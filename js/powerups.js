@@ -1,16 +1,6 @@
 import * as THREE from 'three';
 
 export const POWERUP_TYPES = {
-  ammo: {
-    color: 0xffd600,
-    emissive: 0xffd600,
-    amount: 30,
-    apply: (player, time) => {
-      player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 30);
-    },
-    weight: 0.55,
-    sfx: 'pickupAmmo',
-  },
   health: {
     color: 0x00e676,
     emissive: 0x00e676,
@@ -18,7 +8,7 @@ export const POWERUP_TYPES = {
     apply: (player, time) => {
       player.health = Math.min(player.maxHealth + 25, player.health + 25);
     },
-    weight: 0.25,
+    weight: 0.45,
     sfx: 'pickupHealth',
   },
   damageBoost: {
@@ -29,7 +19,7 @@ export const POWERUP_TYPES = {
       player.damageMult = 1.5;
       player.damageBoostEnd = time + 10;
     },
-    weight: 0.1,
+    weight: 0.25,
     sfx: 'pickupBuff',
   },
   fireRateBoost: {
@@ -40,7 +30,7 @@ export const POWERUP_TYPES = {
       player.fireRateMult = 1.7;
       player.fireRateBoostEnd = time + 8;
     },
-    weight: 0.07,
+    weight: 0.2,
     sfx: 'pickupBuff',
   },
   shield: {
@@ -51,9 +41,19 @@ export const POWERUP_TYPES = {
       player.shield = 50;
       player.shieldEnd = time + 15;
     },
-    weight: 0.03,
+    weight: 0.1,
     sfx: 'pickupShield',
   },
+};
+
+export const AMMO_PICKUP = {
+  color: 0xffd600,
+  emissive: 0xffd600,
+  amount: 45,
+  apply: (player, time) => {
+    player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 45);
+  },
+  sfx: 'pickupAmmo',
 };
 
 const TYPE_KEYS = Object.keys(POWERUP_TYPES);
@@ -158,9 +158,9 @@ const GEOMS = {
 };
 
 export class Powerup {
-  constructor(typeKey, position, scene) {
+  constructor(typeKey, position, scene, typeDef = null) {
     this.typeKey = typeKey;
-    this.type = POWERUP_TYPES[typeKey];
+    this.type = typeDef || POWERUP_TYPES[typeKey];
     this.pos = position.clone();
     this.scene = scene;
     this.spawnTime = performance.now() / 1000;
@@ -251,11 +251,7 @@ export class Powerup {
 
 export function calcPickupsForWave(wave) {
   const count = Math.min(5 + Math.floor(wave * 2.5), 36);
-  const shotsNeeded = count * 3;
-  const totalAvailable = 60;
-  const deficit = Math.max(0, shotsNeeded - totalAvailable);
-  const roundsPerPickup = 30;
-  return Math.max(1, Math.ceil(deficit / roundsPerPickup));
+  return Math.max(1, Math.floor(count * 0.15));
 }
 
 export function spawnPowerup(arena, scene, playerHealth = 0, playerMaxHealth = 100) {
@@ -268,4 +264,15 @@ export function spawnPowerup(arena, scene, playerHealth = 0, playerMaxHealth = 1
     sp.z + (Math.random() - 0.5) * jitter
   );
   return new Powerup(typeKey, pos, scene);
+}
+
+export function spawnAmmo(arena, scene) {
+  const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
+  const jitter = 3;
+  const pos = new THREE.Vector3(
+    sp.x + (Math.random() - 0.5) * jitter,
+    0,
+    sp.z + (Math.random() - 0.5) * jitter
+  );
+  return new Powerup('ammo', pos, scene, AMMO_PICKUP);
 }

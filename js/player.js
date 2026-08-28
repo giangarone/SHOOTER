@@ -34,7 +34,7 @@ export class Player {
     this.magSize = 30;
     this.mag = 30;
     this.maxReserve = 300;
-    this.reserveAmmo = 30;
+    this.reserveAmmo = 90;
     this.fireRate = 8;
     this.fireCd = 0;
     this.reloadTime = 1.4;
@@ -64,7 +64,7 @@ export class Player {
     this.pitch = 0;
     this.health = this.maxHealth;
     this.mag = this.magSize;
-    this.reserveAmmo = 30;
+    this.reserveAmmo = 90;
     this.fireCd = 0;
     this.reloading = 0;
     this.onGround = false;

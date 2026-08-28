@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { buildArena } from './arena.js';
 import { Player } from './player.js';
-import { Enemy, Projectile } from './enemy.js';
+import { Enemy, Projectile, Grenade } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
-import { Powerup, spawnPowerup, calcPickupsForWave } from './powerups.js';
+import { Powerup, spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 
 const autotest = new URLSearchParams(location.search).has('autotest');
 
@@ -46,6 +46,8 @@ class Game {
     this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false, melee: false };
     this.powerupsToSpawn = 0;
     this.powerupSpawnTimer = 0;
+    this.ammoSpawnTimer = 0;
+    this.forceAmmoSpawn = false;
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
 
@@ -192,6 +194,8 @@ class Game {
     this.queue = [];
     this.waveState = 'idle';
     this.interT = 1.2;
+    this.ammoSpawnTimer = 0;
+    this.forceAmmoSpawn = false;
     this.state = 'playing';
     this.input.shoot = false;
     this.input.melee = false;
@@ -224,6 +228,7 @@ class Game {
 
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
+    this.ammoSpawnTimer = 8;
   }
 
   spawnEnemy(type) {
@@ -326,12 +331,26 @@ class Game {
     if (h <= 0) this.gameOver();
   }
 
-  _spawnProjectile(x, y, z) {
+  _spawnProjectile(x, y, z, type = 'shooter') {
     if (this.projectiles.length > 25) return;
     const t = this.player.eyeInto(new THREE.Vector3());
-    const speed = Math.min(16, 10 + this.wave * 0.3);
-    const dmg = Math.min(20, 8 + this.wave * 0.8);
-    this.projectiles.push(new Projectile(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
+    let speed, dmg;
+    if (type === 'sniper') {
+      speed = Math.min(32, 22 + this.wave * 0.4);
+      dmg = Math.min(22, 12 + this.wave * 0.5);
+    } else {
+      speed = Math.min(20, 13 + this.wave * 0.3);
+      dmg = Math.min(20, 8 + this.wave * 0.8);
+    }
+    this.projectiles.push(new Projectile(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg, type));
+  }
+
+  _spawnGrenade(x, y, z, damage) {
+    if (this.projectiles.length > 20) return;
+    const t = this.player.eyeInto(new THREE.Vector3());
+    const speed = Math.min(18, 12 + this.wave * 0.2);
+    const dmg = Math.min(28, damage + this.wave * 0.5);
+    this.projectiles.push(new Grenade(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
   }
 
   _autoInput() {
@@ -387,20 +406,29 @@ class Game {
       if (this.autoTest) this._autoInput();
       this.player.update(dt, this.input, this.arena.obstacles, this.time);
 
-      if (this.waveState === 'active') {
+if (this.waveState === 'active') {
         this.spawnTimer -= dt;
         if (this.queue.length && this.spawnTimer <= 0) {
           this.spawnEnemy(this.queue.shift());
           this.spawnTimer = this._cfg.spawnInterval;
         }
-if (this.powerupsToSpawn > 0) {
-            this.powerupSpawnTimer -= dt;
-            if (this.powerupSpawnTimer <= 0) {
-              this.powerups.push(spawnPowerup(this.arena, this.scene, this.player.health, this.player.maxHealth));
-              this.powerupsToSpawn--;
-              this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
-            }
+        if (this.powerupsToSpawn > 0) {
+          this.powerupSpawnTimer -= dt;
+          if (this.powerupSpawnTimer <= 0) {
+            this.powerups.push(spawnPowerup(this.arena, this.scene, this.player.health, this.player.maxHealth));
+            this.powerupsToSpawn--;
+            this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
           }
+        }
+        this.ammoSpawnTimer -= dt;
+        if (this.ammoSpawnTimer <= 0 || this.forceAmmoSpawn) {
+          this.powerups.push(spawnAmmo(this.arena, this.scene));
+          this.ammoSpawnTimer = 10 + Math.random() * 8;
+          this.forceAmmoSpawn = false;
+        }
+        if (this.player.reserveAmmo < 30 && !this.forceAmmoSpawn) {
+          this.forceAmmoSpawn = true;
+        }
         if (!this.queue.length && !this.enemies.length) {
           this.waveState = 'intermission';
           this.interT = 3;
@@ -443,7 +471,10 @@ if (this.powerupsToSpawn > 0) {
         obstacles: this.arena.obstacles,
         time: this.time,
         onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
-        addProjectile: (x, y, z) => this._spawnProjectile(x, y, z),
+        addProjectile: (x, y, z, type) => this._spawnProjectile(x, y, z, type),
+        addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
+        effects: this.effects,
+        sfx: this.sfx,
       };
       for (const e of this.enemies) {
         e.update(dt, ectx);
@@ -454,20 +485,40 @@ if (this.powerupsToSpawn > 0) {
           this.effects.burst(p, e.colorHex, 24, 6, 2.5, 0.7);
           this.sfx.kill();
           this.scene.remove(e.group);
+          if (e.type === 'splitter') {
+            for (let i = 0; i < 3; i++) {
+              const angle = (Math.PI * 2 / 3) * i + Math.random() * 0.5;
+              const spawnPos = new THREE.Vector3(
+                e.pos.x + Math.cos(angle) * 1.5,
+                0,
+                e.pos.z + Math.sin(angle) * 1.5
+              );
+              const mini = new Enemy('chaser', spawnPos, this._cfg.hpScale * 0.5, this._cfg.speedScale * 1.1, this._cfg.dmgScale * 0.7);
+              mini.score = 0;
+              mini.group.scale.setScalar(0.6);
+              this.scene.add(mini.group);
+              this.enemies.push(mini);
+              this.effects.burst(spawnPos, e.colorHex, 10, 3, 1.5, 0.4);
+            }
+          }
         }
       }
       this.enemies = this.enemies.filter((e) => !e.dead);
 
       for (let i = this.projectiles.length - 1; i >= 0; i--) {
         const pr = this.projectiles[i];
-        pr.target.copy(this.player.eyeInto(this._v1));
         const res = pr.update(dt, {
           obstacles: this.arena.obstacles,
           onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
+          player: this.player,
+          effects: this.effects,
+          sfx: this.sfx,
         });
         if (res !== 'alive') {
           if (res === 'hit') this.effects.burst(pr.pos, 0xff5555, 10, 4, 1, 0.3);
           else if (res === 'wall') this.effects.burst(pr.pos, 0xb14aed, 8, 3, 1, 0.3);
+          else if (res === 'exploded') {
+          }
           this.scene.remove(pr.mesh);
           this.projectiles.splice(i, 1);
         }
