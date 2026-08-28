@@ -37,12 +37,15 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
 
   const report = () => page.evaluate(() => window.__report());
-  const peak = { powerups: 0, ammoPickups: 0, projectiles: 0, geometries: 0, programs: 0 };
+  const peak = { powerups: 0, ammoPickups: 0, projectiles: 0, geometries: 0, programs: 0, textures: 0 };
 
   // Poll while the game plays so transient spikes in the caps are caught, not
-  // just whatever happens to be on screen at the end.
+  // just whatever happens to be on screen at the end. Sixty seconds rather
+  // than thirty: the bot walks to a totem every wave, which costs it time, and
+  // it has to reach wave 4 before the upgrade and weapon assertions below stop
+  // being vacuous. A longer run also gives the leak canaries more to work with.
   const samples = [];
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 60; i++) {
     await sleep(1000);
     const r = await report();
     samples.push(r);
@@ -51,6 +54,7 @@ try {
     peak.projectiles = Math.max(peak.projectiles, r.projectiles);
     peak.geometries = Math.max(peak.geometries, r.geometries);
     peak.programs = Math.max(peak.programs, r.programs);
+    peak.textures = Math.max(peak.textures, r.textures);
   }
 
   console.log('GEOMETRY SERIES', samples.map((r) => r.geometries).join(','));
@@ -66,6 +70,7 @@ try {
   await page.screenshot({ path: 'test/shot.png' });
 
   console.log('REPORT', JSON.stringify(rep, null, 2));
+  console.log('LOADOUT', JSON.stringify(rep.slots));
   console.log('PEAK', JSON.stringify(peak));
   console.log('CONSOLE ERRORS', JSON.stringify(errors, null, 2));
 
@@ -82,8 +87,18 @@ try {
     // have banked credits and gained an upgrade. Without these the wave-clear
     // reward could stop firing entirely and every other check would still pass.
     ['earned credits', rep.credits > 0],
-    ['granted upgrades', rep.wave < 2 || rep.upgradeCount > 0],
+    // Under ?autotest every set offers exactly one weapon, and the bot goes
+    // for it while its second slot is empty and avoids weapon totems once it
+    // is full. So the wave-1 clear always yields a weapon and the wave-2 clear
+    // always yields an upgrade - both guards below fire on a normal run rather
+    // than passing vacuously, which earlier revisions of these two checks did.
+    ['granted upgrades', rep.wave < 3 || rep.upgradeCount > 0],
     ['combo chained', rep.bestCombo >= 2],
+    // WEAPON_CHANCE is forced to 1 under ?autotest, so any run that cleared
+    // wave 2 must have been offered a weapon and claimed it into the second
+    // slot. Covers takeWeapon(), the model swap and the per-slot magazines.
+    ['picked up a weapon', rep.wave < 2 || rep.slots[1] !== null],
+    ['loadout intact', rep.slots[0] !== null && typeof rep.weapon === 'string'],
     ['no console errors', fatal.length === 0],
     // Guards against the checks below passing vacuously if a report field is
     // ever renamed or dropped.
@@ -105,13 +120,16 @@ try {
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.
     ['geometry count bounded', peak.geometries < 120],
-    // Textures step up once, early, as the fixed set of canvas panels (three
-    // totems, two stations) is uploaded, then must stay flat. Comparing two
-    // arbitrary samples was fragile - it failed whenever a slow run raised its
-    // first totem set after the `early` sample. Assert what actually matters:
-    // no growth across the final third, and a hard ceiling.
-    ['texture count steady', samples.slice(20).every((r) => r.textures === rep.textures)],
-    ['texture count bounded', rep.textures <= 12],
+    // The fixed set of canvas panels (three totems, two stations) uploads in
+    // one step the first time a totem set rises, then never grows again. WHEN
+    // that step happens depends on how fast the bot clears wave 1, so any
+    // assertion pinned to a sample index is flaky - two earlier attempts here
+    // both failed on slow runs. What actually matters is that the count only
+    // ever settles upward and stays under a ceiling a per-spawn leak would
+    // blow straight through.
+    ['texture count non-decreasing',
+      samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
+    ['texture count bounded', peak.textures <= 12],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

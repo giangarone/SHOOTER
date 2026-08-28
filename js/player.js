@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { resolveCircle } from './utils.js';
 import { UPGRADES } from './upgrades.js';
+import { WEAPONS, WEAPON_KEYS, STARTING_WEAPON } from './weapons.js';
 
 // Every stat an upgrade is allowed to touch, at its un-upgraded value.
 //
@@ -45,27 +46,9 @@ const DEFAULT_MODS = {
   momentum: 0,          // extra damage fraction at full sprint
 };
 
-// First-person gun model. The 'muzzle' child is an empty marker: main.js
-// reads its world position for the muzzle flash and tracer origin.
-function buildGun() {
-  const g = new THREE.Group();
-  g.position.set(0.3, -0.26, -0.55);
-  const dark = new THREE.MeshStandardMaterial({ color: 0x1c212c, roughness: 0.35, metalness: 0.7 });
-  const acc = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.4, roughness: 0.3, metalness: 0.4 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.5), dark);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.4), dark);
-  barrel.position.set(0, 0.02, -0.42);
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.02, 0.2), acc);
-  strip.position.set(0, 0.06, -0.08);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.09), dark);
-  grip.position.set(0, -0.14, 0.12);
-  grip.rotation.x = 0.3;
-  const muzzle = new THREE.Object3D();
-  muzzle.name = 'muzzle';
-  muzzle.position.set(0, 0.02, -0.65);
-  g.add(body, barrel, strip, grip, muzzle);
-  return g;
-}
+// Seconds a weapon swap takes. Long enough that switching under fire is a real
+// commitment, short enough that it never feels sticky.
+const SWAP_TIME = 0.35;
 
 export class Player {
   constructor(camera, scene) {
@@ -76,17 +59,20 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.baseMaxHealth = 100;
-    this.baseMagSize = 30;
-    this.baseReloadTime = 1.4;
+    // Two weapon slots. `slot` indexes the one in hand; the second starts
+    // empty and is filled by the first weapon totem the player claims.
+    this.slots = [STARTING_WEAPON, null];
+    this.slot = 0;
+    // Magazines are PER SLOT, so swapping away from a half-empty gun and back
+    // finds it exactly as you left it. The reserve pool is shared.
+    this.mags = [WEAPONS[STARTING_WEAPON].magSize, 0];
     // Owned upgrades as id -> stack count, and the stat block derived from
     // them. Both are cleared by reset(), so a run never inherits a build.
     this.upgrades = {};
     this.mods = { ...DEFAULT_MODS };
     this.health = 100;
-    this.mag = 30;
     this.maxReserve = 300;
     this.reserveAmmo = 90;
-    this.fireRate = 8;
     this.fireCd = 0;
     this.reloading = 0;
     this.onGround = false;
@@ -103,12 +89,82 @@ export class Player {
     this.bloodlustStacks = 0;
     this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
-    this.gun = buildGun();
-    this.muzzle = this.gun.getObjectByName('muzzle');
-    this.gunBaseZ = this.gun.position.z;
-    camera.add(this.gun);
+
+    // Every weapon's viewmodel is built once here and parented to the camera;
+    // a swap only toggles `visible`. Building one per swap would allocate
+    // geometry for the rest of the session.
+    this.gunModels = {};
+    for (const key of WEAPON_KEYS) {
+      const model = WEAPONS[key].build();
+      model.visible = false;
+      model.userData.baseZ = model.position.z;
+      camera.add(model);
+      this.gunModels[key] = model;
+    }
+    this._equipModel();
     scene.add(camera);
     this.applyCamera();
+  }
+
+  // The definition of the weapon in hand. Every stat read goes through this,
+  // so nothing caches a weapon's numbers across a swap.
+  get weapon() {
+    return WEAPONS[this.slots[this.slot]];
+  }
+  get gun() {
+    return this.gunModels[this.slots[this.slot]];
+  }
+  // Current magazine, stored per slot.
+  get mag() {
+    return this.mags[this.slot];
+  }
+  set mag(v) {
+    this.mags[this.slot] = v;
+  }
+
+  // Shows only the active weapon's model and re-caches its muzzle marker.
+  _equipModel() {
+    for (const key of WEAPON_KEYS) {
+      if (this.gunModels[key]) this.gunModels[key].visible = false;
+    }
+    const model = this.gun;
+    model.visible = true;
+    this.muzzle = model.getObjectByName('muzzle');
+    this.gunBaseZ = model.userData.baseZ;
+  }
+
+  // Puts `key` in the active slot when the other slot is full, otherwise fills
+  // the empty slot and switches to it. Returns the weapon it displaced, or
+  // null - main.js shows that on the totem so the trade is never a surprise.
+  takeWeapon(key) {
+    if (!WEAPONS[key] || this.slots.includes(key)) return null;
+    const empty = this.slots.indexOf(null);
+    const target = empty === -1 ? this.slot : empty;
+    const displaced = this.slots[target];
+    this.slots[target] = key;
+    this.mags[target] = WEAPONS[key].magSize;
+    this.slot = target;
+    this.reloading = 0;
+    this.fireCd = SWAP_TIME;
+    this._equipModel();
+    return displaced;
+  }
+
+  // The weapon a totem pickup would displace, without taking it. Used for the
+  // totem's warning line.
+  weaponToDisplace() {
+    return this.slots.includes(null) ? null : this.slots[this.slot];
+  }
+
+  // Q. Refuses while the second slot is still empty.
+  swapWeapon() {
+    const other = this.slot === 0 ? 1 : 0;
+    if (!this.slots[other]) return false;
+    this.slot = other;
+    this.reloading = 0;
+    this.fireCd = SWAP_TIME;
+    this._equipModel();
+    return true;
   }
 
   // Derived stats. These are getters, not fields, because a draft pick can
@@ -118,10 +174,13 @@ export class Player {
     return Math.max(10, Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult));
   }
   get magSize() {
-    return Math.max(1, Math.round(this.baseMagSize * this.mods.magMult));
+    return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
   }
   get reloadTime() {
-    return this.baseReloadTime * this.mods.reloadMult;
+    return this.weapon.reloadTime * this.mods.reloadMult;
+  }
+  get fireRate() {
+    return this.weapon.fireRate;
   }
 
   // Rebuilds the whole stat block from the owned upgrade list. Always a full
@@ -147,7 +206,14 @@ export class Player {
     // A max-health change must not leave the player over the new cap or at a
     // stale value; clamp immediately so the HUD never shows 120/100.
     this.health = Math.min(this.health, this.maxHealth);
-    this.mag = Math.min(this.mag, this.magSize);
+    // Both slots, not just the one in hand: a magazine-shrinking upgrade must
+    // not leave the stowed weapon holding more rounds than it can now carry.
+    for (let i = 0; i < this.slots.length; i++) {
+      const key = this.slots[i];
+      if (!key) continue;
+      const cap = Math.max(1, Math.round(WEAPONS[key].magSize * this.mods.magMult));
+      this.mags[i] = Math.min(this.mags[i], cap);
+    }
     return true;
   }
 
@@ -172,6 +238,10 @@ export class Player {
     // last one's stats.
     this.upgrades = {};
     this.rebuildMods();
+    this.slots = [STARTING_WEAPON, null];
+    this.slot = 0;
+    this.mags = [WEAPONS[STARTING_WEAPON].magSize, 0];
+    this._equipModel();
     this.bloodlustStacks = 0;
     this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
@@ -180,7 +250,6 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.health = this.maxHealth;
-    this.mag = this.magSize;
     this.reserveAmmo = 90;
     this.fireCd = 0;
     this.reloading = 0;
@@ -342,18 +411,24 @@ export class Player {
   // Returns 'shot' on a real shot, 'empty' when the trigger is pulled dry, or
   // null while on cooldown or reloading. Only 'shot' consumes a round.
   // Note 'empty' sets no cooldown, so main.js rate-limits the dry-fire sound.
-  tryShoot() {
+  //
+  // `triggerFresh` is true only on the frame the button went down. Semi-auto
+  // weapons refuse without it, so holding the button on a scattergun fires
+  // once rather than emptying the tube.
+  tryShoot(triggerFresh) {
+    const w = this.weapon;
     if (this.reloading > 0 || this.fireCd > 0) return null;
+    if (!w.auto && !triggerFresh) return null;
     if (this.mag <= 0) {
       this.startReload();
       return 'empty';
     }
     this.mag--;
     const effectiveFireRate =
-      this.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
+      w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
-    this.kick = 0.09;
-    this.pitch = Math.min(1.5, this.pitch + 0.006 + Math.random() * 0.004);
+    this.kick = w.kick;
+    this.pitch = Math.min(1.5, this.pitch + w.recoil + Math.random() * w.recoil * 0.6);
     if (this.mag === 0) this.startReload();
     return 'shot';
   }

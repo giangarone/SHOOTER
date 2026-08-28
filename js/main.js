@@ -59,6 +59,7 @@ import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
 import { TotemArea } from './totems.js';
+import { WEAPONS, WEAPON_KEYS } from './weapons.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -81,6 +82,16 @@ const SPAWN_RETRY = 2;
 const MAX_PROJECTILES = 24;
 const EMPTY_CLICK_COOLDOWN = 0.35;
 
+// innerWidth and innerHeight are both 0 in some real situations - a minimised
+// window, a hidden tab, a canvas laid out at zero height. 0/0 is NaN, and a NaN
+// aspect poisons the camera's projection matrix, which makes setFromCamera()
+// produce a NaN ray and silently breaks EVERY raycast in the game: shooting
+// and melee stop registering hits with no error anywhere. Clamp so the aspect
+// is always a finite positive number.
+function viewportAspect() {
+  return Math.max(1, innerWidth) / Math.max(1, innerHeight);
+}
+
 // --- economy ---
 // Seconds a kill chain survives without a new kill.
 const COMBO_WINDOW = 3;
@@ -100,6 +111,18 @@ const CLEAR_BONUS_PER_WAVE = 30;
 const INTERMISSION = 5;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
+// Chance that one of the three totems offers a weapon instead of an upgrade,
+// and the first wave that can happen. Only weapons the player is not already
+// carrying are ever offered.
+// Forced to a certainty under ?autotest so the smoke test actually exercises
+// the weapon path - at 0.3 the bot only sometimes saw a weapon totem in a
+// 30-second run, which would have made the assertion flaky.
+// Both forced under ?autotest so the smoke test actually exercises the weapon
+// path. At 0.3 from wave 2 the bot -- which spends time walking to totems --
+// usually never saw a weapon totem inside a 30-second run, and the assertion
+// passed vacuously instead of covering anything.
+const WEAPON_CHANCE = autotest ? 1 : 0.3;
+const WEAPON_FROM_WAVE = autotest ? 1 : 2;
 
 class Game {
   constructor() {
@@ -112,7 +135,7 @@ class Game {
     document.getElementById('game').appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.1, 200);
 
     this.arena = buildArena(this.scene);
     // The totems and their stations are static furniture: three totems and two
@@ -149,7 +172,9 @@ class Game {
     this.interT = 1.2;
     this.time = 0;
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false, melee: false };
+    // `shootFresh` is the trigger EDGE - true only on the frame the button
+    // went down. Semi-auto weapons need it; the loop clears it every frame.
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false, shootFresh: false, melee: false };
     this.powerupsToSpawn = 0;
     this.powerupSpawnTimer = 0;
     this.ammoSpawnTimer = 0;
@@ -198,6 +223,7 @@ class Game {
       this.autoTest = true;
       this._wt = 0;
       this._dir = 0;
+      this._swapCd = 0;
       this.beginGame();
       window.__game = this;
       window.__report = () => ({
@@ -209,6 +235,8 @@ class Game {
         bestCombo: this.bestCombo,
         upgrades: { ...this.player.upgrades },
         upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
+        slots: [...this.player.slots],
+        weapon: this.player.weapon.name,
         maxHealth: this.player.maxHealth,
         magSize: this.player.magSize,
         enemies: this.enemies.length,
@@ -267,6 +295,7 @@ class Game {
         case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUseStation(); break;
+        case 'KeyQ': this.trySwapWeapon(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -288,6 +317,7 @@ class Game {
         if (this.state === 'playing') {
           if (!this.autoTest && document.pointerLockElement !== canvas) this._lock();
           this.input.shoot = true;
+          this.input.shootFresh = true;
         } else if (this.state === 'menu') {
           this.beginGame();
         } else if (this.state === 'paused') {
@@ -344,7 +374,10 @@ class Game {
     });
 
     addEventListener('resize', () => {
-      this.camera.aspect = innerWidth / innerHeight;
+      // A zero-sized viewport is skipped entirely rather than clamped, so the
+      // renderer is never resized to nothing; the next real resize restores it.
+      if (innerWidth <= 0 || innerHeight <= 0) return;
+      this.camera.aspect = viewportAspect();
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
     });
@@ -354,6 +387,7 @@ class Game {
     const i = this.input;
     i.forward = i.back = i.left = i.right = false;
     i.jump = i.sprint = i.shoot = i.melee = false;
+    i.shootFresh = false;
   }
 
   _lock() {
@@ -423,6 +457,11 @@ class Game {
   tryReload() {
     if (this.state !== 'playing') return;
     if (this.player.startReload()) this.sfx.reload();
+  }
+
+  trySwapWeapon() {
+    if (this.state !== 'playing') return;
+    if (this.player.swapWeapon()) this.sfx.reload();
   }
 
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
@@ -512,12 +551,64 @@ class Game {
     this.effects.addShake(0.12);
   }
 
-  // Hitscan shot. Raycasts once against arena geometry and enemy hitboxes
-  // together, so walls correctly block shots: the nearest hit wins whatever it
-  // is. Called every frame while the trigger is held; the fire rate is gated
-  // inside player.tryShoot().
+  // One pellet of a shot. Walks the sorted hit list so a piercing weapon can
+  // pass through several enemies, stopping at the first thing that is not one.
+  // Returns true if it damaged anything, so the caller can play a single hit
+  // sound per shot rather than one per pellet.
+  _firePellet(muzzle, targets, spread, w) {
+    const ray = this._shotRay;
+    this._screen.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+    ray.setFromCamera(this._screen, this.camera);
+
+    const hits = this._hits;
+    hits.length = 0;
+    ray.intersectObjects(targets, false, hits);
+
+    // Multi-pellet weapons fire eight of these per shot, so their per-impact
+    // particle bursts have to be much smaller or a single shell drains the
+    // whole pool.
+    const burst = w.pellets > 1 ? 4 : 10;
+    let end = null;
+    let pierced = 0;
+    let damaged = false;
+
+    for (const h of hits) {
+      const totem = h.object.userData.totem;
+      if (totem) {
+        this._claimTotem(totem);
+        end = h.point;
+        break;
+      }
+      const en = h.object.userData.enemy;
+      if (!en) {
+        // Wall, floor, crate or a totem pillar - the pellet stops here.
+        end = h.point;
+        this.effects.burst(end, 0x9fb4d8, w.pellets > 1 ? 3 : 6, 3, 1, 0.3);
+        break;
+      }
+      const dealt = this.player.getEffectiveDamage(w.damage) * Math.pow(w.falloff, pierced);
+      en.takeDamage(dealt);
+      this.player.applyLifesteal(dealt);
+      this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
+      damaged = true;
+      pierced++;
+      if (pierced > w.pierce) {
+        end = h.point;
+        break;
+      }
+    }
+
+    if (!end) end = ray.ray.at(60, this._rayEnd);
+    this.effects.tracer(muzzle, end);
+    hits.length = 0;
+    return damaged;
+  }
+
+  // A shot. Raycast targets are built once for the whole blast and shared by
+  // every pellet: arena geometry, enemy hitboxes and the totems together, so
+  // the nearest hit wins whatever it is and walls correctly block shots.
   shoot() {
-    const res = this.player.tryShoot();
+    const res = this.player.tryShoot(this.input.shootFresh);
     if (res === 'empty') {
       // Held trigger on an empty gun would otherwise fire a WebAudio voice
       // every single frame.
@@ -528,58 +619,34 @@ class Game {
       return;
     }
     if (res !== 'shot') return;
+
+    const w = this.player.weapon;
     this.stats.shotsFired++;
     this.sfx.shoot();
 
     const muzzle = this.player.muzzleInto(this._muzzle);
     this.effects.flash(muzzle);
-    this.effects.addShake(0.05);
-
-    const spread = (0.012 + (this.input.sprint ? 0.008 : 0)) * 2;
-    const ray = this._shotRay;
-    this._screen.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
-    ray.setFromCamera(this._screen, this.camera);
+    this.effects.addShake(w.shake);
 
     const targets = this._targets;
     targets.length = 0;
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
-    // Totem pillars and cores join the same raycast, so a totem correctly
-    // blocks a shot. Only the core carries userData.totem and can be claimed.
     this.totemArea.addTargets(targets);
-    const hits = this._hits;
-    hits.length = 0;
-    ray.intersectObjects(targets, false, hits);
 
-    let end;
-    if (hits.length) {
-      end = hits[0].point;
-      const totem = hits[0].object.userData.totem;
-      if (totem) {
-        this._claimTotem(totem);
-        this.effects.tracer(muzzle, end);
-        hits.length = 0;
-        targets.length = 0;
-        return;
-      }
-      const en = hits[0].object.userData.enemy;
-      if (en) {
-        this.stats.hits++;
-        const dealt = this.player.getEffectiveDamage(34);
-        en.takeDamage(dealt);
-        this.player.applyLifesteal(dealt);
-        this.effects.burst(end, 0xffe95e, 10, 4, 1.5, 0.35);
-        this.sfx.hit();
-        this.ui.hitMarker();
-        this.effects.addShake(0.03);
-      } else {
-        this.effects.burst(end, 0x9fb4d8, 6, 3, 1, 0.3);
-      }
-    } else {
-      end = ray.ray.at(60, this._rayEnd);
+    const spread = w.spread + (this.input.sprint ? 0.016 : 0);
+    let hitAny = false;
+    for (let i = 0; i < w.pellets; i++) {
+      if (this._firePellet(muzzle, targets, spread, w)) hitAny = true;
     }
-    this.effects.tracer(muzzle, end);
-    hits.length = 0;
+
+    // One hitmarker and one sound per shot, however many pellets connected.
+    if (hitAny) {
+      this.stats.hits++;
+      this.sfx.hit();
+      this.ui.hitMarker();
+      this.effects.addShake(0.03);
+    }
     targets.length = 0;
   }
 
@@ -662,9 +729,19 @@ class Game {
     // than shooting the core, which keeps the run deterministic.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
+      // While the second slot is empty the bot goes for a weapon totem
+      // specifically, so the smoke test covers takeWeapon() deterministically
+      // instead of depending on which totem happened to be nearest.
+      const wantWeapon = !this.player.slots[1];
       let td = 1e9;
       for (const t of this.totemArea.totems) {
         if (!t.canClaim()) continue;
+        const isWeapon = t.offer && t.offer.kind === 'weapon';
+        if (wantWeapon && isWeapon) {
+          seekTotem = t;
+          break;
+        }
+        if (wantWeapon || isWeapon) continue;
         const d = t.pos.distanceTo(this.player.pos);
         if (d < td) {
           td = d;
@@ -682,16 +759,38 @@ class Game {
         best = e;
       }
     }
+
+    // Pick a weapon for the range. Without this the bot would hold a
+    // scattergun at twenty metres, deal almost nothing, and stall on a wave
+    // forever - which it did, silently, and left every downstream assertion
+    // passing vacuously. The cooldown stops it oscillating on the boundary.
+    this._swapCd -= 1 / 60;
+    const stowedKey = this.player.slots[this.player.slot === 0 ? 1 : 0];
+    if (best && stowedKey && this._swapCd <= 0) {
+      const wantShort = bd < 7;
+      const holdingShort = this.player.weapon.pellets > 1;
+      const stowedShort = WEAPONS[stowedKey].pellets > 1;
+      if (holdingShort !== wantShort && stowedShort === wantShort) {
+        if (this.player.swapWeapon()) this._swapCd = 2;
+      }
+    }
     if (best) {
       const dx = best.pos.x - this.player.pos.x;
       const dy = 1.0 - (this.player.pos.y + 1.7);
       const dz = best.pos.z - this.player.pos.z;
       const ty = Math.atan2(-dx, -dz);
       const tp = Math.atan2(dy, Math.hypot(dx, dz));
-      const k = 0.18;
+      // Sharper than it looks: at 0.18 the bot's aim lagged enough that it hit
+      // one shot in five and died on wave 2, which left every assertion about
+      // later waves passing vacuously.
+      const k = 0.4;
       this.player.yaw += (ty - this.player.yaw) * k;
       this.player.pitch += (tp - this.player.pitch) * k;
       this.input.shoot = true;
+      // The bot re-arms the edge every frame, so it fires semi-autos as fast
+      // as their cooldown allows. Fine for a smoke test - it is exercising the
+      // weapons, not simulating a human trigger finger.
+      this.input.shootFresh = true;
     } else {
       this.input.shoot = false;
     }
@@ -776,9 +875,53 @@ class Game {
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
-    const ids = rollTotems(this.player.upgrades, this.wave, TOTEM_COUNT);
-    this.totemArea.present(ids, this.player.upgrades, !isReroll);
+    this.totemArea.present(this._buildOffers(), !isReroll);
     this._refreshStations();
+  }
+
+  // Normalises upgrades and weapons into the one shape a totem can draw, so
+  // totems.js never has to know the difference between them.
+  _buildOffers() {
+    const ids = rollTotems(this.player.upgrades, this.wave, TOTEM_COUNT);
+    const offers = ids.map((id) => {
+      const def = UPGRADES[id];
+      const owned = this.player.upgrades[id] || 0;
+      return {
+        id,
+        kind: 'upgrade',
+        name: def.name,
+        theme: def.theme,
+        rarityLabel: RARITY[def.rarity].label,
+        rarityColor: RARITY[def.rarity].color,
+        effects: def.effects,
+        note: owned > 0 ? 'OWNED ' + owned + ' / ' + def.max : '',
+      };
+    });
+
+    // Weapons the player is not already carrying can take over one slot of the
+    // set. Offering a weapon they already hold would be a wasted totem.
+    const missing = WEAPON_KEYS.filter((k) => !this.player.slots.includes(k));
+    if (
+      offers.length && missing.length &&
+      this.wave >= WEAPON_FROM_WAVE && Math.random() < WEAPON_CHANCE
+    ) {
+      const key = missing[(Math.random() * missing.length) | 0];
+      const w = WEAPONS[key];
+      const displaced = this.player.weaponToDisplace();
+      offers[(Math.random() * offers.length) | 0] = {
+        id: key,
+        kind: 'weapon',
+        name: w.name,
+        theme: w.theme,
+        rarityLabel: 'WEAPON',
+        rarityColor: '#ffffff',
+        effects: w.effects,
+        // Spelling out the trade matters: with both slots full, taking a
+        // weapon throws one away, and that must never be a surprise.
+        note: displaced ? 'REPLACES ' + WEAPONS[displaced].name : 'FILLS 2ND SLOT',
+      };
+    }
+    return offers;
   }
 
   // Redraws both station labels. Only called when something they display
@@ -799,22 +942,26 @@ class Game {
   // double-claiming lives in exactly one place.
   _claimTotem(totem) {
     if (!totem.canClaim()) return;
-    const id = totem.upgradeId;
-    if (!this.player.takeUpgrade(id)) return;
+    const offer = totem.offer;
+    if (offer.kind === 'weapon') {
+      if (!this.player.takeWeapon(offer.id)) return;
+    } else if (!this.player.takeUpgrade(offer.id)) {
+      return;
+    }
     totem.claimed = true;
 
-    const def = UPGRADES[id];
-    const owned = this.player.upgrades[id];
+    const owned = offer.kind === 'upgrade' ? this.player.upgrades[offer.id] : 1;
+    const max = offer.kind === 'upgrade' ? UPGRADES[offer.id].max : 1;
     this.ui.showUpgrade({
-      name: def.name,
-      effects: def.effects,
-      rarity: RARITY[def.rarity].label,
-      color: '#' + def.theme.toString(16).padStart(6, '0'),
+      name: offer.name,
+      effects: offer.effects,
+      rarity: offer.rarityLabel,
+      color: '#' + offer.theme.toString(16).padStart(6, '0'),
       owned,
-      max: def.max,
+      max,
     });
     this.effects.burst(
-      this._killPos.set(totem.pos.x, 1.4, totem.pos.z), def.theme, 30, 7, 2.5, 0.7
+      this._killPos.set(totem.pos.x, 1.4, totem.pos.z), offer.theme, 30, 7, 2.5, 0.7
     );
     this.effects.addShake(0.1);
     this.sfx.upgrade();
@@ -1047,6 +1194,8 @@ class Game {
     this.ui.setCombo(this.comboKills, this.comboMult(), this.comboTimer / COMBO_WINDOW);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
+    const other = this.player.slots[this.player.slot === 0 ? 1 : 0];
+    this.ui.setWeapon(this.player.weapon.name, other ? WEAPONS[other].name : null);
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
@@ -1073,6 +1222,9 @@ class Game {
 
       this._updateWave(dt);
       if (this.input.shoot) this.shoot();
+      // One press is one frame of freshness: a semi-auto click made during the
+      // fire cooldown is dropped, not queued.
+      this.input.shootFresh = false;
       if (this.input.melee) this.tryMelee();
       this._updatePickups(dt);
       this._updateTotems(dt);

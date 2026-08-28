@@ -18,6 +18,8 @@ export class UI {
     this.ammoNum = $('ammo-num');
     this.ammoRes = $('ammo-res');
     this.ammoReload = $('ammo-reload');
+    this.weaponName = $('weapon-name');
+    this.weaponAlt = $('weapon-alt');
     this.vignette = $('vignette');
     this.bannerEl = $('banner');
     this.hitmarker = $('hitmarker');
@@ -128,6 +130,18 @@ export class UI {
     if (this._c.comboFrac !== f) {
       this._c.comboFrac = f;
       this.comboBar.style.transform = 'scaleX(' + f + ')';
+    }
+  }
+
+  // `alt` is the stowed weapon's name, or null while the second slot is empty.
+  setWeapon(name, alt) {
+    if (this._c.weapon !== name) {
+      this._c.weapon = name;
+      this.weaponName.textContent = name;
+    }
+    if (this._c.weaponAlt !== alt) {
+      this._c.weaponAlt = alt;
+      this.weaponAlt.textContent = alt ? 'Q  ' + alt : '';
     }
   }
 

@@ -25,7 +25,9 @@
 //      ever discarded.
 
 import * as THREE from 'three';
-import { UPGRADES, RARITY, AMMO_PURCHASE } from './upgrades.js';
+// A totem draws whatever it is handed. It knows nothing about upgrades or
+// weapons - main.js normalises both into the same `offer` shape, which is why
+// putting a weapon on a totem needed no changes here.
 
 // Walk this close to a totem and it is yours. Generous enough to catch a
 // player running past at sprint speed.
@@ -84,6 +86,7 @@ function makePanel(w, h, scaleX, scaleY) {
 export class Totem {
   constructor(x, scene) {
     this.upgradeId = null;
+    this.offer = null;
     this.pos = new THREE.Vector3(x, 0, ROW_Z);
     // -1 sunk, 0..1 rising, 1 fully up. Drives both the Y offset and whether
     // the totem can be claimed at all.
@@ -124,14 +127,21 @@ export class Totem {
 
   // Assigns an upgrade and starts the rise. `owned` is the player's current
   // stack count for it, shown so a repeat offer is not mistaken for a new one.
-  present(upgradeId, owned) {
-    this.upgradeId = upgradeId;
+  /**
+   * Assigns an offer and starts the rise.
+   *
+   * @param {object} offer  { id, kind, name, theme, rarityLabel, rarityColor,
+   *   effects, note } - see _buildOffers() in main.js. `kind` is opaque here;
+   *   main.js reads it back when the totem is claimed.
+   */
+  present(offer) {
+    this.offer = offer;
+    this.upgradeId = offer.id;
     this.claimed = false;
-    const def = UPGRADES[upgradeId];
-    this.pillarMat.emissive.setHex(def.theme);
-    this.coreMat.color.setHex(def.theme);
-    this.coreMat.emissive.setHex(def.theme);
-    this._draw(def, owned);
+    this.pillarMat.emissive.setHex(offer.theme);
+    this.coreMat.color.setHex(offer.theme);
+    this.coreMat.emissive.setHex(offer.theme);
+    this._draw(offer);
     this.state = 'rising';
     this.rise = 0;
     this.group.visible = true;
@@ -139,9 +149,9 @@ export class Totem {
 
   // Renders the whole readout in one pass: rarity, name, then one line per
   // effect coloured by its sign. Called once when a set rises, never per frame.
-  _draw(def, owned) {
+  _draw(offer) {
     const c = this.panel.canvas.getContext('2d');
-    const theme = hex(def.theme);
+    const theme = hex(offer.theme);
     c.clearRect(0, 0, 512, 320);
 
     c.fillStyle = 'rgba(8, 10, 16, 0.82)';
@@ -157,26 +167,27 @@ export class Totem {
     c.fill();
 
     c.textAlign = 'center';
-    c.fillStyle = RARITY[def.rarity].color;
+    c.fillStyle = offer.rarityColor;
     c.font = 'bold 22px system-ui, sans-serif';
-    c.fillText(RARITY[def.rarity].label, 256, 60);
+    c.fillText(offer.rarityLabel, 256, 60);
 
     c.fillStyle = '#ffffff';
-    c.font = 'bold 42px system-ui, sans-serif';
-    c.fillText(def.name, 256, 112);
+    // Long weapon names need to shrink to stay on one line.
+    c.font = 'bold ' + (offer.name.length > 15 ? 34 : 42) + 'px system-ui, sans-serif';
+    c.fillText(offer.name, 256, 112);
 
-    c.font = 'bold 30px system-ui, sans-serif';
-    let y = 172;
-    for (const [text, sign] of def.effects) {
+    c.font = 'bold 28px system-ui, sans-serif';
+    let y = 168;
+    for (const [text, sign] of offer.effects) {
       c.fillStyle = SIGN_COLOR[String(sign)];
       c.fillText(text, 256, y);
-      y += 42;
+      y += 38;
     }
 
-    if (owned > 0) {
+    if (offer.note) {
       c.fillStyle = '#5b6785';
       c.font = '600 22px system-ui, sans-serif';
-      c.fillText('OWNED ' + owned + ' / ' + def.max, 256, 292);
+      c.fillText(offer.note, 256, 292);
     }
     this.panel.tex.needsUpdate = true;
   }
@@ -212,6 +223,7 @@ export class Totem {
         this.state = 'hidden';
         this.group.visible = false;
         this.upgradeId = null;
+        this.offer = null;
         return;
       }
     }
@@ -341,18 +353,17 @@ export class TotemArea {
    * Raises a fresh set. Any set still standing is replaced outright, which is
    * what happens when the player never claimed the last one.
    *
-   * @param {string[]} ids  up to three upgrade ids from rollTotems()
-   * @param {Object<string, number>} owned  player's stack counts
+   * @param {object[]} offers  up to three offers from _buildOffers()
    * @param {boolean} resetRerolls  false when this is itself a reroll, so the
    *   escalating price is not reset by the set it just paid for.
    */
-  present(ids, owned, resetRerolls = true) {
+  present(offers, resetRerolls = true) {
     if (resetRerolls) this.rerolls = 0;
     this.totems.forEach((t, i) => {
-      if (i < ids.length) t.present(ids[i], owned[ids[i]] || 0);
+      if (i < offers.length) t.present(offers[i]);
       else t.sink();
     });
-    if (!ids.length) {
+    if (!offers.length) {
       this.dismiss();
       return;
     }

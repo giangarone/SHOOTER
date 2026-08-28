@@ -19,6 +19,7 @@ Open http://localhost:8123
 | Mouse | Aim (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | R | Reload |
+| Q | Swap weapon |
 | Space | Jump |
 | Shift | Sprint |
 | E | Buy ammo / reroll at a station |
@@ -43,7 +44,13 @@ Open http://localhost:8123
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
   (up to x3), and a wave cleared without taking damage pays double.
 - Escalating waves with per-wave HP / speed / damage scaling
-- Weapon with magazine, reload, recoil, tracers, and muzzle flash
+- **Three weapons**, two carried at once and swapped with Q: the full-auto
+  **Pulse Rifle**, a semi-auto **Scattergun** (8 pellets, murderous inside 2m,
+  useless past 10m) and a piercing **Railgun** that one-shots everything but a
+  tank and keeps going through the rank behind it. Magazines are per slot;
+  the reserve pool is shared.
+- Weapons appear on totems - claiming one fills your empty slot, or replaces
+  the gun in hand (the totem says which before you take it)
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
 - WebAudio synth SFX (no audio assets)
 - HUD: health, ammo, score, wave + enemies remaining
@@ -77,13 +84,29 @@ target that stops a bullet harmlessly, because totems stay live through the
 next wave and a shot that missed an enemy behind one must not pick a build for
 you.
 
+## Weapons
+
+`js/weapons.js` is a data table in the same shape as `ENEMY_TYPES` and
+`UPGRADES`: a fourth gun is a stat block plus a `build()`. The stats there are
+BASE values that `player.mods` multiplies, so every upgrade in the pool already
+applies to whatever you are holding - that is the point of the table.
+
+Every weapon's viewmodel is built once at startup and parented to the camera;
+a swap only toggles `visible`. Building a model per swap would allocate
+geometry for the whole session.
+
+When balancing, check damage per second *after* reloads, not per shot. The
+scattergun first shipped at 8 pellets x 13 in a 6-shell magazine, which reads
+as a huge 104-damage shell but works out strictly worse than the starting rifle
+at every range once the short magazine and long reload are counted.
+
 ## Test
 
 ```bash
 npm test
 ```
 
-Runs a headless-Chrome smoke test that plays the game automatically for 30s
+Runs a headless-Chrome smoke test that plays the game automatically for 60s
 (requires a system Chrome; override with `CHROME=/path/to/chrome`). Besides
 checking the game runs, it asserts the pickup, ammo and projectile caps hold
 and that GPU resource counts stay bounded — lights, shader programs and
@@ -104,6 +127,7 @@ js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
+js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
