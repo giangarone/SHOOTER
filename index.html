@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VOID ARENA</title>
+  <link rel="icon" href="data:,"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="hud" class="hidden">
+    <div id="hud-top">
+      <div id="wave-box">
+        <span id="wave-label">WAVE</span>
+        <span id="wave-num">1</span>
+        <span id="enemies-left">ENEMIES 0</span>
+      </div>
+      <div id="score-box">
+        <span id="score-label">SCORE</span>
+        <span id="score-num">0</span>
+      </div>
+    </div>
+    <div id="crosshair">
+      <i></i><i></i><i></i><i></i>
+      <span id="hitmarker"></span>
+    </div>
+    <div id="hud-bottom">
+      <div id="hp-box">
+        <div id="hp-bar-bg"><div id="hp-bar"></div></div>
+        <div id="hp-text">100 / 100</div>
+      </div>
+      <div id="ammo-box">
+        <span id="ammo-reload" class="hidden">RELOADING</span>
+        <span id="ammo-num">30</span>
+        <span id="ammo-res">/ ∞</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="vignette"></div>
+  <div id="banner"></div>
+
+  <div id="overlay-start" class="overlay">
+    <h1>VOID ARENA</h1>
+    <p class="sub">SURVIVE THE WAVES</p>
+    <div class="controls">
+      <b>WASD</b> MOVE  ·  <b>MOUSE</b> AIM  ·  <b>LMB</b> SHOOT  ·  <b>R</b> RELOAD  ·  <b>SPACE</b> JUMP  ·  <b>SHIFT</b> SPRINT
+    </div>
+    <button id="btn-start">CLICK TO START</button>
+  </div>
+
+  <div id="overlay-over" class="overlay hidden">
+    <h1 class="dead">YOU DIED</h1>
+    <p class="sub" id="over-stats"></p>
+    <button id="btn-restart">RESTART</button>
+  </div>
+
+  <div id="overlay-pause" class="overlay hidden">
+    <h1>PAUSED</h1>
+    <button id="btn-resume">CLICK TO RESUME</button>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

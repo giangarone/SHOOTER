@@ -1,0 +1,17 @@
+{
+  "name": "void-arena",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based 3D arena wave shooter built with Three.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "three": "^0.166.1"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}
