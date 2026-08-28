@@ -4,9 +4,9 @@ export const POWERUP_TYPES = {
   ammo: {
     color: 0xffd600,
     emissive: 0xffd600,
-    amount: 12,
+    amount: 30,
     apply: (player, time) => {
-      player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 12);
+      player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 30);
     },
     weight: 0.55,
     sfx: 'pickupAmmo',
@@ -61,14 +61,21 @@ const TYPE_WEIGHTS = TYPE_KEYS.map(k => POWERUP_TYPES[k].weight);
 const WEIGHT_SUM = TYPE_WEIGHTS.reduce((a, b) => a + b, 0);
 const NORMALIZED_WEIGHTS = TYPE_WEIGHTS.map(w => w / WEIGHT_SUM);
 
-function pickRandomType() {
+function pickRandomType(playerHealth = 0, playerMaxHealth = 100) {
   const r = Math.random();
   let acc = 0;
   for (let i = 0; i < NORMALIZED_WEIGHTS.length; i++) {
+    const key = TYPE_KEYS[i];
+    if (key === 'health' && playerHealth >= playerMaxHealth) continue;
     acc += NORMALIZED_WEIGHTS[i];
-    if (r <= acc) return TYPE_KEYS[i];
+    if (r <= acc) return key;
   }
-  return TYPE_KEYS[TYPE_KEYS.length - 1];
+  for (let i = TYPE_KEYS.length - 1; i >= 0; i--) {
+    if (TYPE_KEYS[i] !== 'health' || playerHealth < playerMaxHealth) {
+      return TYPE_KEYS[i];
+    }
+  }
+  return 'ammo';
 }
 
 function createHexDomeGeometry(radius = 1.2, height = 1.4) {
@@ -110,7 +117,45 @@ function createHexDomeGeometry(radius = 1.2, height = 1.4) {
   return geom;
 }
 
+function createPlusGeometry(size = 0.4, thickness = 0.12) {
+  const shape = new THREE.Shape();
+  const w = size;
+  const t = size * 0.4;
+  
+  shape.moveTo(-t, -w);
+  shape.lineTo(t, -w);
+  shape.lineTo(t, -t);
+  shape.lineTo(w, -t);
+  shape.lineTo(w, t);
+  shape.lineTo(t, t);
+  shape.lineTo(t, w);
+  shape.lineTo(-t, w);
+  shape.lineTo(-t, t);
+  shape.lineTo(-w, t);
+  shape.lineTo(-w, -t);
+  shape.lineTo(-t, -t);
+  shape.lineTo(-t, -w);
+
+  const settings = {
+    depth: thickness,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.03,
+    bevelThickness: 0.03,
+  };
+  return new THREE.ExtrudeGeometry(shape, settings);
+}
+
 const DOME_GEOM = createHexDomeGeometry();
+const PLUS_GEOM = createPlusGeometry();
+
+const GEOMS = {
+  ammo: new THREE.OctahedronGeometry(0.35, 0),
+  health: PLUS_GEOM,
+  damageBoost: new THREE.TetrahedronGeometry(0.38, 0),
+  fireRateBoost: new THREE.DodecahedronGeometry(0.32, 0),
+  shield: DOME_GEOM,
+};
 
 export class Powerup {
   constructor(typeKey, position, scene) {
@@ -124,7 +169,6 @@ export class Powerup {
     this.bobOffset = Math.random() * Math.PI * 2;
     this.rotSpeed = 0.5 + Math.random() * 0.5;
 
-    const boxGeom = new THREE.BoxGeometry(0.5, 0.5, 0.5);
     const mat = new THREE.MeshStandardMaterial({
       color: this.type.color,
       emissive: this.type.emissive,
@@ -134,7 +178,7 @@ export class Powerup {
       transparent: true,
       opacity: 0.9,
     });
-    this.core = new THREE.Mesh(boxGeom, mat);
+    this.core = new THREE.Mesh(GEOMS[typeKey] || GEOMS.ammo, mat);
     this.core.position.copy(this.pos);
     this.core.position.y = 0.5;
     this.scene.add(this.core);
@@ -210,12 +254,12 @@ export function calcPickupsForWave(wave) {
   const shotsNeeded = count * 3;
   const totalAvailable = 60;
   const deficit = Math.max(0, shotsNeeded - totalAvailable);
-  const roundsPerPickup = 12;
+  const roundsPerPickup = 30;
   return Math.max(1, Math.ceil(deficit / roundsPerPickup));
 }
 
-export function spawnPowerup(arena, scene) {
-  const typeKey = pickRandomType();
+export function spawnPowerup(arena, scene, playerHealth = 0, playerMaxHealth = 100) {
+  const typeKey = pickRandomType(playerHealth, playerMaxHealth);
   const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
   const jitter = 3;
   const pos = new THREE.Vector3(

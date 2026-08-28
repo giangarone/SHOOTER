@@ -129,11 +129,26 @@ html, body {
   transform-origin: left center;
   transform: scaleX(1);
 }
-.buff-icon.damage::before { background: #ff3d00; box-shadow: 0 0 8px #ff3d00; }
+.buff-icon.damage { color: #ff3d00; }
+.buff-icon.damage::before {
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background: #ff3d00;
+  box-shadow: 0 0 8px #ff3d00;
+}
 .buff-icon.damage .buff-timer { background: #ff3d00; }
-.buff-icon.firerate::before { background: #2979ff; box-shadow: 0 0 8px #2979ff; }
+.buff-icon.firerate { color: #2979ff; }
+.buff-icon.firerate::before {
+  background: #2979ff;
+  box-shadow: 0 0 8px #2979ff;
+  clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+}
 .buff-icon.firerate .buff-timer { background: #2979ff; }
-.buff-icon.shield::before { background: #4ef3ff; box-shadow: 0 0 8px #4ef3ff; }
+.buff-icon.shield { color: #4ef3ff; }
+.buff-icon.shield::before {
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #4ef3ff;
+  box-shadow: 0 0 8px #4ef3ff;
+}
 .buff-icon.shield .buff-timer { background: #4ef3ff; }
 
 #vignette {

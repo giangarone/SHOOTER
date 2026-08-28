@@ -393,14 +393,14 @@ class Game {
           this.spawnEnemy(this.queue.shift());
           this.spawnTimer = this._cfg.spawnInterval;
         }
-        if (this.powerupsToSpawn > 0) {
-          this.powerupSpawnTimer -= dt;
-          if (this.powerupSpawnTimer <= 0) {
-            this.powerups.push(spawnPowerup(this.arena, this.scene));
-            this.powerupsToSpawn--;
-            this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
+if (this.powerupsToSpawn > 0) {
+            this.powerupSpawnTimer -= dt;
+            if (this.powerupSpawnTimer <= 0) {
+              this.powerups.push(spawnPowerup(this.arena, this.scene, this.player.health, this.player.maxHealth));
+              this.powerupsToSpawn--;
+              this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
+            }
           }
-        }
         if (!this.queue.length && !this.enemies.length) {
           this.waveState = 'intermission';
           this.interT = 3;
