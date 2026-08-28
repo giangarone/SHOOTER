@@ -126,10 +126,10 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.ammo,
-    effects: [['+5 AMMO PER KILL', GOOD], ['+25% CREDITS', GOOD]],
+    effects: [['+2 AMMO PER KILL', GOOD], ['+15% CREDITS', GOOD]],
     apply: (mods, n) => {
-      mods.ammoOnKill += 5 * n;
-      mods.creditMult *= 1 + 0.25 * n;
+      mods.ammoOnKill += 2 * n;
+      mods.creditMult *= 1 + 0.15 * n;
     },
   },
   combatStims: {

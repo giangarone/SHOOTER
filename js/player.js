@@ -33,8 +33,8 @@ const DEFAULT_MODS = {
   maxHpMult: 1,
   moveMult: 1,          // multiplier on walk AND sprint speed
   sprintMult: 1,        // extra multiplier applied only while sprinting
-  regenDelay: 4,        // seconds without damage before regen starts
-  regenRate: 5,         // health per second once regenerating
+  regenDelay: 10,        // seconds without damage before regen starts
+  regenRate: 1,         // health per second once regenerating
   lifesteal: 0,         // fraction of damage dealt returned as health
   ammoRegen: 0,         // reserve rounds per second
   creditMult: 1,        // multiplier on credits earned
