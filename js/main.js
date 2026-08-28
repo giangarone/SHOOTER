@@ -3,8 +3,12 @@
 // back into here except through the callbacks in the ctx objects below.
 //
 // STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'gameover' -> 'playing'
+//                             |
+//                             +-> 'draft' (wave-end upgrade pick) -> 'playing'
 // Only 'playing' simulates. The loop still runs and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
+// 'draft' deliberately freezes the simulation: the arena is empty by then, and
+// a frozen backdrop is what makes the screen readable.
 //
 // WAVE STATE (only meaningful while playing):
 //   'active'       spawning from the queue and fighting
@@ -50,6 +54,7 @@ import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
+import { UPGRADES, RARITY, SHOP_ITEMS, SHOP_KEYS, rollDraft, rerollCost } from './upgrades.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -71,6 +76,22 @@ const SPAWN_RETRY = 2;
 
 const MAX_PROJECTILES = 24;
 const EMPTY_CLICK_COOLDOWN = 0.35;
+
+// --- economy ---
+// Seconds a kill chain survives without a new kill.
+const COMBO_WINDOW = 3;
+// Multiplier per kill beyond the first, and its ceiling. The cap exists so a
+// late wave full of splitter children cannot run the multiplier to absurdity.
+const COMBO_STEP = 0.15;
+const COMBO_MAX = 3;
+// Credits per enemy are derived from its score so the two curves cannot drift
+// apart. Splitter children score 0 and so are worth nothing, deliberately -
+// otherwise splitters would be the best credit source in the game.
+const CREDITS_PER_SCORE = 0.1;
+const CLEAR_BONUS_BASE = 60;
+const CLEAR_BONUS_PER_WAVE = 30;
+// How many cards the wave-end draft offers.
+const DRAFT_SIZE = 3;
 
 class Game {
   constructor() {
@@ -94,6 +115,15 @@ class Game {
     this.state = 'menu';
     this.score = 0;
     this.kills = 0;
+    this.credits = 0;
+    this.comboKills = 0;
+    this.comboTimer = 0;
+    this.bestCombo = 0;
+    // Reset at the start of every wave; drives the perfect-clear bonus.
+    this.waveDamageTaken = 0;
+    // Live wave-end draft. `options` is the current three ids, `rerolls` how
+    // many times this one draft has been rerolled (it prices the next one).
+    this.draft = { options: [], rerolls: 0, lastGain: 0, perfect: false };
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -161,6 +191,12 @@ class Game {
         wave: this.wave,
         score: this.score,
         kills: this.kills,
+        credits: this.credits,
+        bestCombo: this.bestCombo,
+        upgrades: { ...this.player.upgrades },
+        upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
+        maxHealth: this.player.maxHealth,
+        magSize: this.player.magSize,
         enemies: this.enemies.length,
         queue: this.queue.length,
         shots: this.stats.shotsFired,
@@ -216,6 +252,10 @@ class Game {
         case 'ShiftLeft':
         case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
+        // Number keys pick a draft card without reaching for the mouse.
+        case 'Digit1': this._pickByIndex(0); break;
+        case 'Digit2': this._pickByIndex(1); break;
+        case 'Digit3': this._pickByIndex(2); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -286,6 +326,12 @@ class Game {
       this.sfx.ensure();
       this.beginGame();
     });
+    this.ui.bindDraft({
+      pick: (id) => this._pickUpgrade(id),
+      reroll: () => this._rerollDraft(),
+      buy: (key) => this._buyItem(key),
+      skip: () => { if (this.state === 'draft') this._closeDraft(); },
+    });
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -333,6 +379,16 @@ class Game {
     this._clearEntities();
     this.score = 0;
     this.kills = 0;
+    this.credits = 0;
+    this.comboKills = 0;
+    this.comboTimer = 0;
+    this.bestCombo = 0;
+    this.waveDamageTaken = 0;
+    this.draft.options.length = 0;
+    this.draft.rerolls = 0;
+    this.draft.lastGain = 0;
+    this.draft.perfect = false;
+    this.ui.hideDraft();
     this.wave = 0;
     this.queue.length = 0;
     this.waveState = 'idle';
@@ -377,6 +433,7 @@ class Game {
     this.ui.banner('WAVE ' + this.wave);
     this.sfx.wave();
 
+    this.waveDamageTaken = 0;
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
     this.ammoSpawnTimer = 8;
@@ -399,8 +456,50 @@ class Game {
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     const eye = this.player.eyeInto(this._killPos);
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
-    this.ui.showOver(this.score, this.wave, this.kills);
+    this.comboKills = 0;
+    this.comboTimer = 0;
+    this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this.sfx.kill();
+  }
+
+  // Current credit/score multiplier from the live kill chain.
+  comboMult() {
+    if (this.comboKills < 2) return 1;
+    return Math.min(COMBO_MAX, 1 + COMBO_STEP * (this.comboKills - 1));
+  }
+
+  // Single entry point for earning credits, so Scavenger's creditMult applies
+  // everywhere without each caller having to remember it.
+  _award(amount) {
+    if (amount <= 0) return 0;
+    const paid = Math.round(amount * this.player.mods.creditMult);
+    this.credits += paid;
+    return paid;
+  }
+
+  // Extends the kill chain. Called once per enemy death, before the credit is
+  // computed, so the kill that starts a chain already counts toward it.
+  _bumpCombo() {
+    this.comboKills++;
+    this.comboTimer = COMBO_WINDOW;
+    if (this.comboKills > this.bestCombo) this.bestCombo = this.comboKills;
+  }
+
+  // Reactive Plating. Detonates around the player when they are hit; damage
+  // and radius both come from the mods so extra stacks widen it.
+  _shockwave() {
+    const mods = this.player.mods;
+    if (mods.shockwave <= 0) return;
+    const r = mods.shockwaveRadius;
+    for (const e of this.enemies) {
+      if (e.pos.distanceTo(this.player.pos) > r) continue;
+      e.takeDamage(mods.shockwave);
+      e.pos.add(
+        this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(2.5)
+      );
+    }
+    this.effects.burst(this.player.eyeInto(this._killPos), 0x4ef3ff, 26, 8, 2.5, 0.6);
+    this.effects.addShake(0.12);
   }
 
   // Hitscan shot. Raycasts once against arena geometry and enemy hitboxes
@@ -445,7 +544,9 @@ class Game {
       const en = hits[0].object.userData.enemy;
       if (en) {
         this.stats.hits++;
-        en.takeDamage(this.player.getEffectiveDamage(34));
+        const dealt = this.player.getEffectiveDamage(34);
+        en.takeDamage(dealt);
+        this.player.applyLifesteal(dealt);
         this.effects.burst(end, 0xffe95e, 10, 4, 1.5, 0.35);
         this.sfx.hit();
         this.ui.hitMarker();
@@ -479,7 +580,9 @@ class Game {
 
     if (hits.length) {
       const en = hits[0].object.userData.enemy;
-      en.takeDamage(this.player.getEffectiveDamage(50));
+      const dealt = this.player.getEffectiveDamage(50);
+      en.takeDamage(dealt);
+      this.player.applyLifesteal(dealt);
       en.pos.add(
         this._knockback.subVectors(en.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
       );
@@ -499,6 +602,8 @@ class Game {
     if (this.state !== 'playing') return;
     const h = this.player.takeDamage(d, this.time);
     this.stats.damaged += d;
+    this.waveDamageTaken += d;
+    this._shockwave();
     this.effects.addShake(0.25);
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
     this.sfx.hurt();
@@ -584,20 +689,159 @@ class Game {
       this._updatePickupSpawns(dt);
       if (!this.queue.length && !this.enemies.length) {
         this.waveState = 'intermission';
-        this.interT = 3;
+        this.interT = 2.2;
         this.score += 100 * this.wave;
+        this._payClearBonus();
         this.ui.banner('WAVE ' + this.wave + ' CLEARED');
       }
     } else if (this.waveState === 'intermission') {
+      // A short beat on the clear banner before the draft takes the screen,
+      // so the wave gets to land before the UI covers it.
       this.interT -= dt;
-      if (this.interT <= 0) {
-        this.waveState = 'idle';
-        this.interT = 0.6;
-      }
+      if (this.interT <= 0) this._openDraft();
     } else if (this.waveState === 'idle') {
       this.interT -= dt;
       if (this.interT <= 0) this.startWave();
     }
+  }
+
+  // Wave-clear payout. A wave cleared without taking a single point of damage
+  // pays double - the clearest signal the game has that playing well is worth
+  // more than playing safe.
+  _payClearBonus() {
+    const base = CLEAR_BONUS_BASE + CLEAR_BONUS_PER_WAVE * this.wave;
+    const perfect = this.waveDamageTaken <= 0;
+    this.draft.perfect = perfect;
+    this.draft.lastGain = this._award(perfect ? base * 2 : base);
+  }
+
+  // Opens the wave-end screen. Freezes the simulation by leaving 'playing',
+  // releases the pointer so the cursor can reach the cards, and rolls the
+  // first set of options. Reroll count resets here, not on pick, so each wave
+  // starts its reroll pricing at the base cost.
+  _openDraft() {
+    this.state = 'draft';
+    this._clearInput();
+    this.comboKills = 0;
+    this.comboTimer = 0;
+    this.draft.rerolls = 0;
+    this.draft.options = rollDraft(this.player.upgrades, this.wave, DRAFT_SIZE);
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    this.ui.showDraft();
+    this._renderDraft();
+    this.sfx.wave();
+
+    // The autotest bot has no cursor. Take the first card so the run keeps
+    // moving and the upgrade paths still get exercised by the smoke test.
+    if (this.autoTest) {
+      if (this.draft.options.length) this._pickUpgrade(this.draft.options[0]);
+      else this._closeDraft();
+    }
+  }
+
+  // Builds the plain model the UI renders from. Everything the screen shows is
+  // derived here, so ui.js never has to reach back into game state.
+  _renderDraft() {
+    const owned = this.player.upgrades;
+    const cards = this.draft.options.map((id) => {
+      const def = UPGRADES[id];
+      return {
+        id,
+        name: def.name,
+        desc: def.desc((owned[id] || 0) + 1),
+        rarity: RARITY[def.rarity].label,
+        color: RARITY[def.rarity].color,
+        owned: owned[id] || 0,
+        max: def.max,
+      };
+    });
+
+    const shop = SHOP_KEYS.map((key) => {
+      const it = SHOP_ITEMS[key];
+      return {
+        key,
+        name: it.name,
+        detail: it.detail,
+        cost: it.cost,
+        available: this.credits >= it.cost && it.enabled(this.player),
+      };
+    });
+
+    const cost = rerollCost(this.draft.rerolls);
+    const build = Object.entries(owned).map(([id, n]) => ({ name: UPGRADES[id].name, n }));
+
+    let subtitle = '+<b>' + this.draft.lastGain + '</b> CREDITS';
+    if (this.draft.perfect) subtitle += ' &nbsp;·&nbsp; <b>FLAWLESS</b> — DOUBLE BONUS';
+    subtitle += ' &nbsp;·&nbsp; BEST CHAIN <b>' + this.bestCombo + '</b>';
+
+    this.ui.renderDraft({
+      wave: this.wave,
+      credits: this.credits,
+      subtitle,
+      cards,
+      shop,
+      rerollCost: cost,
+      canReroll: this.credits >= cost && this.draft.options.length > 0,
+      build,
+    });
+  }
+
+  // Keyboard shortcut for the draft cards. Silently ignored outside the draft.
+  _pickByIndex(i) {
+    if (this.state !== 'draft') return;
+    const id = this.draft.options[i];
+    if (id) this._pickUpgrade(id);
+  }
+
+  _pickUpgrade(id) {
+    if (this.state !== 'draft') return;
+    if (!this.draft.options.includes(id)) return;
+    if (!this.player.takeUpgrade(id)) {
+      this.sfx.denied();
+      return;
+    }
+    this.sfx.upgrade();
+    this._closeDraft();
+  }
+
+  _rerollDraft() {
+    if (this.state !== 'draft') return;
+    const cost = rerollCost(this.draft.rerolls);
+    if (this.credits < cost || !this.draft.options.length) {
+      this.sfx.denied();
+      return;
+    }
+    this.credits -= cost;
+    this.draft.rerolls++;
+    // A full redraw, never a partial one: re-offering a card the player just
+    // paid to get rid of makes the reroll feel rigged.
+    this.draft.options = rollDraft(this.player.upgrades, this.wave, DRAFT_SIZE);
+    this.sfx.reroll();
+    this._renderDraft();
+  }
+
+  _buyItem(key) {
+    if (this.state !== 'draft') return;
+    const it = SHOP_ITEMS[key];
+    if (!it || this.credits < it.cost || !it.enabled(this.player)) {
+      this.sfx.denied();
+      return;
+    }
+    this.credits -= it.cost;
+    it.apply(this.player, this.time);
+    this.sfx.buy();
+    this._renderDraft();
+  }
+
+  // Leaves the draft and hands control back to the wave state machine, which
+  // picks up at 'idle' and starts the next wave after a short beat.
+  _closeDraft() {
+    this.ui.hideDraft();
+    this.state = 'playing';
+    this.waveState = 'idle';
+    this.interT = 0.6;
+    this.ui.resetCache();
+    if (!this.autoTest) this._lock();
   }
 
   // Both spawners run on a timer and respect a hard cap on what is already in
@@ -701,7 +945,19 @@ class Game {
         continue;
       }
       this.kills++;
-      this.score += e.score;
+      // Splitter children score 0, so they extend the chain but pay nothing.
+      // That is intentional: they exist to threaten, not to fund the shop.
+      this._bumpCombo();
+      const mult = this.comboMult();
+      this.score += Math.round(e.score * mult);
+      this._award(e.score * CREDITS_PER_SCORE * mult);
+      this.player.onKill(this.time);
+      if (this.player.mods.ammoOnKill > 0) {
+        this.player.reserveAmmo = Math.min(
+          this.player.maxReserve,
+          this.player.reserveAmmo + this.player.mods.ammoOnKill
+        );
+      }
       this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
       this.sfx.kill();
       this.scene.remove(e.group);
@@ -736,6 +992,8 @@ class Game {
     this.ui.setWave(this.wave);
     this.ui.setEnemies(this.enemies.length + this.queue.length);
     this.ui.setScore(this.score);
+    this.ui.setCredits(this.credits);
+    this.ui.setCombo(this.comboKills, this.comboMult(), this.comboTimer / COMBO_WINDOW);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setBuffs(
@@ -755,6 +1013,10 @@ class Game {
       // silently burn through buff timers and pickup lifetimes.
       this.time += dt;
       if (this.emptyClickCd > 0) this.emptyClickCd -= dt;
+      if (this.comboTimer > 0) {
+        this.comboTimer -= dt;
+        if (this.comboTimer <= 0) this.comboKills = 0;
+      }
       if (this.autoTest) this._autoInput();
       this.player.update(dt, this.input, this.arena.obstacles, this.time);
 

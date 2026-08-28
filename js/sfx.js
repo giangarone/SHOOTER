@@ -118,6 +118,25 @@ export class SFX {
     this.tone({ f: 550, f2: 1100, t: 0.15, type: 'triangle', v: 0.28 });
     this.tone({ f: 820, f2: 1640, t: 0.1, type: 'sine', v: 0.2, delay: 0.08 });
   }
+  upgrade() {
+    this.tone({ f: 440, f2: 880, t: 0.18, type: 'triangle', v: 0.3 });
+    this.tone({ f: 660, f2: 1320, t: 0.2, type: 'sine', v: 0.25, delay: 0.09 });
+    this.tone({ f: 990, f2: 1760, t: 0.26, type: 'sine', v: 0.2, delay: 0.18 });
+  }
+  buy() {
+    this.tone({ f: 700, t: 0.05, v: 0.25 });
+    this.tone({ f: 1050, t: 0.07, v: 0.25, delay: 0.06 });
+  }
+  reroll() {
+    this.noise({ t: 0.14, v: 0.22, f: 3200 });
+    this.tone({ f: 520, f2: 880, t: 0.12, type: 'triangle', v: 0.22 });
+  }
+  denied() {
+    this.tone({ f: 160, f2: 90, t: 0.12, type: 'square', v: 0.22 });
+  }
+  credits() {
+    this.tone({ f: 1180, t: 0.04, v: 0.14, type: 'sine' });
+  }
   pickupShield() {
     this.tone({ f: 330, f2: 660, t: 0.2, type: 'sine', v: 0.3 });
     this.noise({ t: 0.3, v: 0.15, f: 2000 });

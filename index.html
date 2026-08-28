@@ -23,11 +23,17 @@
       <div id="score-box">
         <span id="score-label">SCORE</span>
         <span id="score-num">0</span>
+        <span id="credit-num">0c</span>
       </div>
     </div>
     <div id="crosshair">
       <i></i><i></i><i></i><i></i>
       <span id="hitmarker"></span>
+    </div>
+    <div id="combo" class="hidden">
+      <span id="combo-mult">x1.0</span>
+      <span id="combo-count">0 KILLS</span>
+      <div id="combo-bar"><i></i></div>
     </div>
     <div id="hud-bottom">
       <div id="hp-box">
@@ -60,6 +66,20 @@
     <h1 class="dead">YOU DIED</h1>
     <p class="sub" id="over-stats"></p>
     <button id="btn-restart">RESTART</button>
+  </div>
+
+  <div id="overlay-draft" class="overlay hidden">
+    <div id="draft-head">
+      <h2 id="draft-title">WAVE 1 CLEARED</h2>
+      <p id="draft-sub"></p>
+      <div id="draft-credits">0 <span>CREDITS</span></div>
+    </div>
+    <div id="draft-cards"></div>
+    <div id="draft-shop">
+      <div id="shop-items"></div>
+      <button id="btn-reroll" class="shop-btn reroll">REROLL</button>
+    </div>
+    <div id="draft-build"></div>
   </div>
 
   <div id="overlay-pause" class="overlay hidden">

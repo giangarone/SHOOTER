@@ -14,6 +14,36 @@
 
 import * as THREE from 'three';
 import { resolveCircle } from './utils.js';
+import { UPGRADES } from './upgrades.js';
+
+// Every stat an upgrade is allowed to touch, at its un-upgraded value.
+//
+// rebuildMods() resets to a copy of this and replays the whole owned-upgrade
+// list on top, so an upgrade's apply() always starts from a clean slate. Add a
+// field here before referencing it from upgrades.js, and read it at the point
+// of use rather than caching it - a draft pick can change any of these
+// mid-run, between any two waves.
+const DEFAULT_MODS = {
+  fireRate: 1,          // multiplier on shots per second
+  damage: 1,            // multiplier on all outgoing damage
+  magMult: 1,           // multiplier on magazine size
+  reloadMult: 1,        // multiplier on reload duration
+  maxHpBonus: 0,        // flat max health added before maxHpMult
+  maxHpMult: 1,
+  moveMult: 1,          // multiplier on walk AND sprint speed
+  sprintMult: 1,        // extra multiplier applied only while sprinting
+  regenDelay: 4,        // seconds without damage before regen starts
+  regenRate: 5,         // health per second once regenerating
+  lifesteal: 0,         // fraction of damage dealt returned as health
+  ammoRegen: 0,         // reserve rounds per second
+  creditMult: 1,        // multiplier on credits earned
+  ammoOnKill: 0,        // reserve rounds granted per kill
+  bloodlust: 0,         // fire rate gained per kill stack
+  bloodlustMax: 0,      // maximum kill stacks
+  shockwave: 0,         // damage dealt to nearby enemies when hit
+  shockwaveRadius: 0,
+  momentum: 0,          // extra damage fraction at full sprint
+};
 
 // First-person gun model. The 'muzzle' child is an empty marker: main.js
 // reads its world position for the muzzle flash and tracer origin.
@@ -45,15 +75,19 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
-    this.maxHealth = 100;
+    this.baseMaxHealth = 100;
+    this.baseMagSize = 30;
+    this.baseReloadTime = 1.4;
+    // Owned upgrades as id -> stack count, and the stat block derived from
+    // them. Both are cleared by reset(), so a run never inherits a build.
+    this.upgrades = {};
+    this.mods = { ...DEFAULT_MODS };
     this.health = 100;
-    this.magSize = 30;
     this.mag = 30;
     this.maxReserve = 300;
     this.reserveAmmo = 90;
     this.fireRate = 8;
     this.fireCd = 0;
-    this.reloadTime = 1.4;
     this.reloading = 0;
     this.onGround = false;
     this.lastHurt = -99;
@@ -66,6 +100,9 @@ export class Player {
     this.fireRateBoostEnd = 0;
     this.shield = 0;
     this.shieldEnd = 0;
+    this.bloodlustStacks = 0;
+    this.bloodlustEnd = 0;
+    this._ammoRegenAcc = 0;
     this.gun = buildGun();
     this.muzzle = this.gun.getObjectByName('muzzle');
     this.gunBaseZ = this.gun.position.z;
@@ -74,9 +111,70 @@ export class Player {
     this.applyCamera();
   }
 
+  // Derived stats. These are getters, not fields, because a draft pick can
+  // change the underlying mods at any wave boundary - anything that cached
+  // them would silently keep the pre-upgrade value for the rest of the run.
+  get maxHealth() {
+    return Math.max(10, Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult));
+  }
+  get magSize() {
+    return Math.max(1, Math.round(this.baseMagSize * this.mods.magMult));
+  }
+  get reloadTime() {
+    return this.baseReloadTime * this.mods.reloadMult;
+  }
+
+  // Rebuilds the whole stat block from the owned upgrade list. Always a full
+  // replay from DEFAULT_MODS rather than an incremental apply - see the note
+  // at the top of upgrades.js for why that matters.
+  rebuildMods() {
+    this.mods = { ...DEFAULT_MODS };
+    for (const [id, n] of Object.entries(this.upgrades)) {
+      const def = UPGRADES[id];
+      if (def && n > 0) def.apply(this.mods, n);
+    }
+  }
+
+  // Adds one stack of an upgrade. Returns false when it is already maxed, so
+  // callers can refuse the pick rather than silently wasting it.
+  takeUpgrade(id) {
+    const def = UPGRADES[id];
+    if (!def) return false;
+    const n = (this.upgrades[id] || 0) + 1;
+    if (n > def.max) return false;
+    this.upgrades[id] = n;
+    this.rebuildMods();
+    // A max-health change must not leave the player over the new cap or at a
+    // stale value; clamp immediately so the HUD never shows 120/100.
+    this.health = Math.min(this.health, this.maxHealth);
+    this.mag = Math.min(this.mag, this.magSize);
+    return true;
+  }
+
+  // Called by main.js on every kill. Only Bloodlust uses it today.
+  onKill(time) {
+    if (this.mods.bloodlust <= 0) return;
+    this.bloodlustStacks = Math.min(this.mods.bloodlustMax, this.bloodlustStacks + 1);
+    this.bloodlustEnd = time + 4;
+  }
+
+  // Current fire-rate multiplier from Bloodlust stacks.
+  bloodlustMult() {
+    if (this.bloodlustStacks <= 0) return 1;
+    return 1 + this.mods.bloodlust * this.bloodlustStacks;
+  }
+
   // Back to a fresh-run state. Called on every new game, so anything added to
   // the constructor that changes during play must be reset here too.
   reset() {
+    // Upgrades are cleared first: maxHealth and magSize are derived from
+    // mods, so reading them before the wipe would seed the new run with the
+    // last one's stats.
+    this.upgrades = {};
+    this.rebuildMods();
+    this.bloodlustStacks = 0;
+    this.bloodlustEnd = 0;
+    this._ammoRegenAcc = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
     this.yaw = 0;
@@ -130,6 +228,19 @@ export class Player {
       this.shield = 0;
       this.shieldEnd = 0;
     }
+    if (this.bloodlustStacks > 0 && time >= this.bloodlustEnd) this.bloodlustStacks = 0;
+
+    // Ammo Fabricator. Accumulated as a float and spent in whole rounds, so a
+    // sub-1-round-per-second rate still pays out instead of truncating to
+    // nothing every frame.
+    if (this.mods.ammoRegen > 0 && this.reserveAmmo < this.maxReserve) {
+      this._ammoRegenAcc += this.mods.ammoRegen * dt;
+      if (this._ammoRegenAcc >= 1) {
+        const whole = Math.floor(this._ammoRegenAcc);
+        this._ammoRegenAcc -= whole;
+        this.reserveAmmo = Math.min(this.maxReserve, this.reserveAmmo + whole);
+      }
+    }
 
     if (this.reloading > 0) {
       this.reloading -= dt;
@@ -151,7 +262,7 @@ export class Player {
       const len = Math.hypot(f, s);
       const fn = f / len;
       const sn = s / len;
-      const speed = input.sprint ? 10 : 6.5;
+      const speed = (input.sprint ? 10 * this.mods.sprintMult : 6.5) * this.mods.moveMult;
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
       this.vel.x = (-sinY * fn + cosY * sn) * speed;
@@ -204,8 +315,8 @@ export class Player {
 
     // Regen after 4s without damage. The second branch bleeds off overheal
     // (health above max, from a health pickup) back down to max.
-    if (time - this.lastHurt > 4 && this.health < this.maxHealth) {
-      this.health = Math.min(this.maxHealth, this.health + 5 * dt);
+    if (time - this.lastHurt > this.mods.regenDelay && this.health < this.maxHealth) {
+      this.health = Math.min(this.maxHealth, this.health + this.mods.regenRate * dt);
     } else if (this.health > this.maxHealth) {
       this.health = Math.max(this.maxHealth, this.health - 5 * dt);
     }
@@ -238,7 +349,8 @@ export class Player {
       return 'empty';
     }
     this.mag--;
-    const effectiveFireRate = this.fireRate * this.fireRateMult;
+    const effectiveFireRate =
+      this.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
     this.kick = 0.09;
     this.pitch = Math.min(1.5, this.pitch + 0.006 + Math.random() * 0.004);
@@ -270,7 +382,24 @@ export class Player {
     return this.health;
   }
 
+  // All outgoing damage goes through here. Momentum reads live horizontal
+  // speed, so the bonus rises and falls as the player moves - it is not a
+  // sprint-key check.
   getEffectiveDamage(base) {
-    return base * this.damageMult;
+    let d = base * this.damageMult * this.mods.damage;
+    if (this.mods.momentum > 0) {
+      const speed = Math.hypot(this.vel.x, this.vel.z);
+      d *= 1 + this.mods.momentum * Math.min(1, speed / 10);
+    }
+    return d;
+  }
+
+  // Vampiric Rounds. Heals a fraction of damage dealt, never past max health,
+  // and returns the amount healed so the caller can show feedback.
+  applyLifesteal(damageDealt) {
+    if (this.mods.lifesteal <= 0 || this.health >= this.maxHealth) return 0;
+    const heal = Math.min(damageDealt * this.mods.lifesteal, this.maxHealth - this.health);
+    this.health += heal;
+    return heal;
   }
 }
