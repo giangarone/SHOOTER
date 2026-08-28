@@ -81,4 +81,27 @@ export class SFX {
   empty() {
     this.tone({ f: 140, t: 0.05, v: 0.2 });
   }
+  melee() {
+    this.tone({ f: 120, f2: 60, t: 0.08, type: 'sawtooth', v: 0.4 });
+    this.noise({ t: 0.12, v: 0.35, f: 800, delay: 0.02 });
+    this.tone({ f: 300, f2: 100, t: 0.15, type: 'triangle', v: 0.25, delay: 0.08 });
+  }
+  pickupAmmo() {
+    this.tone({ f: 520, t: 0.04, v: 0.25 });
+    this.tone({ f: 780, t: 0.05, v: 0.25, delay: 0.05 });
+    this.tone({ f: 1040, t: 0.06, v: 0.3, delay: 0.1 });
+  }
+  pickupHealth() {
+    this.tone({ f: 440, f2: 880, t: 0.12, type: 'sine', v: 0.3 });
+    this.tone({ f: 660, f2: 1320, t: 0.15, type: 'sine', v: 0.25, delay: 0.06 });
+  }
+  pickupBuff() {
+    this.tone({ f: 550, f2: 1100, t: 0.15, type: 'triangle', v: 0.28 });
+    this.tone({ f: 820, f2: 1640, t: 0.1, type: 'sine', v: 0.2, delay: 0.08 });
+  }
+  pickupShield() {
+    this.tone({ f: 330, f2: 660, t: 0.2, type: 'sine', v: 0.3 });
+    this.noise({ t: 0.3, v: 0.15, f: 2000 });
+    this.tone({ f: 990, f2: 1980, t: 0.25, type: 'triangle', v: 0.2, delay: 0.1 });
+  }
 }

@@ -33,6 +33,8 @@ export class Player {
     this.health = 100;
     this.magSize = 30;
     this.mag = 30;
+    this.maxReserve = 300;
+    this.reserveAmmo = 30;
     this.fireRate = 8;
     this.fireCd = 0;
     this.reloadTime = 1.4;
@@ -40,6 +42,14 @@ export class Player {
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
+    this.meleeCd = 0;
+    this.meleeActive = 0;
+    this.damageMult = 1;
+    this.damageBoostEnd = 0;
+    this.fireRateMult = 1;
+    this.fireRateBoostEnd = 0;
+    this.shield = 0;
+    this.shieldEnd = 0;
     this.gun = buildGun();
     this.gunBaseZ = this.gun.position.z;
     camera.add(this.gun);
@@ -54,11 +64,20 @@ export class Player {
     this.pitch = 0;
     this.health = this.maxHealth;
     this.mag = this.magSize;
+    this.reserveAmmo = 30;
     this.fireCd = 0;
     this.reloading = 0;
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
+    this.meleeCd = 0;
+    this.meleeActive = 0;
+    this.damageMult = 1;
+    this.damageBoostEnd = 0;
+    this.fireRateMult = 1;
+    this.fireRateBoostEnd = 0;
+    this.shield = 0;
+    this.shieldEnd = 0;
   }
 
   eyeInto(v) {
@@ -68,11 +87,30 @@ export class Player {
 
   update(dt, input, obstacles, time) {
     this.fireCd -= dt;
+    if (this.meleeCd > 0) this.meleeCd -= dt;
+    if (this.meleeActive > 0) this.meleeActive -= dt;
+
+    if (this.damageBoostEnd > 0 && time >= this.damageBoostEnd) {
+      this.damageMult = 1;
+      this.damageBoostEnd = 0;
+    }
+    if (this.fireRateBoostEnd > 0 && time >= this.fireRateBoostEnd) {
+      this.fireRateMult = 1;
+      this.fireRateBoostEnd = 0;
+    }
+    if (this.shieldEnd > 0 && time >= this.shieldEnd) {
+      this.shield = 0;
+      this.shieldEnd = 0;
+    }
+
     if (this.reloading > 0) {
       this.reloading -= dt;
       if (this.reloading <= 0) {
         this.reloading = 0;
-        this.mag = this.magSize;
+        const needed = this.magSize - this.mag;
+        const take = Math.min(needed, this.reserveAmmo);
+        this.mag += take;
+        this.reserveAmmo -= take;
       }
     }
 
@@ -130,6 +168,8 @@ export class Player {
 
     if (time - this.lastHurt > 4 && this.health < this.maxHealth) {
       this.health = Math.min(this.maxHealth, this.health + 5 * dt);
+    } else if (this.health > this.maxHealth) {
+      this.health = Math.max(this.maxHealth, this.health - 5 * dt);
     }
 
     this.kick *= Math.pow(0.0001, dt);
@@ -143,7 +183,7 @@ export class Player {
   }
 
   startReload() {
-    if (this.reloading > 0 || this.mag === this.magSize) return false;
+    if (this.reloading > 0 || this.mag === this.magSize || this.reserveAmmo <= 0) return false;
     this.reloading = this.reloadTime;
     return true;
   }
@@ -151,20 +191,42 @@ export class Player {
   tryShoot() {
     if (this.reloading > 0 || this.fireCd > 0) return null;
     if (this.mag <= 0) {
-      this.startReload();
+      if (this.reserveAmmo > 0) this.startReload();
+      else this.startReload();
       return 'empty';
     }
     this.mag--;
-    this.fireCd = 1 / this.fireRate;
+    const effectiveFireRate = this.fireRate * this.fireRateMult;
+    this.fireCd = 1 / effectiveFireRate;
     this.kick = 0.09;
     this.pitch = Math.min(1.5, this.pitch + 0.006 + Math.random() * 0.004);
     if (this.mag === 0) this.startReload();
     return 'shot';
   }
 
+  tryMelee() {
+    if (this.meleeCd > 0) return false;
+    this.meleeCd = 0.6;
+    this.meleeActive = 0.15;
+    this.kick = 0.12;
+    return true;
+  }
+
   takeDamage(d, time) {
+    if (this.shield > 0) {
+      this.shield = Math.max(0, this.shield - d);
+      if (this.shield <= 0) {
+        this.shieldEnd = 0;
+      }
+      this.lastHurt = time;
+      return this.health;
+    }
     this.health = Math.max(0, this.health - d);
     this.lastHurt = time;
     return this.health;
+  }
+
+  getEffectiveDamage(base) {
+    return base * this.damageMult;
   }
 }

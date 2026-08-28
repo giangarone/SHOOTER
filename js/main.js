@@ -6,6 +6,7 @@ import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
+import { Powerup, spawnPowerup, calcPickupsForWave } from './powerups.js';
 
 const autotest = new URLSearchParams(location.search).has('autotest');
 
@@ -34,6 +35,7 @@ class Game {
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
+    this.powerups = [];
     this.queue = [];
     this._cfg = waveConfig(1);
     this.spawnTimer = 0;
@@ -41,7 +43,9 @@ class Game {
     this.interT = 1.2;
     this.time = 0;
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false, melee: false };
+    this.powerupsToSpawn = 0;
+    this.powerupSpawnTimer = 0;
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
 
@@ -98,19 +102,26 @@ class Game {
       }
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      this.sfx.ensure();
-      if (this.state === 'playing') {
-        if (!this.autoTest && document.pointerLockElement !== canvas) this._lock();
-        this.input.shoot = true;
-      } else if (this.state === 'menu') {
-        this.beginGame();
-      } else if (this.state === 'paused') {
-        this.resume();
+      if (e.button === 0) {
+        this.sfx.ensure();
+        if (this.state === 'playing') {
+          if (!this.autoTest && document.pointerLockElement !== canvas) this._lock();
+          this.input.shoot = true;
+        } else if (this.state === 'menu') {
+          this.beginGame();
+        } else if (this.state === 'paused') {
+          this.resume();
+        }
+      } else if (e.button === 2) {
+        e.preventDefault();
+        if (this.state === 'playing') {
+          this.input.melee = true;
+        }
       }
     });
     addEventListener('mouseup', (e) => {
       if (e.button === 0) this.input.shoot = false;
+      if (e.button === 2) this.input.melee = false;
     });
     document.addEventListener('mousemove', (e) => {
       if (this.state !== 'playing' || this.autoTest) return;
@@ -124,6 +135,7 @@ class Game {
         if (this.state === 'playing' && !this.autoTest) {
           this.state = 'paused';
           this.input.shoot = false;
+          this.input.melee = false;
           this.ui.showPause();
         }
       } else if (this.state === 'paused') {
@@ -172,6 +184,8 @@ class Game {
     this.enemies.length = 0;
     for (const p of this.projectiles) this.scene.remove(p.mesh);
     this.projectiles.length = 0;
+    for (const p of this.powerups) p.destroy();
+    this.powerups.length = 0;
     this.score = 0;
     this.kills = 0;
     this.wave = 0;
@@ -180,6 +194,7 @@ class Game {
     this.interT = 1.2;
     this.state = 'playing';
     this.input.shoot = false;
+    this.input.melee = false;
     this.ui.resetCache();
     this.ui.showHud();
     if (!this.autoTest) this._lock();
@@ -206,6 +221,9 @@ class Game {
     this.ui.setWave(this.wave);
     this.ui.banner('WAVE ' + this.wave);
     this.sfx.wave();
+
+    this.powerupsToSpawn = calcPickupsForWave(this.wave);
+    this.powerupSpawnTimer = 2;
   }
 
   spawnEnemy(type) {
@@ -221,6 +239,7 @@ class Game {
   gameOver() {
     this.state = 'gameover';
     this.input.shoot = false;
+    this.input.melee = false;
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     const eye = this.player.eyeInto(new THREE.Vector3());
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
@@ -259,7 +278,8 @@ class Game {
       const en = hits[0].object.userData.enemy;
       if (en) {
         this.stats.hits++;
-        en.takeDamage(34);
+        const dmg = this.player.getEffectiveDamage(34);
+        en.takeDamage(dmg);
         this.effects.burst(end, 0xffe95e, 10, 4, 1.5, 0.35);
         this.sfx.hit();
         this.ui.hitMarker();
@@ -271,6 +291,28 @@ class Game {
       end = ray.ray.at(60, new THREE.Vector3());
     }
     this.effects.tracer(muzzle, end);
+  }
+
+  tryMelee() {
+    if (!this.player.tryMelee()) return;
+    this.sfx.melee();
+
+    const ray = new THREE.Raycaster();
+    ray.far = 2.2;
+    ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hits = ray.intersectObjects(this.enemies.map((e) => e.hitbox), false);
+    if (hits.length) {
+      const en = hits[0].object.userData.enemy;
+      const dmg = this.player.getEffectiveDamage(50);
+      en.takeDamage(dmg);
+      const knockback = new THREE.Vector3().subVectors(en.pos, this.player.pos).normalize().multiplyScalar(3);
+      en.pos.add(knockback);
+      this.effects.burst(hits[0].point, 0xffd600, 12, 4, 1.5, 0.4);
+      this.ui.hitMarker();
+      this.effects.addShake(0.08);
+    } else {
+      this.effects.addShake(0.03);
+    }
   }
 
   _hurtPlayer(d, pos) {
@@ -351,6 +393,14 @@ class Game {
           this.spawnEnemy(this.queue.shift());
           this.spawnTimer = this._cfg.spawnInterval;
         }
+        if (this.powerupsToSpawn > 0) {
+          this.powerupSpawnTimer -= dt;
+          if (this.powerupSpawnTimer <= 0) {
+            this.powerups.push(spawnPowerup(this.arena, this.scene));
+            this.powerupsToSpawn--;
+            this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
+          }
+        }
         if (!this.queue.length && !this.enemies.length) {
           this.waveState = 'intermission';
           this.interT = 3;
@@ -369,6 +419,23 @@ class Game {
       }
 
       if (this.input.shoot) this.shoot();
+      if (this.input.melee) this.tryMelee();
+
+      for (let i = this.powerups.length - 1; i >= 0; i--) {
+        const p = this.powerups[i];
+        p.update(dt, this.time);
+        if (p.dead) {
+          this.powerups.splice(i, 1);
+          continue;
+        }
+        if (p.tryPickup(this.player.pos)) {
+          p.type.apply(this.player, this.time);
+          this.sfx[p.type.sfx]();
+          this.effects.burst(p.pos, p.type.color, 16, 4, 2, 0.5);
+          p.destroy();
+          this.powerups.splice(i, 1);
+        }
+      }
 
       const ectx = {
         player: this.player,
@@ -413,7 +480,12 @@ class Game {
       this.ui.setEnemies(this.enemies.length + this.queue.length);
       this.ui.setScore(this.score);
       this.ui.setHealth(this.player.health, this.player.maxHealth);
-      this.ui.setAmmo(this.player.mag, this.player.reloading > 0);
+      this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
+      this.ui.setBuffs({
+        damageBoost: this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
+        fireRateBoost: this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
+        shield: this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
+      });
 
       if (this.player.health <= 0) this.gameOver();
     } else if (this.state === 'menu') {

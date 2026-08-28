@@ -8,6 +8,7 @@ export class UI {
     this.hpBar = $('hp-bar');
     this.hpText = $('hp-text');
     this.ammoNum = $('ammo-num');
+    this.ammoRes = $('ammo-res');
     this.ammoReload = $('ammo-reload');
     this.vignette = $('vignette');
     this.bannerEl = $('banner');
@@ -16,7 +17,9 @@ export class UI {
     this.overOv = $('overlay-over');
     this.pauseOv = $('overlay-pause');
     this.overStats = $('over-stats');
+    this.buffsEl = $('buffs');
     this._c = {};
+    this._buffEls = {};
   }
 
   setWave(n) {
@@ -47,15 +50,53 @@ export class UI {
       this.hpText.textContent = Math.ceil(h) + ' / ' + max;
     }
   }
-  setAmmo(mag, reloading) {
+  setAmmo(mag, reserve, reloading) {
     if (this._c.mag !== mag) {
       this._c.mag = mag;
       this.ammoNum.textContent = mag;
       this.ammoNum.style.color = mag === 0 ? '#ff3b30' : '#fff';
     }
+    if (this._c.reserve !== reserve) {
+      this._c.reserve = reserve;
+      this.ammoRes.textContent = ' / ' + reserve;
+      if (reserve === 0) {
+        this.ammoRes.style.color = '#ff3b30';
+        this.ammoRes.style.animation = 'pulse 0.5s infinite alternate';
+      } else if (reserve < 30) {
+        this.ammoRes.style.color = '#ffcc00';
+        this.ammoRes.style.animation = 'none';
+      } else {
+        this.ammoRes.style.color = '#5b6785';
+        this.ammoRes.style.animation = 'none';
+      }
+    }
     if (this._c.reload !== reloading) {
       this._c.reload = reloading;
       this.ammoReload.classList.toggle('hidden', !reloading);
+    }
+  }
+  setBuffs(buffs) {
+    const types = ['damageBoost', 'fireRateBoost', 'shield'];
+    const labels = { damageBoost: 'damage', fireRateBoost: 'firerate', shield: 'shield' };
+    const maxDur = { damageBoost: 10, fireRateBoost: 8, shield: 15 };
+
+    for (const key of types) {
+      const val = buffs[key];
+      let el = this._buffEls[key];
+      if (val > 0) {
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'buff-icon ' + labels[key];
+          el.innerHTML = '<div class="buff-timer"></div>';
+          this.buffsEl.appendChild(el);
+          this._buffEls[key] = el;
+        }
+        el.style.display = 'flex';
+        const timer = el.querySelector('.buff-timer');
+        timer.style.transform = 'scaleX(' + val + ')';
+      } else if (el) {
+        el.style.display = 'none';
+      }
     }
   }
   banner(text) {
@@ -103,5 +144,8 @@ export class UI {
   }
   resetCache() {
     this._c = {};
+    for (const el of Object.values(this._buffEls)) {
+      if (el) el.style.display = 'none';
+    }
   }
 }
