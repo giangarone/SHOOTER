@@ -3,12 +3,14 @@
 // back into here except through the callbacks in the ctx objects below.
 //
 // STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'gameover' -> 'playing'
-//                             |
-//                             +-> 'draft' (wave-end upgrade pick) -> 'playing'
 // Only 'playing' simulates. The loop still runs and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
-// 'draft' deliberately freezes the simulation: the arena is empty by then, and
-// a frozen backdrop is what makes the screen readable.
+//
+// NOTHING IN THE RUN EVER PAUSES THE GAME. The wave-end upgrade is rolled and
+// applied automatically and only announced by an overlay-free reveal, and
+// credits are spent at the in-arena terminals with a keypress. Both are
+// deliberate: a menu at the wave boundary killed the momentum this game runs
+// on. Keep new systems on that side of the line.
 //
 // WAVE STATE (only meaningful while playing):
 //   'active'       spawning from the queue and fighting
@@ -54,7 +56,8 @@ import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
-import { UPGRADES, RARITY, SHOP_ITEMS, SHOP_KEYS, rollDraft, rerollCost } from './upgrades.js';
+import { UPGRADES, RARITY, rollUpgrade } from './upgrades.js';
+import { buildTerminals } from './terminals.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -90,8 +93,9 @@ const COMBO_MAX = 3;
 const CREDITS_PER_SCORE = 0.1;
 const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
-// How many cards the wave-end draft offers.
-const DRAFT_SIZE = 3;
+// How long the wave-end upgrade card stays on screen. Must match the `reveal`
+// CSS animation, which is what actually removes it.
+const REVEAL_TIME = 3.6;
 
 class Game {
   constructor() {
@@ -107,6 +111,10 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 200);
 
     this.arena = buildArena(this.scene);
+    // Terminals are static level furniture: built once, never spawned or
+    // destroyed, and their collision boxes join the arena's obstacle list so
+    // the player cannot walk through one.
+    this.terminals = buildTerminals(this.scene, this.arena.obstacles);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     this.ui = new UI();
@@ -121,9 +129,10 @@ class Game {
     this.bestCombo = 0;
     // Reset at the start of every wave; drives the perfect-clear bonus.
     this.waveDamageTaken = 0;
-    // Live wave-end draft. `options` is the current three ids, `rerolls` how
-    // many times this one draft has been rerolled (it prices the next one).
-    this.draft = { options: [], rerolls: 0, lastGain: 0, perfect: false };
+    // Credits paid by the last wave clear, and whether it was flawless. Both
+    // are shown on the upgrade reveal.
+    this.lastGain = 0;
+    this.lastPerfect = false;
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -252,10 +261,7 @@ class Game {
         case 'ShiftLeft':
         case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
-        // Number keys pick a draft card without reaching for the mouse.
-        case 'Digit1': this._pickByIndex(0); break;
-        case 'Digit2': this._pickByIndex(1); break;
-        case 'Digit3': this._pickByIndex(2); break;
+        case 'KeyE': this.tryUseTerminal(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -326,12 +332,6 @@ class Game {
       this.sfx.ensure();
       this.beginGame();
     });
-    this.ui.bindDraft({
-      pick: (id) => this._pickUpgrade(id),
-      reroll: () => this._rerollDraft(),
-      buy: (key) => this._buyItem(key),
-      skip: () => { if (this.state === 'draft') this._closeDraft(); },
-    });
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -384,11 +384,10 @@ class Game {
     this.comboTimer = 0;
     this.bestCombo = 0;
     this.waveDamageTaken = 0;
-    this.draft.options.length = 0;
-    this.draft.rerolls = 0;
-    this.draft.lastGain = 0;
-    this.draft.perfect = false;
-    this.ui.hideDraft();
+    this.lastGain = 0;
+    this.lastPerfect = false;
+    this.ui.hideUpgrade();
+    for (const t of this.terminals) t.restock();
     this.wave = 0;
     this.queue.length = 0;
     this.waveState = 'idle';
@@ -434,6 +433,9 @@ class Game {
     this.sfx.wave();
 
     this.waveDamageTaken = 0;
+    // One charge per terminal per wave. Restocking here rather than on a
+    // timer is what makes crossing the arena for a buy a real decision.
+    for (const t of this.terminals) t.restock();
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
     this.ammoSpawnTimer = 8;
@@ -458,6 +460,8 @@ class Game {
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
     this.comboKills = 0;
     this.comboTimer = 0;
+    this.ui.setPrompt(null, false);
+    this.ui.hideUpgrade();
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this.sfx.kill();
   }
@@ -689,16 +693,22 @@ class Game {
       this._updatePickupSpawns(dt);
       if (!this.queue.length && !this.enemies.length) {
         this.waveState = 'intermission';
-        this.interT = 2.2;
+        // Long enough for the upgrade card to be read, short enough that the
+        // player is still moving when the next wave lands. The reveal is the
+        // wave-clear announcement, so there is no separate banner here.
+        this.interT = REVEAL_TIME;
         this.score += 100 * this.wave;
         this._payClearBonus();
-        this.ui.banner('WAVE ' + this.wave + ' CLEARED');
+        this._grantWaveUpgrade();
       }
     } else if (this.waveState === 'intermission') {
-      // A short beat on the clear banner before the draft takes the screen,
-      // so the wave gets to land before the UI covers it.
+      // The simulation keeps running through the reveal - the player can move,
+      // shoot and buy from a terminal the whole time.
       this.interT -= dt;
-      if (this.interT <= 0) this._openDraft();
+      if (this.interT <= 0) {
+        this.waveState = 'idle';
+        this.interT = 0.4;
+      }
     } else if (this.waveState === 'idle') {
       this.interT -= dt;
       if (this.interT <= 0) this.startWave();
@@ -710,138 +720,81 @@ class Game {
   // more than playing safe.
   _payClearBonus() {
     const base = CLEAR_BONUS_BASE + CLEAR_BONUS_PER_WAVE * this.wave;
-    const perfect = this.waveDamageTaken <= 0;
-    this.draft.perfect = perfect;
-    this.draft.lastGain = this._award(perfect ? base * 2 : base);
+    this.lastPerfect = this.waveDamageTaken <= 0;
+    this.lastGain = this._award(this.lastPerfect ? base * 2 : base);
   }
 
-  // Opens the wave-end screen. Freezes the simulation by leaving 'playing',
-  // releases the pointer so the cursor can reach the cards, and rolls the
-  // first set of options. Reroll count resets here, not on pick, so each wave
-  // starts its reroll pricing at the base cost.
-  _openDraft() {
-    this.state = 'draft';
-    this._clearInput();
-    this.comboKills = 0;
-    this.comboTimer = 0;
-    this.draft.rerolls = 0;
-    this.draft.options = rollDraft(this.player.upgrades, this.wave, DRAFT_SIZE);
-    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
-    this.ui.showDraft();
-    this._renderDraft();
-    this.sfx.wave();
+  // Rolls one random upgrade, applies it immediately and announces it. There
+  // is no choice and no pause by design: the reveal is a readout, the game
+  // keeps simulating underneath it, and the player keeps control throughout.
+  //
+  // Returns silently once every upgrade is maxed out - rollUpgrade() gives
+  // back null rather than re-granting something at its cap.
+  _grantWaveUpgrade() {
+    const id = rollUpgrade(this.player.upgrades, this.wave);
+    if (!id || !this.player.takeUpgrade(id)) return;
 
-    // The autotest bot has no cursor. Take the first card so the run keeps
-    // moving and the upgrade paths still get exercised by the smoke test.
-    if (this.autoTest) {
-      if (this.draft.options.length) this._pickUpgrade(this.draft.options[0]);
-      else this._closeDraft();
-    }
-  }
-
-  // Builds the plain model the UI renders from. Everything the screen shows is
-  // derived here, so ui.js never has to reach back into game state.
-  _renderDraft() {
-    const owned = this.player.upgrades;
-    const cards = this.draft.options.map((id) => {
-      const def = UPGRADES[id];
-      return {
-        id,
-        name: def.name,
-        desc: def.desc((owned[id] || 0) + 1),
-        rarity: RARITY[def.rarity].label,
-        color: RARITY[def.rarity].color,
-        owned: owned[id] || 0,
-        max: def.max,
-      };
+    const def = UPGRADES[id];
+    const owned = this.player.upgrades[id];
+    let head = 'WAVE ' + this.wave + ' CLEARED &nbsp;·&nbsp; +<b>' + this.lastGain + '</b> CREDITS';
+    if (this.lastPerfect) head += ' &nbsp;·&nbsp; <b>FLAWLESS</b>';
+    this.ui.showUpgrade({
+      head,
+      name: def.name,
+      desc: def.desc(owned),
+      rarity: RARITY[def.rarity].label,
+      color: RARITY[def.rarity].color,
+      owned,
+      max: def.max,
     });
-
-    const shop = SHOP_KEYS.map((key) => {
-      const it = SHOP_ITEMS[key];
-      return {
-        key,
-        name: it.name,
-        detail: it.detail,
-        cost: it.cost,
-        available: this.credits >= it.cost && it.enabled(this.player),
-      };
-    });
-
-    const cost = rerollCost(this.draft.rerolls);
-    const build = Object.entries(owned).map(([id, n]) => ({ name: UPGRADES[id].name, n }));
-
-    let subtitle = '+<b>' + this.draft.lastGain + '</b> CREDITS';
-    if (this.draft.perfect) subtitle += ' &nbsp;·&nbsp; <b>FLAWLESS</b> — DOUBLE BONUS';
-    subtitle += ' &nbsp;·&nbsp; BEST CHAIN <b>' + this.bestCombo + '</b>';
-
-    this.ui.renderDraft({
-      wave: this.wave,
-      credits: this.credits,
-      subtitle,
-      cards,
-      shop,
-      rerollCost: cost,
-      canReroll: this.credits >= cost && this.draft.options.length > 0,
-      build,
-    });
-  }
-
-  // Keyboard shortcut for the draft cards. Silently ignored outside the draft.
-  _pickByIndex(i) {
-    if (this.state !== 'draft') return;
-    const id = this.draft.options[i];
-    if (id) this._pickUpgrade(id);
-  }
-
-  _pickUpgrade(id) {
-    if (this.state !== 'draft') return;
-    if (!this.draft.options.includes(id)) return;
-    if (!this.player.takeUpgrade(id)) {
-      this.sfx.denied();
-      return;
-    }
     this.sfx.upgrade();
-    this._closeDraft();
   }
 
-  _rerollDraft() {
-    if (this.state !== 'draft') return;
-    const cost = rerollCost(this.draft.rerolls);
-    if (this.credits < cost || !this.draft.options.length) {
+  // Nearest terminal in range, or null. Shared by the prompt and the purchase
+  // so the two can never disagree about which one the player is standing at.
+  _terminalInRange() {
+    for (const t of this.terminals) {
+      if (t.inRange(this.player.pos)) return t;
+    }
+    return null;
+  }
+
+  // Refreshes the "[E] REPAIR 90c" prompt. Runs every frame; UI.setPrompt
+  // compares against the last string and only touches the DOM on a change.
+  _updateTerminals() {
+    for (const t of this.terminals) t.update(this.time);
+
+    const t = this._terminalInRange();
+    if (!t) {
+      this.ui.setPrompt(null, false);
+      return;
+    }
+    const blocked = t.blockedReason(this.player, this.credits);
+    if (blocked) {
+      this.ui.setPrompt(t.item.name + ' &nbsp;·&nbsp; ' + blocked, true);
+    } else {
+      this.ui.setPrompt(
+        '<b>E</b> ' + t.item.name + ' &nbsp;·&nbsp; ' + t.item.detail
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.item.cost + 'c</span>',
+        false
+      );
+    }
+  }
+
+  // E at a terminal. Mid-wave, under fire, with no menu and no pause - the
+  // cost of a purchase is the time spent crossing the arena to reach one.
+  tryUseTerminal() {
+    if (this.state !== 'playing') return;
+    const t = this._terminalInRange();
+    if (!t) return;
+    if (t.blockedReason(this.player, this.credits)) {
       this.sfx.denied();
       return;
     }
-    this.credits -= cost;
-    this.draft.rerolls++;
-    // A full redraw, never a partial one: re-offering a card the player just
-    // paid to get rid of makes the reroll feel rigged.
-    this.draft.options = rollDraft(this.player.upgrades, this.wave, DRAFT_SIZE);
-    this.sfx.reroll();
-    this._renderDraft();
-  }
-
-  _buyItem(key) {
-    if (this.state !== 'draft') return;
-    const it = SHOP_ITEMS[key];
-    if (!it || this.credits < it.cost || !it.enabled(this.player)) {
-      this.sfx.denied();
-      return;
-    }
-    this.credits -= it.cost;
-    it.apply(this.player, this.time);
+    this.credits -= t.item.cost;
+    t.purchase(this.player, this.time);
     this.sfx.buy();
-    this._renderDraft();
-  }
-
-  // Leaves the draft and hands control back to the wave state machine, which
-  // picks up at 'idle' and starts the next wave after a short beat.
-  _closeDraft() {
-    this.ui.hideDraft();
-    this.state = 'playing';
-    this.waveState = 'idle';
-    this.interT = 0.6;
-    this.ui.resetCache();
-    if (!this.autoTest) this._lock();
+    this.effects.burst(t.pos, t.color, 18, 5, 2, 0.5);
   }
 
   // Both spawners run on a timer and respect a hard cap on what is already in
@@ -1024,6 +977,7 @@ class Game {
       if (this.input.shoot) this.shoot();
       if (this.input.melee) this.tryMelee();
       this._updatePickups(dt);
+      this._updateTerminals();
       this._updateEnemies(dt);
       this._updateProjectiles(dt);
 

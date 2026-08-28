@@ -21,8 +21,8 @@ Open http://localhost:8123
 | R | Reload |
 | Space | Jump |
 | Shift | Sprint |
+| E | Buy from a terminal you are standing at |
 | Esc | Pause |
-| 1 / 2 / 3 | Pick an upgrade on the wave-end screen |
 
 ## Features
 
@@ -30,12 +30,13 @@ Open http://localhost:8123
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Six enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades)
 - Pickups: ammo crates plus health, damage, fire-rate and shield powerups
-- **Roguelike upgrade draft**: every wave ends on a choice of three random
-  upgrades from a rarity-weighted pool. Picks are permanent for the run and
-  stack, so no two runs build the same way.
+- **Random wave-clear upgrades**: every wave grants one random upgrade from a
+  rarity-weighted pool, applied instantly and announced by a reveal card. They
+  are permanent for the run and stack, so no two runs build the same way.
+- **In-arena terminals**: three wall stations sell ammo, repairs and shields
+  for credits. Walk up, press E, keep fighting - one charge each per wave.
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
-  (up to x3), and a wave cleared without taking damage pays double. Credits buy
-  rerolls, ammo, repairs and shields on the wave-end screen.
+  (up to x3), and a wave cleared without taking damage pays double.
 - Escalating waves with per-wave HP / speed / damage scaling
 - Weapon with magazine, reload, recoil, tracers, and muzzle flash
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
@@ -43,17 +44,24 @@ Open http://localhost:8123
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart
 
-## The upgrade draft
+## Upgrades
+
+**Nothing in a run ever pauses the game.** The wave-clear upgrade is rolled and
+applied automatically and only announced by a reveal card that takes no input,
+and credits are spent at the in-arena terminals with a keypress mid-wave. A
+menu at the wave boundary killed the momentum the game runs on; keep new
+systems on that side of the line.
 
 Upgrades live in `js/upgrades.js`. Each one is a pure function of its stack
 count, and the whole owned list is replayed from scratch onto a fresh stat
-block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
+block (`Player.rebuildMods`) after every grant, so `apply(mods, n)` must set
 absolute values rather than accumulate. Every stat an upgrade may touch is
 declared in `DEFAULT_MODS` in `js/player.js`.
 
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
-with rares getting commoner as the run goes on. Rerolls cost 50 credits and
-double each time within a single draft, and always redraw all three cards.
+with rares getting commoner as the run goes on. Because grants are random,
+every upgrade in the pool must be worth getting unprompted - one that is only
+useful next to a specific other upgrade does not belong there.
 
 ## Test
 
@@ -81,7 +89,8 @@ js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
 js/waves.js         wave difficulty config
-js/upgrades.js      upgrade pool, draft roll, shop items
+js/upgrades.js      upgrade pool, wave-clear roll, terminal stock
+js/terminals.js     in-arena vending terminals
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
 ```

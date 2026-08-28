@@ -31,48 +31,16 @@ export class UI {
     this.comboMult = $('combo-mult');
     this.comboCount = $('combo-count');
     this.comboBar = $('combo-bar').firstElementChild;
-    this.draftOv = $('overlay-draft');
-    this.draftTitle = $('draft-title');
-    this.draftSub = $('draft-sub');
-    this.draftCredits = $('draft-credits');
-    this.draftCards = $('draft-cards');
-    this.shopItems = $('shop-items');
-    this.rerollBtn = $('btn-reroll');
-    this.draftBuild = $('draft-build');
+    this.revealEl = $('upgrade-reveal');
+    this.revealCard = $('reveal-card');
+    this.revealHead = $('reveal-head');
+    this.revealRarity = $('reveal-rarity');
+    this.revealName = $('reveal-name');
+    this.revealDesc = $('reveal-desc');
+    this.revealStack = $('reveal-stack');
+    this.promptEl = $('prompt');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
-    this._draft = null;  // callbacks supplied by bindDraft()
-
-    // One delegated listener per container instead of re-binding handlers on
-    // every card rebuild - renderDraft() replaces this subtree on each reroll
-    // and purchase, so per-node listeners would have to be re-attached (and
-    // would leak) each time.
-    this.draftCards.addEventListener('click', (e) => {
-      if (!this._draft) return;
-      // The placeholder card shown when the pool is exhausted is the only way
-      // out of that draft, so it doubles as the continue button.
-      if (e.target.closest('.up-card[data-skip]')) {
-        this._draft.skip();
-        return;
-      }
-      const card = e.target.closest('.up-card[data-id]');
-      if (card) this._draft.pick(card.dataset.id);
-    });
-    this.shopItems.addEventListener('click', (e) => {
-      const btn = e.target.closest('.shop-btn[data-key]');
-      if (btn && !btn.disabled && this._draft) this._draft.buy(btn.dataset.key);
-    });
-    this.rerollBtn.addEventListener('click', () => {
-      if (!this.rerollBtn.disabled && this._draft) this._draft.reroll();
-    });
-    // The draft overlay must not fall through to the generic overlay click
-    // handlers, which resume the game.
-    this.draftOv.addEventListener('click', (e) => e.stopPropagation());
-  }
-
-  // Registers the three draft actions once, at startup.
-  bindDraft(handlers) {
-    this._draft = handlers;
   }
 
   setWave(n) {
@@ -227,7 +195,6 @@ export class UI {
     this.startOv.classList.remove('hidden');
     this.overOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
-    this.draftOv.classList.add('hidden');
     this.hud.classList.add('hidden');
   }
   showHud() {
@@ -235,7 +202,6 @@ export class UI {
     this.startOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.overOv.classList.add('hidden');
-    this.draftOv.classList.add('hidden');
   }
   showPause() {
     this.pauseOv.classList.remove('hidden');
@@ -248,76 +214,44 @@ export class UI {
       'WAVE REACHED <b>' + wave + '</b> &nbsp;·&nbsp; SCORE <b>' + score.toLocaleString() + '</b> &nbsp;·&nbsp; KILLS <b>' + kills + '</b>'
       + ' &nbsp;·&nbsp; BEST CHAIN <b>' + bestCombo + '</b>';
     this.overOv.classList.remove('hidden');
-    this.draftOv.classList.add('hidden');
     this.hud.classList.add('hidden');
   }
-  // Builds the whole wave-end screen from a plain model object. Called on
-  // open and again after every reroll or purchase - it is a full rebuild, but
-  // it runs a handful of times per wave, not per frame, so the simplicity is
-  // worth more than the diffing would be.
-  renderDraft(m) {
-    this.draftTitle.textContent = 'WAVE ' + m.wave + ' CLEARED';
-    this.draftSub.innerHTML = m.subtitle;
-    this.draftCredits.innerHTML = m.credits.toLocaleString() + ' <span>CREDITS</span>';
-
-    this.draftCards.textContent = '';
-    if (!m.cards.length) {
-      const el = document.createElement('div');
-      el.className = 'up-card empty';
-      el.dataset.skip = '1';
-      el.innerHTML = '<div class="up-name">ALL UPGRADES MAXED</div>'
-        + '<div class="up-desc">Nothing left to draft. Click to continue.</div>';
-      this.draftCards.appendChild(el);
-    }
-    m.cards.forEach((c, i) => {
-      const el = document.createElement('div');
-      el.className = 'up-card';
-      el.dataset.id = c.id;
-      el.style.color = c.color;
-      el.style.borderTopColor = c.color;
-      el.innerHTML =
-        '<span class="up-key">' + (i + 1) + '</span>' +
-        '<div class="up-rarity">' + c.rarity + '</div>' +
-        '<div class="up-name">' + c.name + '</div>' +
-        '<div class="up-desc">' + c.desc + '</div>' +
-        '<div class="up-stack">' + (c.owned ? 'OWNED ' + c.owned + ' / ' + c.max : 'NEW') + '</div>';
-      this.draftCards.appendChild(el);
-    });
-
-    this.shopItems.textContent = '';
-    for (const it of m.shop) {
-      const b = document.createElement('button');
-      b.className = 'shop-btn';
-      b.dataset.key = it.key;
-      b.disabled = !it.available;
-      b.innerHTML =
-        '<span>' + it.name + '</span>' +
-        '<span class="shop-detail">' + it.detail + '</span>' +
-        '<span class="shop-cost">' + it.cost + 'c</span>';
-      this.shopItems.appendChild(b);
-    }
-
-    this.rerollBtn.disabled = !m.canReroll;
-    this.rerollBtn.innerHTML =
-      '<span>REROLL</span><span class="shop-cost">' + m.rerollCost + 'c</span>';
-
-    this.draftBuild.textContent = '';
-    for (const u of m.build) {
-      const chip = document.createElement('div');
-      chip.className = 'build-chip';
-      chip.innerHTML = '<b>' + u.name + '</b>'
-        + (u.n > 1 ? ' <span class="build-n">x' + u.n + '</span>' : '');
-      this.draftBuild.appendChild(chip);
-    }
+  // Wave-end upgrade reveal. Deliberately not an overlay: it takes no input,
+  // never pauses the game and animates itself out, so the player keeps
+  // fighting while it plays.
+  //
+  // Same remove-reflow-re-add trick as banner(): without the forced reflow the
+  // browser coalesces both class changes and the animation never replays, so
+  // two upgrades in a row would show only the first.
+  showUpgrade(m) {
+    this.revealHead.innerHTML = m.head;
+    this.revealCard.style.color = m.color;
+    this.revealRarity.textContent = m.rarity;
+    this.revealName.textContent = m.name;
+    this.revealDesc.textContent = m.desc;
+    this.revealStack.textContent = m.owned > 1 ? 'STACK ' + m.owned + ' / ' + m.max : 'NEW';
+    this.revealEl.classList.remove('show');
+    void this.revealEl.offsetWidth;
+    this.revealEl.classList.add('show');
+  }
+  hideUpgrade() {
+    this.revealEl.classList.remove('show');
   }
 
-  showDraft() {
-    this.draftOv.classList.remove('hidden');
-    this.hud.classList.add('hidden');
-  }
-  hideDraft() {
-    this.draftOv.classList.add('hidden');
-    this.hud.classList.remove('hidden');
+  // Terminal prompt. `text` is null when the player is not near a terminal.
+  // Compared against the last string written, so standing next to a terminal
+  // does not rewrite the DOM sixty times a second.
+  setPrompt(text, blocked) {
+    if (this._c.prompt === text && this._c.promptBlocked === blocked) return;
+    this._c.prompt = text;
+    this._c.promptBlocked = blocked;
+    if (!text) {
+      this.promptEl.classList.add('hidden');
+      return;
+    }
+    this.promptEl.innerHTML = text;
+    this.promptEl.classList.toggle('blocked', !!blocked);
+    this.promptEl.classList.remove('hidden');
   }
 
   // Called on a new game: forces every setter to repaint on the next frame and
@@ -325,6 +259,8 @@ export class UI {
   resetCache() {
     this._c = {};
     this.comboEl.classList.add('hidden');
+    this.promptEl.classList.add('hidden');
+    this.revealEl.classList.remove('show');
     for (const entry of Object.values(this._buffEls)) {
       entry.el.style.display = 'none';
       entry.shown = false;

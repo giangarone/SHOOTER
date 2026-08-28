@@ -75,12 +75,11 @@ try {
     ['spawned enemies', rep.spawned > 0],
     ['fired shots', rep.shots > 0],
     ['landed hits', rep.hits > 0],
-    // The autotest bot takes the first draft card every wave, so a run that
-    // got past wave 1 must have banked credits and an upgrade. Without these
-    // the draft could stop opening entirely and every other check would still
-    // pass.
+    // Every wave clear grants one random upgrade, so a run past wave 1 must
+    // have banked credits and gained an upgrade. Without these the wave-clear
+    // reward could stop firing entirely and every other check would still pass.
     ['earned credits', rep.credits > 0],
-    ['drafted upgrades', rep.wave < 2 || rep.upgradeCount > 0],
+    ['granted upgrades', rep.wave < 2 || rep.upgradeCount > 0],
     ['combo chained', rep.bestCombo >= 2],
     ['no console errors', fatal.length === 0],
     // Guards against the checks below passing vacuously if a report field is

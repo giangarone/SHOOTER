@@ -220,101 +220,69 @@ html, body {
   transform-origin: left center;
 }
 
-/* ---- wave-end draft + shop ---- */
-#overlay-draft {
-  justify-content: flex-start;
-  gap: 0;
-  padding: 4vh 24px;
-  overflow-y: auto;
-  background: radial-gradient(ellipse at center, rgba(10, 12, 18, 0.9), rgba(4, 5, 9, 0.97));
+/* ---- terminal prompt ---- */
+#prompt {
+  position: fixed; left: 50%; top: calc(50% + 92px);
+  transform: translateX(-50%);
+  z-index: 6; pointer-events: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px;
+  background: rgba(10, 12, 18, 0.72);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+  font-size: 12px; letter-spacing: 0.18em; color: var(--text);
+  white-space: nowrap;
 }
-#draft-head { text-align: center; margin-bottom: 22px; }
-#draft-head h2 {
-  font-size: 30px; font-weight: 900; letter-spacing: 0.3em;
-  color: #fff; text-shadow: 0 0 26px var(--cyan);
+#prompt b {
+  display: inline-block; min-width: 18px;
+  padding: 2px 6px;
+  background: var(--cyan); color: #0a0c12;
+  font-weight: 800;
 }
-#draft-sub {
-  margin-top: 8px; font-size: 11px; letter-spacing: 0.22em; color: var(--dim);
-  min-height: 14px;
-}
-#draft-sub b { color: var(--gold); }
-#draft-credits {
-  margin-top: 12px; font-size: 26px; font-weight: 800; color: #ffb300;
-  text-shadow: 0 0 18px rgba(255, 179, 0, 0.5); letter-spacing: 0.05em;
-}
-#draft-credits span { font-size: 10px; letter-spacing: 0.28em; color: var(--dim); }
+#prompt .prompt-cost { color: #ffb300; }
+#prompt.blocked { opacity: 0.6; }
+#prompt.blocked b { background: var(--dim); }
 
-#draft-cards { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+/* ---- wave-end upgrade reveal ---- */
+/* Purely a readout - it never takes input and never pauses the game, so it is
+   pointer-events:none and animates itself out. */
+#upgrade-reveal {
+  position: fixed; left: 50%; top: 23%;
+  transform: translateX(-50%);
+  z-index: 7; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  opacity: 0;
+  text-align: center;
+}
+#upgrade-reveal.show { animation: reveal 3.6s forwards; }
+@keyframes reveal {
+  0% { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.94); }
+  8% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.99); }
+}
 
-.up-card {
+#reveal-head {
+  font-size: 12px; letter-spacing: 0.3em; color: var(--dim);
+}
+#reveal-head b { color: var(--gold); }
+
+#reveal-card {
   position: relative;
-  width: 236px; min-height: 210px;
-  display: flex; flex-direction: column;
-  padding: 20px 18px;
-  background: linear-gradient(180deg, rgba(20, 25, 38, 0.94), rgba(10, 12, 20, 0.94));
+  min-width: 320px; max-width: 400px;
+  padding: 20px 26px 18px;
+  background: linear-gradient(180deg, rgba(20, 25, 38, 0.92), rgba(10, 12, 20, 0.92));
   border: 1px solid var(--line);
-  border-top: 3px solid var(--line);
-  cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  border-top: 3px solid currentColor;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
 }
-.up-card:hover {
-  transform: translateY(-6px);
-  border-color: currentColor;
-  box-shadow: 0 0 34px rgba(78, 243, 255, 0.16);
+#reveal-rarity { font-size: 9px; letter-spacing: 0.34em; color: currentColor; }
+#reveal-name {
+  margin-top: 8px;
+  font-size: 27px; font-weight: 900; letter-spacing: 0.1em; color: #fff;
+  text-shadow: 0 0 24px currentColor;
+  line-height: 1.15;
 }
-.up-card .up-rarity {
-  font-size: 9px; letter-spacing: 0.3em; color: currentColor; margin-bottom: 10px;
-}
-.up-card .up-name {
-  font-size: 19px; font-weight: 800; letter-spacing: 0.08em; color: #fff;
-  line-height: 1.2; margin-bottom: 12px;
-}
-.up-card .up-desc { font-size: 13px; line-height: 1.55; color: var(--text); flex: 1; }
-.up-card .up-stack {
-  margin-top: 14px; font-size: 10px; letter-spacing: 0.18em; color: var(--dim);
-}
-.up-card .up-synergy {
-  margin-top: 6px; font-size: 10px; letter-spacing: 0.16em; color: var(--gold);
-}
-.up-card .up-key {
-  position: absolute; top: 12px; right: 14px;
-  font-size: 11px; font-weight: 700; color: var(--dim);
-}
-.up-card.empty { opacity: 0.55; justify-content: center; text-align: center; }
-
-#draft-shop {
-  display: flex; align-items: stretch; gap: 12px;
-  margin-top: 26px; flex-wrap: wrap; justify-content: center;
-}
-#shop-items { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-.overlay button.shop-btn {
-  margin-top: 0;
-  box-shadow: none;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 10px 18px;
-  background: rgba(20, 25, 38, 0.9);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-}
-.overlay button.shop-btn:hover:not(:disabled) { border-color: var(--cyan); color: #fff; background: rgba(30, 40, 60, 0.9); }
-.overlay button.shop-btn:disabled { opacity: 0.32; cursor: not-allowed; }
-.overlay button.shop-btn .shop-detail { font-size: 9px; font-weight: 400; letter-spacing: 0.14em; color: var(--dim); }
-.overlay button.shop-btn .shop-cost { font-size: 11px; color: #ffb300; letter-spacing: 0.1em; }
-.overlay button.shop-btn.reroll { border-color: rgba(78, 243, 255, 0.4); color: var(--cyan); }
-
-#draft-build {
-  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
-  margin-top: 26px; max-width: 780px;
-}
-#draft-build:empty { display: none; }
-.build-chip {
-  padding: 5px 10px;
-  border: 1px solid var(--line);
-  background: rgba(15, 19, 30, 0.8);
-  font-size: 10px; letter-spacing: 0.14em; color: var(--dim);
-}
-.build-chip b { color: var(--text); font-weight: 700; }
-.build-chip .build-n { color: var(--gold); }
+#reveal-desc { margin-top: 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
+#reveal-stack { margin-top: 12px; font-size: 10px; letter-spacing: 0.2em; color: var(--dim); }
