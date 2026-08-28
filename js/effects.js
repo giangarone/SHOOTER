@@ -5,6 +5,7 @@
 //   - particles: one THREE.Points with MAX slots, written through a ring
 //     buffer. An overflowing burst overwrites the oldest particles.
 //   - tracers: a small fixed pool of lines, reusing the first free one.
+//   - shockwave rings: the same pool trick with flat discs, scaled and faded.
 //   - flash: a single PointLight, moved and re-lit per shot. It counts toward
 //     the scene's fixed light budget (see arena.js).
 //
@@ -51,6 +52,30 @@ export class Effects {
       line.frustumCulled = false;
       scene.add(line);
       this.tracers.push({ line, life: 0 });
+    }
+
+    // Shockwave rings: a small fixed pool of flat discs, scaled outward and
+    // faded on use. Same reasoning as the tracers - melee fires often enough
+    // that building a ring per swing would churn geometry every second.
+    // Unit-radius so a caller's range in metres is just the target scale.
+    this.rings = [];
+    const ringGeom = new THREE.RingGeometry(0.82, 1, 40);
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.MeshBasicMaterial({
+        color: 0xff3b30,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(ringGeom, m);
+      // Flat on the floor, lifted just clear of it so it does not z-fight.
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.rings.push({ mesh, life: 0, maxLife: 0.28, radius: 1 });
     }
 
     this.flashLight = new THREE.PointLight(0xffc36b, 0, 7);
@@ -133,6 +158,27 @@ export class Effects {
     t.life = 0.07;
   }
 
+  // An expanding ring on the floor at `p`, growing to `radius` metres. Used to
+  // show the area a melee swing covered; deliberately faint, since it fires on
+  // every swing and a bright flash at the player's feet would read as damage
+  // taken rather than damage dealt.
+  shockwave(p, color = 0xff3b30, radius = 3, life = 0.28) {
+    let r = this.rings[0];
+    for (const cand of this.rings) {
+      if (cand.life <= 0) {
+        r = cand;
+        break;
+      }
+    }
+    r.mesh.position.set(p.x, p.y + 0.08, p.z);
+    r.mesh.material.color.setHex(color);
+    r.mesh.scale.setScalar(0.001);
+    r.mesh.visible = true;
+    r.radius = radius;
+    r.maxLife = life;
+    r.life = life;
+  }
+
   // Relight the muzzle flash at `p`. The light is never added or removed, only
   // moved and dimmed - see the light-count note in arena.js.
   flash(p) {
@@ -162,6 +208,20 @@ export class Effects {
     if (this.flashT > 0) {
       this.flashT -= dt;
       if (this.flashT <= 0) this.flashLight.intensity = 0;
+    }
+    for (const r of this.rings) {
+      if (r.life <= 0) continue;
+      r.life -= dt;
+      if (r.life <= 0) {
+        r.mesh.visible = false;
+        continue;
+      }
+      // Ease-out on the way out, so the wave reads as a snap rather than a
+      // steady creep, and fade over the whole life.
+      const t = 1 - r.life / r.maxLife;
+      const e = 1 - Math.pow(1 - t, 3);
+      r.mesh.scale.setScalar(Math.max(0.001, r.radius * e));
+      r.mesh.material.opacity = 0.5 * (1 - t);
     }
     for (const t of this.tracers) {
       if (t.life > 0) {

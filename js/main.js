@@ -82,6 +82,23 @@ const SPAWN_RETRY = 2;
 const MAX_PROJECTILES = 24;
 const EMPTY_CLICK_COOLDOWN = 0.35;
 
+// Seconds a station ignores further hits after one is bought by shooting it.
+// A held trigger lands several pellets per second on the same box, and every
+// one of those would otherwise be a separate purchase.
+const STATION_SHOOT_COOLDOWN = 0.25;
+
+// No enemy spawns closer than this to the player. The spawn grid sits near the
+// arena edges, but the player is free to stand on one, and materialising a
+// charger inside their hitbox is damage they had no chance to avoid.
+const MIN_SPAWN_DISTANCE = 10;
+
+// Melee reach, in metres from the player's feet, and the half-angle of the
+// arc it sweeps. It is a swing, not a poke: everything in front of the player
+// inside the arc is hit, not just what the crosshair happens to be on.
+const MELEE_RANGE = 3.6;
+const MELEE_ARC = Math.PI / 3;
+const MELEE_DAMAGE = 50;
+
 // innerWidth and innerHeight are both 0 in some real situations - a minimised
 // window, a hidden tab, a canvas laid out at zero height. 0/0 is NaN, and a NaN
 // aspect poisons the camera's projection matrix, which makes setFromCamera()
@@ -193,8 +210,7 @@ class Game {
     this._pendingSpawns = [];
     this._shotRay = new THREE.Raycaster();
     this._shotRay.far = 120;
-    this._meleeRay = new THREE.Raycaster();
-    this._meleeRay.far = 2.2;
+    this._meleeDir = new THREE.Vector3();
     this._enemyCtx = {
       player: this.player,
       enemies: this.enemies,
@@ -483,13 +499,38 @@ class Game {
   }
 
   spawnEnemy(type) {
-    const sp = this.arena.spawnPoints[(Math.random() * this.arena.spawnPoints.length) | 0];
-    const j = new THREE.Vector3(sp.x + (Math.random() - 0.5) * 2, 0, sp.z + (Math.random() - 0.5) * 2);
+    const j = this._pickSpawnPos();
     const e = new Enemy(type, j, this._cfg.hpScale, this._cfg.speedScale, this._cfg.dmgScale);
     this.scene.add(e.group);
     this.enemies.push(e);
     this.effects.burst(j, e.colorHex, 12, 3, 2, 0.4);
     this.stats.spawned++;
+  }
+
+  // A jittered spawn point at least MIN_SPAWN_DISTANCE from the player. Walks
+  // the grid from a random start and takes the first point that clears the
+  // distance; if the player has somehow crowded all of them, the farthest one
+  // is used rather than giving up and spawning on top of them.
+  _pickSpawnPos() {
+    const points = this.arena.spawnPoints;
+    const start = (Math.random() * points.length) | 0;
+    let best = null;
+    let bestD = -1;
+    for (let i = 0; i < points.length; i++) {
+      const sp = points[(start + i) % points.length];
+      const d = Math.hypot(sp.x - this.player.pos.x, sp.z - this.player.pos.z);
+      if (d >= MIN_SPAWN_DISTANCE) {
+        best = sp;
+        break;
+      }
+      if (d > bestD) {
+        bestD = d;
+        best = sp;
+      }
+    }
+    return new THREE.Vector3(
+      best.x + (Math.random() - 0.5) * 2, 0, best.z + (Math.random() - 0.5) * 2
+    );
   }
 
   gameOver() {
@@ -579,6 +620,15 @@ class Game {
         end = h.point;
         break;
       }
+      const station = h.object.userData.station;
+      if (station) {
+        // The pellet stops here whether or not the purchase went through -
+        // a station on cooldown is a wall, not a hole to shoot enemies past.
+        this._shootStation(station);
+        end = h.point;
+        this.effects.burst(end, station.color, w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        break;
+      }
       const en = h.object.userData.enemy;
       if (!en) {
         // Wall, floor, crate or a totem pillar - the pellet stops here.
@@ -650,38 +700,52 @@ class Game {
     targets.length = 0;
   }
 
-  // Short-range melee. Unlike shoot(), this only tests enemy hitboxes, so it
-  // reaches through thin cover. Cooldown lives in player.tryMelee().
+  // A melee swing. This is a radial arc test rather than a raycast: everything
+  // within MELEE_RANGE and inside MELEE_ARC of where the player is looking is
+  // hit, so a swing at a crowd connects with the crowd and not only with
+  // whatever the crosshair was on. Like the old raycast it ignores geometry,
+  // so it still reaches through thin cover. Cooldown lives in
+  // player.tryMelee(); the ring the player sees is drawn at the real range, so
+  // the indicator and the hit test can never disagree.
   tryMelee() {
     if (!this.player.tryMelee()) return;
     this.sfx.melee();
 
-    const ray = this._meleeRay;
-    this._screen.set(0, 0);
-    ray.setFromCamera(this._screen, this.camera);
-    const targets = this._targets;
-    targets.length = 0;
-    for (const e of this.enemies) targets.push(e.hitbox);
-    const hits = this._hits;
-    hits.length = 0;
-    ray.intersectObjects(targets, false, hits);
+    const forward = this.player.forwardInto(this._meleeDir);
+    const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE);
+    const cosArc = Math.cos(MELEE_ARC);
+    let hit = false;
 
-    if (hits.length) {
-      const en = hits[0].object.userData.enemy;
-      const dealt = this.player.getEffectiveDamage(50);
-      en.takeDamage(dealt);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const dx = e.pos.x - this.player.pos.x;
+      const dz = e.pos.z - this.player.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > MELEE_RANGE) continue;
+      // Anything the player is standing inside has no meaningful direction, so
+      // it is always in the arc.
+      if (d > 0.001 && (dx * forward.x + dz * forward.z) / d < cosArc) continue;
+      e.takeDamage(dealt);
       this.player.applyLifesteal(dealt);
-      en.pos.add(
-        this._knockback.subVectors(en.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
+      e.pos.add(
+        this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
       );
-      this.effects.burst(hits[0].point, 0xffd600, 12, 4, 1.5, 0.4);
+      this.effects.burst(
+        this._killPos.set(e.pos.x, 1.1, e.pos.z), 0xffd600, 12, 4, 1.5, 0.4
+      );
+      hit = true;
+    }
+
+    // The shockwave shows the area that was just swept whether or not it
+    // caught anything - a miss that reads as "nothing there" is what makes the
+    // range learnable.
+    this.effects.shockwave(this.player.pos, 0xff3b30, MELEE_RANGE);
+    if (hit) {
       this.ui.hitMarker();
       this.effects.addShake(0.08);
     } else {
       this.effects.addShake(0.03);
     }
-    hits.length = 0;
-    targets.length = 0;
   }
 
   // Single entry point for all damage to the player, passed to enemies and
@@ -990,13 +1054,13 @@ class Game {
       this.ui.setPrompt((st.kind === 'ammo' ? 'AMMO' : 'REROLL') + ' &nbsp;·&nbsp; ' + blocked, true);
     } else if (st.kind === 'ammo') {
       this.ui.setPrompt(
-        '<b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
+        '<b>SHOOT</b> / <b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
         + ' &nbsp;·&nbsp; <span class="prompt-cost">' + AMMO_PURCHASE.cost + 'c</span>',
         false
       );
     } else {
       this.ui.setPrompt(
-        '<b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
+        '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
         + '<span class="prompt-cost">' + rerollCost(area.rerolls) + 'c</span>',
         false
       );
@@ -1017,13 +1081,26 @@ class Game {
     return null;
   }
 
-  // E at a station. Buying ammo leaves the totems standing; rerolling redraws
-  // all three, because re-offering an upgrade the player just paid to replace
-  // makes the reroll feel rigged.
+  // E at a station, from anywhere in its radius.
   tryUseStation() {
     if (this.state !== 'playing') return;
     const st = this.totemArea.stationInRange(this.player.pos);
-    if (!st) return;
+    if (st) this._useStation(st);
+  }
+
+  // A pellet hit a station. One purchase per STATION_SHOOT_COOLDOWN however
+  // many pellets or shots land inside it, so holding the trigger on the
+  // reroll console buys one reroll and not eight.
+  _shootStation(st) {
+    if (this.state !== 'playing' || !st.canShoot()) return;
+    st.shootCd = STATION_SHOOT_COOLDOWN;
+    this._useStation(st);
+  }
+
+  // Buying ammo leaves the totems standing; rerolling redraws all three,
+  // because re-offering an upgrade the player just paid to replace makes the
+  // reroll feel rigged.
+  _useStation(st) {
     if (this._stationBlocked(st)) {
       this.sfx.denied();
       return;

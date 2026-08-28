@@ -240,7 +240,8 @@ export class Totem {
 }
 
 // A small console beside the totems. Two exist: one sells ammo, one rerolls
-// the set. Both are bought with E and neither disturbs the totems.
+// the set. Both are bought by shooting them or by pressing E in range, and
+// neither disturbs the totems.
 export class Station {
   constructor(x, kind, scene) {
     this.kind = kind; // 'ammo' | 'reroll'
@@ -248,6 +249,10 @@ export class Station {
     this.color = kind === 'ammo' ? 0xffd600 : 0x4ef3ff;
     this.state = 'hidden';
     this.rise = 0;
+    // A station is bought by shooting it, and the guns here fire far faster
+    // than anyone means to buy. Without this a single burst would drain the
+    // wallet on a chain of rerolls before the first one had even risen.
+    this.shootCd = 0;
 
     this.group = new THREE.Group();
     this.group.position.set(x, SUNK_Y, ROW_Z);
@@ -257,10 +262,14 @@ export class Station {
       color: 0x161b26, emissive: this.color, emissiveIntensity: 0.5,
       roughness: 0.4, metalness: 0.7,
     });
-    const body = new THREE.Mesh(STATION_GEOM, this.mat);
-    body.position.y = 0.7;
-    body.castShadow = true;
-    this.group.add(body);
+    this.body = new THREE.Mesh(STATION_GEOM, this.mat);
+    this.body.position.y = 0.7;
+    this.body.castShadow = true;
+    // How main.js tells a station hit from an ordinary wall hit. The whole
+    // body is the target, unlike a totem's small core - a station purchase is
+    // repeatable and rate-limited, so a stray hit costs a shot, not a build.
+    this.body.userData.station = this;
+    this.group.add(this.body);
 
     this.panel = makePanel(256, 160, 1.9, 1.2);
     this.panel.sprite.position.set(0, 1.9, 0);
@@ -295,6 +304,10 @@ export class Station {
     this.state = 'rising';
     this.group.visible = true;
   }
+  // Only a fully-risen station off cooldown can be bought by shooting.
+  canShoot() {
+    return this.state === 'up' && this.shootCd <= 0;
+  }
   sink() {
     if (this.state !== 'hidden') this.state = 'sinking';
   }
@@ -308,6 +321,7 @@ export class Station {
   }
 
   update(dt, time) {
+    if (this.shootCd > 0) this.shootCd -= dt;
     if (this.state === 'hidden') return;
     if (this.state === 'rising') {
       this.rise = Math.min(1, this.rise + dt / RISE_TIME);
@@ -393,11 +407,15 @@ export class TotemArea {
 
   // Appends this set's shootable parts to a raycast target list. The pillars
   // go in so bullets stop on them; only the cores carry userData.totem, so
-  // only a core hit can claim.
+  // only a core hit can claim. Station bodies go in too - they carry
+  // userData.station and are bought by shooting them.
   addTargets(out) {
     for (const t of this.totems) {
       if (t.state === 'hidden') continue;
       out.push(t.pillar, t.core);
+    }
+    for (const s of this.stations) {
+      if (s.state !== 'hidden') out.push(s.body);
     }
   }
 

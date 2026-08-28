@@ -134,20 +134,21 @@ export class Player {
   }
 
   // Puts `key` in the active slot when the other slot is full, otherwise fills
-  // the empty slot and switches to it. Returns the weapon it displaced, or
-  // null - main.js shows that on the totem so the trade is never a surprise.
+  // the empty slot and switches to it. Returns whether the weapon was taken -
+  // NOT the displaced weapon, because filling an empty slot displaces nothing
+  // and a falsy "success" there left the totem set standing after the claim.
+  // What a pickup would displace comes from weaponToDisplace() instead.
   takeWeapon(key) {
-    if (!WEAPONS[key] || this.slots.includes(key)) return null;
+    if (!WEAPONS[key] || this.slots.includes(key)) return false;
     const empty = this.slots.indexOf(null);
     const target = empty === -1 ? this.slot : empty;
-    const displaced = this.slots[target];
     this.slots[target] = key;
     this.mags[target] = WEAPONS[key].magSize;
     this.slot = target;
     this.reloading = 0;
     this.fireCd = SWAP_TIME;
     this._equipModel();
-    return displaced;
+    return true;
   }
 
   // The weapon a totem pickup would displace, without taking it. Used for the
@@ -276,6 +277,13 @@ export class Player {
   // World position of the gun's muzzle, written into `v`.
   muzzleInto(v) {
     return this.muzzle.getWorldPosition(v);
+  }
+
+  // Flat facing direction, written into `v`. Y is dropped: melee and anything
+  // else that sweeps the ground should reach just as far when the player is
+  // looking at their feet as when they are looking straight ahead.
+  forwardInto(v) {
+    return v.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
   // `time` is game time (see main.js) - used for buff expiry and regen delay,

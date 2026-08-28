@@ -267,7 +267,10 @@ export function rerollCost(n) {
 export const AMMO_PURCHASE = {
   name: 'AMMO',
   detail: '+90 ROUNDS',
-  cost: 60,
+  // Ammo was the cheapest thing in the game and it competed with nothing:
+  // topping up cost less than a quarter of a single reroll, so credits had no
+  // real second use. At 120 a refill is a wave's earnings, not pocket change.
+  cost: 120,
   enabled: (player) => player.reserveAmmo < player.maxReserve,
   apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);

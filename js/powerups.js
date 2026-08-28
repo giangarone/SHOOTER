@@ -77,8 +77,14 @@ export const AMMO_PICKUP = {
   sfx: 'pickupAmmo',
 };
 
-// How long a pickup sits in the arena before it fades out, in game seconds.
+// How long a pickup sits in the arena before it fades out, in game seconds,
+// and how many of those final seconds it spends blinking. The blink is the
+// only warning the player gets, so it starts well before the pickup goes.
 export const PICKUP_LIFETIME = 60;
+export const PICKUP_BLINK_TIME = 5;
+// Blinks per second during that window. Fast enough to read as urgent from
+// across the arena without strobing.
+const BLINK_RATE = 5;
 
 const TYPE_KEYS = Object.keys(POWERUP_TYPES);
 
@@ -101,7 +107,9 @@ function pickRandomType(playerHealth, playerMaxHealth) {
   return last;
 }
 
-function createHexDomeGeometry(radius = 1.2, height = 1.4) {
+// The shield dome is deliberately small: at its original size it swallowed
+// the floor around it and read as arena geometry rather than as a pickup.
+function createHexDomeGeometry(radius = 0.5, height = 0.62) {
   const geom = new THREE.BufferGeometry();
   const positions = [];
   const indices = [];
@@ -270,9 +278,21 @@ export class Powerup {
   update(dt, time) {
     if (this.dead) return;
 
-    if (time - this.spawnTime >= this.despawnTime) {
+    const age = time - this.spawnTime;
+    if (age >= this.despawnTime) {
       this.destroy();
       return;
+    }
+
+    // The last few seconds blink. Visibility is toggled rather than faded
+    // because the core and glow materials are shared by every pickup of this
+    // type - dimming one would dim all of them (see rule 2 at the top).
+    const remaining = this.despawnTime - age;
+    const on = remaining > PICKUP_BLINK_TIME || (remaining * BLINK_RATE) % 1 > 0.45;
+    if (this.core.visible !== on) {
+      this.core.visible = on;
+      this.glow.visible = on;
+      if (this.dome) this.dome.visible = on;
     }
 
     const bob = Math.sin(time * 2 + this.bobOffset) * 0.15;
