@@ -33,10 +33,10 @@ export class UI {
     this.comboBar = $('combo-bar').firstElementChild;
     this.revealEl = $('upgrade-reveal');
     this.revealCard = $('reveal-card');
-    this.revealHead = $('reveal-head');
+
     this.revealRarity = $('reveal-rarity');
     this.revealName = $('reveal-name');
-    this.revealDesc = $('reveal-desc');
+    this.revealEffects = $('reveal-effects');
     this.revealStack = $('reveal-stack');
     this.promptEl = $('prompt');
     this._c = {};        // last value written per HUD field
@@ -224,11 +224,18 @@ export class UI {
   // browser coalesces both class changes and the animation never replays, so
   // two upgrades in a row would show only the first.
   showUpgrade(m) {
-    this.revealHead.innerHTML = m.head;
     this.revealCard.style.color = m.color;
     this.revealRarity.textContent = m.rarity;
     this.revealName.textContent = m.name;
-    this.revealDesc.textContent = m.desc;
+    // Same signed effect lines the totem showed, in the same colours, so the
+    // confirmation reads as the thing the player just walked into.
+    this.revealEffects.textContent = '';
+    for (const [text, sign] of m.effects) {
+      const el = document.createElement('div');
+      el.className = 'fx ' + (sign > 0 ? 'good' : sign < 0 ? 'bad' : 'note');
+      el.textContent = text;
+      this.revealEffects.appendChild(el);
+    }
     this.revealStack.textContent = m.owned > 1 ? 'STACK ' + m.owned + ' / ' + m.max : 'NEW';
     this.revealEl.classList.remove('show');
     void this.revealEl.offsetWidth;
@@ -238,7 +245,7 @@ export class UI {
     this.revealEl.classList.remove('show');
   }
 
-  // Terminal prompt. `text` is null when the player is not near a terminal.
+  // Station prompt. `text` is null when the player is not near a station.
   // Compared against the last string written, so standing next to a terminal
   // does not rewrite the DOM sixty times a second.
   setPrompt(text, blocked) {

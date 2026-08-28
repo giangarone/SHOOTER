@@ -21,7 +21,7 @@ Open http://localhost:8123
 | R | Reload |
 | Space | Jump |
 | Shift | Sprint |
-| E | Buy from a terminal you are standing at |
+| E | Buy ammo / reroll at a station |
 | Esc | Pause |
 
 ## Features
@@ -30,11 +30,16 @@ Open http://localhost:8123
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Six enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades)
 - Pickups: ammo crates plus health, damage, fire-rate and shield powerups
-- **Random wave-clear upgrades**: every wave grants one random upgrade from a
-  rarity-weighted pool, applied instantly and announced by a reveal card. They
-  are permanent for the run and stack, so no two runs build the same way.
-- **In-arena terminals**: three wall stations sell ammo, repairs and shields
-  for credits. Walk up, press E, keep fighting - one charge each per wave.
+- **Upgrade totems**: clearing a wave raises three pillars near the arena
+  centre, each showing one upgrade as short colour-coded lines - benefits
+  green, drawbacks red, and the pillar itself tinted by what the upgrade does.
+  Walk into one or shoot its core to take it. Upgrades are permanent for the
+  run and stack, so no two runs build the same way.
+- **No pauses**: the next wave starts 5s after the clear whether or not you
+  chose. An unclaimed set stays standing and is only replaced when the
+  following wave is cleared - so a pick you ignore is a pick you lose.
+- **Stations**: ammo and a totem reroll, bought with E beside the totems.
+  Buying ammo leaves the totems standing; rerolling redraws all three.
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
   (up to x3), and a wave cleared without taking damage pays double.
 - Escalating waves with per-wave HP / speed / damage scaling
@@ -46,22 +51,31 @@ Open http://localhost:8123
 
 ## Upgrades
 
-**Nothing in a run ever pauses the game.** The wave-clear upgrade is rolled and
-applied automatically and only announced by a reveal card that takes no input,
-and credits are spent at the in-arena terminals with a keypress mid-wave. A
+**Nothing in a run ever pauses the game.** The choice is three totems standing
+in the arena, and credits are spent at stations beside them with a keypress. A
 menu at the wave boundary killed the momentum the game runs on; keep new
 systems on that side of the line.
 
 Upgrades live in `js/upgrades.js`. Each one is a pure function of its stack
 count, and the whole owned list is replayed from scratch onto a fresh stat
-block (`Player.rebuildMods`) after every grant, so `apply(mods, n)` must set
+block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
 absolute values rather than accumulate. Every stat an upgrade may touch is
 declared in `DEFAULT_MODS` in `js/player.js`.
 
+Each upgrade carries a `theme` colour describing what it DOES (gold ammo,
+orange fire rate, cyan armour, blue mobility...) and an `effects` list of short
+signed lines - `1` benefit drawn green, `-1` drawback drawn red, `0` a dim
+qualifier. The sign is about good versus bad, not arithmetic: `-30% RELOAD
+TIME` is a benefit. Keep each line under about 22 characters; it is read at a
+glance, mid-run, from across the arena.
+
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
-with rares getting commoner as the run goes on. Because grants are random,
-every upgrade in the pool must be worth getting unprompted - one that is only
-useful next to a specific other upgrade does not belong there.
+with rares getting commoner as the run goes on.
+
+Only a totem's small **core** claims it. The pillar body is an ordinary raycast
+target that stops a bullet harmlessly, because totems stay live through the
+next wave and a shot that missed an enemy behind one must not pick a build for
+you.
 
 ## Test
 
@@ -89,8 +103,8 @@ js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
 js/waves.js         wave difficulty config
-js/upgrades.js      upgrade pool, wave-clear roll, terminal stock
-js/terminals.js     in-arena vending terminals
+js/upgrades.js      upgrade pool, totem roll, ammo purchase
+js/totems.js        wave-end totems + ammo/reroll stations
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
 ```

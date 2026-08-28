@@ -262,11 +262,6 @@ html, body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.99); }
 }
 
-#reveal-head {
-  font-size: 12px; letter-spacing: 0.3em; color: var(--dim);
-}
-#reveal-head b { color: var(--gold); }
-
 #reveal-card {
   position: relative;
   min-width: 320px; max-width: 400px;
@@ -284,5 +279,11 @@ html, body {
   text-shadow: 0 0 24px currentColor;
   line-height: 1.15;
 }
-#reveal-desc { margin-top: 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
+#reveal-effects { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+/* Same three colours the totem canvas uses - keep them in sync with
+   SIGN_COLOR in js/totems.js. */
+#reveal-effects .fx { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
+#reveal-effects .fx.good { color: #37e08b; }
+#reveal-effects .fx.bad { color: #ff5a4d; }
+#reveal-effects .fx.note { color: #8a95b3; }
 #reveal-stack { margin-top: 12px; font-size: 10px; letter-spacing: 0.2em; color: var(--dim); }

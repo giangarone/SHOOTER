@@ -56,6 +56,9 @@ try {
   console.log('GEOMETRY SERIES', samples.map((r) => r.geometries).join(','));
   console.log('LIGHT SERIES', samples.map((r) => r.lights).join(','));
   console.log('PROGRAM SERIES', samples.map((r) => r.programs).join(','));
+  console.log('TEXTURE SERIES', samples.map((r) => r.textures).join(','));
+  console.log('WAVE SERIES', samples.map((r) => r.wave).join(','));
+  console.log('UPGRADE SERIES', samples.map((r) => r.upgradeCount).join(','));
   // The shared caches are filled lazily, the first time each enemy or
   // projectile type appears, so only the steady state is meaningful.
   const early = samples[Math.floor(samples.length * 2 / 3)];
@@ -102,7 +105,13 @@ try {
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.
     ['geometry count bounded', peak.geometries < 120],
-    ['texture count steady', rep.textures <= early.textures],
+    // Textures step up once, early, as the fixed set of canvas panels (three
+    // totems, two stations) is uploaded, then must stay flat. Comparing two
+    // arbitrary samples was fragile - it failed whenever a slow run raised its
+    // first totem set after the `early` sample. Assert what actually matters:
+    // no growth across the final third, and a hard ceiling.
+    ['texture count steady', samples.slice(20).every((r) => r.textures === rep.textures)],
+    ['texture count bounded', rep.textures <= 12],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

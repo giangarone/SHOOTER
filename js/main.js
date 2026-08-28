@@ -6,11 +6,12 @@
 // Only 'playing' simulates. The loop still runs and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
 //
-// NOTHING IN THE RUN EVER PAUSES THE GAME. The wave-end upgrade is rolled and
-// applied automatically and only announced by an overlay-free reveal, and
-// credits are spent at the in-arena terminals with a keypress. Both are
-// deliberate: a menu at the wave boundary killed the momentum this game runs
-// on. Keep new systems on that side of the line.
+// NOTHING IN THE RUN EVER PAUSES THE GAME. The wave-end upgrade choice is
+// three totems that rise out of the arena floor - walk into one or shoot its
+// core - and credits are spent at two stations beside them. The next wave
+// starts on a timer regardless, and an unclaimed set stays standing until the
+// following wave is cleared. A menu at the wave boundary killed the momentum
+// this game runs on; keep new systems on that side of the line.
 //
 // WAVE STATE (only meaningful while playing):
 //   'active'       spawning from the queue and fighting
@@ -56,8 +57,8 @@ import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
-import { UPGRADES, RARITY, rollUpgrade } from './upgrades.js';
-import { buildTerminals } from './terminals.js';
+import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
+import { TotemArea } from './totems.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -93,9 +94,12 @@ const COMBO_MAX = 3;
 const CREDITS_PER_SCORE = 0.1;
 const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
-// How long the wave-end upgrade card stays on screen. Must match the `reveal`
-// CSS animation, which is what actually removes it.
-const REVEAL_TIME = 3.6;
+// Seconds between a wave being cleared and the next one starting. The totems
+// are still standing when it does - claiming one is never a reason to stop
+// fighting.
+const INTERMISSION = 5;
+// Totems offered per set.
+const TOTEM_COUNT = 3;
 
 class Game {
   constructor() {
@@ -111,10 +115,11 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 200);
 
     this.arena = buildArena(this.scene);
-    // Terminals are static level furniture: built once, never spawned or
-    // destroyed, and their collision boxes join the arena's obstacle list so
-    // the player cannot walk through one.
-    this.terminals = buildTerminals(this.scene, this.arena.obstacles);
+    // The totems and their stations are static furniture: three totems and two
+    // stations, built once and reused for every set. They are deliberately NOT
+    // in the obstacle list - walking into a totem claims it, so the player can
+    // never actually pass through one.
+    this.totemArea = new TotemArea(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     this.ui = new UI();
@@ -261,7 +266,7 @@ class Game {
         case 'ShiftLeft':
         case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
-        case 'KeyE': this.tryUseTerminal(); break;
+        case 'KeyE': this.tryUseStation(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -387,7 +392,7 @@ class Game {
     this.lastGain = 0;
     this.lastPerfect = false;
     this.ui.hideUpgrade();
-    for (const t of this.terminals) t.restock();
+    this.totemArea.dismiss();
     this.wave = 0;
     this.queue.length = 0;
     this.waveState = 'idle';
@@ -433,9 +438,6 @@ class Game {
     this.sfx.wave();
 
     this.waveDamageTaken = 0;
-    // One charge per terminal per wave. Restocking here rather than on a
-    // timer is what makes crossing the arena for a buy a real decision.
-    for (const t of this.terminals) t.restock();
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
     this.ammoSpawnTimer = 8;
@@ -478,6 +480,10 @@ class Game {
     if (amount <= 0) return 0;
     const paid = Math.round(amount * this.player.mods.creditMult);
     this.credits += paid;
+    // Station labels show whether the player can currently afford them, so a
+    // balance change has to redraw them. Only fires on a kill or a wave clear,
+    // never per frame.
+    if (this.totemArea.active) this._refreshStations();
     return paid;
   }
 
@@ -538,6 +544,9 @@ class Game {
     targets.length = 0;
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
+    // Totem pillars and cores join the same raycast, so a totem correctly
+    // blocks a shot. Only the core carries userData.totem and can be claimed.
+    this.totemArea.addTargets(targets);
     const hits = this._hits;
     hits.length = 0;
     ray.intersectObjects(targets, false, hits);
@@ -545,6 +554,14 @@ class Game {
     let end;
     if (hits.length) {
       end = hits[0].point;
+      const totem = hits[0].object.userData.totem;
+      if (totem) {
+        this._claimTotem(totem);
+        this.effects.tracer(muzzle, end);
+        hits.length = 0;
+        targets.length = 0;
+        return;
+      }
       const en = hits[0].object.userData.enemy;
       if (en) {
         this.stats.hits++;
@@ -640,6 +657,22 @@ class Game {
   // Autotest bot: aims at the nearest enemy, holds the trigger, and wanders in
   // a random cardinal direction. Only good enough to exercise the game.
   _autoInput() {
+    // Claiming a totem takes priority over fighting, so the bot exercises the
+    // upgrade path every wave instead of ignoring it. It walks into one rather
+    // than shooting the core, which keeps the run deterministic.
+    let seekTotem = null;
+    if (this.totemArea.active && !this.totemArea.claimed) {
+      let td = 1e9;
+      for (const t of this.totemArea.totems) {
+        if (!t.canClaim()) continue;
+        const d = t.pos.distanceTo(this.player.pos);
+        if (d < td) {
+          td = d;
+          seekTotem = t;
+        }
+      }
+    }
+
     let best = null;
     let bd = 1e9;
     for (const e of this.enemies) {
@@ -667,8 +700,21 @@ class Game {
       this._wt = 1 + Math.random() * 2;
       this._dir = (Math.random() * 5) | 0;
     }
-    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]];
-    const [fx, fz] = dirs[this._dir];
+    // World-space direction to walk. Straight at a totem when one is up,
+    // otherwise the random cardinal wander.
+    let fx;
+    let fz;
+    if (seekTotem) {
+      const dx = seekTotem.pos.x - this.player.pos.x;
+      const dz = seekTotem.pos.z - this.player.pos.z;
+      const len = Math.hypot(dx, dz) || 1;
+      fx = dx / len;
+      fz = dz / len;
+      this.input.shoot = false;
+    } else {
+      const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]];
+      [fx, fz] = dirs[this._dir];
+    }
     const sinY = Math.sin(this.player.yaw);
     const cosY = Math.cos(this.player.yaw);
     const lf = fx * -sinY + fz * -cosY;
@@ -693,17 +739,20 @@ class Game {
       this._updatePickupSpawns(dt);
       if (!this.queue.length && !this.enemies.length) {
         this.waveState = 'intermission';
-        // Long enough for the upgrade card to be read, short enough that the
-        // player is still moving when the next wave lands. The reveal is the
-        // wave-clear announcement, so there is no separate banner here.
-        this.interT = REVEAL_TIME;
+        this.interT = INTERMISSION;
         this.score += 100 * this.wave;
         this._payClearBonus();
-        this._grantWaveUpgrade();
+        // A set still standing from last wave is replaced here, so an
+        // unclaimed pick is lost rather than accumulating.
+        this._presentTotems();
+        let msg = 'WAVE ' + this.wave + ' CLEARED  +' + this.lastGain + 'c';
+        if (this.lastPerfect) msg += '  FLAWLESS';
+        this.ui.banner(msg);
+        this.sfx.wave();
       }
     } else if (this.waveState === 'intermission') {
-      // The simulation keeps running through the reveal - the player can move,
-      // shoot and buy from a terminal the whole time.
+      // Only a countdown to the next wave. The totems stay standing through
+      // it and well past it - claiming one is never a reason to stop moving.
       this.interT -= dt;
       if (this.interT <= 0) {
         this.waveState = 'idle';
@@ -724,77 +773,126 @@ class Game {
     this.lastGain = this._award(this.lastPerfect ? base * 2 : base);
   }
 
-  // Rolls one random upgrade, applies it immediately and announces it. There
-  // is no choice and no pause by design: the reveal is a readout, the game
-  // keeps simulating underneath it, and the player keeps control throughout.
-  //
-  // Returns silently once every upgrade is maxed out - rollUpgrade() gives
-  // back null rather than re-granting something at its cap.
-  _grantWaveUpgrade() {
-    const id = rollUpgrade(this.player.upgrades, this.wave);
-    if (!id || !this.player.takeUpgrade(id)) return;
+  // Raises a fresh set of three totems. Called on every wave clear, so a set
+  // the player never claimed is simply replaced - that pick is forfeited.
+  _presentTotems(isReroll = false) {
+    const ids = rollTotems(this.player.upgrades, this.wave, TOTEM_COUNT);
+    this.totemArea.present(ids, this.player.upgrades, !isReroll);
+    this._refreshStations();
+  }
+
+  // Redraws both station labels. Only called when something they display
+  // actually changes - a purchase, a reroll, or a new set - never per frame.
+  _refreshStations() {
+    const area = this.totemArea;
+    area.ammoStation.setLabel(
+      AMMO_PURCHASE.name,
+      AMMO_PURCHASE.cost + 'c',
+      this.credits >= AMMO_PURCHASE.cost && AMMO_PURCHASE.enabled(this.player)
+    );
+    const cost = rerollCost(area.rerolls);
+    area.rerollStation.setLabel('REROLL', cost + 'c', this.credits >= cost && area.active);
+  }
+
+  // Grants the upgrade a totem is offering and sinks the whole set. Every
+  // claim path - touch and shoot - funnels through here, so the guard against
+  // double-claiming lives in exactly one place.
+  _claimTotem(totem) {
+    if (!totem.canClaim()) return;
+    const id = totem.upgradeId;
+    if (!this.player.takeUpgrade(id)) return;
+    totem.claimed = true;
 
     const def = UPGRADES[id];
     const owned = this.player.upgrades[id];
-    let head = 'WAVE ' + this.wave + ' CLEARED &nbsp;·&nbsp; +<b>' + this.lastGain + '</b> CREDITS';
-    if (this.lastPerfect) head += ' &nbsp;·&nbsp; <b>FLAWLESS</b>';
     this.ui.showUpgrade({
-      head,
       name: def.name,
-      desc: def.desc(owned),
+      effects: def.effects,
       rarity: RARITY[def.rarity].label,
-      color: RARITY[def.rarity].color,
+      color: '#' + def.theme.toString(16).padStart(6, '0'),
       owned,
       max: def.max,
     });
+    this.effects.burst(
+      this._killPos.set(totem.pos.x, 1.4, totem.pos.z), def.theme, 30, 7, 2.5, 0.7
+    );
+    this.effects.addShake(0.1);
     this.sfx.upgrade();
+    this.totemArea.dismiss();
   }
 
-  // Nearest terminal in range, or null. Shared by the prompt and the purchase
-  // so the two can never disagree about which one the player is standing at.
-  _terminalInRange() {
-    for (const t of this.terminals) {
-      if (t.inRange(this.player.pos)) return t;
+  // Ticks the installation and claims by touch. Shooting a core is handled in
+  // shoot(), which already has the raycast.
+  _updateTotems(dt) {
+    const area = this.totemArea;
+    area.update(dt, this.time);
+
+    const touched = area.touched(this.player.pos);
+    if (touched) {
+      this._claimTotem(touched);
+      return;
     }
-    return null;
-  }
 
-  // Refreshes the "[E] REPAIR 90c" prompt. Runs every frame; UI.setPrompt
-  // compares against the last string and only touches the DOM on a change.
-  _updateTerminals() {
-    for (const t of this.terminals) t.update(this.time);
-
-    const t = this._terminalInRange();
-    if (!t) {
+    const st = area.stationInRange(this.player.pos);
+    if (!st) {
       this.ui.setPrompt(null, false);
       return;
     }
-    const blocked = t.blockedReason(this.player, this.credits);
+    const blocked = this._stationBlocked(st);
     if (blocked) {
-      this.ui.setPrompt(t.item.name + ' &nbsp;·&nbsp; ' + blocked, true);
+      this.ui.setPrompt((st.kind === 'ammo' ? 'AMMO' : 'REROLL') + ' &nbsp;·&nbsp; ' + blocked, true);
+    } else if (st.kind === 'ammo') {
+      this.ui.setPrompt(
+        '<b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + AMMO_PURCHASE.cost + 'c</span>',
+        false
+      );
     } else {
       this.ui.setPrompt(
-        '<b>E</b> ' + t.item.name + ' &nbsp;·&nbsp; ' + t.item.detail
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.item.cost + 'c</span>',
+        '<b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
+        + '<span class="prompt-cost">' + rerollCost(area.rerolls) + 'c</span>',
         false
       );
     }
   }
 
-  // E at a terminal. Mid-wave, under fire, with no menu and no pause - the
-  // cost of a purchase is the time spent crossing the arena to reach one.
-  tryUseTerminal() {
+  // Why a station can't be used, or null if it can. Shared by the prompt and
+  // the purchase so the two can never disagree.
+  _stationBlocked(st) {
+    if (st.kind === 'ammo') {
+      if (!AMMO_PURCHASE.enabled(this.player)) return 'AMMO FULL';
+      if (this.credits < AMMO_PURCHASE.cost) return 'NEED ' + AMMO_PURCHASE.cost + 'c';
+      return null;
+    }
+    const cost = rerollCost(this.totemArea.rerolls);
+    if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
+    if (this.credits < cost) return 'NEED ' + cost + 'c';
+    return null;
+  }
+
+  // E at a station. Buying ammo leaves the totems standing; rerolling redraws
+  // all three, because re-offering an upgrade the player just paid to replace
+  // makes the reroll feel rigged.
+  tryUseStation() {
     if (this.state !== 'playing') return;
-    const t = this._terminalInRange();
-    if (!t) return;
-    if (t.blockedReason(this.player, this.credits)) {
+    const st = this.totemArea.stationInRange(this.player.pos);
+    if (!st) return;
+    if (this._stationBlocked(st)) {
       this.sfx.denied();
       return;
     }
-    this.credits -= t.item.cost;
-    t.purchase(this.player, this.time);
-    this.sfx.buy();
-    this.effects.burst(t.pos, t.color, 18, 5, 2, 0.5);
+    if (st.kind === 'ammo') {
+      this.credits -= AMMO_PURCHASE.cost;
+      AMMO_PURCHASE.apply(this.player, this.time);
+      this.sfx.buy();
+    } else {
+      this.credits -= rerollCost(this.totemArea.rerolls);
+      this.totemArea.rerolls++;
+      this._presentTotems(true);
+      this.sfx.reroll();
+    }
+    this.effects.burst(st.pos, st.color, 16, 5, 2, 0.45);
+    this._refreshStations();
   }
 
   // Both spawners run on a timer and respect a hard cap on what is already in
@@ -977,7 +1075,7 @@ class Game {
       if (this.input.shoot) this.shoot();
       if (this.input.melee) this.tryMelee();
       this._updatePickups(dt);
-      this._updateTerminals();
+      this._updateTotems(dt);
       this._updateEnemies(dt);
       this._updateProjectiles(dt);
 

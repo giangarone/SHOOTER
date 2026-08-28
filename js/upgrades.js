@@ -35,35 +35,65 @@ export const RARITY = {
   cursed: { label: 'CURSED', color: '#ff3d00', weight: 0.3 },
 };
 
-// `desc` is shown on the reveal card and is regenerated per stack, so it can
-// report what this particular stack added rather than the running total.
+// THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
+// the totem can be read before any text is: gold means ammo, orange means rate
+// of fire, cyan means armour. Reuse an existing entry rather than inventing a
+// near-duplicate shade - the whole point is that the palette stays learnable.
+export const THEME = {
+  rate: 0xff9500,     // fire rate, attack speed
+  ammo: 0xffd600,     // magazine, reserve, economy
+  damage: 0xff3d00,   // raw damage
+  vitality: 0x00e676, // healing, regeneration
+  armor: 0x4ef3ff,    // max health, shields, retaliation
+  mobility: 0x2979ff, // move and sprint speed
+  blood: 0xff2d6f,    // lifesteal
+};
+
+// `effects` is the totem's whole readout: two or three lines, each a short
+// phrase and a sign. The sign is about GOOD vs BAD, not about the arithmetic -
+// "-30% RELOAD TIME" is a benefit and so scores +1 and renders green.
+//
+//    1  benefit   (green)
+//   -1  drawback  (red)
+//    0  neutral qualifier, drawn dim
+//
+// Keep each line under about 22 characters. It is read at a glance, mid-run,
+// from across the arena - a sentence is already too long.
+const GOOD = 1;
+const BAD = -1;
+const NOTE = 0;
+
 export const UPGRADES = {
   overclock: {
     name: 'OVERCLOCK',
     rarity: 'common',
     max: 5,
-    desc: () => '+20% fire rate.',
+    theme: THEME.rate,
+    effects: [['+20% FIRE RATE', GOOD]],
     apply: (mods, n) => { mods.fireRate *= 1 + 0.2 * n; },
   },
   extendedMag: {
     name: 'EXTENDED MAG',
     rarity: 'common',
     max: 3,
-    desc: () => '+50% magazine size.',
+    theme: THEME.ammo,
+    effects: [['+50% MAGAZINE', GOOD]],
     apply: (mods, n) => { mods.magMult *= 1 + 0.5 * n; },
   },
   speedLoader: {
     name: 'SPEED LOADER',
     rarity: 'common',
     max: 3,
-    desc: () => '−30% reload time.',
+    theme: THEME.ammo,
+    effects: [['-30% RELOAD TIME', GOOD]],
     apply: (mods, n) => { mods.reloadMult *= Math.pow(0.7, n); },
   },
   hollowPoint: {
     name: 'HOLLOW POINT',
     rarity: 'common',
     max: 3,
-    desc: () => '+30% damage, −25% magazine size.',
+    theme: THEME.damage,
+    effects: [['+30% DAMAGE', GOOD], ['-25% MAGAZINE', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.3 * n;
       mods.magMult *= Math.pow(0.75, n);
@@ -73,7 +103,8 @@ export const UPGRADES = {
     name: 'NANOWEAVE',
     rarity: 'common',
     max: 2,
-    desc: () => 'Regeneration starts sooner and heals faster.',
+    theme: THEME.vitality,
+    effects: [['2x HEAL RATE', GOOD], ['HEALS 2.5s SOONER', GOOD]],
     apply: (mods, n) => {
       mods.regenDelay = Math.max(0.8, 4 - 1.25 * n);
       mods.regenRate = 5 * (1 + n);
@@ -83,7 +114,8 @@ export const UPGRADES = {
     name: 'BULWARK',
     rarity: 'common',
     max: 3,
-    desc: () => '+50 max health, −12% move speed.',
+    theme: THEME.armor,
+    effects: [['+50 MAX HEALTH', GOOD], ['-12% MOVE SPEED', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 50 * n;
       mods.moveMult *= Math.pow(0.88, n);
@@ -93,7 +125,8 @@ export const UPGRADES = {
     name: 'SCAVENGER',
     rarity: 'common',
     max: 3,
-    desc: () => 'Kills drop 5 rounds. +25% credits.',
+    theme: THEME.ammo,
+    effects: [['+5 AMMO PER KILL', GOOD], ['+25% CREDITS', GOOD]],
     apply: (mods, n) => {
       mods.ammoOnKill += 5 * n;
       mods.creditMult *= 1 + 0.25 * n;
@@ -103,7 +136,8 @@ export const UPGRADES = {
     name: 'COMBAT STIMS',
     rarity: 'common',
     max: 3,
-    desc: () => '+12% move speed, +10% sprint speed.',
+    theme: THEME.mobility,
+    effects: [['+12% MOVE SPEED', GOOD], ['+10% SPRINT', GOOD]],
     apply: (mods, n) => {
       mods.moveMult *= 1 + 0.12 * n;
       mods.sprintMult *= 1 + 0.1 * n;
@@ -113,14 +147,16 @@ export const UPGRADES = {
     name: 'VAMPIRIC ROUNDS',
     rarity: 'rare',
     max: 3,
-    desc: () => '4% of damage dealt returns as health.',
+    theme: THEME.blood,
+    effects: [['HEAL 4% OF DAMAGE', GOOD]],
     apply: (mods, n) => { mods.lifesteal += 0.04 * n; },
   },
   reactivePlating: {
     name: 'REACTIVE PLATING',
     rarity: 'rare',
     max: 3,
-    desc: () => 'Taking a hit detonates a shockwave around you.',
+    theme: THEME.armor,
+    effects: [['SHOCKWAVE WHEN HIT', GOOD], ['45 DAMAGE NEARBY', NOTE]],
     apply: (mods, n) => {
       mods.shockwave += 45 * n;
       mods.shockwaveRadius = 5 + n;
@@ -130,7 +166,8 @@ export const UPGRADES = {
     name: 'BLOODLUST',
     rarity: 'rare',
     max: 2,
-    desc: () => 'Each kill stacks +8% fire rate for 4s.',
+    theme: THEME.rate,
+    effects: [['+8% FIRE RATE / KILL', GOOD], ['STACKS TO 10', NOTE]],
     apply: (mods, n) => {
       mods.bloodlust += 0.08 * n;
       mods.bloodlustMax = 10;
@@ -140,21 +177,24 @@ export const UPGRADES = {
     name: 'AMMO FABRICATOR',
     rarity: 'rare',
     max: 3,
-    desc: () => 'Reserve ammo regenerates continuously.',
+    theme: THEME.ammo,
+    effects: [['+2.5 AMMO / SEC', GOOD]],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
   momentum: {
     name: 'MOMENTUM',
     rarity: 'rare',
     max: 2,
-    desc: () => 'Damage scales with your speed, up to +35%.',
+    theme: THEME.mobility,
+    effects: [['UP TO +35% DAMAGE', GOOD], ['WHILE MOVING FAST', NOTE]],
     apply: (mods, n) => { mods.momentum += 0.35 * n; },
   },
   glassCannon: {
     name: 'GLASS CANNON',
     rarity: 'cursed',
     max: 1,
-    desc: () => '+70% damage. Max health halved.',
+    theme: THEME.damage,
+    effects: [['+70% DAMAGE', GOOD], ['-50% MAX HEALTH', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.7 * n;
       mods.maxHpMult *= Math.pow(0.5, n);
@@ -178,68 +218,59 @@ function rarityWeight(rarity, wave) {
 }
 
 /**
- * Rolls one random upgrade for a wave clear.
+ * Rolls the three upgrades offered on a totem set.
  *
- * There is no choice offered - the roll IS the reward - so the weighting is
- * the only thing shaping a run. Upgrades already at their stack cap drop out
- * of the pool, which is what stops a long run from re-rolling the same maxed
- * common forever.
+ * Drawn WITHOUT replacement, so one upgrade can never fill two totems of the
+ * same set. Upgrades already at their stack cap drop out of the pool, which is
+ * what stops a long run from offering a maxed common forever.
  *
  * @param {Object<string, number>} owned  stack count per upgrade id
  * @param {number} wave  the wave just cleared; gates rarity
- * @returns {string|null} an upgrade id, or null once everything is maxed.
+ * @param {number} count how many totems to fill
+ * @returns {string[]} upgrade ids. Shorter than `count` - possibly empty -
+ *   once the pool runs dry, and the caller must cope with that.
  */
-export function rollUpgrade(owned, wave) {
+export function rollTotems(owned, wave, count = 3) {
   const pool = [];
-  let total = 0;
   for (const key of UPGRADE_KEYS) {
     if ((owned[key] || 0) >= UPGRADES[key].max) continue;
     const w = rarityWeight(UPGRADES[key].rarity, wave);
-    if (w <= 0) continue;
-    pool.push([key, w]);
-    total += w;
+    if (w > 0) pool.push([key, w]);
   }
-  if (!pool.length) return null;
 
-  let r = Math.random() * total;
-  for (let i = 0; i < pool.length; i++) {
-    r -= pool[i][1];
-    if (r <= 0) return pool[i][0];
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    let total = 0;
+    for (const [, w] of pool) total += w;
+    let r = Math.random() * total;
+    let idx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) {
+      r -= pool[i][1];
+      if (r <= 0) { idx = i; break; }
+    }
+    picked.push(pool[idx][0]);
+    pool.splice(idx, 1);
   }
-  return pool[pool.length - 1][0];
+  return picked;
 }
 
-// Stock for the in-arena terminals (see terminals.js). `enabled` suppresses a
-// purchase that would do nothing - a repair at full health - and `apply` runs
-// on purchase. Both take the live player.
-export const SHOP_ITEMS = {
-  ammo: {
-    name: 'AMMO',
-    detail: '+90 reserve rounds',
-    cost: 60,
-    enabled: (player) => player.reserveAmmo < player.maxReserve,
-    apply: (player) => {
-      player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);
-    },
-  },
-  repair: {
-    name: 'REPAIR',
-    detail: 'restore 50 health',
-    cost: 90,
-    enabled: (player) => player.health < player.maxHealth,
-    apply: (player) => {
-      player.health = Math.min(player.maxHealth, player.health + 50);
-    },
-  },
-  shield: {
-    name: 'SHIELD',
-    detail: '50 shield, 25s',
-    cost: 140,
-    enabled: () => true,
-    apply: (player, time) => {
-      player.shield = 50;
-      player.shieldEnd = time + 25;
-    },
+// Reroll price for the nth reroll of a single totem set (n starts at 0).
+// Doubling is what stops credits from simply buying the best upgrade in the
+// pool; the counter resets when a fresh set rises.
+export function rerollCost(n) {
+  return 50 * Math.pow(2, n);
+}
+
+// The one thing credits buy outright, sold from a station beside the totems.
+// Healing and shields deliberately are not for sale: health is what upgrades
+// and regeneration are for, and being able to buy safety flattened the wave.
+export const AMMO_PURCHASE = {
+  name: 'AMMO',
+  detail: '+90 ROUNDS',
+  cost: 60,
+  enabled: (player) => player.reserveAmmo < player.maxReserve,
+  apply: (player) => {
+    player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);
   },
 };
 
