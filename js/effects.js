@@ -1,7 +1,24 @@
+// Visual effects: particles, bullet tracers, muzzle flash, screen shake.
+//
+// Everything here is pre-allocated and recycled. No effect ever creates a
+// scene object at runtime, because effects fire dozens of times per second.
+//   - particles: one THREE.Points with MAX slots, written through a ring
+//     buffer. An overflowing burst overwrites the oldest particles.
+//   - tracers: a small fixed pool of lines, reusing the first free one.
+//   - flash: a single PointLight, moved and re-lit per shot. It counts toward
+//     the scene's fixed light budget (see arena.js).
+//
+// update() must be called once per frame, including while paused, so effects
+// keep settling.
+
 import * as THREE from 'three';
 
+// Particle slots. Bursts beyond this recycle the oldest particles rather than
+// growing the buffer.
 const MAX = 1024;
 
+// Soft radial white dot, tinted per-use by material colour. Shared by the
+// particles, the projectile glows and the pickup glows.
 export function makeGlowTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;
@@ -21,6 +38,9 @@ export class Effects {
     this.glowTex = makeGlowTexture();
     this._initParticles();
 
+    // Tracer pool. Each is a two-vertex line whose endpoints are rewritten on
+    // use; frustum culling is off because the endpoints move without the
+    // bounding volume being recomputed.
     this.tracers = [];
     for (let i = 0; i < 10; i++) {
       const g = new THREE.BufferGeometry();
@@ -39,6 +59,9 @@ export class Effects {
     this.shakeAmp = 0;
   }
 
+  // Parallel typed arrays, one entry per particle slot. `pos` and `col` are
+  // uploaded to the GPU each frame; the rest is CPU-side simulation state.
+  // A slot is free when life[i] <= 0.
   _initParticles() {
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(MAX * 3);
@@ -66,6 +89,8 @@ export class Effects {
     this.alive = 0;
   }
 
+  // Spray `count` particles from point `p`. `up` biases them upward, `life` is
+  // seconds (randomised per particle). Particles fade to black as they die.
   burst(p, color, count = 16, speed = 5, up = 2, life = 0.5) {
     const c = new THREE.Color(color);
     for (let i = 0; i < count; i++) {
@@ -108,16 +133,23 @@ export class Effects {
     t.life = 0.07;
   }
 
+  // Relight the muzzle flash at `p`. The light is never added or removed, only
+  // moved and dimmed - see the light-count note in arena.js.
   flash(p) {
     this.flashLight.position.copy(p);
     this.flashLight.intensity = 26;
     this.flashT = 0.05;
   }
 
+  // Shake is additive and capped, so many hits at once don't compound into an
+  // unreadable screen. It decays exponentially in update().
   addShake(a) {
     this.shakeAmp = Math.min(0.32, this.shakeAmp + a);
   }
 
+  // Random camera offset for this frame, written into `out`. main.js adds it
+  // after the player has positioned the camera, so it must be applied every
+  // frame or not at all - it is an offset, not a persistent state.
   shakeOffset(out) {
     const s = this.shakeAmp;
     out.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s * 0.8, (Math.random() - 0.5) * s * 0.4);

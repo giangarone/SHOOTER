@@ -1,3 +1,11 @@
+// HUD and overlay DOM. The only module that touches the document outside
+// main.js's event wiring.
+//
+// Every setter is called each frame from main.js, so all of them compare
+// against a cached value in `this._c` and touch the DOM only on change.
+// Writing unconditionally would cause layout work 60 times a second.
+// resetCache() clears those caches on a new game, so the first frame repaints.
+
 export class UI {
   constructor() {
     const $ = (id) => document.getElementById(id);
@@ -18,8 +26,8 @@ export class UI {
     this.pauseOv = $('overlay-pause');
     this.overStats = $('over-stats');
     this.buffsEl = $('buffs');
-    this._c = {};
-    this._buffEls = {};
+    this._c = {};        // last value written per HUD field
+    this._buffEls = {};  // lazily created buff icons, keyed by buff name
   }
 
   setWave(n) {
@@ -82,6 +90,7 @@ export class UI {
       this.ammoReload.classList.toggle('hidden', !reloading);
     }
   }
+  // Each argument is 0..1 of that buff's remaining duration; 0 hides its icon.
   setBuffs(damageBoost, fireRateBoost, shield) {
     this._setBuff('damageBoost', 'damage', damageBoost);
     this._setBuff('fireRateBoost', 'firerate', fireRateBoost);
@@ -119,6 +128,9 @@ export class UI {
     }
   }
 
+  // Restarts the CSS animation. Removing the class, forcing a reflow by
+  // reading offsetWidth, then re-adding it is what makes it replay - without
+  // the reflow the browser coalesces both changes and nothing happens.
   banner(text) {
     this.bannerEl.textContent = text;
     this.bannerEl.classList.remove('show');
@@ -162,6 +174,8 @@ export class UI {
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
   }
+  // Called on a new game: forces every setter to repaint on the next frame and
+  // hides any buff icon left over from the previous run.
   resetCache() {
     this._c = {};
     for (const entry of Object.values(this._buffEls)) {

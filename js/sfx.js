@@ -1,10 +1,23 @@
+// WebAudio synth. Every sound is generated from oscillators and noise buffers
+// at call time - there are no audio assets. Nodes are one-shot and get
+// collected once they finish playing.
+//
+// All the named sounds below (shoot, kill, pickupAmmo, ...) are just recipes
+// over tone() and noise(). Powerups reference them by name: the `sfx` string on
+// a pickup type in powerups.js must match a method here.
+
 export class SFX {
   constructor() {
     this.ctx = null;
     this.master = null;
+    // Only used to time the reload's final click. Must match
+    // Player.reloadTime in player.js.
     this.reloadDur = 1.4;
   }
 
+  // Must be called from a user gesture: browsers refuse to start an
+  // AudioContext otherwise. Safe to call repeatedly - it also resumes a
+  // context the browser suspended.
   ensure() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -17,6 +30,9 @@ export class SFX {
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
   }
 
+  // One oscillator note. f = start frequency, f2 = optional glide target,
+  // t = seconds, v = peak gain, delay = seconds to wait before playing.
+  // Silently does nothing until ensure() has run.
   tone({ f = 440, f2 = 0, t = 0.1, type = 'square', v = 0.5, delay = 0 }) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime + delay;
@@ -33,6 +49,8 @@ export class SFX {
     o.stop(now + t + 0.03);
   }
 
+  // One burst of lowpassed white noise, fading out over its length.
+  // f is the filter cutoff here, not a pitch.
   noise({ t = 0.1, v = 0.5, f = 1000, delay = 0 }) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime + delay;
@@ -54,6 +72,7 @@ export class SFX {
     src.start(now);
   }
 
+  // ---- named sounds ----
   shoot() {
     this.noise({ t: 0.09, v: 0.5, f: 2600 });
     this.tone({ f: 180, f2: 60, t: 0.08, type: 'square', v: 0.25 });

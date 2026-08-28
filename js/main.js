@@ -1,3 +1,46 @@
+// VOID ARENA - game entry point. Owns the renderer, the scene, all entity
+// lists, and the frame loop. Every other module is a leaf: they never call
+// back into here except through the callbacks in the ctx objects below.
+//
+// STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'gameover' -> 'playing'
+// Only 'playing' simulates. The loop still runs and renders in every state,
+// which is what keeps the menu camera orbiting and the pause overlay live.
+//
+// WAVE STATE (only meaningful while playing):
+//   'active'       spawning from the queue and fighting
+//   'intermission' wave cleared, showing the banner
+//   'idle'         short beat, then the next wave starts
+//
+// TIME: `this.time` is GAME time - it only advances while playing, and dt is
+// clamped so a stalled tab can't teleport everything. Every gameplay deadline
+// (buff expiry, pickup despawn, regen delay) is measured against it. Use
+// performance.now() only for things outside the simulation, like the menu
+// camera. Mixing the two is a real bug that has happened here before.
+//
+// FRAME ORDER in _loop() is deliberate:
+//   1. player.update      moves the player and the camera
+//   2. _updateWave        spawns enemies and pickups
+//   3. shoot / melee      raycasts against enemy hitboxes
+//   4. _updatePickups     proximity collection
+//   5. _updateEnemies     AI, then remove the dead
+//   6. _updateProjectiles movement and player hits
+//   7. shake, HUD, render
+// Step 3 raycasts against hitbox transforms from the PREVIOUS frame, because
+// world matrices are only refreshed during render. That one-frame lag is
+// normal for this kind of loop; don't "fix" it by forcing matrix updates
+// mid-frame.
+//
+// ALLOCATION: the loop runs 60 times a second, so the hot path allocates
+// nothing. Scratch vectors, raycasters and reusable arrays live on `this`
+// (the `_`-prefixed fields in the constructor). Reach for one of those rather
+// than writing `new THREE.Vector3()` inside a per-frame method.
+//
+// GPU RESOURCES: enemies, projectiles and pickups all draw from shared
+// geometry and material caches in their own modules. When an entity leaves the
+// scene it must be removed AND disposed (Enemy.dispose(), Powerup.destroy()).
+// Skipping that leaks for the whole session and was the original cause of the
+// framerate decaying over a few waves.
+
 import * as THREE from 'three';
 import { buildArena } from './arena.js';
 import { Player } from './player.js';
@@ -8,6 +51,9 @@ import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 
+// ?autotest makes the game play itself and exposes window.__game and
+// window.__report() for test/smoke.mjs. It also skips pointer lock, which
+// headless Chrome can't grant.
 const autotest = new URLSearchParams(location.search).has('autotest');
 
 // Pickup budget. Every pickup in the arena is a draw call and a collision
@@ -264,6 +310,8 @@ class Game {
     if (p && p.catch) p.catch(() => {});
   }
 
+  // Tears down every live entity. Enemies and pickups must be disposed, not
+  // just removed, or their per-instance materials leak.
   _clearEntities() {
     for (const e of this.enemies) {
       this.scene.remove(e.group);
@@ -276,6 +324,9 @@ class Game {
     this.powerups.length = 0;
   }
 
+  // Starts a fresh run from the menu or the game-over screen. Anything that
+  // changes during play must be reset here, including the spawn timers -
+  // leftover state used to carry into the next run.
   beginGame() {
     this.sfx.ensure();
     this.player.reset();
@@ -314,6 +365,8 @@ class Game {
     if (this.player.startReload()) this.sfx.reload();
   }
 
+  // Rolls the next wave's enemy queue and difficulty, and sets the pickup
+  // budget for it. Enemies then trickle out of the queue on spawnTimer.
   startWave() {
     this.wave++;
     this._cfg = waveConfig(this.wave);
@@ -350,6 +403,10 @@ class Game {
     this.sfx.kill();
   }
 
+  // Hitscan shot. Raycasts once against arena geometry and enemy hitboxes
+  // together, so walls correctly block shots: the nearest hit wins whatever it
+  // is. Called every frame while the trigger is held; the fire rate is gated
+  // inside player.tryShoot().
   shoot() {
     const res = this.player.tryShoot();
     if (res === 'empty') {
@@ -404,6 +461,8 @@ class Game {
     targets.length = 0;
   }
 
+  // Short-range melee. Unlike shoot(), this only tests enemy hitboxes, so it
+  // reaches through thin cover. Cooldown lives in player.tryMelee().
   tryMelee() {
     if (!this.player.tryMelee()) return;
     this.sfx.melee();
@@ -434,6 +493,8 @@ class Game {
     targets.length = 0;
   }
 
+  // Single entry point for all damage to the player, passed to enemies and
+  // projectiles through their ctx. `pos` is only used to place the hit spray.
   _hurtPlayer(d, pos) {
     if (this.state !== 'playing') return;
     const h = this.player.takeDamage(d, this.time);
@@ -467,6 +528,8 @@ class Game {
     this.projectiles.push(new Grenade(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
   }
 
+  // Autotest bot: aims at the nearest enemy, holds the trigger, and wanders in
+  // a random cardinal direction. Only good enough to exercise the game.
   _autoInput() {
     let best = null;
     let bd = 1e9;
@@ -509,6 +572,8 @@ class Game {
     this.input.sprint = false;
   }
 
+  // Drives the wave state machine and the enemy trickle. A wave ends only when
+  // the queue is empty AND no enemies are left alive.
   _updateWave(dt) {
     if (this.waveState === 'active') {
       this.spawnTimer -= dt;
@@ -575,6 +640,8 @@ class Game {
       : AMMO_INTERVAL + Math.random() * AMMO_INTERVAL_JITTER;
   }
 
+  // Ticks pickups and collects any the player is standing on. Iterates
+  // backwards so removals don't skip entries.
   _updatePickups(dt) {
     for (let i = this.powerups.length - 1; i >= 0; i--) {
       const p = this.powerups[i];
@@ -593,6 +660,9 @@ class Game {
     }
   }
 
+  // Splitter death: three weaker, faster, smaller chasers worth no score.
+  // They go to _pendingSpawns, not straight into the enemy list - see
+  // _updateEnemies.
   _splitInto(e) {
     for (let i = 0; i < 3; i++) {
       const angle = ((Math.PI * 2) / 3) * i + Math.random() * 0.5;
@@ -645,6 +715,8 @@ class Game {
     this._pendingSpawns.length = 0;
   }
 
+  // Moves projectiles and reacts to what they hit. Grenades handle their own
+  // blast inside update(); this only spawns the impact effect and cleans up.
   _updateProjectiles(dt) {
     const ctx = this._projCtx;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -658,6 +730,8 @@ class Game {
     }
   }
 
+  // Pushes state to the HUD every frame. UI caches internally, so these calls
+  // are cheap when nothing changed.
   _updateHud() {
     this.ui.setWave(this.wave);
     this.ui.setEnemies(this.enemies.length + this.queue.length);
@@ -671,6 +745,7 @@ class Game {
     );
   }
 
+  // The frame. See the FRAME ORDER note at the top before reordering anything.
   _loop(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;

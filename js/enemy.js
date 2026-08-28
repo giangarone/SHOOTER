@@ -1,6 +1,30 @@
+// Enemies and enemy projectiles.
+//
+// An Enemy owns a THREE.Group (its model) and a `pos` vector that is the
+// source of truth for its location; the group follows pos each update. Like
+// the player, pos is at floor level. Enemies never leave the ground plane -
+// they slide around obstacles rather than climbing them.
+//
+// Behaviour by type:
+//   chaser/splitter/tank  close to melee range, wind up, then hit
+//   shooter/sniper        hold a preferred distance, strafe, fire projectiles
+//   bomber                holds distance and lobs arcing grenades
+// Splitters are ordinary enemies here; main.js is what spawns their children
+// when one dies.
+//
+// LIFECYCLE: a killed enemy sets `dead` and main.js removes it from the scene
+// and calls dispose(). Anything added to an enemy that allocates a GPU
+// resource per instance must be freed there, or it leaks for the whole session.
+//
+// ctx passed to update() is built once per frame in main.js and carries the
+// player, the live enemy list, obstacles, game time, and callbacks for
+// damaging the player and spawning projectiles.
+
 import * as THREE from 'three';
 import { resolveCircle, pointInObstacle } from './utils.js';
 
+// Base stats before per-wave scaling (waves.js supplies the multipliers).
+// `scale` sizes the whole model, including its hitbox.
 export const ENEMY_TYPES = {
   chaser: { hp: 42, speed: 3.4, damage: 12, score: 100, color: 0xff3b30, eye: 0xffe08a, scale: 1 },
   shooter: { hp: 28, speed: 2.7, damage: 8, score: 150, color: 0xb14aed, eye: 0x4ef3ff, scale: 1.08 },
@@ -215,6 +239,8 @@ export class Enemy {
     return true;
   }
 
+  // One AI + movement step. Computes a desired velocity for this frame, adds
+  // crowd separation, clamps it, moves, then resolves against obstacles.
   update(dt, ctx) {
     if (this.dead) return;
     const p = ctx.player.pos;
@@ -327,6 +353,8 @@ export class Enemy {
     this._setFlash(this.flash > 0);
   }
 
+  // Returns true if this hit killed the enemy. Only sets `dead`; main.js does
+  // the actual removal on its next sweep.
   takeDamage(d) {
     if (this.dead) return false;
     this.hp -= d;
@@ -392,6 +420,9 @@ function grenadeMaterials(glowTex) {
 
 const _tmpTarget = new THREE.Vector3();
 
+// Straight-line enemy shot. update() returns 'alive', 'hit' (reached the
+// player), 'wall' (hit geometry or the floor) or 'expired'; main.js removes it
+// from the scene on anything but 'alive'.
 export class Projectile {
   constructor(scene, glowTex, x, y, z, target, speed, damage, type = 'shooter') {
     this.pos = new THREE.Vector3(x, y, z);
@@ -425,6 +456,9 @@ export class Projectile {
   }
 }
 
+// Bomber's arcing shot: gravity-driven, explodes on contact or when its fuse
+// runs out, and damages the player with falloff over its blast radius.
+// Same return contract as Projectile, plus 'exploded'.
 export class Grenade {
   constructor(scene, glowTex, x, y, z, target, speed, damage) {
     this.pos = new THREE.Vector3(x, y, z);

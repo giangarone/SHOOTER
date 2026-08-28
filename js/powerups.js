@@ -1,3 +1,21 @@
+// Pickups: ammo crates and the four powerups.
+//
+// A pickup is a floating mesh plus an additive glow sprite. It is collected by
+// proximity (no raycast) and despawns after PICKUP_LIFETIME.
+//
+// Adding a type means: an entry in POWERUP_TYPES with a `weight` and an `sfx`
+// name that matches a method on SFX, and a geometry in GEOMS under the same
+// key. `apply(player, time)` mutates the player directly; timed buffs set an
+// end time that Player.update() watches for.
+//
+// TWO RULES THAT COST A LOT WHEN BROKEN:
+//   1. Never give a pickup a real light. three.js keys shader programs on the
+//      scene's light count, so spawning one recompiles every material in the
+//      scene. That is what the glow sprite is for.
+//   2. Geometries and materials here are shared by every instance and are
+//      never disposed. destroy() only removes objects from the scene. Calling
+//      dispose() on them would break every other pickup of that type.
+
 import * as THREE from 'three';
 import { waveEnemyCount } from './waves.js';
 
@@ -47,6 +65,8 @@ export const POWERUP_TYPES = {
   },
 };
 
+// Ammo is deliberately not in POWERUP_TYPES: it is spawned on its own timer
+// and its own cap in main.js, not from the weighted powerup roll.
 export const AMMO_PICKUP = {
   color: 0xffd600,
   emissive: 0xffd600,
@@ -206,6 +226,8 @@ function shieldDomeMaterial() {
   return SHIELD_DOME_MAT;
 }
 
+// One pickup in the arena. main.js owns the list, calls update() each frame,
+// and destroys it on pickup or despawn.
 export class Powerup {
   /**
    * @param {number} time game time (the same clock passed to update), used for
@@ -243,6 +265,8 @@ export class Powerup {
     scene.add(this.glow);
   }
 
+  // Bob, spin and pulse. Sets `dead` when its lifetime runs out; main.js
+  // removes dead pickups from its list on the same pass.
   update(dt, time) {
     if (this.dead) return;
 
@@ -263,10 +287,14 @@ export class Powerup {
     }
   }
 
+  // Proximity collection. Compares against the player's FEET position, so the
+  // radius is generous enough to catch a player running over it.
   tryPickup(playerPos) {
     return playerPos.distanceTo(this.pos) < 1.2;
   }
 
+  // Removes from the scene only - see rule 2 at the top of this file.
+  // Idempotent: pickup and despawn can both reach it.
   destroy() {
     if (this.dead) return;
     this.dead = true;
@@ -276,6 +304,8 @@ export class Powerup {
   }
 }
 
+// Powerups granted per wave, scaled off the wave's enemy count. This is a
+// budget main.js spends over the wave, not an instant spawn.
 export function calcPickupsForWave(wave) {
   return Math.max(1, Math.floor(waveEnemyCount(wave) * 0.15));
 }

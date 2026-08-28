@@ -1,6 +1,23 @@
+// Static level geometry and lighting. Built once at startup and never
+// modified - nothing here is per-frame.
+//
+// buildArena() returns:
+//   group       the parent Object3D holding all level meshes
+//   obstacles   AABBs for collision (utils.js). Only solid, standable things
+//               are listed; decorative trims and edges are not.
+//   meshList    raycast targets for shooting. Enemy hitboxes are appended to
+//               this list per shot in main.js.
+//   spawnPoints where enemies and pickups appear, jittered by the caller.
+//
+// IMPORTANT: the light count here is fixed and must stay that way. three.js
+// keys its shader programs on the number of lights, so adding or removing one
+// at runtime recompiles every material in the scene and stalls the frame.
+// That is why pickups glow with sprites instead of PointLights.
 import * as THREE from 'three';
 import { makeAabb } from './utils.js';
 
+// Half-width of the playable floor. Walls sit just outside this; entities
+// clamp themselves to a slightly smaller bound to stay off the walls.
 const BOUND = 22;
 
 export function buildArena(scene) {
@@ -18,6 +35,7 @@ export function buildArena(scene) {
   // pass straight through and never spawn an impact.
   meshList.push(floor);
 
+  // Purely decorative, floats just above the floor to avoid z-fighting.
   const grid = new THREE.GridHelper(BOUND * 2 + 2, 23, 0x4a5a6a, 0x3a4a5a);
   grid.position.y = 0.02;
   grid.material.transparent = true;
@@ -26,6 +44,9 @@ export function buildArena(scene) {
 
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x1d222e, roughness: 0.6, metalness: 0.35 });
   const trimMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.6 });
+  // Four perimeter walls, each with an emissive trim strip along the top.
+  // Walls are raycast targets but not obstacles: entities are kept inside by
+  // the hard clamp in their update, not by collision.
   const wallDefs = [
     { x: 0, z: -(BOUND + 0.5), w: BOUND * 2 + 3, d: 1 },
     { x: 0, z: BOUND + 0.5, w: BOUND * 2 + 3, d: 1 },
@@ -46,6 +67,8 @@ export function buildArena(scene) {
 
   const platMat = new THREE.MeshStandardMaterial({ color: 0x232a3a, roughness: 0.5, metalness: 0.45 });
   const platEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 0.9 });
+  // Raised platforms - solid, and jumpable via the step-up test in player.js.
+  // h is the height of the top surface.
   const platforms = [
     { x: 0, z: 0, w: 4, d: 4, h: 1.0 },
     { x: -8, z: -8, w: 5, d: 4, h: 1.2 },
@@ -67,6 +90,8 @@ export function buildArena(scene) {
   }
 
   const crateMat = new THREE.MeshStandardMaterial({ color: 0x2e2a22, roughness: 0.7, metalness: 0.25 });
+  // Low cover. The collision box is slightly wider than the mesh (1.15 vs
+  // 0.95) to compensate for the random Y rotation, which the AABB can't model.
   const crates = [
     { x: 3.5, z: -3 }, { x: -4, z: 2.5 }, { x: 2, z: 5.5 }, { x: -2, z: -5.5 }, { x: 12, z: -2 },
   ];
@@ -82,6 +107,8 @@ export function buildArena(scene) {
   }
 
   const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1a1f2b, roughness: 0.4, metalness: 0.6 });
+  // Tall cover, too high to jump onto. Boxed as a square AABB around the
+  // cylinder, so the corners collide a little wider than they look.
   const pillars = [
     { x: -14, z: 0 }, { x: 14, z: -2 }, { x: 0, z: 14 }, { x: -3, z: -14 }, { x: 3, z: 14 },
   ];
@@ -95,12 +122,17 @@ export function buildArena(scene) {
     obstacles.push(makeAabb(pl.x, 1.15, pl.z, 1.5, 2.3, 1.5));
   }
 
+  // ---- lighting: exactly 5 lights, see the note at the top of this file ----
+  // 1) hemisphere fill, 2) shadow-casting key light, 3+4) two colour accents.
+  // The fifth is the muzzle flash light, owned by effects.js.
   const hemi = new THREE.HemisphereLight(0x3a4a6a, 0x2a2f3a, 1.0);
   group.add(hemi);
   const dir = new THREE.DirectionalLight(0xbfd4ff, 1.6);
   dir.position.set(9, 15, 6);
   dir.castShadow = true;
   dir.shadow.mapSize.set(2048, 2048);
+  // The shadow frustum is sized to cover the whole arena, since the light is
+  // fixed and everything inside must cast into it.
   dir.shadow.camera.left = -26;
   dir.shadow.camera.right = 26;
   dir.shadow.camera.top = 26;
@@ -119,6 +151,8 @@ export function buildArena(scene) {
   scene.background = new THREE.Color(0x1a1f2a);
   scene.fog = new THREE.Fog(0x1a1f2a, 26, 62);
 
+  // Spawn points: a 3x3 grid near the arena edges, minus the centre (which is
+  // on top of the middle platform and would drop spawns onto the player).
   for (const sx of [-18, 0, 18]) {
     for (const sz of [-18, 0, 18]) {
       if (sx === 0 && sz === 0) continue;

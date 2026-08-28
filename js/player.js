@@ -1,6 +1,22 @@
+// Player movement, weapon state and camera.
+//
+// Conventions used across the whole game:
+//   - World units are roughly metres, Y is up, the arena floor is y = 0.
+//   - `pos` is at the player's FEET. The camera/eye sits 1.7 above it, which
+//     is why eyeInto() exists - use it for anything aim- or hit-related.
+//   - yaw rotates around Y, pitch around X, applied in that order ('YXZ').
+//     Both increase counter-clockwise, so the mouse handler in main.js
+//     subtracts movement.
+//   - The player is a circle of radius 0.4 for collision (see utils.js).
+//
+// This class owns no scene objects except the gun, which is parented to the
+// camera so it renders as a first-person viewmodel.
+
 import * as THREE from 'three';
 import { resolveCircle } from './utils.js';
 
+// First-person gun model. The 'muzzle' child is an empty marker: main.js
+// reads its world position for the muzzle flash and tracer origin.
 function buildGun() {
   const g = new THREE.Group();
   g.position.set(0.3, -0.26, -0.55);
@@ -58,6 +74,8 @@ export class Player {
     this.applyCamera();
   }
 
+  // Back to a fresh-run state. Called on every new game, so anything added to
+  // the constructor that changes during play must be reset here too.
   reset() {
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
@@ -81,15 +99,20 @@ export class Player {
     this.shieldEnd = 0;
   }
 
+  // Eye position (feet + 1.7) written into `v`. Takes an out-param so the hot
+  // path can reuse a scratch vector instead of allocating.
   eyeInto(v) {
     v.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
     return v;
   }
 
+  // World position of the gun's muzzle, written into `v`.
   muzzleInto(v) {
     return this.muzzle.getWorldPosition(v);
   }
 
+  // `time` is game time (see main.js) - used for buff expiry and regen delay,
+  // not for physics. All physics uses `dt`.
   update(dt, input, obstacles, time) {
     this.fireCd -= dt;
     if (this.meleeCd > 0) this.meleeCd -= dt;
@@ -119,6 +142,9 @@ export class Player {
       }
     }
 
+    // Movement: build a normalised local direction, rotate it by yaw, and set
+    // horizontal velocity outright. There is no acceleration - releasing the
+    // keys just damps the velocity toward zero.
     const f = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
     const s = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     if (f || s) {
@@ -142,6 +168,10 @@ export class Player {
       this.onGround = false;
     }
 
+    // Vertical resolution. Landing on a box only counts when falling onto its
+    // top face from above (prevY above the top, new Y at or below it), which
+    // is what makes platforms and crates jumpable but not climbable from the
+    // side.
     const prevY = this.pos.y;
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
@@ -167,10 +197,13 @@ export class Player {
       }
     }
     resolveCircle(this.pos, 0.4, obstacles);
+    // Arena walls sit at +-22; clamp inside them by the player radius.
     const B = 21.6;
     this.pos.x = Math.max(-B, Math.min(B, this.pos.x));
     this.pos.z = Math.max(-B, Math.min(B, this.pos.z));
 
+    // Regen after 4s without damage. The second branch bleeds off overheal
+    // (health above max, from a health pickup) back down to max.
     if (time - this.lastHurt > 4 && this.health < this.maxHealth) {
       this.health = Math.min(this.maxHealth, this.health + 5 * dt);
     } else if (this.health > this.maxHealth) {
@@ -187,12 +220,17 @@ export class Player {
     this.camera.position.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
   }
 
+  // Returns false when a reload is pointless (already reloading, mag full, or
+  // no reserve), so callers can skip the sound.
   startReload() {
     if (this.reloading > 0 || this.mag === this.magSize || this.reserveAmmo <= 0) return false;
     this.reloading = this.reloadTime;
     return true;
   }
 
+  // Returns 'shot' on a real shot, 'empty' when the trigger is pulled dry, or
+  // null while on cooldown or reloading. Only 'shot' consumes a round.
+  // Note 'empty' sets no cooldown, so main.js rate-limits the dry-fire sound.
   tryShoot() {
     if (this.reloading > 0 || this.fireCd > 0) return null;
     if (this.mag <= 0) {
@@ -216,6 +254,8 @@ export class Player {
     return true;
   }
 
+  // Shield soaks damage first and fully - a hit that breaks the shield does
+  // not carry the remainder through to health. Returns remaining health.
   takeDamage(d, time) {
     if (this.shield > 0) {
       this.shield = Math.max(0, this.shield - d);

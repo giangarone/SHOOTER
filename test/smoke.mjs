@@ -55,6 +55,7 @@ try {
 
   console.log('GEOMETRY SERIES', samples.map((r) => r.geometries).join(','));
   console.log('LIGHT SERIES', samples.map((r) => r.lights).join(','));
+  console.log('PROGRAM SERIES', samples.map((r) => r.programs).join(','));
   // The shared caches are filled lazily, the first time each enemy or
   // projectile type appears, so only the steady state is meaningful.
   const early = samples[Math.floor(samples.length * 2 / 3)];
@@ -87,10 +88,10 @@ try {
     // changing light count triggers a full recompile of every material in the
     // scene. Pickups used to add one PointLight each; the count must be fixed.
     ['light count constant', samples.every((r) => r.lights === samples[0].lights)],
-    // Which in turn keeps the program count small and flat instead of growing
-    // by a few every second.
+    // Which in turn keeps the program count small instead of growing by a few
+    // every second. Only the bound is asserted: three.js frees programs it is
+    // not using, so the count drifts by one either way between samples.
     ['shader programs bounded', peak.programs <= 24],
-    ['shader program count steady', rep.programs <= early.programs],
     // Enemies, projectiles and pickups all draw from a fixed set of shared
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.
