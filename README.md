@@ -27,7 +27,8 @@ Open http://localhost:8123
 
 - First-person camera with pointer-lock mouse aiming
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
-- Two enemy types: **Chasers** (fast melee) and **Shooters** (ranged, strafe and fire darts)
+- Six enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades)
+- Pickups: ammo crates plus health, damage, fire-rate and shield powerups
 - Escalating waves with per-wave HP / speed / damage scaling
 - Weapon with magazine, reload, recoil, tracers, and muzzle flash
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
@@ -41,7 +42,11 @@ Open http://localhost:8123
 npm test
 ```
 
-Runs a headless-Chrome smoke test that plays the game automatically (requires a system Chrome; override with `CHROME=/path/to/chrome`).
+Runs a headless-Chrome smoke test that plays the game automatically for 30s
+(requires a system Chrome; override with `CHROME=/path/to/chrome`). Besides
+checking the game runs, it asserts the pickup, ammo and projectile caps hold
+and that GPU resource counts stay bounded — lights, shader programs and
+geometries must not grow as enemies spawn and die.
 
 ## Structure
 

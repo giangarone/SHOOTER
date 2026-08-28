@@ -14,6 +14,9 @@ export function buildArena(scene) {
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
+  // The floor is a raycast target too, otherwise shots aimed at the ground
+  // pass straight through and never spawn an impact.
+  meshList.push(floor);
 
   const grid = new THREE.GridHelper(BOUND * 2 + 2, 23, 0x4a5a6a, 0x3a4a5a);
   grid.position.y = 0.02;

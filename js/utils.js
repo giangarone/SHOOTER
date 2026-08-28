@@ -32,11 +32,3 @@ export function makeAabb(x, y, z, w, h, d) {
     max: { x: x + w / 2, y: y + h / 2, z: z + d / 2 },
   };
 }
-
-export function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}

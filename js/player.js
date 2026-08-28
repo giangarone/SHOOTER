@@ -51,6 +51,7 @@ export class Player {
     this.shield = 0;
     this.shieldEnd = 0;
     this.gun = buildGun();
+    this.muzzle = this.gun.getObjectByName('muzzle');
     this.gunBaseZ = this.gun.position.z;
     camera.add(this.gun);
     scene.add(camera);
@@ -83,6 +84,10 @@ export class Player {
   eyeInto(v) {
     v.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
     return v;
+  }
+
+  muzzleInto(v) {
+    return this.muzzle.getWorldPosition(v);
   }
 
   update(dt, input, obstacles, time) {
@@ -191,8 +196,7 @@ export class Player {
   tryShoot() {
     if (this.reloading > 0 || this.fireCd > 0) return null;
     if (this.mag <= 0) {
-      if (this.reserveAmmo > 0) this.startReload();
-      else this.startReload();
+      this.startReload();
       return 'empty';
     }
     this.mag--;

@@ -63,6 +63,7 @@ export class Effects {
     this.points.frustumCulled = false;
     this.scene.add(this.points);
     this.cursor = 0;
+    this.alive = 0;
   }
 
   burst(p, color, count = 16, speed = 5, up = 2, life = 0.5) {
@@ -71,6 +72,7 @@ export class Effects {
       const idx = this.cursor;
       this.cursor = (this.cursor + 1) % MAX;
       const i3 = idx * 3;
+      if (this.life[idx] <= 0) this.alive++;
       this.pos[i3] = p.x;
       this.pos[i3 + 1] = p.y;
       this.pos[i3 + 2] = p.z;
@@ -90,7 +92,13 @@ export class Effects {
   }
 
   tracer(from, to) {
-    const t = this.tracers.find((t) => t.life <= 0) || this.tracers[0];
+    let t = this.tracers[0];
+    for (const cand of this.tracers) {
+      if (cand.life <= 0) {
+        t = cand;
+        break;
+      }
+    }
     const a = t.line.geometry.attributes.position;
     a.setXYZ(0, from.x, from.y, from.z);
     a.setXYZ(1, to.x, to.y, to.z);
@@ -130,6 +138,9 @@ export class Effects {
         if (t.life <= 0) t.line.visible = false;
       }
     }
+    // Nothing alive means nothing moved, so skip the sweep and the two
+    // full-buffer uploads entirely.
+    if (this.alive === 0) return;
     const { pos: p, vel: v, life: l, maxLife: ml, col: c, c0 } = this;
     for (let i = 0; i < MAX; i++) {
       if (l[i] <= 0) continue;
@@ -138,6 +149,7 @@ export class Effects {
       if (l[i] <= 0) {
         p[i3 + 1] = -100;
         c[i3] = c[i3 + 1] = c[i3 + 2] = 0;
+        this.alive--;
         continue;
       }
       v[i3 + 1] -= 9.8 * dt * 0.6;

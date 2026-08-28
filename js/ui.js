@@ -41,14 +41,21 @@ export class UI {
     }
   }
   setHealth(h, max) {
+    // Keyed off the displayed number, not the clamped bar width, so overheal
+    // ticking back down to full still updates the readout.
+    const shown = Math.ceil(Math.max(0, h));
+    if (this._c.hp === shown) return;
+    this._c.hp = shown;
     const p = Math.max(0, Math.min(100, (h / max) * 100));
-    if (this._c.hp !== Math.round(p)) {
-      this._c.hp = Math.round(p);
-      this.hpBar.style.width = p + '%';
-      this.hpBar.style.background = p < 30 ? 'linear-gradient(90deg,#ff3b30,#ff7a45)' : 'linear-gradient(90deg,#37e08b,#b6f54c)';
-      this.hpBar.style.boxShadow = p < 30 ? '0 0 12px rgba(255,59,48,0.6)' : '0 0 12px rgba(55,224,139,0.5)';
-      this.hpText.textContent = Math.ceil(h) + ' / ' + max;
-    }
+    const low = p < 30;
+    this.hpBar.style.width = p + '%';
+    this.hpBar.style.background = low
+      ? 'linear-gradient(90deg,#ff3b30,#ff7a45)'
+      : 'linear-gradient(90deg,#37e08b,#b6f54c)';
+    this.hpBar.style.boxShadow = low
+      ? '0 0 12px rgba(255,59,48,0.6)'
+      : '0 0 12px rgba(55,224,139,0.5)';
+    this.hpText.textContent = shown + ' / ' + max;
   }
   setAmmo(mag, reserve, reloading) {
     if (this._c.mag !== mag) {
@@ -75,30 +82,43 @@ export class UI {
       this.ammoReload.classList.toggle('hidden', !reloading);
     }
   }
-  setBuffs(buffs) {
-    const types = ['damageBoost', 'fireRateBoost', 'shield'];
-    const labels = { damageBoost: 'damage', fireRateBoost: 'firerate', shield: 'shield' };
-    const maxDur = { damageBoost: 10, fireRateBoost: 8, shield: 15 };
+  setBuffs(damageBoost, fireRateBoost, shield) {
+    this._setBuff('damageBoost', 'damage', damageBoost);
+    this._setBuff('fireRateBoost', 'firerate', fireRateBoost);
+    this._setBuff('shield', 'shield', shield);
+  }
 
-    for (const key of types) {
-      const val = buffs[key];
-      let el = this._buffEls[key];
-      if (val > 0) {
-        if (!el) {
-          el = document.createElement('div');
-          el.className = 'buff-icon ' + labels[key];
-          el.innerHTML = '<div class="buff-timer"></div>';
-          this.buffsEl.appendChild(el);
-          this._buffEls[key] = el;
-        }
-        el.style.display = 'flex';
-        const timer = el.querySelector('.buff-timer');
-        timer.style.transform = 'scaleX(' + val + ')';
-      } else if (el) {
-        el.style.display = 'none';
+  // Fraction is 0..1 of the buff's remaining duration; 0 hides the icon.
+  _setBuff(key, cssName, fraction) {
+    let entry = this._buffEls[key];
+    if (fraction <= 0) {
+      if (entry && entry.shown) {
+        entry.el.style.display = 'none';
+        entry.shown = false;
       }
+      return;
+    }
+    if (!entry) {
+      const el = document.createElement('div');
+      el.className = 'buff-icon ' + cssName;
+      el.innerHTML = '<div class="buff-timer"></div>';
+      this.buffsEl.appendChild(el);
+      // The timer node is cached: querySelector on every frame for every buff
+      // is pure waste.
+      entry = { el, timer: el.querySelector('.buff-timer'), shown: false, scale: -1 };
+      this._buffEls[key] = entry;
+    }
+    if (!entry.shown) {
+      entry.el.style.display = 'flex';
+      entry.shown = true;
+    }
+    const s = Math.round(Math.min(1, fraction) * 100) / 100;
+    if (entry.scale !== s) {
+      entry.scale = s;
+      entry.timer.style.transform = 'scaleX(' + s + ')';
     }
   }
+
   banner(text) {
     this.bannerEl.textContent = text;
     this.bannerEl.classList.remove('show');
@@ -144,8 +164,10 @@ export class UI {
   }
   resetCache() {
     this._c = {};
-    for (const el of Object.values(this._buffEls)) {
-      if (el) el.style.display = 'none';
+    for (const entry of Object.values(this._buffEls)) {
+      entry.el.style.display = 'none';
+      entry.shown = false;
+      entry.scale = -1;
     }
   }
 }

@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { waveEnemyCount } from './waves.js';
 
 export const POWERUP_TYPES = {
   health: {
     color: 0x00e676,
     emissive: 0x00e676,
     amount: 25,
-    apply: (player, time) => {
+    apply: (player) => {
       player.health = Math.min(player.maxHealth + 25, player.health + 25);
     },
     weight: 0.45,
@@ -50,32 +51,34 @@ export const AMMO_PICKUP = {
   color: 0xffd600,
   emissive: 0xffd600,
   amount: 45,
-  apply: (player, time) => {
+  apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 45);
   },
   sfx: 'pickupAmmo',
 };
 
-const TYPE_KEYS = Object.keys(POWERUP_TYPES);
-const TYPE_WEIGHTS = TYPE_KEYS.map(k => POWERUP_TYPES[k].weight);
-const WEIGHT_SUM = TYPE_WEIGHTS.reduce((a, b) => a + b, 0);
-const NORMALIZED_WEIGHTS = TYPE_WEIGHTS.map(w => w / WEIGHT_SUM);
+// How long a pickup sits in the arena before it fades out, in game seconds.
+export const PICKUP_LIFETIME = 60;
 
-function pickRandomType(playerHealth = 0, playerMaxHealth = 100) {
-  const r = Math.random();
-  let acc = 0;
-  for (let i = 0; i < NORMALIZED_WEIGHTS.length; i++) {
-    const key = TYPE_KEYS[i];
+const TYPE_KEYS = Object.keys(POWERUP_TYPES);
+
+// Draws from the eligible types only, renormalising their weights so skipping
+// health does not skew every remaining roll toward the last entry.
+function pickRandomType(playerHealth, playerMaxHealth) {
+  let total = 0;
+  for (const key of TYPE_KEYS) {
     if (key === 'health' && playerHealth >= playerMaxHealth) continue;
-    acc += NORMALIZED_WEIGHTS[i];
-    if (r <= acc) return key;
+    total += POWERUP_TYPES[key].weight;
   }
-  for (let i = TYPE_KEYS.length - 1; i >= 0; i--) {
-    if (TYPE_KEYS[i] !== 'health' || playerHealth < playerMaxHealth) {
-      return TYPE_KEYS[i];
-    }
+  let r = Math.random() * total;
+  let last = null;
+  for (const key of TYPE_KEYS) {
+    if (key === 'health' && playerHealth >= playerMaxHealth) continue;
+    last = key;
+    r -= POWERUP_TYPES[key].weight;
+    if (r <= 0) return key;
   }
-  return 'ammo';
+  return last;
 }
 
 function createHexDomeGeometry(radius = 1.2, height = 1.4) {
@@ -90,24 +93,18 @@ function createHexDomeGeometry(radius = 1.2, height = 1.4) {
     const y = v * height;
     const ringRadius = radius * (1 - v * 0.3);
     for (let s = 0; s < segments; s++) {
-      const u = s / segments;
-      const angle = u * Math.PI * 2;
-      positions.push(
-        Math.cos(angle) * ringRadius,
-        y,
-        Math.sin(angle) * ringRadius
-      );
+      const angle = (s / segments) * Math.PI * 2;
+      positions.push(Math.cos(angle) * ringRadius, y, Math.sin(angle) * ringRadius);
     }
   }
 
   for (let r = 0; r < rings; r++) {
     for (let s = 0; s < segments; s++) {
       const a = r * segments + s;
-      const b = r * segments + (s + 1) % segments;
+      const b = r * segments + ((s + 1) % segments);
       const c = (r + 1) * segments + s;
-      const d = (r + 1) * segments + (s + 1) % segments;
-      indices.push(a, b, d);
-      indices.push(d, c, a);
+      const d = (r + 1) * segments + ((s + 1) % segments);
+      indices.push(a, b, d, d, c, a);
     }
   }
 
@@ -121,7 +118,7 @@ function createPlusGeometry(size = 0.4, thickness = 0.12) {
   const shape = new THREE.Shape();
   const w = size;
   const t = size * 0.4;
-  
+
   shape.moveTo(-t, -w);
   shape.lineTo(t, -w);
   shape.lineTo(t, -t);
@@ -136,82 +133,120 @@ function createPlusGeometry(size = 0.4, thickness = 0.12) {
   shape.lineTo(-t, -t);
   shape.lineTo(-t, -w);
 
-  const settings = {
+  return new THREE.ExtrudeGeometry(shape, {
     depth: thickness,
     bevelEnabled: true,
     bevelSegments: 2,
     bevelSize: 0.03,
     bevelThickness: 0.03,
-  };
-  return new THREE.ExtrudeGeometry(shape, settings);
+  });
 }
 
 const DOME_GEOM = createHexDomeGeometry();
-const PLUS_GEOM = createPlusGeometry();
 
+// Geometries and materials are shared across every pickup instance and live
+// for the lifetime of the page, so nothing here is ever disposed.
 const GEOMS = {
   ammo: new THREE.OctahedronGeometry(0.35, 0),
-  health: PLUS_GEOM,
+  health: createPlusGeometry(),
   damageBoost: new THREE.TetrahedronGeometry(0.38, 0),
   fireRateBoost: new THREE.DodecahedronGeometry(0.32, 0),
   shield: DOME_GEOM,
 };
 
-export class Powerup {
-  constructor(typeKey, position, scene, typeDef = null) {
-    this.typeKey = typeKey;
-    this.type = typeDef || POWERUP_TYPES[typeKey];
-    this.pos = position.clone();
-    this.scene = scene;
-    this.spawnTime = performance.now() / 1000;
-    this.despawnTime = 60;
-    this.dead = false;
-    this.bobOffset = Math.random() * Math.PI * 2;
-    this.rotSpeed = 0.5 + Math.random() * 0.5;
-
-    const mat = new THREE.MeshStandardMaterial({
-      color: this.type.color,
-      emissive: this.type.emissive,
+const coreMats = new Map();
+function coreMaterial(typeKey, def) {
+  let m = coreMats.get(typeKey);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({
+      color: def.color,
+      emissive: def.emissive,
       emissiveIntensity: 1.2,
       roughness: 0.3,
       metalness: 0.7,
       transparent: true,
       opacity: 0.9,
     });
-    this.core = new THREE.Mesh(GEOMS[typeKey] || GEOMS.ammo, mat);
-    this.core.position.copy(this.pos);
-    this.core.position.y = 0.5;
-    this.scene.add(this.core);
+    coreMats.set(typeKey, m);
+  }
+  return m;
+}
+
+const glowMats = new Map();
+function glowMaterial(typeKey, def, glowTex) {
+  let m = glowMats.get(typeKey);
+  if (!m) {
+    m = new THREE.SpriteMaterial({
+      map: glowTex,
+      color: def.color,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    glowMats.set(typeKey, m);
+  }
+  return m;
+}
+
+let SHIELD_DOME_MAT = null;
+function shieldDomeMaterial() {
+  if (!SHIELD_DOME_MAT) {
+    SHIELD_DOME_MAT = new THREE.MeshStandardMaterial({
+      color: 0x4ef3ff,
+      emissive: 0x4ef3ff,
+      emissiveIntensity: 0.8,
+      roughness: 0.2,
+      metalness: 0.8,
+      transparent: true,
+      opacity: 0.25,
+      side: THREE.DoubleSide,
+    });
+  }
+  return SHIELD_DOME_MAT;
+}
+
+export class Powerup {
+  /**
+   * @param {number} time game time (the same clock passed to update), used for
+   *   the despawn countdown. Mixing this with wall time makes pickups either
+   *   despawn instantly or never at all.
+   */
+  constructor(typeKey, position, scene, glowTex, time, typeDef = null) {
+    this.typeKey = typeKey;
+    this.type = typeDef || POWERUP_TYPES[typeKey];
+    this.pos = position.clone();
+    this.scene = scene;
+    this.spawnTime = time;
+    this.despawnTime = PICKUP_LIFETIME;
+    this.dead = false;
+    this.bobOffset = Math.random() * Math.PI * 2;
+    this.rotSpeed = 0.5 + Math.random() * 0.5;
+
+    this.core = new THREE.Mesh(GEOMS[typeKey] || GEOMS.ammo, coreMaterial(typeKey, this.type));
+    this.core.position.set(this.pos.x, 0.5, this.pos.z);
+    scene.add(this.core);
 
     this.dome = null;
     if (typeKey === 'shield') {
-      const domeMat = new THREE.MeshStandardMaterial({
-        color: 0x4ef3ff,
-        emissive: 0x4ef3ff,
-        emissiveIntensity: 0.8,
-        roughness: 0.2,
-        metalness: 0.8,
-        transparent: true,
-        opacity: 0.25,
-        side: THREE.DoubleSide,
-      });
-      this.dome = new THREE.Mesh(DOME_GEOM, domeMat);
-      this.dome.position.copy(this.pos);
-      this.dome.position.y = 0.7;
-      this.scene.add(this.dome);
+      this.dome = new THREE.Mesh(DOME_GEOM, shieldDomeMaterial());
+      this.dome.position.set(this.pos.x, 0.7, this.pos.z);
+      scene.add(this.dome);
     }
 
-    this.glow = new THREE.PointLight(this.type.color, 8, 6);
-    this.glow.position.copy(this.pos);
-    this.glow.position.y = 0.7;
-    this.scene.add(this.glow);
+    // An additive sprite instead of a PointLight: a real light would change the
+    // scene's light count on every spawn/despawn, which forces three.js to
+    // recompile every material in the scene and stalls the frame.
+    this.glow = new THREE.Sprite(glowMaterial(typeKey, this.type, glowTex));
+    this.glow.scale.setScalar(1.8);
+    this.glow.position.set(this.pos.x, 0.7, this.pos.z);
+    scene.add(this.glow);
   }
 
   update(dt, time) {
     if (this.dead) return;
 
-    const age = time - this.spawnTime;
-    if (age >= this.despawnTime) {
+    if (time - this.spawnTime >= this.despawnTime) {
       this.destroy();
       return;
     }
@@ -219,17 +254,13 @@ export class Powerup {
     const bob = Math.sin(time * 2 + this.bobOffset) * 0.15;
     this.core.position.y = 0.5 + bob;
     this.core.rotation.y += this.rotSpeed * dt;
+    this.glow.position.y = 0.7 + bob;
+    this.glow.scale.setScalar(1.8 + Math.sin(time * 5 + this.bobOffset) * 0.25);
 
     if (this.dome) {
       this.dome.position.y = 0.7 + bob;
       this.dome.rotation.y += this.rotSpeed * dt * 0.7;
-      const pulse = 0.15 + Math.sin(time * 4) * 0.05;
-      this.dome.material.opacity = 0.25 + pulse;
-      this.dome.material.emissiveIntensity = 0.8 + pulse;
     }
-
-    const glowPulse = 0.8 + Math.sin(time * 5) * 0.2;
-    this.glow.intensity = 8 * glowPulse;
   }
 
   tryPickup(playerPos) {
@@ -237,42 +268,33 @@ export class Powerup {
   }
 
   destroy() {
+    if (this.dead) return;
     this.dead = true;
     this.scene.remove(this.core);
-    this.core.geometry.dispose();
-    this.core.material.dispose();
-    if (this.dome) {
-      this.scene.remove(this.dome);
-      this.dome.material.dispose();
-    }
+    if (this.dome) this.scene.remove(this.dome);
     this.scene.remove(this.glow);
   }
 }
 
 export function calcPickupsForWave(wave) {
-  const count = Math.min(5 + Math.floor(wave * 2.5), 36);
-  return Math.max(1, Math.floor(count * 0.15));
+  return Math.max(1, Math.floor(waveEnemyCount(wave) * 0.15));
 }
 
-export function spawnPowerup(arena, scene, playerHealth = 0, playerMaxHealth = 100) {
+function randomSpawnPos(arena) {
+  const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
+  const jitter = 3;
+  return new THREE.Vector3(
+    sp.x + (Math.random() - 0.5) * jitter,
+    0,
+    sp.z + (Math.random() - 0.5) * jitter
+  );
+}
+
+export function spawnPowerup(arena, scene, glowTex, time, playerHealth = 0, playerMaxHealth = 100) {
   const typeKey = pickRandomType(playerHealth, playerMaxHealth);
-  const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
-  const jitter = 3;
-  const pos = new THREE.Vector3(
-    sp.x + (Math.random() - 0.5) * jitter,
-    0,
-    sp.z + (Math.random() - 0.5) * jitter
-  );
-  return new Powerup(typeKey, pos, scene);
+  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time);
 }
 
-export function spawnAmmo(arena, scene) {
-  const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
-  const jitter = 3;
-  const pos = new THREE.Vector3(
-    sp.x + (Math.random() - 0.5) * jitter,
-    0,
-    sp.z + (Math.random() - 0.5) * jitter
-  );
-  return new Powerup('ammo', pos, scene, AMMO_PICKUP);
+export function spawnAmmo(arena, scene, glowTex, time) {
+  return new Powerup('ammo', randomSpawnPos(arena), scene, glowTex, time, AMMO_PICKUP);
 }
