@@ -62,7 +62,7 @@ import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
-import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
+import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
   UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost, effectLines,
 } from './upgrades.js';
@@ -78,12 +78,34 @@ const autotest = new URLSearchParams(location.search).has('autotest');
 // Pickup budget. Every pickup in the arena is a draw call and a collision
 // check, and unbounded spawning was the cause of the arena filling with ammo.
 const MAX_ACTIVE_PICKUPS = 12;
-const MAX_ACTIVE_AMMO = 3;
-// Total rounds (magazine + reserve) below which ammo spawns get more frequent.
-const LOW_AMMO_THRESHOLD = 60;
-const AMMO_INTERVAL = 12;
-const AMMO_INTERVAL_JITTER = 6;
-const AMMO_INTERVAL_LOW = 5;
+// How much loose ammo the arena may hold at once. The old timer needed this to
+// stop it flooding the map; the budget bounds a wave's total now, but the cap
+// stays because need-weighting alone would let an empty player's whole budget
+// land as ammo and nothing else.
+const MAX_ACTIVE_AMMO = 5;
+
+// ---- drops ---------------------------------------------------------------
+// Pickups come off the enemies that die, not from timers around the map.
+//
+// A wave carries a fixed budget (calcDropsForWave) and each kill's chance to
+// drop is `budget remaining / enemies remaining`, so the budget is always
+// spent in full and always spread evenly - a wave contains the same loot
+// whether it is cleared fast or slow, which is what keeps two runs comparable.
+// What each drop turns out to BE is need-weighted; how MUCH drops is not.
+//
+// Boss waves cannot use a budget: their adds are endless, so there is no
+// denominator. They pay out per add kill at a flat rate, plus the boss itself
+// shedding a pickup as it crosses each health threshold.
+const BOSS_ADD_DROP_CHANCE = 0.2;
+const BOSS_BLEED_THRESHOLDS = [0.75, 0.5, 0.25];
+
+// The safety net. Kill drops alone would be a death spiral: out of ammo means
+// no kills, and no kills means no ammo. If either bar is under its floor and
+// nothing has dropped for a while, one is placed near the player regardless of
+// how the fight is going.
+const RELIEF_INTERVAL = 10;
+const RELIEF_HEALTH_FRAC = 0.35;
+const RELIEF_AMMO = 40;
 // Retry delay used when a spawn is skipped because a cap is already reached,
 // so a blocked spawn can never be retried every single frame.
 const SPAWN_RETRY = 2;
@@ -222,6 +244,9 @@ class Game {
     this.powerups = [];
     this.queue = [];
     this._cfg = waveConfig(1);
+    // Pickups this wave still has to give, and the safety-net countdown.
+    this.dropsLeft = 0;
+    this._reliefT = RELIEF_INTERVAL;
     this.spawnTimer = 0;
     // The live boss fight, or null. `parts` is every entity that counts as the
     // boss - one for most of them, several once Schism has split.
@@ -233,9 +258,6 @@ class Game {
     // `shootFresh` is the trigger EDGE - true only on the frame the button
     // went down. Semi-auto weapons need it; the loop clears it every frame.
     this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false };
-    this.powerupsToSpawn = 0;
-    this.powerupSpawnTimer = 0;
-    this.ammoSpawnTimer = 0;
     this.emptyClickCd = 0;
 
     // Scratch objects reused every frame so the hot path allocates nothing.
@@ -523,6 +545,8 @@ class Game {
     this.powerups.length = 0;
     this._pendingSpawns.length = 0;
     this._bigAlive = 0;
+    this.dropsLeft = 0;
+    this._reliefT = RELIEF_INTERVAL;
     this.bossFight = null;
     this.ui.setBoss(null, 0, '', '');
     // Lingering zones have to go with the entities that made them. A hazard
@@ -554,9 +578,8 @@ class Game {
     this.waveState = 'idle';
     this.interT = 1.2;
     this.spawnTimer = 0;
-    this.powerupsToSpawn = 0;
-    this.powerupSpawnTimer = 0;
-    this.ammoSpawnTimer = 0;
+    this.dropsLeft = 0;
+    this._reliefT = RELIEF_INTERVAL;
     this.emptyClickCd = 0;
     this.stats.shotsFired = 0;
     this.stats.hits = 0;
@@ -596,9 +619,9 @@ class Game {
 
     this.waveDamageTaken = 0;
     this.player.armWard();
-    this.powerupsToSpawn = calcPickupsForWave(this.wave);
-    this.powerupSpawnTimer = 2;
-    this.ammoSpawnTimer = 8;
+    // The wave's whole loot budget, spent across its kills.
+    this.dropsLeft = calcDropsForWave(this.wave);
+    this._reliefT = RELIEF_INTERVAL;
     if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
   }
 
@@ -639,6 +662,8 @@ class Game {
       addTimer: 3,
       maxAdds: this._cfg.maxAdds,
       addInterval: this._cfg.addInterval,
+      // How many health thresholds the boss has already bled a pickup at.
+      bleedAt: 0,
       note: '',
       state: '',
     };
@@ -1442,8 +1467,11 @@ class Game {
         this.spawnEnemy(this.queue.shift());
         this.spawnTimer = this._cfg.spawnInterval;
       }
-      this._updatePickupSpawns(dt);
-      if (this.bossFight) this._updateBossAdds(dt);
+      this._updateReliefDrop(dt);
+      if (this.bossFight) {
+        this._updateBossAdds(dt);
+        this._bossBleed();
+      }
 
       // A boss wave ends when the BOSS is dead, not when the field is clear -
       // the adds never stop arriving, so waiting for an empty field would wait
@@ -1652,44 +1680,85 @@ class Game {
     this._refreshStations();
   }
 
-  // Both spawners run on a timer and respect a hard cap on what is already in
-  // the arena. When a cap blocks a spawn the timer is pushed out rather than
-  // left at zero, so a blocked spawn cannot retry sixty times a second.
-  _updatePickupSpawns(dt) {
-    if (this.powerupsToSpawn > 0) {
-      this.powerupSpawnTimer -= dt;
-      if (this.powerupSpawnTimer <= 0) {
-        if (this.powerups.length < MAX_ACTIVE_PICKUPS) {
-          this.powerups.push(
-            spawnPowerup(
-              this.arena, this.scene, this.effects.glowTex, this.time,
-              this.player.health, this.player.maxHealth
-            )
-          );
-          this.powerupsToSpawn--;
-          this.powerupSpawnTimer = this._cfg.spawnInterval * 1.5;
-        } else {
-          this.powerupSpawnTimer = SPAWN_RETRY;
-        }
-      }
-    }
-
-    this.ammoSpawnTimer -= dt;
-    if (this.ammoSpawnTimer > 0) return;
-
-    let ammoActive = 0;
-    for (const p of this.powerups) if (p.typeKey === 'ammo') ammoActive++;
-    const low = this.player.reserveAmmo + this.player.mag < LOW_AMMO_THRESHOLD;
-    const cap = low ? MAX_ACTIVE_AMMO : MAX_ACTIVE_AMMO - 1;
-
-    if (ammoActive >= cap || this.powerups.length >= MAX_ACTIVE_PICKUPS) {
-      this.ammoSpawnTimer = SPAWN_RETRY;
+  // The safety net, and the only pickup that is not dropped by something dying.
+  //
+  // Without it the drop system has a death spiral in it: low ammo means no
+  // kills, and no kills means no ammo. A player who is genuinely stuck gets one
+  // placed near them regardless of how the fight is going. It is deliberately
+  // slow and conditional - it should feel like the game catching you, not like
+  // a supply line.
+  _updateReliefDrop(dt) {
+    this._reliefT -= dt;
+    if (this._reliefT > 0) return;
+    if (this.powerups.length >= MAX_ACTIVE_PICKUPS) {
+      this._reliefT = SPAWN_RETRY;
       return;
     }
-    this.powerups.push(spawnAmmo(this.arena, this.scene, this.effects.glowTex, this.time));
-    this.ammoSpawnTimer = low
-      ? AMMO_INTERVAL_LOW
-      : AMMO_INTERVAL + Math.random() * AMMO_INTERVAL_JITTER;
+    const hpFrac = this.player.health / this.player.maxHealth;
+    const ammo = this.player.reserveAmmo + this.player.mag;
+    const needHealth = hpFrac < RELIEF_HEALTH_FRAC;
+    const needAmmo = ammo < RELIEF_AMMO;
+    if (!needHealth && !needAmmo) {
+      // Checked often, but the clock only starts once something is actually
+      // wrong - so a comfortable player never banks relief they did not need.
+      this._reliefT = 1;
+      return;
+    }
+    // Ammo first when both are low: health with an empty gun only postpones it.
+    const kind = needAmmo ? 'ammo' : 'health';
+    this.powerups.push(
+      spawnRelief(kind, this.arena, this.player.pos, this.scene, this.effects.glowTex, this.time)
+    );
+    this._reliefT = RELIEF_INTERVAL;
+  }
+
+  // One kill's roll. `remaining` is how many more enemies this wave still has
+  // to give, which is what makes the budget land evenly instead of all at the
+  // start or all at the end.
+  _rollDrop(pos, remaining) {
+    if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
+    let chance;
+    if (this.bossFight) {
+      // No fixed denominator on a boss wave - the adds never stop.
+      chance = BOSS_ADD_DROP_CHANCE;
+    } else {
+      if (this.dropsLeft <= 0) return;
+      chance = this.dropsLeft / Math.max(1, remaining);
+    }
+    if (Math.random() >= chance) return;
+    if (!this.bossFight) this.dropsLeft--;
+    this._spawnDrop(pos);
+  }
+
+  // Places one drop, choosing what it is from what the player is short of.
+  _spawnDrop(pos) {
+    const hpFrac = this.player.health / this.player.maxHealth;
+    const ammoFrac = (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve;
+    let ammoActive = 0;
+    for (const p of this.powerups) if (p.typeKey === 'ammo') ammoActive++;
+    const kind = pickDropType(hpFrac, ammoFrac, ammoActive < MAX_ACTIVE_AMMO);
+    this.powerups.push(
+      spawnDropAt(kind, pos, this.scene, this.effects.glowTex, this.time)
+    );
+    // The drop has to be findable in a fight it landed in the middle of.
+    this.effects.burst(this._killPos.set(pos.x, 0.9, pos.z), 0xffe95e, 10, 3, 2, 0.5);
+  }
+
+  // A boss sheds a pickup as it crosses each health threshold. Without this a
+  // forty-second boss fight would be the longest stretch in the game with no
+  // resources in it at all: one kill, at the very end.
+  _bossBleed() {
+    const bf = this.bossFight;
+    // No parts means the boss is already dead and _bossHpFrac reads 0, which
+    // would trip every remaining threshold at once on a corpse.
+    if (!bf || !bf.parts.length) return;
+    const frac = this._bossHpFrac();
+    while (bf.bleedAt < BOSS_BLEED_THRESHOLDS.length
+      && frac <= BOSS_BLEED_THRESHOLDS[bf.bleedAt]) {
+      bf.bleedAt++;
+      const part = bf.parts[0];
+      if (part) this._spawnDrop(part.pos);
+    }
   }
 
   // Ticks pickups and collects any the player is standing on. Iterates
@@ -1753,6 +1822,12 @@ class Game {
     const list = this.enemies;
     for (let i = 0; i < list.length; i++) list[i].update(dt, ctx);
 
+    // Enemies this wave still owes after this frame's deaths - the denominator
+    // the drop chance is measured against. Counted once here rather than per
+    // death, so several kills in one frame all price against the same figure.
+    let remaining = this.queue.length;
+    for (let i = 0; i < list.length; i++) if (!list[i].dead) remaining++;
+
     let write = 0;
     let big = 0;
     for (let i = 0; i < list.length; i++) {
@@ -1778,6 +1853,10 @@ class Game {
       }
       this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
       this.sfx.kill();
+      // Loot falls where the thing died. Boss parts are excluded: the boss
+      // pays out by bleeding at health thresholds and by the kill bonus, and
+      // letting the final part roll as well would double-pay the same kill.
+      if (!e.boss) this._rollDrop(e.pos, remaining);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
       const m = this.player.mods;

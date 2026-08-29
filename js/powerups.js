@@ -66,8 +66,8 @@ export const POWERUP_TYPES = {
   },
 };
 
-// Ammo is deliberately not in POWERUP_TYPES: it is spawned on its own timer
-// and its own cap in main.js, not from the weighted powerup roll.
+// Ammo is deliberately not in POWERUP_TYPES: it is not part of the weighted
+// buff roll, and pickDropType weighs it against health on its own terms.
 export const AMMO_PICKUP = {
   color: 0xffd600,
   emissive: 0xffd600,
@@ -81,29 +81,68 @@ export const AMMO_PICKUP = {
 // How long a pickup sits in the arena before it fades out, in game seconds,
 // and how many of those final seconds it spends blinking. The blink is the
 // only warning the player gets, so it starts well before the pickup goes.
-export const PICKUP_LIFETIME = 60;
+//
+// Short, because pickups are DROPPED where enemies die rather than placed
+// around the map: one lands next to the fight and is meant to be taken as part
+// of it, not banked and walked back to three waves later.
+export const PICKUP_LIFETIME = 30;
 export const PICKUP_BLINK_TIME = 5;
 // Blinks per second during that window. Fast enough to read as urgent from
 // across the arena without strobing.
 const BLINK_RATE = 5;
 
-const TYPE_KEYS = Object.keys(POWERUP_TYPES);
+// NEED-WEIGHTED DROP TYPE.
+//
+// The wave decides HOW MANY pickups drop; this decides WHICH. That split is
+// deliberate. Scaling the drop RATE with how badly the player is doing would
+// hand more resources to the player who played worse, which flattens the skill
+// curve and makes two leaderboard scores less comparable. Scaling only the
+// COMPOSITION keeps the loot per run identical and simply stops the game
+// handing out a health pack to someone on full health.
+//
+// Health and ammo weights climb as their bar empties, squared so the pull is
+// gentle at three-quarters full and overwhelming near empty. Both fall to zero
+// when full, at which point only the buffs can roll - which is what makes a
+// well-supplied player start seeing damage and fire-rate drops instead.
+const BUFF_KEYS = ['damageBoost', 'fireRateBoost', 'shield'];
+// Total weight the three buffs share between them, against a need weight that
+// reaches NEED_PEAK at an empty bar. Buffs stay reachable at moderate need and
+// vanish in an emergency.
+const BUFF_WEIGHT = 1.0;
+const NEED_PEAK = 4.0;
 
-// Draws from the eligible types only, renormalising their weights so skipping
-// health does not skew every remaining roll toward the last entry.
-function pickRandomType(playerHealth, playerMaxHealth) {
-  let total = 0;
-  for (const key of TYPE_KEYS) {
-    if (key === 'health' && playerHealth >= playerMaxHealth) continue;
-    total += POWERUP_TYPES[key].weight;
-  }
+function needWeight(frac) {
+  const lack = Math.max(0, 1 - frac);
+  return lack * lack * NEED_PEAK;
+}
+
+/**
+ * Chooses what a drop should be, given how the player is doing.
+ *
+ * @param {number} hpFrac    health / maxHealth
+ * @param {number} ammoFrac  (reserve + mag) / maxReserve
+ * @param {boolean} allowAmmo false when the arena already holds as much loose
+ *   ammo as it should. An empty player killing a whole wave would otherwise
+ *   carpet the floor in crates, all of one shape, most of them redundant by
+ *   the time the second is collected.
+ * @returns {string} a spawnable type key: 'ammo' or a POWERUP_TYPES key
+ */
+export function pickDropType(hpFrac, ammoFrac, allowAmmo = true) {
+  const wHealth = needWeight(hpFrac);
+  const wAmmo = allowAmmo ? needWeight(ammoFrac) : 0;
+  let total = wHealth + wAmmo;
+  for (const k of BUFF_KEYS) total += POWERUP_TYPES[k].weight * BUFF_WEIGHT;
+
   let r = Math.random() * total;
-  let last = null;
-  for (const key of TYPE_KEYS) {
-    if (key === 'health' && playerHealth >= playerMaxHealth) continue;
-    last = key;
-    r -= POWERUP_TYPES[key].weight;
-    if (r <= 0) return key;
+  r -= wHealth;
+  if (r <= 0) return 'health';
+  r -= wAmmo;
+  if (r <= 0) return 'ammo';
+  let last = BUFF_KEYS[BUFF_KEYS.length - 1];
+  for (const k of BUFF_KEYS) {
+    r -= POWERUP_TYPES[k].weight * BUFF_WEIGHT;
+    if (r <= 0) return k;
+    last = k;
   }
   return last;
 }
@@ -325,10 +364,15 @@ export class Powerup {
   }
 }
 
-// Powerups granted per wave, scaled off the wave's enemy count. This is a
-// budget main.js spends over the wave, not an instant spawn.
-export function calcPickupsForWave(wave) {
-  return Math.max(1, Math.floor(waveEnemyCount(wave) * 0.15));
+// Pickups a wave is worth, scaled off its enemy count. main.js spends this
+// budget across the wave's KILLS rather than on a timer, so this is the whole
+// loot a wave contains and it cannot be exceeded however the wave is played.
+//
+// Higher than the old figure because ammo used to arrive on a second timer of
+// its own, outside the budget entirely; one number now has to cover what the
+// two of them did.
+export function calcDropsForWave(wave) {
+  return Math.max(3, Math.round(waveEnemyCount(wave) * 0.3));
 }
 
 // Pickups land anywhere on the floor rather than on the enemy spawn grid,
@@ -374,11 +418,39 @@ function randomSpawnPos(arena) {
   return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
 }
 
-export function spawnPowerup(arena, scene, glowTex, time, playerHealth = 0, playerMaxHealth = 100) {
-  const typeKey = pickRandomType(playerHealth, playerMaxHealth);
-  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time);
+// A pickup left exactly where something died. The position comes from an enemy
+// whose own collision has already pushed it clear of obstacles, so there is
+// nothing to resolve here - it only needs clamping inside the arena bound in
+// case the kill happened against a wall.
+export function spawnDropAt(typeKey, pos, scene, glowTex, time) {
+  const B = SPAWN_BOUND;
+  const at = new THREE.Vector3(
+    Math.max(-B, Math.min(B, pos.x)), 0, Math.max(-B, Math.min(B, pos.z))
+  );
+  return new Powerup(typeKey, at, scene, glowTex, time, defFor(typeKey));
 }
 
-export function spawnAmmo(arena, scene, glowTex, time) {
-  return new Powerup('ammo', randomSpawnPos(arena), scene, glowTex, time, AMMO_PICKUP);
+// The safety-net spawn. Placed in a ring around the player rather than
+// anywhere on the map: it exists because the player is in trouble with no
+// kills coming, and a health pack twenty metres away is no help at all. Close
+// enough to reach under pressure, far enough that it still has to be walked to.
+export function spawnRelief(typeKey, arena, near, scene, glowTex, time) {
+  for (let i = 0; i < 30; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 6 + Math.random() * 5;
+    const x = near.x + Math.cos(ang) * rad;
+    const z = near.z + Math.sin(ang) * rad;
+    if (Math.abs(x) > SPAWN_BOUND || Math.abs(z) > SPAWN_BOUND) continue;
+    if (blocked(x, z, arena.obstacles)) continue;
+    return new Powerup(typeKey, new THREE.Vector3(x, 0, z), scene, glowTex, time, defFor(typeKey));
+  }
+  // Nowhere clear nearby - fall back to open floor anywhere rather than
+  // withholding the one pickup meant to stop a death spiral.
+  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time, defFor(typeKey));
+}
+
+// Ammo lives outside POWERUP_TYPES (see the note on AMMO_PICKUP), so every
+// spawner that takes a type key has to resolve it through here.
+function defFor(typeKey) {
+  return typeKey === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[typeKey];
 }

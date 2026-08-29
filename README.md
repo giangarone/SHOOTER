@@ -33,8 +33,26 @@ Open http://localhost:8123
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- Six enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades)
-- Pickups: ammo crates plus health, damage, fire-rate and shield powerups
+- Ten enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Wraiths** (blink behind you), **Bulwarks** (frontal shield - flank them, or burn them, since damage over time ignores it), **Conduits** (no attack; buff everything near them) and **Blights** (lingering pools that make standing still cost health)
+- **A boss every five waves**, in a fixed rotation of five that repeats: the
+  **Colossus** (armoured but for a weak point travelling around its body, and a
+  telegraphed charge that knocks it out cold against a wall), **Siege**
+  (telegraphed mortar barrages), **Schism** (splits at half health, then again),
+  **Maw** (drags you in and rolls rings you have to jump) and the **Herald**
+  (blinks, volleys, and enrages under 30%). Regular enemies keep arriving
+  throughout; killing the boss ends the wave, pays out, and rearms you.
+- **Wave composition is fixed, its cast is not.** Every wave has the same
+  number of enemies and the same mix of ROLES in every run, but which type
+  fills each slot is rolled from that role's members, who are balanced to be
+  near-equivalent. Two runs face the same difficulty and a different fight,
+  which is what keeps scores comparable.
+- **Pickups drop off the enemies you kill**, not from timers around the map.
+  Each wave carries a fixed loot budget spread evenly across its kills, so a
+  wave always contains the same amount however it is played; what each drop
+  turns out to BE is weighted by what you are short of, so a player on full
+  health and full ammo gets buffs instead. Bosses shed a pickup at each
+  quarter of their health, and if you are starving with no kills coming, one
+  is placed near you so the fight cannot dead-end.
 - **Upgrade totems**: clearing a wave raises three pillars near the arena
   centre, each showing one upgrade as short colour-coded lines - benefits
   green, drawbacks red - with its own theme colour and a small 3D icon
@@ -216,6 +234,20 @@ Runs a headless-Chrome smoke test that plays the game automatically for 60s
 checking the game runs, it asserts the pickup, ammo and projectile caps hold
 and that GPU resource counts stay bounded — lights, shader programs and
 geometries must not grow as enemies spawn and die.
+
+```bash
+npm run test:boss
+npm run test:drops
+```
+
+Two targeted suites, because the smoke test's bot rarely survives past the
+early waves and would pass every later assertion vacuously. `test:boss` drives
+the game into each boss wave in turn and checks the fight resolves, the adds
+stay capped, telegraph handles are returned to their pool, and — the one boss
+bug that every functional test sails straight through — that the Colossus's
+weak point is on the same side as the plate the player can see. `test:drops`
+checks a wave can never yield more loot than its budget, that it yields close
+to all of it, and that need actually decides the type.
 
 ## Structure
 

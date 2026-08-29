@@ -8,7 +8,7 @@ const CHROME =
 
 // Caps the game promises to hold. Mirrors the constants in js/main.js.
 const MAX_ACTIVE_PICKUPS = 12;
-const MAX_ACTIVE_AMMO = 3;
+const MAX_ACTIVE_AMMO = 5;
 const MAX_PROJECTILES = 48;
 
 if (!existsSync(CHROME)) {
