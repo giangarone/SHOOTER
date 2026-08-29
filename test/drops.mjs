@@ -183,7 +183,8 @@ try {
 
   // ---- ground zones hand their decals back ----
   // Every lingering zone holds a slot in the creep pool for its whole life.
-  // The pool is fourteen deep and shared by ash clouds and hazard pools, so a
+  // The pool is thirty deep and shared by ash clouds, blight pools and magma
+  // trails, so a
   // zone that expired without releasing would go unnoticed until, several
   // waves later, zones silently stopped being drawn at all - the exact failure
   // the decals were added to fix.
@@ -197,7 +198,8 @@ try {
     g.player.mods.ashDps = 18;
     g.player.mods.ashRadius = 3.5;
     g.player.mods.ashTime = 1.2;
-    // More zones than the pool holds, so the recycling path is exercised too.
+    // More zones than the per-kind caps hold (8 clouds, 4 pools), so the
+    // recycling path is exercised too.
     for (let i = 0; i < 10; i++) g._addAsh({ x: -8 + i * 1.7, z: 4 });
     for (let i = 0; i < 6; i++) g._addHazard(-6 + i * 2.4, 9, 3, 1.2, 9);
     const peak = g.effects.creep.filter((c) => c.used).length;

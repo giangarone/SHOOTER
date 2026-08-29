@@ -62,6 +62,8 @@ export const THEME = {
   blast: 0xff6f00,
   ember: 0xbf360c,
   electric: 0xffee58,
+  storm: 0x9fd8ff,
+  flawless: 0xeaff6b,
   // staying alive
   vitality: 0x00e676,
   armor: 0x4ef3ff,
@@ -623,11 +625,16 @@ export const UPGRADES = {
     // A lingering ZONE, not another instant blast: Blast Corpse and
     // Crystallize already own that shape, and a cloud you have to push enemies
     // through plays differently from a puff you never see.
-    effects: [['BURNING DEAD LEAVE', GOOD], ['ASH: 18 DMG/s, 4s', NOTE], ['IN A 3.5m CLOUD', NOTE]],
+    // A CHANCE rather than a certainty. Once Incendiary is running, every
+    // burning enemy in a wave dies burning, and a cloud per corpse buried the
+    // arena in ash: the zones stopped being places the player had to steer
+    // enemies into and became the floor. At 15% a cloud is an event again.
+    effects: [['15% OF BURNING DEAD', NOTE], ['LEAVE ASH: 18 DMG/s, 4s', GOOD], ['IN A 3.5m CLOUD', NOTE]],
     apply: (mods, n) => {
       mods.ashDps = 18 * n;
       mods.ashRadius = 3.5;
       mods.ashTime = 4;
+      mods.ashChance = 0.15;
     },
   },
   neurotoxin: {
@@ -699,6 +706,40 @@ export const UPGRADES = {
       mods.homingAngle = 0.21 * n;
       mods.homingRange = 30;
     },
+  },
+  lightningWizard: {
+    name: 'LIGHTNING WIZARD',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.storm,
+    icon: 'bolt',
+    // Rare per shot and heavy when it lands, which is the opposite trade to
+    // Arc Rounds: that one is a small certainty on every hit, this is a large
+    // uncertainty. At 5% a magazine usually contains one, so it reads as
+    // punctuation rather than as a damage number the player has to plan on.
+    effects: [['5% OF HITS CALL', GOOD], ['LIGHTNING: 90 DMG', NOTE], ['+50 AROUND IT', NOTE]],
+    apply: (mods, n) => {
+      mods.lightningChance = 0.05 * n;
+      mods.lightningDamage = 90 * n;
+      mods.lightningSplash = 50 * n;
+      mods.lightningRadius = 4;
+    },
+  },
+  noHitBonus: {
+    name: 'NO-HIT BONUS',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.flawless,
+    icon: 'chevron',
+    // The only PERMANENT growth in the pool, and the only reward for a skill
+    // the game already measured and only ever paid in credits. It stacks for
+    // the rest of the run, so a player who keeps clearing waves clean is
+    // compounding - and a single hit anywhere in a wave costs them the whole
+    // thing, which is what makes it worth playing around.
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+10% DAMAGE, FOREVER', GOOD], ['+10% FIRE RATE, TOO', GOOD]],
+    apply: (mods, n) => { mods.noHitBonus = 0.1 * n; },
   },
 };
 

@@ -25,6 +25,19 @@ const ARC_SEGMENTS = 12;
 // curve is the whole message and it has to survive long enough to be seen.
 const ARC_LIFE = 0.14;
 
+// LIGHTNING. Joints in one bolt, how high it starts, and how long it hangs
+// there. Longer-lived than a tracer by an order of magnitude: a tracer says a
+// bullet went somewhere, a bolt is a whole event and has to be seen even by a
+// player who was looking at the other side of the arena when it landed.
+const BOLT_SEGMENTS = 14;
+const BOLT_HEIGHT = 18;
+const BOLT_LIFE = 0.22;
+// Lines drawn per strike. A GL line is one pixel wide however thick it is
+// asked to be, so a single polyline eighteen metres long reads as a hair on
+// the screen. Three of them, each jittered separately, is what makes a strike
+// look like a strike - the thickness is the spread between them.
+const BOLT_FORKS = 3;
+
 // Soft radial white dot, tinted per-use by material colour. Shared by the
 // particles, the projectile glows and the pickup glows.
 export function makeGlowTexture() {
@@ -40,52 +53,67 @@ export function makeGlowTexture() {
   return new THREE.CanvasTexture(cv);
 }
 
-// Ground texture for CREEP - the persistent stain a lingering zone leaves on
-// the floor. White with an alpha falloff so a single copy can be tinted per
-// zone; the blobs give it a ragged edge, because a clean circle reads as a UI
-// marker and this has to read as something spilled.
-export function makeCreepTexture() {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 128;
-  const ctx = cv.getContext('2d');
-  const R = 64;
+// Ground shapes for CREEP - the persistent patch a lingering zone leaves on
+// the floor.
+//
+// NOT A CIRCLE. A disc with a rim around it reads as a UI marker - a selection
+// ring, a spell indicator - and the one thing this has to say is that a piece
+// of the FLOOR is different. So a patch is an irregular polygon: a closed loop
+// of vertices whose radius wanders, with no two the same. It is generated as
+// geometry rather than painted into a texture because the outline is the part
+// that has to be exact, and a soft-edged decal has no outline at all.
+//
+// The average radius is exactly 1, so a caller's radius in metres is the mesh
+// scale and the damage circle and the patch agree at the edges.
+//
+// TWO FAMILIES, and the difference is the whole point of them. A SMOOTH patch
+// is the player's - ash, the ground they made dangerous for the enemy. A
+// JAGGED one hurts THEM. That distinction is carried by the silhouette first,
+// by colour second and by the pulse third, so it survives colourblindness, a
+// busy screen and a player who has never read a tooltip.
+const CREEP_POINTS = 64;
 
-  const base = ctx.createRadialGradient(R, R, R * 0.1, R, R, R);
-  base.addColorStop(0, 'rgba(255,255,255,0.90)');
-  base.addColorStop(0.5, 'rgba(255,255,255,0.55)');
-  base.addColorStop(0.82, 'rgba(255,255,255,0.26)');
-  base.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, 128, 128);
-
-  // Irregular density so the middle looks pooled rather than airbrushed.
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 26; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = R * (0.3 + Math.random() * 0.52);
-    const r = R * (0.1 + Math.random() * 0.19);
-    const x = R + Math.cos(a) * d;
-    const y = R + Math.sin(a) * d;
-    const blob = ctx.createRadialGradient(x, y, 0, x, y, r);
-    blob.addColorStop(0, 'rgba(255,255,255,0.30)');
-    blob.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = blob;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+function makeCreepShape(jagged, seed) {
+  const shape = new THREE.Shape();
+  // A few low-frequency lobes give the overall blobby outline; the jagged
+  // family adds a high-frequency term on top, which is what turns a puddle
+  // into something that looks burnt into the floor.
+  const a1 = seed * 1.7, a2 = seed * 3.1, a3 = seed * 5.3;
+  const lobes = jagged ? 7 : 3;
+  let sum = 0;
+  const r = new Array(CREEP_POINTS);
+  for (let i = 0; i < CREEP_POINTS; i++) {
+    const t = (i / CREEP_POINTS) * Math.PI * 2;
+    let v = 1
+      + 0.20 * Math.sin(t * 2 + a1)
+      + 0.13 * Math.sin(t * 3 + a2)
+      + 0.08 * Math.sin(t * 5 + a3);
+    if (jagged) {
+      v += 0.17 * Math.sin(t * lobes + a2 * 2)
+        + 0.10 * Math.sin(t * (lobes * 2 + 1) + a3);
+    }
+    r[i] = Math.max(0.35, v);
+    sum += r[i];
   }
-
-  // Fade the outer edge to nothing. The decal turns slowly, and without this
-  // the square corners of the canvas would sweep visibly round the zone.
-  ctx.globalCompositeOperation = 'destination-in';
-  const mask = ctx.createRadialGradient(R, R, R * 0.55, R, R, R);
-  mask.addColorStop(0, 'rgba(255,255,255,1)');
-  mask.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = mask;
-  ctx.fillRect(0, 0, 128, 128);
-
-  return new THREE.CanvasTexture(cv);
+  // Normalise so the MEAN radius is 1. Without this a spiky variant would
+  // cover noticeably more ground than a smooth one at the same scale, and the
+  // patch would stop matching the radius the damage check uses.
+  const k = CREEP_POINTS / sum;
+  for (let i = 0; i < CREEP_POINTS; i++) {
+    const t = (i / CREEP_POINTS) * Math.PI * 2;
+    const rad = r[i] * k;
+    const x = Math.cos(t) * rad;
+    const y = Math.sin(t) * rad;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
 }
+
+// Four variants per family, built once and shared. Enough that two patches
+// side by side are never the same outline, few enough that they cost nothing.
+const CREEP_VARIANTS = 4;
 
 export class Effects {
   constructor(scene) {
@@ -207,23 +235,30 @@ export class Effects {
       });
     }
 
-    // CREEP. The persistent ground stain under a lingering zone - an ash
-    // cloud, a pool of blight. A separate pool from the telegraph marks for
-    // two reasons: marks are ten deep and transient, while creep is held for
-    // the whole life of a zone and there can be twelve of those at once, so
-    // sharing would starve the telegraphs. And creep is meant to look like
-    // terrain rather than like an instruction.
+    // CREEP. The persistent patch of wrong ground under a lingering zone - an
+    // ash cloud, a pool of blight, a magma trail. A separate pool from the
+    // telegraph marks for two reasons: marks are ten deep and transient, while
+    // creep is held for the whole life of a zone and a magma walker alone can
+    // hold a dozen, so sharing would starve the telegraphs. And creep is meant
+    // to look like terrain rather than like an instruction.
     //
-    // Each zone gets a textured blotch that turns slowly, plus a hard rim at
-    // the exact damage radius. The blotch says "this ground is wrong"; the rim
-    // says precisely where it stops - particles alone gave neither, which is
-    // why a zone could be stood in without being noticed.
-    this.creepTex = makeCreepTexture();
+    // Each patch is an irregular polygon plus a slightly larger copy of the
+    // SAME polygon behind it, which reads as a border that follows every kink
+    // in the outline. The old version was a soft disc inside a hard ring, and
+    // a ring is the one shape a player already reads as UI.
+    //
+    // Whose patch it is comes from the shape family (see makeCreepShape) and
+    // is set when the slot is claimed, because that is the only moment the
+    // geometry needs to change.
+    this.creepGeo = { smooth: [], jagged: [] };
+    for (let i = 0; i < CREEP_VARIANTS; i++) {
+      this.creepGeo.smooth.push(makeCreepShape(false, i * 2.3 + 0.7));
+      this.creepGeo.jagged.push(makeCreepShape(true, i * 3.7 + 1.9));
+    }
     this.creep = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 30; i++) {
       const grp = new THREE.Group();
       const fillMat = new THREE.MeshBasicMaterial({
-        map: this.creepTex,
         color: 0xffffff,
         transparent: true,
         opacity: 0,
@@ -231,7 +266,7 @@ export class Effects {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const rimMat = new THREE.MeshBasicMaterial({
+      const edgeMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0,
@@ -239,28 +274,49 @@ export class Effects {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      // The plane is a unit square, so it needs twice the group's scale to
-      // span the zone's diameter; the ring is already unit-RADIUS and takes
-      // the group scale as it is.
-      const fill = new THREE.Mesh(markLane, fillMat);
-      fill.scale.set(2, 2, 1);
-      const rim = new THREE.Mesh(markRing, rimMat);
-      grp.add(fill, rim);
+      const variant = (Math.random() * CREEP_VARIANTS) | 0;
+      // The border is drawn first and slightly wider, so the fill sits on top
+      // of it and only the overhang shows. One geometry, two scales - the
+      // border cannot drift out of register with the shape it is bordering.
+      const edge = new THREE.Mesh(this.creepGeo.smooth[variant], edgeMat);
+      const fill = new THREE.Mesh(this.creepGeo.smooth[variant], fillMat);
+      fill.scale.setScalar(0.86);
+      // Fractionally above the border so the two do not z-fight where they
+      // overlap; both are still under the telegraph marks at 0.06.
+      fill.position.z = 0.004;
+      grp.add(edge, fill);
       grp.rotation.x = -Math.PI / 2;
-      // Under the telegraph marks at 0.06, so a mortar circle drawn over a
-      // pool still reads on top of it.
       grp.position.y = 0.035;
       grp.visible = false;
       grp.frustumCulled = false;
       scene.add(grp);
       this.creep.push({
-        group: grp, fill, fillMat, rimMat,
-        spin: (Math.random() < 0.5 ? -1 : 1) * (0.12 + Math.random() * 0.16),
+        group: grp, fill, edge, fillMat, edgeMat, variant, hostile: false,
+        spin: (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.12),
         phase: Math.random() * Math.PI * 2,
         used: false,
       });
     }
     this._creepT = 0;
+
+    // LIGHTNING BOLTS. Same pooled-polyline shape as the arcs, at a size that
+    // spans the whole arena vertically. Two strikes' worth: they live a fifth
+    // of a second, and Lightning Wizard fires on 5% of hits.
+    this.bolts = [];
+    for (let i = 0; i < BOLT_FORKS * 2; i++) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array((BOLT_SEGMENTS + 1) * 3), 3)
+      );
+      const m = new THREE.LineBasicMaterial({ color: 0xfff17a, transparent: true, opacity: 0 });
+      const line = new THREE.Line(g, m);
+      line.visible = false;
+      line.frustumCulled = false;
+      scene.add(line);
+      this.bolts.push({ line, life: 0 });
+    }
+    this._boltAt = new THREE.Vector3();
 
     // BEAMS. One-frame lines, redrawn every frame by whatever owns them -
     // a conduit's links to the enemies it is buffing. Same shape as the
@@ -476,22 +532,37 @@ export class Effects {
     this.marks[h].group.visible = false;
   }
 
-  // Claim a creep slot for a zone, held until the zone expires. Returns -1
-  // when the pool is full, which a caller must survive - the zone still deals
-  // its damage, it just goes undecorated.
-  creepAcquire() {
+  /**
+   * Claim a creep slot for a zone, held until the zone expires. Returns -1
+   * when the pool is full, which a caller must survive - the zone still deals
+   * its damage, it just goes undecorated.
+   *
+   * @param {boolean} hostile true when this patch hurts the PLAYER. It picks
+   *   the jagged shape family instead of the smooth one, which is the primary
+   *   way the two are told apart - see makeCreepShape.
+   */
+  creepAcquire(hostile = false) {
     for (let i = 0; i < this.creep.length; i++) {
-      if (!this.creep[i].used) {
-        this.creep[i].used = true;
-        this.creep[i].group.visible = true;
-        return i;
-      }
+      const c = this.creep[i];
+      if (c.used) continue;
+      c.used = true;
+      c.hostile = hostile;
+      const geo = (hostile ? this.creepGeo.jagged : this.creepGeo.smooth)[c.variant];
+      c.edge.geometry = geo;
+      c.fill.geometry = geo;
+      // A fresh outline every time a slot is reused, so a magma trail is a
+      // line of different-looking scorches rather than one shape stamped
+      // twelve times.
+      c.fill.rotation.z = Math.random() * Math.PI * 2;
+      c.edge.rotation.z = c.fill.rotation.z;
+      c.group.visible = true;
+      return i;
     }
     return -1;
   }
 
   /**
-   * Position and tint one zone's ground stain. Call every frame it is alive.
+   * Position and tint one zone's ground patch. Call every frame it is alive.
    *
    * @param {number} intensity 0..1. Zones fade theirs down as they expire, so
    *   the floor going clean is the warning that the danger has passed.
@@ -502,16 +573,20 @@ export class Effects {
     c.group.position.set(x, 0.035, z);
     c.group.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
     c.fillMat.color.setHex(color);
-    c.rimMat.color.setHex(color);
+    c.edgeMat.color.setHex(color);
     const k = Math.max(0, Math.min(1, intensity));
-    // The rim breathes and the fill does not. One moving element reads as
-    // alive; two competing rhythms just look noisy.
-    const pulse = 0.8 + Math.sin(this._creepT * 2.6 + c.phase) * 0.2;
-    // Deliberately strong. These are the only warning that a patch of floor is
-    // dangerous, and a subtle one is the same as none - the whole reason the
-    // particle-only version failed is that it could be stood in unnoticed.
-    c.fillMat.opacity = 0.55 * k;
-    c.rimMat.opacity = 1.0 * k * pulse;
+    // A HOSTILE patch breathes and a friendly one does not. Movement is what
+    // the eye is drawn to in a crowded frame, so it is spent on the only
+    // patches the player has to get out of; ground they made dangerous for the
+    // enemy sits still and stays out of the way.
+    if (c.hostile) {
+      const pulse = 0.78 + Math.sin(this._creepT * 4.2 + c.phase) * 0.22;
+      c.fillMat.opacity = 0.5 * k;
+      c.edgeMat.opacity = 1.0 * k * pulse;
+    } else {
+      c.fillMat.opacity = 0.34 * k;
+      c.edgeMat.opacity = 0.42 * k;
+    }
   }
 
   creepRelease(h) {
@@ -519,7 +594,62 @@ export class Effects {
     this.creep[h].used = false;
     this.creep[h].group.visible = false;
     this.creep[h].fillMat.opacity = 0;
-    this.creep[h].rimMat.opacity = 0;
+    this.creep[h].edgeMat.opacity = 0;
+  }
+
+  /**
+   * A bolt of lightning onto (x, z). Lightning Wizard's whole tell: the strike
+   * has to be unmistakably a strike, and it has to say how far the splash
+   * reached, because that is the part of the mutation a player cannot infer
+   * from the damage numbers.
+   *
+   * The bolt is one polyline from well above the arena down to the floor,
+   * jittered sideways at every joint. Straight would read as a laser.
+   */
+  lightning(x, z, radius) {
+    // Every fork of one strike shares the point it lands on and nothing else,
+    // so the three lines splay apart with height and meet at the floor.
+    for (let f = 0; f < BOLT_FORKS; f++) {
+      let slot = null;
+      for (const b of this.bolts) {
+        if (b.life <= 0) { slot = b; break; }
+      }
+      // Every bolt busy means two strikes landed within a fifth of a second,
+      // which is exactly when overwriting the oldest is right - the newest
+      // strike is the one the player is looking for.
+      if (!slot) slot = this.bolts[f];
+      const pos = slot.line.geometry.attributes.position;
+      // Drifts as it descends, so the top of the bolt is not directly over the
+      // point it hits. A perfectly vertical column reads as a spawn effect.
+      const topX = x + (Math.random() - 0.5) * 4.5;
+      const topZ = z + (Math.random() - 0.5) * 4.5;
+      for (let i = 0; i <= BOLT_SEGMENTS; i++) {
+        const t = i / BOLT_SEGMENTS;
+        // The kink dies away to nothing at the ground so the bolt actually
+        // touches the point it is meant to have struck.
+        const wob = (1 - t) * 1.1 + 0.06;
+        pos.setXYZ(
+          i,
+          topX + (x - topX) * t + (Math.random() - 0.5) * wob,
+          BOLT_HEIGHT * (1 - t) + 0.05,
+          topZ + (z - topZ) * t + (Math.random() - 0.5) * wob
+        );
+      }
+      pos.needsUpdate = true;
+      slot.line.visible = true;
+      slot.life = BOLT_LIFE;
+    }
+    // The strike point gets a ring at exactly the splash radius and a column
+    // of sparks: the ring is the only thing that says how far the extra damage
+    // reached, which is the part of the mutation a player cannot infer from
+    // watching one enemy die.
+    this._boltAt.set(x, 0.05, z);
+    this.shockwave(this._boltAt, 0xfff17a, radius, 0.45);
+    this._boltAt.y = 0.5;
+    this.burst(this._boltAt, 0xfff17a, 30, 7, 6, 0.55);
+    this.burst(this._boltAt, 0x9fd8ff, 18, 4, 4, 0.45);
+    this.flash(this._boltAt);
+    this.addShake(0.16);
   }
 
   // A line from `a` to `b` for THIS frame only. Callers redraw every frame;
@@ -567,7 +697,18 @@ export class Effects {
     // The stains turn, slowly and each at its own rate, so a zone looks like
     // it is spreading rather than like a decal someone pasted down.
     for (const c of this.creep) {
-      if (c.used) c.fill.rotation.z += c.spin * dt;
+      if (!c.used) continue;
+      c.fill.rotation.z += c.spin * dt;
+      c.edge.rotation.z = c.fill.rotation.z;
+    }
+    // Bolts are held bright and then dropped, for the same reason the homing
+    // arcs are: a GL line is one pixel wide whatever is asked for, so how long
+    // it stays at full strength is the only lever on whether it is readable.
+    for (const b of this.bolts) {
+      if (b.life <= 0) continue;
+      b.life -= dt;
+      b.line.material.opacity = Math.max(0, Math.min(1, (b.life / BOLT_LIFE) * 2.6));
+      if (b.life <= 0) b.line.visible = false;
     }
     this.shakeAmp *= Math.pow(0.01, dt);
     if (this.shakeAmp < 0.002) this.shakeAmp = 0;

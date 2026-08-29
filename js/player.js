@@ -94,6 +94,15 @@ const DEFAULT_MODS = {
   chargeRadius: 0,
   homingAngle: 0,       // Seeker: half-angle a MISSED shot may curve through
   homingRange: 0,       // and how far out it will look for something to hit
+  ashChance: 0,         // Ashen: chance a burning death actually leaves a cloud
+  lightningChance: 0,   // Lightning Wizard: chance a hit calls a bolt down
+  lightningDamage: 0,   // straight onto the enemy that was hit
+  lightningSplash: 0,   // and to everything else inside lightningRadius
+  lightningRadius: 0,
+  noHitBonus: 0,        // No-Hit Bonus: damage and fire rate gained per wave
+                        // cleared without taking damage. Unlike everything
+                        // else here it accumulates across the run - see
+                        // noHitStacks and rebuildMods().
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -161,6 +170,11 @@ export class Player {
     // revive counter, which is spent once per run and not refilled.
     this.wardReady = false;
     this.livesUsed = 0;
+    // No-Hit Bonus: waves cleared without taking a point of damage since the
+    // mutation was picked up. It lives on the PLAYER rather than in mods
+    // because mods are rebuilt from the upgrade list on every draft pick, and
+    // anything written into them by an event would be wiped by the next one.
+    this.noHitStacks = 0;
 
     // The viewmodel is built once here and parented to the camera. Building
     // one per equip would allocate geometry for the rest of the session.
@@ -230,6 +244,23 @@ export class Player {
       const def = UPGRADES[id];
       if (def && n > 0) def.apply(this.mods, n);
     }
+    // No-Hit Bonus is applied AFTER the upgrade replay, because it multiplies
+    // whatever the build ended up with rather than being part of it. It is
+    // compounding, not additive: ten flawless waves is 2.6x, which is a lot
+    // and is meant to be - it costs a whole run of never being touched.
+    if (this.mods.noHitBonus > 0 && this.noHitStacks > 0) {
+      const k = Math.pow(1 + this.mods.noHitBonus, this.noHitStacks);
+      this.mods.damage *= k;
+      this.mods.fireRate *= k;
+    }
+  }
+
+  // One more flawless wave. Returns the new stack count so the caller can say
+  // so on screen; a run that has not picked the mutation up never calls this.
+  addNoHitStack() {
+    this.noHitStacks++;
+    this.rebuildMods();
+    return this.noHitStacks;
   }
 
   // Adds one stack of an upgrade. Returns false when it is already maxed, so
@@ -293,6 +324,9 @@ export class Player {
     // mods, so reading them before the wipe would seed the new run with the
     // last one's stats.
     this.upgrades = {};
+    // Before rebuildMods, or the wiped run would be rebuilt with the last
+    // one's flawless stacks still multiplying it.
+    this.noHitStacks = 0;
     this.rebuildMods();
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;

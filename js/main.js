@@ -129,10 +129,15 @@ const EMPTY_CLICK_COOLDOWN = 0.35;
 // one of those would otherwise be a separate purchase.
 const STATION_SHOOT_COOLDOWN = 0.25;
 
-// No enemy spawns closer than this to the player. The spawn grid sits near the
-// arena edges, but the player is free to stand on one, and materialising a
-// charger inside their hitbox is damage they had no chance to avoid.
-const MIN_SPAWN_DISTANCE = 10;
+// NO-SPAWN BUBBLE. No enemy is ever placed closer than this to the player.
+// The spawn grid sits near the arena edges, but the player is free to stand on
+// one, and materialising a charger inside their hitbox is damage they had no
+// chance to avoid. Ten metres was not enough on its own: a chaser covers that
+// in under three seconds, and the jitter applied to a spawn point could take a
+// metre back off it. This is a medium bubble - wide enough that anything that
+// appears has to visibly travel to reach the player, well short of the arena's
+// 21 metre half-width so the grid always has points outside it.
+const MIN_SPAWN_DISTANCE = 16;
 
 // Melee reach, in metres from the player's feet, and the half-angle of the
 // arc it sweeps. It is a swing, not a poke: everything in front of the player
@@ -169,16 +174,29 @@ const TOTEM_COUNT = 3;
 // Ashen: how many clouds can be alive at once, and how often Neurotoxin's
 // poison is allowed to make a jump.
 const MAX_ASH_CLOUDS = 8;
-// Blight pools and Herald's spray: lingering zones that damage the PLAYER.
-// Capped much lower than the ash clouds because they sit where the player is
-// standing rather than where enemies died, and four overlapping ones already
-// means the ground is gone.
-const MAX_HAZARDS = 4;
-// Ground-stain colours, one per kind of zone, kept distinct from each other
-// and from the telegraph orange so a player can tell at a glance whether a
-// patch of floor hurts THEM or the enemies standing in it.
-const CREEP_ASH = 0xff5714;
-const CREEP_HAZARD = 0x8ede2a;
+// Lingering zones that damage the PLAYER. There are two kinds and they are
+// capped separately, because they are completely different shapes of threat:
+//
+//   pool  a blight's lob, or Herald's spray - big, slow, one at a time, and
+//         sitting exactly where the player is standing. Four overlapping ones
+//         already means the ground is gone.
+//   lava  a magma walker's trail - small, constant, and a dozen alive per
+//         enemy by design. It is the LINE it draws that matters, so capping it
+//         with the pools would either starve the pools or cut the trail into
+//         disconnected dots.
+//
+// A single list holds both and eviction is per kind, so a magma running laps
+// can never push a blight pool out from under the player's feet.
+const MAX_POOLS = 4;
+const MAX_LAVA = 24;
+// Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
+// whose it is, and the shape family answers it (see makeCreepShape in
+// effects.js) - these back it up. Ash is the player's, so it wears the
+// player's own cyan, the colour of their shots and their pickups; everything
+// that hurts THEM is hot or toxic, and nothing hostile is ever cyan.
+const CREEP_ASH = 0x3ad6ff;
+const CREEP_HAZARD = 0xaaff2a;
+const CREEP_LAVA = 0xff4a10;
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
 const MAX_MORTARS = 6;
@@ -285,6 +303,10 @@ class Game {
     // times and shove its target twelve metres.
     this._shotHits = new Set();
     this._blastAt = new THREE.Vector3();
+    // Lightning Wizard's strike point. Its OWN scratch and not _blastAt: a
+    // bolt is rolled inside _landShot, before Detonator has fired, and sharing
+    // the vector moved Detonator's blast onto whatever the last bolt hit.
+    this._boltAt = new THREE.Vector3();
     this._blastHit = false;
     // Where the last pellet stopped, for Breach Round's blast.
     this._lastImpact = new THREE.Vector3();
@@ -340,7 +362,8 @@ class Game {
       addProjectile: (x, y, z, type, speedScale) =>
         this._spawnProjectile(x, y, z, type, speedScale),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
-      addHazard: (x, z, radius, life, dps) => this._addHazard(x, z, radius, life, dps),
+      addHazard: (x, z, radius, life, dps, kind) =>
+        this._addHazard(x, z, radius, life, dps, kind),
       addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
       pullPlayer: (dx, dz, strength) => this._pullPlayer(dx, dz, strength),
       bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
@@ -812,18 +835,20 @@ class Game {
     this.ui.setBoss(null, 0, '', '');
   }
 
-  // The boss kill's own payout, on top of the ordinary clear bonus. The refill
-  // matters as much as the money: without it a hard-won fight leaves the
-  // player to start the next four waves on whatever they had left.
+  // The boss kill's own payout, on top of the ordinary clear bonus.
+  //
+  // MONEY ONLY. It used to hand back a full health bar and a full reserve as
+  // well, which quietly undid the fight: whatever the boss had cost was
+  // refunded the instant it died, so there was no such thing as coming out of
+  // one in trouble. The player is paid enough to buy what they need at the
+  // stations, and choosing between health and ammo with a fixed sum is the
+  // decision the free refill was taking away.
   _payBossBonus() {
     const bonus = BOSS_BONUS_BASE + BOSS_BONUS_PER_WAVE * this.wave;
     this.score += bonus * 4;
     const paid = this._award(bonus);
-    this.player.health = this.player.maxHealth;
-    this.player.reserveAmmo = this.player.maxReserve;
-    this.player.mag = this.player.magSize;
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
-    this.ui.banner('BOSS DOWN  +$' + paid + '  REARMED');
+    this.ui.banner('BOSS DOWN  +$' + paid);
   }
 
   spawnEnemy(type) {
@@ -835,10 +860,16 @@ class Game {
     this.stats.spawned++;
   }
 
-  // A jittered spawn point at least MIN_SPAWN_DISTANCE from the player. Walks
-  // the grid from a random start and takes the first point that clears the
-  // distance; if the player has somehow crowded all of them, the farthest one
-  // is used rather than giving up and spawning on top of them.
+  // A jittered spawn point outside the no-spawn bubble. Walks the grid from a
+  // random start and takes the first point that clears the distance; if the
+  // player has somehow crowded all of them, the farthest one is used rather
+  // than giving up and spawning on top of them.
+  //
+  // The jitter is applied FIRST and then checked, because it is up to a metre
+  // in each axis and can carry a point that only just cleared the bubble back
+  // inside it - which is exactly the case the bubble exists for. A jittered
+  // point that fails is pushed straight back out along the line from the
+  // player, so the spread survives and the guarantee holds.
   _pickSpawnPos() {
     const points = this.arena.spawnPoints;
     const start = (Math.random() * points.length) | 0;
@@ -856,9 +887,21 @@ class Game {
         best = sp;
       }
     }
-    return new THREE.Vector3(
+    const at = new THREE.Vector3(
       best.x + (Math.random() - 0.5) * 2, 0, best.z + (Math.random() - 0.5) * 2
     );
+    const dx = at.x - this.player.pos.x;
+    const dz = at.z - this.player.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 0.001 && d < MIN_SPAWN_DISTANCE) {
+      const k = MIN_SPAWN_DISTANCE / d;
+      at.x = this.player.pos.x + dx * k;
+      at.z = this.player.pos.z + dz * k;
+      // Pushing outward can leave the arena; the walls are at 21.6.
+      at.x = Math.max(-21, Math.min(21, at.x));
+      at.z = Math.max(-21, Math.min(21, at.z));
+    }
+    return at;
   }
 
   gameOver() {
@@ -958,6 +1001,26 @@ class Game {
       this._chainTo.set(best.pos.x, 1.0, best.pos.z)
     );
     this.effects.burst(this._chainTo, 0x9ff3ff, 6, 3, 1.5, 0.3);
+  }
+
+  // Lightning Wizard. A bolt out of the sky onto the enemy that was hit: the
+  // full damage to them, and a smaller share to everything standing around
+  // them, so it is worth firing into the middle of a crowd rather than at its
+  // edge.
+  //
+  // The splash goes through _blast with the struck enemy skipped, because
+  // _blast already owns radial falloff and the enemy list, and a second copy
+  // of that arithmetic here would be one more place for the two to disagree.
+  // It cannot hurt the player: the bolt is the player's, and a mutation that
+  // rolled itself 5% of the time and occasionally killed you would be a curse.
+  _lightning(en) {
+    const m = this.player.mods;
+    this._boltAt.set(en.pos.x, 0, en.pos.z);
+    // The direct hit first. A warden's dome can eat it, exactly like a bullet.
+    en.takeDamage(m.lightningDamage);
+    this._blast(this._boltAt, m.lightningSplash, m.lightningRadius, en, false);
+    this.effects.lightning(en.pos.x, en.pos.z, m.lightningRadius);
+    this.sfx.kill();
   }
 
   // Knockout Drops. Shoves an enemy along the shot, then resolves it out of
@@ -1087,6 +1150,14 @@ class Game {
   // `dir` is the direction the shot ARRIVED from, which is what armour reads.
   _landShot(en, point, dir, dealt, burst) {
     const m = this.player.mods;
+    // A warded enemy eats the shot whole (see Enemy.takeDamage). It gets the
+    // stone-grey spark rather than the ordinary yellow one, so a player
+    // emptying a magazine into a group under a warden's dome is told why
+    // nothing is dying by the hits themselves, not just by the health bar.
+    if (en.wardT > 0) {
+      this.effects.burst(point, 0xc9d2dd, burst, 3, 1.2, 0.3);
+      return;
+    }
     en.takeDamage(dealt, false, dir.x, dir.z);
     this.effects.burst(point, 0xffe95e, burst, 4, 1.5, 0.35);
     // Damage is per-pellet; everything below is per-shot.
@@ -1102,6 +1173,9 @@ class Game {
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
     if (m.petrifyChance && Math.random() < m.petrifyChance) {
       en.applyStatus('freeze', m.petrifyTime);
+    }
+    if (m.lightningChance && Math.random() < m.lightningChance) {
+      this._lightning(en);
     }
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
@@ -1605,6 +1679,18 @@ class Game {
         this._payClearBonus();
         let msg = 'WAVE ' + this.wave + ' CLEARED  +$' + this.lastGain;
         if (this.lastPerfect) msg += '  FLAWLESS';
+        // No-Hit Bonus. Read from the same flag the clear bonus just set, so
+        // the two can never disagree about what flawless means, and banked on
+        // the player rather than in mods - see Player.addNoHitStack. It is
+        // folded into the clear banner rather than raised as its own, because
+        // a banner replaces whatever is on screen: a second one here would
+        // wipe the wave-clear line before it could be read.
+        if (this.lastPerfect && this.player.mods.noHitBonus > 0) {
+          const n = this.player.addNoHitStack();
+          const pct = Math.round((Math.pow(1 + this.player.mods.noHitBonus, n) - 1) * 100);
+          this.effects.shockwave(this.player.pos, 0xeaff6b, 7, 0.7);
+          msg += '  NO-HIT x' + n + ' (+' + pct + '% DMG & RATE)';
+        }
         this.ui.banner(msg);
         this.sfx.wave();
         // After the clear bonus, so the flawless test still reads the damage
@@ -1817,7 +1903,26 @@ class Game {
       return;
     }
     // Ammo first when both are low: health with an empty gun only postpones it.
-    const kind = needAmmo ? 'ammo' : 'health';
+    //
+    // But the ammo cap is a promise the whole drop system holds, and relief is
+    // the one path that used to be able to break it - a starving player is
+    // exactly the state that fires this every ten seconds, so left unchecked it
+    // was the only way six ammo boxes could be on the floor at once. When the
+    // cap is already reached the boxes ARE there and the player simply has not
+    // walked to them, so relief falls back to health if that is also low and
+    // otherwise waits.
+    let kind = needAmmo ? 'ammo' : 'health';
+    if (kind === 'ammo') {
+      let ammoActive = 0;
+      for (const p of this.powerups) if (p.typeKey === 'ammo') ammoActive++;
+      if (ammoActive >= MAX_ACTIVE_AMMO) {
+        if (!needHealth) {
+          this._reliefT = SPAWN_RETRY;
+          return;
+        }
+        kind = 'health';
+      }
+    }
     this.powerups.push(
       spawnRelief(kind, this.arena, this.player.pos, this.scene, this.effects.glowTex, this.time)
     );
@@ -2038,7 +2143,11 @@ class Game {
       }
       // Ashen leaves a ZONE rather than another instant blast - the two
       // upgrades above already own that shape.
-      if (m.ashDps > 0 && this._deathBurn[i]) this._addAsh(at);
+      // A CHANCE, not a rule: with Incendiary running every corpse in a wave
+      // is a burning one, and a cloud per death paved the arena.
+      if (m.ashDps > 0 && this._deathBurn[i] && Math.random() < m.ashChance) {
+        this._addAsh(at);
+      }
       // The fire jumps to exactly one neighbour, so a burning crowd cascades
       // one enemy at a time rather than igniting the whole arena at once.
       if (m.burnSpread > 0 && this._deathBurn[i]) {
@@ -2073,13 +2182,15 @@ class Game {
     this._ash.push({
       x: pos.x, z: pos.z, life: m.ashTime, maxLife: m.ashTime,
       dps: m.ashDps, radius: m.ashRadius, drip: 0,
-      creep: this.effects.creepAcquire(),
+      // Friendly: the smooth shape family, the one that never hurts the
+      // player. Standing in your own ash has to be visibly safe.
+      creep: this.effects.creepAcquire(false),
     });
     // A cloud that faded in was easy to miss in a busy wave, so it announces
     // itself: a ring the size of the damage area, plus an upward puff where
     // the enemy fell.
-    this.effects.shockwave(this._ashAt.set(pos.x, 0, pos.z), 0xff6d00, m.ashRadius, 0.5);
-    this.effects.burst(this._ashAt.set(pos.x, 0.4, pos.z), 0xff8f2e, 22, 4, 2.4, 0.8);
+    this.effects.shockwave(this._ashAt.set(pos.x, 0, pos.z), CREEP_ASH, m.ashRadius, 0.5);
+    this.effects.burst(this._ashAt.set(pos.x, 0.4, pos.z), CREEP_ASH, 22, 4, 2.4, 0.8);
   }
 
   // Runs the clouds down and tickles whatever is standing in one. Damage is
@@ -2126,7 +2237,7 @@ class Game {
         const r = Math.sqrt(Math.random()) * a.radius;
         this.effects.burst(
           this._ashAt.set(a.x + Math.cos(ang) * r, 0.35, a.z + Math.sin(ang) * r),
-          0xffb300, 3, 1.5, 1.8, 0.9
+          CREEP_ASH, 3, 1.5, 1.8, 0.9
         );
       }
     }
@@ -2134,22 +2245,49 @@ class Game {
 
   // ---- player-facing hazards ---------------------------------------------
 
-  // A lingering pool the PLAYER has to walk out of. Same data-only shape as an
-  // ash cloud, and recycled the same way: the oldest goes rather than the
-  // newest being refused, so the pool an enemy just threw always exists.
-  _addHazard(x, z, radius, life, dps) {
-    if (this._hazard.length >= MAX_HAZARDS) {
-      this.effects.creepRelease(this._hazard.shift().creep);
+  /**
+   * A lingering zone the PLAYER has to walk out of. Same data-only shape as an
+   * ash cloud, and recycled the same way: the oldest of its OWN kind goes
+   * rather than the newest being refused, so the patch an enemy just laid down
+   * always exists.
+   *
+   * @param {string} kind 'pool' (a blight's lob) or 'lava' (a magma's trail).
+   *   It picks the cap, the colour and how loudly the zone announces itself -
+   *   a pool lands once and has to be noticed, a trail patch is one of twelve
+   *   and a splash per drop would be a strobe.
+   */
+  _addHazard(x, z, radius, life, dps, kind = 'pool') {
+    const cap = kind === 'lava' ? MAX_LAVA : MAX_POOLS;
+    let n = 0;
+    for (const h of this._hazard) {
+      if (h.kind === kind) n++;
+    }
+    if (n >= cap) {
+      for (let i = 0; i < this._hazard.length; i++) {
+        if (this._hazard[i].kind !== kind) continue;
+        this.effects.creepRelease(this._hazard[i].creep);
+        this._hazard.splice(i, 1);
+        break;
+      }
     }
     this._hazard.push({
-      x, z, radius, life, maxLife: life, dps, acc: 0, drip: 0, tick: 0,
-      creep: this.effects.creepAcquire(),
+      x, z, radius, life, maxLife: life, dps, kind, acc: 0, drip: 0, tick: 0,
+      // Hostile, always: everything in this list hurts the player, and the
+      // jagged shape family is what says so before any colour is read.
+      creep: this.effects.creepAcquire(true),
     });
-    // It lands as a splash, so the moment the ground turns is visible even if
-    // the player is looking somewhere else when it is thrown.
+    const color = kind === 'lava' ? CREEP_LAVA : CREEP_HAZARD;
     this._ashAt.set(x, 0.1, z);
-    this.effects.shockwave(this._ashAt, CREEP_HAZARD, radius, 0.45);
-    this.effects.burst(this._ashAt, CREEP_HAZARD, 16, 3, 1.2, 0.6);
+    if (kind === 'lava') {
+      // A few embers where it fell. No ring: a magma drops one of these twice
+      // a second and a shockwave per drop would spend the whole ring pool.
+      this.effects.burst(this._ashAt, color, 6, 1.6, 1.4, 0.5);
+      return;
+    }
+    // A pool lands as a splash, so the moment the ground turns is visible even
+    // if the player is looking somewhere else when it is thrown.
+    this.effects.shockwave(this._ashAt, color, radius, 0.45);
+    this.effects.burst(this._ashAt, color, 16, 3, 1.2, 0.6);
   }
 
   // Runs the pools down and bleeds the player for standing in one.
@@ -2164,9 +2302,8 @@ class Game {
         this._hazard.splice(i, 1);
         continue;
       }
-      this.effects.creepSet(
-        h.creep, h.x, h.z, h.radius, CREEP_HAZARD, Math.min(1, h.life)
-      );
+      const color = h.kind === 'lava' ? CREEP_LAVA : CREEP_HAZARD;
+      this.effects.creepSet(h.creep, h.x, h.z, h.radius, color, Math.min(1, h.life));
       const dx = this.player.pos.x - h.x;
       const dz = this.player.pos.z - h.z;
       // Only while the player is on the ground. A pool is something to jump
@@ -2184,15 +2321,17 @@ class Game {
       // One emission per drip rather than the ash cloud's two: four pools
       // running at once is already 77 particles standing in the buffer, and
       // unlike ash these are always on screen, right where the player is
-      // looking.
+      // looking. A trail patch drips a third as often again, because there can
+      // be two dozen of those and at the pool's rate one magma would stand a
+      // couple of hundred particles up in the shared buffer on its own.
       h.drip -= dt;
       if (h.drip <= 0) {
-        h.drip = 0.14;
+        h.drip = h.kind === 'lava' ? 0.42 : 0.14;
         const ang = Math.random() * Math.PI * 2;
         const r = Math.sqrt(Math.random()) * h.radius;
         this.effects.burst(
           this._ashAt.set(h.x + Math.cos(ang) * r, 0.3, h.z + Math.sin(ang) * r),
-          0x7ac943, 3, 1.2, 1.4, 0.8
+          h.kind === 'lava' ? 0xff8c1a : 0x7ac943, 3, 1.2, 1.4, 0.8
         );
       }
     }

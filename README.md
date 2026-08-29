@@ -33,14 +33,27 @@ Open http://localhost:8123
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- Ten enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Wraiths** (blink behind you), **Bulwarks** (frontal shield - flank them, or burn them, since damage over time ignores it), **Conduits** (no attack; buff everything near them) and **Blights** (lingering pools that make standing still cost health)
+- Twelve enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Wraiths** (blink behind you), **Bulwarks** (frontal shield - flank them, or burn them, since damage over time ignores it), **Conduits** (no attack; buff everything near them), **Blights** (lingering pools that make standing still cost health), **Magmas** (burn a trail of lava into the floor behind them that lasts five seconds - do not retreat down the line they walked) and **Wardens** (no attack; project a dome that makes every enemy inside it invincible and stone-grey until you kill the warden itself)
+- **Nothing ever spawns on top of you.** There is a no-spawn bubble sixteen
+  metres wide around the player, applied after the spawn point's jitter, so
+  every enemy that appears has to visibly cross ground to reach you.
+- **Ground you can read at a glance.** Every lingering zone is an irregular
+  patch burnt into the floor rather than a circle with an effect inside it,
+  and whose it is comes from the SHAPE first: smooth blobs in the player's own
+  cyan are yours and cannot hurt you (Ashen's clouds), jagged patches that
+  pulse are the ones that cost you health (blight pools in toxic green, magma
+  trails in molten orange). Colour and the pulse back the silhouette up, so the
+  distinction survives a busy screen.
 - **A boss every five waves**, in a fixed rotation of five that repeats: the
   **Colossus** (armoured but for a weak point travelling around its body, and a
   telegraphed charge that knocks it out cold against a wall), **Siege**
   (telegraphed mortar barrages), **Schism** (splits at half health, then again),
   **Maw** (drags you in and rolls rings you have to jump) and the **Herald**
   (blinks, volleys, and enrages under 30%). Regular enemies keep arriving
-  throughout; killing the boss ends the wave, pays out, and rearms you.
+  throughout; killing the boss ends the wave and pays out. It does NOT refill
+  your health or ammo - the payout is large and the stations are right there,
+  so coming out of a boss in trouble is a real state to be in and what you
+  spend the money on is a real decision.
 - **Wave composition is fixed, its cast is not.** Every wave has the same
   number of enemies and the same mix of ROLES in every run, but which type
   fills each slot is rolled from that role's members, who are balanced to be
@@ -116,7 +129,7 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 41 upgrades: 10 commons, 25 rares and 6 cursed. A specific rare
+The pool is 44 upgrades: 10 commons, 28 rares and 6 cursed. A specific rare
 mutation turns up in roughly 6-7% of totem sets, so a run sees a slice of the
 pool rather than all of it - that is the point, but it means a new upgrade only
 matters if it is worth taking on sight, without a partner card.

@@ -152,6 +152,36 @@ export const ENEMY_TYPES = {
     build: buildBlight, ai: aiBlight,
   },
 
+  // Punishes running the same line the enemy is running. It walks toward the
+  // player like a chaser and burns the floor behind it, so the ground it has
+  // crossed stays dangerous for five seconds. Slower and weaker in melee than
+  // a chaser, because the trail is where its threat actually lives - and the
+  // trail is the reason to break off and take an angle rather than backpedal
+  // in a straight line.
+  magma: {
+    hp: 52, speed: 2.7, damage: 9, score: 210, color: 0xff5a1f, eye: 0xffd166,
+    scale: 1.05, radius: 0.52, mass: 1,
+    melee: { windup: 0.5, start: 1.5, hit: 2.2, cd: 1.3 },
+    build: buildMagma, ai: aiMagma,
+  },
+
+  // Punishes shooting into a crowd. It has no attack at all: it projects a
+  // dome that makes every enemy standing in it UNKILLABLE, and the answer is
+  // always the same - stop firing at the stone-grey ones and go through the
+  // warden.
+  //
+  // Everything about it is built to be unmissable rather than clever. The
+  // dome is drawn at exactly the radius it works at, the ring on the floor
+  // says where the edge is from inside it, and anything it is protecting turns
+  // to stone. A player who cannot tell why their shots stopped landing is the
+  // one failure this enemy can have.
+  warden: {
+    hp: 70, speed: 2.0, damage: 0, score: 360, color: 0x9aa5b1, eye: 0xfff2b0,
+    scale: 1.2, radius: 0.52, mass: 1,
+    orbit: { dist: 10, band: 2, out: 0.7, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
+    build: buildWarden, ai: aiWarden,
+  },
+
   // ---- bosses ------------------------------------------------------------
   // Every fifth wave, in the rotation waves.js owns. All of them share the
   // same resistance block: a boss that can be frozen solid, feared into the
@@ -314,6 +344,15 @@ const SHARED_MATS = {
     color: 0x6f5bff, emissive: 0x6f5bff, emissiveIntensity: 0.7,
     roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.45,
   }),
+  magmaVent: new THREE.MeshStandardMaterial({
+    color: 0xff7a18, emissive: 0xff5a00, emissiveIntensity: 1.6,
+    roughness: 0.4, metalness: 0.1,
+  }),
+  magmaCrust: new THREE.MeshStandardMaterial({ color: 0x2b1a12, roughness: 0.9, metalness: 0.1 }),
+  wardenCrown: new THREE.MeshStandardMaterial({
+    color: 0xdfe6ef, emissive: 0xfff2b0, emissiveIntensity: 1.1,
+    roughness: 0.25, metalness: 0.7,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 
@@ -378,6 +417,20 @@ const CONDUIT_SPEED = 1.15;
 // it is buffing rather than every last one.
 const CONDUIT_RANGE = 7;
 const CONDUIT_LINKS = 4;
+// Warden's dome: how far the invincibility reaches, and the colour anything
+// inside it turns. The radius is a compromise - wide enough that it obviously
+// covers a group, narrow enough that walking round the edge of it is a real
+// option and the warden is never safely parked out of reach behind its own
+// protection.
+const WARD_RANGE = 6.5;
+const WARD_STONE = 0x8d9199;
+// Magma's trail: how often it drops a patch while it is moving, and how big,
+// how long and how hard each one burns. Five seconds is the brief - long
+// enough that a corridor it walked down stays closed behind it.
+const MAGMA_DROP_INTERVAL = 0.42;
+const MAGMA_PATCH_RADIUS = 1.5;
+const MAGMA_PATCH_LIFE = 5;
+const MAGMA_PATCH_DPS = 12;
 // Scratch for the drip's spawn point. Module-level and reused: the drip runs
 // for every afflicted enemy several times a second.
 const _dripAt = new THREE.Vector3();
@@ -550,6 +603,65 @@ function buildBlight(e, g, s) {
   nozzle.rotation.x = -Math.PI / 2.4;
   nozzle.position.set(0, 0.85 * s, -0.35 * s);
   g.add(sac, nozzle);
+}
+
+function buildMagma(e, g, s) {
+  // Cracked crust over a glow: the vents say where the heat is coming out,
+  // which is the only part of the model that has to communicate anything.
+  const ventGeo = geo('magmaVent', () => new THREE.SphereGeometry(0.13, 8, 6));
+  for (let i = 0; i < 3; i++) {
+    const v = new THREE.Mesh(ventGeo, SHARED_MATS.magmaVent);
+    const a = (i / 3) * Math.PI * 2;
+    v.position.set(Math.cos(a) * 0.3 * s, (0.6 + i * 0.22) * s, Math.sin(a) * 0.3 * s);
+    g.add(v);
+  }
+  const crust = new THREE.Mesh(
+    geo('magmaCrust', () => new THREE.ConeGeometry(0.4, 0.3, 7)),
+    SHARED_MATS.magmaCrust
+  );
+  crust.position.y = 1.3 * s;
+  g.add(crust);
+}
+
+function buildWarden(e, g, s) {
+  // The DOME is the enemy. It is built at exactly WARD_RANGE so what the
+  // player sees and what the aura protects are the same number, and it is
+  // open-topped so it never fills the screen when the player is standing
+  // inside it - the ring on the floor is what they read from in there.
+  const domeMat = new THREE.MeshBasicMaterial({
+    color: 0xbfc7d2, transparent: true, opacity: 0.06,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xdfe6ef, transparent: true, opacity: 0.85,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  e._extraMats.push(domeMat, ringMat);
+  const dome = new THREE.Mesh(
+    geo('wardenDome', () => new THREE.SphereGeometry(WARD_RANGE, 26, 10, 0, Math.PI * 2, 0, Math.PI * 0.42)),
+    domeMat
+  );
+  const ring = new THREE.Mesh(
+    geo('wardenRing', () => new THREE.RingGeometry(WARD_RANGE - 0.32, WARD_RANGE, 64)),
+    ringMat
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.05;
+  // The dome and ring sit at the enemy's FEET and must not inherit the model's
+  // scale, so they are added to the group directly at world size - `s` is
+  // already baked into every other part.
+  e.wardDome = domeMat;
+  e.wardRing = ringMat;
+  g.add(dome, ring);
+
+  const crown = new THREE.Mesh(
+    geo('wardenCrown', () => new THREE.TorusGeometry(0.3, 0.05, 8, 16)),
+    SHARED_MATS.wardenCrown
+  );
+  crown.rotation.x = Math.PI / 2;
+  crown.position.y = 1.35 * s;
+  e.crown = crown;
+  g.add(crown);
 }
 
 // Bosses are built from the same primitives as everything else, at a much
@@ -812,6 +924,57 @@ function aiBlight(e, a) {
     _blinkAt.set(e.pos.x, 1.1, e.pos.z);
     a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.blight.color, 10, 3, 2, 0.5);
   }
+}
+
+// Walks the player down and burns the floor as it goes. The patch is dropped
+// where it HAS been, never where it is going: a trail the player can be
+// steered into is area denial, one that appears under their feet is an
+// unavoidable hit.
+function aiMagma(e, a) {
+  aiMelee(e, a);
+  e.magmaCd = (e.magmaCd || 0) - a.dt;
+  if (e.magmaCd > 0) return;
+  e.magmaCd = MAGMA_DROP_INTERVAL;
+  a.ctx.addHazard(
+    e.pos.x, e.pos.z,
+    MAGMA_PATCH_RADIUS, MAGMA_PATCH_LIFE, MAGMA_PATCH_DPS, 'lava'
+  );
+  if (a.ctx.effects) {
+    _blinkAt.set(e.pos.x, 0.25, e.pos.z);
+    a.ctx.effects.burst(_blinkAt, 0xff7a18, 5, 1.6, 2, 0.5);
+  }
+}
+
+// No attack of its own. It keeps a middle distance and makes everything under
+// its dome unkillable, so it converts a crowd the player was already shooting
+// into a wall - and the fix is to walk in and delete the warden.
+//
+// It never wards ITSELF and never wards another warden: a pair that covered
+// each other would be a stalemate with no way in, and a warden inside its own
+// dome would simply be an enemy that cannot be killed.
+function aiWarden(e, a) {
+  orbit(e, a, ENEMY_TYPES.warden.orbit);
+  e.crown.rotation.z += a.dt * 1.4;
+  // The dome breathes so it never reads as a static piece of scenery, and
+  // brightens with how much it is currently doing.
+  let held = 0;
+  for (const o of a.ctx.enemies) {
+    if (o === e || o.dead || o.boss || o.type === 'warden') continue;
+    const dx = o.pos.x - e.pos.x;
+    const dz = o.pos.z - e.pos.z;
+    if (dx * dx + dz * dz > WARD_RANGE * WARD_RANGE) continue;
+    // Refreshed, never accumulated, exactly like a conduit's buff: it lapses
+    // a fraction of a second after the warden dies, so killing one makes the
+    // whole group take damage again immediately.
+    o.wardT = 0.2;
+    held++;
+  }
+  const pulse = 0.8 + Math.sin(a.ctx.time * 3.4 + e.id) * 0.2;
+  // Kept low even when it is doing its job: at the edge of the dome it fills
+  // the screen, and an aura that washes out the enemies inside it would hide
+  // the stone grey that is the other half of the tell.
+  e.wardDome.opacity = (held > 0 ? 0.10 : 0.05) * pulse;
+  e.wardRing.opacity = (held > 0 ? 1.0 : 0.55) * pulse;
 }
 
 // COLOSSUS. Four states, and the whole fight is the player reading which one
@@ -1241,6 +1404,9 @@ export class Enemy {
     // frame and counted down in _tickStatus, so it lapses on its own the frame
     // after the conduit dies - no reference to clean up.
     this.buffT = 0;
+    // Warden's dome, in seconds remaining. Same refresh-and-lapse contract as
+    // buffT above; while it is positive this enemy cannot be damaged at all.
+    this.wardT = 0;
     this.colorHex = def.color;
     this.eyeBase = def.eye;
     this.pos = pos.clone();
@@ -1280,6 +1446,9 @@ export class Enemy {
     // Last emissive colour written to bodyMat, so the tick can skip the
     // setHex() when nothing changed.
     this._tintHex = def.color;
+    // What the body is currently WEARING - 'flash', 'ward' or a tint hex - so
+    // _applyBodyLook can skip the material writes when nothing has changed.
+    this._look = def.color;
     // Per-status re-application lockout, used only by status-resistant types
     // so a continuous stream of hits cannot hold one permanently afflicted.
     this._statusCd = { freeze: 0, burn: 0, poison: 0, slow: 0, fear: 0 };
@@ -1333,22 +1502,50 @@ export class Enemy {
     this.group.updateMatrixWorld(true);
   }
 
-  // The hit flash and the status tint are the same two material properties, so
-  // they must not both write them. The flash wins while it lasts; when it ends
-  // it hands the body back to whatever status is active rather than assuming
-  // the enemy's own colour.
   _setFlash(on) {
     if (this._flashOn === on) return;
     this._flashOn = on;
-    if (on) {
+    this._applyBodyLook();
+  }
+
+  // THE BODY HAS ONE WRITER. The hit flash, the warden's stone and the status
+  // tint all want the same two material properties, and three separate setters
+  // is how a flash used to erase a status tint until the next status change
+  // put it back. They are a strict priority instead:
+  //
+  //   flash   the hit landed - always wins, and lasts a tenth of a second
+  //   ward    a warden is protecting this enemy: it cannot be damaged, and it
+  //           goes stone grey in the COLOUR channel as well as the emissive,
+  //           so it stops looking like a thing worth shooting at all
+  //   status  poison, fire, ice - the tint the mutations put on it
+  //   base    its own colour
+  //
+  // `_look` is what is currently on the material, so a frame that changes
+  // nothing writes nothing.
+  _applyBodyLook() {
+    const want = this._flashOn ? 'flash' : this.wardT > 0 ? 'ward' : this._dominantTint();
+    if (want === this._look) return;
+    this._look = want;
+    if (want === 'flash') {
+      this.bodyMat.color.setHex(this.colorHex);
       this.bodyMat.emissive.setHex(BODY_FLASH_HEX);
       this.bodyMat.emissiveIntensity = BODY_FLASH_INTENSITY;
-    } else {
-      this._tintHex = this._dominantTint();
-      this.bodyMat.emissive.setHex(this._tintHex);
-      this.bodyMat.emissiveIntensity =
-        this._tintHex === this.colorHex ? BODY_BASE_INTENSITY : STATUS_INTENSITY;
+      return;
     }
+    if (want === 'ward') {
+      // The base colour goes too, not just the glow. An enemy that was still
+      // its own bright red under a grey sheen read as "tinted", and the whole
+      // job of this state is to read as "made of rock".
+      this.bodyMat.color.setHex(WARD_STONE);
+      this.bodyMat.emissive.setHex(WARD_STONE);
+      this.bodyMat.emissiveIntensity = 0.45;
+      return;
+    }
+    this._tintHex = want;
+    this.bodyMat.color.setHex(this.colorHex);
+    this.bodyMat.emissive.setHex(want);
+    this.bodyMat.emissiveIntensity =
+      want === this.colorHex ? BODY_BASE_INTENSITY : STATUS_INTENSITY;
   }
 
   // The colour this enemy should be wearing right now: the highest-priority
@@ -1421,6 +1618,7 @@ export class Enemy {
       && ctx.mods && ctx.mods.entropyBelow > 0
       && this.hp <= this.maxHp * ctx.mods.entropyBelow;
     if (this.buffT > 0) this.buffT -= dt;
+    if (this.wardT > 0) this.wardT -= dt;
     if (this.statusMul < 1) {
       for (const k of STATUS_ORDER) {
         if (this._statusCd[k] > 0) this._statusCd[k] -= dt;
@@ -1457,12 +1655,7 @@ export class Enemy {
       }
     }
 
-    const tint = this._dominantTint();
-    if (tint !== this._tintHex && !this._flashOn) {
-      this._tintHex = tint;
-      this.bodyMat.emissive.setHex(tint);
-      this.bodyMat.emissiveIntensity = tint === this.colorHex ? BODY_BASE_INTENSITY : STATUS_INTENSITY;
-    }
+    this._applyBodyLook();
 
     if (!any || !ctx.effects) return;
     // One drip per ACTIVE status, each on its own timer and in its own colour.
@@ -1642,6 +1835,11 @@ export class Enemy {
   // whole visual tell for poison and fire.
   takeDamage(d, silent = false, dirX = 0, dirZ = 0) {
     if (this.dead) return false;
+    // A warded enemy takes NOTHING - not bullets, not blasts, not the damage
+    // over time already ticking on it. A partial reduction here would leave
+    // the player unsure whether their shots were working, which is the one
+    // thing the warden must never be ambiguous about.
+    if (this.wardT > 0) return false;
     if (this.status.freeze > 0) d *= this.freezeVuln;
     // ARMOUR. `dirX, dirZ` is the direction the hit TRAVELLED, which is what
     // decides whether it landed on a shield or a weak point. Callers that have

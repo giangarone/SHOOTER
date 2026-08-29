@@ -26,11 +26,11 @@
 // Role membership. Peers within a role must be comparable in threat - see the
 // note above.
 const ROLES = {
-  rusher: ['chaser', 'splitter', 'wraith'],
+  rusher: ['chaser', 'splitter', 'wraith', 'magma'],
   gunner: ['shooter', 'sniper'],
   brute: ['tank', 'bulwark'],
   artillery: ['bomber', 'blight'],
-  support: ['conduit'],
+  support: ['conduit', 'warden'],
 };
 
 // The wave a type first becomes eligible. Everything does NOT show up at once:
@@ -48,6 +48,8 @@ const UNLOCK = {
   bulwark: 9,
   conduit: 11,
   blight: 12,
+  magma: 13,
+  warden: 14,
 };
 
 // ---- bosses --------------------------------------------------------------
