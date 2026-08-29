@@ -61,6 +61,7 @@ import { Enemy, Projectile, Grenade, Shard, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
+import { Music } from './music.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
@@ -246,6 +247,10 @@ class Game {
     this.effects = new Effects(this.scene);
     this.ui = new UI();
     this.sfx = new SFX();
+    this.music = new Music('/assets/audio/soundtrack.m4a');
+    // Read before the first gesture builds the graph, so a muted player never
+    // hears the opening bar leak out before the setting is applied.
+    try { this.music.muted = localStorage.getItem('va-music-muted') === '1'; } catch {}
 
     this.state = 'menu';
     this.score = 0;
@@ -485,7 +490,7 @@ class Game {
     addEventListener('blur', () => this._clearInput());
     canvas.addEventListener('mousedown', (e) => {
       if (e.button === 0) {
-        this.sfx.ensure();
+        this._audioGesture();
         if (this.state === 'playing') {
           if (!this.autoTest && document.pointerLockElement !== canvas) this._lock();
           this.input.shoot = true;
@@ -526,7 +531,7 @@ class Game {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     const onStart = () => {
-      this.sfx.ensure();
+      this._audioGesture();
       if (this.state === 'menu') this.beginGame();
     };
     document.getElementById('overlay-start').addEventListener('click', onStart);
@@ -536,9 +541,23 @@ class Game {
     });
     document.getElementById('btn-restart').addEventListener('click', (e) => {
       e.stopPropagation();
-      this.sfx.ensure();
+      this._audioGesture();
       this.beginGame();
     });
+    // Mute toggles live on the start and pause overlays. Both overlays are
+    // themselves click-to-continue, so these must stop the event or muting
+    // would also start or resume the run.
+    this._muteBtns = [document.getElementById('btn-mute-start'), document.getElementById('btn-mute-pause')];
+    for (const b of this._muteBtns) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.music.toggleMute();
+        this._saveMuted();
+        this._syncMuteBtns();
+      });
+    }
+    this._syncMuteBtns();
+
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -593,11 +612,44 @@ class Game {
     this._ash.length = 0;
   }
 
+  // Both buttons show one shared state, so muting on the pause screen is
+  // still muted when the start screen comes back after a death.
+  _syncMuteBtns() {
+    const m = this.music.muted;
+    for (const b of this._muteBtns) {
+      b.textContent = m ? 'MUSIC OFF' : 'MUSIC ON';
+      b.classList.toggle('off', m);
+    }
+  }
+
+  // Storage throws in private-mode Safari and when cookies are blocked, and a
+  // failed preference save is not worth taking the game down for.
+  _saveMuted() {
+    try { localStorage.setItem('va-music-muted', this.music.muted ? '1' : '0'); } catch {}
+  }
+
+  // Primes the audio graph and gets the soundtrack going. Every user gesture
+  // that reaches audio routes through here rather than calling sfx.ensure()
+  // directly, because the music has to be (re)started on a gesture too and a
+  // gesture that primed only one of the two was the original bug here.
+  _audioGesture() {
+    this.sfx.ensure();
+    this.music.start(this.sfx.ctx);
+  }
+
+  // True when the music should sound muffled: anything that is not live
+  // combat. Combat is the ONLY clean state - intermission (walking the totems
+  // to pick a mutation), the menu, pause and the death screen are all behind
+  // the filter, which makes "the music opened up" mean "you are fighting".
+  _musicMuffled() {
+    return this.state !== 'playing' || this.waveState !== 'active';
+  }
+
   // Starts a fresh run from the menu or the game-over screen. Anything that
   // changes during play must be reset here, including the spawn timers -
   // leftover state used to carry into the next run.
   beginGame() {
-    this.sfx.ensure();
+    this._audioGesture();
     this.player.reset();
     this._clearEntities();
     this.score = 0;
@@ -2567,6 +2619,10 @@ class Game {
       this.camera.position.set(Math.sin(a) * 13, 5.5, Math.cos(a) * 13);
       this.camera.lookAt(0, 1, 0);
     }
+
+    // Outside the `playing` branch: the muffle applies to the menu, pause and
+    // death screens too, and none of those tick game time.
+    this.music.setMuffled(this._musicMuffled());
 
     this.effects.update(dt);
     this.renderer.render(this.scene, this.camera);

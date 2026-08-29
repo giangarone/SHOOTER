@@ -102,6 +102,11 @@ Open http://localhost:8123
 - Reloading shows twice over: the gun drops out of frame and rolls through the
   reload, and a ring sweeps round the crosshair as it completes
 - WebAudio synth SFX (no audio assets)
+- Looping soundtrack that ducks behind a lowpass filter whenever you are not
+  fighting - picking a mutation at the totems, paused, dead, or on the menu.
+  The cutoff sweeps over 0.7s rather than switching, so combat opening back up
+  is something you hear. Mute toggle on the start and pause screens, remembered
+  between sessions.
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart
 
@@ -287,6 +292,7 @@ js/icons.js         3D totem icons, built from shared primitives
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
+js/music.js         streaming soundtrack + combat/intermission lowpass
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/weapons.js       weapon stats + first-person models

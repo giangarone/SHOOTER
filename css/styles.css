@@ -253,6 +253,17 @@ html, body {
 }
 .overlay button:hover { background: #8ffaff; }
 #overlay-over button { background: var(--red); box-shadow: 0 0 26px rgba(255, 59, 48, 0.55); }
+/* Secondary next to the big call-to-action: outlined rather than filled, so
+   it never competes with START or RESUME for the first click. */
+.overlay .mute-btn {
+  margin-top: 4px; padding: 9px 22px;
+  font-size: 11px; letter-spacing: 0.26em;
+  color: var(--cyan); background: none;
+  border: 1px solid rgba(78, 243, 255, 0.4); box-shadow: none;
+}
+.overlay .mute-btn:hover { background: rgba(78, 243, 255, 0.12); }
+.overlay .mute-btn.off { color: var(--dim); border-color: rgba(138, 149, 179, 0.35); }
+.overlay .mute-btn.off:hover { background: rgba(138, 149, 179, 0.12); }
 #overlay-over button:hover { background: #ff6e60; }
 /* ---- credits, combo ---- */
 #credit-num {
