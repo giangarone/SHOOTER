@@ -263,15 +263,6 @@ const ICONS = {
     add(BOX(), DARK, [-0.14, -0.16, 0], [0.12, 0.24, 0.12], [0, 0, 0.3]);
     add(BOX(), glow, [-0.02, 0.13, 0], [0.16, 0.06, 0.1]);
   },
-  // The railgun: a barrel through two accelerator rings.
-  rail(add, glow) {
-    // Pale barrel through glowing rings. A dark barrel leaves two theme-colour
-    // rings floating on a pillar of the same colour, which reads as two holes.
-    add(CYL(), PALE, [0, 0, 0], [0.1, 0.74, 0.1], [0, 0, Math.PI / 2]);
-    add(TORUS(), glow, [-0.16, 0, 0], [0.52, 0.52, 0.52], [0, Math.PI / 2, 0]);
-    add(TORUS(), glow, [0.12, 0, 0], [0.52, 0.52, 0.52], [0, Math.PI / 2, 0]);
-    add(CONE(), glow, [0.42, 0, 0], [0.16, 0.2, 0.16], [0, 0, -Math.PI / 2]);
-  },
   // Fallback.
   shard(add, glow) {
     add(OCTA(), glow, [0, 0, 0], [0.55, 0.55, 0.55]);

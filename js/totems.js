@@ -196,9 +196,8 @@ export class Totem {
   /**
    * Assigns an offer and starts the rise.
    *
-   * @param {object} offer  { id, kind, name, theme, icon, rarityLabel,
-   *   rarityColor, effects, note } - see _buildOffers() in main.js. `kind` is
-   *   opaque here; main.js reads it back when the totem is claimed.
+   * @param {object} offer  { id, name, theme, icon, rarityLabel, rarityColor,
+   *   effects, note } - see _buildOffers() in main.js.
    */
   present(offer) {
     this.offer = offer;

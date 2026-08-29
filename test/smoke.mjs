@@ -42,8 +42,8 @@ try {
   // Poll while the game plays so transient spikes in the caps are caught, not
   // just whatever happens to be on screen at the end. Sixty seconds rather
   // than thirty: the bot walks to a totem every wave, which costs it time, and
-  // it has to reach wave 4 before the upgrade and weapon assertions below stop
-  // being vacuous. A longer run also gives the leak canaries more to work with.
+  // it has to reach wave 4 before the upgrade assertions below stop being
+  // vacuous. A longer run also gives the leak canaries more to work with.
   const samples = [];
   for (let i = 0; i < 60; i++) {
     await sleep(1000);
@@ -70,7 +70,6 @@ try {
   await page.screenshot({ path: 'test/shot.png' });
 
   console.log('REPORT', JSON.stringify(rep, null, 2));
-  console.log('LOADOUT', JSON.stringify(rep.slots));
   console.log('PEAK', JSON.stringify(peak));
   console.log('CONSOLE ERRORS', JSON.stringify(errors, null, 2));
 
@@ -87,18 +86,15 @@ try {
     // have banked credits and gained an upgrade. Without these the wave-clear
     // reward could stop firing entirely and every other check would still pass.
     ['earned credits', rep.credits > 0],
-    // Under ?autotest every set offers exactly one weapon, and the bot goes
-    // for it while its second slot is empty and avoids weapon totems once it
-    // is full. So the wave-1 clear always yields a weapon and the wave-2 clear
-    // always yields an upgrade - both guards below fire on a normal run rather
-    // than passing vacuously, which earlier revisions of these two checks did.
+    // The bot claims a totem every wave, so anything past wave 3 must have
+    // banked upgrades - the guard fires on a normal run rather than passing
+    // vacuously, which earlier revisions of it did.
     ['granted upgrades', rep.wave < 3 || rep.upgradeCount > 0],
     ['combo chained', rep.bestCombo >= 2],
-    // WEAPON_CHANCE is forced to 1 under ?autotest, so any run that cleared
-    // wave 2 must have been offered a weapon and claimed it into the second
-    // slot. Covers takeWeapon(), the model swap and the per-slot magazines.
-    ['picked up a weapon', rep.wave < 2 || rep.slots[1] !== null],
-    ['loadout intact', rep.slots[0] !== null && typeof rep.weapon === 'string'],
+    // One lit plate on the receiver per owned bullet mutation. Covers
+    // refreshGunMarks() being called on every draft pick, not just the first.
+    ['gun marks match build', rep.gunMarks === rep.markedUpgrades],
+    ['loadout intact', typeof rep.weapon === 'string'],
     ['no console errors', fatal.length === 0],
     // Guards against the checks below passing vacuously if a report field is
     // ever renamed or dropped.

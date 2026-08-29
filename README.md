@@ -19,7 +19,6 @@ Open http://localhost:8123
 | Mouse | Aim (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | R | Reload |
-| Q | Swap weapon |
 | Space | Jump |
 | E | Buy ammo / reroll at a station |
 | Esc | Pause |
@@ -50,13 +49,13 @@ Open http://localhost:8123
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
   (up to x3), and a wave cleared without taking damage pays double.
 - Escalating waves with per-wave HP / speed / damage scaling
-- **Three weapons**, two carried at once and swapped with Q: the full-auto
-  **Pulse Rifle**, a semi-auto **Scattergun** (8 pellets, murderous inside 2m,
-  useless past 10m) and a piercing **Railgun** that one-shots everything but a
-  tank and keeps going through the rank behind it. Magazines are per slot;
-  the reserve pool is shared.
-- Weapons appear on totems - claiming one fills your empty slot, or replaces
-  the gun in hand (the totem says which before you take it)
+- **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
+  to it, so a run's identity comes from the build rather than from the weapon.
+- **The gun shows its build.** Each mutation that changes what a bullet does -
+  Venom, Incendiary, Cryo, Terror, Petrify, Arc Rounds, Knockout, Detonator,
+  Blast Corpse, Twenty/Twenty - lights a small plate on the receiver in that
+  mutation's totem colour. Stat upgrades like Extended Mag do not, so the row
+  of plates reads as exactly what your shots now do to what they hit.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
 - Reloading shows twice over: the gun drops out of frame and rolls through the
   reload, and a ring sweeps round the crosshair as it completes
@@ -155,18 +154,22 @@ the foot of the platform rather than losing the route entirely.
 ## Weapons
 
 `js/weapons.js` is a data table in the same shape as `ENEMY_TYPES` and
-`UPGRADES`: a fourth gun is a stat block plus a `build()`. The stats there are
-BASE values that `player.mods` multiplies, so every upgrade in the pool already
-applies to whatever you are holding - that is the point of the table.
+`UPGRADES`: a second gun would be a stat block plus a `build()`. The run
+carries only the Pulse Rifle. The stats there are BASE values that
+`player.mods` multiplies, so every upgrade in the pool already applies to it -
+that is the point of the table.
 
-Every weapon's viewmodel is built once at startup and parented to the camera;
-a swap only toggles `visible`. Building a model per swap would allocate
-geometry for the whole session.
+The viewmodel is built once at startup and parented to the camera. Building one
+per equip would allocate geometry for the whole session.
 
-When balancing, check damage per second *after* reloads, not per shot. The
-scattergun first shipped at 8 pellets x 13 in a 6-shell magazine, which reads
-as a huge 104-damage shell but works out strictly worse than the starting rifle
-at every range once the short magazine and long reload are counted.
+The receiver carries a grid of twelve small emissive plates, built hidden with
+the model. `setGunMarks(model, colors)` lights one per owned mutation flagged
+`mark: true` in `UPGRADES`, in that upgrade's theme colour;
+`Player.refreshGunMarks()` calls it on every draft pick and on reset. Plates are
+toggled, never created per pick - a rebuild per draft would leak a material each
+time.
+
+When balancing, check damage per second *after* reloads, not per shot.
 
 ## Test
 

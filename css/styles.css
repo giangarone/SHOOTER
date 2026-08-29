@@ -96,8 +96,6 @@ html, body {
 }
 #weapon-line { display: flex; align-items: baseline; gap: 10px; }
 #weapon-name { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; color: var(--cyan); }
-#weapon-alt { font-size: 10px; letter-spacing: 0.16em; color: var(--dim); }
-#weapon-alt:empty { display: none; }
 #ammo-line { display: flex; align-items: baseline; gap: 8px; }
 #ammo-num { font-size: 40px; font-weight: 700; color: #fff; }
 #ammo-res { font-size: 15px; color: var(--dim); }

@@ -66,7 +66,6 @@ import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
 import { TotemArea } from './totems.js';
 import { NavGrid } from './nav.js';
-import { WEAPONS, WEAPON_KEYS } from './weapons.js';
 import { resolveCircle } from './utils.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
@@ -132,18 +131,6 @@ const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
-// Chance that one of the three totems offers a weapon instead of an upgrade,
-// and the first wave that can happen. Only weapons the player is not already
-// carrying are ever offered.
-// Forced to a certainty under ?autotest so the smoke test actually exercises
-// the weapon path - at 0.3 the bot only sometimes saw a weapon totem in a
-// 30-second run, which would have made the assertion flaky.
-// Both forced under ?autotest so the smoke test actually exercises the weapon
-// path. At 0.3 from wave 2 the bot -- which spends time walking to totems --
-// usually never saw a weapon totem inside a 30-second run, and the assertion
-// passed vacuously instead of covering anything.
-const WEAPON_CHANCE = autotest ? 1 : 0.3;
-const WEAPON_FROM_WAVE = autotest ? 1 : 2;
 
 class Game {
   constructor() {
@@ -266,7 +253,6 @@ class Game {
       this._botMove = { x: 0, z: 0 };
       this._wt = 0;
       this._dir = 0;
-      this._swapCd = 0;
       this.beginGame();
       window.__game = this;
       window.__report = () => ({
@@ -278,8 +264,13 @@ class Game {
         bestCombo: this.bestCombo,
         upgrades: { ...this.player.upgrades },
         upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
-        slots: [...this.player.slots],
         weapon: this.player.weapon.name,
+        // The receiver plates and the marked upgrades they stand for. Kept
+        // side by side so the smoke test can assert they agree.
+        gunMarks: this.player.gun.getObjectByName('marks').children
+          .reduce((n, m) => n + (m.visible ? 1 : 0), 0),
+        markedUpgrades: Object.keys(this.player.upgrades)
+          .filter((id) => UPGRADES[id] && UPGRADES[id].mark).length,
         maxHealth: this.player.maxHealth,
         magSize: this.player.magSize,
         enemies: this.enemies.length,
@@ -336,7 +327,6 @@ class Game {
         case 'Space': this.input.jump = true; e.preventDefault(); break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUseStation(); break;
-        case 'KeyQ': this.trySwapWeapon(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -496,11 +486,6 @@ class Game {
   tryReload() {
     if (this.state !== 'playing') return;
     if (this.player.startReload()) this.sfx.reload();
-  }
-
-  trySwapWeapon() {
-    if (this.state !== 'playing') return;
-    if (this.player.swapWeapon()) this.sfx.reload();
   }
 
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
@@ -942,25 +927,13 @@ class Game {
     // It SHOOTS the totem it wants rather than walking into it. Touch is a
     // 1.7m radius on totems spaced 3.6m apart, so a bot crossing the row to
     // reach a specific one clips whichever it passes and takes the wrong
-    // upgrade - which is what made `picked up a weapon` fail about one run in
-    // four, on the old code as well as the new. Shooting picks exactly the
-    // totem it aimed at. It walks toward the target at the same time, so a
-    // blocked line of sight resolves itself.
+    // upgrade. Shooting picks exactly the totem it aimed at. It walks toward
+    // the target at the same time, so a blocked line of sight resolves itself.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
-      // While the second slot is empty the bot goes for a weapon totem
-      // specifically, so the smoke test covers takeWeapon() deterministically
-      // instead of depending on which totem happened to be nearest.
-      const wantWeapon = !this.player.slots[1];
       let td = 1e9;
       for (const t of this.totemArea.totems) {
         if (!t.canClaim()) continue;
-        const isWeapon = t.offer && t.offer.kind === 'weapon';
-        if (wantWeapon && isWeapon) {
-          seekTotem = t;
-          break;
-        }
-        if (wantWeapon || isWeapon) continue;
         const d = t.pos.distanceTo(this.player.pos);
         if (d < td) {
           td = d;
@@ -979,20 +952,6 @@ class Game {
       }
     }
 
-    // Pick a weapon for the range. Without this the bot would hold a
-    // scattergun at twenty metres, deal almost nothing, and stall on a wave
-    // forever - which it did, silently, and left every downstream assertion
-    // passing vacuously. The cooldown stops it oscillating on the boundary.
-    this._swapCd -= 1 / 60;
-    const stowedKey = this.player.slots[this.player.slot === 0 ? 1 : 0];
-    if (best && stowedKey && this._swapCd <= 0) {
-      const wantShort = bd < 7;
-      const holdingShort = this.player.weapon.pellets > 1;
-      const stowedShort = WEAPONS[stowedKey].pellets > 1;
-      if (holdingShort !== wantShort && stowedShort === wantShort) {
-        if (this.player.swapWeapon()) this._swapCd = 2;
-      }
-    }
     // Line up on the totem before firing at it. Until the bot is in position
     // it holds fire, because a shot from the wrong angle claims the wrong
     // upgrade just as effectively as a good one claims the right one.
@@ -1158,16 +1117,14 @@ class Game {
     this._refreshStations();
   }
 
-  // Normalises upgrades and weapons into the one shape a totem can draw, so
-  // totems.js never has to know the difference between them.
+  // Puts each rolled upgrade into the shape a totem can draw.
   _buildOffers() {
     const ids = rollTotems(this.player.upgrades, this.wave, TOTEM_COUNT);
-    const offers = ids.map((id) => {
+    return ids.map((id) => {
       const def = UPGRADES[id];
       const owned = this.player.upgrades[id] || 0;
       return {
         id,
-        kind: 'upgrade',
         name: def.name,
         theme: def.theme,
         icon: def.icon,
@@ -1177,32 +1134,6 @@ class Game {
         note: owned > 0 ? 'OWNED ' + owned + ' / ' + def.max : '',
       };
     });
-
-    // Weapons the player is not already carrying can take over one slot of the
-    // set. Offering a weapon they already hold would be a wasted totem.
-    const missing = WEAPON_KEYS.filter((k) => !this.player.slots.includes(k));
-    if (
-      offers.length && missing.length &&
-      this.wave >= WEAPON_FROM_WAVE && Math.random() < WEAPON_CHANCE
-    ) {
-      const key = missing[(Math.random() * missing.length) | 0];
-      const w = WEAPONS[key];
-      const displaced = this.player.weaponToDisplace();
-      offers[(Math.random() * offers.length) | 0] = {
-        id: key,
-        kind: 'weapon',
-        name: w.name,
-        theme: w.theme,
-        icon: w.icon,
-        rarityLabel: 'WEAPON',
-        rarityColor: '#ffffff',
-        effects: w.effects,
-        // Spelling out the trade matters: with both slots full, taking a
-        // weapon throws one away, and that must never be a surprise.
-        note: displaced ? 'REPLACES ' + WEAPONS[displaced].name : 'FILLS 2ND SLOT',
-      };
-    }
-    return offers;
   }
 
   // Redraws both station labels. Only called when something they display
@@ -1224,15 +1155,11 @@ class Game {
   _claimTotem(totem) {
     if (!totem.canClaim()) return;
     const offer = totem.offer;
-    if (offer.kind === 'weapon') {
-      if (!this.player.takeWeapon(offer.id)) return;
-    } else if (!this.player.takeUpgrade(offer.id)) {
-      return;
-    }
+    if (!this.player.takeUpgrade(offer.id)) return;
     totem.claimed = true;
 
-    const owned = offer.kind === 'upgrade' ? this.player.upgrades[offer.id] : 1;
-    const max = offer.kind === 'upgrade' ? UPGRADES[offer.id].max : 1;
+    const owned = this.player.upgrades[offer.id];
+    const max = UPGRADES[offer.id].max;
     this.ui.showUpgrade({
       name: offer.name,
       effects: offer.effects,
@@ -1547,8 +1474,7 @@ class Game {
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);
-    const other = this.player.slots[this.player.slot === 0 ? 1 : 0];
-    this.ui.setWeapon(this.player.weapon.name, other ? WEAPONS[other].name : null);
+    this.ui.setWeapon(this.player.weapon.name);
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,

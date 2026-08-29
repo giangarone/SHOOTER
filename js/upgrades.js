@@ -243,7 +243,15 @@ export const UPGRADES = {
   // the player cannot see is a stat increase with extra steps, so each drives
   // a body tint and a particle drip (see STATUS_TINT in enemy.js) and the
   // colours are held distinct from each other and from the hit flash.
+  //
+  // `mark: true` also puts a plate in the theme colour on the gun's receiver
+  // (see setGunMarks in weapons.js). It belongs on upgrades that change what a
+  // bullet DOES to what it hits - a status, a chain, a blast, a second shot -
+  // and never on a stat change. Twelve plates fit; keep the marked set inside
+  // that. Passive numbers like magazine size or reload speed stay unmarked, or
+  // the readout stops meaning anything.
   venom: {
+    mark: true,
     name: 'VENOM ROUNDS',
     rarity: 'rare',
     max: 1,
@@ -256,6 +264,7 @@ export const UPGRADES = {
     },
   },
   incendiary: {
+    mark: true,
     name: 'INCENDIARY',
     rarity: 'rare',
     max: 1,
@@ -269,6 +278,7 @@ export const UPGRADES = {
     },
   },
   cryo: {
+    mark: true,
     name: 'CRYO ROUNDS',
     rarity: 'rare',
     max: 1,
@@ -278,6 +288,7 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.slowTime = 3 * n; },
   },
   terror: {
+    mark: true,
     name: 'TERROR',
     rarity: 'rare',
     max: 1,
@@ -287,6 +298,7 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.fearTime = 2 * n; },
   },
   petrify: {
+    mark: true,
     name: 'PETRIFY',
     rarity: 'rare',
     max: 1,
@@ -299,6 +311,7 @@ export const UPGRADES = {
     },
   },
   arcRounds: {
+    mark: true,
     name: 'ARC ROUNDS',
     rarity: 'rare',
     max: 1,
@@ -311,6 +324,7 @@ export const UPGRADES = {
     },
   },
   knockout: {
+    mark: true,
     name: 'KNOCKOUT DROPS',
     rarity: 'rare',
     max: 1,
@@ -332,6 +346,7 @@ export const UPGRADES = {
     },
   },
   detonator: {
+    mark: true,
     name: 'DETONATOR',
     rarity: 'cursed',
     max: 1,
@@ -345,6 +360,7 @@ export const UPGRADES = {
     },
   },
   blastCorpse: {
+    mark: true,
     name: 'BLAST CORPSE',
     rarity: 'cursed',
     max: 1,
@@ -357,6 +373,7 @@ export const UPGRADES = {
     },
   },
   twentyTwenty: {
+    mark: true,
     name: 'TWENTY/TWENTY',
     rarity: 'rare',
     max: 1,

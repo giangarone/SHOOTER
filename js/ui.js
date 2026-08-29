@@ -20,7 +20,6 @@ export class UI {
     this.ammoReload = $('ammo-reload');
     this.reloadRing = $('reload-ring');
     this.weaponName = $('weapon-name');
-    this.weaponAlt = $('weapon-alt');
     this.vignette = $('vignette');
     this.bannerEl = $('banner');
     this.hitmarker = $('hitmarker');
@@ -146,15 +145,10 @@ export class UI {
     }
   }
 
-  // `alt` is the stowed weapon's name, or null while the second slot is empty.
-  setWeapon(name, alt) {
+  setWeapon(name) {
     if (this._c.weapon !== name) {
       this._c.weapon = name;
       this.weaponName.textContent = name;
-    }
-    if (this._c.weaponAlt !== alt) {
-      this._c.weaponAlt = alt;
-      this.weaponAlt.textContent = alt ? 'Q  ' + alt : '';
     }
   }
 
