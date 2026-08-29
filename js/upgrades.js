@@ -267,15 +267,21 @@ export const UPGRADES = {
   bloodlust: {
     name: 'BLOODLUST',
     rarity: 'rare',
-    max: 2,
+    max: 1,
     theme: THEME.frenzy,
     icon: 'claw',
-    effects: (n) => [
-      ['FIRE RATE ' + step(n, pctUp(8)), GOOD],
-      ['PER KILL, STACKS 10', NOTE],
+    // A gun that starts worse and is bought back by the kill chain. Tied to
+    // the COMBO rather than to a timer of its own: the run already has one
+    // clock for "are you still killing", and a second one beside it would be
+    // two bars saying almost the same thing.
+    effects: [
+      ['-25% FIRE RATE', BAD],
+      ['+5% PER COMBO KILL', GOOD],
+      ['10 KILLS, UP TO +50%', NOTE],
     ],
     apply: (mods, n) => {
-      mods.bloodlust += 0.08 * n;
+      mods.fireRate *= Math.pow(0.75, n);
+      mods.bloodlust = 0.05 * n;
       mods.bloodlustMax = 10;
     },
   },
@@ -521,9 +527,12 @@ export const UPGRADES = {
     max: 2,
     theme: THEME.rage,
     icon: 'claw',
-    effects: (n) => [
-      ['DAMAGE ' + step(n, pctUp(50)), GOOD],
-      ['AT 1 HP, SCALING', NOTE],
+    // Deliberately no numbers: the shape of the deal is the whole pick, and a
+    // percentage that only pays at an HP the player is trying not to be at
+    // told them less than the sentence does.
+    effects: [
+      ['THE LESS HP YOU HAVE', NOTE],
+      ['THE MORE DAMAGE YOU DEAL', GOOD],
     ],
     apply: (mods, n) => { mods.berserk += 0.5 * n; },
   },
@@ -561,7 +570,8 @@ export const UPGRADES = {
     icon: 'ammoBox',
     effects: (n) => [
       [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
-      ['SKIP THE MAGAZINE', NOTE],
+      ['FIRE FROM THE RESERVE', NOTE],
+      ['SO YOU RELOAD LESS', GOOD],
     ],
     apply: (mods, n) => { mods.beltFeed = 0.1 * n; },
   },
@@ -659,18 +669,19 @@ export const UPGRADES = {
       mods.dotTime *= Math.pow(0.5, n);
     },
   },
-  deadAir: {
-    name: 'DEAD AIR',
+  breachRound: {
+    name: 'BREACH ROUND',
     rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.charge,
     icon: 'bomb',
-    effects: [['HOLD FIRE 4s:', GOOD], ['NEXT HIT BLASTS', GOOD], ['70 DMG IN 4m', NOTE]],
+    // Armed by the reload rather than by a timer, so it rewards a rhythm the
+    // player already has instead of asking them to stand still and not shoot.
+    effects: [['1st SHOT AFTER EVERY', GOOD], ['RELOAD EXPLODES', GOOD], ['70 DMG IN 4m', NOTE]],
     apply: (mods, n) => {
       mods.chargeDamage = 70 * n;
       mods.chargeRadius = 4;
-      mods.chargeTime = 4;
     },
   },
 };

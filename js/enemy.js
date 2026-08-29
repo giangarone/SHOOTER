@@ -96,10 +96,31 @@ const STATUS_TINT = {
 // Well above BODY_BASE_INTENSITY (0.18) so an afflicted enemy is obvious in a
 // crowd, and well below BODY_FLASH_INTENSITY (0.9) so it never reads as a hit.
 const STATUS_INTENSITY = 0.55;
-// Seconds between the two-particle drip that marks an afflicted enemy. The
-// tint alone is easy to miss on a distant enemy; the drip is what catches the
-// eye. Two particles per enemy per 0.3s stays far inside the 1024-slot buffer.
-const DRIP_INTERVAL = 0.3;
+// How each status behaves as particles. The body tint says WHICH status an
+// enemy is carrying, but only one at a time - an enemy can hold several and
+// can only wear one colour. The particles are what show the rest, and they
+// carry the character of the effect as motion rather than as colour alone:
+//
+//   burn    fast, hot, straight up - the only one that looks violent
+//   poison  slow bubbles drifting up off the body
+//   freeze  heavy crystals falling off it
+//   slow    a cold sink, thinner and slower than freeze
+//   fear    light wisps streaming upward and gone
+//
+// Every active status drips, not just the dominant one, so a poisoned and
+// burning enemy reads as both. Counts and intervals are deliberately small:
+// this runs per enemy per status, and a wave of twenty afflicted enemies has
+// to stay inside the 1024-slot particle buffer with room for combat on top.
+//
+// `up` is passed straight to Effects.burst(), where it biases the spray
+// upward; negative values sink.
+const STATUS_FX = {
+  burn: { interval: 0.14, count: 3, speed: 1.7, up: 2.8, life: 0.45, y: 0.9 },
+  poison: { interval: 0.22, count: 2, speed: 0.7, up: 1.7, life: 0.8, y: 0.8 },
+  freeze: { interval: 0.24, count: 3, speed: 0.6, up: -0.8, life: 0.7, y: 1.25 },
+  slow: { interval: 0.3, count: 2, speed: 0.5, up: -0.5, life: 0.65, y: 1.1 },
+  fear: { interval: 0.2, count: 2, speed: 1.3, up: 2.4, life: 0.4, y: 1.45 },
+};
 const SLOW_FACTOR = 0.5;
 // Scratch for the drip's spawn point. Module-level and reused: the drip runs
 // for every afflicted enemy several times a second.
@@ -142,7 +163,9 @@ export class Enemy {
     // and Incendiary gets both, rather than the larger of the two.
     this._dps = { poison: 0, burn: 0 };
     this._dotAcc = 0;
-    this._dripAcc = 0;
+    // One drip timer per status, so each effect keeps its own rhythm instead
+    // of every status on an enemy puffing on the same frame.
+    this._dripAcc = { freeze: 0, burn: 0, poison: 0, slow: 0, fear: 0 };
     // Last emissive colour written to bodyMat, so the tick can skip the
     // setHex() when nothing changed.
     this._tintHex = def.color;
@@ -361,17 +384,25 @@ export class Enemy {
       this.bodyMat.emissiveIntensity = tint === this.colorHex ? BODY_BASE_INTENSITY : STATUS_INTENSITY;
     }
 
-    if (!any) {
-      this._dripAcc = 0;
-      return;
-    }
-    this._dripAcc += dt;
-    if (this._dripAcc >= DRIP_INTERVAL && ctx.effects) {
-      this._dripAcc = 0;
-      // At chest height, not at the feet: a drip on the floor is hidden by the
-      // enemy itself from anywhere but point blank.
-      _dripAt.set(this.pos.x, 1.0, this.pos.z);
-      ctx.effects.burst(_dripAt, tint, 2, 0.8, 1.2, 0.45);
+    if (!any || !ctx.effects) return;
+    // One drip per ACTIVE status, each on its own timer and in its own colour.
+    // Spawn heights come from STATUS_FX so a rising effect starts low on the
+    // body and a falling one starts high - a drip that began at the feet would
+    // be hidden by the enemy itself from anywhere but point blank.
+    for (const k of STATUS_ORDER) {
+      if (this.status[k] <= 0) continue;
+      const fx = STATUS_FX[k];
+      this._dripAcc[k] += dt;
+      if (this._dripAcc[k] < fx.interval) continue;
+      this._dripAcc[k] = 0;
+      // Spread across the body rather than all from one point, or the drip
+      // reads as a single jet coming out of the enemy's chest.
+      _dripAt.set(
+        this.pos.x + (Math.random() - 0.5) * 0.5,
+        fx.y + (Math.random() - 0.5) * 0.3,
+        this.pos.z + (Math.random() - 0.5) * 0.5
+      );
+      ctx.effects.burst(_dripAt, STATUS_TINT[k], fx.count, fx.speed, fx.up, fx.life);
     }
   }
 

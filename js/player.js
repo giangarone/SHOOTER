@@ -38,8 +38,8 @@ const DEFAULT_MODS = {
   ammoRegen: 0,         // reserve rounds per second
   creditMult: 1,        // multiplier on credits earned
   ammoOnKill: 0,        // reserve rounds granted per kill
-  bloodlust: 0,         // fire rate gained per kill stack
-  bloodlustMax: 0,      // maximum kill stacks
+  bloodlust: 0,         // Bloodlust: fire rate gained per kill in the combo
+  bloodlustMax: 0,      // Bloodlust: kills past which it stops climbing
   shockwave: 0,         // damage dealt to nearby enemies when hit
   shockwaveRadius: 0,
   steady: 0,            // extra damage fraction while standing still
@@ -90,9 +90,8 @@ const DEFAULT_MODS = {
   entropyBelow: 0,      // Entropy: HP fraction under which statuses never end
   dotPower: 1,          // Malady: multiplier on poison and burn damage
   dotTime: 1,           // Malady: multiplier on poison and burn duration
-  chargeDamage: 0,      // Dead Air: blast on the first shot after a pause
+  chargeDamage: 0,      // Breach Round: blast on the first shot after a reload
   chargeRadius: 0,
-  chargeTime: 0,        // seconds of held fire that arm it
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -130,9 +129,8 @@ export class Player {
     this.maxReserve = 300;
     this.reserveAmmo = 90;
     this.fireCd = 0;
-    // When the last shot went off, for Dead Air. Starts far enough back that
-    // the first shot of a run is charged.
-    this.lastShot = -99;
+    // Breach Round: set by a finished reload, spent by the next shot.
+    this.breachReady = false;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
     this.reloading = 0;
@@ -148,7 +146,6 @@ export class Player {
     this.shield = 0;
     this.shieldEnd = 0;
     this.bloodlustStacks = 0;
-    this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
     // Holy Mantle's charge, re-armed at every wave start, and Dead Cat's
     // revive counter, which is spent once per run and not refilled.
@@ -250,14 +247,19 @@ export class Player {
     this.dodgeEnd = time + DODGE_TIME;
   }
 
-  // Called by main.js on every kill. Bloodlust and Vampiric Rounds use it.
+  // Called by main.js on every kill. Only Vampiric Rounds uses it now:
+  // Bloodlust rides the combo counter, which main.js owns, and is pushed in
+  // through setBloodlustStacks() whenever that counter moves.
   onKill(time) {
     if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
       this.health = Math.min(this.maxHealth, this.health + 1);
     }
-    if (this.mods.bloodlust <= 0) return;
-    this.bloodlustStacks = Math.min(this.mods.bloodlustMax, this.bloodlustStacks + 1);
-    this.bloodlustEnd = time + 4;
+  }
+
+  // Bloodlust. `kills` is the length of the CURRENT combo; the cap is the mod
+  // so the upgrade owns its own ceiling.
+  setBloodlustStacks(kills) {
+    this.bloodlustStacks = Math.min(this.mods.bloodlustMax, kills);
   }
 
   // Holy Mantle. Called at the start of every wave: the ward is a per-wave
@@ -266,7 +268,9 @@ export class Player {
     this.wardReady = this.mods.wardPerWave > 0;
   }
 
-  // Current fire-rate multiplier from Bloodlust stacks.
+  // Current fire-rate multiplier from Bloodlust's kill chain. It is paid ON
+  // TOP of the flat penalty the upgrade applies to mods.fireRate, so a cold
+  // gun with Bloodlust is worse than no Bloodlust at all - that is the deal.
   bloodlustMult() {
     if (this.bloodlustStacks <= 0) return 1;
     return 1 + this.mods.bloodlust * this.bloodlustStacks;
@@ -285,11 +289,10 @@ export class Player {
     this._equipModel();
     this.refreshGunMarks();
     this.bloodlustStacks = 0;
-    this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
     this.wardReady = false;
     this.livesUsed = 0;
-    this.lastShot = -99;
+    this.breachReady = false;
     this.dodgeEnd = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
@@ -350,7 +353,6 @@ export class Player {
       this.shield = 0;
       this.shieldEnd = 0;
     }
-    if (this.bloodlustStacks > 0 && time >= this.bloodlustEnd) this.bloodlustStacks = 0;
 
     // Ammo Fabricator. Accumulated as a float and spent in whole rounds, so a
     // sub-1-round-per-second rate still pays out instead of truncating to
@@ -376,6 +378,7 @@ export class Player {
         this.mag += take;
         this.reserveAmmo -= take;
         reloadFinished = true;
+        this.breachReady = true;
       }
     }
 

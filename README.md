@@ -52,9 +52,9 @@ Open http://localhost:8123
 - **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
   to it, so a run's identity comes from the build rather than from the weapon.
 - **The gun shows its build.** Each mutation that changes what a bullet does -
-  Venom, Incendiary, Piercing Shot, Dead Air and fifteen others - sets a small
-  block into the top of the receiver in that mutation's totem colour, in two
-  rows down the barrel. Stat upgrades like Extended Mag do not, so the row
+  Venom, Incendiary, Piercing Shot, Breach Round and fifteen others - sets a
+  small block into the top of the receiver in that mutation's totem colour, in
+  two rows down the barrel. Stat upgrades like Extended Mag do not, so the row
   of gems reads as exactly what your shots now do to what they hit. Twenty
   sockets, filled front to back; an empty socket is never drawn.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake

@@ -33,13 +33,6 @@ export class UI {
     this.comboMult = $('combo-mult');
     this.comboCount = $('combo-count');
     this.comboBar = $('combo-bar').firstElementChild;
-    this.revealEl = $('upgrade-reveal');
-    this.revealCard = $('reveal-card');
-
-    this.revealRarity = $('reveal-rarity');
-    this.revealName = $('reveal-name');
-    this.revealEffects = $('reveal-effects');
-    this.revealStack = $('reveal-stack');
     this.promptEl = $('prompt');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
@@ -120,7 +113,7 @@ export class UI {
   setCredits(n) {
     if (this._c.credits !== n) {
       this._c.credits = n;
-      this.creditNum.textContent = n.toLocaleString() + 'c';
+      this.creditNum.textContent = '$' + n.toLocaleString();
     }
   }
   // `kills` is the current chain length and `fraction` is 0..1 of the time
@@ -237,35 +230,6 @@ export class UI {
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
   }
-  // Wave-end upgrade reveal. Deliberately not an overlay: it takes no input,
-  // never pauses the game and animates itself out, so the player keeps
-  // fighting while it plays.
-  //
-  // Same remove-reflow-re-add trick as banner(): without the forced reflow the
-  // browser coalesces both class changes and the animation never replays, so
-  // two upgrades in a row would show only the first.
-  showUpgrade(m) {
-    this.revealCard.style.color = m.color;
-    this.revealRarity.textContent = m.rarity;
-    this.revealName.textContent = m.name;
-    // Same signed effect lines the totem showed, in the same colours, so the
-    // confirmation reads as the thing the player just walked into.
-    this.revealEffects.textContent = '';
-    for (const [text, sign] of m.effects) {
-      const el = document.createElement('div');
-      el.className = 'fx ' + (sign > 0 ? 'good' : sign < 0 ? 'bad' : 'note');
-      el.textContent = text;
-      this.revealEffects.appendChild(el);
-    }
-    this.revealStack.textContent = m.owned > 1 ? 'STACK ' + m.owned + ' / ' + m.max : 'NEW';
-    this.revealEl.classList.remove('show');
-    void this.revealEl.offsetWidth;
-    this.revealEl.classList.add('show');
-  }
-  hideUpgrade() {
-    this.revealEl.classList.remove('show');
-  }
-
   // Station prompt. `text` is null when the player is not near a station.
   // Compared against the last string written, so standing next to a terminal
   // does not rewrite the DOM sixty times a second.
@@ -288,7 +252,6 @@ export class UI {
     this._c = {};
     this.comboEl.classList.add('hidden');
     this.promptEl.classList.add('hidden');
-    this.revealEl.classList.remove('show');
     for (const entry of Object.values(this._buffEls)) {
       entry.el.style.display = 'none';
       entry.shown = false;

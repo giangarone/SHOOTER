@@ -176,11 +176,12 @@ class Game {
     this.credits = 0;
     this.comboKills = 0;
     this.comboTimer = 0;
+    this.player.setBloodlustStacks(0);
     this.bestCombo = 0;
     // Reset at the start of every wave; drives the perfect-clear bonus.
     this.waveDamageTaken = 0;
     // Credits paid by the last wave clear, and whether it was flawless. Both
-    // are shown on the upgrade reveal.
+    // are shown in the wave-cleared banner.
     this.lastGain = 0;
     this.lastPerfect = false;
     this.wave = 0;
@@ -223,7 +224,7 @@ class Game {
     this._shotHits = new Set();
     this._blastAt = new THREE.Vector3();
     this._blastHit = false;
-    // Where the last pellet stopped, for Dead Air's blast.
+    // Where the last pellet stopped, for Breach Round's blast.
     this._lastImpact = new THREE.Vector3();
     this._pullTo = new THREE.Vector3();
     this._shardDir = new THREE.Vector3();
@@ -484,7 +485,6 @@ class Game {
     this.waveDamageTaken = 0;
     this.lastGain = 0;
     this.lastPerfect = false;
-    this.ui.hideUpgrade();
     this.totemArea.dismiss();
     this.wave = 0;
     this.queue.length = 0;
@@ -581,8 +581,8 @@ class Game {
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
     this.comboKills = 0;
     this.comboTimer = 0;
+    this.player.setBloodlustStacks(0);
     this.ui.setPrompt(null, false);
-    this.ui.hideUpgrade();
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this.sfx.kill();
   }
@@ -612,6 +612,7 @@ class Game {
     this.comboKills++;
     this.comboTimer = COMBO_WINDOW;
     if (this.comboKills > this.bestCombo) this.bestCombo = this.comboKills;
+    this.player.setBloodlustStacks(this.comboKills);
   }
 
   // Reactive Plating. Detonates around the player when they are hit; damage
@@ -791,8 +792,8 @@ class Game {
     }
 
     if (!end) end = ray.ray.at(60, this._rayEnd);
-    // Dead Air detonates wherever the shot stopped - an enemy, a wall or the
-    // floor - so the last impact point is kept for the caller.
+    // Breach Round detonates wherever the shot stopped - an enemy, a wall or
+    // the floor - so the last impact point is kept for the caller.
     this._lastImpact.copy(end);
     this.effects.tracer(muzzle, end);
     hits.length = 0;
@@ -816,12 +817,11 @@ class Game {
     if (res !== 'shot') return;
 
     const mods = this.player.mods;
-    // Dead Air arms on the GAP between shots, so it is read before this shot
-    // stamps the clock. Reloads do not reset it: standing still through a
-    // reload is exactly the pause it is paying you for.
-    const charged = mods.chargeDamage > 0
-      && this.time - this.player.lastShot >= mods.chargeTime;
-    this.player.lastShot = this.time;
+    // Breach Round. The reload arms it and this shot spends it, whether or not
+    // it hits anything - a wasted breach round is the cost of firing one at
+    // nothing, and it re-arms on the next reload either way.
+    const charged = mods.chargeDamage > 0 && this.player.breachReady;
+    this.player.breachReady = false;
 
     // Cursed Ammo, rolled once per trigger pull. The floor is what keeps it
     // playable: a held trigger must never be able to kill you on its own.
@@ -865,8 +865,8 @@ class Game {
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
     }
-    // Dead Air fires wherever the shot stopped, which is why it is here and
-    // not in the enemy branch: a charged round buried in a wall still goes off.
+    // Breach Round fires wherever the shot stopped, which is why it is here and
+    // not in the enemy branch: a breach round buried in a wall still goes off.
     if (charged) {
       this._blast(this._lastImpact, mods.chargeDamage, mods.chargeRadius, null, false);
       this.effects.addShake(0.2);
@@ -1173,7 +1173,7 @@ class Game {
         this.score += 100 * this.wave;
         this._payClearBonus();
         this._presentTotems();
-        let msg = 'WAVE ' + this.wave + ' CLEARED  +' + this.lastGain + 'c';
+        let msg = 'WAVE ' + this.wave + ' CLEARED  +$' + this.lastGain;
         if (this.lastPerfect) msg += '  FLAWLESS';
         this.ui.banner(msg);
         this.sfx.wave();
@@ -1239,32 +1239,24 @@ class Game {
     const area = this.totemArea;
     area.ammoStation.setLabel(
       AMMO_PURCHASE.name,
-      AMMO_PURCHASE.cost + 'c',
+      '$' + AMMO_PURCHASE.cost,
       this.credits >= AMMO_PURCHASE.cost && AMMO_PURCHASE.enabled(this.player)
     );
     const cost = rerollCost(area.rerolls);
-    area.rerollStation.setLabel('REROLL', cost + 'c', this.credits >= cost && area.active);
+    area.rerollStation.setLabel('REROLL', '$' + cost, this.credits >= cost && area.active);
   }
 
   // Grants the upgrade a totem is offering and sinks the whole set. Every
   // claim path - touch and shoot - funnels through here, so the guard against
-  // double-claiming lives in exactly one place.
+  // double-claiming lives in exactly one place. The pick is confirmed by the
+  // burst and the gun itself, not by a card: the totem the player walked into
+  // already said what it was.
   _claimTotem(totem) {
     if (!totem.canClaim()) return;
     const offer = totem.offer;
     if (!this.player.takeUpgrade(offer.id)) return;
     totem.claimed = true;
 
-    const owned = this.player.upgrades[offer.id];
-    const max = UPGRADES[offer.id].max;
-    this.ui.showUpgrade({
-      name: offer.name,
-      effects: offer.effects,
-      rarity: offer.rarityLabel,
-      color: '#' + offer.theme.toString(16).padStart(6, '0'),
-      owned,
-      max,
-    });
     this.effects.burst(
       this._killPos.set(totem.pos.x, 1.4, totem.pos.z), offer.theme, 30, 7, 2.5, 0.7
     );
@@ -1296,13 +1288,13 @@ class Game {
     } else if (st.kind === 'ammo') {
       this.ui.setPrompt(
         '<b>SHOOT</b> / <b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + AMMO_PURCHASE.cost + 'c</span>',
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + AMMO_PURCHASE.cost + '</span>',
         false
       );
     } else {
       this.ui.setPrompt(
         '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
-        + '<span class="prompt-cost">' + rerollCost(area.rerolls) + 'c</span>',
+        + '<span class="prompt-cost">$' + rerollCost(area.rerolls) + '</span>',
         false
       );
     }
@@ -1319,12 +1311,12 @@ class Game {
   _stationBlocked(st) {
     if (st.kind === 'ammo') {
       if (!AMMO_PURCHASE.enabled(this.player)) return 'AMMO FULL';
-      if (this.credits < AMMO_PURCHASE.cost) return 'NEED ' + AMMO_PURCHASE.cost + 'c';
+      if (this.credits < AMMO_PURCHASE.cost) return 'NEED $' + AMMO_PURCHASE.cost;
       return null;
     }
     const cost = rerollCost(this.totemArea.rerolls);
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
-    if (this.credits < cost) return 'NEED ' + cost + 'c';
+    if (this.credits < cost) return 'NEED $' + cost;
     return null;
   }
 
@@ -1704,7 +1696,12 @@ class Game {
       if (this.emptyClickCd > 0) this.emptyClickCd -= dt;
       if (this.comboTimer > 0) {
         this.comboTimer -= dt;
-        if (this.comboTimer <= 0) this.comboKills = 0;
+        // The chain lapsing is what takes Bloodlust's bonus away, so the
+        // upgrade has exactly one clock and the player can already see it.
+        if (this.comboTimer <= 0) {
+          this.comboKills = 0;
+          this.player.setBloodlustStacks(0);
+        }
       }
       if (this.autoTest) this._autoInput();
       const reloaded = this.player.update(dt, this.input, this.arena.obstacles, this.time);
