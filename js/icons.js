@@ -263,6 +263,33 @@ const ICONS = {
     add(BOX(), DARK, [-0.14, -0.16, 0], [0.12, 0.24, 0.12], [0, 0, 0.3]);
     add(BOX(), glow, [-0.02, 0.13, 0], [0.16, 0.06, 0.1]);
   },
+  // Gravity Rounds: three rings drawing in on one core.
+  vortex(add, glow) {
+    add(SPHERE(), glow, [0, 0, 0], [0.3, 0.3, 0.3]);
+    add(TORUS(), DARK, [0, 0.18, 0], [0.9, 0.9, 0.9], [Math.PI / 2, 0, 0]);
+    add(TORUS(), glow, [0, 0, 0], [1.3, 1.3, 1.3], [Math.PI / 2, 0, 0]);
+    add(TORUS(), DARK, [0, -0.18, 0], [0.9, 0.9, 0.9], [Math.PI / 2, 0, 0]);
+  },
+  // Evasion: a swept wing.
+  wing(add, glow) {
+    add(BOX(), DARK, [0, 0, 0], [0.16, 0.5, 0.16]);
+    add(TETRA(), glow, [0.28, 0.1, 0], [0.7, 0.5, 0.3], [0, 0, -0.5]);
+    add(TETRA(), glow, [-0.28, 0.1, 0], [0.7, 0.5, 0.3], [0, 0, 0.5]);
+  },
+  // Ashen: a low cloud of lumps.
+  cloud(add, glow) {
+    add(SPHERE(), glow, [0, 0, 0], [0.62, 0.5, 0.5]);
+    add(SPHERE(), glow, [-0.26, -0.1, 0], [0.42, 0.36, 0.4]);
+    add(SPHERE(), glow, [0.26, -0.08, 0], [0.46, 0.38, 0.4]);
+    add(SPHERE(), DARK, [0.06, 0.22, 0], [0.36, 0.32, 0.34]);
+  },
+  // Entropy: an hourglass whose sand has stopped.
+  hourglass(add, glow) {
+    add(CONE(), glow, [0, 0.2, 0], [0.62, 0.42, 0.62], [Math.PI, 0, 0]);
+    add(CONE(), DARK, [0, -0.2, 0], [0.62, 0.42, 0.62]);
+    add(BOX(), DARK, [0, 0.44, 0], [0.7, 0.1, 0.7]);
+    add(BOX(), DARK, [0, -0.44, 0], [0.7, 0.1, 0.7]);
+  },
   // Fallback.
   shard(add, glow) {
     add(OCTA(), glow, [0, 0, 0], [0.55, 0.55, 0.55]);

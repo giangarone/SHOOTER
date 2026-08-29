@@ -52,10 +52,11 @@ Open http://localhost:8123
 - **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
   to it, so a run's identity comes from the build rather than from the weapon.
 - **The gun shows its build.** Each mutation that changes what a bullet does -
-  Venom, Incendiary, Cryo, Terror, Petrify, Arc Rounds, Knockout, Detonator,
-  Blast Corpse, Twenty/Twenty - lights a small plate on the receiver in that
-  mutation's totem colour. Stat upgrades like Extended Mag do not, so the row
-  of plates reads as exactly what your shots now do to what they hit.
+  Venom, Incendiary, Piercing Shot, Dead Air and fifteen others - sets a small
+  faceted gem into the top of the receiver in that mutation's totem colour, in
+  two rows down the barrel. Stat upgrades like Extended Mag do not, so the row
+  of gems reads as exactly what your shots now do to what they hit. Twenty
+  sockets, filled front to back; an empty socket is never drawn.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
 - Reloading shows twice over: the gun drops out of frame and rolls through the
   reload, and a ring sweeps round the crosshair as it completes
@@ -96,6 +97,25 @@ owned, and its lines read `current → next` (`CHANCE 50% → 75%`, `FIRE RATE
 pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
+
+The pool is 41 upgrades: 10 commons, 25 rares and 6 cursed. A specific rare
+mutation turns up in roughly 6-7% of totem sets, so a run sees a slice of the
+pool rather than all of it - that is the point, but it means a new upgrade only
+matters if it is worth taking on sight, without a partner card.
+
+Where a new upgrade's hook goes, by what it reacts to:
+
+| Reacts to | Hook |
+| --- | --- |
+| the bullet, per pellet | `_firePellet()` in `main.js` |
+| the shot, once per trigger pull | `shoot()`, and the `_shotHits` guard inside `_firePellet()` |
+| an enemy dying | the sweep in `_updateEnemies()`, recorded via `_recordDeath()` and played in `_playDeaths()` |
+| damage to the player | `_hurtPlayer()` |
+| the gun's own state | `Player.tryShoot()` / `Player.update()` |
+| an enemy's own timers | `Enemy._tickStatus()`, reading `ctx.mods` |
+
+Deaths are recorded and played AFTER the sweep, never inline: a corpse effect
+that ran mid-sweep would read the enemy list while it is half-compacted.
 
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
 with rares getting commoner as the run goes on.
@@ -169,12 +189,14 @@ that is the point of the table.
 The viewmodel is built once at startup and parented to the camera. Building one
 per equip would allocate geometry for the whole session.
 
-The receiver carries a grid of twelve small emissive plates, built hidden with
-the model. `setGunMarks(model, colors)` lights one per owned mutation flagged
-`mark: true` in `UPGRADES`, in that upgrade's theme colour;
-`Player.refreshGunMarks()` calls it on every draft pick and on reset. Plates are
-toggled, never created per pick - a rebuild per draft would leak a material each
-time.
+The receiver carries twenty sockets, each a dark bezel with a faceted gem in
+it, built hidden with the model. `setGunMarks(model, colors)` fills one per
+owned mutation flagged `mark: true` in `UPGRADES`, in that upgrade's theme
+colour; `Player.refreshGunMarks()` calls it on every draft pick and on reset.
+Sockets are toggled, never created per pick - a rebuild per draft would leak a
+material each time. The bezel is what makes a gem read as set INTO the gun
+rather than painted on it: at this size the facets alone are too subtle, and it
+is the shadow line around the stone that carries the depth.
 
 When balancing, check damage per second *after* reloads, not per shot.
 

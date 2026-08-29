@@ -57,44 +57,79 @@ function buildPulseRifle() {
   return g;
 }
 
-// MUTATION MARKS. A grid of small emissive plates on the left flank of the
-// receiver - the face the camera actually sees - one lit per mutation the gun
-// is carrying, in that mutation's totem colour. It is the only readout of a
-// build that does not require opening anything: the gun visibly accumulates.
+// MUTATION MARKS. Small faceted gems set into the TOP of the receiver, one lit
+// per mutation the gun is carrying, in that mutation's totem colour. It is the
+// only readout of a build that does not require opening anything: the gun
+// visibly accumulates as the run goes on.
 //
-// The plates are built once and toggled, not created per pick, for the same
+// They sit on the top deck rather than the flank because the top is the face
+// that stays visible through the whole idle sway and the reload dip, and
+// because two rows down the barrel read as a rail of sockets - a natural place
+// for something to be set into - where a block on the side read as decal.
+//
+// Each mark is a faceted gem sunk into a dark bezel, because relief is what
+// separates "set into the gun" from "painted on it": at 1.5cm across the
+// facets alone are too subtle to read, and it is the shadow line of the socket
+// around the stone that sells the depth. Flat shading keeps the facets legible
+// at that size - a smooth normal just looks like a blurry dot.
+//
+// The bezel is hidden with its gem rather than always shown. Twenty empty
+// sockets on a gun that has earned nothing yet reads as damage, not as space
+// waiting to be filled.
+//
+// The gems are built once and toggled, not created per pick, for the same
 // reason the models are: a rebuild runs on every draft and would leak a
-// material each time. MARK_MAX is the number of markable upgrades in the pool;
-// extras beyond it are simply not shown rather than overflowing the receiver.
-const MARK_MAX = 12;
-const MARK_COLS = 4;
+// material each time. MARK_MAX is the ceiling on markable upgrades in the
+// pool; extras beyond it are not shown rather than overflowing the receiver.
+const MARK_MAX = 20;
+// Half the deck width apart, and far enough down the barrel to clear the grip.
+const MARK_X = 0.021;
+const MARK_Z0 = 0.15;
+const MARK_DZ = 0.031;
 
 function buildMarks() {
   const g = new THREE.Group();
   g.name = 'marks';
-  const geom = new THREE.BoxGeometry(0.008, 0.03, 0.03);
+  const gemGeom = new THREE.OctahedronGeometry(0.0115, 0);
+  const bezelGeom = new THREE.BoxGeometry(0.026, 0.012, 0.026);
+  const bezelMat = mat({ color: 0x11161f, roughness: 0.5, metalness: 0.8 });
   for (let i = 0; i < MARK_MAX; i++) {
-    const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({
-      color: 0x0b0e14, emissive: 0xffffff, emissiveIntensity: 1.6,
-      roughness: 0.3, metalness: 0.4,
+    const socket = new THREE.Group();
+    // Two columns running down the barrel, near column first so the row the
+    // player sees best is the one that fills up first.
+    socket.position.set(
+      i % 2 === 0 ? -MARK_X : MARK_X,
+      0.064,
+      MARK_Z0 - Math.floor(i / 2) * MARK_DZ
+    );
+    const bezel = new THREE.Mesh(bezelGeom, bezelMat);
+    bezel.rotation.y = Math.PI / 4;
+    const gem = new THREE.Mesh(gemGeom, new THREE.MeshStandardMaterial({
+      color: 0x0b0e14, emissive: 0xffffff, emissiveIntensity: 1.25,
+      roughness: 0.2, metalness: 0.5, flatShading: true,
     }));
-    // Filled left to right along the barrel, then down a row.
-    m.position.set(-0.05, 0.04 - Math.floor(i / MARK_COLS) * 0.04, 0.06 - (i % MARK_COLS) * 0.045);
-    m.visible = false;
-    g.add(m);
+    // Squashed and turned 45 degrees: a low cap sitting proud of its socket
+    // with a facet toward the player, not a spike standing off the gun.
+    gem.scale.set(1, 0.75, 1);
+    gem.rotation.y = Math.PI / 4;
+    gem.position.y = 0.009;
+    socket.add(bezel, gem);
+    socket.userData.gem = gem;
+    socket.visible = false;
+    g.add(socket);
   }
   return g;
 }
 
-// Lights the first `colors.length` plates on a model and hides the rest.
+// Fills the first `colors.length` sockets on a model and empties the rest.
 // Called by Player whenever the owned-upgrade list changes.
 export function setGunMarks(model, colors) {
   const marks = model.getObjectByName('marks');
   if (!marks) return;
   for (let i = 0; i < marks.children.length; i++) {
-    const m = marks.children[i];
-    m.visible = i < colors.length;
-    if (m.visible) m.material.emissive.setHex(colors[i]);
+    const socket = marks.children[i];
+    socket.visible = i < colors.length;
+    if (socket.visible) socket.userData.gem.material.emissive.setHex(colors[i]);
   }
 }
 

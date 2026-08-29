@@ -317,8 +317,18 @@ export class Enemy {
   // current and drip a couple of particles. Called at the top of update().
   _tickStatus(dt, ctx) {
     let any = false;
+    // Entropy. Under the threshold the timers simply stop running: what is
+    // already on an enemy stays on it until it dies. It is deliberately a
+    // hold rather than a refresh, so it can never apply a status the player
+    // did not put there.
+    const held = ctx.mods && ctx.mods.entropyBelow > 0
+      && this.hp <= this.maxHp * ctx.mods.entropyBelow;
     for (const k of STATUS_ORDER) {
       if (this.status[k] <= 0) continue;
+      if (held) {
+        any = true;
+        continue;
+      }
       this.status[k] -= dt;
       if (this.status[k] <= 0) {
         this.status[k] = 0;
@@ -634,6 +644,65 @@ export class Projectile {
     if (this.pos.y <= 0.03) return 'wall';
     if (pointInObstacle(this.pos, ctx.obstacles)) return 'wall';
     return 'alive';
+  }
+}
+
+// Reload Burst's shard. The one projectile the PLAYER owns: it flies flat and
+// outward, explodes on an enemy, an obstacle or a short fuse, and cannot hurt
+// the player - that is the whole promise of the upgrade, so there is no
+// player-damage branch here to get wrong later.
+//
+// Damage is dealt through ctx.onBlast rather than inline: radial falloff and
+// the enemy list both live in main.js, and a second copy of that arithmetic
+// here would be one more place for the two to disagree.
+export class Shard {
+  constructor(scene, glowTex, x, y, z, dirX, dirZ, speed, damage, radius) {
+    this.pos = new THREE.Vector3(x, y, z);
+    this.vel = new THREE.Vector3(dirX, 0, dirZ).normalize().multiplyScalar(speed);
+    this.damage = damage;
+    this.radius = radius;
+    this.life = 0.7;
+    this.exploded = false;
+
+    const mats = grenadeMaterials(glowTex);
+    this.mesh = new THREE.Mesh(geo('shard', () => new THREE.OctahedronGeometry(0.12, 0)), mats.core);
+    const sp = new THREE.Sprite(mats.glow);
+    sp.scale.setScalar(0.8);
+    this.mesh.add(sp);
+    this.mesh.position.copy(this.pos);
+    scene.add(this.mesh);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    if (this.life <= 0) {
+      this.explode(ctx);
+      return 'expired';
+    }
+    this.pos.addScaledVector(this.vel, dt);
+    this.mesh.position.copy(this.pos);
+    this.mesh.rotation.x += dt * 12;
+    this.mesh.rotation.y += dt * 9;
+
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      if (this.pos.distanceTo(e.pos) < e.radius + 0.4) {
+        this.explode(ctx);
+        return 'exploded';
+      }
+    }
+    if (pointInObstacle(this.pos, ctx.obstacles)) {
+      this.explode(ctx);
+      return 'exploded';
+    }
+    return 'alive';
+  }
+
+  explode(ctx) {
+    if (this.exploded) return;
+    this.exploded = true;
+    ctx.onBlast(this.pos, this.damage, this.radius);
+    this.mesh.visible = false;
   }
 }
 

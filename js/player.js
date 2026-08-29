@@ -69,12 +69,41 @@ const DEFAULT_MODS = {
   volleyDamage: 1,      // multiplier on each of them
   wardPerWave: 0,       // Holy Mantle: free hits granted at each wave start
   extraLives: 0,        // Dead Cat: revives per run
+  pierce: 0,            // Piercing Shot: extra enemies a shot passes through
+  pierceFalloff: 1,     // damage multiplier per enemy already pierced
+  gravityPull: 0,       // Gravity Rounds: metres enemies are dragged inward
+  gravityRadius: 0,
+  berserk: 0,           // Berserker: bonus damage at zero health
+  ammoPerShot: 1,       // Triple Tap: rounds a single shot costs
+  cursedChance: 0,      // Cursed Ammo: chance a shot costs 1 HP and hits harder
+  cursedDamage: 0,
+  beltFeed: 0,          // Belt Feed: chance a shot comes from the reserve
+  dodgeChance: 0,       // Evasion: chance an incoming hit is avoided outright
+  reloadShards: 0,      // Reload Burst: shards thrown when a reload finishes
+  reloadShardDamage: 0,
+  shatterDamage: 0,     // Crystallize: blast when a frozen enemy dies
+  shatterRadius: 0,
+  ashDps: 0,            // Ashen: lingering cloud where a burning enemy died
+  ashRadius: 0,
+  ashTime: 0,
+  poisonSpread: 0,      // Neurotoxin: radius poison jumps to a clean enemy
+  entropyBelow: 0,      // Entropy: HP fraction under which statuses never end
+  dotPower: 1,          // Malady: multiplier on poison and burn damage
+  dotTime: 1,           // Malady: multiplier on poison and burn duration
+  chargeDamage: 0,      // Dead Air: blast on the first shot after a pause
+  chargeRadius: 0,
+  chargeTime: 0,        // seconds of held fire that arm it
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
 // holding a key to move at the speed the game is balanced around was a tax
 // rather than a decision, so the walk is gone and this is what everyone gets.
 const BASE_SPEED = 10;
+// Evasion's window after a successful dodge, and what it multiplies speed by.
+// Short on purpose: it is an escape from the hit you just avoided, not a
+// standing movement upgrade.
+const DODGE_TIME = 1.5;
+const DODGE_SPEED = 1.4;
 // Horizontal speed at which Steady Aim's bonus has fully decayed. Well under
 // BASE_SPEED: the upgrade pays for standing your ground, not for strolling.
 const STILL_SPEED = 3;
@@ -101,6 +130,11 @@ export class Player {
     this.maxReserve = 300;
     this.reserveAmmo = 90;
     this.fireCd = 0;
+    // When the last shot went off, for Dead Air. Starts far enough back that
+    // the first shot of a run is charged.
+    this.lastShot = -99;
+    // Evasion's speed boost, set by main.js when a hit is dodged.
+    this.dodgeEnd = 0;
     this.reloading = 0;
     this.onGround = false;
     this.lastHurt = -99;
@@ -210,6 +244,12 @@ export class Player {
     return true;
   }
 
+  // Evasion. Called by main.js when an incoming hit is dodged; the speed
+  // burst is read back in update().
+  startDodge(time) {
+    this.dodgeEnd = time + DODGE_TIME;
+  }
+
   // Called by main.js on every kill. Bloodlust and Vampiric Rounds use it.
   onKill(time) {
     if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
@@ -249,6 +289,8 @@ export class Player {
     this._ammoRegenAcc = 0;
     this.wardReady = false;
     this.livesUsed = 0;
+    this.lastShot = -99;
+    this.dodgeEnd = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
     this.yaw = 0;
@@ -322,6 +364,9 @@ export class Player {
       }
     }
 
+    // Returned to the caller so main.js can fire Reload Burst on exactly the
+    // frame the magazine seats, without polling `reloading` from outside.
+    let reloadFinished = false;
     if (this.reloading > 0) {
       this.reloading -= dt;
       if (this.reloading <= 0) {
@@ -330,6 +375,7 @@ export class Player {
         const take = Math.min(needed, this.reserveAmmo);
         this.mag += take;
         this.reserveAmmo -= take;
+        reloadFinished = true;
       }
     }
 
@@ -342,7 +388,8 @@ export class Player {
       const len = Math.hypot(f, s);
       const fn = f / len;
       const sn = s / len;
-      const speed = BASE_SPEED * this.mods.moveMult;
+      // Evasion's reward for a dodge: a burst of speed to leave with.
+      const speed = BASE_SPEED * this.mods.moveMult * (time < this.dodgeEnd ? DODGE_SPEED : 1);
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
       this.vel.x = (-sinY * fn + cosY * sn) * speed;
@@ -405,6 +452,7 @@ export class Player {
     this.gun.position.z = this.gunBaseZ + this.kick;
     this._animateReload();
     this.applyCamera();
+    return reloadFinished;
   }
 
   // Reload animation. The gun drops out of frame, rolls over as if a magazine
@@ -467,7 +515,17 @@ export class Player {
       this.startReload();
       return 'empty';
     }
-    this.mag--;
+    // Belt Feed takes the round straight off the reserve now and then, which
+    // is worth more than the round itself: it is a reload you never have to
+    // stand through. Triple Tap's cost comes out of whichever pool pays.
+    if (this.mods.beltFeed > 0 && this.reserveAmmo >= this.mods.ammoPerShot
+      && Math.random() < this.mods.beltFeed) {
+      this.reserveAmmo -= this.mods.ammoPerShot;
+    } else {
+      // A shot that cannot afford its full cost still fires and empties the
+      // magazine; refusing it would jam the gun on one leftover round.
+      this.mag = Math.max(0, this.mag - this.mods.ammoPerShot);
+    }
     const effectiveFireRate =
       w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
@@ -508,6 +566,12 @@ export class Player {
     let d = base * this.damageMult * this.mods.damage;
     if (this.mods.steady > 0) {
       d *= 1 + this.mods.steady * this.stillness;
+    }
+    // Berserker pays on health MISSING, so it is worth nothing at full health
+    // and everything at one. Read live rather than cached: it has to move with
+    // the health bar, including upward as Vampiric heals you back out of it.
+    if (this.mods.berserk > 0) {
+      d *= 1 + this.mods.berserk * (1 - this.health / this.maxHealth);
     }
     return d;
   }

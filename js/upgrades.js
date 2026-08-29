@@ -73,6 +73,16 @@ export const THEME = {
   mobility: 0x2979ff,
   poise: 0x7c4dff,
   impact: 0x00e5c0,
+  // the shot itself: how it travels and what it costs to fire
+  pierce: 0x76ff03,
+  gravity: 0x536dfe,
+  rage: 0x8b0000,
+  burden: 0xff8a80,
+  hex: 0x6a1b9a,
+  feed: 0xffab40,
+  evade: 0x18ffff,
+  shrapnel: 0xff7043,
+  charge: 0xe0e0e0,
   // status effects, matched to STATUS_TINT in enemy.js
   poison: 0x39d353,
   fire: 0xff5a00,
@@ -473,6 +483,194 @@ export const UPGRADES = {
     apply: (mods, n) => {
       mods.damage *= 1 + 0.7 * n;
       mods.maxHpMult *= Math.pow(0.5, n);
+    },
+  },
+  piercingShot: {
+    name: 'PIERCING SHOT',
+    rarity: 'rare',
+    max: 3,
+    mark: true,
+    theme: THEME.pierce,
+    icon: 'bullet',
+    effects: (n) => [
+      ['PIERCE ' + step(n, (k) => String(k)), GOOD],
+      ['ENEMIES PER SHOT', NOTE],
+      ['-30% DMG EACH ONE', BAD],
+    ],
+    apply: (mods, n) => {
+      mods.pierce = n;
+      mods.pierceFalloff = 0.7;
+    },
+  },
+  gravityRounds: {
+    name: 'GRAVITY ROUNDS',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.gravity,
+    icon: 'vortex',
+    effects: [['HITS DRAG ENEMIES IN', GOOD], ['1.5m, WITHIN 5m', NOTE]],
+    apply: (mods, n) => {
+      mods.gravityPull = 1.5 * n;
+      mods.gravityRadius = 5;
+    },
+  },
+  berserker: {
+    name: 'BERSERKER',
+    rarity: 'rare',
+    max: 2,
+    theme: THEME.rage,
+    icon: 'claw',
+    effects: (n) => [
+      ['DAMAGE ' + step(n, pctUp(50)), GOOD],
+      ['AT 1 HP, SCALING', NOTE],
+    ],
+    apply: (mods, n) => { mods.berserk += 0.5 * n; },
+  },
+  tripleTap: {
+    name: 'TRIPLE TAP',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.burden,
+    icon: 'bullet',
+    effects: [['+70% DAMAGE', GOOD], ['3 AMMO PER SHOT', BAD]],
+    apply: (mods, n) => {
+      mods.damage *= 1 + 0.7 * n;
+      mods.ammoPerShot = 1 + 2 * n;
+    },
+  },
+  cursedAmmo: {
+    name: 'CURSED AMMO',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.hex,
+    icon: 'skull',
+    // The floor is the whole reason this is playable: without it a held
+    // trigger kills you from full health with no enemy in the room.
+    effects: [['20% OF SHOTS: 2x DMG', GOOD], ['THOSE COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
+    apply: (mods, n) => {
+      mods.cursedChance = 0.2 * n;
+      mods.cursedDamage = 1;
+    },
+  },
+  beltFeed: {
+    name: 'BELT FEED',
+    rarity: 'common',
+    max: 3,
+    theme: THEME.feed,
+    icon: 'ammoBox',
+    effects: (n) => [
+      [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
+      ['SKIP THE MAGAZINE', NOTE],
+    ],
+    apply: (mods, n) => { mods.beltFeed = 0.1 * n; },
+  },
+  evasion: {
+    name: 'EVASION',
+    rarity: 'rare',
+    max: 3,
+    theme: THEME.evade,
+    icon: 'wing',
+    effects: (n) => [
+      ['DODGE ' + step(n, pctUp(12)), GOOD],
+      ['OF HITS TAKEN', NOTE],
+      ['+40% SPEED ON DODGE', GOOD],
+    ],
+    apply: (mods, n) => { mods.dodgeChance = 0.12 * n; },
+  },
+  reloadBurst: {
+    name: 'RELOAD BURST',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.shrapnel,
+    icon: 'burst',
+    effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 25 DMG EACH', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
+    apply: (mods, n) => {
+      mods.reloadShards = 8 * n;
+      mods.reloadShardDamage = 25 * n;
+    },
+  },
+  crystallize: {
+    name: 'CRYSTALLIZE',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.ice,
+    icon: 'icicle',
+    effects: [['FROZEN DEAD SHATTER', GOOD], ['60 DMG IN 3.5m', NOTE]],
+    apply: (mods, n) => {
+      mods.shatterDamage = 60 * n;
+      mods.shatterRadius = 3.5;
+    },
+  },
+  ashen: {
+    name: 'ASHEN',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.ember,
+    icon: 'cloud',
+    // A lingering ZONE, not another instant blast: Blast Corpse and
+    // Crystallize already own that shape, and a cloud you have to push enemies
+    // through plays differently from a puff you never see.
+    effects: [['BURNING DEAD LEAVE', GOOD], ['ASH: 18 DMG/s, 4s', NOTE], ['IN A 3.5m CLOUD', NOTE]],
+    apply: (mods, n) => {
+      mods.ashDps = 18 * n;
+      mods.ashRadius = 3.5;
+      mods.ashTime = 4;
+    },
+  },
+  neurotoxin: {
+    name: 'NEUROTOXIN',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.poison,
+    icon: 'flask',
+    // Slowing a poisoned enemy would have been Cryo Rounds with a different
+    // name - Cryo already halves their speed and their shots. Spreading is the
+    // thing only poison does.
+    effects: [['POISON JUMPS ENEMY', GOOD], ['TO ENEMY, WITHIN 3m', NOTE]],
+    apply: (mods, n) => { mods.poisonSpread = 3 * n; },
+  },
+  entropy: {
+    name: 'ENTROPY',
+    rarity: 'common',
+    max: 1,
+    mark: true,
+    theme: THEME.stone,
+    icon: 'hourglass',
+    effects: [['STATUS NEVER ENDS', GOOD], ['ON ENEMIES UNDER 30%', NOTE]],
+    apply: (mods, n) => { mods.entropyBelow = 0.3 * n; },
+  },
+  malady: {
+    name: 'MALADY',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.fire,
+    icon: 'flask',
+    // Poison and burn ONLY. Cryo, Terror and Petrify have no strength to
+    // amplify, so the same trade on them would be a drawback with no upside.
+    effects: [['+50% POISON & BURN', GOOD], ['THEY LAST HALF AS LONG', BAD]],
+    apply: (mods, n) => {
+      mods.dotPower *= 1 + 0.5 * n;
+      mods.dotTime *= Math.pow(0.5, n);
+    },
+  },
+  deadAir: {
+    name: 'DEAD AIR',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.charge,
+    icon: 'bomb',
+    effects: [['HOLD FIRE 4s:', GOOD], ['NEXT HIT BLASTS', GOOD], ['70 DMG IN 4m', NOTE]],
+    apply: (mods, n) => {
+      mods.chargeDamage = 70 * n;
+      mods.chargeRadius = 4;
+      mods.chargeTime = 4;
     },
   },
 };

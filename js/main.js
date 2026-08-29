@@ -57,7 +57,7 @@
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player } from './player.js';
-import { Enemy, Projectile, Grenade } from './enemy.js';
+import { Enemy, Projectile, Grenade, Shard } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
@@ -88,7 +88,11 @@ const AMMO_INTERVAL_LOW = 5;
 // so a blocked spawn can never be retried every single frame.
 const SPAWN_RETRY = 2;
 
-const MAX_PROJECTILES = 24;
+// Enemy shots, grenades and Reload Burst's shards share one pool. Raised from
+// 24 when Reload Burst arrived: eight shards live for well under a second, but
+// a reload during a heavy wave would otherwise spend the whole budget and
+// silently drop enemy fire, which reads as the wave going quiet.
+const MAX_PROJECTILES = 32;
 const EMPTY_CLICK_COOLDOWN = 0.35;
 
 // Seconds a station ignores further hits after one is bought by shooting it.
@@ -133,6 +137,10 @@ const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
+// Ashen: how many clouds can be alive at once, and how often Neurotoxin's
+// poison is allowed to make a jump.
+const MAX_ASH_CLOUDS = 8;
+const POISON_SPREAD_INTERVAL = 0.5;
 
 class Game {
   constructor() {
@@ -215,6 +223,10 @@ class Game {
     this._shotHits = new Set();
     this._blastAt = new THREE.Vector3();
     this._blastHit = false;
+    // Where the last pellet stopped, for Dead Air's blast.
+    this._lastImpact = new THREE.Vector3();
+    this._pullTo = new THREE.Vector3();
+    this._shardDir = new THREE.Vector3();
     this._chainFrom = new THREE.Vector3();
     this._chainTo = new THREE.Vector3();
     // Deaths that owe an after-effect, recorded during the enemy sweep and
@@ -223,6 +235,14 @@ class Game {
     // sweep itself is written to avoid. Both arrays are grown once and reused.
     this._deathPos = [];
     this._deathBurn = [];
+    this._deathFrozen = [];
+    // Ashen's lingering clouds. Capped because each one drips particles every
+    // frame it is alive and a wave clear can kill twenty burning enemies at
+    // once; the oldest is recycled rather than the newest refused, so the
+    // cloud you just made is always the one that exists.
+    this._ash = [];
+    this._ashAt = new THREE.Vector3();
+    this._spreadCd = 0;
     this._deathCount = 0;
     this._enemyCtx = {
       player: this.player,
@@ -234,12 +254,20 @@ class Game {
       addProjectile: (x, y, z, type, speedScale) =>
         this._spawnProjectile(x, y, z, type, speedScale),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
+      // `mods` is deliberately absent here: rebuildMods() swaps the object on
+      // every draft pick, so anything captured at construction goes stale on
+      // the first upgrade. _updateEnemies() sets it fresh each frame, before
+      // any enemy reads it.
       effects: this.effects,
       sfx: this.sfx,
     };
     this._projCtx = {
       obstacles: this.arena.obstacles,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
+      // Reload Burst's shards damage enemies and never the player, so they get
+      // the enemy list and a blast that cannot reach back.
+      enemies: this.enemies,
+      onBlast: (pos, dmg, radius) => this._blast(pos, dmg, radius, null, false),
       player: this.player,
       effects: this.effects,
       sfx: this.sfx,
@@ -634,6 +662,22 @@ class Game {
     resolveCircle(en.pos, en.radius, this.arena.obstacles);
   }
 
+  // Gravity Rounds. Drags everything around the impact toward it, the pull
+  // fading to nothing at the edge of the radius so an enemy at 5m twitches and
+  // one at arm's length is yanked. `skip` is the enemy that took the shot: it
+  // is already at the impact point, and pulling it into itself jitters it.
+  _pull(point, radius, dist, skip) {
+    for (const e of this.enemies) {
+      if (e === skip || e.dead) continue;
+      const d = e.pos.distanceTo(point);
+      if (d > radius || d < 0.001) continue;
+      this._pullTo.set(point.x - e.pos.x, 0, point.z - e.pos.z).normalize();
+      e.pos.addScaledVector(this._pullTo, Math.min(dist * (1 - d / radius), d));
+      resolveCircle(e.pos, e.radius, this.arena.obstacles);
+    }
+    this.effects.burst(point, 0x536dfe, 10, 3, 1.5, 0.35);
+  }
+
   // Radial damage with linear falloff, shared by Detonator and Blast Corpse.
   // `skip` is the enemy that is already taking the hit directly, and
   // `hitPlayer` is what separates the two: your own impact blasts cannot hurt
@@ -658,7 +702,8 @@ class Game {
   // pass through several enemies, stopping at the first thing that is not one.
   // Returns true if it damaged anything, so the caller can play a single hit
   // sound per shot rather than one per pellet.
-  _firePellet(muzzle, targets, spread, w) {
+  _firePellet(muzzle, targets, spread, w, dmgMult = 1) {
+    const m = this.player.mods;
     const ray = this._shotRay;
     this._screen.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
     ray.setFromCamera(this._screen, this.camera);
@@ -671,6 +716,11 @@ class Game {
     // particle bursts have to be much smaller or a single shell drains the
     // whole pool.
     const burst = w.pellets > 1 ? 4 : 10;
+    // Piercing Shot adds to whatever the weapon pierces on its own, and its
+    // steeper falloff replaces the weapon's - a shot that keeps full damage
+    // through four enemies is worth more than any other pick in the pool.
+    const pierceCap = w.pierce + m.pierce;
+    const falloff = m.pierce > 0 ? Math.min(w.falloff, m.pierceFalloff) : w.falloff;
     let end = null;
     let pierced = 0;
     let damaged = false;
@@ -702,16 +752,19 @@ class Game {
         this.effects.burst(end, 0x9fb4d8, w.pellets > 1 ? 3 : 6, 3, 1, 0.3);
         break;
       }
-      const m = this.player.mods;
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
-        * Math.pow(w.falloff, pierced);
+        * Math.pow(falloff, pierced) * dmgMult;
       en.takeDamage(dealt);
       this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
       // Damage is per-pellet; everything below is per-shot.
       if (!this._shotHits.has(en)) {
         this._shotHits.add(en);
-        if (m.poisonTime) en.applyStatus('poison', m.poisonTime, m.poisonDps);
-        if (m.burnTime) en.applyStatus('burn', m.burnTime, m.burnDps);
+        // Malady scales the two statuses that HAVE a strength. Cryo, Terror
+        // and Petrify are left alone: shortening them buys nothing back.
+        if (m.poisonTime) {
+          en.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
+        }
+        if (m.burnTime) en.applyStatus('burn', m.burnTime * m.dotTime, m.burnDps * m.dotPower);
         if (m.slowTime) en.applyStatus('slow', m.slowTime);
         if (m.fearTime) en.applyStatus('fear', m.fearTime);
         if (m.petrifyChance && Math.random() < m.petrifyChance) {
@@ -719,6 +772,7 @@ class Game {
         }
         if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
         if (m.knockback) this._shove(en, ray.ray.direction, m.knockback);
+        if (m.gravityPull) this._pull(h.point, m.gravityRadius, m.gravityPull, en);
         if (m.midas) this.effects.burst(h.point, 0xffd600, 6, 3, 1.5, 0.35);
         // Detonator goes off once per trigger pull, at the first enemy the
         // shot touched. Per-pellet it would fire eight blasts from one shell
@@ -730,13 +784,16 @@ class Game {
       }
       damaged = true;
       pierced++;
-      if (pierced > w.pierce) {
+      if (pierced > pierceCap) {
         end = h.point;
         break;
       }
     }
 
     if (!end) end = ray.ray.at(60, this._rayEnd);
+    // Dead Air detonates wherever the shot stopped - an enemy, a wall or the
+    // floor - so the last impact point is kept for the caller.
+    this._lastImpact.copy(end);
     this.effects.tracer(muzzle, end);
     hits.length = 0;
     return damaged;
@@ -758,6 +815,24 @@ class Game {
     }
     if (res !== 'shot') return;
 
+    const mods = this.player.mods;
+    // Dead Air arms on the GAP between shots, so it is read before this shot
+    // stamps the clock. Reloads do not reset it: standing still through a
+    // reload is exactly the pause it is paying you for.
+    const charged = mods.chargeDamage > 0
+      && this.time - this.player.lastShot >= mods.chargeTime;
+    this.player.lastShot = this.time;
+
+    // Cursed Ammo, rolled once per trigger pull. The floor is what keeps it
+    // playable: a held trigger must never be able to kill you on its own.
+    let dmgMult = 1;
+    if (mods.cursedChance > 0 && this.player.health > 1
+      && Math.random() < mods.cursedChance) {
+      this.player.health = Math.max(1, this.player.health - 1);
+      dmgMult += mods.cursedDamage;
+      this.effects.burst(this.player.eyeInto(this._killPos), 0x6a1b9a, 10, 4, 2, 0.35);
+    }
+
     const w = this.player.weapon;
     this.stats.shotsFired++;
     this.sfx.shoot();
@@ -776,7 +851,6 @@ class Game {
     // gone it reads live speed instead, which also means it fades in and out
     // with the player rather than snapping.
     const spread = w.spread + (this.player.speedXZ > 6 ? 0.016 : 0);
-    const mods = this.player.mods;
     let hitAny = false;
     this._shotHits.clear();
     this._blastHit = false;
@@ -785,11 +859,17 @@ class Game {
     // pull, so an enemy caught by both still takes one dose of status.
     for (let v = 0; v < mods.volley; v++) {
       for (let i = 0; i < w.pellets; i++) {
-        if (this._firePellet(muzzle, targets, spread, w)) hitAny = true;
+        if (this._firePellet(muzzle, targets, spread, w, dmgMult)) hitAny = true;
       }
     }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
+    }
+    // Dead Air fires wherever the shot stopped, which is why it is here and
+    // not in the enemy branch: a charged round buried in a wall still goes off.
+    if (charged) {
+      this._blast(this._lastImpact, mods.chargeDamage, mods.chargeRadius, null, false);
+      this.effects.addShake(0.2);
     }
     this._shotHits.clear();
 
@@ -854,6 +934,18 @@ class Game {
   // projectiles through their ctx. `pos` is only used to place the hit spray.
   _hurtPlayer(d, pos) {
     if (this.state !== 'playing') return;
+    // Evasion, rolled before the ward: a dodge is free and the ward is a
+    // limited charge, so spending the charge on a hit that was going to miss
+    // anyway would be strictly worse for the player. A dodge has to be LOUD -
+    // a hit that silently fails to land reads as nothing happening at all.
+    if (this.player.mods.dodgeChance > 0 && Math.random() < this.player.mods.dodgeChance) {
+      this.player.startDodge(this.time);
+      this.effects.shockwave(this.player.pos, 0x18ffff, 3, 0.35);
+      this.effects.burst(pos, 0x18ffff, 14, 5, 2.5, 0.4);
+      this.sfx.melee();
+      this.ui.banner('DODGE');
+      return;
+    }
     // Holy Mantle. The ward eats the hit whole, however big it was, and is
     // spent doing it - it is a free mistake per wave, not damage reduction.
     if (this.player.wardReady) {
@@ -1360,6 +1452,10 @@ class Game {
   _updateEnemies(dt) {
     const ctx = this._enemyCtx;
     ctx.time = this.time;
+    // Re-read every frame, never captured: rebuildMods() replaces the whole
+    // mods object on each draft pick, so a reference taken once would be the
+    // pre-upgrade block for the rest of the run.
+    ctx.mods = this.player.mods;
     // Refresh the route to the player once for the whole list, before anyone
     // reads it. The grid throttles itself; this call is cheap on most frames.
     this.nav.update(dt, this.player.pos.x, this.player.pos.z);
@@ -1395,9 +1491,14 @@ class Game {
       this.sfx.kill();
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
+      const m = this.player.mods;
       const wasBurning = e.status.burn > 0;
-      if (this.player.mods.corpseDamage > 0 || (this.player.mods.burnSpread > 0 && wasBurning)) {
-        this._recordDeath(e.pos, wasBurning);
+      const wasFrozen = e.status.freeze > 0;
+      if (m.corpseDamage > 0
+        || (m.burnSpread > 0 && wasBurning)
+        || (m.ashDps > 0 && wasBurning)
+        || (m.shatterDamage > 0 && wasFrozen)) {
+        this._recordDeath(e.pos, wasBurning, wasFrozen);
       }
       this.scene.remove(e.group);
       if (e.type === 'splitter') this._splitInto(e);
@@ -1414,11 +1515,12 @@ class Game {
   // Notes a death that owes an after-effect. Vectors are reused across frames;
   // the arrays only ever grow to the largest number of deaths seen in one
   // frame, which a wave clear bounds naturally.
-  _recordDeath(pos, burning) {
+  _recordDeath(pos, burning, frozen) {
     const i = this._deathCount++;
     if (!this._deathPos[i]) this._deathPos[i] = new THREE.Vector3();
     this._deathPos[i].set(pos.x, 0.9, pos.z);
     this._deathBurn[i] = burning;
+    this._deathFrozen[i] = frozen;
   }
 
   // Blast Corpse and Incendiary's spread, played once the enemy list is whole
@@ -1431,6 +1533,16 @@ class Game {
       if (m.corpseDamage > 0) {
         this._blast(at, m.corpseDamage, m.corpseRadius, null, true);
       }
+      // Crystallize. Only a body that was still frozen when it died shatters,
+      // so it is Petrify's payoff rather than a second corpse blast.
+      if (m.shatterDamage > 0 && this._deathFrozen[i]) {
+        this._blast(at, m.shatterDamage, m.shatterRadius, null, false);
+        this.effects.shockwave(at, 0x7fe3ff, m.shatterRadius, 0.5);
+        this.effects.burst(at, 0xcfeaff, 22, 6, 3, 0.5);
+      }
+      // Ashen leaves a ZONE rather than another instant blast - the two
+      // upgrades above already own that shape.
+      if (m.ashDps > 0 && this._deathBurn[i]) this._addAsh(at);
       // The fire jumps to exactly one neighbour, so a burning crowd cascades
       // one enemy at a time rather than igniting the whole arena at once.
       if (m.burnSpread > 0 && this._deathBurn[i]) {
@@ -1451,6 +1563,99 @@ class Game {
       }
     }
     this._deathCount = 0;
+  }
+
+  // Ashen. A cloud is four numbers and a drip timer, not a scene object: it is
+  // drawn by the same particle pool everything else uses, so a cloud costs
+  // nothing to create and nothing to dispose.
+  _addAsh(pos) {
+    if (this._ash.length >= MAX_ASH_CLOUDS) this._ash.shift();
+    const m = this.player.mods;
+    this._ash.push({
+      x: pos.x, z: pos.z, life: m.ashTime, dps: m.ashDps, radius: m.ashRadius, drip: 0,
+    });
+  }
+
+  // Runs the clouds down and tickles whatever is standing in one. Damage is
+  // dealt per second of exposure, so walking through the edge of a cloud costs
+  // an enemy far less than being pushed into the middle of it.
+  _updateAsh(dt) {
+    for (let i = this._ash.length - 1; i >= 0; i--) {
+      const a = this._ash[i];
+      a.life -= dt;
+      if (a.life <= 0) {
+        this._ash.splice(i, 1);
+        continue;
+      }
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dx = e.pos.x - a.x;
+        const dz = e.pos.z - a.z;
+        if (dx * dx + dz * dz > a.radius * a.radius) continue;
+        e.takeDamage(a.dps * dt, true);
+      }
+      // The cloud has to be visible or it is an invisible damage field. One
+      // puff every fifth of a second reads as smoke without draining the pool.
+      a.drip -= dt;
+      if (a.drip <= 0) {
+        a.drip = 0.2;
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * a.radius;
+        this.effects.burst(
+          this._ashAt.set(a.x + Math.cos(ang) * r, 0.5, a.z + Math.sin(ang) * r),
+          0xbf360c, 3, 1.2, 0.8, 0.5
+        );
+      }
+    }
+  }
+
+  // Neurotoxin. Poison walks from an afflicted enemy to a clean one standing
+  // near it, one jump per tick, so a packed crowd goes green in a couple of
+  // seconds and a spread-out one never does. Rate-limited rather than run per
+  // frame: at 60fps an untimed spread would infect a whole wave instantly.
+  _updatePoisonSpread(dt) {
+    const m = this.player.mods;
+    if (m.poisonSpread <= 0) return;
+    this._spreadCd -= dt;
+    if (this._spreadCd > 0) return;
+    this._spreadCd = POISON_SPREAD_INTERVAL;
+    const list = this.enemies;
+    for (let i = 0; i < list.length; i++) {
+      const src = list[i];
+      if (src.dead || src.status.poison <= 0) continue;
+      for (let j = 0; j < list.length; j++) {
+        const dst = list[j];
+        if (dst === src || dst.dead || dst.status.poison > 0) continue;
+        if (dst.pos.distanceTo(src.pos) > m.poisonSpread) continue;
+        dst.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
+        this.effects.burst(
+          this._ashAt.set(dst.pos.x, 1.0, dst.pos.z), 0x39d353, 6, 3, 1.5, 0.35
+        );
+        break;
+      }
+    }
+  }
+
+  // Reload Burst. Thrown in an even ring on the frame a reload completes, so
+  // it reads as the gun venting rather than as a shot the player aimed. Each
+  // shard is a projectile like any other and counts against the same cap: a
+  // reload in the middle of a heavy wave throws what there is room for.
+  _reloadBurst() {
+    const m = this.player.mods;
+    const n = m.reloadShards;
+    if (n <= 0) return;
+    const spin = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      if (this.projectiles.length >= MAX_PROJECTILES) break;
+      const a = spin + (i / n) * Math.PI * 2;
+      this.projectiles.push(new Shard(
+        this.scene, this.effects.glowTex,
+        this.player.pos.x, 1.0, this.player.pos.z,
+        Math.cos(a), Math.sin(a), 16, m.reloadShardDamage, 2.2
+      ));
+    }
+    this.effects.shockwave(this.player.pos, 0xff7043, 2.5, 0.35);
+    this.effects.addShake(0.08);
   }
 
   // Moves projectiles and reacts to what they hit. Grenades handle their own
@@ -1502,7 +1707,8 @@ class Game {
         if (this.comboTimer <= 0) this.comboKills = 0;
       }
       if (this.autoTest) this._autoInput();
-      this.player.update(dt, this.input, this.arena.obstacles, this.time);
+      const reloaded = this.player.update(dt, this.input, this.arena.obstacles, this.time);
+      if (reloaded) this._reloadBurst();
 
       this._updateWave(dt);
       if (this.input.shoot) this.shoot();
@@ -1512,6 +1718,11 @@ class Game {
       if (this.input.melee) this.tryMelee();
       this._updatePickups(dt);
       this._updateTotems(dt);
+      // Ash and the poison spread run BEFORE the enemy sweep so anything they
+      // kill is collected by the sweep this frame rather than lingering a
+      // frame as a dead enemy that is still being drawn.
+      this._updateAsh(dt);
+      this._updatePoisonSpread(dt);
       this._updateEnemies(dt);
       this._updateProjectiles(dt);
 
