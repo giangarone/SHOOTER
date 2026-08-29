@@ -443,187 +443,372 @@ const FREEZE_VULN = 1.5;
 let idSeq = 0;
 
 // ---- model builders ------------------------------------------------------
-// One per type, named on its ENEMY_TYPES entry. `g` is the enemy's group and
-// `s` its scale; the body and eyes are already in place when these run, so a
-// builder only adds what makes the type recognisable. Declared as functions
-// rather than arrow constants so the table above can name them before this
-// point in the file.
+// One per type, named on its ENEMY_TYPES entry, and responsible for the WHOLE
+// model: torso, limbs, eyes and props. Nothing is placed before these run.
 //
-// Parts that should FLASH with the body must use e.bodyMat (see tank's
-// shoulders); everything else takes a SHARED_MATS entry, because a material
-// allocated here would be one per enemy and would have to be disposed.
+// THE SILHOUETTE IS THE DESIGN. Every type used to share one capsule and a
+// pair of eyes, with a small prop bolted on, so at the distance the game is
+// actually played at the only thing telling a chaser from a bomber was its
+// colour - and colour is exactly what the status tints overwrite. A frozen
+// enemy and a poisoned one are not their own colour any more, so the shape has
+// to carry the identity on its own. The test each of these has to pass is that
+// it is still identifiable as a flat black shape.
+//
+// The shape language maps to behaviour, so the model teaches the mechanic:
+//
+//   rushes you        leaning forward, narrow, legs under it   chaser wraith magma
+//   soaks you         wide, planted, top-heavy, thick legs     tank bulwark colossus
+//   shoots you        upright, thin, asymmetric weapon side    shooter sniper
+//   supports          floating, legless, symmetrical           conduit warden
+//   denies ground     bloated, bottom-heavy, hunched           blight bomber
+//   comes apart       visibly segmented into halves            splitter schism
+//
+// Everything is built from few-segment primitives - 4 to 6 sided prisms, cones
+// and octahedra - and bodyMat carries flatShading, so the whole roster reads as
+// cut facets rather than smooth blobs.
+//
+// `P` is the part helper described on partsFor(): geometry is authored at UNIT
+// size and P scales and positions it by the type's `s`, so one cached geometry
+// can be shared by types of different sizes.
 
-function buildChaser(e, g) {
-  const jaw = new THREE.Mesh(
-    geo('chaserJaw', () => new THREE.ConeGeometry(0.16, 0.3, 6)),
-    e.bodyMat
-  );
-  jaw.rotation.x = -Math.PI / 2;
-  jaw.position.set(0, 0.68, -0.34);
-  g.add(jaw);
+// Builds the `P(key, make, opts)` helper a build() uses for every mesh it adds.
+//
+// Anything that must FLASH white on a hit and carry the status tint goes
+// through P with the default material - that is the enemy's own bodyMat, the
+// single object _applyBodyLook writes to. Pass `mat` only for trim that should
+// keep its own colour regardless of what the body is doing (gunmetal, glowing
+// cores), and `mat: e.eyeMat` for anything that should blink with the eyes.
+//
+// opts: x,y,z position and sx,sy,sz or s scale, all in UNIT space and
+// multiplied up by the type's scale; rx,ry,rz rotation in radians; mat; and
+// shadow:false for parts too small or too transparent to be worth a shadow.
+function partsFor(e, g, s) {
+  return function P(key, make, o = {}) {
+    const m = new THREE.Mesh(geo(key, make), o.mat || e.bodyMat);
+    m.position.set((o.x || 0) * s, (o.y || 0) * s, (o.z || 0) * s);
+    m.rotation.set(o.rx || 0, o.ry || 0, o.rz || 0);
+    const k = (o.s ?? 1) * s;
+    m.scale.set((o.sx ?? 1) * k, (o.sy ?? 1) * k, (o.sz ?? 1) * k);
+    m.castShadow = o.shadow !== false;
+    g.add(m);
+    return m;
+  };
 }
 
-function buildShooter(e, g) {
-  const barrel = new THREE.Mesh(
-    geo('shooterBarrel', () => new THREE.BoxGeometry(0.12, 0.12, 0.55)),
-    SHARED_MATS.gunmetal
-  );
-  barrel.position.set(0.22, 0.8, -0.32);
-  g.add(barrel);
+// Shared faceted primitives. Segment counts are deliberately low - these are
+// the facets, and raising them is what would take the roster back to blobs.
+const prism = (rt, rb, h, seg) => () => new THREE.CylinderGeometry(rt, rb, h, seg);
+const spike = (r, h, seg) => () => new THREE.ConeGeometry(r, h, seg);
+const slab = (w, h, d) => () => new THREE.BoxGeometry(w, h, d);
+const shard = (r) => () => new THREE.OctahedronGeometry(r, 0);
+const lump = (r) => () => new THREE.IcosahedronGeometry(r, 0);
+const rock = (r) => () => new THREE.DodecahedronGeometry(r, 0);
+
+// The default pair of eyes, on the -z face. `y` and `spread` move them; most
+// types take the default. Types whose identity is a machine or a monolith
+// (conduit, warden, maw) call something else or nothing at all.
+function eyes(P, { y = 1.05, x = 0.13, z = -0.27, r = 1, mat }) {
+  const o = { mat: mat || undefined, s: r, shadow: false };
+  P('eyeShard', shard(0.07), { ...o, x: -x, y, z });
+  P('eyeShard', shard(0.07), { ...o, x, y, z });
 }
 
+// ---- the original six ----------------------------------------------------
+
+// Leaning forward from the ankles up, and the only thing in the roster with a
+// snout. Read: it is already coming at you.
+function buildChaser(e, g, s) {
+  const P = partsFor(e, g, s);
+  // FLATTENED FRONT TO BACK and only four sided. A six sided prism at this
+  // size is a circle from the player's eye, which is what made the old roster
+  // read as blobs; the wedge is what gives it a front.
+  P('chaserTorso', prism(0.34, 0.16, 0.62, 4), {
+    y: 0.92, z: -0.04, rx: -0.3, ry: Math.PI / 4, sz: 0.62,
+  });
+  // Neck, so the head is a separate mass instead of the top of the torso.
+  P('chaserNeck', prism(0.08, 0.1, 0.16, 4), { y: 1.2, z: -0.18, rx: -0.5 });
+  // The snout has to PROJECT PAST the torso outline or it is not in the
+  // silhouette at all. It runs well forward of the body and sits low.
+  P('chaserSkull', spike(0.15, 0.52, 4), { y: 1.24, z: -0.42, rx: -Math.PI / 2, ry: Math.PI / 4 });
+  P('chaserJaw', spike(0.1, 0.34, 4), { y: 1.11, z: -0.4, rx: -Math.PI / 2, ry: Math.PI / 4 });
+  // Two spines swept back off the shoulders. They break the top of the outline,
+  // which is the part of a silhouette the player sees first.
+  P('chaserSpine', spike(0.05, 0.42, 4), { x: -0.17, y: 1.28, z: 0.16, rx: 0.9 });
+  P('chaserSpine', spike(0.05, 0.42, 4), { x: 0.17, y: 1.28, z: 0.16, rx: 0.9 });
+  // Long enough to leave real air under the body. Short stubs read as no legs.
+  P('chaserThigh', slab(0.11, 0.44, 0.13), { x: -0.16, y: 0.55, z: 0.08, rx: 0.35 });
+  P('chaserThigh', slab(0.11, 0.44, 0.13), { x: 0.16, y: 0.55, z: 0.08, rx: 0.35 });
+  P('chaserShin', slab(0.09, 0.42, 0.1), { x: -0.16, y: 0.21, z: -0.02, rx: -0.2 });
+  P('chaserShin', slab(0.09, 0.42, 0.1), { x: 0.16, y: 0.21, z: -0.02, rx: -0.2 });
+  eyes(P, { y: 1.3, x: 0.1, z: -0.32, r: 0.85, mat: e.eyeMat });
+}
+
+// Upright and still, with all of its mass on one side: the arm cannon is the
+// silhouette. Read: it is standing off and shooting.
+function buildShooter(e, g, s) {
+  const P = partsFor(e, g, s);
+  // Narrow, upright and flat: a thin plate of a body, so the cannon is what
+  // has width. Standing straight is the read - it is not closing on you.
+  P('shooterTorso', prism(0.3, 0.18, 0.7, 4), { y: 1.0, ry: Math.PI / 4, sz: 0.5 });
+  // Head on a visible neck and much smaller than the torso, so the two do not
+  // merge into one lump at distance.
+  P('shooterNeck', prism(0.07, 0.07, 0.14, 4), { y: 1.4 });
+  P('shooterHead', shard(0.15), { y: 1.56, sz: 0.7 });
+  // THE CANNON IS THE SILHOUETTE. It hangs well outboard and reaches forward
+  // past the body, so the outline is lopsided from every angle.
+  P('shooterMount', slab(0.2, 0.2, 0.22), { x: 0.36, y: 1.12 });
+  P('shooterBarrel', prism(0.1, 0.14, 0.8, 6), {
+    x: 0.36, y: 1.12, z: -0.42, rx: -Math.PI / 2, mat: SHARED_MATS.gunmetal,
+  });
+  P('shooterVent', slab(0.26, 0.1, 0.16), { x: 0.36, y: 1.28, z: -0.1, mat: SHARED_MATS.gunmetal });
+  // The other arm is a thin rod, which is what makes the cannon side read as
+  // heavy rather than just as detail.
+  P('shooterArm', slab(0.07, 0.5, 0.07), { x: -0.3, y: 1.02 });
+  P('shooterLeg', slab(0.1, 0.62, 0.1), { x: -0.14, y: 0.32 });
+  P('shooterLeg', slab(0.1, 0.62, 0.1), { x: 0.14, y: 0.32 });
+  eyes(P, { y: 1.58, x: 0.08, z: -0.13, r: 0.75, mat: e.eyeMat });
+}
+
+// An inverted trapezoid: everything is up top. Read: hitting it will not move
+// it, and getting hit by it will.
 function buildTank(e, g, s) {
-  // Shoulders reuse the body material so they flash with the rest of the body.
-  const shoulderGeo = geo('tankShoulder', () => new THREE.BoxGeometry(0.25, 0.35, 0.25));
-  const shoulderL = new THREE.Mesh(shoulderGeo, e.bodyMat);
-  shoulderL.position.set(-0.35 * s, 0.95 * s, 0);
-  const shoulderR = new THREE.Mesh(shoulderGeo, e.bodyMat);
-  shoulderR.position.set(0.35 * s, 0.95 * s, 0);
-  g.add(shoulderL, shoulderR);
-  const plate = new THREE.Mesh(
-    geo('tankPlate', () => new THREE.BoxGeometry(0.7 * s, 0.12, 0.4 * s)),
-    SHARED_MATS.tankPlate
-  );
-  plate.position.set(0, 0.6 * s, -0.25 * s);
-  g.add(plate);
+  const P = partsFor(e, g, s);
+  // Wide at the shoulders, narrow at the waist - the opposite taper to blight.
+  P('tankTorso', prism(0.5, 0.28, 0.72, 4), { y: 0.86, ry: Math.PI / 4 });
+  P('tankPauldron', slab(0.34, 0.36, 0.36), { x: -0.5, y: 1.06 });
+  P('tankPauldron', slab(0.34, 0.36, 0.36), { x: 0.5, y: 1.06 });
+  // Head sunk between the pauldrons rather than sitting above them.
+  P('tankHead', slab(0.26, 0.2, 0.24), { y: 1.12, z: -0.14 });
+  // Chest plate, kept in its own dark material as the armour read.
+  P('tankPlate', slab(0.66, 0.16, 0.12), { y: 0.92, z: -0.3, mat: SHARED_MATS.tankPlate });
+  P('tankLeg', slab(0.2, 0.44, 0.22), { x: -0.22, y: 0.22 });
+  P('tankLeg', slab(0.2, 0.44, 0.22), { x: 0.22, y: 0.22 });
+  eyes(P, { y: 1.14, x: 0.08, z: -0.27, r: 0.8, mat: e.eyeMat });
 }
 
+// The only tripod in the game, and the tallest thin thing in it. Read: it is
+// set up, a long way off, and pointed at you.
 function buildSniper(e, g, s) {
-  const longBarrel = new THREE.Mesh(
-    geo('sniperBarrel', () => new THREE.CylinderGeometry(0.05, 0.06, 0.9, 8)),
-    SHARED_MATS.sniperBarrel
-  );
-  longBarrel.rotation.x = Math.PI / 2;
-  longBarrel.position.set(0, 0.85 * s, -0.6 * s);
-  g.add(longBarrel);
-  const scope = new THREE.Mesh(
-    geo('sniperScope', () => new THREE.BoxGeometry(0.1, 0.1, 0.2)),
-    SHARED_MATS.sniperScope
-  );
-  scope.position.set(0, 0.98 * s, -0.2 * s);
-  g.add(scope);
-  const smallEyeGeo = geo('eyeSmall', () => new THREE.SphereGeometry(0.05, 6, 6));
-  const e1s = new THREE.Mesh(smallEyeGeo, e.eyeMat);
-  e1s.position.set(-0.1 * s, 1.1 * s, -0.3 * s);
-  const e2s = new THREE.Mesh(smallEyeGeo, e.eyeMat);
-  e2s.position.set(0.1 * s, 1.1 * s, -0.3 * s);
-  g.add(e1s, e2s);
+  const P = partsFor(e, g, s);
+  P('sniperTorso', prism(0.15, 0.21, 0.5, 5), { y: 1.12 });
+  P('sniperHead', slab(0.22, 0.15, 0.28), { y: 1.46 });
+  // Three legs splayed off a hub. Splaying by rotating each one outward along
+  // its own bearing is what keeps this readable from any angle.
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+    P('sniperLeg', prism(0.03, 0.055, 1.0, 4), {
+      x: Math.cos(a) * 0.19, y: 0.5, z: Math.sin(a) * 0.19,
+      rz: -Math.cos(a) * 0.32, rx: Math.sin(a) * 0.32,
+    });
+  }
+  P('sniperBarrel', prism(0.045, 0.055, 1.0, 6), {
+    y: 1.46, z: -0.66, rx: Math.PI / 2, mat: SHARED_MATS.sniperBarrel,
+  });
+  P('sniperScope', slab(0.1, 0.11, 0.22), { y: 1.6, z: -0.16, mat: SHARED_MATS.sniperScope });
+  eyes(P, { y: 1.47, x: 0.07, z: -0.15, r: 0.7, mat: e.eyeMat });
 }
 
+// Two shards stacked with a lit seam between them. Read: this is already two
+// things, and killing it will prove it.
 function buildSplitter(e, g, s) {
-  const core = new THREE.Mesh(
-    geo('splitterCore', () => new THREE.OctahedronGeometry(0.12 * s, 0)),
-    SHARED_MATS.splitterCore
-  );
-  core.position.set(0, 0.85 * s, 0);
+  const P = partsFor(e, g, s);
+  P('splitterLower', shard(0.36), { y: 0.58, sy: 0.9 });
+  P('splitterUpper', shard(0.29), { y: 1.08, sy: 0.9 });
+  // A tapered foot instead of legs: it should not look like it walks.
+  P('splitterFoot', spike(0.24, 0.34, 5), { y: 0.17, rx: Math.PI });
+
+  const core = P('splitterCore', shard(0.13), {
+    y: 0.84, mat: SHARED_MATS.splitterCore, shadow: false,
+  });
   e.coreMesh = core;
   const ring = new THREE.Mesh(
-    geo('splitterRing', () => new THREE.TorusGeometry(0.25 * s, 0.03, 8, 16)),
+    geo('splitterRing', () => new THREE.TorusGeometry(0.27, 0.032, 6, 12)),
     SHARED_MATS.splitterRing
   );
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.6 * s;
+  ring.position.y = 0.84 * s;
+  ring.scale.setScalar(s);
   e.ringMesh = ring;
-  g.add(core, ring);
+  g.add(ring);
+  eyes(P, { y: 1.12, x: 0.1, z: -0.22, r: 0.8, mat: e.eyeMat });
 }
 
+// A pear: all of the mass low, a small head on top, stubby legs under a belly
+// full of ordnance. Read: slow, and carrying something.
 function buildBomber(e, g, s) {
-  const grenade = new THREE.Mesh(
-    geo('bomberShell', () => new THREE.SphereGeometry(0.18, 8, 8)),
-    SHARED_MATS.bomberShell
-  );
-  grenade.position.set(0.25 * s, 0.75 * s, -0.25 * s);
-  const pin = new THREE.Mesh(
-    geo('bomberPin', () => new THREE.CylinderGeometry(0.015, 0.015, 0.12, 6)),
-    SHARED_MATS.bomberPin
-  );
-  pin.position.set(0.25 * s, 0.9 * s, -0.25 * s);
-  g.add(grenade, pin);
+  const P = partsFor(e, g, s);
+  // Bomber, blight and magma are the three heavy-set types, and the first pass
+  // had all three reading as the same round lump. What separates them is where
+  // the mass SITS: the bomber's belly is carried HIGH on long thin legs, the
+  // blight's is dumped flat on the floor, and the magma's is stacked upward.
+  P('bomberBelly', lump(0.44), { y: 0.82, sy: 0.92, sz: 0.86 });
+  // A pinched neck, so the head is not just the top of the belly.
+  P('bomberNeck', prism(0.08, 0.1, 0.14, 4), { y: 1.22 });
+  P('bomberHead', shard(0.15), { y: 1.36, sy: 0.8 });
+  // Long, thin and splayed. The air under the belly is half the silhouette.
+  P('bomberLeg', slab(0.08, 0.68, 0.09), { x: -0.24, y: 0.34, rz: 0.16 });
+  P('bomberLeg', slab(0.08, 0.68, 0.09), { x: 0.24, y: 0.34, rz: -0.16 });
+  P('bomberFoot', slab(0.16, 0.08, 0.2), { x: -0.29, y: 0.04 });
+  P('bomberFoot', slab(0.16, 0.08, 0.2), { x: 0.29, y: 0.04 });
+  // The rack stands proud of the back so the load is in the outline, not
+  // buried in it - a bomber seen from behind should still read as carrying.
+  for (let i = 0; i < 3; i++) {
+    const up = i === 1 ? 0.14 : 0;
+    P('bomberShell', lump(0.14), {
+      x: (i - 1) * 0.22, y: 1.02 + up, z: 0.42, mat: SHARED_MATS.bomberShell,
+    });
+    P('bomberPin', prism(0.02, 0.02, 0.16, 4), {
+      x: (i - 1) * 0.22, y: 1.18 + up, z: 0.42, mat: SHARED_MATS.bomberPin, shadow: false,
+    });
+  }
+  eyes(P, { y: 1.38, x: 0.08, z: -0.15, r: 0.8, mat: e.eyeMat });
 }
 
+// Legless and hovering, a narrow spike with a ragged hem. Read: it is not
+// walking anywhere, and it will be behind you.
 function buildWraith(e, g, s) {
-  // A loose shroud around the body rather than a hard part: it should read as
-  // something that is only partly there, so a blink looks like the same trick
-  // it was already doing.
+  const P = partsFor(e, g, s);
+  P('wraithCore', shard(0.21), { y: 0.98 });
+  P('wraithSpike', spike(0.11, 0.6, 4), { y: 1.5 });
+  // A loose open shroud rather than a hard body: it should read as something
+  // only partly there, so a blink looks like the trick it was already doing.
   const shroud = new THREE.Mesh(
-    geo('wraithShroud', () => new THREE.ConeGeometry(0.42 * s, 1.1 * s, 7, 1, true)),
+    geo('wraithShroud', () => new THREE.ConeGeometry(0.44, 1.15, 6, 1, true)),
     SHARED_MATS.wraithShroud
   );
-  shroud.position.y = 0.62 * s;
-  const blade = new THREE.Mesh(
-    geo('wraithBlade', () => new THREE.ConeGeometry(0.07, 0.5, 4)),
-    e.bodyMat
-  );
-  blade.rotation.x = -Math.PI / 2;
-  blade.position.set(0.2 * s, 0.8 * s, -0.4 * s);
-  g.add(shroud, blade);
+  shroud.position.y = 0.72 * s;
+  shroud.scale.setScalar(s);
+  g.add(shroud);
+  // The hem, torn into three points. This is what says it has no feet.
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    P('wraithTatter', spike(0.1, 0.42, 4), {
+      x: Math.cos(a) * 0.26, y: 0.26, z: Math.sin(a) * 0.26, rx: Math.PI,
+    });
+  }
+  P('wraithBlade', spike(0.07, 0.55, 4), { x: 0.24, y: 1.0, z: -0.4, rx: -Math.PI / 2 });
+  eyes(P, { y: 1.05, x: 0.09, z: -0.19, r: 0.85, mat: e.eyeMat });
 }
 
+// Squat and wide behind a hexagonal plate that is most of its footprint. Read:
+// the front is closed, so go around it.
 function buildBulwark(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('bulwarkTorso', prism(0.4, 0.46, 0.58, 6), { y: 0.7 });
+  P('bulwarkHead', slab(0.24, 0.16, 0.22), { y: 1.06, z: -0.1 });
+  // Thick and short. A bulwark that looked like it could run would be lying.
+  P('bulwarkLeg', slab(0.22, 0.34, 0.24), { x: -0.26, y: 0.17 });
+  P('bulwarkLeg', slab(0.22, 0.34, 0.24), { x: 0.26, y: 0.17 });
   // The shield is the whole read of this enemy, so it is wide, flat and in
   // front - the player has to be able to tell at a glance which way it faces.
-  const shield = new THREE.Mesh(
-    geo('bulwarkShield', () => new THREE.BoxGeometry(1.0, 0.9, 0.1)),
-    SHARED_MATS.bulwarkShield
-  );
-  shield.position.set(0, 0.8 * s, -0.5 * s);
-  shield.castShadow = true;
-  const rim = new THREE.Mesh(
-    geo('bulwarkRim', () => new THREE.BoxGeometry(1.06, 0.1, 0.12)),
-    e.bodyMat
-  );
-  rim.position.set(0, 1.22 * s, -0.5 * s);
-  g.add(shield, rim);
+  P('bulwarkShield', prism(0.62, 0.62, 0.1, 6), {
+    y: 0.8, z: -0.52, rx: Math.PI / 2, mat: SHARED_MATS.bulwarkShield,
+  });
+  P('bulwarkBoss', shard(0.14), { y: 0.8, z: -0.6, mat: SHARED_MATS.wardenCrown });
+  eyes(P, { y: 1.08, x: 0.08, z: -0.22, r: 0.75, mat: e.eyeMat });
 }
 
+// A floating spindle with nothing that could hold a weapon, and no eyes at
+// all. Read: it is a machine, it is not attacking, and it is the reason the
+// crowd stopped dying.
 function buildConduit(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('conduitCore', shard(0.32), { y: 1.0 });
+  P('conduitCap', spike(0.22, 0.32, 6), { y: 1.42 });
+  P('conduitKeel', spike(0.26, 0.46, 6), { y: 0.48, rx: Math.PI });
   // Two rings on different axes, spun in update. A support unit has to look
   // like a machine doing something rather than another soldier.
-  const ringGeo = geo('conduitRing', () => new THREE.TorusGeometry(0.34 * s, 0.035, 8, 18));
+  const ringGeo = geo('conduitRing', () => new THREE.TorusGeometry(0.36, 0.035, 6, 14));
   const r1 = new THREE.Mesh(ringGeo, SHARED_MATS.conduitRing);
-  r1.position.y = 0.9 * s;
+  r1.position.y = 1.0 * s;
+  r1.scale.setScalar(s);
   const r2 = new THREE.Mesh(ringGeo, SHARED_MATS.conduitRing);
-  r2.position.y = 0.9 * s;
+  r2.position.y = 1.0 * s;
+  r2.scale.setScalar(s);
   r2.rotation.y = Math.PI / 2;
   e.ringA = r1;
   e.ringB = r2;
   g.add(r1, r2);
 }
 
+// Bottom-heavy and hunched, tapering the opposite way to a tank, with a
+// drooping nozzle. Read: everything it has is going onto the floor.
 function buildBlight(e, g, s) {
-  const sac = new THREE.Mesh(
-    geo('blightSac', () => new THREE.SphereGeometry(0.3 * s, 9, 7)),
-    SHARED_MATS.blightSac
-  );
-  sac.position.set(0, 1.05 * s, 0.2 * s);
-  const nozzle = new THREE.Mesh(
-    geo('blightNozzle', () => new THREE.CylinderGeometry(0.05, 0.11, 0.45, 7)),
-    SHARED_MATS.gunmetal
-  );
-  nozzle.rotation.x = -Math.PI / 2.4;
-  nozzle.position.set(0, 0.85 * s, -0.35 * s);
-  g.add(sac, nozzle);
-}
-
-function buildMagma(e, g, s) {
-  // Cracked crust over a glow: the vents say where the heat is coming out,
-  // which is the only part of the model that has to communicate anything.
-  const ventGeo = geo('magmaVent', () => new THREE.SphereGeometry(0.13, 8, 6));
-  for (let i = 0; i < 3; i++) {
-    const v = new THREE.Mesh(ventGeo, SHARED_MATS.magmaVent);
-    const a = (i / 3) * Math.PI * 2;
-    v.position.set(Math.cos(a) * 0.3 * s, (0.6 + i * 0.22) * s, Math.sin(a) * 0.3 * s);
-    g.add(v);
+  const P = partsFor(e, g, s);
+  // WIDE AND FLAT ON THE FLOOR - the opposite of the bomber's stilts. Nothing
+  // else in the roster is broader than it is tall, and that alone is enough to
+  // tell the two heavy types apart at a glance.
+  P('blightGut', lump(0.5), { y: 0.36, sx: 1.3, sy: 0.6, sz: 1.15 });
+  // A hump on the back, so the outline has a peak that is not the head.
+  P('blightHump', lump(0.3), { y: 0.62, z: 0.22, sy: 0.85 });
+  // The head is low and slung FORWARD off the front of the gut, and the
+  // nozzle carries on past it - together they are the long snout that reads
+  // from the side.
+  P('blightHead', prism(0.16, 0.24, 0.34, 5), { y: 0.5, z: -0.5, rx: -1.15 });
+  P('blightNozzle', prism(0.05, 0.13, 0.62, 5), {
+    y: 0.34, z: -0.82, rx: -Math.PI / 2.1, mat: SHARED_MATS.gunmetal,
+  });
+  // Four legs splayed out sideways, crab-like, and barely clearing the floor.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    P('blightLeg', slab(0.08, 0.34, 0.08), {
+      x: Math.cos(a) * 0.44, y: 0.16, z: Math.sin(a) * 0.38,
+      rz: -Math.cos(a) * 0.75, rx: Math.sin(a) * 0.5,
+    });
   }
-  const crust = new THREE.Mesh(
-    geo('magmaCrust', () => new THREE.ConeGeometry(0.4, 0.3, 7)),
-    SHARED_MATS.magmaCrust
-  );
-  crust.position.y = 1.3 * s;
-  g.add(crust);
+  P('blightSac', lump(0.24), { x: -0.4, y: 0.6, z: 0.06, mat: SHARED_MATS.blightSac });
+  P('blightSac', lump(0.24), { x: 0.4, y: 0.6, z: 0.06, mat: SHARED_MATS.blightSac });
+  eyes(P, { y: 0.62, x: 0.08, z: -0.58, r: 0.75, mat: e.eyeMat });
 }
 
+// A stack of cracked chunks with the heat showing between them. Read: it is
+// made of the thing it is leaving on the ground.
+function buildMagma(e, g, s) {
+  const P = partsFor(e, g, s);
+  // STACKED UPWARD and off-axis. The chunks step sideways as they rise so the
+  // tower leans and the joins are visible as notches in the outline - a
+  // straight stack just rebuilt the lump this pass exists to get rid of.
+  P('magmaBase', rock(0.4), { y: 0.34, sy: 0.75, sx: 1.15 });
+  P('magmaMid', rock(0.34), { x: 0.1, y: 0.76, ry: 0.7, sy: 0.85 });
+  P('magmaTop', rock(0.26), { x: -0.08, y: 1.14, ry: 1.5 });
+  P('magmaHead', rock(0.17), { x: 0.06, y: 1.44, ry: 2.2 });
+  // Jagged shards off the shoulders, angled out. These are what make the
+  // outline read as broken rock rather than as a boulder.
+  // One cached shard, varied by SCALE. geo() keys by name alone, so three
+  // calls under one key asking for three different sizes would all silently
+  // get whichever was built first.
+  const shardGeo = spike(0.09, 0.46, 4);
+  P('magmaShard', shardGeo, { x: -0.36, y: 1.0, rz: 0.85, rx: -0.2 });
+  P('magmaShard', shardGeo, { x: 0.38, y: 0.84, rz: -1.05, rx: 0.3, s: 0.88 });
+  P('magmaShard', shardGeo, { x: -0.2, y: 1.36, z: 0.24, rx: 0.7, s: 0.74 });
+  P('magmaFoot', rock(0.15), { x: -0.28, y: 0.11, z: -0.04 });
+  P('magmaFoot', rock(0.15), { x: 0.26, y: 0.11, z: 0.06 });
+  // Vents sit in the notches between chunks: the only part of the model that
+  // has to communicate anything, so they go where the rock does not meet.
+  const ventGeo = shard(0.12);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    P('magmaVent', ventGeo, {
+      x: Math.cos(a) * 0.3, y: 0.56 + i * 0.3, z: Math.sin(a) * 0.3,
+      mat: SHARED_MATS.magmaVent, shadow: false,
+    });
+  }
+  P('magmaCrust', spike(0.24, 0.36, 5), { x: 0.06, y: 1.7, mat: SHARED_MATS.magmaCrust });
+  eyes(P, { y: 1.46, x: 0.09, z: -0.16, r: 0.85, mat: e.eyeMat });
+}
+
+// A four-sided obelisk with no legs, no arms and one slit instead of eyes.
+// Read: it is not a soldier, it does not move like one, and it is the reason
+// your shots stopped landing.
 function buildWarden(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('wardenShaft', prism(0.24, 0.36, 1.24, 4), { y: 0.72, ry: Math.PI / 4 });
+  P('wardenTip', spike(0.24, 0.4, 4), { y: 1.54, ry: Math.PI / 4 });
+  P('wardenBase', prism(0.4, 0.34, 0.16, 4), { y: 0.08, ry: Math.PI / 4 });
+  // One horizontal slit rather than a pair of dots. Nothing else in the roster
+  // reads this way, and it is what makes a warden findable in a crowd.
+  P('wardenSlit', slab(0.34, 0.055, 0.05), { y: 1.1, z: -0.26, mat: e.eyeMat, shadow: false });
+
   // The DOME is the enemy. It is built at exactly WARD_RANGE so what the
   // player sees and what the aura protects are the same number, and it is
   // open-topped so it never fills the screen when the player is standing
@@ -655,29 +840,34 @@ function buildWarden(e, g, s) {
   g.add(dome, ring);
 
   const crown = new THREE.Mesh(
-    geo('wardenCrown', () => new THREE.TorusGeometry(0.3, 0.05, 8, 16)),
+    geo('wardenCrown', () => new THREE.TorusGeometry(0.34, 0.05, 6, 12)),
     SHARED_MATS.wardenCrown
   );
   crown.rotation.x = Math.PI / 2;
-  crown.position.y = 1.35 * s;
+  crown.position.y = 1.36 * s;
+  crown.scale.setScalar(s);
   e.crown = crown;
   g.add(crown);
 }
 
-// Bosses are built from the same primitives as everything else, at a much
-// larger `scale`, plus the one part that carries their mechanic.
+// ---- bosses --------------------------------------------------------------
+// Built from the same primitives as everything else, at a much larger `scale`,
+// plus the one part that carries the fight's mechanic. A boss silhouette has
+// to be legible at the distance the arena is fought across, so these lean on
+// overall proportion rather than on detail that would vanish.
+
+// The widest thing in the game, on two thick legs, with one plate that does
+// not match the rest of it.
 function buildColossus(e, g, s) {
-  const shoulderGeo = geo('colossusPauldron', () => new THREE.BoxGeometry(0.42, 0.5, 0.42));
-  const l = new THREE.Mesh(shoulderGeo, e.bodyMat);
-  l.position.set(-0.4 * s, 0.98 * s, 0);
-  const r = new THREE.Mesh(shoulderGeo, e.bodyMat);
-  r.position.set(0.4 * s, 0.98 * s, 0);
-  const plate = new THREE.Mesh(
-    geo('colossusPlate', () => new THREE.BoxGeometry(0.8, 0.16, 0.5)),
-    SHARED_MATS.tankPlate
-  );
-  plate.position.set(0, 0.55 * s, -0.28 * s);
-  g.add(l, r, plate);
+  const P = partsFor(e, g, s);
+  P('colossusTorso', prism(0.6, 0.4, 0.86, 6), { y: 0.88 });
+  P('colossusPauldron', slab(0.46, 0.5, 0.46), { x: -0.52, y: 1.08 });
+  P('colossusPauldron', slab(0.46, 0.5, 0.46), { x: 0.52, y: 1.08 });
+  P('colossusHead', slab(0.3, 0.24, 0.28), { y: 1.16, z: -0.16 });
+  P('colossusLeg', slab(0.28, 0.5, 0.3), { x: -0.26, y: 0.25 });
+  P('colossusLeg', slab(0.28, 0.5, 0.3), { x: 0.26, y: 0.25 });
+  P('colossusPlate', slab(0.8, 0.18, 0.14), { y: 0.96, z: -0.36, mat: SHARED_MATS.tankPlate });
+  eyes(P, { y: 1.18, x: 0.1, z: -0.31, r: 1.1, mat: e.eyeMat });
 
   // THE WEAK POINT. Parented to a pivot at the boss's centre so the ai only
   // has to turn one object: the plate then travels around the body without any
@@ -704,67 +894,104 @@ function buildColossus(e, g, s) {
   e.bs.coreMat = mat;
 }
 
+// Legless: a wide braced platform with a barrel angled at the sky. Read: it is
+// not chasing you, it is ranging on you.
 function buildSiege(e, g, s) {
-  const barrel = new THREE.Mesh(
-    geo('siegeBarrel', () => new THREE.CylinderGeometry(0.14, 0.19, 1.1, 10)),
-    SHARED_MATS.sniperBarrel
-  );
+  const P = partsFor(e, g, s);
+  P('siegeBase', prism(0.6, 0.78, 0.32, 6), { y: 0.18 });
+  P('siegeHull', prism(0.44, 0.58, 0.5, 6), { y: 0.62 });
+  // Outriggers braced on the floor, so the whole thing reads as planted.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    P('siegeFoot', slab(0.26, 0.16, 0.26), {
+      x: Math.cos(a) * 0.78, y: 0.09, z: Math.sin(a) * 0.78, ry: a,
+      mat: SHARED_MATS.tankPlate,
+    });
+  }
+  P('siegeMantlet', slab(0.5, 0.34, 0.3), { y: 0.98, z: -0.14 });
   // Angled up: it lobs rather than shoots, and the silhouette should say so
   // from across the arena.
-  barrel.rotation.x = -Math.PI / 3;
-  barrel.position.set(0, 1.0 * s, -0.3 * s);
-  const base = new THREE.Mesh(
-    geo('siegeBase', () => new THREE.CylinderGeometry(0.55, 0.7, 0.3, 8)),
-    SHARED_MATS.tankPlate
-  );
-  base.position.y = 0.25 * s;
-  g.add(barrel, base);
+  P('siegeBarrel', prism(0.13, 0.19, 1.2, 8), {
+    y: 1.18, z: -0.42, rx: -Math.PI / 3, mat: SHARED_MATS.sniperBarrel,
+  });
+  eyes(P, { y: 1.0, x: 0.16, z: -0.3, r: 1.1, mat: e.eyeMat });
 }
 
+// Two crystals side by side with a lit gap between them. The whole model is
+// the mechanic: it is already two, and it is going to be four.
 function buildSchism(e, g, s) {
-  const shellGeo = geo('schismShell', () => new THREE.OctahedronGeometry(0.4, 0));
-  const a = new THREE.Mesh(shellGeo, e.bodyMat);
-  a.position.y = 1.05 * s;
-  const b = new THREE.Mesh(shellGeo, SHARED_MATS.splitterCore);
-  b.position.y = 1.05 * s;
-  b.scale.setScalar(1.35);
+  const P = partsFor(e, g, s);
+  // Held far enough apart that the gap survives a three-quarter view - at
+  // +/-0.24 the two halves overlapped into one diamond and the whole read of
+  // the fight was lost.
+  P('schismHalf', shard(0.42), { x: -0.38, y: 1.05, sy: 1.2, sz: 0.85 });
+  P('schismHalf', shard(0.42), { x: 0.38, y: 1.05, sy: 1.2, sz: 0.85 });
+  P('schismKeel', spike(0.36, 0.62, 6), { y: 0.36, rx: Math.PI });
+  const a = P('schismCore', shard(0.3), { y: 1.02, mat: e.bodyMat, shadow: false });
+  const b = P('schismGlow', shard(0.22), {
+    y: 1.02, mat: SHARED_MATS.splitterCore, shadow: false,
+  });
   e.coreMesh = a;
   e.ringMesh = b;
-  g.add(a, b);
+  eyes(P, { y: 1.3, x: 0.24, z: -0.24, r: 1.2, mat: e.eyeMat });
 }
 
+// A funnel: wide open at the top, narrowing to nothing at the floor. Nothing
+// else in the game is wider at the top, and that is the whole read - it is a
+// mouth, and it is pulling.
 function buildMaw(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('mawFunnel', prism(0.78, 0.18, 1.05, 8), { y: 0.62 });
+  P('mawStem', prism(0.18, 0.3, 0.2, 6), { y: 0.1 });
+  // Teeth around the rim, pointing inward and down into the throat.
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    P('mawTooth', spike(0.09, 0.34, 4), {
+      x: Math.cos(ang) * 0.66, y: 1.0, z: Math.sin(ang) * 0.66,
+      rx: Math.PI - Math.sin(ang) * 0.4, rz: Math.cos(ang) * 0.4,
+    });
+  }
+  P('mawVoid', shard(0.44), { y: 0.95, mat: SHARED_MATS.sniperScope, shadow: false });
   const maw = new THREE.Mesh(
-    geo('mawRing', () => new THREE.TorusGeometry(0.55, 0.14, 10, 20)),
+    geo('mawRing', () => new THREE.TorusGeometry(0.8, 0.13, 8, 16)),
     SHARED_MATS.conduitRing
   );
   maw.rotation.x = Math.PI / 2;
-  maw.position.y = 0.9 * s;
-  const void_ = new THREE.Mesh(
-    geo('mawCore', () => new THREE.SphereGeometry(0.42, 12, 10)),
-    SHARED_MATS.sniperScope
-  );
-  void_.position.y = 0.9 * s;
+  maw.position.y = 1.14 * s;
+  maw.scale.setScalar(s);
   e.ringA = maw;
-  g.add(maw, void_);
+  g.add(maw);
 }
 
+// Tall, robed and crowned - the only thing in the roster with a skirt, and the
+// tallest silhouette in the game. Read: this is the last one.
 function buildHerald(e, g, s) {
-  const crownGeo = geo('heraldSpire', () => new THREE.ConeGeometry(0.1, 0.55, 5));
+  const P = partsFor(e, g, s);
+  // The robe has to MEET the torso. As a plain cone it tapered to a point
+  // well under the body and the two read as separate objects stacked in the
+  // air; a truncated cone keeps the silhouette one continuous figure.
+  P('heraldRobe', prism(0.3, 0.62, 0.92, 6), { y: 0.46 });
+  P('heraldTorso', prism(0.24, 0.32, 0.56, 6), { y: 1.14 });
+  P('heraldShoulder', slab(0.26, 0.14, 0.3), { x: -0.3, y: 1.34, rz: 0.4 });
+  P('heraldShoulder', slab(0.26, 0.14, 0.3), { x: 0.3, y: 1.34, rz: -0.4 });
+  P('heraldHead', shard(0.19), { y: 1.58 });
+  const crownGeo = spike(0.09, 0.5, 4);
   for (let i = 0; i < 5; i++) {
-    const spire = new THREE.Mesh(crownGeo, e.bodyMat);
     const ang = (i / 5) * Math.PI * 2;
-    spire.position.set(Math.cos(ang) * 0.36 * s, 1.28 * s, Math.sin(ang) * 0.36 * s);
-    g.add(spire);
+    P('heraldSpire', crownGeo, {
+      x: Math.cos(ang) * 0.3, y: 1.72, z: Math.sin(ang) * 0.3,
+    });
   }
   const halo = new THREE.Mesh(
-    geo('heraldHalo', () => new THREE.TorusGeometry(0.46, 0.045, 8, 20)),
+    geo('heraldHalo', () => new THREE.TorusGeometry(0.5, 0.045, 6, 16)),
     SHARED_MATS.conduitRing
   );
   halo.rotation.x = Math.PI / 2;
-  halo.position.y = 1.45 * s;
+  halo.position.y = 1.98 * s;
+  halo.scale.setScalar(s);
   e.ringA = halo;
   g.add(halo);
+  eyes(P, { y: 1.52, x: 0.09, z: -0.16, r: 0.9, mat: e.eyeMat });
 }
 
 // ---- AI ------------------------------------------------------------------
@@ -1459,34 +1686,23 @@ export class Enemy {
 
     this.group = new THREE.Group();
     this.group.position.copy(this.pos);
+    // flatShading is what makes the whole roster read as cut facets. Every
+    // part of every silhouette shares this one material, so a hit flash and a
+    // status tint land on the entire body at once - see partsFor().
     this.bodyMat = new THREE.MeshStandardMaterial({
-      color: def.color, roughness: 0.4, metalness: 0.3,
+      color: def.color, roughness: 0.4, metalness: 0.3, flatShading: true,
       emissive: def.color, emissiveIntensity: BODY_BASE_INTENSITY,
     });
-    const body = new THREE.Mesh(
-      geo('body:' + type, () => new THREE.CapsuleGeometry(0.34 * s, 0.55 * s, 4, 10)),
-      this.bodyMat
-    );
-    body.position.y = 0.75 * s;
-    body.castShadow = true;
-    this.group.add(body);
-
     this.eyeMat = new THREE.MeshBasicMaterial({ color: def.eye });
-    const eyeGeo = geo('eye', () => new THREE.SphereGeometry(0.07, 8, 8));
-    const e1 = new THREE.Mesh(eyeGeo, this.eyeMat);
-    e1.position.set(-0.13 * s, 1.05 * s, -0.27 * s);
-    const e2 = new THREE.Mesh(eyeGeo, this.eyeMat);
-    e2.position.set(0.13 * s, 1.05 * s, -0.27 * s);
-    this.group.add(e1, e2);
 
-    // The type's own parts. A type with no build() falls back to the chaser
-    // jaw, which is what the original chain's `else` did for anything it did
-    // not recognise.
+    // The type builds its OWN model, silhouette included. There is deliberately
+    // no shared body here: one capsule for every type was what made the roster
+    // read as the same blob in different colours.
     (def.build || buildChaser)(this, this.group, s);
 
     // A type may override the hit sphere when its silhouette is nothing like
-    // the default capsule. The geometry is still cached per type, never per
-    // instance.
+    // the usual upright body - the bosses all do. The geometry is still cached
+    // per type, never per instance.
     const hb = def.hitbox;
     this.hitbox = new THREE.Mesh(
       hb
@@ -1996,8 +2212,8 @@ export class Shard {
     // Horizontal test only. A shard flies at chest height and an enemy's `pos`
     // is at its FEET, so a 3D distance here was never smaller than the metre
     // between them and the shards sailed straight through everything - they
-    // only ever went off on their fuse. Enemies are upright capsules, so the
-    // XZ distance is the right comparison.
+    // only ever went off on their fuse. Every enemy is taller than it is wide
+    // and stands on the floor, so the XZ distance is the right comparison.
     for (const e of ctx.enemies) {
       if (e.dead) continue;
       const dx = this.pos.x - e.pos.x;

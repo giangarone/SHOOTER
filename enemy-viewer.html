@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Enemy model viewer</title>
+<script type="importmap">
+  { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+</script>
+<style>
+  body { margin:0; background:#0b0d12; color:#cfd6e4; font:12px ui-monospace,monospace; overflow:hidden; }
+  #bar { position:fixed; top:0; left:0; right:0; padding:8px 12px; background:#11141c;
+         z-index:2; display:flex; gap:10px; align-items:center; }
+  button { background:#222836; color:#cfd6e4; border:1px solid #384154; padding:5px 10px;
+           cursor:pointer; font:inherit; }
+  button.on { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+  #hint { opacity:.6; margin-left:auto; }
+  canvas { display:block; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="prev">&larr;</button>
+  <button id="next">&rarr;</button>
+  <button id="sil">silhouette</button>
+  <button id="spin" class="on">spin</button>
+  <button id="face">front</button>
+  <button id="q34">3/4</button>
+  <button id="side">side</button>
+  <button id="near">close range</button>
+  <span id="hint">arrows pan &middot; camera is at the player's eye height (1.7m), FOV 75</span>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { ENEMY_TYPES, Enemy } from './js/enemy.js';
+
+// The whole point of this page is to judge silhouettes from where the player
+// actually stands. The game is FIRST PERSON: the camera sits at eye height
+// 1.7m with pitch 0 and a 75deg FOV (player.js updateCamera, main.js). Viewing
+// these from above - the obvious way to lay out a model sheet - foreshortens
+// every vertical difference away and makes the entire roster look like blobs,
+// which is exactly the bug being fixed. So: eye height, horizontal, one row.
+const EYE = 1.7, FOV = 75;
+// Wide enough that a 3.2x boss does not overlap its neighbours.
+const SPACING = 6.0;
+const FAR_Z = 11, NEAR_Z = 5.5;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d12);
+const cam = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x8899bb, 0x202028, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(4, 10, 7);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.7);
+rim.position.set(-6, 3, -9);
+scene.add(rim);
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 400),
+  new THREE.MeshStandardMaterial({ color: 0x161a24, roughness: 1 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+const names = Object.keys(ENEMY_TYPES);
+const spinners = [], labels = [], originals = [];
+const silMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+names.forEach((name, i) => {
+  const e = new Enemy(name, new THREE.Vector3(0, 0, 0), 1, 1, 1);
+  const g = e.group;
+  // The warden's dome and floor ring are built at world size (6.5m radius) and
+  // would swallow the whole row; the MODEL is what is under review here.
+  if (name === 'warden') {
+    for (const c of [...g.children]) {
+      if (c.isMesh && (c.geometry.type === 'SphereGeometry' || c.geometry.type === 'RingGeometry')) {
+        g.remove(c);
+      }
+    }
+  }
+  const holder = new THREE.Object3D();
+  holder.position.x = i * SPACING;
+  holder.add(g);
+  scene.add(holder);
+  spinners.push(holder);
+  // The hit sphere is a real mesh with an invisible material. Swapping it for
+  // the black silhouette material would draw a 0.6m ball over the whole model -
+  // which is what made every enemy look like a blob in this very test.
+  g.traverse(o => {
+    if (o.isMesh && o.material.visible !== false) originals.push([o, o.material]);
+  });
+
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.font = 'bold 56px ui-monospace,monospace';
+  cx.textAlign = 'center';
+  cx.fillText(name.toUpperCase(), 256, 66);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true, depthTest: false,
+  }));
+  sp.scale.set(2.6, 0.5, 1);
+  sp.position.set(holder.position.x, -0.35, 0);
+  scene.add(sp);
+  labels.push(sp);
+});
+
+let silhouette = false, spinning = true, near = false;
+let focus = 0, camX = 0;
+// Exposed so the model sheet can be driven from the console while iterating.
+window.viewer = {
+  go(i) { focus = Math.max(0, Math.min(names.length - 1, i)); camX = focus * SPACING; },
+  names,
+};
+
+const btn = (id, fn) => {
+  const b = document.getElementById(id);
+  b.onclick = () => fn(b);
+};
+btn('sil', (b) => {
+  silhouette = !silhouette;
+  b.classList.toggle('on', silhouette);
+  for (const [m, orig] of originals) m.material = silhouette ? silMat : orig;
+  scene.background = new THREE.Color(silhouette ? 0xe8ecf4 : 0x0b0d12);
+  floor.visible = !silhouette;
+  for (const l of labels) l.material.color.set(silhouette ? 0x111111 : 0xffffff);
+});
+btn('spin', (b) => { spinning = !spinning; b.classList.toggle('on', spinning); });
+// Models face -z, the camera looks down -z, so an unrotated enemy shows its
+// BACK. These three park every model at a known bearing instead.
+const pose = (a) => () => {
+  spinning = false;
+  document.getElementById('spin').classList.remove('on');
+  for (const h of spinners) h.rotation.y = a;
+};
+btn('face', pose(Math.PI));
+btn('q34', pose(Math.PI * 0.75));
+btn('side', pose(Math.PI * 0.5));
+btn('near', (b) => { near = !near; b.classList.toggle('on', near); });
+btn('prev', () => { focus = Math.max(0, focus - 1); });
+btn('next', () => { focus = Math.min(names.length - 1, focus + 1); });
+addEventListener('keydown', (ev) => {
+  if (ev.key === 'ArrowLeft') focus = Math.max(0, focus - 1);
+  if (ev.key === 'ArrowRight') focus = Math.min(names.length - 1, focus + 1);
+});
+addEventListener('resize', () => {
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function frame() {
+  const dt = clock.getDelta();
+  if (spinning) for (const h of spinners) h.rotation.y += dt * 0.6;
+  camX += (focus * SPACING - camX) * Math.min(1, dt * 6);
+  cam.position.set(camX, EYE, near ? NEAR_Z : FAR_Z);
+  cam.lookAt(camX, near ? 1.0 : 0.85, 0);
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

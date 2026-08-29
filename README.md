@@ -34,6 +34,16 @@ Open http://localhost:8123
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
 - Twelve enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Wraiths** (blink behind you), **Bulwarks** (frontal shield - flank them, or burn them, since damage over time ignores it), **Conduits** (no attack; buff everything near them), **Blights** (lingering pools that make standing still cost health), **Magmas** (burn a trail of lava into the floor behind them that lasts five seconds - do not retreat down the line they walked) and **Wardens** (no attack; project a dome that makes every enemy inside it invincible and stone-grey until you kill the warden itself)
+- **Every enemy is its own silhouette.** Types used to share one capsule body
+  and differ only by colour, which falls apart exactly when it matters - a
+  frozen or poisoned enemy is wearing the status tint, not its own colour. Each
+  type now has its own faceted geometry, and the shape maps to the behaviour:
+  types that rush you lean forward on legs, types that soak damage are wide and
+  planted, ranged types stand upright and carry the weight on one side,
+  support types float with no legs at all, ground-deniers are bloated and
+  low, and the two that come apart are visibly built in halves. The test each
+  model has to pass is being identifiable as a flat black shape - `enemy-viewer.html`
+  renders the whole roster that way, at the player's own eye height.
 - **Nothing ever spawns on top of you.** There is a no-spawn bubble sixteen
   metres wide around the player, applied after the spawn point's jitter, so
   every enemy that appears has to visibly cross ground to reach you.
