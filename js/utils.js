@@ -47,3 +47,49 @@ export function makeAabb(x, y, z, w, h, d) {
     max: { x: x + w / 2, y: y + h / 2, z: z + d / 2 },
   };
 }
+
+// True if the straight XZ segment a->b clears every obstacle, treating the
+// mover as a circle of `radius` (each box is expanded by it, the standard
+// Minkowski trick). Used by the navigation grid to decide whether an enemy can
+// simply walk at the player, and to shortcut the corners off a grid path.
+//
+// Slab test per box: clip the segment's [0,1] parameter range against the x
+// and z spans in turn. If a range survives both, the segment is inside that
+// box somewhere along its length.
+export function segmentClear(ax, az, bx, bz, radius, obstacles) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  for (const o of obstacles) {
+    const minX = o.min.x - radius;
+    const maxX = o.max.x + radius;
+    const minZ = o.min.z - radius;
+    const maxZ = o.max.z + radius;
+    let t0 = 0;
+    let t1 = 1;
+    // A near-zero component means the segment is parallel to that pair of
+    // faces: it either starts between them for its whole length or misses the
+    // box outright, and there is no range to clip.
+    if (Math.abs(dx) < 1e-8) {
+      if (ax < minX || ax > maxX) continue;
+    } else {
+      let ta = (minX - ax) / dx;
+      let tb = (maxX - ax) / dx;
+      if (ta > tb) { const s = ta; ta = tb; tb = s; }
+      if (ta > t0) t0 = ta;
+      if (tb < t1) t1 = tb;
+      if (t0 > t1) continue;
+    }
+    if (Math.abs(dz) < 1e-8) {
+      if (az < minZ || az > maxZ) continue;
+    } else {
+      let ta = (minZ - az) / dz;
+      let tb = (maxZ - az) / dz;
+      if (ta > tb) { const s = ta; ta = tb; tb = s; }
+      if (ta > t0) t0 = ta;
+      if (tb < t1) t1 = tb;
+      if (t0 > t1) continue;
+    }
+    return false;
+  }
+  return true;
+}

@@ -2,16 +2,26 @@
 //
 // Three pillars rise out of the arena floor when a wave is cleared, each
 // showing one upgrade. The player takes one by walking into it or by shooting
-// its core. Nothing pauses: the next wave starts on a timer whether or not a
-// choice was made, and an unclaimed set simply stays standing until the wave
-// after it is cleared, when a fresh set replaces it.
+// it ANYWHERE - the pillar and the icon hovering in front of it are one target.
+// Nothing pauses: the next wave starts on a timer whether or not a choice was
+// made, and an unclaimed set simply stays standing until the wave after it is
+// cleared, when a fresh set replaces it.
 //
-// WHY THE CORE IS A SEPARATE, SMALL TARGET
-//   Totems stay live through the following wave, so the player is fighting
-//   around them. Only the little core claims an upgrade; the pillar body is a
-//   normal raycast target that stops a bullet harmlessly. Without that split, a
-//   shot that missed an enemy standing behind a totem would pick a build for
-//   you.
+// THE WHOLE TOTEM IS THE TARGET
+//   An earlier revision made only a small floating core claim the upgrade, so
+//   that a shot which missed an enemy standing behind a totem could not pick a
+//   build for you. It cost more than it saved: hitting a wobbling 27cm orb
+//   mid-fight is a marksmanship test nobody asked for, and the totem reads as
+//   one object, so half of it being inert reads as a bug. Claiming is now a
+//   single invisible box around the pillar and its icon (`hit` below). The
+//   floating label panel above is deliberately NOT part of it - it hangs wide
+//   and high over the arena, and a stray shot up there should stay a miss.
+//
+// EACH OFFER HAS ITS OWN COLOUR AND ICON
+//   `theme` tints the pillar, the panel and the icon; `icon` names a small 3D
+//   object from icons.js that says what the upgrade does before the text is
+//   legible - a flame for Incendiary, an icicle for Cryo. Both come straight
+//   off the offer, so this file still knows nothing about upgrades.
 //
 // PERFORMANCE RULES, same as arena.js and powerups.js:
 //   1. No PointLights, ever. three.js keys its shader programs on the scene's
@@ -23,8 +33,13 @@
 //      textures every wave is a leak that shows up as a slow framerate decay
 //      thirty waves in. Nothing here is ever disposed because nothing here is
 //      ever discarded.
+//   3. Icons are built on first sight and KEPT, one per offer id per totem,
+//      hidden rather than thrown away. That bounds them by the size of the
+//      upgrade pool instead of by the number of waves survived, and the
+//      geometry behind them is shared across every icon in the game.
 
 import * as THREE from 'three';
+import { buildIcon } from './icons.js';
 // A totem draws whatever it is handed. It knows nothing about upgrades or
 // weapons - main.js normalises both into the same `offer` shape, which is why
 // putting a weapon on a totem needed no changes here.
@@ -49,9 +64,19 @@ const SUNK_Y = -3.4;
 const SIGN_COLOR = { '1': '#37e08b', '-1': '#ff5a4d', '0': '#8a95b3' };
 
 const PILLAR_GEOM = new THREE.BoxGeometry(1.15, 2.4, 0.5);
-const CORE_GEOM = new THREE.IcosahedronGeometry(0.27, 0);
+// The claim volume: the pillar plus the space the icon floats in, with enough
+// margin that a shot grazing either edge still counts.
+const HIT_GEOM = new THREE.BoxGeometry(1.45, 2.6, 1.3);
 const STATION_GEOM = new THREE.BoxGeometry(1.0, 1.4, 0.5);
-const BODY_MAT = new THREE.MeshStandardMaterial({ color: 0x161b26, roughness: 0.45, metalness: 0.7 });
+// Invisible, but still a raycast target - the same trick the enemy hitboxes
+// use. three.js raycasts geometry, not visibility.
+const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
+// Where the icon hovers: just clear of the pillar's front face, at chest
+// height on the panel side. ICON_SCALE sizes the whole catalogue at once -
+// icons.js builds every shape at roughly half a metre, which is legible in the
+// hand and too small against a 1.15m-wide pillar seen from across the arena.
+const ICON_POS = [0, 1.5, 0.55];
+const ICON_SCALE = 1.35;
 
 function hex(n) {
   return '#' + n.toString(16).padStart(6, '0');
@@ -108,15 +133,23 @@ export class Totem {
     this.pillar.castShadow = true;
     this.group.add(this.pillar);
 
-    this.coreMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.2,
-      roughness: 0.2, metalness: 0.5,
-    });
-    this.core = new THREE.Mesh(CORE_GEOM, this.coreMat);
-    this.core.position.set(0, 1.45, 0.42);
-    // How main.js tells a core hit from an ordinary wall hit.
-    this.core.userData.totem = this;
-    this.group.add(this.core);
+    // The claim volume, covering the pillar and the icon in front of it. It is
+    // the only raycast target a totem contributes, so a pellet that lands
+    // anywhere on the totem takes the upgrade and stops there.
+    this.hit = new THREE.Mesh(HIT_GEOM, HIT_MAT);
+    this.hit.position.set(0, 1.25, 0.2);
+    // How main.js tells a totem hit from an ordinary wall hit.
+    this.hit.userData.totem = this;
+    this.group.add(this.hit);
+
+    // Icons hang off this so the bob and spin are written once, whichever icon
+    // is showing. Built lazily and kept - see rule 3 at the top of the file.
+    this.iconAnchor = new THREE.Group();
+    this.iconAnchor.position.set(ICON_POS[0], ICON_POS[1], ICON_POS[2]);
+    this.iconAnchor.scale.setScalar(ICON_SCALE);
+    this.group.add(this.iconAnchor);
+    this._icons = new Map();
+    this.icon = null;
 
     this.panel = makePanel(512, 320, 3.5, 2.2);
     this.panel.sprite.position.set(0, 3.35, 0);
@@ -130,21 +163,36 @@ export class Totem {
   /**
    * Assigns an offer and starts the rise.
    *
-   * @param {object} offer  { id, kind, name, theme, rarityLabel, rarityColor,
-   *   effects, note } - see _buildOffers() in main.js. `kind` is opaque here;
-   *   main.js reads it back when the totem is claimed.
+   * @param {object} offer  { id, kind, name, theme, icon, rarityLabel,
+   *   rarityColor, effects, note } - see _buildOffers() in main.js. `kind` is
+   *   opaque here; main.js reads it back when the totem is claimed.
    */
   present(offer) {
     this.offer = offer;
     this.upgradeId = offer.id;
     this.claimed = false;
     this.pillarMat.emissive.setHex(offer.theme);
-    this.coreMat.color.setHex(offer.theme);
-    this.coreMat.emissive.setHex(offer.theme);
+    this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
     this.rise = 0;
     this.group.visible = true;
+  }
+
+  // Swaps in this offer's icon, building it the first time this totem is asked
+  // for it. Keyed by offer id rather than by icon name: two upgrades can share
+  // a shape (Overclock and Arc Rounds are both lightning) but never a colour,
+  // and the colour is baked into the icon's material when it is built.
+  _showIcon(offer) {
+    let icon = this._icons.get(offer.id);
+    if (!icon) {
+      icon = buildIcon(offer.icon || 'shard', offer.theme);
+      this._icons.set(offer.id, icon);
+      this.iconAnchor.add(icon);
+    }
+    if (this.icon && this.icon !== icon) this.icon.visible = false;
+    icon.visible = true;
+    this.icon = icon;
   }
 
   // Renders the whole readout in one pass: rarity, name, then one line per
@@ -232,10 +280,17 @@ export class Totem {
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
 
-    this.core.rotation.y += dt * 1.6;
-    this.core.rotation.x += dt * 0.9;
-    this.core.position.y = 1.45 + Math.sin(time * 2.4) * 0.07;
-    this.coreMat.emissiveIntensity = 2.0 + Math.sin(time * 5) * 0.5;
+    // The icon SWAYS rather than spins. Half of the catalogue is a flat
+    // silhouette a few centimetres deep - a bolt, a cross, a coin - and a full
+    // turn hides each of those edge-on for a third of its cycle, which reads as
+    // the icon blinking out. A bounded sway keeps every icon facing the row the
+    // player approaches from while still catching the eye. The phase is offset
+    // per totem so the three do not move as one object.
+    this.iconAnchor.rotation.y = Math.sin(time * 0.9 + this.pos.x) * 0.5;
+    this.iconAnchor.position.y = ICON_POS[1] + Math.sin(time * 2.4 + this.pos.x) * 0.07;
+    if (this.icon) {
+      this.icon.userData.glow.emissiveIntensity = 1.35 + Math.sin(time * 5) * 0.35;
+    }
   }
 }
 
@@ -266,7 +321,7 @@ export class Station {
     this.body.position.y = 0.7;
     this.body.castShadow = true;
     // How main.js tells a station hit from an ordinary wall hit. The whole
-    // body is the target, unlike a totem's small core - a station purchase is
+    // body is the target, the same as a totem - a station purchase is
     // repeatable and rate-limited, so a stray hit costs a shot, not a build.
     this.body.userData.station = this;
     this.group.add(this.body);
@@ -405,14 +460,14 @@ export class TotemArea {
     return null;
   }
 
-  // Appends this set's shootable parts to a raycast target list. The pillars
-  // go in so bullets stop on them; only the cores carry userData.totem, so
-  // only a core hit can claim. Station bodies go in too - they carry
-  // userData.station and are bought by shooting them.
+  // Appends this set's shootable parts to a raycast target list. One invisible
+  // box per standing totem, sized around the pillar and its icon: hitting it
+  // anywhere claims the offer and stops the pellet. Station bodies go in too -
+  // they carry userData.station and are bought by shooting them.
   addTargets(out) {
     for (const t of this.totems) {
       if (t.state === 'hidden') continue;
-      out.push(t.pillar, t.core);
+      out.push(t.hit);
     }
     for (const s of this.stations) {
       if (s.state !== 'hidden') out.push(s.body);

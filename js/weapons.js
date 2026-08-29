@@ -120,6 +120,7 @@ export const WEAPONS = {
   pulseRifle: {
     name: 'PULSE RIFLE',
     theme: 0x4ef3ff,
+    icon: 'gun',
     damage: 34,
     fireRate: 8,
     magSize: 30,
@@ -138,6 +139,7 @@ export const WEAPONS = {
   scattergun: {
     name: 'SCATTERGUN',
     theme: 0xffb300,
+    icon: 'shell',
     // 8 x 20 is 160 in one shell with every pellet landing, which only happens
     // point blank - the cone throws most of them away at any real distance.
     // Measured against a chaser (42hp) and a tank (180hp): full damage inside
@@ -166,6 +168,7 @@ export const WEAPONS = {
   railgun: {
     name: 'RAILGUN',
     theme: 0xb14aed,
+    icon: 'rail',
     // 150 one-shots every enemy in the game except a tank, and keeps doing it
     // down the line behind them. Sustained damage is deliberately poor - the
     // railgun is for burst on a priority target and for line clears, not for

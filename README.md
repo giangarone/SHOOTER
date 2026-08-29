@@ -29,13 +29,16 @@ Open http://localhost:8123
 
 - First-person camera with pointer-lock mouse aiming
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
+- Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
+  of grinding into the nearest pillar
 - Six enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades)
 - Pickups: ammo crates plus health, damage, fire-rate and shield powerups
 - **Upgrade totems**: clearing a wave raises three pillars near the arena
   centre, each showing one upgrade as short colour-coded lines - benefits
-  green, drawbacks red, and the pillar itself tinted by what the upgrade does.
-  Walk into one or shoot its core to take it. Upgrades are permanent for the
-  run and stack, so no two runs build the same way.
+  green, drawbacks red - with its own theme colour and a small 3D icon
+  hovering in front of it: a flame for Incendiary, an icicle for Cryo, a coin
+  for Midas Touch. Walk into one or shoot it anywhere to take it. Upgrades are
+  permanent for the run and stack, so no two runs build the same way.
 - **No pauses**: the next wave starts 5s after the clear whether or not you
   chose. An unclaimed set stays standing and is only replaced when the
   following wave is cleared - so a pick you ignore is a pick you lose.
@@ -79,10 +82,46 @@ glance, mid-run, from across the arena.
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
 with rares getting commoner as the run goes on.
 
-Only a totem's small **core** claims it. The pillar body is an ordinary raycast
-target that stops a bullet harmlessly, because totems stay live through the
-next wave and a shot that missed an enemy behind one must not pick a build for
-you.
+**The whole totem claims it.** One invisible box wraps the pillar and its icon,
+so a hit anywhere on the thing takes the upgrade. An earlier revision made only
+a small floating core claim, so a shot that missed an enemy standing behind a
+totem could not pick a build for you - but hitting a 27cm orb mid-fight is a
+marksmanship test nobody asked for, and a totem that is half inert reads as a
+bug. The floating label panel above is deliberately outside the box: it hangs
+wide and high over the arena, and a stray shot up there stays a miss.
+
+Each upgrade carries an `icon` naming a shape in `js/icons.js` alongside its
+`theme`. Icons are assembled from one shared set of eight unit primitives -
+box, sphere, cone, cylinder, torus, and three polyhedra - scaled and rotated
+per part, so a new icon costs no GPU memory. Never add a bespoke geometry
+there. A totem builds an icon the first time it shows one and keeps it hidden
+afterwards, which bounds the count by the size of the upgrade pool rather than
+by how many waves have passed.
+
+## Enemy movement
+
+Enemies route with a flow field, not a straight line. `js/nav.js` bakes the
+arena's obstacle AABBs into a half-metre occupancy grid once at startup, grown
+by the enemy radius so an open cell is a cell an enemy actually fits in. A
+breadth-first flood from the player's cell fills a distance field over that
+grid five times a second, and every enemy alive steers by walking downhill
+through the one field - which is the reason for a field rather than an A* per
+enemy: thirty enemies want a route to the same place, so it is computed once.
+
+Two passes keep it from looking like grid movement. If the straight line to the
+player is clear the field is ignored entirely, which is most of the time in an
+arena this open and costs one segment/box test. Otherwise the enemy follows the
+downhill chain a few cells ahead and aims at the farthest cell it still has a
+clear line to, which cuts the staircase off the path and rounds corners.
+
+Retreats - a feared enemy, a shooter backing off its preferred range - reverse
+the straight line instead of the path. Running away has no destination to route
+to, and the collision resolver already slides them along whatever they back
+into.
+
+The player is often standing on a platform, which is a blocked cell. The flood
+seeds from the ring of open cells around it in that case, so enemies gather at
+the foot of the platform rather than losing the route entirely.
 
 ## Weapons
 
@@ -122,6 +161,8 @@ js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         enemy AI (chaser / shooter) + projectiles
+js/nav.js           navigation grid + flow field enemies steer by
+js/icons.js         3D totem icons, built from shared primitives
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds

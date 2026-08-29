@@ -37,18 +37,50 @@ export const RARITY = {
 
 // THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
 // the totem can be read before any text is: gold means ammo, orange means rate
-// of fire, cyan means armour. Reuse an existing entry rather than inventing a
-// near-duplicate shade - the whole point is that the palette stays learnable.
+// of fire, cyan means armour, and the mutations each wear the colour of the
+// thing they inflict - green poison, orange fire, pale blue ice.
+//
+// Entries are grouped into families and shaded apart inside one, so two
+// upgrades never share a colour outright: the family is what makes the palette
+// learnable, the shade is what makes a particular totem recognisable from the
+// far side of the arena before its icon resolves. Add a shade to a family
+// rather than opening a new hue when the two would land next to each other.
 export const THEME = {
-  rate: 0xff9500,     // fire rate, attack speed
-  ammo: 0xffd600,     // magazine, reserve, economy
-  damage: 0xff3d00,   // raw damage
-  vitality: 0x00e676, // healing, regeneration
-  armor: 0x4ef3ff,    // max health, shields, retaliation
-  mobility: 0x2979ff, // move and sprint speed
-  blood: 0xff2d6f,    // lifesteal
-  status: 0x9d4edd,   // status effects: poison, fire, slow, fear, freeze
+  // rate of fire
+  rate: 0xff9500,
+  frenzy: 0xd50000,
+  // ammo and economy
+  ammo: 0xffd600,
+  brass: 0xffb300,
+  fabricate: 0xffe57f,
+  salvage: 0xc6ff00,
+  gold: 0xf9a825,
+  // damage
+  damage: 0xff3d00,
+  precision: 0xff5fd2,
+  glass: 0xcfe8ff,
+  blast: 0xff6f00,
+  ember: 0xbf360c,
+  electric: 0xffee58,
+  // staying alive
+  vitality: 0x00e676,
+  armor: 0x4ef3ff,
+  shock: 0x00b0ff,
+  holy: 0xfff2b0,
+  ninelives: 0xea80fc,
+  blood: 0xff2d6f,
+  // movement
+  mobility: 0x2979ff,
+  surge: 0x536dfe,
+  impact: 0x00e5c0,
+  // status effects, matched to STATUS_TINT in enemy.js
+  poison: 0x39d353,
+  fire: 0xff5a00,
+  ice: 0x7fe3ff,
+  fear: 0x9d4edd,
+  stone: 0x9aa5b1,
 };
+
 
 // `effects` is the totem's whole readout: two or three lines, each a short
 // phrase and a sign. The sign is about GOOD vs BAD, not about the arithmetic -
@@ -70,6 +102,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 5,
     theme: THEME.rate,
+    icon: 'bolt',
     effects: [['+20% FIRE RATE', GOOD]],
     apply: (mods, n) => { mods.fireRate *= 1 + 0.2 * n; },
   },
@@ -78,6 +111,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.ammo,
+    icon: 'magazine',
     effects: [['+50% MAGAZINE', GOOD]],
     apply: (mods, n) => { mods.magMult *= 1 + 0.5 * n; },
   },
@@ -85,7 +119,8 @@ export const UPGRADES = {
     name: 'SPEED LOADER',
     rarity: 'common',
     max: 3,
-    theme: THEME.ammo,
+    theme: THEME.brass,
+    icon: 'shell',
     effects: [['-30% RELOAD TIME', GOOD]],
     apply: (mods, n) => { mods.reloadMult *= Math.pow(0.7, n); },
   },
@@ -94,6 +129,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.damage,
+    icon: 'bullet',
     effects: [['+30% DAMAGE', GOOD], ['-25% MAGAZINE', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.3 * n;
@@ -105,6 +141,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 2,
     theme: THEME.vitality,
+    icon: 'cross',
     effects: [['2x HEAL RATE', GOOD], ['HEALS 2.5s SOONER', GOOD]],
     apply: (mods, n) => {
       mods.regenDelay = Math.max(0.8, 4 - 1.25 * n);
@@ -116,6 +153,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.armor,
+    icon: 'shield',
     effects: [['+50 MAX HEALTH', GOOD], ['-12% MOVE SPEED', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 50 * n;
@@ -126,7 +164,8 @@ export const UPGRADES = {
     name: 'SCAVENGER',
     rarity: 'common',
     max: 3,
-    theme: THEME.ammo,
+    theme: THEME.salvage,
+    icon: 'ammoBox',
     effects: [['+2 AMMO PER KILL', GOOD], ['+15% CREDITS', GOOD]],
     apply: (mods, n) => {
       mods.ammoOnKill += 2 * n;
@@ -138,6 +177,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.mobility,
+    icon: 'syringe',
     effects: [['+12% MOVE SPEED', GOOD], ['+10% SPRINT', GOOD]],
     apply: (mods, n) => {
       mods.moveMult *= 1 + 0.12 * n;
@@ -149,6 +189,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 3,
     theme: THEME.blood,
+    icon: 'drop',
     effects: [['HEAL 4% OF DAMAGE', GOOD]],
     apply: (mods, n) => { mods.lifesteal += 0.04 * n; },
   },
@@ -156,7 +197,8 @@ export const UPGRADES = {
     name: 'REACTIVE PLATING',
     rarity: 'rare',
     max: 3,
-    theme: THEME.armor,
+    theme: THEME.shock,
+    icon: 'spikeShield',
     effects: [['SHOCKWAVE WHEN HIT', GOOD], ['45 DAMAGE NEARBY', NOTE]],
     apply: (mods, n) => {
       mods.shockwave += 45 * n;
@@ -167,7 +209,8 @@ export const UPGRADES = {
     name: 'BLOODLUST',
     rarity: 'rare',
     max: 2,
-    theme: THEME.rate,
+    theme: THEME.frenzy,
+    icon: 'claw',
     effects: [['+8% FIRE RATE / KILL', GOOD], ['STACKS TO 10', NOTE]],
     apply: (mods, n) => {
       mods.bloodlust += 0.08 * n;
@@ -178,7 +221,8 @@ export const UPGRADES = {
     name: 'AMMO FABRICATOR',
     rarity: 'rare',
     max: 3,
-    theme: THEME.ammo,
+    theme: THEME.fabricate,
+    icon: 'gear',
     effects: [['+2.5 AMMO / SEC', GOOD]],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
@@ -186,7 +230,8 @@ export const UPGRADES = {
     name: 'MOMENTUM',
     rarity: 'rare',
     max: 2,
-    theme: THEME.mobility,
+    theme: THEME.surge,
+    icon: 'chevron',
     effects: [['UP TO +35% DAMAGE', GOOD], ['WHILE MOVING FAST', NOTE]],
     apply: (mods, n) => { mods.momentum += 0.35 * n; },
   },
@@ -204,7 +249,8 @@ export const UPGRADES = {
     name: 'VENOM ROUNDS',
     rarity: 'rare',
     max: 1,
-    theme: THEME.status,
+    theme: THEME.poison,
+    icon: 'flask',
     effects: [['HITS POISON', GOOD], ['12 DMG / SEC, 4s', NOTE]],
     apply: (mods, n) => {
       mods.poisonDps = 12 * n;
@@ -215,7 +261,8 @@ export const UPGRADES = {
     name: 'INCENDIARY',
     rarity: 'rare',
     max: 1,
-    theme: THEME.status,
+    theme: THEME.fire,
+    icon: 'flame',
     effects: [['HITS SET FIRE', GOOD], ['20 DMG / SEC, 3s', NOTE], ['SPREADS ON DEATH', NOTE]],
     apply: (mods, n) => {
       mods.burnDps = 20 * n;
@@ -227,7 +274,8 @@ export const UPGRADES = {
     name: 'CRYO ROUNDS',
     rarity: 'rare',
     max: 1,
-    theme: THEME.status,
+    theme: THEME.ice,
+    icon: 'icicle',
     effects: [['HITS SLOW BY HALF', GOOD], ['THEIR SHOTS TOO, 3s', NOTE]],
     apply: (mods, n) => { mods.slowTime = 3 * n; },
   },
@@ -235,7 +283,8 @@ export const UPGRADES = {
     name: 'TERROR',
     rarity: 'rare',
     max: 1,
-    theme: THEME.status,
+    theme: THEME.fear,
+    icon: 'skull',
     effects: [['HIT ENEMIES FLEE', GOOD], ['2s, CANNOT ATTACK', NOTE]],
     apply: (mods, n) => { mods.fearTime = 2 * n; },
   },
@@ -243,7 +292,8 @@ export const UPGRADES = {
     name: 'PETRIFY',
     rarity: 'rare',
     max: 1,
-    theme: THEME.status,
+    theme: THEME.stone,
+    icon: 'stone',
     effects: [['12% TO FREEZE 1.5s', GOOD], ['FROZEN TAKE +50%', GOOD]],
     apply: (mods, n) => {
       mods.petrifyChance = 0.12 * n;
@@ -254,7 +304,8 @@ export const UPGRADES = {
     name: 'ARC ROUNDS',
     rarity: 'rare',
     max: 1,
-    theme: THEME.damage,
+    theme: THEME.electric,
+    icon: 'bolt',
     effects: [['HITS ARC ONWARD', GOOD], ['40% DMG, ONE JUMP', NOTE]],
     apply: (mods, n) => {
       mods.chainDamage = 0.4 * n;
@@ -265,7 +316,8 @@ export const UPGRADES = {
     name: 'KNOCKOUT DROPS',
     rarity: 'rare',
     max: 1,
-    theme: THEME.mobility,
+    theme: THEME.impact,
+    icon: 'hammer',
     effects: [['HITS SHOVE ENEMIES', GOOD], ['1.5 METRES BACK', NOTE]],
     apply: (mods, n) => { mods.knockback = 1.5 * n; },
   },
@@ -273,7 +325,8 @@ export const UPGRADES = {
     name: 'MIDAS TOUCH',
     rarity: 'rare',
     max: 1,
-    theme: THEME.ammo,
+    theme: THEME.gold,
+    icon: 'coin',
     effects: [['2x CREDITS', GOOD], ['THE HIT TURN GOLD', NOTE]],
     apply: (mods, n) => {
       mods.creditMult *= 1 + n;
@@ -284,7 +337,8 @@ export const UPGRADES = {
     name: 'DETONATOR',
     rarity: 'cursed',
     max: 1,
-    theme: THEME.damage,
+    theme: THEME.blast,
+    icon: 'bomb',
     effects: [['HITS EXPLODE', GOOD], ['30 DMG IN 2.5m', NOTE], ['-25% FIRE RATE', BAD]],
     apply: (mods, n) => {
       mods.blastDamage = 30 * n;
@@ -296,7 +350,8 @@ export const UPGRADES = {
     name: 'BLAST CORPSE',
     rarity: 'cursed',
     max: 1,
-    theme: THEME.damage,
+    theme: THEME.ember,
+    icon: 'burst',
     effects: [['THE DEAD EXPLODE', GOOD], ['45 DMG IN 4m', NOTE], ['IT CAN HIT YOU', BAD]],
     apply: (mods, n) => {
       mods.corpseDamage = 45 * n;
@@ -307,7 +362,8 @@ export const UPGRADES = {
     name: 'TWENTY/TWENTY',
     rarity: 'rare',
     max: 1,
-    theme: THEME.damage,
+    theme: THEME.precision,
+    icon: 'crosshair',
     effects: [['EVERY SHOT FIRES 2x', GOOD], ['60% DAMAGE EACH', BAD]],
     apply: (mods, n) => {
       mods.volley = 1 + n;
@@ -318,7 +374,8 @@ export const UPGRADES = {
     name: 'HOLY MANTLE',
     rarity: 'rare',
     max: 1,
-    theme: THEME.armor,
+    theme: THEME.holy,
+    icon: 'halo',
     effects: [['1st HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
     apply: (mods, n) => { mods.wardPerWave = n; },
   },
@@ -326,7 +383,8 @@ export const UPGRADES = {
     name: 'DEAD CAT',
     rarity: 'cursed',
     max: 1,
-    theme: THEME.armor,
+    theme: THEME.ninelives,
+    icon: 'cat',
     effects: [['REVIVE ONCE AT 1 HP', GOOD], ['-40% MAX HEALTH', BAD]],
     apply: (mods, n) => {
       mods.extraLives += n;
@@ -337,7 +395,8 @@ export const UPGRADES = {
     name: 'GLASS CANNON',
     rarity: 'cursed',
     max: 1,
-    theme: THEME.damage,
+    theme: THEME.glass,
+    icon: 'crystal',
     effects: [['+70% DAMAGE', GOOD], ['-50% MAX HEALTH', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.7 * n;

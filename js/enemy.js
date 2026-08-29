@@ -12,6 +12,13 @@
 // Splitters are ordinary enemies here; main.js is what spawns their children
 // when one dies.
 //
+// MOVEMENT IS PATH-AWARE. `nx, nz` inside update() is the straight line to the
+// player, and is what an enemy AIMS and ATTACKS along; `px, pz` is the heading
+// it WALKS along, which comes from the shared navigation grid (nav.js) and
+// bends around pillars and crates. Retreats - a feared enemy, a shooter
+// backing off - reverse the straight line instead: running away has no
+// destination to route to.
+//
 // LIFECYCLE: a killed enemy sets `dead` and main.js removes it from the scene
 // and calls dispose(). Anything added to an enemy that allocates a GPU
 // resource per instance must be freed there, or it leaks for the whole session.
@@ -97,6 +104,9 @@ const SLOW_FACTOR = 0.5;
 // Scratch for the drip's spawn point. Module-level and reused: the drip runs
 // for every afflicted enemy several times a second.
 const _dripAt = new THREE.Vector3();
+// Scratch for the navigation heading. Module-level and consumed immediately:
+// every enemy asks for one every frame.
+const _steer = { x: 0, z: 0 };
 // Petrify's reward: a frozen enemy cannot act, and takes half again as much.
 const FREEZE_VULN = 1.5;
 
@@ -397,6 +407,15 @@ export class Enemy {
     const nz = dz * inv;
     this.attackCd -= dt;
 
+    // Walking heading: around the level rather than into it. Falls back to the
+    // straight line when there is no grid, or no route through it.
+    let px = nx;
+    let pz = nz;
+    if (ctx.nav && ctx.nav.steer(this.pos.x, this.pos.z, _steer)) {
+      px = _steer.x;
+      pz = _steer.z;
+    }
+
     let vx = 0;
     let vz = 0;
 
@@ -413,18 +432,18 @@ export class Enemy {
       vz = -nz * sp;
     } else if (this.type === 'chaser') {
       if (this._meleeCycle(dt, dist, ctx, 0.45, 1.5, 2.2, 1.1)) {
-        vx = nx * sp;
-        vz = nz * sp;
+        vx = px * sp;
+        vz = pz * sp;
       }
     } else if (this.type === 'tank') {
       if (this._meleeCycle(dt, dist, ctx, 0.8, 3.5, 4.0, 3.0)) {
-        vx = nx * sp;
-        vz = nz * sp;
+        vx = px * sp;
+        vz = pz * sp;
       }
     } else if (this.type === 'splitter') {
       if (this._meleeCycle(dt, dist, ctx, 0.4, 1.4, 2.0, 1.0)) {
-        vx = nx * sp;
-        vz = nz * sp;
+        vx = px * sp;
+        vz = pz * sp;
       }
       this.coreMesh.rotation.y += dt * 3;
       this.ringMesh.rotation.z += dt * 2;
@@ -436,8 +455,8 @@ export class Enemy {
       }
       const desired = 7.5;
       const along = dist > desired + 1.5 ? 1 : dist < desired - 1.5 ? -0.7 : 0;
-      vx = nx * sp * along + -nz * this.strafe * sp * 0.5;
-      vz = nz * sp * along + nx * this.strafe * sp * 0.5;
+      vx = px * sp * along + -pz * this.strafe * sp * 0.5;
+      vz = pz * sp * along + px * this.strafe * sp * 0.5;
       if (this.attackCd <= 0 && dist < 18) {
         this.attackCd = 1.6 + Math.random() * 0.6;
         this.flash = 0.12;
@@ -451,8 +470,8 @@ export class Enemy {
       }
       const desired = 22;
       const along = dist > desired + 2 ? 0.8 : dist < desired - 2 ? -0.5 : 0;
-      vx = nx * sp * along + -nz * this.strafe * sp * 0.4;
-      vz = nz * sp * along + nx * this.strafe * sp * 0.4;
+      vx = px * sp * along + -pz * this.strafe * sp * 0.4;
+      vz = pz * sp * along + px * this.strafe * sp * 0.4;
       if (this.attackCd <= 0 && dist < 35) {
         this.attackCd = 2.0 + Math.random() * 0.5;
         this.flash = 0.1;
@@ -466,8 +485,8 @@ export class Enemy {
       }
       const desired = 10;
       const along = dist > desired + 2 ? 0.6 : dist < desired - 2 ? -0.3 : 0;
-      vx = nx * sp * along + -nz * this.strafe * sp * 0.3;
-      vz = nz * sp * along + nx * this.strafe * sp * 0.3;
+      vx = px * sp * along + -pz * this.strafe * sp * 0.3;
+      vz = pz * sp * along + px * this.strafe * sp * 0.3;
       if (this.attackCd <= 0 && dist < 16) {
         this.attackCd = 2.5 + Math.random() * 0.8;
         this.flash = 0.15;

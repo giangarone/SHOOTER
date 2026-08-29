@@ -7,8 +7,8 @@
 // which is what keeps the menu camera orbiting and the pause overlay live.
 //
 // NOTHING IN THE RUN EVER PAUSES THE GAME. The wave-end upgrade choice is
-// three totems that rise out of the arena floor - walk into one or shoot its
-// core - and credits are spent at two stations beside them. The next wave
+// three totems that rise out of the arena floor - walk into one or shoot it
+// anywhere - and credits are spent at two stations beside them. The next wave
 // starts on a timer regardless, and an unclaimed set stays standing until the
 // following wave is cleared. A menu at the wave boundary killed the momentum
 // this game runs on; keep new systems on that side of the line.
@@ -49,7 +49,7 @@
 // framerate decaying over a few waves.
 
 import * as THREE from 'three';
-import { buildArena } from './arena.js';
+import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player } from './player.js';
 import { Enemy, Projectile, Grenade } from './enemy.js';
 import { Effects } from './effects.js';
@@ -59,6 +59,7 @@ import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
 import { TotemArea } from './totems.js';
+import { NavGrid } from './nav.js';
 import { WEAPONS, WEAPON_KEYS } from './weapons.js';
 import { resolveCircle } from './utils.js';
 
@@ -156,6 +157,10 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.1, 200);
 
     this.arena = buildArena(this.scene);
+    // One navigation grid, shared by every enemy alive. It is baked from the
+    // arena's obstacles at startup and reflooded toward the player a few times
+    // a second - see nav.js for why it is one field rather than a path each.
+    this.nav = new NavGrid(this.arena.obstacles, ARENA_BOUND, 0.5);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list - walking into a totem claims it, so the player can
@@ -232,6 +237,7 @@ class Game {
       player: this.player,
       enemies: this.enemies,
       obstacles: this.arena.obstacles,
+      nav: this.nav,
       time: 0,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
       addProjectile: (x, y, z, type, speedScale) =>
@@ -686,8 +692,12 @@ class Game {
     for (const h of hits) {
       const totem = h.object.userData.totem;
       if (totem) {
+        // Anywhere on the totem claims it. The pellet stops either way - a
+        // totem already claimed is a wall, not a hole to shoot enemies past.
         this._claimTotem(totem);
         end = h.point;
+        this.effects.burst(end, totem.offer ? totem.offer.theme : 0x9fb4d8,
+          w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
         break;
       }
       const station = h.object.userData.station;
@@ -701,7 +711,7 @@ class Game {
       }
       const en = h.object.userData.enemy;
       if (!en) {
-        // Wall, floor, crate or a totem pillar - the pellet stops here.
+        // Wall, floor or crate - the pellet stops here.
         end = h.point;
         this.effects.burst(end, 0x9fb4d8, w.pellets > 1 ? 3 : 6, 3, 1, 0.3);
         break;
@@ -925,8 +935,9 @@ class Game {
   // a random cardinal direction. Only good enough to exercise the game.
   _autoInput() {
     // Claiming a totem takes priority over fighting, so the bot exercises the
-    // upgrade path every wave instead of ignoring it. It walks into one rather
-    // than shooting the core, which keeps the run deterministic.
+    // upgrade path every wave instead of ignoring it. It walks into the one it
+    // wants and HOLDS FIRE on the way (see the shoot flag below), which is what
+    // keeps the run deterministic now that a hit anywhere on a totem claims it.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
       // While the second slot is empty the bot goes for a weapon totem
@@ -986,11 +997,17 @@ class Game {
       const k = 0.4;
       this.player.yaw += (ty - this.player.yaw) * k;
       this.player.pitch += (tp - this.player.pitch) * k;
-      this.input.shoot = true;
+      // Ceasefire while walking to a chosen totem. The whole totem is a claim
+      // target, so a shot at an enemy standing past the row takes whichever
+      // totem is in the line - which is right for a player, who is making that
+      // trade knowingly, and useless for a test that has to reach a SPECIFIC
+      // totem to cover takeWeapon(). Totems only stand between waves, so this
+      // costs the bot a second or two of fire, not a fight.
+      this.input.shoot = !seekTotem;
       // The bot re-arms the edge every frame, so it fires semi-autos as fast
       // as their cooldown allows. Fine for a smoke test - it is exercising the
       // weapons, not simulating a human trigger finger.
-      this.input.shootFresh = true;
+      this.input.shootFresh = this.input.shoot;
     } else {
       this.input.shoot = false;
     }
@@ -1091,6 +1108,7 @@ class Game {
         kind: 'upgrade',
         name: def.name,
         theme: def.theme,
+        icon: def.icon,
         rarityLabel: RARITY[def.rarity].label,
         rarityColor: RARITY[def.rarity].color,
         effects: def.effects,
@@ -1113,6 +1131,7 @@ class Game {
         kind: 'weapon',
         name: w.name,
         theme: w.theme,
+        icon: w.icon,
         rarityLabel: 'WEAPON',
         rarityColor: '#ffffff',
         effects: w.effects,
@@ -1168,7 +1187,7 @@ class Game {
     this.totemArea.dismiss();
   }
 
-  // Ticks the installation and claims by touch. Shooting a core is handled in
+  // Ticks the installation and claims by touch. Shooting a totem is handled in
   // shoot(), which already has the raycast.
   _updateTotems(dt) {
     const area = this.totemArea;
@@ -1341,6 +1360,9 @@ class Game {
   _updateEnemies(dt) {
     const ctx = this._enemyCtx;
     ctx.time = this.time;
+    // Refresh the route to the player once for the whole list, before anyone
+    // reads it. The grid throttles itself; this call is cheap on most frames.
+    this.nav.update(dt, this.player.pos.x, this.player.pos.z);
 
     // Update everything first, then compact. Doing both in one pass would let
     // an enemy read half-compacted neighbours and feel the same one twice

@@ -18,7 +18,7 @@ import { makeAabb } from './utils.js';
 
 // Half-width of the playable floor. Walls sit just outside this; entities
 // clamp themselves to a slightly smaller bound to stay off the walls.
-const BOUND = 22;
+export const BOUND = 22;
 
 export function buildArena(scene) {
   const group = new THREE.Group();
