@@ -187,8 +187,9 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.blood,
     icon: 'drop',
-    effects: [['HEAL 4% OF DAMAGE', GOOD]],
-    apply: (mods, n) => { mods.lifesteal += 0.04 * n; },
+    effects: [['HEAL 1 HP ON KILL', GOOD], ['50% / 75% / 100%', NOTE]],
+    // Chance per kill, one stack at a time: 50%, then 75%, then every kill.
+    apply: (mods, n) => { mods.killHealChance = 0.25 * (n + 1); },
   },
   reactivePlating: {
     name: 'REACTIVE PLATING',
@@ -303,7 +304,7 @@ export const UPGRADES = {
     max: 1,
     theme: THEME.electric,
     icon: 'bolt',
-    effects: [['HITS ARC ONWARD', GOOD], ['40% DMG, ONE JUMP', NOTE]],
+    effects: [['CHAINS TO 1 ENEMY', GOOD], ['CHAIN HITS FOR 40%', NOTE]],
     apply: (mods, n) => {
       mods.chainDamage = 0.4 * n;
       mods.chainRange = 6;
@@ -462,7 +463,7 @@ export function rollTotems(owned, wave, count = 3) {
 // Doubling is what stops credits from simply buying the best upgrade in the
 // pool; the counter resets when a fresh set rises.
 export function rerollCost(n) {
-  return 50 * Math.pow(2, n);
+  return 150 * Math.pow(2, n);
 }
 
 // The one thing credits buy outright, sold from a station beside the totems.
@@ -471,10 +472,9 @@ export function rerollCost(n) {
 export const AMMO_PURCHASE = {
   name: 'AMMO',
   detail: '+90 ROUNDS',
-  // Ammo was the cheapest thing in the game and it competed with nothing:
-  // topping up cost less than a quarter of a single reroll, so credits had no
-  // real second use. At 120 a refill is a wave's earnings, not pocket change.
-  cost: 120,
+  // A refill has to compete with a reroll for the same wallet, so it is
+  // priced like one: several waves' earnings, not pocket change.
+  cost: 300,
   enabled: (player) => player.reserveAmmo < player.maxReserve,
   apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);

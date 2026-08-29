@@ -34,7 +34,7 @@ const DEFAULT_MODS = {
   moveMult: 1,          // multiplier on move speed
   regenDelay: 10,        // seconds without damage before regen starts
   regenRate: 1,         // health per second once regenerating
-  lifesteal: 0,         // fraction of damage dealt returned as health
+  killHealChance: 0,    // Vampiric Rounds: chance a kill heals 1 HP
   ammoRegen: 0,         // reserve rounds per second
   creditMult: 1,        // multiplier on credits earned
   ammoOnKill: 0,        // reserve rounds granted per kill
@@ -256,8 +256,11 @@ export class Player {
     return true;
   }
 
-  // Called by main.js on every kill. Only Bloodlust uses it today.
+  // Called by main.js on every kill. Bloodlust and Vampiric Rounds use it.
   onKill(time) {
+    if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
+      this.health = Math.min(this.maxHealth, this.health + 1);
+    }
     if (this.mods.bloodlust <= 0) return;
     this.bloodlustStacks = Math.min(this.mods.bloodlustMax, this.bloodlustStacks + 1);
     this.bloodlustEnd = time + 4;
@@ -566,14 +569,5 @@ export class Player {
   // Horizontal speed, for the shot-spread penalty in main.js.
   get speedXZ() {
     return Math.hypot(this.vel.x, this.vel.z);
-  }
-
-  // Vampiric Rounds. Heals a fraction of damage dealt, never past max health,
-  // and returns the amount healed so the caller can show feedback.
-  applyLifesteal(damageDealt) {
-    if (this.mods.lifesteal <= 0 || this.health >= this.maxHealth) return 0;
-    const heal = Math.min(damageDealt * this.mods.lifesteal, this.maxHealth - this.health);
-    this.health += heal;
-    return heal;
   }
 }

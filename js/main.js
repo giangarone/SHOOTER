@@ -719,9 +719,8 @@ class Game {
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
         * Math.pow(w.falloff, pierced);
       en.takeDamage(dealt);
-      this.player.applyLifesteal(dealt);
       this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
-      // Damage and lifesteal are per-pellet; everything below is per-shot.
+      // Damage is per-pellet; everything below is per-shot.
       if (!this._shotHits.has(en)) {
         this._shotHits.add(en);
         if (m.poisonTime) en.applyStatus('poison', m.poisonTime, m.poisonDps);
@@ -843,7 +842,6 @@ class Game {
       // it is always in the arc.
       if (d > 0.001 && (dx * forward.x + dz * forward.z) / d < cosArc) continue;
       e.takeDamage(dealt);
-      this.player.applyLifesteal(dealt);
       e.pos.add(
         this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
       );
@@ -1265,10 +1263,7 @@ class Game {
 
     const st = area.stationInRange(this.player.pos);
     if (!st) {
-      // With the wave gated on a pick, silence here would read as the game
-      // having stalled. A station prompt still wins - the player is standing
-      // at one, so that is the thing they are asking about.
-      this.ui.setPrompt(this._awaitingPick() ? 'TAKE A TOTEM TO CALL THE NEXT WAVE' : null, false);
+      this.ui.setPrompt(null, false);
       return;
     }
     const blocked = this._stationBlocked(st);
