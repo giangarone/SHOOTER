@@ -683,6 +683,23 @@ export const UPGRADES = {
       mods.chargeRadius = 4;
     },
   },
+  seeker: {
+    name: 'SEEKER',
+    rarity: 'rare',
+    max: 1,
+    mark: true,
+    theme: THEME.precision,
+    icon: 'crosshair',
+    // Rescues MISSES and nothing else. A shot already on target is never
+    // touched, so this can never drag a bullet off the weak point the player
+    // deliberately lined up - it only takes the shots that were going to hit
+    // a wall and gives them somewhere to go.
+    effects: [['MISSED SHOTS CURVE', GOOD], ['TO A TARGET IN 12 deg', NOTE], ['HITS ARE NEVER MOVED', NOTE]],
+    apply: (mods, n) => {
+      mods.homingAngle = 0.21 * n;
+      mods.homingRange = 30;
+    },
+  },
 };
 
 export const UPGRADE_KEYS = Object.keys(UPGRADES);

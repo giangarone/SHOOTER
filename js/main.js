@@ -290,6 +290,14 @@ class Game {
     this._lastImpact = new THREE.Vector3();
     this._pullTo = new THREE.Vector3();
     this._shardDir = new THREE.Vector3();
+    // Seeker's scratch: the candidate's world position, the direction to it,
+    // its own hit list, and the candidates already rejected for being behind
+    // cover this shot.
+    this._homeAt = new THREE.Vector3();
+    this._homeDir = new THREE.Vector3();
+    this._homeRay = new THREE.Raycaster();
+    this._homeHits = [];
+    this._homeSkip = [];
     this._chainFrom = new THREE.Vector3();
     this._chainTo = new THREE.Vector3();
     // Deaths that owe an after-effect, recorded during the enemy sweep and
@@ -997,6 +1005,117 @@ class Game {
     this.effects.addShake(0.1);
   }
 
+  // Seeker's rescue. Finds the enemy closest to the line of fire inside the
+  // cone, confirms it is actually visible, and lands the shot on it with a
+  // curved tracer.
+  //
+  // The curve is not decoration. Without it a player whose crosshair was off
+  // would watch a miss register as a hit with nothing to explain it; the bend
+  // is the game saying what it did, which is the whole reason this shape was
+  // chosen over silently widening the hitbox.
+  //
+  // A homed shot hits exactly ONE enemy and stops. It never carries on through
+  // a pierce chain: re-homing at every step would let a single round walk
+  // itself through an entire wave.
+  //
+  // Candidates are tried nearest-to-aim first and skipped when something is in
+  // the way, rather than giving up on the first blocked one - the enemy
+  // closest to your crosshair being behind a pillar should not stop the round
+  // finding the one standing beside it in the open.
+  _homeShot(ray, muzzle, w, dmgMult, burst) {
+    const m = this.player.mods;
+    const origin = ray.ray.origin;
+    const aim = ray.ray.direction;
+    const skip = this._homeSkip;
+    const minDot = Math.cos(m.homingAngle);
+    let landed = false;
+
+    for (let attempt = 0; attempt < 3 && !landed; attempt++) {
+      let best = null;
+      let bestDot = minDot;
+      for (const e of this.enemies) {
+        if (e.dead || skip.includes(e)) continue;
+        // The hitbox rather than e.pos: aiming at an enemy's feet would push
+        // every candidate below the line of fire and make the cone read as
+        // being lower than it is.
+        e.hitbox.getWorldPosition(this._homeAt);
+        const v = this._homeDir.subVectors(this._homeAt, origin);
+        const d = v.length();
+        if (d > m.homingRange || d < 0.001) continue;
+        v.multiplyScalar(1 / d);
+        const dot = v.dot(aim);
+        if (dot <= bestDot) continue;
+        bestDot = dot;
+        best = e;
+      }
+      if (!best) break;
+
+      // Line of sight, cast from the same origin the shot used so what the
+      // round can reach is exactly what the player can see.
+      best.hitbox.getWorldPosition(this._homeAt);
+      this._homeDir.subVectors(this._homeAt, origin).normalize();
+      this._homeRay.set(origin, this._homeDir);
+      const hits = this._homeHits;
+      hits.length = 0;
+      this._homeRay.intersectObjects(this._targets, false, hits);
+      if (hits.length && hits[0].object.userData.enemy === best) {
+        const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage) * dmgMult;
+        this._landShot(best, hits[0].point, this._homeDir, dealt, burst);
+        this._lastImpact.copy(hits[0].point);
+        this.effects.arc(muzzle, hits[0].point, aim);
+        // A second burst in Seeker's own colour on top of the ordinary hit
+        // spray. The curve is a one-pixel line and can be missed in a crowd;
+        // this makes a rescued shot read differently from one the player
+        // actually landed, which is the whole point of showing the mechanic.
+        this.effects.burst(hits[0].point, 0xff5fd2, 8, 3, 1.5, 0.35);
+        landed = true;
+      } else {
+        skip.push(best);
+      }
+      hits.length = 0;
+    }
+
+    skip.length = 0;
+    return landed;
+  }
+
+  // Everything one pellet does to the enemy it landed on.
+  //
+  // Shared by the straight shot and by Seeker's homed shot, so the two cannot
+  // drift: status, chaining, knockback and Detonator have to behave the same
+  // whether the player's aim was on target or the round curved onto it.
+  // `dir` is the direction the shot ARRIVED from, which is what armour reads.
+  _landShot(en, point, dir, dealt, burst) {
+    const m = this.player.mods;
+    en.takeDamage(dealt, false, dir.x, dir.z);
+    this.effects.burst(point, 0xffe95e, burst, 4, 1.5, 0.35);
+    // Damage is per-pellet; everything below is per-shot.
+    if (this._shotHits.has(en)) return;
+    this._shotHits.add(en);
+    // Malady scales the two statuses that HAVE a strength. Cryo, Terror
+    // and Petrify are left alone: shortening them buys nothing back.
+    if (m.poisonTime) {
+      en.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
+    }
+    if (m.burnTime) en.applyStatus('burn', m.burnTime * m.dotTime, m.burnDps * m.dotPower);
+    if (m.slowTime) en.applyStatus('slow', m.slowTime);
+    if (m.fearTime) en.applyStatus('fear', m.fearTime);
+    if (m.petrifyChance && Math.random() < m.petrifyChance) {
+      en.applyStatus('freeze', m.petrifyTime);
+    }
+    if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
+    if (m.knockback) this._shove(en, dir, m.knockback);
+    if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en);
+    if (m.midas) this.effects.burst(point, 0xffd600, 6, 3, 1.5, 0.35);
+    // Detonator goes off once per trigger pull, at the first enemy the
+    // shot touched. Per-pellet it would fire eight blasts from one shell
+    // and exhaust the four-ring pool on its own.
+    if (m.blastDamage && !this._blastHit) {
+      this._blastHit = true;
+      this._blastAt.copy(point);
+    }
+  }
+
   // One pellet of a shot. Walks the sorted hit list so a piercing weapon can
   // pass through several enemies, stopping at the first thing that is not one.
   // Returns true if it damaged anything, so the caller can play a single hit
@@ -1023,6 +1142,9 @@ class Game {
     let end = null;
     let pierced = 0;
     let damaged = false;
+    // A pellet that stopped on a totem or a station was aimed there on
+    // purpose. Seeker must not treat that as a miss and steal it.
+    let hitProp = false;
 
     for (const h of hits) {
       const totem = h.object.userData.totem;
@@ -1030,6 +1152,7 @@ class Game {
         // Anywhere on the totem claims it. The pellet stops either way - a
         // totem already claimed is a wall, not a hole to shoot enemies past.
         this._claimTotem(totem);
+        hitProp = true;
         end = h.point;
         this.effects.burst(end, totem.offer ? totem.offer.theme : 0x9fb4d8,
           w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
@@ -1040,6 +1163,7 @@ class Game {
         // The pellet stops here whether or not the purchase went through -
         // a station on cooldown is a wall, not a hole to shoot enemies past.
         this._shootStation(station);
+        hitProp = true;
         end = h.point;
         this.effects.burst(end, station.color, w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
         break;
@@ -1053,35 +1177,7 @@ class Game {
       }
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
         * Math.pow(falloff, pierced) * dmgMult;
-      // The direction the shot travelled decides whether it landed on armour.
-      en.takeDamage(dealt, false, ray.ray.direction.x, ray.ray.direction.z);
-      this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
-      // Damage is per-pellet; everything below is per-shot.
-      if (!this._shotHits.has(en)) {
-        this._shotHits.add(en);
-        // Malady scales the two statuses that HAVE a strength. Cryo, Terror
-        // and Petrify are left alone: shortening them buys nothing back.
-        if (m.poisonTime) {
-          en.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
-        }
-        if (m.burnTime) en.applyStatus('burn', m.burnTime * m.dotTime, m.burnDps * m.dotPower);
-        if (m.slowTime) en.applyStatus('slow', m.slowTime);
-        if (m.fearTime) en.applyStatus('fear', m.fearTime);
-        if (m.petrifyChance && Math.random() < m.petrifyChance) {
-          en.applyStatus('freeze', m.petrifyTime);
-        }
-        if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
-        if (m.knockback) this._shove(en, ray.ray.direction, m.knockback);
-        if (m.gravityPull) this._pull(h.point, m.gravityRadius, m.gravityPull, en);
-        if (m.midas) this.effects.burst(h.point, 0xffd600, 6, 3, 1.5, 0.35);
-        // Detonator goes off once per trigger pull, at the first enemy the
-        // shot touched. Per-pellet it would fire eight blasts from one shell
-        // and exhaust the four-ring pool on its own.
-        if (m.blastDamage && !this._blastHit) {
-          this._blastHit = true;
-          this._blastAt.copy(h.point);
-        }
-      }
+      this._landShot(en, h.point, ray.ray.direction, dealt, burst);
       damaged = true;
       pierced++;
       if (pierced > pierceCap) {
@@ -1090,12 +1186,22 @@ class Game {
       }
     }
 
+    hits.length = 0;
+
+    // SEEKER. Only ever runs on a pellet that touched no enemy, which is what
+    // makes the mutation purely additive: a shot already on target is never
+    // moved, so it cannot drag a round off a Colossus weak point or a
+    // Bulwark's flank that the player deliberately lined up.
+    if (!damaged && !hitProp && m.homingAngle > 0
+      && this._homeShot(ray, muzzle, w, dmgMult, burst)) {
+      return true;
+    }
+
     if (!end) end = ray.ray.at(60, this._rayEnd);
     // Breach Round detonates wherever the shot stopped - an enemy, a wall or
     // the floor - so the last impact point is kept for the caller.
     this._lastImpact.copy(end);
     this.effects.tracer(muzzle, end);
-    hits.length = 0;
     return damaged;
   }
 

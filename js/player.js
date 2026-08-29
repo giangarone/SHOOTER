@@ -92,6 +92,8 @@ const DEFAULT_MODS = {
   dotTime: 1,           // Malady: multiplier on poison and burn duration
   chargeDamage: 0,      // Breach Round: blast on the first shot after a reload
   chargeRadius: 0,
+  homingAngle: 0,       // Seeker: half-angle a MISSED shot may curve through
+  homingRange: 0,       // and how far out it will look for something to hit
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;

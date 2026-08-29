@@ -18,6 +18,13 @@ import * as THREE from 'three';
 // growing the buffer.
 const MAX = 1024;
 
+// Points along a homing tracer. Enough that the bend reads as a curve rather
+// than as two straight lines meeting at an angle.
+const ARC_SEGMENTS = 12;
+// How long a homing arc stays up. Longer than a straight tracer's 0.07s: the
+// curve is the whole message and it has to survive long enough to be seen.
+const ARC_LIFE = 0.14;
+
 // Soft radial white dot, tinted per-use by material colour. Shared by the
 // particles, the projectile glows and the pickup glows.
 export function makeGlowTexture() {
@@ -99,6 +106,27 @@ export class Effects {
       line.frustumCulled = false;
       scene.add(line);
       this.tracers.push({ line, life: 0 });
+    }
+
+    // ARCS. Curved tracers for shots that homed onto a target. Same pooling as
+    // the straight tracers, but each is a polyline rather than a segment,
+    // because the curve IS the feedback: without seeing the bend, a player
+    // whose crosshair was off would just see a miss register as a hit and have
+    // no idea why. They also live twice as long as a straight tracer - four
+    // frames is enough to read a line and not enough to read a shape.
+    this.arcs = [];
+    for (let i = 0; i < 6; i++) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array((ARC_SEGMENTS + 1) * 3), 3)
+      );
+      const m = new THREE.LineBasicMaterial({ color: 0xff5fd2, transparent: true, opacity: 0 });
+      const line = new THREE.Line(g, m);
+      line.visible = false;
+      line.frustumCulled = false;
+      scene.add(line);
+      this.arcs.push({ line, life: 0 });
     }
 
     // Shockwave rings: a small fixed pool of flat discs, scaled outward and
@@ -330,6 +358,46 @@ export class Effects {
     t.life = 0.07;
   }
 
+  /**
+   * A curved tracer from `from` to `to`, leaving along `dir` before bending
+   * onto the target. Quadratic bezier with the control point pushed out along
+   * the barrel, so the line starts on the player's actual aim and curves from
+   * there - which is what makes it read as the shot being corrected rather
+   * than as the shot having been fired somewhere else all along.
+   */
+  arc(from, to, dir) {
+    let a = this.arcs[0];
+    for (const cand of this.arcs) {
+      if (cand.life <= 0) {
+        a = cand;
+        break;
+      }
+    }
+    const pos = a.line.geometry.attributes.position;
+    const d = from.distanceTo(to);
+    // Control point: half a shot-length down the original line of fire.
+    const cx = from.x + dir.x * d * 0.55;
+    const cy = from.y + dir.y * d * 0.55;
+    const cz = from.z + dir.z * d * 0.55;
+    for (let i = 0; i <= ARC_SEGMENTS; i++) {
+      const t = i / ARC_SEGMENTS;
+      const u = 1 - t;
+      const w0 = u * u;
+      const w1 = 2 * u * t;
+      const w2 = t * t;
+      pos.setXYZ(
+        i,
+        w0 * from.x + w1 * cx + w2 * to.x,
+        w0 * from.y + w1 * cy + w2 * to.y,
+        w0 * from.z + w1 * cz + w2 * to.z
+      );
+    }
+    pos.needsUpdate = true;
+    a.line.visible = true;
+    a.line.material.opacity = 0.95;
+    a.life = ARC_LIFE;
+  }
+
   // An expanding ring on the floor at `p`, growing to `radius` metres. Used to
   // show the area a melee swing covered; deliberately faint, since it fires on
   // every swing and a bright flash at the player's feet would read as damage
@@ -520,6 +588,17 @@ export class Effects {
       const e = 1 - Math.pow(1 - t, 3);
       r.mesh.scale.setScalar(Math.max(0.001, r.radius * e));
       r.mesh.material.opacity = 0.5 * (1 - t);
+    }
+    for (const a of this.arcs) {
+      if (a.life > 0) {
+        a.life -= dt;
+        // Held bright for most of its life and then dropped, rather than faded
+        // linearly. A GL line is one pixel wide whatever we ask for, so the
+        // only lever on how readable the curve is is how long it stays at full
+        // strength - a linear fade spends most of the window half-visible.
+        a.line.material.opacity = Math.max(0, Math.min(1, (a.life / ARC_LIFE) * 2.4)) * 0.95;
+        if (a.life <= 0) a.line.visible = false;
+      }
     }
     for (const t of this.tracers) {
       if (t.life > 0) {
