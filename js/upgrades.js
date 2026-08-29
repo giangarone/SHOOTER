@@ -219,11 +219,10 @@ export const UPGRADES = {
     icon: 'ammoBox',
     effects: (n) => [
       ['AMMO / KILL ' + step(n, (k) => '+' + 2 * k), GOOD],
-      ['CREDITS ' + step(n, pctUp(15)), GOOD],
+      ['KILLS REFILL RESERVE', NOTE],
     ],
     apply: (mods, n) => {
       mods.ammoOnKill += 2 * n;
-      mods.creditMult *= 1 + 0.15 * n;
     },
   },
   combatStims: {

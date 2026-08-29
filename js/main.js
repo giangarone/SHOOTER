@@ -1564,8 +1564,14 @@ class Game {
     if (this._ash.length >= MAX_ASH_CLOUDS) this._ash.shift();
     const m = this.player.mods;
     this._ash.push({
-      x: pos.x, z: pos.z, life: m.ashTime, dps: m.ashDps, radius: m.ashRadius, drip: 0,
+      x: pos.x, z: pos.z, life: m.ashTime, dps: m.ashDps, radius: m.ashRadius,
+      drip: 0,
     });
+    // A cloud that faded in was easy to miss in a busy wave, so it announces
+    // itself: a ring the size of the damage area, plus an upward puff where
+    // the enemy fell.
+    this.effects.shockwave(this._ashAt.set(pos.x, 0, pos.z), 0xff6d00, m.ashRadius, 0.5);
+    this.effects.burst(this._ashAt.set(pos.x, 0.4, pos.z), 0xff8f2e, 22, 4, 2.4, 0.8);
   }
 
   // Runs the clouds down and tickles whatever is standing in one. Damage is
@@ -1586,17 +1592,27 @@ class Game {
         if (dx * dx + dz * dz > a.radius * a.radius) continue;
         e.takeDamage(a.dps * dt, true);
       }
-      // The cloud has to be visible or it is an invisible damage field. One
-      // puff every fifth of a second reads as smoke without draining the pool.
+      // The cloud has to READ as a zone you keep enemies out of: three dark
+      // red specks every fifth of a second vanished against the floor. It now
+      // drips brighter embers, twice as often, with real height on them, and
+      // gets two emissions per drip: one anywhere inside the disc,
+      // and one pinned near the RIM, which is what actually draws the edge of
+      // the damage area. Rates are held where eight clouds at once still fit
+      // inside the shared particle pool, and the edge is drawn with embers
+      // rather than a pulsing shockwave because that ring pool is four deep
+      // and shared with melee and blasts.
       a.drip -= dt;
       if (a.drip <= 0) {
-        a.drip = 0.2;
-        const ang = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * a.radius;
-        this.effects.burst(
-          this._ashAt.set(a.x + Math.cos(ang) * r, 0.5, a.z + Math.sin(ang) * r),
-          0xbf360c, 3, 1.2, 0.8, 0.5
-        );
+        a.drip = 0.1;
+        for (let k = 0; k < 2; k++) {
+          const ang = Math.random() * Math.PI * 2;
+          const r = k === 0 ? Math.sqrt(Math.random()) * a.radius
+                            : a.radius * (0.85 + Math.random() * 0.15);
+          this.effects.burst(
+            this._ashAt.set(a.x + Math.cos(ang) * r, 0.35, a.z + Math.sin(ang) * r),
+            k === 0 ? 0xffb300 : 0xff5722, 3, 1.5, 1.8, 0.9
+          );
+        }
       }
     }
   }

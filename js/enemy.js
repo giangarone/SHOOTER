@@ -715,9 +715,17 @@ export class Shard {
     this.mesh.rotation.x += dt * 12;
     this.mesh.rotation.y += dt * 9;
 
+    // Horizontal test only. A shard flies at chest height and an enemy's `pos`
+    // is at its FEET, so a 3D distance here was never smaller than the metre
+    // between them and the shards sailed straight through everything - they
+    // only ever went off on their fuse. Enemies are upright capsules, so the
+    // XZ distance is the right comparison.
     for (const e of ctx.enemies) {
       if (e.dead) continue;
-      if (this.pos.distanceTo(e.pos) < e.radius + 0.4) {
+      const dx = this.pos.x - e.pos.x;
+      const dz = this.pos.z - e.pos.z;
+      const reach = e.radius + 0.4;
+      if (dx * dx + dz * dz < reach * reach) {
         this.explode(ctx);
         return 'exploded';
       }
@@ -732,7 +740,11 @@ export class Shard {
   explode(ctx) {
     if (this.exploded) return;
     this.exploded = true;
-    ctx.onBlast(this.pos, this.damage, this.radius);
+    // The blast is measured from the floor under the shard, not from the shard
+    // itself: enemy positions are at floor level, and blasting from chest
+    // height would spend a metre of the radius on the vertical gap.
+    _tmpTarget.set(this.pos.x, 0, this.pos.z);
+    ctx.onBlast(_tmpTarget, this.damage, this.radius);
     this.mesh.visible = false;
   }
 }

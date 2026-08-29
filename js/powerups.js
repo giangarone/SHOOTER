@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { waveEnemyCount } from './waves.js';
+import { BOUND } from './arena.js';
 
 export const POWERUP_TYPES = {
   health: {
@@ -330,14 +331,47 @@ export function calcPickupsForWave(wave) {
   return Math.max(1, Math.floor(waveEnemyCount(wave) * 0.15));
 }
 
+// Pickups land anywhere on the floor rather than on the enemy spawn grid,
+// which put them in the same nine clumps every wave. Two rules shape the roll:
+//
+//   1. Nothing inside CENTER_KEEPOUT of the origin. That disc is where the
+//      totems and stations rise between waves, and a pickup sitting in it
+//      either hides behind a pillar or gets collected by accident while the
+//      player is reading a draft.
+//   2. Nothing inside an obstacle. Boxes are grown by PICKUP_CLEARANCE so a
+//      crate-hugging pickup is still reachable from outside the crate.
+//
+// Rejection sampling: the free area is most of the arena, so this lands on the
+// first or second try in practice. The fallback ring exists only so the
+// function can never return nothing.
+const CENTER_KEEPOUT = 10;
+const SPAWN_BOUND = BOUND - 2.5;
+const PICKUP_CLEARANCE = 0.8;
+
+function blocked(x, z, obstacles) {
+  for (const b of obstacles) {
+    if (
+      x > b.min.x - PICKUP_CLEARANCE && x < b.max.x + PICKUP_CLEARANCE &&
+      z > b.min.z - PICKUP_CLEARANCE && z < b.max.z + PICKUP_CLEARANCE
+    ) return true;
+  }
+  return false;
+}
+
 function randomSpawnPos(arena) {
-  const sp = arena.spawnPoints[(Math.random() * arena.spawnPoints.length) | 0];
-  const jitter = 3;
-  return new THREE.Vector3(
-    sp.x + (Math.random() - 0.5) * jitter,
-    0,
-    sp.z + (Math.random() - 0.5) * jitter
-  );
+  const obstacles = arena.obstacles;
+  for (let i = 0; i < 40; i++) {
+    const x = (Math.random() * 2 - 1) * SPAWN_BOUND;
+    const z = (Math.random() * 2 - 1) * SPAWN_BOUND;
+    if (x * x + z * z < CENTER_KEEPOUT * CENTER_KEEPOUT) continue;
+    if (blocked(x, z, obstacles)) continue;
+    return new THREE.Vector3(x, 0, z);
+  }
+  // Every sample was rejected - drop it on the keep-out ring instead, which is
+  // open floor by construction.
+  const a = Math.random() * Math.PI * 2;
+  const r = CENTER_KEEPOUT + 1.5;
+  return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
 }
 
 export function spawnPowerup(arena, scene, glowTex, time, playerHealth = 0, playerMaxHealth = 100) {
