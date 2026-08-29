@@ -174,6 +174,11 @@ const MAX_ASH_CLOUDS = 8;
 // standing rather than where enemies died, and four overlapping ones already
 // means the ground is gone.
 const MAX_HAZARDS = 4;
+// Ground-stain colours, one per kind of zone, kept distinct from each other
+// and from the telegraph orange so a player can tell at a glance whether a
+// patch of floor hurts THEM or the enemies standing in it.
+const CREEP_ASH = 0xff5714;
+const CREEP_HAZARD = 0x8ede2a;
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
 const MAX_MORTARS = 6;
@@ -553,6 +558,7 @@ class Game {
     // pool left behind would start the next run already burning the player,
     // standing on a patch of floor nothing on screen explains.
     this._clearHazards();
+    for (const a of this._ash) this.effects.creepRelease(a.creep);
     this._ash.length = 0;
   }
 
@@ -1953,11 +1959,15 @@ class Game {
   // drawn by the same particle pool everything else uses, so a cloud costs
   // nothing to create and nothing to dispose.
   _addAsh(pos) {
-    if (this._ash.length >= MAX_ASH_CLOUDS) this._ash.shift();
+    if (this._ash.length >= MAX_ASH_CLOUDS) {
+      // Recycled, so its stain has to go back to the pool with it.
+      this.effects.creepRelease(this._ash.shift().creep);
+    }
     const m = this.player.mods;
     this._ash.push({
-      x: pos.x, z: pos.z, life: m.ashTime, dps: m.ashDps, radius: m.ashRadius,
-      drip: 0,
+      x: pos.x, z: pos.z, life: m.ashTime, maxLife: m.ashTime,
+      dps: m.ashDps, radius: m.ashRadius, drip: 0,
+      creep: this.effects.creepAcquire(),
     });
     // A cloud that faded in was easy to miss in a busy wave, so it announces
     // itself: a ring the size of the damage area, plus an upward puff where
@@ -1974,9 +1984,15 @@ class Game {
       const a = this._ash[i];
       a.life -= dt;
       if (a.life <= 0) {
+        this.effects.creepRelease(a.creep);
         this._ash.splice(i, 1);
         continue;
       }
+      // The stain IS the warning now. It fades over the last second so the
+      // ground going clean is what says the cloud has burnt out.
+      this.effects.creepSet(
+        a.creep, a.x, a.z, a.radius, CREEP_ASH, Math.min(1, a.life)
+      );
       for (const e of this.enemies) {
         if (e.dead) continue;
         const dx = e.pos.x - a.x;
@@ -1993,18 +2009,19 @@ class Game {
       // inside the shared particle pool, and the edge is drawn with embers
       // rather than a pulsing shockwave because that ring pool is four deep
       // and shared with melee and blasts.
+      // Embers on top of the stain, at half the old rate. They used to be the
+      // only thing marking the cloud, which is why there were so many of them;
+      // now they are texture over a mark the player can already see, and eight
+      // clouds' worth at the old rate was a third of the particle buffer.
       a.drip -= dt;
       if (a.drip <= 0) {
-        a.drip = 0.1;
-        for (let k = 0; k < 2; k++) {
-          const ang = Math.random() * Math.PI * 2;
-          const r = k === 0 ? Math.sqrt(Math.random()) * a.radius
-                            : a.radius * (0.85 + Math.random() * 0.15);
-          this.effects.burst(
-            this._ashAt.set(a.x + Math.cos(ang) * r, 0.35, a.z + Math.sin(ang) * r),
-            k === 0 ? 0xffb300 : 0xff5722, 3, 1.5, 1.8, 0.9
-          );
-        }
+        a.drip = 0.2;
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * a.radius;
+        this.effects.burst(
+          this._ashAt.set(a.x + Math.cos(ang) * r, 0.35, a.z + Math.sin(ang) * r),
+          0xffb300, 3, 1.5, 1.8, 0.9
+        );
       }
     }
   }
@@ -2015,8 +2032,18 @@ class Game {
   // ash cloud, and recycled the same way: the oldest goes rather than the
   // newest being refused, so the pool an enemy just threw always exists.
   _addHazard(x, z, radius, life, dps) {
-    if (this._hazard.length >= MAX_HAZARDS) this._hazard.shift();
-    this._hazard.push({ x, z, radius, life, maxLife: life, dps, acc: 0, drip: 0, tick: 0 });
+    if (this._hazard.length >= MAX_HAZARDS) {
+      this.effects.creepRelease(this._hazard.shift().creep);
+    }
+    this._hazard.push({
+      x, z, radius, life, maxLife: life, dps, acc: 0, drip: 0, tick: 0,
+      creep: this.effects.creepAcquire(),
+    });
+    // It lands as a splash, so the moment the ground turns is visible even if
+    // the player is looking somewhere else when it is thrown.
+    this._ashAt.set(x, 0.1, z);
+    this.effects.shockwave(this._ashAt, CREEP_HAZARD, radius, 0.45);
+    this.effects.burst(this._ashAt, CREEP_HAZARD, 16, 3, 1.2, 0.6);
   }
 
   // Runs the pools down and bleeds the player for standing in one.
@@ -2027,9 +2054,13 @@ class Game {
       const h = this._hazard[i];
       h.life -= dt;
       if (h.life <= 0) {
+        this.effects.creepRelease(h.creep);
         this._hazard.splice(i, 1);
         continue;
       }
+      this.effects.creepSet(
+        h.creep, h.x, h.z, h.radius, CREEP_HAZARD, Math.min(1, h.life)
+      );
       const dx = this.player.pos.x - h.x;
       const dz = this.player.pos.z - h.z;
       // Only while the player is on the ground. A pool is something to jump
@@ -2140,6 +2171,7 @@ class Game {
   // over, so a pool thrown a moment before the last enemy died does not keep
   // burning the player through the intermission.
   _clearHazards() {
+    for (const h of this._hazard) this.effects.creepRelease(h.creep);
     this._hazard.length = 0;
     for (const m of this._mortars) this.effects.markRelease(m.mark);
     this._mortars.length = 0;

@@ -33,6 +33,53 @@ export function makeGlowTexture() {
   return new THREE.CanvasTexture(cv);
 }
 
+// Ground texture for CREEP - the persistent stain a lingering zone leaves on
+// the floor. White with an alpha falloff so a single copy can be tinted per
+// zone; the blobs give it a ragged edge, because a clean circle reads as a UI
+// marker and this has to read as something spilled.
+export function makeCreepTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const ctx = cv.getContext('2d');
+  const R = 64;
+
+  const base = ctx.createRadialGradient(R, R, R * 0.1, R, R, R);
+  base.addColorStop(0, 'rgba(255,255,255,0.90)');
+  base.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+  base.addColorStop(0.82, 'rgba(255,255,255,0.26)');
+  base.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 128, 128);
+
+  // Irregular density so the middle looks pooled rather than airbrushed.
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = R * (0.3 + Math.random() * 0.52);
+    const r = R * (0.1 + Math.random() * 0.19);
+    const x = R + Math.cos(a) * d;
+    const y = R + Math.sin(a) * d;
+    const blob = ctx.createRadialGradient(x, y, 0, x, y, r);
+    blob.addColorStop(0, 'rgba(255,255,255,0.30)');
+    blob.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = blob;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Fade the outer edge to nothing. The decal turns slowly, and without this
+  // the square corners of the canvas would sweep visibly round the zone.
+  ctx.globalCompositeOperation = 'destination-in';
+  const mask = ctx.createRadialGradient(R, R, R * 0.55, R, R, R);
+  mask.addColorStop(0, 'rgba(255,255,255,1)');
+  mask.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = mask;
+  ctx.fillRect(0, 0, 128, 128);
+
+  return new THREE.CanvasTexture(cv);
+}
+
 export class Effects {
   constructor(scene) {
     this.scene = scene;
@@ -131,6 +178,61 @@ export class Effects {
         discMesh, ringMesh, lane, shape: '', used: false,
       });
     }
+
+    // CREEP. The persistent ground stain under a lingering zone - an ash
+    // cloud, a pool of blight. A separate pool from the telegraph marks for
+    // two reasons: marks are ten deep and transient, while creep is held for
+    // the whole life of a zone and there can be twelve of those at once, so
+    // sharing would starve the telegraphs. And creep is meant to look like
+    // terrain rather than like an instruction.
+    //
+    // Each zone gets a textured blotch that turns slowly, plus a hard rim at
+    // the exact damage radius. The blotch says "this ground is wrong"; the rim
+    // says precisely where it stops - particles alone gave neither, which is
+    // why a zone could be stood in without being noticed.
+    this.creepTex = makeCreepTexture();
+    this.creep = [];
+    for (let i = 0; i < 14; i++) {
+      const grp = new THREE.Group();
+      const fillMat = new THREE.MeshBasicMaterial({
+        map: this.creepTex,
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const rimMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      // The plane is a unit square, so it needs twice the group's scale to
+      // span the zone's diameter; the ring is already unit-RADIUS and takes
+      // the group scale as it is.
+      const fill = new THREE.Mesh(markLane, fillMat);
+      fill.scale.set(2, 2, 1);
+      const rim = new THREE.Mesh(markRing, rimMat);
+      grp.add(fill, rim);
+      grp.rotation.x = -Math.PI / 2;
+      // Under the telegraph marks at 0.06, so a mortar circle drawn over a
+      // pool still reads on top of it.
+      grp.position.y = 0.035;
+      grp.visible = false;
+      grp.frustumCulled = false;
+      scene.add(grp);
+      this.creep.push({
+        group: grp, fill, fillMat, rimMat,
+        spin: (Math.random() < 0.5 ? -1 : 1) * (0.12 + Math.random() * 0.16),
+        phase: Math.random() * Math.PI * 2,
+        used: false,
+      });
+    }
+    this._creepT = 0;
 
     // BEAMS. One-frame lines, redrawn every frame by whatever owns them -
     // a conduit's links to the enemies it is buffing. Same shape as the
@@ -306,6 +408,52 @@ export class Effects {
     this.marks[h].group.visible = false;
   }
 
+  // Claim a creep slot for a zone, held until the zone expires. Returns -1
+  // when the pool is full, which a caller must survive - the zone still deals
+  // its damage, it just goes undecorated.
+  creepAcquire() {
+    for (let i = 0; i < this.creep.length; i++) {
+      if (!this.creep[i].used) {
+        this.creep[i].used = true;
+        this.creep[i].group.visible = true;
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Position and tint one zone's ground stain. Call every frame it is alive.
+   *
+   * @param {number} intensity 0..1. Zones fade theirs down as they expire, so
+   *   the floor going clean is the warning that the danger has passed.
+   */
+  creepSet(h, x, z, radius, color, intensity) {
+    if (h < 0) return;
+    const c = this.creep[h];
+    c.group.position.set(x, 0.035, z);
+    c.group.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+    c.fillMat.color.setHex(color);
+    c.rimMat.color.setHex(color);
+    const k = Math.max(0, Math.min(1, intensity));
+    // The rim breathes and the fill does not. One moving element reads as
+    // alive; two competing rhythms just look noisy.
+    const pulse = 0.8 + Math.sin(this._creepT * 2.6 + c.phase) * 0.2;
+    // Deliberately strong. These are the only warning that a patch of floor is
+    // dangerous, and a subtle one is the same as none - the whole reason the
+    // particle-only version failed is that it could be stood in unnoticed.
+    c.fillMat.opacity = 0.55 * k;
+    c.rimMat.opacity = 1.0 * k * pulse;
+  }
+
+  creepRelease(h) {
+    if (h < 0) return;
+    this.creep[h].used = false;
+    this.creep[h].group.visible = false;
+    this.creep[h].fillMat.opacity = 0;
+    this.creep[h].rimMat.opacity = 0;
+  }
+
   // A line from `a` to `b` for THIS frame only. Callers redraw every frame;
   // update() hides whatever was not claimed.
   beam(a, b, color) {
@@ -347,6 +495,12 @@ export class Effects {
     // the last update belongs to an owner that is gone.
     for (let i = this._beamCount; i < this.beams.length; i++) this.beams[i].visible = false;
     this._beamCount = 0;
+    this._creepT += dt;
+    // The stains turn, slowly and each at its own rate, so a zone looks like
+    // it is spreading rather than like a decal someone pasted down.
+    for (const c of this.creep) {
+      if (c.used) c.fill.rotation.z += c.spin * dt;
+    }
     this.shakeAmp *= Math.pow(0.01, dt);
     if (this.shakeAmp < 0.002) this.shakeAmp = 0;
     if (this.flashT > 0) {

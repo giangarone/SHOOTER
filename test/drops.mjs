@@ -181,6 +181,38 @@ try {
   check('relief favours ammo when both are empty', relief.kinds.includes('ammo'),
     JSON.stringify(relief.kinds));
 
+  // ---- ground zones hand their decals back ----
+  // Every lingering zone holds a slot in the creep pool for its whole life.
+  // The pool is fourteen deep and shared by ash clouds and hazard pools, so a
+  // zone that expired without releasing would go unnoticed until, several
+  // waves later, zones silently stopped being drawn at all - the exact failure
+  // the decals were added to fix.
+  const creep = await page.evaluate(async () => {
+    const g = window.__game;
+    g._ash.forEach((a) => g.effects.creepRelease(a.creep));
+    g._ash.length = 0;
+    g._hazard.forEach((h) => g.effects.creepRelease(h.creep));
+    g._hazard.length = 0;
+    g.waveState = 'active';
+    g.player.mods.ashDps = 18;
+    g.player.mods.ashRadius = 3.5;
+    g.player.mods.ashTime = 1.2;
+    // More zones than the pool holds, so the recycling path is exercised too.
+    for (let i = 0; i < 10; i++) g._addAsh({ x: -8 + i * 1.7, z: 4 });
+    for (let i = 0; i < 6; i++) g._addHazard(-6 + i * 2.4, 9, 3, 1.2, 9);
+    const peak = g.effects.creep.filter((c) => c.used).length;
+    await new Promise((r) => setTimeout(r, 4000));
+    return {
+      peak,
+      held: g.effects.creep.filter((c) => c.used).length,
+      visible: g.effects.creep.filter((c) => c.group.visible).length,
+      zones: g._ash.length + g._hazard.length,
+    };
+  });
+  check('zone decals are drawn while zones live', creep.peak > 0, `peak=${creep.peak}`);
+  check('zone decals return to the pool', creep.held === 0 && creep.visible === 0,
+    `held=${creep.held} visible=${creep.visible} zones=${creep.zones}`);
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   if (browser) await browser.close();
