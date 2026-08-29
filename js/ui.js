@@ -18,6 +18,7 @@ export class UI {
     this.ammoNum = $('ammo-num');
     this.ammoRes = $('ammo-res');
     this.ammoReload = $('ammo-reload');
+    this.reloadRing = $('reload-ring');
     this.weaponName = $('weapon-name');
     this.weaponAlt = $('weapon-alt');
     this.vignette = $('vignette');
@@ -103,7 +104,19 @@ export class UI {
     if (this._c.reload !== reloading) {
       this._c.reload = reloading;
       this.ammoReload.classList.toggle('hidden', !reloading);
+      this.reloadRing.classList.toggle('hidden', !reloading);
     }
+  }
+
+  // Sweep of the ring around the crosshair, 0..1. Quantised to a hundredth
+  // before it is written: this is called every frame, and a custom-property
+  // write the browser has to restyle for is not worth spending on a change
+  // nobody can see.
+  setReloadProgress(p) {
+    const q = Math.round(p * 100);
+    if (this._c.reloadP === q) return;
+    this._c.reloadP = q;
+    this.reloadRing.style.setProperty('--p', q / 100);
   }
   setCredits(n) {
     if (this._c.credits !== n) {

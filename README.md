@@ -21,13 +21,16 @@ Open http://localhost:8123
 | R | Reload |
 | Q | Swap weapon |
 | Space | Jump |
-| Shift | Sprint |
 | E | Buy ammo / reroll at a station |
 | Esc | Pause |
 
 ## Features
 
 - First-person camera with pointer-lock mouse aiming
+- One move speed, always on. There is no sprint key: holding a button to travel
+  at the pace the game is tuned around was a tax rather than a decision, so the
+  slower walk is gone and everyone moves at what used to be sprint speed.
+  Accuracy still falls off while moving fast.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
@@ -36,12 +39,12 @@ Open http://localhost:8123
 - **Upgrade totems**: clearing a wave raises three pillars near the arena
   centre, each showing one upgrade as short colour-coded lines - benefits
   green, drawbacks red - with its own theme colour and a small 3D icon
-  hovering in front of it: a flame for Incendiary, an icicle for Cryo, a coin
-  for Midas Touch. Walk into one or shoot it anywhere to take it. Upgrades are
-  permanent for the run and stack, so no two runs build the same way.
-- **No pauses**: the next wave starts 5s after the clear whether or not you
-  chose. An unclaimed set stays standing and is only replaced when the
-  following wave is cleared - so a pick you ignore is a pick you lose.
+  that orbits round to whatever side you are standing on: a flame for
+  Incendiary, an icicle for Cryo, a coin for Midas Touch. Walk into one or
+  shoot it anywhere to take it. Upgrades are permanent for the run and stack,
+  so no two runs build the same way.
+- **The next wave waits for your pick.** No menu opens and the camera never
+  leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
@@ -55,16 +58,25 @@ Open http://localhost:8123
 - Weapons appear on totems - claiming one fills your empty slot, or replaces
   the gun in hand (the totem says which before you take it)
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
+- Reloading shows twice over: the gun drops out of frame and rolls through the
+  reload, and a ring sweeps round the crosshair as it completes
 - WebAudio synth SFX (no audio assets)
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart
 
 ## Upgrades
 
-**Nothing in a run ever pauses the game.** The choice is three totems standing
-in the arena, and credits are spent at stations beside them with a keypress. A
-menu at the wave boundary killed the momentum the game runs on; keep new
-systems on that side of the line.
+**No menu ever opens.** The choice is three totems standing in the arena, and
+credits are spent at stations beside them with a keypress. A modal at the wave
+boundary killed the momentum the game runs on; keep new systems on that side of
+the line.
+
+The wave boundary itself IS held: the next wave does not start until a totem
+has been taken. That replaced a five-second timer which let an unclaimed set
+sink, so a forfeited pick was silent - the player found out only by noticing
+they never got one. The hold costs no tension, because the cleared wave's
+enemies are already dead when it starts, and the player keeps their hands on
+the controls throughout.
 
 Upgrades live in `js/upgrades.js`. Each one is a pure function of its stack
 count, and the whole owned list is replayed from scratch onto a fresh stat
@@ -82,6 +94,14 @@ glance, mid-run, from across the arena.
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
 with rares getting commoner as the run goes on.
 
+**A totem cannot be taken the instant it arrives.** Totems come up wherever the
+player happens to be standing, into whatever is already in the air, so there are
+two guards and they cover different mistakes. `ARM_TIME` refuses any claim for
+1.2s after the pillar lands, which catches a burst fired before the set existed.
+Touch additionally refuses until the player has been seen *outside* the radius
+since the rise - a timer alone does nothing for someone who never stepped off
+the spot the pillar came up in, which was the whole problem.
+
 **The whole totem claims it.** One invisible box wraps the pillar and its icon,
 so a hit anywhere on the thing takes the upgrade. An earlier revision made only
 a small floating core claim, so a shot that missed an enemy standing behind a
@@ -97,6 +117,15 @@ per part, so a new icon costs no GPU memory. Never add a bespoke geometry
 there. A totem builds an icon the first time it shows one and keeps it hidden
 afterwards, which bounds the count by the size of the upgrade pool rather than
 by how many waves have passed.
+
+The icon **orbits** its pillar to whatever side the player is on and turns to
+face them, so it is legible from every angle. The alternative considered was a
+translucent pillar with a fully billboarded icon; translucency washes out the
+theme colour, which is the thing carrying meaning at distance, and billboarding
+a 3D shape flattens it. Orbiting keeps the pillar solid and the icon presenting
+its front. The radii are elliptical (1.0 x 0.62) because the pillar is - a
+circular orbit wide enough to clear the sides leaves the icon absurdly far off
+the front.
 
 ## Enemy movement
 

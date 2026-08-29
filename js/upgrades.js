@@ -69,9 +69,9 @@ export const THEME = {
   holy: 0xfff2b0,
   ninelives: 0xea80fc,
   blood: 0xff2d6f,
-  // movement
+  // movement, and the one upgrade that pays for the absence of it
   mobility: 0x2979ff,
-  surge: 0x536dfe,
+  poise: 0x7c4dff,
   impact: 0x00e5c0,
   // status effects, matched to STATUS_TINT in enemy.js
   poison: 0x39d353,
@@ -178,11 +178,8 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.mobility,
     icon: 'syringe',
-    effects: [['+12% MOVE SPEED', GOOD], ['+10% SPRINT', GOOD]],
-    apply: (mods, n) => {
-      mods.moveMult *= 1 + 0.12 * n;
-      mods.sprintMult *= 1 + 0.1 * n;
-    },
+    effects: [['+15% MOVE SPEED', GOOD]],
+    apply: (mods, n) => { mods.moveMult *= 1 + 0.15 * n; },
   },
   vampiric: {
     name: 'VAMPIRIC ROUNDS',
@@ -226,14 +223,14 @@ export const UPGRADES = {
     effects: [['+2.5 AMMO / SEC', GOOD]],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
-  momentum: {
-    name: 'MOMENTUM',
+  steadyAim: {
+    name: 'STEADY AIM',
     rarity: 'rare',
     max: 2,
-    theme: THEME.surge,
-    icon: 'chevron',
-    effects: [['UP TO +35% DAMAGE', GOOD], ['WHILE MOVING FAST', NOTE]],
-    apply: (mods, n) => { mods.momentum += 0.35 * n; },
+    theme: THEME.poise,
+    icon: 'tripod',
+    effects: [['UP TO +40% DAMAGE', GOOD], ['WHILE STANDING STILL', NOTE]],
+    apply: (mods, n) => { mods.steady += 0.4 * n; },
   },
   // ---- MUTATIONS ---------------------------------------------------------
   // Single-tier picks: max 1, no levels, one distinct behaviour each. Where

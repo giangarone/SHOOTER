@@ -53,6 +53,19 @@ html, body {
 #crosshair i:nth-child(2) { left: 50%; bottom: 0; width: 2px; height: 6px; transform: translateX(-50%); }
 #crosshair i:nth-child(3) { top: 50%; left: 0; height: 2px; width: 6px; transform: translateY(-50%); }
 #crosshair i:nth-child(4) { top: 50%; right: 0; height: 2px; width: 6px; transform: translateY(-50%); }
+/* Reload ring. A conic gradient swept by --p (0..1) and punched hollow with a
+   radial mask, so the whole indicator is one element and one custom property
+   write per frame. It sits at the crosshair because that is the one place the
+   player is already looking - the RELOADING word in the ammo box is in the
+   corner of the eye at best. */
+#reload-ring {
+  position: absolute; inset: -13px; border-radius: 50%;
+  background: conic-gradient(var(--cyan) calc(var(--p, 0) * 1turn), rgba(159, 180, 216, 0.18) 0);
+  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 76%);
+  mask: radial-gradient(closest-side, transparent 74%, #000 76%);
+  filter: drop-shadow(0 0 5px rgba(78, 243, 255, 0.55));
+}
+
 #hitmarker { position: absolute; inset: -9px; opacity: 0; transition: opacity 0.14s; }
 #hitmarker::before, #hitmarker::after {
   content: ""; position: absolute; left: 50%; top: 50%;

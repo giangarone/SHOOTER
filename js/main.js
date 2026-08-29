@@ -6,16 +6,22 @@
 // Only 'playing' simulates. The loop still runs and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
 //
-// NOTHING IN THE RUN EVER PAUSES THE GAME. The wave-end upgrade choice is
-// three totems that rise out of the arena floor - walk into one or shoot it
-// anywhere - and credits are spent at two stations beside them. The next wave
-// starts on a timer regardless, and an unclaimed set stays standing until the
-// following wave is cleared. A menu at the wave boundary killed the momentum
-// this game runs on; keep new systems on that side of the line.
+// NO MENU EVER OPENS. The wave-end upgrade choice is three totems that rise
+// out of the arena floor - walk into one or shoot it anywhere - and credits
+// are spent at two stations beside them. The player keeps their hands on the
+// controls and the camera stays where it was; a modal at the wave boundary
+// killed the momentum this game runs on, and that line still holds.
+//
+// The wave boundary IS held, though: the next wave does not start until a
+// totem has been taken. That replaced a five-second timer that let a set sink
+// unclaimed, which meant a forfeited pick was silent - the player learned they
+// had lost one only by noticing they never got it. Everything else about the
+// boundary is unchanged, including that enemies from the cleared wave are
+// already gone, so the hold costs no tension.
 //
 // WAVE STATE (only meaningful while playing):
 //   'active'       spawning from the queue and fighting
-//   'intermission' wave cleared, showing the banner
+//   'intermission' wave cleared, totems up, waiting for the player to pick
 //   'idle'         short beat, then the next wave starts
 //
 // TIME: `this.time` is GAME time - it only advances while playing, and dt is
@@ -124,10 +130,6 @@ const COMBO_MAX = 3;
 const CREDITS_PER_SCORE = 0.1;
 const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
-// Seconds between a wave being cleared and the next one starting. The totems
-// are still standing when it does - claiming one is never a reason to stop
-// fighting.
-const INTERMISSION = 5;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
 // Chance that one of the three totems offers a weapon instead of an upgrade,
@@ -197,7 +199,7 @@ class Game {
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
     // `shootFresh` is the trigger EDGE - true only on the frame the button
     // went down. Semi-auto weapons need it; the loop clears it every frame.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, sprint: false, shoot: false, shootFresh: false, melee: false };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false };
     this.powerupsToSpawn = 0;
     this.powerupSpawnTimer = 0;
     this.ammoSpawnTimer = 0;
@@ -261,6 +263,7 @@ class Game {
 
     if (autotest) {
       this.autoTest = true;
+      this._botMove = { x: 0, z: 0 };
       this._wt = 0;
       this._dir = 0;
       this._swapCd = 0;
@@ -331,8 +334,6 @@ class Game {
         case 'KeyA': this.input.left = true; break;
         case 'KeyD': this.input.right = true; break;
         case 'Space': this.input.jump = true; e.preventDefault(); break;
-        case 'ShiftLeft':
-        case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUseStation(); break;
         case 'KeyQ': this.trySwapWeapon(); break;
@@ -345,8 +346,6 @@ class Game {
         case 'KeyA': this.input.left = false; break;
         case 'KeyD': this.input.right = false; break;
         case 'Space': this.input.jump = false; break;
-        case 'ShiftLeft':
-        case 'ShiftRight': this.input.sprint = false; break;
       }
     });
     // Losing focus mid-key would otherwise leave the player running forever.
@@ -426,7 +425,7 @@ class Game {
   _clearInput() {
     const i = this.input;
     i.forward = i.back = i.left = i.right = false;
-    i.jump = i.sprint = i.shoot = i.melee = false;
+    i.jump = i.shoot = i.melee = false;
     i.shootFresh = false;
   }
 
@@ -787,7 +786,10 @@ class Game {
     for (const e of this.enemies) targets.push(e.hitbox);
     this.totemArea.addTargets(targets);
 
-    const spread = w.spread + (this.input.sprint ? 0.016 : 0);
+    // Moving costs accuracy. This used to be a sprint-key test; with the key
+    // gone it reads live speed instead, which also means it fades in and out
+    // with the player rather than snapping.
+    const spread = w.spread + (this.player.speedXZ > 6 ? 0.016 : 0);
     const mods = this.player.mods;
     let hitAny = false;
     this._shotHits.clear();
@@ -935,9 +937,17 @@ class Game {
   // a random cardinal direction. Only good enough to exercise the game.
   _autoInput() {
     // Claiming a totem takes priority over fighting, so the bot exercises the
-    // upgrade path every wave instead of ignoring it. It walks into the one it
-    // wants and HOLDS FIRE on the way (see the shoot flag below), which is what
-    // keeps the run deterministic now that a hit anywhere on a totem claims it.
+    // upgrade path every wave instead of ignoring it - and now that the next
+    // wave will not start until something is claimed, a bot that failed to
+    // claim would hang the run rather than merely skip an upgrade.
+    //
+    // It SHOOTS the totem it wants rather than walking into it. Touch is a
+    // 1.7m radius on totems spaced 3.6m apart, so a bot crossing the row to
+    // reach a specific one clips whichever it passes and takes the wrong
+    // upgrade - which is what made `picked up a weapon` fail about one run in
+    // four, on the old code as well as the new. Shooting picks exactly the
+    // totem it aimed at. It walks toward the target at the same time, so a
+    // blocked line of sight resolves itself.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
       // While the second slot is empty the bot goes for a weapon totem
@@ -985,10 +995,19 @@ class Game {
         if (this.player.swapWeapon()) this._swapCd = 2;
       }
     }
-    if (best) {
-      const dx = best.pos.x - this.player.pos.x;
-      const dy = 1.0 - (this.player.pos.y + 1.7);
-      const dz = best.pos.z - this.player.pos.z;
+    // Line up on the totem before firing at it. Until the bot is in position
+    // it holds fire, because a shot from the wrong angle claims the wrong
+    // upgrade just as effectively as a good one claims the right one.
+    const lined = seekTotem ? this._botLineUp(seekTotem) : false;
+
+    // The totem outranks the nearest enemy as an aim point: it is the thing
+    // that has to be hit for the run to continue.
+    const aimAt = seekTotem || best;
+    if (aimAt) {
+      const dx = aimAt.pos.x - this.player.pos.x;
+      // Totems are aimed at icon height, enemies at the chest.
+      const dy = (seekTotem ? 1.5 : 1.0) - (this.player.pos.y + 1.7);
+      const dz = aimAt.pos.z - this.player.pos.z;
       const ty = Math.atan2(-dx, -dz);
       const tp = Math.atan2(dy, Math.hypot(dx, dz));
       // Sharper than it looks: at 0.18 the bot's aim lagged enough that it hit
@@ -997,13 +1016,7 @@ class Game {
       const k = 0.4;
       this.player.yaw += (ty - this.player.yaw) * k;
       this.player.pitch += (tp - this.player.pitch) * k;
-      // Ceasefire while walking to a chosen totem. The whole totem is a claim
-      // target, so a shot at an enemy standing past the row takes whichever
-      // totem is in the line - which is right for a player, who is making that
-      // trade knowingly, and useless for a test that has to reach a SPECIFIC
-      // totem to cover takeWeapon(). Totems only stand between waves, so this
-      // costs the bot a second or two of fire, not a fight.
-      this.input.shoot = !seekTotem;
+      this.input.shoot = seekTotem ? lined : true;
       // The bot re-arms the edge every frame, so it fires semi-autos as fast
       // as their cooldown allows. Fine for a smoke test - it is exercising the
       // weapons, not simulating a human trigger finger.
@@ -1021,12 +1034,8 @@ class Game {
     let fx;
     let fz;
     if (seekTotem) {
-      const dx = seekTotem.pos.x - this.player.pos.x;
-      const dz = seekTotem.pos.z - this.player.pos.z;
-      const len = Math.hypot(dx, dz) || 1;
-      fx = dx / len;
-      fz = dz / len;
-      this.input.shoot = false;
+      fx = this._botMove.x;
+      fz = this._botMove.z;
     } else {
       const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]];
       [fx, fz] = dirs[this._dir];
@@ -1040,7 +1049,62 @@ class Game {
     this.input.right = lr > 0.1;
     this.input.left = lr < -0.1;
     this.input.jump = Math.sin(this.time * 3) > 0.92;
-    this.input.sprint = false;
+  }
+
+  // Autotest bot: manoeuvre into a position it can safely shoot `t` from,
+  // writing the walk direction into this._botMove and returning whether it is
+  // there yet. Three rules, in priority order:
+  //
+  //   1. Stay out of every totem's touch radius. Touch claims whatever it
+  //      brushes, and the bot is trying to claim one SPECIFIC totem.
+  //   2. Close to firing range.
+  //   3. Sidestep until no other totem sits on the line of fire - the totems
+  //      are in a row, so a bot approaching from the flank shoots through two
+  //      of them to reach the third and claims the first one it hits.
+  _botLineUp(t) {
+    const p = this.player.pos;
+    const m = this._botMove;
+    m.x = 0;
+    m.z = 0;
+
+    for (const o of this.totemArea.totems) {
+      if (o.state === 'hidden') continue;
+      const ox = p.x - o.pos.x;
+      const oz = p.z - o.pos.z;
+      const d = Math.hypot(ox, oz);
+      // Well outside TOUCH_RADIUS (1.7), with room for a frame of movement.
+      if (d < 3 && d > 1e-3) {
+        m.x = ox / d;
+        m.z = oz / d;
+        return false;
+      }
+    }
+
+    const vx = t.pos.x - p.x;
+    const vz = t.pos.z - p.z;
+    const d = Math.hypot(vx, vz) || 1;
+    if (d > 12) {
+      m.x = vx / d;
+      m.z = vz / d;
+      return false;
+    }
+
+    for (const o of this.totemArea.totems) {
+      if (o === t || o.state === 'hidden') continue;
+      // Distance from the other totem to the segment player -> target.
+      const l2 = vx * vx + vz * vz;
+      const s = Math.max(0, Math.min(1, ((o.pos.x - p.x) * vx + (o.pos.z - p.z) * vz) / l2));
+      const cx = p.x + vx * s - o.pos.x;
+      const cz = p.z + vz * s - o.pos.z;
+      if (cx * cx + cz * cz < 4) {
+        // Strafe, always the same way round, so it sweeps clear instead of
+        // oscillating on the boundary.
+        m.x = -vz / d;
+        m.z = vx / d;
+        return false;
+      }
+    }
+    return true;
   }
 
   // Drives the wave state machine and the enemy trickle. A wave ends only when
@@ -1055,11 +1119,8 @@ class Game {
       this._updatePickupSpawns(dt);
       if (!this.queue.length && !this.enemies.length) {
         this.waveState = 'intermission';
-        this.interT = INTERMISSION;
         this.score += 100 * this.wave;
         this._payClearBonus();
-        // A set still standing from last wave is replaced here, so an
-        // unclaimed pick is lost rather than accumulating.
         this._presentTotems();
         let msg = 'WAVE ' + this.wave + ' CLEARED  +' + this.lastGain + 'c';
         if (this.lastPerfect) msg += '  FLAWLESS';
@@ -1067,10 +1128,13 @@ class Game {
         this.sfx.wave();
       }
     } else if (this.waveState === 'intermission') {
-      // Only a countdown to the next wave. The totems stay standing through
-      // it and well past it - claiming one is never a reason to stop moving.
-      this.interT -= dt;
-      if (this.interT <= 0) {
+      // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
+      // game stops for the player, so this is the one held boundary in a run
+      // and it exists because a forfeited pick was invisible: the set sank, a
+      // wave started, and nothing ever said what was lost. `!active` covers a
+      // set that never rose - an empty roll, or one dismissed on a reset - so
+      // an exhausted pool can never wedge the run.
+      if (!this.totemArea.active || this.totemArea.claimed) {
         this.waveState = 'idle';
         this.interT = 0.4;
       }
@@ -1191,7 +1255,7 @@ class Game {
   // shoot(), which already has the raycast.
   _updateTotems(dt) {
     const area = this.totemArea;
-    area.update(dt, this.time);
+    area.update(dt, this.time, this.player.pos);
 
     const touched = area.touched(this.player.pos);
     if (touched) {
@@ -1201,7 +1265,10 @@ class Game {
 
     const st = area.stationInRange(this.player.pos);
     if (!st) {
-      this.ui.setPrompt(null, false);
+      // With the wave gated on a pick, silence here would read as the game
+      // having stalled. A station prompt still wins - the player is standing
+      // at one, so that is the thing they are asking about.
+      this.ui.setPrompt(this._awaitingPick() ? 'TAKE A TOTEM TO CALL THE NEXT WAVE' : null, false);
       return;
     }
     const blocked = this._stationBlocked(st);
@@ -1220,6 +1287,12 @@ class Game {
         false
       );
     }
+  }
+
+  // True while the run is held at the wave boundary waiting for the player to
+  // take one of the totems that are standing.
+  _awaitingPick() {
+    return this.waveState === 'intermission' && this.totemArea.active && !this.totemArea.claimed;
   }
 
   // Why a station can't be used, or null if it can. Shared by the prompt and
@@ -1478,6 +1551,7 @@ class Game {
     this.ui.setCombo(this.comboKills, this.comboMult(), this.comboTimer / COMBO_WINDOW);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
+    this.ui.setReloadProgress(this.player.reloadProgress);
     const other = this.player.slots[this.player.slot === 0 ? 1 : 0];
     this.ui.setWeapon(this.player.weapon.name, other ? WEAPONS[other].name : null);
     this.ui.setBuffs(

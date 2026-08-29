@@ -31,8 +31,7 @@ const DEFAULT_MODS = {
   reloadMult: 1,        // multiplier on reload duration
   maxHpBonus: 0,        // flat max health added before maxHpMult
   maxHpMult: 1,
-  moveMult: 1,          // multiplier on walk AND sprint speed
-  sprintMult: 1,        // extra multiplier applied only while sprinting
+  moveMult: 1,          // multiplier on move speed
   regenDelay: 10,        // seconds without damage before regen starts
   regenRate: 1,         // health per second once regenerating
   lifesteal: 0,         // fraction of damage dealt returned as health
@@ -43,7 +42,7 @@ const DEFAULT_MODS = {
   bloodlustMax: 0,      // maximum kill stacks
   shockwave: 0,         // damage dealt to nearby enemies when hit
   shockwaveRadius: 0,
-  momentum: 0,          // extra damage fraction at full sprint
+  steady: 0,            // extra damage fraction while standing still
 
   // MUTATION FIELDS. These are the single-tier picks - each is set by exactly
   // one upgrade with max: 1, so they are flags and rates rather than
@@ -75,6 +74,13 @@ const DEFAULT_MODS = {
 // Seconds a weapon swap takes. Long enough that switching under fire is a real
 // commitment, short enough that it never feels sticky.
 const SWAP_TIME = 0.35;
+// The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
+// holding a key to move at the speed the game is balanced around was a tax
+// rather than a decision, so the walk is gone and this is what everyone gets.
+const BASE_SPEED = 10;
+// Horizontal speed at which Steady Aim's bonus has fully decayed. Well under
+// BASE_SPEED: the upgrade pays for standing your ground, not for strolling.
+const STILL_SPEED = 3;
 
 export class Player {
   constructor(camera, scene) {
@@ -128,6 +134,7 @@ export class Player {
       const model = WEAPONS[key].build();
       model.visible = false;
       model.userData.baseZ = model.position.z;
+      model.userData.baseY = model.position.y;
       camera.add(model);
       this.gunModels[key] = model;
     }
@@ -161,6 +168,7 @@ export class Player {
     model.visible = true;
     this.muzzle = model.getObjectByName('muzzle');
     this.gunBaseZ = model.userData.baseZ;
+    this.gunBaseY = model.userData.baseY;
   }
 
   // Puts `key` in the active slot when the other slot is full, otherwise fills
@@ -377,7 +385,7 @@ export class Player {
       const len = Math.hypot(f, s);
       const fn = f / len;
       const sn = s / len;
-      const speed = (input.sprint ? 10 * this.mods.sprintMult : 6.5) * this.mods.moveMult;
+      const speed = BASE_SPEED * this.mods.moveMult;
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
       this.vel.x = (-sinY * fn + cosY * sn) * speed;
@@ -438,7 +446,40 @@ export class Player {
 
     this.kick *= Math.pow(0.0001, dt);
     this.gun.position.z = this.gunBaseZ + this.kick;
+    this._animateReload();
     this.applyCamera();
+  }
+
+  // Reload animation. The gun drops out of frame, rolls over as if a magazine
+  // were being pulled, and comes back up - a full arc over the reload, driven
+  // off the same timer the reload itself uses so it always matches the real
+  // duration however much Speed Loader has cut it. Written every frame while
+  // idle too, so the transforms are cleared the instant a reload is cancelled
+  // by a weapon swap.
+  _animateReload() {
+    const g = this.gun;
+    const total = this.reloadTime;
+    if (this.reloading <= 0 || total <= 0) {
+      g.position.y = this.gunBaseY;
+      g.rotation.x = 0;
+      g.rotation.z = 0;
+      return;
+    }
+    const t = 1 - this.reloading / total;
+    // One hump: nothing at the ends, everything in the middle, so the gun is
+    // back in the firing pose exactly as the last round seats.
+    const arc = Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+    g.position.y = this.gunBaseY - 0.16 * arc;
+    g.rotation.x = 0.55 * arc;
+    g.rotation.z = -0.35 * arc;
+  }
+
+  // 0 while idle, otherwise how far through the current reload we are. Drives
+  // the ring around the crosshair.
+  get reloadProgress() {
+    const total = this.reloadTime;
+    if (this.reloading <= 0 || total <= 0) return 0;
+    return Math.min(1, Math.max(0, 1 - this.reloading / total));
   }
 
   applyCamera() {
@@ -503,16 +544,28 @@ export class Player {
     return this.health;
   }
 
-  // All outgoing damage goes through here. Momentum reads live horizontal
-  // speed, so the bonus rises and falls as the player moves - it is not a
-  // sprint-key check.
+  // All outgoing damage goes through here. Steady Aim reads live horizontal
+  // speed, so the bonus fades in as the player settles and drops the moment
+  // they move - it is not a key check, and there is no key to check.
   getEffectiveDamage(base) {
     let d = base * this.damageMult * this.mods.damage;
-    if (this.mods.momentum > 0) {
-      const speed = Math.hypot(this.vel.x, this.vel.z);
-      d *= 1 + this.mods.momentum * Math.min(1, speed / 10);
+    if (this.mods.steady > 0) {
+      d *= 1 + this.mods.steady * this.stillness;
     }
     return d;
+  }
+
+  // 1 while planted, falling to 0 by STILL_SPEED. Movement damps rather than
+  // stopping dead, so a hard threshold would flicker the bonus on and off for
+  // a fraction of a second after every stop; the ramp settles instead.
+  get stillness() {
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    return Math.max(0, 1 - speed / STILL_SPEED);
+  }
+
+  // Horizontal speed, for the shot-spread penalty in main.js.
+  get speedXZ() {
+    return Math.hypot(this.vel.x, this.vel.z);
   }
 
   // Vampiric Rounds. Heals a fraction of damage dealt, never past max health,

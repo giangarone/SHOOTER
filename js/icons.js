@@ -245,6 +245,17 @@ const ICONS = {
     add(CYL(), DARK, [0, -0.14, 0], [0.1, 0.46, 0.1]);
     add(CYL(), glow, [0, -0.34, 0], [0.13, 0.08, 0.13]);
   },
+  // Damage for holding still: a barrel braced on a tripod.
+  tripod(add, glow) {
+    add(CYL(), PALE, [0, 0.2, 0], [0.09, 0.5, 0.09], [0, 0, Math.PI / 2]);
+    add(SPHERE(), glow, [0, 0.08, 0], [0.16, 0.16, 0.16]);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      add(CYL(), glow, [Math.cos(a) * 0.16, -0.16, Math.sin(a) * 0.12], [0.06, 0.42, 0.06],
+        [Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45]);
+    }
+  },
+
   // A weapon offer: a stubby gun.
   gun(add, glow) {
     add(BOX(), DARK, [0, 0.02, 0], [0.44, 0.16, 0.14]);

@@ -7,6 +7,14 @@
 // made, and an unclaimed set simply stays standing until the wave after it is
 // cleared, when a fresh set replaces it.
 //
+// A TOTEM CANNOT BE TAKEN THE INSTANT IT ARRIVES
+//   Totems come up wherever the player happens to be standing, into whatever
+//   is already in the air. Two guards, because they cover different mistakes:
+//   an arm delay after the rise (ARM_TIME) catches a burst that was fired
+//   before the set existed, and touch additionally requires having been seen
+//   OUTSIDE the radius since the rise (`touchArmed`) - a timer alone does
+//   nothing for a player who never moved off the spot the pillar came up in.
+//
 // THE WHOLE TOTEM IS THE TARGET
 //   An earlier revision made only a small floating core claim the upgrade, so
 //   that a shot which missed an enemy standing behind a totem could not pick a
@@ -22,6 +30,12 @@
 //   object from icons.js that says what the upgrade does before the text is
 //   legible - a flame for Incendiary, an icicle for Cryo. Both come straight
 //   off the offer, so this file still knows nothing about upgrades.
+//
+//   The icon ORBITS its pillar to whatever side the player is on and turns to
+//   face them. The alternative considered was a translucent pillar with a
+//   billboarded icon: translucency washes out the theme colour, which is the
+//   thing carrying meaning at distance, and billboarding a 3D shape flattens
+//   it. Orbiting keeps the pillar solid and the icon presenting its front.
 //
 // PERFORMANCE RULES, same as arena.js and powerups.js:
 //   1. No PointLights, ever. three.js keys its shader programs on the scene's
@@ -45,8 +59,15 @@ import { buildIcon } from './icons.js';
 // putting a weapon on a totem needed no changes here.
 
 // Walk this close to a totem and it is yours. Generous enough to catch a
-// player running past at sprint speed.
+// player running past at full speed.
 export const TOUCH_RADIUS = 1.7;
+// Seconds after a totem finishes rising before it will accept a claim. Totems
+// come up wherever the player happens to be standing, and often into the line
+// of a burst that was already in the air when the wave ended - without this,
+// clearing a wave next to the row picks your build for you. Long enough to
+// cover a trigger already held down, short enough that a player walking in
+// deliberately never notices it.
+const ARM_TIME = 1.2;
 // Press E this close to a station.
 export const STATION_RADIUS = 2.6;
 
@@ -71,11 +92,16 @@ const STATION_GEOM = new THREE.BoxGeometry(1.0, 1.4, 0.5);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
 const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
-// Where the icon hovers: just clear of the pillar's front face, at chest
-// height on the panel side. ICON_SCALE sizes the whole catalogue at once -
+// The icon ORBITS the pillar to stay on the player's side of it and turns to
+// face them, so it is legible from any angle without the pillar having to go
+// translucent. The radii are elliptical because the pillar is: 1.15 wide and
+// 0.5 deep, so a circular orbit at any radius that cleared the sides would
+// leave the icon floating absurdly far off the front.
+const ICON_Y = 1.5;
+const ICON_RX = 1.0;
+const ICON_RZ = 0.62;
 // icons.js builds every shape at roughly half a metre, which is legible in the
 // hand and too small against a 1.15m-wide pillar seen from across the arena.
-const ICON_POS = [0, 1.5, 0.55];
 const ICON_SCALE = 1.35;
 
 function hex(n) {
@@ -118,6 +144,13 @@ export class Totem {
     this.rise = 0;
     this.state = 'hidden'; // hidden | rising | up | sinking
     this.claimed = false;
+    // Seconds left on the arm delay; see ARM_TIME.
+    this.armT = ARM_TIME;
+    // False until the player has been seen OUTSIDE the touch radius since this
+    // totem rose. The arm delay alone does not cover a player who is simply
+    // standing on the spot a totem comes up in - they would still be inside it
+    // when the timer expired. Touch has to be entered, not merely occupied.
+    this.touchArmed = false;
 
     this.group = new THREE.Group();
     this.group.position.set(x, SUNK_Y, ROW_Z);
@@ -145,7 +178,7 @@ export class Totem {
     // Icons hang off this so the bob and spin are written once, whichever icon
     // is showing. Built lazily and kept - see rule 3 at the top of the file.
     this.iconAnchor = new THREE.Group();
-    this.iconAnchor.position.set(ICON_POS[0], ICON_POS[1], ICON_POS[2]);
+    this.iconAnchor.position.set(0, ICON_Y, ICON_RZ);
     this.iconAnchor.scale.setScalar(ICON_SCALE);
     this.group.add(this.iconAnchor);
     this._icons = new Map();
@@ -176,6 +209,8 @@ export class Totem {
     this._draw(offer);
     this.state = 'rising';
     this.rise = 0;
+    this.armT = ARM_TIME;
+    this.touchArmed = false;
     this.group.visible = true;
   }
 
@@ -245,20 +280,27 @@ export class Totem {
     this.state = 'sinking';
   }
 
-  // Only a fully-risen, unclaimed totem can be taken. Everything that grants
-  // an upgrade goes through this, so a totem cannot be claimed twice or
-  // claimed while it is still coming out of the floor.
+  // Only a fully-risen, armed, unclaimed totem can be taken. Everything that
+  // grants an upgrade goes through this, so a totem cannot be claimed twice,
+  // claimed while it is still coming out of the floor, or claimed by a shot
+  // that was already in the air when it arrived.
   canClaim() {
-    return this.state === 'up' && !this.claimed && this.upgradeId !== null;
+    return this.state === 'up' && this.armT <= 0 && !this.claimed && this.upgradeId !== null;
   }
 
+  // Touch additionally requires the player to have left the radius at least
+  // once since the rise - see `touchArmed`.
   inTouchRange(playerPos) {
+    return this.touchArmed && this._within(playerPos);
+  }
+
+  _within(playerPos) {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
     return dx * dx + dz * dz < TOUCH_RADIUS * TOUCH_RADIUS;
   }
 
-  update(dt, time) {
+  update(dt, time, playerPos) {
     if (this.state === 'hidden') return;
 
     if (this.state === 'rising') {
@@ -276,18 +318,29 @@ export class Totem {
       }
     }
 
+    // The arm delay runs only once the pillar has landed, so a slow rise never
+    // eats into it.
+    if (this.state === 'up' && this.armT > 0) this.armT -= dt;
+    if (!this.touchArmed && playerPos && !this._within(playerPos)) this.touchArmed = true;
+
     // Ease-out on the way up so the pillar decelerates as it lands.
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
 
-    // The icon SWAYS rather than spins. Half of the catalogue is a flat
-    // silhouette a few centimetres deep - a bolt, a cross, a coin - and a full
-    // turn hides each of those edge-on for a third of its cycle, which reads as
-    // the icon blinking out. A bounded sway keeps every icon facing the row the
-    // player approaches from while still catching the eye. The phase is offset
-    // per totem so the three do not move as one object.
-    this.iconAnchor.rotation.y = Math.sin(time * 0.9 + this.pos.x) * 0.5;
-    this.iconAnchor.position.y = ICON_POS[1] + Math.sin(time * 2.4 + this.pos.x) * 0.07;
+    // The icon rides around to the player's side of the pillar and turns to
+    // face them. Two problems, one fix: an icon parked on the front face is
+    // invisible from behind, and a 3D shape left to spin hides itself edge-on
+    // for a third of every turn - half the catalogue is a flat silhouette a few
+    // centimetres deep. Orbiting solves both without the pillar having to be
+    // see-through. Local +Z is the icon's front, so a yaw of `a` aims it at the
+    // player and the same angle places it.
+    if (playerPos) {
+      const a = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
+      this.iconAnchor.position.x = Math.sin(a) * ICON_RX;
+      this.iconAnchor.position.z = Math.cos(a) * ICON_RZ;
+      this.iconAnchor.rotation.y = a;
+    }
+    this.iconAnchor.position.y = ICON_Y + Math.sin(time * 2.4 + this.pos.x) * 0.07;
     if (this.icon) {
       this.icon.userData.glow.emissiveIntensity = 1.35 + Math.sin(time * 5) * 0.35;
     }
@@ -474,8 +527,8 @@ export class TotemArea {
     }
   }
 
-  update(dt, time) {
-    for (const t of this.totems) t.update(dt, time);
+  update(dt, time, playerPos) {
+    for (const t of this.totems) t.update(dt, time, playerPos);
     for (const s of this.stations) s.update(dt, time);
   }
 }
