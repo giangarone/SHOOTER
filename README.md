@@ -53,8 +53,8 @@ Open http://localhost:8123
   to it, so a run's identity comes from the build rather than from the weapon.
 - **The gun shows its build.** Each mutation that changes what a bullet does -
   Venom, Incendiary, Piercing Shot, Dead Air and fifteen others - sets a small
-  faceted gem into the top of the receiver in that mutation's totem colour, in
-  two rows down the barrel. Stat upgrades like Extended Mag do not, so the row
+  block into the top of the receiver in that mutation's totem colour, in two
+  rows down the barrel. Stat upgrades like Extended Mag do not, so the row
   of gems reads as exactly what your shots now do to what they hit. Twenty
   sockets, filled front to back; an empty socket is never drawn.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
@@ -189,14 +189,19 @@ that is the point of the table.
 The viewmodel is built once at startup and parented to the camera. Building one
 per equip would allocate geometry for the whole session.
 
-The receiver carries twenty sockets, each a dark bezel with a faceted gem in
-it, built hidden with the model. `setGunMarks(model, colors)` fills one per
-owned mutation flagged `mark: true` in `UPGRADES`, in that upgrade's theme
-colour; `Player.refreshGunMarks()` calls it on every draft pick and on reset.
-Sockets are toggled, never created per pick - a rebuild per draft would leak a
-material each time. The bezel is what makes a gem read as set INTO the gun
-rather than painted on it: at this size the facets alone are too subtle, and it
-is the shadow line around the stone that carries the depth.
+The receiver carries twenty sockets, each a block standing on a plinth, built
+hidden with the model. `setGunMarks(model, colors)` fills one per owned
+mutation flagged `mark: true` in `UPGRADES`, in that upgrade's theme colour;
+`Player.refreshGunMarks()` calls it on every draft pick and on reset. Sockets
+are toggled, never created per pick - a rebuild per draft would leak a material
+each time.
+
+Each block carries TWO materials, and that is what makes it look solid: a
+single emissive material lights every face equally, so a cube reads as a flat
+silhouette however bright it is. The cap face is at full emissive and the four
+walls at a fraction of it, so the sides fall into shadow against the top and
+the block has visible height. Anything added here needs the same treatment -
+brightness alone will always read as a sticker.
 
 When balancing, check damage per second *after* reloads, not per shot.
 
