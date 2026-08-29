@@ -44,6 +44,32 @@ const DEFAULT_MODS = {
   shockwave: 0,         // damage dealt to nearby enemies when hit
   shockwaveRadius: 0,
   momentum: 0,          // extra damage fraction at full sprint
+
+  // MUTATION FIELDS. These are the single-tier picks - each is set by exactly
+  // one upgrade with max: 1, so they are flags and rates rather than
+  // multipliers that stack. Zero means the mutation is not owned, which is
+  // what every hook in main.js tests.
+  poisonDps: 0,         // Venom: damage per second, for poisonTime seconds
+  poisonTime: 0,
+  burnDps: 0,           // Incendiary: damage per second, for burnTime seconds
+  burnTime: 0,
+  burnSpread: 0,        // metres the burn jumps when a burning enemy dies
+  slowTime: 0,          // Cryo: seconds of movement and projectile slow
+  fearTime: 0,          // Terror: seconds an enemy flees instead of attacking
+  petrifyChance: 0,     // Petrify: chance per enemy per shot to freeze
+  petrifyTime: 0,
+  chainDamage: 0,       // Arc Rounds: fraction of the hit that jumps onward
+  chainRange: 0,
+  knockback: 0,         // Knockout Drops: metres an enemy is shoved per shot
+  midas: 0,             // Midas Touch: flag, gold spray on hit
+  blastDamage: 0,       // Detonator: damage at the centre of the impact blast
+  blastRadius: 0,
+  corpseDamage: 0,      // Blast Corpse: damage when an enemy dies
+  corpseRadius: 0,
+  volley: 1,            // Twenty/Twenty: shots fired per trigger pull
+  volleyDamage: 1,      // multiplier on each of them
+  wardPerWave: 0,       // Holy Mantle: free hits granted at each wave start
+  extraLives: 0,        // Dead Cat: revives per run
 };
 
 // Seconds a weapon swap takes. Long enough that switching under fire is a real
@@ -89,6 +115,10 @@ export class Player {
     this.bloodlustStacks = 0;
     this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
+    // Holy Mantle's charge, re-armed at every wave start, and Dead Cat's
+    // revive counter, which is spent once per run and not refilled.
+    this.wardReady = false;
+    this.livesUsed = 0;
 
     // Every weapon's viewmodel is built once here and parented to the camera;
     // a swap only toggles `visible`. Building one per swap would allocate
@@ -225,6 +255,12 @@ export class Player {
     this.bloodlustEnd = time + 4;
   }
 
+  // Holy Mantle. Called at the start of every wave: the ward is a per-wave
+  // charge, so a wave survived without spending it does not bank a second one.
+  armWard() {
+    this.wardReady = this.mods.wardPerWave > 0;
+  }
+
   // Current fire-rate multiplier from Bloodlust stacks.
   bloodlustMult() {
     if (this.bloodlustStacks <= 0) return 1;
@@ -246,6 +282,8 @@ export class Player {
     this.bloodlustStacks = 0;
     this.bloodlustEnd = 0;
     this._ammoRegenAcc = 0;
+    this.wardReady = false;
+    this.livesUsed = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
     this.yaw = 0;

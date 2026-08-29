@@ -60,6 +60,7 @@ import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
 import { TotemArea } from './totems.js';
 import { WEAPONS, WEAPON_KEYS } from './weapons.js';
+import { resolveCircle } from './utils.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -211,13 +212,30 @@ class Game {
     this._shotRay = new THREE.Raycaster();
     this._shotRay.far = 120;
     this._meleeDir = new THREE.Vector3();
+    // Enemies already touched by the shot in flight. A scattergun sends eight
+    // pellets through _firePellet, and every mutation effect is per-shot, not
+    // per-pellet: without this a point-blank shell would roll Petrify eight
+    // times and shove its target twelve metres.
+    this._shotHits = new Set();
+    this._blastAt = new THREE.Vector3();
+    this._blastHit = false;
+    this._chainFrom = new THREE.Vector3();
+    this._chainTo = new THREE.Vector3();
+    // Deaths that owe an after-effect, recorded during the enemy sweep and
+    // played once it has finished. Doing it inline would let a corpse blast
+    // read the enemy list while it is half-compacted - the same hazard the
+    // sweep itself is written to avoid. Both arrays are grown once and reused.
+    this._deathPos = [];
+    this._deathBurn = [];
+    this._deathCount = 0;
     this._enemyCtx = {
       player: this.player,
       enemies: this.enemies,
       obstacles: this.arena.obstacles,
       time: 0,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
-      addProjectile: (x, y, z, type) => this._spawnProjectile(x, y, z, type),
+      addProjectile: (x, y, z, type, speedScale) =>
+        this._spawnProjectile(x, y, z, type, speedScale),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
       effects: this.effects,
       sfx: this.sfx,
@@ -493,6 +511,7 @@ class Game {
     this.sfx.wave();
 
     this.waveDamageTaken = 0;
+    this.player.armWard();
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
     this.ammoSpawnTimer = 8;
@@ -592,6 +611,57 @@ class Game {
     this.effects.addShake(0.12);
   }
 
+  // Arc Rounds. Jumps a fraction of a hit to one more enemy, and exactly one:
+  // a chain that could chain again would clear a whole wave from a single
+  // pellet, and the tracer would stop reading as a discrete arc.
+  _chain(from, dmg, range) {
+    let best = null;
+    let bestD = range;
+    for (const e of this.enemies) {
+      if (e === from || e.dead) continue;
+      const d = e.pos.distanceTo(from.pos);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    if (!best) return;
+    best.takeDamage(dmg);
+    this.effects.tracer(
+      this._chainFrom.set(from.pos.x, 1.0, from.pos.z),
+      this._chainTo.set(best.pos.x, 1.0, best.pos.z)
+    );
+    this.effects.burst(this._chainTo, 0x9ff3ff, 6, 3, 1.5, 0.3);
+  }
+
+  // Knockout Drops. Shoves an enemy along the shot, then resolves it out of
+  // any obstacle it landed in - without that, a shove into cover would leave
+  // the enemy stuck inside a crate.
+  _shove(en, dir, dist) {
+    en.pos.add(this._knockback.set(dir.x, 0, dir.z).normalize().multiplyScalar(dist));
+    resolveCircle(en.pos, en.radius, this.arena.obstacles);
+  }
+
+  // Radial damage with linear falloff, shared by Detonator and Blast Corpse.
+  // `skip` is the enemy that is already taking the hit directly, and
+  // `hitPlayer` is what separates the two: your own impact blasts cannot hurt
+  // you, but a corpse going off in your face is the whole cost of the pick.
+  _blast(point, dmg, radius, skip, hitPlayer) {
+    for (const e of this.enemies) {
+      if (e === skip || e.dead) continue;
+      const d = e.pos.distanceTo(point);
+      if (d > radius) continue;
+      e.takeDamage(dmg * (1 - d / radius));
+    }
+    if (hitPlayer) {
+      const d = this.player.eyeInto(this._killPos).distanceTo(point);
+      if (d < radius) this._hurtPlayer(dmg * (1 - d / radius), point);
+    }
+    this.effects.shockwave(point, 0xff7a18, radius);
+    this.effects.burst(point, 0xff7a18, 18, 6, 2, 0.5);
+    this.effects.addShake(0.1);
+  }
+
   // One pellet of a shot. Walks the sorted hit list so a piercing weapon can
   // pass through several enemies, stopping at the first thing that is not one.
   // Returns true if it damaged anything, so the caller can play a single hit
@@ -636,10 +706,33 @@ class Game {
         this.effects.burst(end, 0x9fb4d8, w.pellets > 1 ? 3 : 6, 3, 1, 0.3);
         break;
       }
-      const dealt = this.player.getEffectiveDamage(w.damage) * Math.pow(w.falloff, pierced);
+      const m = this.player.mods;
+      const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
+        * Math.pow(w.falloff, pierced);
       en.takeDamage(dealt);
       this.player.applyLifesteal(dealt);
       this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
+      // Damage and lifesteal are per-pellet; everything below is per-shot.
+      if (!this._shotHits.has(en)) {
+        this._shotHits.add(en);
+        if (m.poisonTime) en.applyStatus('poison', m.poisonTime, m.poisonDps);
+        if (m.burnTime) en.applyStatus('burn', m.burnTime, m.burnDps);
+        if (m.slowTime) en.applyStatus('slow', m.slowTime);
+        if (m.fearTime) en.applyStatus('fear', m.fearTime);
+        if (m.petrifyChance && Math.random() < m.petrifyChance) {
+          en.applyStatus('freeze', m.petrifyTime);
+        }
+        if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
+        if (m.knockback) this._shove(en, ray.ray.direction, m.knockback);
+        if (m.midas) this.effects.burst(h.point, 0xffd600, 6, 3, 1.5, 0.35);
+        // Detonator goes off once per trigger pull, at the first enemy the
+        // shot touched. Per-pellet it would fire eight blasts from one shell
+        // and exhaust the four-ring pool on its own.
+        if (m.blastDamage && !this._blastHit) {
+          this._blastHit = true;
+          this._blastAt.copy(h.point);
+        }
+      }
       damaged = true;
       pierced++;
       if (pierced > w.pierce) {
@@ -685,10 +778,22 @@ class Game {
     this.totemArea.addTargets(targets);
 
     const spread = w.spread + (this.input.sprint ? 0.016 : 0);
+    const mods = this.player.mods;
     let hitAny = false;
-    for (let i = 0; i < w.pellets; i++) {
-      if (this._firePellet(muzzle, targets, spread, w)) hitAny = true;
+    this._shotHits.clear();
+    this._blastHit = false;
+    // Twenty/Twenty fires the whole pellet pattern twice off one round. The
+    // dedup set is NOT cleared between volleys - both barrels are one trigger
+    // pull, so an enemy caught by both still takes one dose of status.
+    for (let v = 0; v < mods.volley; v++) {
+      for (let i = 0; i < w.pellets; i++) {
+        if (this._firePellet(muzzle, targets, spread, w)) hitAny = true;
+      }
     }
+    if (this._blastHit) {
+      this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
+    }
+    this._shotHits.clear();
 
     // One hitmarker and one sound per shot, however many pellets connected.
     if (hitAny) {
@@ -752,6 +857,16 @@ class Game {
   // projectiles through their ctx. `pos` is only used to place the hit spray.
   _hurtPlayer(d, pos) {
     if (this.state !== 'playing') return;
+    // Holy Mantle. The ward eats the hit whole, however big it was, and is
+    // spent doing it - it is a free mistake per wave, not damage reduction.
+    if (this.player.wardReady) {
+      this.player.wardReady = false;
+      this.effects.shockwave(this.player.pos, 0x4ef3ff, 3.5, 0.4);
+      this.effects.burst(pos, 0x4ef3ff, 16, 5, 2, 0.5);
+      this.sfx.hit();
+      this.ui.banner('WARD');
+      return;
+    }
     const h = this.player.takeDamage(d, this.time);
     this.stats.damaged += d;
     this.waveDamageTaken += d;
@@ -760,10 +875,29 @@ class Game {
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
     this.sfx.hurt();
     this.ui.damage();
-    if (h <= 0) this.gameOver();
+    if (h > 0) return;
+    // Dead Cat. One revive for the whole run, not one per wave: it is the
+    // upside of a permanently smaller health pool, and refilling it every wave
+    // would make the drawback free after the first clear.
+    if (this.player.livesUsed < this.player.mods.extraLives) {
+      this.player.livesUsed++;
+      this.player.health = 1;
+      this.player.shield = 40;
+      this.player.shieldEnd = this.time + 3;
+      this.effects.shockwave(this.player.pos, 0xff2d6f, 6, 0.5);
+      this.effects.burst(this.player.eyeInto(this._killPos), 0xff2d6f, 40, 7, 3, 0.9);
+      this.effects.addShake(0.3);
+      this.ui.banner('NINE LIVES');
+      return;
+    }
+    this.gameOver();
   }
 
-  _spawnProjectile(x, y, z, type = 'shooter') {
+  // `speedScale` is Cryo Rounds slowing the shot a slowed enemy fires. It is
+  // baked in at spawn rather than read per frame: the round is already in the
+  // air by the time the shooter thaws, and a shot that sped up mid-flight
+  // would be unreadable.
+  _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1) {
     if (this.projectiles.length >= MAX_PROJECTILES) return;
     const t = this.player.eyeInto(this._aimTarget);
     let speed, dmg;
@@ -774,7 +908,9 @@ class Game {
       speed = Math.min(20, 13 + this.wave * 0.3);
       dmg = Math.min(20, 8 + this.wave * 0.8);
     }
-    this.projectiles.push(new Projectile(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg, type));
+    this.projectiles.push(
+      new Projectile(this.scene, this.effects.glowTex, x, y, z, t, speed * speedScale, dmg, type)
+    );
   }
 
   _spawnGrenade(x, y, z, damage) {
@@ -1235,6 +1371,12 @@ class Game {
       }
       this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
       this.sfx.kill();
+      // Blast Corpse and Incendiary's spread both need the enemy list intact,
+      // so they are only noted here and played after the sweep.
+      const wasBurning = e.status.burn > 0;
+      if (this.player.mods.corpseDamage > 0 || (this.player.mods.burnSpread > 0 && wasBurning)) {
+        this._recordDeath(e.pos, wasBurning);
+      }
       this.scene.remove(e.group);
       if (e.type === 'splitter') this._splitInto(e);
       e.dispose();
@@ -1244,6 +1386,49 @@ class Game {
     // never visited by the loop that created them.
     for (const mini of this._pendingSpawns) list.push(mini);
     this._pendingSpawns.length = 0;
+    if (this._deathCount > 0) this._playDeaths();
+  }
+
+  // Notes a death that owes an after-effect. Vectors are reused across frames;
+  // the arrays only ever grow to the largest number of deaths seen in one
+  // frame, which a wave clear bounds naturally.
+  _recordDeath(pos, burning) {
+    const i = this._deathCount++;
+    if (!this._deathPos[i]) this._deathPos[i] = new THREE.Vector3();
+    this._deathPos[i].set(pos.x, 0.9, pos.z);
+    this._deathBurn[i] = burning;
+  }
+
+  // Blast Corpse and Incendiary's spread, played once the enemy list is whole
+  // again. The corpse blast damages the player too - that is the cost of the
+  // pick, and it routes through _hurtPlayer so Holy Mantle and Dead Cat see it.
+  _playDeaths() {
+    const m = this.player.mods;
+    for (let i = 0; i < this._deathCount; i++) {
+      const at = this._deathPos[i];
+      if (m.corpseDamage > 0) {
+        this._blast(at, m.corpseDamage, m.corpseRadius, null, true);
+      }
+      // The fire jumps to exactly one neighbour, so a burning crowd cascades
+      // one enemy at a time rather than igniting the whole arena at once.
+      if (m.burnSpread > 0 && this._deathBurn[i]) {
+        let best = null;
+        let bestD = m.burnSpread;
+        for (const e of this.enemies) {
+          if (e.dead || e.status.burn > 0) continue;
+          const d = e.pos.distanceTo(at);
+          if (d < bestD) {
+            bestD = d;
+            best = e;
+          }
+        }
+        if (best) {
+          best.applyStatus('burn', m.burnTime, m.burnDps);
+          this.effects.burst(at, 0xff7a18, 8, 4, 2, 0.4);
+        }
+      }
+    }
+    this._deathCount = 0;
   }
 
   // Moves projectiles and reacts to what they hit. Grenades handle their own

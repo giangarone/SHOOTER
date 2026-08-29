@@ -47,6 +47,7 @@ export const THEME = {
   armor: 0x4ef3ff,    // max health, shields, retaliation
   mobility: 0x2979ff, // move and sprint speed
   blood: 0xff2d6f,    // lifesteal
+  status: 0x9d4edd,   // status effects: poison, fire, slow, fear, freeze
 };
 
 // `effects` is the totem's whole readout: two or three lines, each a short
@@ -189,6 +190,149 @@ export const UPGRADES = {
     effects: [['UP TO +35% DAMAGE', GOOD], ['WHILE MOVING FAST', NOTE]],
     apply: (mods, n) => { mods.momentum += 0.35 * n; },
   },
+  // ---- MUTATIONS ---------------------------------------------------------
+  // Single-tier picks: max 1, no levels, one distinct behaviour each. Where
+  // every upgrade above answers "how much", these answer "what happens" - the
+  // player should be able to name what a mutation does from watching one shot
+  // land, without reading the totem twice.
+  //
+  // The ones that afflict an enemy all have to SAY SO ON THE ENEMY. A status
+  // the player cannot see is a stat increase with extra steps, so each drives
+  // a body tint and a particle drip (see STATUS_TINT in enemy.js) and the
+  // colours are held distinct from each other and from the hit flash.
+  venom: {
+    name: 'VENOM ROUNDS',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.status,
+    effects: [['HITS POISON', GOOD], ['12 DMG / SEC, 4s', NOTE]],
+    apply: (mods, n) => {
+      mods.poisonDps = 12 * n;
+      mods.poisonTime = 4 * n;
+    },
+  },
+  incendiary: {
+    name: 'INCENDIARY',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.status,
+    effects: [['HITS SET FIRE', GOOD], ['20 DMG / SEC, 3s', NOTE], ['SPREADS ON DEATH', NOTE]],
+    apply: (mods, n) => {
+      mods.burnDps = 20 * n;
+      mods.burnTime = 3 * n;
+      mods.burnSpread = 3 * n;
+    },
+  },
+  cryo: {
+    name: 'CRYO ROUNDS',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.status,
+    effects: [['HITS SLOW BY HALF', GOOD], ['THEIR SHOTS TOO, 3s', NOTE]],
+    apply: (mods, n) => { mods.slowTime = 3 * n; },
+  },
+  terror: {
+    name: 'TERROR',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.status,
+    effects: [['HIT ENEMIES FLEE', GOOD], ['2s, CANNOT ATTACK', NOTE]],
+    apply: (mods, n) => { mods.fearTime = 2 * n; },
+  },
+  petrify: {
+    name: 'PETRIFY',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.status,
+    effects: [['12% TO FREEZE 1.5s', GOOD], ['FROZEN TAKE +50%', GOOD]],
+    apply: (mods, n) => {
+      mods.petrifyChance = 0.12 * n;
+      mods.petrifyTime = 1.5 * n;
+    },
+  },
+  arcRounds: {
+    name: 'ARC ROUNDS',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.damage,
+    effects: [['HITS ARC ONWARD', GOOD], ['40% DMG, ONE JUMP', NOTE]],
+    apply: (mods, n) => {
+      mods.chainDamage = 0.4 * n;
+      mods.chainRange = 6;
+    },
+  },
+  knockout: {
+    name: 'KNOCKOUT DROPS',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.mobility,
+    effects: [['HITS SHOVE ENEMIES', GOOD], ['1.5 METRES BACK', NOTE]],
+    apply: (mods, n) => { mods.knockback = 1.5 * n; },
+  },
+  midas: {
+    name: 'MIDAS TOUCH',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.ammo,
+    effects: [['2x CREDITS', GOOD], ['THE HIT TURN GOLD', NOTE]],
+    apply: (mods, n) => {
+      mods.creditMult *= 1 + n;
+      mods.midas = 1;
+    },
+  },
+  detonator: {
+    name: 'DETONATOR',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.damage,
+    effects: [['HITS EXPLODE', GOOD], ['30 DMG IN 2.5m', NOTE], ['-25% FIRE RATE', BAD]],
+    apply: (mods, n) => {
+      mods.blastDamage = 30 * n;
+      mods.blastRadius = 2.5;
+      mods.fireRate *= Math.pow(0.75, n);
+    },
+  },
+  blastCorpse: {
+    name: 'BLAST CORPSE',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.damage,
+    effects: [['THE DEAD EXPLODE', GOOD], ['45 DMG IN 4m', NOTE], ['IT CAN HIT YOU', BAD]],
+    apply: (mods, n) => {
+      mods.corpseDamage = 45 * n;
+      mods.corpseRadius = 4;
+    },
+  },
+  twentyTwenty: {
+    name: 'TWENTY/TWENTY',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.damage,
+    effects: [['EVERY SHOT FIRES 2x', GOOD], ['60% DAMAGE EACH', BAD]],
+    apply: (mods, n) => {
+      mods.volley = 1 + n;
+      mods.volleyDamage = 0.6;
+    },
+  },
+  holyMantle: {
+    name: 'HOLY MANTLE',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.armor,
+    effects: [['1st HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
+    apply: (mods, n) => { mods.wardPerWave = n; },
+  },
+  deadCat: {
+    name: 'DEAD CAT',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.armor,
+    effects: [['REVIVE ONCE AT 1 HP', GOOD], ['-40% MAX HEALTH', BAD]],
+    apply: (mods, n) => {
+      mods.extraLives += n;
+      mods.maxHpMult *= Math.pow(0.6, n);
+    },
+  },
   glassCannon: {
     name: 'GLASS CANNON',
     rarity: 'cursed',
@@ -212,8 +356,12 @@ function rarityWeight(rarity, wave) {
   if (rarity === 'cursed' && wave < 3) return 0;
   const base = RARITY[rarity].weight;
   // Rares get commoner as the run goes on; commons never fall out of the pool
-  // because low-rarity stat stacking is what a build is made of.
-  if (rarity === 'rare') return Math.min(1, base + wave * 0.05);
+  // because low-rarity stat stacking is what a build is made of. The ramp is
+  // deliberately shallow and capped: the mutations are all rare or cursed, so
+  // the rare half of the pool is now three times the size it was, and the old
+  // +0.05 climb to 1.0 would have crowded stat stacking out of a long run
+  // entirely rather than merely making it less certain.
+  if (rarity === 'rare') return Math.min(0.7, base + wave * 0.02);
   return base;
 }
 
