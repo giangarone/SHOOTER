@@ -28,15 +28,9 @@
 import * as THREE from 'three';
 
 const DARK = { color: 0x1c212c, roughness: 0.35, metalness: 0.7 };
-const BLACK = { color: 0x0b0e14, roughness: 0.3, metalness: 0.8 };
 
 function mat(spec) {
   return new THREE.MeshStandardMaterial(spec);
-}
-function accent(hex) {
-  return new THREE.MeshStandardMaterial({
-    color: 0x0b0e14, emissive: hex, emissiveIntensity: 1.4, roughness: 0.3, metalness: 0.4,
-  });
 }
 
 // Every model puts an empty named 'muzzle' where the barrel ends. main.js
@@ -56,12 +50,10 @@ function buildPulseRifle() {
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.5), dark);
   const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.4), dark);
   barrel.position.set(0, 0.02, -0.42);
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.02, 0.2), accent(0x4ef3ff));
-  strip.position.set(0, 0.06, -0.08);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.09), dark);
   grip.position.set(0, -0.14, 0.12);
   grip.rotation.x = 0.3;
-  g.add(body, barrel, strip, grip, buildMarks(), muzzleAt(0, 0.02, -0.65));
+  g.add(body, barrel, grip, buildMarks(), muzzleAt(0, 0.02, -0.65));
   return g;
 }
 

@@ -87,8 +87,15 @@ Each upgrade carries a `theme` colour describing what it DOES (gold ammo,
 orange fire rate, cyan armour, blue mobility...) and an `effects` list of short
 signed lines - `1` benefit drawn green, `-1` drawback drawn red, `0` a dim
 qualifier. The sign is about good versus bad, not arithmetic: `-30% RELOAD
-TIME` is a benefit. Keep each line under about 22 characters; it is read at a
+TIME` is a benefit. Keep each line under about 24 characters; it is read at a
 glance, mid-run, from across the arena.
+
+An upgrade that stacks writes `effects` as a function of the stacks already
+owned, and its lines read `current → next` (`CHANCE 50% → 75%`, `FIRE RATE
++20% → +40%`) so a pick always says what it moves you from and to. The first
+pick has no "from" and shows the result alone. `effectLines(def, owned)`
+resolves either form; the numbers live next to the `apply()` they mirror so the
+two cannot drift.
 
 Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
 with rares getting commoner as the run goes on.

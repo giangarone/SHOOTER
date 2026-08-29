@@ -90,11 +90,43 @@ export const THEME = {
 //   -1  drawback  (red)
 //    0  neutral qualifier, drawn dim
 //
-// Keep each line under about 22 characters. It is read at a glance, mid-run,
+// Keep each line under about 24 characters. It is read at a glance, mid-run,
 // from across the arena - a sentence is already too long.
+//
+// A stacking upgrade writes `effects` as a function of the stack count the
+// player already owns instead of a fixed array, so the line can name the tier
+// they are on and the one the pick moves them to. See step() below.
 const GOOD = 1;
 const BAD = -1;
 const NOTE = 0;
+
+// TIERED READOUTS. A stacking upgrade's totem shows what THIS pick changes,
+// not the whole ladder: the value the player is on now, an arrow, and the
+// value they will be on if they take it. The first pick has no "now", so it
+// shows the result on its own.
+//
+// The ladder printed out in full (`50% / 75% / 100%`) made the player work out
+// which rung they were on before they could tell what a pick was worth, and it
+// went stale the moment an apply() changed. `fmt` is called with a stack count
+// and returns that tier's value, so the arithmetic sits next to the apply() it
+// mirrors and reads the same numbers.
+function step(owned, fmt) {
+  return owned > 0 ? fmt(owned) + ' \u2192 ' + fmt(owned + 1) : fmt(owned + 1);
+}
+// The two shapes every multiplier in the pool takes: `1 + p * n` per stack,
+// and `r ^ n` for one that shrinks.
+const pctUp = (p) => (k) => '+' + Math.round(p * k) + '%';
+const pctDown = (r) => (k) => '-' + Math.round((1 - Math.pow(r, k)) * 100) + '%';
+const secs = (v) => (Math.round(v * 10) / 10) + 's';
+
+/**
+ * The effect lines to draw for a player who owns `owned` stacks of `def`.
+ * A static array is used as-is - that is every max-1 mutation, which has no
+ * tiers to compare. A function is a tiered readout; see step().
+ */
+export function effectLines(def, owned = 0) {
+  return typeof def.effects === 'function' ? def.effects(owned) : def.effects;
+}
 
 export const UPGRADES = {
   overclock: {
@@ -103,7 +135,7 @@ export const UPGRADES = {
     max: 5,
     theme: THEME.rate,
     icon: 'bolt',
-    effects: [['+20% FIRE RATE', GOOD]],
+    effects: (n) => [['FIRE RATE ' + step(n, pctUp(20)), GOOD]],
     apply: (mods, n) => { mods.fireRate *= 1 + 0.2 * n; },
   },
   extendedMag: {
@@ -112,7 +144,7 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.ammo,
     icon: 'magazine',
-    effects: [['+50% MAGAZINE', GOOD]],
+    effects: (n) => [['MAGAZINE ' + step(n, pctUp(50)), GOOD]],
     apply: (mods, n) => { mods.magMult *= 1 + 0.5 * n; },
   },
   speedLoader: {
@@ -121,7 +153,7 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.brass,
     icon: 'shell',
-    effects: [['-30% RELOAD TIME', GOOD]],
+    effects: (n) => [['RELOAD ' + step(n, pctDown(0.7)), GOOD]],
     apply: (mods, n) => { mods.reloadMult *= Math.pow(0.7, n); },
   },
   hollowPoint: {
@@ -130,7 +162,10 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.damage,
     icon: 'bullet',
-    effects: [['+30% DAMAGE', GOOD], ['-25% MAGAZINE', BAD]],
+    effects: (n) => [
+      ['DAMAGE ' + step(n, pctUp(30)), GOOD],
+      ['MAGAZINE ' + step(n, pctDown(0.75)), BAD],
+    ],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.3 * n;
       mods.magMult *= Math.pow(0.75, n);
@@ -142,7 +177,10 @@ export const UPGRADES = {
     max: 2,
     theme: THEME.vitality,
     icon: 'cross',
-    effects: [['2x HEAL RATE', GOOD], ['HEALS 2.5s SOONER', GOOD]],
+    effects: (n) => [
+      ['REGEN ' + step(n, (k) => 5 * (1 + k) + ' HP/s'), GOOD],
+      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(0.8, 4 - 1.25 * k))), GOOD],
+    ],
     apply: (mods, n) => {
       mods.regenDelay = Math.max(0.8, 4 - 1.25 * n);
       mods.regenRate = 5 * (1 + n);
@@ -154,7 +192,10 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.armor,
     icon: 'shield',
-    effects: [['+50 MAX HEALTH', GOOD], ['-12% MOVE SPEED', BAD]],
+    effects: (n) => [
+      ['MAX HEALTH ' + step(n, (k) => '+' + 50 * k), GOOD],
+      ['MOVE SPEED ' + step(n, pctDown(0.88)), BAD],
+    ],
     apply: (mods, n) => {
       mods.maxHpBonus += 50 * n;
       mods.moveMult *= Math.pow(0.88, n);
@@ -166,7 +207,10 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.salvage,
     icon: 'ammoBox',
-    effects: [['+2 AMMO PER KILL', GOOD], ['+15% CREDITS', GOOD]],
+    effects: (n) => [
+      ['AMMO / KILL ' + step(n, (k) => '+' + 2 * k), GOOD],
+      ['CREDITS ' + step(n, pctUp(15)), GOOD],
+    ],
     apply: (mods, n) => {
       mods.ammoOnKill += 2 * n;
       mods.creditMult *= 1 + 0.15 * n;
@@ -178,7 +222,7 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.mobility,
     icon: 'syringe',
-    effects: [['+15% MOVE SPEED', GOOD]],
+    effects: (n) => [['MOVE SPEED ' + step(n, pctUp(15)), GOOD]],
     apply: (mods, n) => { mods.moveMult *= 1 + 0.15 * n; },
   },
   vampiric: {
@@ -187,7 +231,10 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.blood,
     icon: 'drop',
-    effects: [['HEAL 1 HP ON KILL', GOOD], ['50% / 75% / 100%', NOTE]],
+    effects: (n) => [
+      ['HEAL 1 HP ON KILL', GOOD],
+      ['CHANCE ' + step(n, (k) => 25 * (k + 1) + '%'), NOTE],
+    ],
     // Chance per kill, one stack at a time: 50%, then 75%, then every kill.
     apply: (mods, n) => { mods.killHealChance = 0.25 * (n + 1); },
   },
@@ -197,7 +244,11 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.shock,
     icon: 'spikeShield',
-    effects: [['SHOCKWAVE WHEN HIT', GOOD], ['45 DAMAGE NEARBY', NOTE]],
+    effects: (n) => [
+      ['SHOCKWAVE WHEN HIT', GOOD],
+      ['DAMAGE ' + step(n, (k) => String(45 * k)), NOTE],
+      ['RADIUS ' + step(n, (k) => 5 + k + 'm'), NOTE],
+    ],
     apply: (mods, n) => {
       mods.shockwave += 45 * n;
       mods.shockwaveRadius = 5 + n;
@@ -209,7 +260,10 @@ export const UPGRADES = {
     max: 2,
     theme: THEME.frenzy,
     icon: 'claw',
-    effects: [['+8% FIRE RATE / KILL', GOOD], ['STACKS TO 10', NOTE]],
+    effects: (n) => [
+      ['FIRE RATE ' + step(n, pctUp(8)), GOOD],
+      ['PER KILL, STACKS 10', NOTE],
+    ],
     apply: (mods, n) => {
       mods.bloodlust += 0.08 * n;
       mods.bloodlustMax = 10;
@@ -221,7 +275,7 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.fabricate,
     icon: 'gear',
-    effects: [['+2.5 AMMO / SEC', GOOD]],
+    effects: (n) => [['AMMO / SEC ' + step(n, (k) => '+' + 2.5 * k), GOOD]],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
   steadyAim: {
@@ -230,7 +284,10 @@ export const UPGRADES = {
     max: 2,
     theme: THEME.poise,
     icon: 'tripod',
-    effects: [['UP TO +40% DAMAGE', GOOD], ['WHILE STANDING STILL', NOTE]],
+    effects: (n) => [
+      ['DAMAGE ' + step(n, pctUp(40)), GOOD],
+      ['WHILE STANDING STILL', NOTE],
+    ],
     apply: (mods, n) => { mods.steady += 0.4 * n; },
   },
   // ---- MUTATIONS ---------------------------------------------------------

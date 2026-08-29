@@ -63,7 +63,9 @@ import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { waveConfig } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
-import { UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost } from './upgrades.js';
+import {
+  UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost, effectLines,
+} from './upgrades.js';
 import { TotemArea } from './totems.js';
 import { NavGrid } from './nav.js';
 import { resolveCircle } from './utils.js';
@@ -1130,7 +1132,10 @@ class Game {
         icon: def.icon,
         rarityLabel: RARITY[def.rarity].label,
         rarityColor: RARITY[def.rarity].color,
-        effects: def.effects,
+        // Resolved against what the player already owns, so a stacking
+        // upgrade shows the tier it moves them from and the one it moves
+        // them to rather than the whole ladder.
+        effects: effectLines(def, owned),
         note: owned > 0 ? 'OWNED ' + owned + ' / ' + def.max : '',
       };
     });
