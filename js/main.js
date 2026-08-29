@@ -57,11 +57,11 @@
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player } from './player.js';
-import { Enemy, Projectile, Grenade, Shard } from './enemy.js';
+import { Enemy, Projectile, Grenade, Shard, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
-import { waveConfig } from './waves.js';
+import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { spawnPowerup, calcPickupsForWave, spawnAmmo } from './powerups.js';
 import {
   UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost, effectLines,
@@ -92,7 +92,14 @@ const SPAWN_RETRY = 2;
 // 24 when Reload Burst arrived: eight shards live for well under a second, but
 // a reload during a heavy wave would otherwise spend the whole budget and
 // silently drop enemy fire, which reads as the wave going quiet.
-const MAX_PROJECTILES = 32;
+//
+// Raised again for bosses, and SPLIT. Herald throws five-shot volleys on top
+// of whatever the adds are firing, and with one shared ceiling a boss wave
+// could hold the pool full for seconds at a time - which would silently
+// cancel Reload Burst, an upgrade the player paid for. Enemies stop at
+// MAX_ENEMY_PROJECTILES, so eight slots are always there for the shards.
+const MAX_PROJECTILES = 48;
+const MAX_ENEMY_PROJECTILES = 40;
 const EMPTY_CLICK_COOLDOWN = 0.35;
 
 // Seconds a station ignores further hits after one is bought by shooting it.
@@ -140,6 +147,26 @@ const TOTEM_COUNT = 3;
 // Ashen: how many clouds can be alive at once, and how often Neurotoxin's
 // poison is allowed to make a jump.
 const MAX_ASH_CLOUDS = 8;
+// Blight pools and Herald's spray: lingering zones that damage the PLAYER.
+// Capped much lower than the ash clouds because they sit where the player is
+// standing rather than where enemies died, and four overlapping ones already
+// means the ground is gone.
+const MAX_HAZARDS = 4;
+// Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
+// depth minus the handles the bosses hold for their own warnings.
+const MAX_MORTARS = 6;
+// The boss kill's own payout, separate from the wave clear bonus.
+const BOSS_BONUS_BASE = 400;
+const BOSS_BONUS_PER_WAVE = 60;
+// Display names, kept out of ENEMY_TYPES because nothing else in the game
+// needs an enemy to have one.
+const BOSS_NAMES = {
+  colossus: 'COLOSSUS',
+  siege: 'SIEGE',
+  schism: 'SCHISM',
+  maw: 'MAW',
+  herald: 'HERALD',
+};
 const POISON_SPREAD_INTERVAL = 0.5;
 
 class Game {
@@ -160,6 +187,11 @@ class Game {
     // arena's obstacles at startup and reflooded toward the player a few times
     // a second - see nav.js for why it is one field rather than a path each.
     this.nav = new NavGrid(this.arena.obstacles, ARENA_BOUND, 0.5);
+    // A second grid baked for wide bodies. The first is cut for a 0.5m agent,
+    // so a boss steered by it would be routed through gaps it cannot fit
+    // through and grind against the corners. Flooded only while something big
+    // is actually alive, which is never on a normal wave.
+    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list - walking into a totem claims it, so the player can
@@ -191,6 +223,9 @@ class Game {
     this.queue = [];
     this._cfg = waveConfig(1);
     this.spawnTimer = 0;
+    // The live boss fight, or null. `parts` is every entity that counts as the
+    // boss - one for most of them, several once Schism has split.
+    this.bossFight = null;
     this.waveState = 'idle';
     this.interT = 1.2;
     this.time = 0;
@@ -243,18 +278,37 @@ class Game {
     // cloud you just made is always the one that exists.
     this._ash = [];
     this._ashAt = new THREE.Vector3();
+    // Player-damaging ground zones, and telegraphed impacts. Both are plain
+    // data with no scene objects of their own, the same trick _ash uses: the
+    // hazards are drawn by the particle pool and the mortars by the telegraph
+    // pool, so creating one costs nothing and disposing one is a splice.
+    //
+    // Hazards are a SEPARATE list from _ash rather than a flag on it: the ash
+    // loop walks every enemy while this one tests a single player, so folding
+    // them together would put a branch in a hot loop that is wrong half the
+    // time it runs.
+    this._hazard = [];
+    this._mortars = [];
     this._spreadCd = 0;
     this._deathCount = 0;
+    // Live enemies wide enough to need the big-agent nav grid. Counted during
+    // the sweep so the grid is only flooded on the waves that have one.
+    this._bigAlive = 0;
     this._enemyCtx = {
       player: this.player,
       enemies: this.enemies,
       obstacles: this.arena.obstacles,
       nav: this.nav,
+      navBig: this.navBig,
       time: 0,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
       addProjectile: (x, y, z, type, speedScale) =>
         this._spawnProjectile(x, y, z, type, speedScale),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
+      addHazard: (x, z, radius, life, dps) => this._addHazard(x, z, radius, life, dps),
+      addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
+      pullPlayer: (dx, dz, strength) => this._pullPlayer(dx, dz, strength),
+      bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
       // `mods` is deliberately absent here: rebuildMods() swaps the object on
       // every draft pick, so anything captured at construction goes stale on
       // the first upgrade. _updateEnemies() sets it fresh each frame, before
@@ -467,6 +521,15 @@ class Game {
     this.projectiles.length = 0;
     for (const p of this.powerups) p.destroy();
     this.powerups.length = 0;
+    this._pendingSpawns.length = 0;
+    this._bigAlive = 0;
+    this.bossFight = null;
+    this.ui.setBoss(null, 0, '', '');
+    // Lingering zones have to go with the entities that made them. A hazard
+    // pool left behind would start the next run already burning the player,
+    // standing on a patch of floor nothing on screen explains.
+    this._clearHazards();
+    this._ash.length = 0;
   }
 
   // Starts a fresh run from the menu or the game-over screen. Anything that
@@ -526,6 +589,7 @@ class Game {
     this.queue = this._cfg.queue;
     this.spawnTimer = 0.8;
     this.waveState = 'active';
+    this.bossFight = null;
     this.ui.setWave(this.wave);
     this.ui.banner('WAVE ' + this.wave);
     this.sfx.wave();
@@ -535,6 +599,192 @@ class Game {
     this.powerupsToSpawn = calcPickupsForWave(this.wave);
     this.powerupSpawnTimer = 2;
     this.ammoSpawnTimer = 8;
+    if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
+  }
+
+  // ---- boss waves --------------------------------------------------------
+
+  // Places the boss and opens the fight. Unlike a normal spawn this ignores
+  // the drip: the boss is there from the first second, and the adds arrive
+  // around it.
+  _spawnBoss(key) {
+    const sc = bossScale(this.wave);
+    const def = ENEMY_TYPES[key];
+    // The farthest spawn point, not the first clear one. A boss appearing at
+    // the edge of vision is an entrance; one appearing at arm's length is an
+    // ambush the player had no way to read.
+    let best = this.arena.spawnPoints[0];
+    let bestD = -1;
+    for (const sp of this.arena.spawnPoints) {
+      const d = sp.distanceTo(this.player.pos);
+      if (d > bestD) {
+        bestD = d;
+        best = sp;
+      }
+    }
+    const at = new THREE.Vector3(best.x, 0, best.z);
+    resolveCircle(at, def.radius, this.arena.obstacles);
+    const boss = new Enemy(key, at, sc.hp, sc.speed, sc.dmg);
+    boss.rate = sc.rate;
+    boss.cycle = Math.floor((this.wave - 1) / 25);
+    this.scene.add(boss.group);
+    this.enemies.push(boss);
+    this._bigAlive++;
+
+    this.bossFight = {
+      key,
+      name: BOSS_NAMES[key],
+      parts: [boss],
+      totalMaxHp: boss.maxHp,
+      addTimer: 3,
+      maxAdds: this._cfg.maxAdds,
+      addInterval: this._cfg.addInterval,
+      note: '',
+      state: '',
+    };
+    this.effects.burst(at, def.color, 40, 8, 3, 1.0);
+    this.effects.shockwave(at, def.color, 8, 0.7);
+    this.effects.addShake(0.4);
+    this.ui.banner(BOSS_NAMES[key]);
+    this.sfx.wave();
+  }
+
+  // Live health across every part, for the bar.
+  _bossHpFrac() {
+    const bf = this.bossFight;
+    if (!bf || !bf.totalMaxHp) return 0;
+    let hp = 0;
+    for (const p of bf.parts) hp += p.hp;
+    return hp / bf.totalMaxHp;
+  }
+
+  // Boss-specific announcements. Kept in one place so a boss's ai() does not
+  // need to know anything about the HUD.
+  _bossEvent(kind, enemy) {
+    const bf = this.bossFight;
+    if (!bf) return;
+    if (kind === 'stagger') {
+      bf.state = 'vulnerable';
+      bf.note = 'STAGGERED';
+      this.ui.banner('STAGGERED');
+      this.sfx.hit();
+    } else if (kind === 'recover') {
+      bf.state = '';
+      bf.note = '';
+    } else if (kind === 'charge') {
+      this.sfx.wave();
+    } else if (kind === 'enrage') {
+      bf.state = 'enraged';
+      bf.note = 'ENRAGED';
+      this.ui.banner('ENRAGED');
+      this.sfx.wave();
+    } else if (kind === 'split') {
+      this._splitBoss(enemy);
+    }
+  }
+
+  // Schism's split. Called from a boss's ai() through ctx.bossEvent, which
+  // means it runs DURING _updateEnemies' update pass - the parent is still
+  // alive and still in both lists at this point.
+  //
+  // The children go to _pendingSpawns like a splitter's minis, so they are not
+  // visited by the loop that created them, and into `parts` immediately. That
+  // second write is what keeps the wave from ending: the parent is removed
+  // from `parts` later in the same frame, and if the children were not already
+  // there the next _updateWave would see an empty parts list and call the
+  // fight won.
+  _splitBoss(e) {
+    const bf = this.bossFight;
+    if (!bf) return;
+    const sc = bossScale(this.wave);
+    const tier = e.bs.tier;
+    // Each half carries half the parent's remaining pool, so the total health
+    // left in the fight is unchanged by the split itself.
+    const half = e.maxHp * 0.5;
+    for (let i = 0; i < 2; i++) {
+      const ang = (i === 0 ? 1 : -1) * 1.2 + Math.random() * 0.4;
+      const at = new THREE.Vector3(
+        e.pos.x + Math.cos(ang) * 2.2, 0, e.pos.z + Math.sin(ang) * 2.2
+      );
+      const child = new Enemy('schism', at, sc.hp, sc.speed, sc.dmg);
+      child.rate = e.rate;
+      child.cycle = e.cycle;
+      child.maxHp = half;
+      child.hp = half;
+      child.bs.tier = tier;
+      // The geometry cache bakes `scale` per TYPE, so a child cannot have its
+      // own - visual size comes from the group, exactly as a splitter's minis
+      // do. Collision and melee reach follow through `radius`.
+      const shrink = tier === 1 ? 0.68 : 0.46;
+      child.group.scale.setScalar(shrink);
+      child.radius = ENEMY_TYPES.schism.radius * shrink;
+      child.speed = e.speed * (tier === 1 ? 1.2 : 1.4);
+      // The score is divided rather than duplicated: splitting is the boss
+      // surviving, not four more bosses to be paid for.
+      child.score = Math.round(e.score * 0.5);
+      resolveCircle(child.pos, child.radius, this.arena.obstacles);
+      this.scene.add(child.group);
+      this._pendingSpawns.push(child);
+      bf.parts.push(child);
+    }
+    // The parent dies of the split itself.
+    e.hp = 0;
+    e.dead = true;
+    e.score = 0;
+    bf.note = 'PARTS ' + bf.parts.length;
+    this.effects.shockwave(e.pos, ENEMY_TYPES.schism.color, 6, 0.5);
+    this.effects.burst(
+      this._killPos.set(e.pos.x, 1.2, e.pos.z), ENEMY_TYPES.schism.color, 30, 7, 2.5, 0.7
+    );
+    this.effects.addShake(0.25);
+    this.ui.banner('IT SPLITS');
+    this.sfx.wave();
+  }
+
+  // Adds keep arriving for as long as the boss lives. There is no budget: the
+  // only bound is how many may be alive at once, so a player who kills them
+  // faster simply gets more of them, and one who ignores them is surrounded.
+  _updateBossAdds(dt) {
+    const bf = this.bossFight;
+    bf.addTimer -= dt;
+    if (bf.addTimer > 0) return;
+    bf.addTimer = bf.addInterval;
+    if (this.enemies.length - bf.parts.length >= bf.maxAdds) return;
+    this.spawnEnemy(pickAddType(this.wave));
+  }
+
+  // Ends a boss wave the moment the last part dies. Everything still on the
+  // field is cleared out - the fight is over, and leaving a handful of adds to
+  // mop up would end the wave on an anticlimax.
+  //
+  // Deliberately no score and no combo for the purge: five free kills at the
+  // wave boundary would inflate both the payout and the best-chain stat with
+  // something the player did not do.
+  _finishBossWave() {
+    for (const e of this.enemies) {
+      this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 14, 5, 2, 0.5);
+      this.scene.remove(e.group);
+      e.dispose();
+    }
+    this.enemies.length = 0;
+    this._bigAlive = 0;
+    this._clearHazards();
+    this.bossFight = null;
+    this.ui.setBoss(null, 0, '', '');
+  }
+
+  // The boss kill's own payout, on top of the ordinary clear bonus. The refill
+  // matters as much as the money: without it a hard-won fight leaves the
+  // player to start the next four waves on whatever they had left.
+  _payBossBonus() {
+    const bonus = BOSS_BONUS_BASE + BOSS_BONUS_PER_WAVE * this.wave;
+    this.score += bonus * 4;
+    const paid = this._award(bonus);
+    this.player.health = this.player.maxHealth;
+    this.player.reserveAmmo = this.player.maxReserve;
+    this.player.mag = this.player.magSize;
+    this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
+    this.ui.banner('BOSS DOWN  +$' + paid + '  REARMED');
   }
 
   spawnEnemy(type) {
@@ -583,6 +833,17 @@ class Game {
     this.comboTimer = 0;
     this.player.setBloodlustStacks(0);
     this.ui.setPrompt(null, false);
+    this.ui.setBoss(null, 0, '', '');
+    // The boss keeps its telegraphs until it is disposed, and on the game-over
+    // screen it never is - release them with the fight.
+    if (this.bossFight) {
+      for (const p of this.bossFight.parts) {
+        const def = ENEMY_TYPES[p.type];
+        if (def.cleanup) def.cleanup(p);
+      }
+      this.bossFight = null;
+    }
+    this._clearHazards();
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this.sfx.kill();
   }
@@ -624,6 +885,9 @@ class Game {
     for (const e of this.enemies) {
       if (e.pos.distanceTo(this.player.pos) > r) continue;
       e.takeDamage(mods.shockwave);
+      // Heavy things take the damage but do not budge - see `immovable` in
+      // enemy.js. A boss knocked out of its own charge would not be a fight.
+      if (e.immovable) continue;
       e.pos.add(
         this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(2.5)
       );
@@ -647,7 +911,9 @@ class Game {
       }
     }
     if (!best) return;
-    best.takeDamage(dmg);
+    best.takeDamage(
+      dmg, false, best.pos.x - from.pos.x, best.pos.z - from.pos.z
+    );
     this.effects.tracer(
       this._chainFrom.set(from.pos.x, 1.0, from.pos.z),
       this._chainTo.set(best.pos.x, 1.0, best.pos.z)
@@ -659,6 +925,7 @@ class Game {
   // any obstacle it landed in - without that, a shove into cover would leave
   // the enemy stuck inside a crate.
   _shove(en, dir, dist) {
+    if (en.immovable) return;
     en.pos.add(this._knockback.set(dir.x, 0, dir.z).normalize().multiplyScalar(dist));
     resolveCircle(en.pos, en.radius, this.arena.obstacles);
   }
@@ -669,7 +936,7 @@ class Game {
   // is already at the impact point, and pulling it into itself jitters it.
   _pull(point, radius, dist, skip) {
     for (const e of this.enemies) {
-      if (e === skip || e.dead) continue;
+      if (e === skip || e.dead || e.immovable) continue;
       const d = e.pos.distanceTo(point);
       if (d > radius || d < 0.001) continue;
       this._pullTo.set(point.x - e.pos.x, 0, point.z - e.pos.z).normalize();
@@ -755,7 +1022,8 @@ class Game {
       }
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
         * Math.pow(falloff, pierced) * dmgMult;
-      en.takeDamage(dealt);
+      // The direction the shot travelled decides whether it landed on armour.
+      en.takeDamage(dealt, false, ray.ray.direction.x, ray.ray.direction.z);
       this.effects.burst(h.point, 0xffe95e, burst, 4, 1.5, 0.35);
       // Damage is per-pellet; everything below is per-shot.
       if (!this._shotHits.has(en)) {
@@ -904,14 +1172,21 @@ class Game {
       const dx = e.pos.x - this.player.pos.x;
       const dz = e.pos.z - this.player.pos.z;
       const d = Math.hypot(dx, dz);
-      if (d > MELEE_RANGE) continue;
+      // Reach grows with the target: a boss two metres wide would otherwise be
+      // unmeleeable, since its surface is already past MELEE_RANGE while its
+      // centre is far outside it.
+      if (d > MELEE_RANGE + e.radius - 0.5) continue;
       // Anything the player is standing inside has no meaningful direction, so
       // it is always in the arc.
       if (d > 0.001 && (dx * forward.x + dz * forward.z) / d < cosArc) continue;
-      e.takeDamage(dealt);
-      e.pos.add(
-        this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
-      );
+      // A swing travels from the player toward the enemy, which is what tells
+      // a shield or a weak point whether it was struck.
+      e.takeDamage(dealt, false, dx / (d || 1), dz / (d || 1));
+      if (!e.immovable) {
+        e.pos.add(
+          this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
+        );
+      }
       this.effects.burst(
         this._killPos.set(e.pos.x, 1.1, e.pos.z), 0xffd600, 12, 4, 1.5, 0.4
       );
@@ -987,7 +1262,7 @@ class Game {
   // air by the time the shooter thaws, and a shot that sped up mid-flight
   // would be unreadable.
   _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1) {
-    if (this.projectiles.length >= MAX_PROJECTILES) return;
+    if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     const t = this.player.eyeInto(this._aimTarget);
     let speed, dmg;
     if (type === 'sniper') {
@@ -1003,7 +1278,7 @@ class Game {
   }
 
   _spawnGrenade(x, y, z, damage) {
-    if (this.projectiles.length >= MAX_PROJECTILES) return;
+    if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     const t = this.player.eyeInto(this._aimTarget);
     const speed = Math.min(18, 12 + this.wave * 0.2);
     const dmg = Math.min(28, damage + this.wave * 0.5);
@@ -1168,15 +1443,34 @@ class Game {
         this.spawnTimer = this._cfg.spawnInterval;
       }
       this._updatePickupSpawns(dt);
-      if (!this.queue.length && !this.enemies.length) {
+      if (this.bossFight) this._updateBossAdds(dt);
+
+      // A boss wave ends when the BOSS is dead, not when the field is clear -
+      // the adds never stop arriving, so waiting for an empty field would wait
+      // forever.
+      //
+      // The invariant that makes reading parts.length here safe: _updateWave
+      // runs BEFORE _updateEnemies in the frame, and a boss that splits has
+      // its children pushed into `parts` inside the same sweep that removes
+      // the parent. So this only ever sees the settled post-sweep value, never
+      // the empty instant in the middle of a split.
+      const done = this.bossFight
+        ? this.bossFight.parts.length === 0
+        : !this.queue.length && !this.enemies.length;
+      if (done) {
+        if (this.bossFight) this._finishBossWave();
+        this._clearHazards();
         this.waveState = 'intermission';
         this.score += 100 * this.wave;
         this._payClearBonus();
-        this._presentTotems();
         let msg = 'WAVE ' + this.wave + ' CLEARED  +$' + this.lastGain;
         if (this.lastPerfect) msg += '  FLAWLESS';
         this.ui.banner(msg);
         this.sfx.wave();
+        // After the clear bonus, so the flawless test still reads the damage
+        // actually taken during the fight.
+        if (this._cfg.boss) this._payBossBonus();
+        this._presentTotems();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
@@ -1451,6 +1745,7 @@ class Game {
     // Refresh the route to the player once for the whole list, before anyone
     // reads it. The grid throttles itself; this call is cheap on most frames.
     this.nav.update(dt, this.player.pos.x, this.player.pos.z);
+    if (this._bigAlive > 0) this.navBig.update(dt, this.player.pos.x, this.player.pos.z);
 
     // Update everything first, then compact. Doing both in one pass would let
     // an enemy read half-compacted neighbours and feel the same one twice
@@ -1459,9 +1754,11 @@ class Game {
     for (let i = 0; i < list.length; i++) list[i].update(dt, ctx);
 
     let write = 0;
+    let big = 0;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (!e.dead) {
+        if (e.radius > 0.8) big++;
         list[write++] = e;
         continue;
       }
@@ -1494,12 +1791,28 @@ class Game {
       }
       this.scene.remove(e.group);
       if (e.type === 'splitter') this._splitInto(e);
+      // A dead boss part leaves `parts` here, inside the same sweep that would
+      // push any children it split into. _updateWave reads parts.length on the
+      // next frame, so it never catches the gap between the two.
+      if (e.boss && this.bossFight) {
+        const bi = this.bossFight.parts.indexOf(e);
+        if (bi >= 0) this.bossFight.parts.splice(bi, 1);
+        if (this.bossFight.parts.length > 1) {
+          this.bossFight.note = 'PARTS ' + this.bossFight.parts.length;
+        } else if (this.bossFight.key === 'schism') {
+          this.bossFight.note = '';
+        }
+      }
       e.dispose();
     }
     list.length = write;
+    this._bigAlive = big;
     // Children of a splitter join the roster only after the sweep, so they are
     // never visited by the loop that created them.
-    for (const mini of this._pendingSpawns) list.push(mini);
+    for (const mini of this._pendingSpawns) {
+      if (mini.radius > 0.8) this._bigAlive++;
+      list.push(mini);
+    }
     this._pendingSpawns.length = 0;
     if (this._deathCount > 0) this._playDeaths();
   }
@@ -1617,6 +1930,142 @@ class Game {
     }
   }
 
+  // ---- player-facing hazards ---------------------------------------------
+
+  // A lingering pool the PLAYER has to walk out of. Same data-only shape as an
+  // ash cloud, and recycled the same way: the oldest goes rather than the
+  // newest being refused, so the pool an enemy just threw always exists.
+  _addHazard(x, z, radius, life, dps) {
+    if (this._hazard.length >= MAX_HAZARDS) this._hazard.shift();
+    this._hazard.push({ x, z, radius, life, maxLife: life, dps, acc: 0, drip: 0, tick: 0 });
+  }
+
+  // Runs the pools down and bleeds the player for standing in one.
+  //
+  // Damage goes through _hurtPlayerDot, NOT _hurtPlayer - see the note there.
+  _updateHazard(dt) {
+    for (let i = this._hazard.length - 1; i >= 0; i--) {
+      const h = this._hazard[i];
+      h.life -= dt;
+      if (h.life <= 0) {
+        this._hazard.splice(i, 1);
+        continue;
+      }
+      const dx = this.player.pos.x - h.x;
+      const dz = this.player.pos.z - h.z;
+      // Only while the player is on the ground. A pool is something to jump
+      // out of as much as to run out of.
+      if (dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
+        h.acc += h.dps * dt;
+        h.tick -= dt;
+        if (h.acc >= 1 && h.tick <= 0) {
+          const whole = Math.floor(h.acc);
+          h.acc -= whole;
+          h.tick = 0.34;
+          this._hurtPlayerDot(whole);
+        }
+      }
+      // One emission per drip rather than the ash cloud's two: four pools
+      // running at once is already 77 particles standing in the buffer, and
+      // unlike ash these are always on screen, right where the player is
+      // looking.
+      h.drip -= dt;
+      if (h.drip <= 0) {
+        h.drip = 0.14;
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * h.radius;
+        this.effects.burst(
+          this._ashAt.set(h.x + Math.cos(ang) * r, 0.3, h.z + Math.sin(ang) * r),
+          0x7ac943, 3, 1.2, 1.4, 0.8
+        );
+      }
+    }
+  }
+
+  // Damage over time on the PLAYER. Deliberately not _hurtPlayer.
+  //
+  // A pool deals its damage in one-point ticks several times a second, and
+  // every one of those going through the normal path would roll Evasion sixty
+  // times a minute and, worse, spend Holy Mantle's ward - a charge meant to
+  // eat one real hit - on a single point of pool damage. So this is the one
+  // place damage bypasses the ward, on purpose. It still counts toward the
+  // flawless bonus and still ends the run.
+  _hurtPlayerDot(d) {
+    if (this.state !== 'playing') return;
+    const h = this.player.takeDamage(d, this.time);
+    this.stats.damaged += d;
+    this.waveDamageTaken += d;
+    // Throttled: the vignette flashing on every tick reads as a strobe.
+    if (this.time - (this._lastDotFx || 0) > 0.5) {
+      this._lastDotFx = this.time;
+      this.ui.damage();
+      this.sfx.hurt();
+    }
+    if (h > 0) return;
+    if (this.player.livesUsed < this.player.mods.extraLives) {
+      this.player.livesUsed++;
+      this.player.health = 1;
+      this.player.shield = 40;
+      this.player.shieldEnd = this.time + 3;
+      this.effects.shockwave(this.player.pos, 0xff2d6f, 6, 0.5);
+      this.effects.burst(this.player.eyeInto(this._killPos), 0xff2d6f, 40, 7, 3, 0.9);
+      this.ui.banner('NINE LIVES');
+      return;
+    }
+    this.gameOver();
+  }
+
+  // A telegraphed impact: a circle on the floor that fills, then detonates.
+  // Not a projectile - it never touches the projectile pool - and it holds a
+  // telegraph handle for its whole life, released when it goes off.
+  _addMortar(x, z, radius, delay, damage) {
+    if (this._mortars.length >= MAX_MORTARS) return;
+    this._mortars.push({
+      x, z, radius, delay, damage, t: 0, mark: this.effects.markAcquire(),
+    });
+  }
+
+  _updateMortars(dt) {
+    for (let i = this._mortars.length - 1; i >= 0; i--) {
+      const m = this._mortars[i];
+      m.t += dt;
+      if (m.t < m.delay) {
+        this.effects.markSet(m.mark, m.x, m.z, m.radius, 0xff5533, m.t / m.delay);
+        continue;
+      }
+      this.effects.markRelease(m.mark);
+      this._mortars.splice(i, 1);
+      this._ashAt.set(m.x, 0, m.z);
+      // A mortar IS a discrete hit that the player was shown and could have
+      // walked out of, so unlike a pool it goes through the normal path and
+      // the ward is allowed to eat it.
+      const dx = this.player.pos.x - m.x;
+      const dz = this.player.pos.z - m.z;
+      const d = Math.hypot(dx, dz);
+      if (d < m.radius) this._hurtPlayer(m.damage * (1 - d / m.radius), this._ashAt);
+      this.effects.shockwave(this._ashAt, 0xff5533, m.radius, 0.35);
+      this.effects.burst(this._ashAt, 0xff7043, 20, 6, 2.5, 0.6);
+      this.effects.addShake(0.14);
+    }
+  }
+
+  // Maw's drag. Capped well under the player's 10 m/s: running out of the well
+  // has to stay possible, standing still in it does not.
+  _pullPlayer(dx, dz, strength) {
+    const d = Math.hypot(dx, dz) || 1;
+    this.player.extX += (dx / d) * Math.min(5.5, strength);
+    this.player.extZ += (dz / d) * Math.min(5.5, strength);
+  }
+
+  // Clears every hazard and telegraph. Called when a wave ends and on game
+  // over, so a pool thrown a moment before the last enemy died does not keep
+  // burning the player through the intermission.
+  _clearHazards() {
+    this._hazard.length = 0;
+    for (const m of this._mortars) this.effects.markRelease(m.mark);
+    this._mortars.length = 0;
+  }
+
   // Neurotoxin. Poison walks from an afflicted enemy to a clean one standing
   // near it, one jump per tick, so a packed crowd goes green in a couple of
   // seconds and a spread-out one never does. Rate-limited rather than run per
@@ -1685,7 +2134,16 @@ class Game {
   // are cheap when nothing changed.
   _updateHud() {
     this.ui.setWave(this.wave);
-    this.ui.setEnemies(this.enemies.length + this.queue.length);
+    // The boss has its own bar, so the counter reads as adds on the field
+    // rather than sitting at "ENEMIES 1" for the length of a boss fight.
+    const parts = this.bossFight ? this.bossFight.parts.length : 0;
+    this.ui.setEnemies(this.enemies.length + this.queue.length - parts);
+    if (this.bossFight) {
+      const bf = this.bossFight;
+      this.ui.setBoss(bf.name, this._bossHpFrac(), bf.note, bf.state);
+    } else {
+      this.ui.setBoss(null, 0, '', '');
+    }
     this.ui.setScore(this.score);
     this.ui.setCredits(this.credits);
     this.ui.setCombo(this.comboKills, this.comboMult(), this.comboTimer / COMBO_WINDOW);
@@ -1735,6 +2193,8 @@ class Game {
       // kill is collected by the sweep this frame rather than lingering a
       // frame as a dead enemy that is still being drawn.
       this._updateAsh(dt);
+      this._updateHazard(dt);
+      this._updateMortars(dt);
       this._updatePoisonSpread(dt);
       this._updateEnemies(dt);
       this._updateProjectiles(dt);

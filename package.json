@@ -6,7 +6,8 @@
   "description": "Browser-based 3D arena wave shooter built with Three.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs",
+    "test:boss": "node test/boss.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

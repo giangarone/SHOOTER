@@ -21,6 +21,10 @@ export class UI {
     this.reloadRing = $('reload-ring');
     this.weaponName = $('weapon-name');
     this.vignette = $('vignette');
+    this.bossBar = $('boss-bar');
+    this.bossName = $('boss-name');
+    this.bossHp = $('boss-hp');
+    this.bossNote = $('boss-note');
     this.bannerEl = $('banner');
     this.hitmarker = $('hitmarker');
     this.startOv = $('overlay-start');
@@ -50,6 +54,38 @@ export class UI {
       this.enemies.textContent = 'ENEMIES ' + n;
     }
   }
+  /**
+   * The boss bar. Pass a null name to hide it.
+   *
+   * @param {number} frac  0..1 of the boss's combined health
+   * @param {string} note  a short line under the bar - 'STAGGERED', 'PARTS 4'
+   * @param {string} state '' | 'vulnerable' | 'enraged', a class on the bar
+   */
+  setBoss(name, frac, note, state) {
+    if (this._c.bossName !== name) {
+      this._c.bossName = name;
+      this.bossBar.classList.toggle('hidden', !name);
+      if (name) this.bossName.textContent = name;
+    }
+    if (!name) return;
+    // Quantised like the combo bar: the width is a style write and the health
+    // changes by a fraction of a percent on most frames, which would be a
+    // layout every frame for a change nobody can see.
+    const q = Math.round(Math.max(0, Math.min(1, frac)) * 200) / 200;
+    if (this._c.bossFrac !== q) {
+      this._c.bossFrac = q;
+      this.bossHp.style.width = (q * 100) + '%';
+    }
+    if (this._c.bossNote !== note) {
+      this._c.bossNote = note;
+      this.bossNote.textContent = note;
+    }
+    if (this._c.bossState !== state) {
+      this._c.bossState = state;
+      this.bossBar.className = state || '';
+    }
+  }
+
   setScore(n) {
     if (this._c.score !== n) {
       this._c.score = n;
@@ -250,6 +286,8 @@ export class UI {
   // hides any buff icon left over from the previous run.
   resetCache() {
     this._c = {};
+    this.bossBar.classList.add('hidden');
+    this.bossBar.className = 'hidden';
     this.comboEl.classList.add('hidden');
     this.promptEl.classList.add('hidden');
     for (const entry of Object.values(this._buffEls)) {

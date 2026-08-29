@@ -133,6 +133,14 @@ export class Player {
     this.breachReady = false;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
+    // EXTERNAL DRAG, metres per second, written by whatever is pulling the
+    // player around - Maw's gravity well. It cannot be an addition to `vel`:
+    // update() ASSIGNS vel.x/z outright whenever a movement key is held, so a
+    // velocity written from outside would be thrown away on the same frame the
+    // player pressed W. It is applied straight to `pos` instead, and consumed
+    // every frame, so a puller has to keep asking for it.
+    this.extX = 0;
+    this.extZ = 0;
     this.reloading = 0;
     this.onGround = false;
     this.lastHurt = -99;
@@ -294,6 +302,8 @@ export class Player {
     this.livesUsed = 0;
     this.breachReady = false;
     this.dodgeEnd = 0;
+    this.extX = 0;
+    this.extZ = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
     this.yaw = 0;
@@ -437,6 +447,12 @@ export class Player {
         }
       }
     }
+    // Applied here, before collision, so a pull cannot drag the player through
+    // a wall or a crate.
+    this.pos.x += this.extX * dt;
+    this.pos.z += this.extZ * dt;
+    this.extX = 0;
+    this.extZ = 0;
     resolveCircle(this.pos, 0.4, obstacles);
     // Arena walls sit at +-22; clamp inside them by the player radius.
     const B = 21.6;
