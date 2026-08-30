@@ -21,6 +21,7 @@ export class UI {
     this.reloadRing = $('reload-ring');
     this.weaponName = $('weapon-name');
     this.vignette = $('vignette');
+    this.strobe = $('strobe');
     this.bossBar = $('boss-bar');
     this.bossName = $('boss-name');
     this.bossHp = $('boss-hp');
@@ -234,6 +235,16 @@ export class UI {
     void h.offsetWidth;
     h.classList.add('show');
   }
+  // The rig's flash level, 0..1. Quantised to 1/64 before writing: this is
+  // called every frame and an unrounded float would dirty the compositor on
+  // every one of them, including while the value is drifting invisibly.
+  setStrobe(v) {
+    const q = Math.round(Math.min(1, Math.max(0, v)) * 64) / 64;
+    if (q === this._c.strobe) return;
+    this._c.strobe = q;
+    this.strobe.style.opacity = q;
+  }
+
   damage() {
     this.vignette.classList.remove('flash');
     void this.vignette.offsetWidth;

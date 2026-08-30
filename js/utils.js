@@ -7,11 +7,20 @@
 
 // Pushes `pos` out of any box it overlaps, along whichever axis needs the
 // smallest correction. Mutates `pos` in place.
-export function resolveCircle(pos, radius, obstacles) {
+//
+// `height` is how tall the mover is, and only matters for geometry suspended
+// overhead - see the second skip below. The default clears every ordinary
+// enemy and the player; bosses pass their own.
+export function resolveCircle(pos, radius, obstacles, height = 2.5) {
   for (const b of obstacles) {
     // Standing on top of the box: the player is supported, not intersecting,
     // so pushing sideways here would shove them off every ledge.
     if (pos.y >= b.max.y - 0.06) continue;
+    // The mirror image of the test above: a catwalk suspended above head
+    // height is something you walk UNDER, not into. Without this every raised
+    // walkway would carve an invisible pillar all the way down to the floor,
+    // for enemies as well as the player.
+    if (b.min.y > pos.y + height) continue;
     const minX = b.min.x - radius;
     const maxX = b.max.x + radius;
     const minZ = b.min.z - radius;

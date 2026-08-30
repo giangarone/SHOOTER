@@ -209,6 +209,15 @@ html, body {
 }
 .buff-icon.shield .buff-timer { background: #4ef3ff; }
 
+/* The rig's full-screen flash. Sits ABOVE the canvas but BELOW the HUD
+   (z-index 5), so the room strobes and the readouts never do. Only `opacity`
+   is ever written, which the compositor handles without layout or paint, and
+   at 0 the browser skips the layer entirely. */
+#strobe {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4;
+  background: #fff; opacity: 0; will-change: opacity;
+}
+
 #vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
   background: radial-gradient(ellipse at center, transparent 52%, rgba(255, 30, 30, 0.55) 100%);

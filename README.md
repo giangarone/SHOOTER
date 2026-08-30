@@ -107,6 +107,25 @@ Open http://localhost:8123
   The cutoff sweeps over 0.7s rather than switching, so combat opening back up
   is something you hear. Mute toggle on the start and pause screens, remembered
   between sessions.
+- The arena is an enclosed venue: a closed ceiling 16 units up, a truss rig
+  hung under it, speaker stacks and a stage where the crates and platforms used
+  to be.
+- **The lights run off the music.** An analyser reads the soundtrack's bass and
+  the rig flashes on the actual kick - not on a timer. It is tapped upstream of
+  both the mute and the muffle, so the room keeps dancing to the track even with
+  the music turned off.
+- The room reads the fight: flashes speed up as your kill chain climbs, a red
+  heartbeat joins below 30% health and quickens as you drop, each wave starts
+  with a blackout and a slam, and taking a hit blows the lights white.
+- Boss waves hand the room to the boss - its own colour across the fixtures,
+  fog and beams, two heads tracking it, the fog pulled in tight, and a red
+  alarm strobe while it is enraged.
+- Clearing a wave brings the house lights up: strobing stops, everything goes
+  warm and slow while you pick a mutation, and combat starting again is the drop.
+- Optional verticality: speaker stack to wall ledge to catwalk, each hop inside
+  the jump arc. The decks are suspended above head height, so enemies walk
+  underneath them and enemy fire passes straight through - the high ground buys
+  sightlines and costs you cover.
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart
 
@@ -292,7 +311,8 @@ js/icons.js         3D totem icons, built from shared primitives
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
-js/music.js         streaming soundtrack + combat/intermission lowpass
+js/music.js         streaming soundtrack, lowpass, beat detection
+js/rig.js           the rave lighting rig: lights, beams, fixtures, cues
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/weapons.js       weapon stats + first-person models

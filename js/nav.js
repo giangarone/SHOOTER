@@ -53,8 +53,15 @@ export class NavGrid {
    * @param {number} bound        arena half-width
    * @param {number} agentRadius  radius of the thing being routed
    */
-  constructor(obstacles, bound, agentRadius = 0.5) {
-    this.obstacles = obstacles;
+  constructor(obstacles, bound, agentRadius = 0.5, agentHeight = 2.5) {
+    // Ground agents path UNDER anything suspended above their heads, so the
+    // catwalks are filtered out here rather than special-cased later. This one
+    // list feeds the bake AND both line-of-sight tests below, so filtering
+    // once is all it takes - without it a walkway overhead would carve a
+    // pillar through the flow field down to the floor and enemies would walk
+    // around thin air. Filtered once at construction because the grid is baked
+    // once; nothing may be added to `obstacles` after startup anyway.
+    this.obstacles = obstacles.filter((o) => o.min.y <= agentHeight);
     this.radius = agentRadius;
     // Line-of-sight is tested a little tighter than the agent really is.
     // Testing at the full radius makes an enemy already brushing a crate

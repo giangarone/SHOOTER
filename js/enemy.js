@@ -1901,20 +1901,28 @@ export class Enemy {
     this.eyeMat.color.setHex(on ? 0xffffff : this.eyeBase);
   }
 
+  // How far above an enemy the player can be and still be hit by a melee
+  // swing. `dist` is measured on the XZ plane only - the whole game collides
+  // in 2D - so without this a rusher on the floor would land hits on a player
+  // standing on a catwalk four metres over its head. Generous enough to still
+  // cover the raised platforms, which are well inside a swing's reach.
+  static MELEE_REACH_Y = 2.4;
+
   // Wind up a melee swing, then land it if the player is still in range.
   _meleeCycle(dt, dist, ctx, windupTime, startRange, hitRange, cooldown) {
+    const dy = Math.abs(ctx.player.pos.y - this.pos.y);
     if (this.windup > 0) {
       this.windup -= dt;
       this._setEyeAlert(true);
       if (this.windup <= 0) {
         this._setEyeAlert(false);
-        if (dist < hitRange) ctx.onHitPlayer(this.damage, this.pos);
+        if (dist < hitRange && dy < Enemy.MELEE_REACH_Y) ctx.onHitPlayer(this.damage, this.pos);
         this.attackCd = cooldown;
       }
       return false;
     }
     this._setEyeAlert(false);
-    if (dist < startRange && this.attackCd <= 0) {
+    if (dist < startRange && dy < Enemy.MELEE_REACH_Y && this.attackCd <= 0) {
       this.windup = windupTime;
       return false;
     }

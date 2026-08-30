@@ -1,5 +1,6 @@
 // Static level geometry and lighting. Built once at startup and never
-// modified - nothing here is per-frame.
+// modified - nothing here is per-frame. The animated rave lighting that plays
+// over all of this lives in rig.js; what is here is the venue itself.
 //
 // buildArena() returns:
 //   group       the parent Object3D holding all level meshes
@@ -8,17 +9,56 @@
 //   meshList    raycast targets for shooting. Enemy hitboxes are appended to
 //               this list per shot in main.js.
 //   spawnPoints where enemies and pickups appear, jittered by the caller.
+//   rig         the fixtures, trusses and lights rig.js animates
 //
 // IMPORTANT: the light count here is fixed and must stay that way. three.js
 // keys its shader programs on the number of lights, so adding or removing one
 // at runtime recompiles every material in the scene and stalls the frame.
 // That is why pickups glow with sprites instead of PointLights.
+//
+// THE ROOM IS A CLOSED BOX. Floor, four walls to the ceiling, and a ceiling at
+// CEIL_Y. Nothing is open to a skybox, because a rave happens indoors and the
+// beams need something to land on. The walls do NOT cast shadows: at this
+// height, with the key light where it is, they would drop the entire floor
+// into shade.
+//
+// GEOMETRY BUDGET: the smoke test caps unique geometries under 120, so
+// anything repeated - truss bays, fixtures, speaker boxes - shares one
+// geometry instance and only the transform differs. Do not write
+// `new BoxGeometry` inside a loop here.
 import * as THREE from 'three';
 import { makeAabb } from './utils.js';
 
 // Half-width of the playable floor. Walls sit just outside this; entities
 // clamp themselves to a slightly smaller bound to stay off the walls.
 export const BOUND = 22;
+// Ceiling height. Deliberately far above anything reachable - the jump apex is
+// 1.84m and the highest catwalk is 4.6 - so the room reads as a big warehouse
+// venue rather than a lid pressed down on the fight.
+export const CEIL_Y = 16;
+// Top surface of the perimeter catwalks. Above every ordinary enemy's head, so
+// they walk underneath it: see the overhead skip in resolveCircle and the
+// filter in the NavGrid constructor.
+export const CATWALK_Y = 4.6;
+
+// ONE unit cube, scaled per mesh. Every box in the venue - walls, ceiling,
+// truss bays, speaker cabinets, catwalk decks, trims - is this geometry with a
+// different transform. Writing `new BoxGeometry` per prop would put ~60
+// geometries on the budget for no benefit; the smoke test caps it under 120
+// for the whole game.
+const BOX = new THREE.BoxGeometry(1, 1, 1);
+// Likewise one unit cylinder, scaled in Y for the truss towers.
+const CYL = new THREE.CylinderGeometry(0.7, 0.7, 1, 10);
+
+// Adds a box of the given world size at the given centre. Returns the mesh so
+// the caller can push it onto meshList or tweak it.
+function box(group, mat, x, y, z, w, h, d) {
+  const m = new THREE.Mesh(BOX, mat);
+  m.position.set(x, y, z);
+  m.scale.set(w, h, d);
+  group.add(m);
+  return m;
+}
 
 export function buildArena(scene) {
   const group = new THREE.Group();
@@ -26,7 +66,11 @@ export function buildArena(scene) {
   const meshList = [];
   const spawnPoints = [];
 
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.75, metalness: 0.1 });
+  // Mostly diffuse on purpose. Metalness here has to stay low: there is no
+  // environment map in this scene, so a metallic surface has nothing to
+  // reflect and renders very nearly black - a shiny "club floor" made the
+  // whole room read as an unlit void.
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2b3040, roughness: 0.55, metalness: 0.18 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(BOUND * 2 + 2, BOUND * 2 + 2), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -35,18 +79,23 @@ export function buildArena(scene) {
   // pass straight through and never spawn an impact.
   meshList.push(floor);
 
-  // Purely decorative, floats just above the floor to avoid z-fighting.
-  const grid = new THREE.GridHelper(BOUND * 2 + 2, 23, 0x4a5a6a, 0x3a4a5a);
+  // Purely decorative, floats just above the floor to avoid z-fighting. Dimmer
+  // and cooler than it used to be: the floor is a dancefloor now and the rig
+  // is what is supposed to draw the eye, not a bright grid.
+  const grid = new THREE.GridHelper(BOUND * 2 + 2, 23, 0x2b6a80, 0x1d3a4a);
   grid.position.y = 0.02;
   grid.material.transparent = true;
-  grid.material.opacity = 0.55;
+  grid.material.opacity = 0.35;
   group.add(grid);
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1d222e, roughness: 0.6, metalness: 0.35 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2432, roughness: 0.78, metalness: 0.12 });
   const trimMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.6 });
-  // Four perimeter walls, each with an emissive trim strip along the top.
-  // Walls are raycast targets but not obstacles: entities are kept inside by
-  // the hard clamp in their update, not by collision.
+  // Four perimeter walls, floor to ceiling, each with an emissive trim strip
+  // at head height. Walls are raycast targets but not obstacles: entities are
+  // kept inside by the hard clamp in their update, not by collision.
+  //
+  // castShadow is deliberately OFF. At CEIL_Y tall, with the key light up at
+  // (9, 15, 6), a wall that casts would drop the whole arena into its shade.
   const wallDefs = [
     { x: 0, z: -(BOUND + 0.5), w: BOUND * 2 + 3, d: 1 },
     { x: 0, z: BOUND + 0.5, w: BOUND * 2 + 3, d: 1 },
@@ -54,19 +103,31 @@ export function buildArena(scene) {
     { x: BOUND + 0.5, z: 0, w: 1, d: BOUND * 2 + 3 },
   ];
   for (const wd of wallDefs) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(wd.w, 3, wd.d), wallMat);
-    wall.position.set(wd.x, 1.5, wd.z);
-    wall.castShadow = true;
+    const wall = box(group, wallMat, wd.x, CEIL_Y / 2, wd.z, wd.w, CEIL_Y, wd.d);
     wall.receiveShadow = true;
-    group.add(wall);
     meshList.push(wall);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(wd.w === 1 ? 1.02 : wd.w, 0.08, wd.d === 1 ? 1.02 : wd.d), trimMat);
-    trim.position.set(wd.x, 3.02, wd.z);
-    group.add(trim);
+    box(group, trimMat, wd.x, 3.02, wd.z, wd.w === 1 ? 1.02 : wd.w, 0.08, wd.d === 1 ? 1.02 : wd.d);
   }
 
-  const platMat = new THREE.MeshStandardMaterial({ color: 0x232a3a, roughness: 0.5, metalness: 0.45 });
-  const platEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 0.9 });
+  // The lid. Same reasoning as the walls on shadows. It is a raycast target so
+  // a shot fired straight up sparks off something instead of vanishing.
+  // Basic, not Standard: the ceiling is a 46x46 unlit slab and running every
+  // light in the scene over that many fragments buys nothing you can see.
+  const ceilMat = new THREE.MeshBasicMaterial({ color: 0x0a0c12 });
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(BOUND * 2 + 2, BOUND * 2 + 2), ceilMat);
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.y = CEIL_Y;
+  group.add(ceil);
+  meshList.push(ceil);
+
+  // ---- floor furniture ---------------------------------------------------
+  // Every prop below keeps the EXACT footprint and height it had before the
+  // venue re-skin. Enemy pathing is baked from these AABBs and the combat
+  // spacing was tuned around them, so the boxes are fixed points: what changed
+  // is only what they look like.
+
+  const platMat = new THREE.MeshStandardMaterial({ color: 0x252b3a, roughness: 0.5, metalness: 0.25 });
+  const platEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.2 });
   // Raised platforms - solid, and jumpable via the step-up test in player.js.
   // h is the height of the top surface.
   const platforms = [
@@ -77,54 +138,139 @@ export function buildArena(scene) {
     { x: 9, z: -9, w: 4, d: 4, h: 1.5 },
   ];
   for (const p of platforms) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(p.w, p.h, p.d), platMat);
-    m.position.set(p.x, p.h / 2, p.z);
+    const m = box(group, platMat, p.x, p.h / 2, p.z, p.w, p.h, p.d);
     m.castShadow = true;
     m.receiveShadow = true;
-    group.add(m);
     meshList.push(m);
     obstacles.push(makeAabb(p.x, p.h / 2, p.z, p.w, p.h, p.d));
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(p.w + 0.04, 0.05, p.d + 0.04), platEdgeMat);
-    edge.position.set(p.x, p.h + 0.01, p.z);
-    group.add(edge);
+    box(group, platEdgeMat, p.x, p.h + 0.01, p.z, p.w + 0.04, 0.05, p.d + 0.04);
   }
 
-  const crateMat = new THREE.MeshStandardMaterial({ color: 0x2e2a22, roughness: 0.7, metalness: 0.25 });
-  // Low cover. The collision box is slightly wider than the mesh (1.15 vs
-  // 0.95) to compensate for the random Y rotation, which the AABB can't model.
+  // The stage: an LED backdrop standing on the centre platform. Its footprint
+  // is deliberately INSIDE the platform's own 4x4 box, so the union of the two
+  // AABBs is unchanged in XZ and the navmesh is bit-for-bit what it was.
+  const ledMat = new THREE.MeshStandardMaterial({ color: 0x05070c, emissive: 0xff2fb0, emissiveIntensity: 0.9 });
+  const stageFrameMat = new THREE.MeshStandardMaterial({ color: 0x0d1017, roughness: 0.5, metalness: 0.7 });
+  const led = box(group, ledMat, 0, 2.5, 1.6, 4, 3, 0.4);
+  led.castShadow = true;
+  meshList.push(led);
+  obstacles.push(makeAabb(0, 2.5, 1.6, 4, 3, 0.4));
+  box(group, stageFrameMat, 0, 4.05, 1.6, 4.3, 0.2, 0.6);
+
+  // Low cover, now speaker cabinets. The collision box is slightly wider than
+  // the mesh (1.15 vs 0.95) to compensate for the random Y rotation, which the
+  // AABB can't model.
+  const speakerMat = new THREE.MeshStandardMaterial({ color: 0x191d26, roughness: 0.85, metalness: 0.1 });
+  const coneMat = new THREE.MeshStandardMaterial({ color: 0x1c1f28, roughness: 0.6, metalness: 0.4 });
   const crates = [
     { x: 3.5, z: -3 }, { x: -4, z: 2.5 }, { x: 2, z: 5.5 }, { x: -2, z: -5.5 }, { x: 12, z: -2 },
   ];
   for (const c of crates) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.95), crateMat);
-    m.position.set(c.x, 0.475, c.z);
+    const m = box(group, speakerMat, c.x, 0.475, c.z, 0.95, 0.95, 0.95);
     m.rotation.y = Math.random() * 0.6 - 0.3;
     m.castShadow = true;
     m.receiveShadow = true;
-    group.add(m);
     meshList.push(m);
     obstacles.push(makeAabb(c.x, 0.475, c.z, 1.15, 0.95, 1.15));
+    // Driver cones on the front face, purely decorative.
+    const cone = box(group, coneMat, 0, 0.12, 0.5, 0.62, 0.62, 0.04);
+    const cone2 = box(group, coneMat, 0, -0.22, 0.5, 0.34, 0.34, 0.04);
+    m.add(cone);
+    m.add(cone2);
   }
 
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1a1f2b, roughness: 0.4, metalness: 0.6 });
-  // Tall cover, too high to jump onto. Boxed as a square AABB around the
-  // cylinder, so the corners collide a little wider than they look.
+  // Tall cover, now lighting-truss towers. Too high to jump onto. Boxed as a
+  // square AABB around the cylinder, so the corners collide a little wider
+  // than they look.
+  const towerMat = new THREE.MeshStandardMaterial({ color: 0x1c2130, roughness: 0.45, metalness: 0.35 });
   const pillars = [
     { x: -14, z: 0 }, { x: 14, z: -2 }, { x: 0, z: 14 }, { x: -3, z: -14 }, { x: 3, z: 14 },
   ];
   for (const pl of pillars) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 2.3, 10), pillarMat);
+    const m = new THREE.Mesh(CYL, towerMat);
     m.position.set(pl.x, 1.15, pl.z);
+    m.scale.set(1, 2.3, 1);
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
     meshList.push(m);
     obstacles.push(makeAabb(pl.x, 1.15, pl.z, 1.5, 2.3, 1.5));
+    // A lamp head on top of each tower, lit by rig.js.
+    box(group, trimMat, pl.x, 2.42, pl.z, 0.5, 0.14, 0.5);
   }
 
-  // ---- lighting: exactly 5 lights, see the note at the top of this file ----
+  // ---- perimeter traversal -----------------------------------------------
+  // Going up is OPTIONAL. Everything here hugs the walls so the middle of the
+  // floor - where the fight actually happens - is exactly as open as it was.
+  //
+  // The climb is floor -> stack (1.5) -> ledge (2.9) -> catwalk (4.3). The
+  // jump apex is 1.84m, so every hop has ~0.44m of margin; tighter than that
+  // and the step-up test in player.js becomes a coin flip.
+  //
+  // The ledges and the catwalk are SUSPENDED: their undersides sit at 2.65 and
+  // 4.05, above the 2.5m agent height the NavGrid filters on, so enemies walk
+  // straight under them instead of treating them as pillars. The stacks are
+  // the only part of the chain standing on the floor, and they are ordinary
+  // cover like the speaker cabinets.
+  //
+  // There is no railing and no cover up here on purpose: high ground buys you
+  // sightlines, and costs you being an easy target for every gunner in the room.
+  const deckMat = new THREE.MeshStandardMaterial({ color: 0x232838, roughness: 0.55, metalness: 0.25 });
+  const deckEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0xffb300, emissiveIntensity: 1.0 });
+
+  // Step 1: solid stacks on the floor. These DO block pathing, like any crate.
+  // Placed clear of the spawn points at +-18.
+  const stacks = [{ x: -16.0, z: -19.4 }, { x: 16.0, z: 19.4 }];
+  for (const st of stacks) {
+    const m = box(group, speakerMat, st.x, 0.75, st.z, 1.4, 1.5, 1.4);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    meshList.push(m);
+    obstacles.push(makeAabb(st.x, 0.75, st.z, 1.4, 1.5, 1.4));
+  }
+
+  // Step 2: wall-mounted ledges, underside at 2.65.
+  //
+  // These sit BEYOND the ends of the catwalk runs, never beneath one. That is
+  // not cosmetic: resolveCircle only ignores a box the mover is standing on or
+  // is entirely underneath, so a deck 1.15m above a ledge is neither, and it
+  // would shove the player sideways off the ledge they were standing on. The
+  // climb has to happen where there is open air overhead.
+  const ledges = [{ x: -15.6, z: -20.6 }, { x: 15.6, z: 20.6 }];
+  for (const l of ledges) {
+    const m = box(group, deckMat, l.x, 2.775, l.z, 2.0, 0.25, 2.0);
+    m.castShadow = true;
+    meshList.push(m);
+    obstacles.push(makeAabb(l.x, 2.775, l.z, 2.0, 0.25, 2.0));
+  }
+
+  // Step 3: two catwalk runs, on the north and south walls, underside at 4.05.
+  // They stop at |x| = 14 so the access ledges above have clear sky, and so
+  // the two sides are not joined - you come down to cross the room, which
+  // keeps the floor the fastest way to anywhere.
+  const catwalks = [
+    { x: 0, z: -20.6, w: 28, d: 1.8 },
+    { x: 0, z: 20.6, w: 28, d: 1.8 },
+  ];
+  for (const c of catwalks) {
+    const m = box(group, deckMat, c.x, 4.175, c.z, c.w, 0.25, c.d);
+    m.receiveShadow = true;
+    meshList.push(m);
+    obstacles.push(makeAabb(c.x, 4.175, c.z, c.w, 0.25, c.d));
+    // Lit edge strip so the walkway reads from the floor below.
+    box(group, deckEdgeMat, c.x, 4.31, c.z, c.w, 0.04, 0.12);
+  }
+
+  // ---- lighting: exactly 4 lights here, see the note at the top of this file
   // 1) hemisphere fill, 2) shadow-casting key light, 3+4) two colour accents.
-  // The fifth is the muzzle flash light, owned by effects.js.
+  // The fifth is the muzzle flash light, owned by effects.js. rig.js adds its
+  // moving heads on top and animates all of these - it never creates one
+  // after startup.
+  //
+  // The hemisphere and the key light are the WHITE light that keeps enemies
+  // readable. rig.js modulates their intensity but never their hue: enemy
+  // colours run the whole hue wheel and a coloured key would collapse them
+  // into each other.
   const hemi = new THREE.HemisphereLight(0x3a4a6a, 0x2a2f3a, 1.0);
   group.add(hemi);
   const dir = new THREE.DirectionalLight(0xbfd4ff, 1.6);
@@ -148,8 +294,8 @@ export function buildArena(scene) {
   p2.position.set(12, 3.6, 12);
   group.add(p2);
 
-  scene.background = new THREE.Color(0x1a1f2a);
-  scene.fog = new THREE.Fog(0x1a1f2a, 26, 62);
+  scene.background = new THREE.Color(0x07090f);
+  scene.fog = new THREE.Fog(0x07090f, 24, 66);
 
   // Spawn points: a 3x3 grid near the arena edges, minus the centre (which is
   // on top of the middle platform and would drop spawns onto the player).
@@ -161,5 +307,19 @@ export function buildArena(scene) {
   }
 
   scene.add(group);
-  return { group, obstacles, meshList, spawnPoints };
+  // `lights` is handed to rig.js, which animates them. `mats` are the emissive
+  // materials rig.js pulses - shared instances, so writing one changes every
+  // prop that uses it.
+  // Obstacles a ground-level thing can actually run into. The suspended decks
+  // are excluded, which is what lets enemy fire pass UNDER a catwalk instead
+  // of stopping dead on its underside - see the note where projectiles use it
+  // in main.js. `obstacles` stays the full list, for the player's landing test.
+  const ground = obstacles.filter((o) => o.min.y <= 2.5);
+
+  return {
+    group, obstacles, ground, meshList, spawnPoints,
+    lights: { hemi, dir, p1, p2 },
+    mats: { trim: trimMat, platEdge: platEdgeMat, led: ledMat, deckEdge: deckEdgeMat },
+    shared: { BOX, CYL },
+  };
 }

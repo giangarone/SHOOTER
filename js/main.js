@@ -62,6 +62,7 @@ import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
+import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
@@ -229,6 +230,10 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.1, 200);
 
     this.arena = buildArena(this.scene);
+    // The lighting show that plays over the arena. Built here, before anything
+    // can cue it, and it creates every light it will ever use up front - see
+    // the light-count note in arena.js.
+    this.rig = new Rig(this.scene, this.arena);
     // One navigation grid, shared by every enemy alive. It is baked from the
     // arena's obstacles at startup and reflooded toward the player a few times
     // a second - see nav.js for why it is one field rather than a path each.
@@ -237,7 +242,9 @@ class Game {
     // so a boss steered by it would be routed through gaps it cannot fit
     // through and grind against the corners. Flooded only while something big
     // is actually alive, which is never on a normal wave.
-    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6);
+    // Also taller: a boss stands well clear of the perimeter catwalks that
+    // ordinary enemies walk under, so anything overhead is a wall to it.
+    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, 5);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list - walking into a totem claims it, so the player can
@@ -287,6 +294,13 @@ class Game {
     // went down. Semi-auto weapons need it; the loop clears it every frame.
     this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false };
     this.emptyClickCd = 0;
+
+    // Refilled and handed to the rig every frame. One object for the life of
+    // the game, per the no-allocation rule below.
+    this._rigState = {
+      mode: 'idle', beat: 0, level: 0, healthFrac: 1, comboMult: 1,
+      bossColor: 0xffffff, bossPos: null,
+    };
 
     // Scratch objects reused every frame so the hot path allocates nothing.
     this._shakeV = new THREE.Vector3();
@@ -380,7 +394,11 @@ class Game {
       sfx: this.sfx,
     };
     this._projCtx = {
-      obstacles: this.arena.obstacles,
+      // GROUND obstacles, not all of them: a shot fired at a player up on a
+      // catwalk must not stop against the deck they are standing on. The high
+      // ground is meant to buy sightlines and cost you cover, so the decks are
+      // deliberately not bulletproof. Do not "fix" this to arena.obstacles.
+      obstacles: this.arena.ground,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
       // Reload Burst's shards damage enemies and never the player, so they get
       // the enemy list and a blast that cannot reach back.
@@ -628,6 +646,35 @@ class Game {
     try { localStorage.setItem('va-music-muted', this.music.muted ? '1' : '0'); } catch {}
   }
 
+  // Fills the object the rig reads. Mutates in place and returns it, so the
+  // loop allocates nothing.
+  //
+  // `mode` is derived from the SAME condition the music muffle uses, so the
+  // house lights and the muffled track can never disagree about whether the
+  // party is on: combat is the only state that is neither muffled nor lit by
+  // the house lights.
+  _fillRigState() {
+    const r = this._rigState;
+    const combat = this.state === 'playing' && this.waveState === 'active';
+    r.mode = combat ? (this.bossFight ? 'boss' : 'combat')
+      : this.waveState === 'intermission' && this.state === 'playing' ? 'house'
+        : 'idle';
+    r.beat = this.music.beat;
+    r.level = this.music.level;
+    // Clamped: a health pickup can overheal past max, which would drive the
+    // low-health maths backwards.
+    r.healthFrac = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
+    r.comboMult = this.comboMult();
+    if (this.bossFight && this.bossFight.parts.length) {
+      const boss = this.bossFight.parts[0];
+      r.bossColor = ENEMY_TYPES[this.bossFight.key].color;
+      r.bossPos = boss.pos;
+    } else {
+      r.bossPos = null;
+    }
+    return r;
+  }
+
   // Primes the audio graph and gets the soundtrack going. Every user gesture
   // that reaches audio routes through here rather than calling sfx.ensure()
   // directly, because the music has to be (re)started on a gesture too and a
@@ -705,6 +752,10 @@ class Game {
     this.ui.setWave(this.wave);
     this.ui.banner('WAVE ' + this.wave);
     this.sfx.wave();
+    // Blackout, then the whole rig hits at once. The dark beat before it is
+    // what makes the hit land - a bright room just getting brighter reads as
+    // nothing at all.
+    this.rig.cueWaveStart();
 
     this.waveDamageTaken = 0;
     this.player.armWard();
@@ -761,6 +812,7 @@ class Game {
     this.effects.addShake(0.4);
     this.ui.banner(BOSS_NAMES[key]);
     this.sfx.wave();
+    this.rig.setEnraged(false);
   }
 
   // Live health across every part, for the bar.
@@ -782,9 +834,12 @@ class Game {
       bf.note = 'STAGGERED';
       this.ui.banner('STAGGERED');
       this.sfx.hit();
+      // Black out, then flare white as it comes back up.
+      this.rig.cueStagger();
     } else if (kind === 'recover') {
       bf.state = '';
       bf.note = '';
+      this.rig.setEnraged(false);
     } else if (kind === 'charge') {
       this.sfx.wave();
     } else if (kind === 'enrage') {
@@ -792,6 +847,8 @@ class Game {
       bf.note = 'ENRAGED';
       this.ui.banner('ENRAGED');
       this.sfx.wave();
+      // Hands the room over to a red alarm until the boss recovers or dies.
+      this.rig.setEnraged(true);
     } else if (kind === 'split') {
       this._splitBoss(enemy);
     }
@@ -885,6 +942,9 @@ class Game {
     this._clearHazards();
     this.bossFight = null;
     this.ui.setBoss(null, 0, '', '');
+    // Hands the room back: the boss colour and the tightened fog both release
+    // once nothing is driving them.
+    this.rig.setEnraged(false);
   }
 
   // The boss kill's own payout, on top of the ordinary clear bonus.
@@ -1502,6 +1562,9 @@ class Game {
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
     this.sfx.hurt();
     this.ui.damage();
+    // A hard white blink over the red vignette. Shorter than the vignette on
+    // purpose, so the two read as one hit rather than two events.
+    this.rig.cueDamage();
     if (h > 0) return;
     // Dead Cat. One revive for the whole run, not one per wave: it is the
     // upside of a permanently smaller health pool, and refilling it every wave
@@ -2407,6 +2470,9 @@ class Game {
       this._lastDotFx = this.time;
       this.ui.damage();
       this.sfx.hurt();
+      // Inside the throttle with the vignette, for the reason named above: a
+      // flinch on every damage tick really would be a strobe.
+      this.rig.cueDamage();
     }
     if (h > 0) return;
     if (this.player.livesUsed < this.player.mods.extraLives) {
@@ -2620,9 +2686,16 @@ class Game {
       this.camera.lookAt(0, 1, 0);
     }
 
-    // Outside the `playing` branch: the muffle applies to the menu, pause and
-    // death screens too, and none of those tick game time.
+    // Outside the `playing` branch: the muffle and the rig both apply to the
+    // menu, pause and death screens too, and none of those tick game time.
+    // Driven by `dt` (real time, computed in every state) rather than
+    // `this.time`, which stops when the simulation does.
     this.music.setMuffled(this._musicMuffled());
+    // Sampled before the rig reads it, so a beat lights the room on the same
+    // frame it happens rather than the next one.
+    this.music.sample(dt);
+    this.rig.update(dt, this._fillRigState());
+    this.ui.setStrobe(this.rig.flash);
 
     this.effects.update(dt);
     this.renderer.render(this.scene, this.camera);
