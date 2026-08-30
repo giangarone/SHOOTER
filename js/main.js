@@ -67,7 +67,7 @@ import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
-  UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rollDeals, rerollCost,
+  UPGRADES, AMMO_PURCHASE, rollTotems, rollDeals, rerollCost,
   dealRerollCost, effectLines,
 } from './upgrades.js';
 import { TotemArea, ARM_TIME_DEVIL } from './totems.js';
@@ -290,8 +290,11 @@ class Game {
     this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
-    // in the obstacle list - walking into a totem claims it, so the player can
-    // never actually pass through one.
+    // in the obstacle list. That USED to be because walking into one claimed
+    // it, so nobody could stand inside one anyway; now that a claim takes a
+    // shot or an E press, the reason is simply that the row stands in the
+    // middle of the arena mid-run and solid pillars there would be five new
+    // things to get caught on while a wave is chasing you.
     this.totemArea = new TotemArea(this.scene);
     // The Devil's installation, on the far side of the arena. Built once and
     // reused like the totems, and hidden for most of a run.
@@ -580,7 +583,7 @@ class Game {
         case 'KeyD': this._tapMove(e.code, this.input.right); this.input.right = true; break;
         case 'Space': this.input.jump = true; e.preventDefault(); break;
         case 'KeyR': this.tryReload(); break;
-        case 'KeyE': this.tryUseStation(); break;
+        case 'KeyE': this.tryUse(); break;
         // Fullscreen is bound on the window rather than to a button alone so
         // it is reachable mid-run without giving up pointer lock to click.
         case 'KeyF': this._toggleFullscreen(); break;
@@ -2072,11 +2075,11 @@ class Game {
     // wave will not start until something is claimed, a bot that failed to
     // claim would hang the run rather than merely skip an upgrade.
     //
-    // It SHOOTS the totem it wants rather than walking into it. Touch is a
-    // 1.7m radius on totems spaced 3.6m apart, so a bot crossing the row to
-    // reach a specific one clips whichever it passes and takes the wrong
-    // upgrade. Shooting picks exactly the totem it aimed at. It walks toward
-    // the target at the same time, so a blocked line of sight resolves itself.
+    // It SHOOTS the totem it wants. Shooting picks exactly the one it aimed at
+    // and needs no proximity, and it walks toward the target at the same time
+    // so a blocked line of sight resolves itself. The E path is the human one
+    // and is covered by test/devil.mjs instead - a bot pressing a key at
+    // whatever it happened to be standing next to would test nothing.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
       let td = 1e9;
@@ -2160,8 +2163,9 @@ class Game {
   // writing the walk direction into this._botMove and returning whether it is
   // there yet. Three rules, in priority order:
   //
-  //   1. Stay out of every totem's touch radius. Touch claims whatever it
-  //      brushes, and the bot is trying to claim one SPECIFIC totem.
+  //   1. Keep a few metres off every totem. Standing among the row means
+  //      firing from inside it, where the pillar it wants is as likely to be
+  //      behind a neighbour as in front of one.
   //   2. Close to firing range.
   //   3. Sidestep until no other totem sits on the line of fire - the totems
   //      are in a row, so a bot approaching from the flank shoots through two
@@ -2177,7 +2181,7 @@ class Game {
       const ox = p.x - o.pos.x;
       const oz = p.z - o.pos.z;
       const d = Math.hypot(ox, oz);
-      // Well outside TOUCH_RADIUS (1.7), with room for a frame of movement.
+      // Comfortably clear of the pillar, with room for a frame of movement.
       if (d < 3 && d > 1e-3) {
         m.x = ox / d;
         m.z = oz / d;
@@ -2344,8 +2348,6 @@ class Game {
         name: def.name,
         theme: def.theme,
         icon: def.icon,
-        rarityLabel: RARITY[def.rarity].label,
-        rarityColor: RARITY[def.rarity].color,
         // Resolved against what the player already owns, so a stacking
         // upgrade shows the tier it moves them from and the one it moves
         // them to rather than the whole ladder.
@@ -2368,8 +2370,6 @@ class Game {
         name: def.name,
         theme: def.theme,
         icon: def.icon,
-        rarityLabel: RARITY[def.rarity].label,
-        rarityColor: RARITY[def.rarity].color,
         effects: effectLines(def, 0),
         cost: def.cost,
         enabled: this.player.canPay(def.cost),
@@ -2406,8 +2406,12 @@ class Game {
   // double-claiming lives in exactly one place. The pick is confirmed by the
   // burst and the gun itself, not by a card: the totem the player walked into
   // already said what it was.
-  _claimTotem(totem) {
-    if (!totem.canClaim()) return;
+  //
+  // `byKey` is true for an E press, which skips the arm delay: that delay
+  // exists to stop a burst already in the air from picking a build, and a key
+  // press is never that burst. A shot still has to wait it out.
+  _claimTotem(totem, byKey = false) {
+    if (!(byKey ? totem.canUse() : totem.canClaim())) return;
     const offer = totem.offer;
     if (!this.player.takeUpgrade(offer.id)) return;
     totem.claimed = true;
@@ -2431,8 +2435,8 @@ class Game {
   // and the wave is still waiting on them; a deal closes the Devil's shop and
   // nothing else, so a player can take a deal and then still choose their free
   // mutation. The other two pillars sink because the set is spent.
-  _claimDeal(deal) {
-    if (!deal.canClaim()) return;
+  _claimDeal(deal, byKey = false) {
+    if (!(byKey ? deal.canUse() : deal.canClaim())) return;
     const offer = deal.offer;
     // canClaim() already refused an unaffordable deal via `enabled`, and
     // payMaxHp refuses again on its own. Two guards on the one thing in the
@@ -2484,63 +2488,89 @@ class Game {
     return null;
   }
 
-  // Ticks the installation and claims by touch. Shooting a totem is handled in
-  // shoot(), which already has the raycast.
+  // Ticks both installations and writes the E prompt. Shooting is handled in
+  // shoot(), which already has the raycast; NOTHING is claimed by walking into
+  // it any more - see the note at the top of totems.js.
   _updateTotems(dt) {
-    const area = this.totemArea;
-    area.update(dt, this.time, this.player.pos);
+    this.totemArea.update(dt, this.time, this.player.pos);
     this.devilArea.update(dt, this.time, this.player.pos);
 
-    // The Devil first. His pillars are the ones that cost something, so a
-    // player standing between the two installations - which cannot happen,
-    // they are fourteen metres apart - would still never buy by accident.
-    const deal = this.devilArea.touched(this.player.pos);
-    if (deal) {
-      this._claimDeal(deal);
-      return;
-    }
-
-    const touched = area.touched(this.player.pos);
-    if (touched) {
-      this._claimTotem(touched);
-      return;
-    }
-
-    // The Devil is his own console: E at his feet rerolls the set.
-    if (this.devilArea.heartInRange(this.player.pos)) {
-      const blocked = this._devilBlocked();
-      this.ui.setPrompt(
-        blocked
-          ? 'REROLL &nbsp;\u00b7&nbsp; ' + blocked
-          : '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;\u00b7&nbsp; NEW DEALS &nbsp;\u00b7&nbsp; '
-            + '<span class="prompt-cost">' + dealRerollCost(this.devilArea.rerolls)
-            + ' MAX HP</span>',
-        !!blocked
-      );
-      return;
-    }
-
-    const st = area.stationInRange(this.player.pos);
-    if (!st) {
+    const use = this._useTarget();
+    if (!use) {
       this.ui.setPrompt(null, false);
       return;
     }
-    const blocked = this._stationBlocked(st);
+    const [text, blocked] = this._usePrompt(use);
+    this.ui.setPrompt(text, blocked);
+  }
+
+  /**
+   * What E would act on right now, or null.
+   *
+   * ONE RESOLVER FOR THE PROMPT AND THE KEY, so the line on screen can never
+   * name something other than what the press does. Five things can be in
+   * reach - three totems, three deals, the Devil's heart, two stations - and
+   * several of their radii overlap, so the NEAREST wins rather than whichever
+   * happened to be checked first.
+   *
+   * @returns {?{kind: string, target: object}} kind is 'totem' | 'deal' |
+   *   'devil' | 'station'.
+   */
+  _useTarget() {
+    let best = null;
+    let bestD = Infinity;
+    const consider = (hit, kind) => {
+      if (!hit || hit.d2 >= bestD) return;
+      bestD = hit.d2;
+      best = { kind, target: hit.target };
+    };
+    consider(this.totemArea.usable(this.player.pos), 'totem');
+    consider(this.totemArea.stationInRange(this.player.pos), 'station');
+    consider(this.devilArea.usable(this.player.pos), 'deal');
+    consider(this.devilArea.heartInRange(this.player.pos), 'devil');
+    return best;
+  }
+
+  // The prompt line for whatever E is currently pointed at, as [html, blocked].
+  _usePrompt(use) {
+    const t = use.target;
+    if (use.kind === 'totem') {
+      return ['<b>SHOOT</b> / <b>E</b> TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
+    }
+    if (use.kind === 'deal') {
+      return [
+        '<b>SHOOT</b> / <b>E</b> TAKE &nbsp;·&nbsp; ' + t.offer.name
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">\u2212' + t.offer.cost + ' MAX HP</span>',
+        false,
+      ];
+    }
+    if (use.kind === 'devil') {
+      const blocked = this._devilBlocked();
+      return [
+        blocked
+          ? 'REROLL &nbsp;\u00b7&nbsp; ' + blocked
+          : '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;\u00b7&nbsp; NEW DEALS &nbsp;\u00b7&nbsp; '
+            + '<span class="prompt-cost">\u2212' + dealRerollCost(this.devilArea.rerolls)
+            + ' MAX HP</span>',
+        !!blocked,
+      ];
+    }
+    const blocked = this._stationBlocked(t);
     if (blocked) {
-      this.ui.setPrompt((st.kind === 'ammo' ? 'AMMO' : 'REROLL') + ' &nbsp;·&nbsp; ' + blocked, true);
-    } else if (st.kind === 'ammo') {
-      this.ui.setPrompt(
+      return [(t.kind === 'ammo' ? 'AMMO' : 'REROLL') + ' &nbsp;·&nbsp; ' + blocked, true];
+    }
+    if (t.kind === 'ammo') {
+      return [
         '<b>SHOOT</b> / <b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
         + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + AMMO_PURCHASE.cost + '</span>',
-        false
-      );
-    } else {
-      this.ui.setPrompt(
-        '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
-        + '<span class="prompt-cost">$' + rerollCost(area.rerolls) + '</span>',
-        false
-      );
+        false,
+      ];
     }
+    return [
+      '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
+      + '<span class="prompt-cost">$' + rerollCost(this.totemArea.rerolls) + '</span>',
+      false,
+    ];
   }
 
   // True while the run is held at the wave boundary waiting for the player to
@@ -2564,16 +2594,17 @@ class Game {
   }
 
   // E at a station, from anywhere in its radius.
-  tryUseStation() {
+  // E. Takes whatever _useTarget() says is nearest - a mutation, a deal, a
+  // reroll or an ammo refill - so the key always does the thing the prompt on
+  // screen just said it would.
+  tryUse() {
     if (this.state !== 'playing') return;
-    // The Devil is checked first for the same reason he is in _updateTotems:
-    // one key, and whichever console the player is actually standing at.
-    if (this.devilArea.heartInRange(this.player.pos)) {
-      this._rerollDeals();
-      return;
-    }
-    const st = this.totemArea.stationInRange(this.player.pos);
-    if (st) this._useStation(st);
+    const use = this._useTarget();
+    if (!use) return;
+    if (use.kind === 'totem') this._claimTotem(use.target, true);
+    else if (use.kind === 'deal') this._claimDeal(use.target, true);
+    else if (use.kind === 'devil') this._rerollDeals();
+    else this._useStation(use.target);
   }
 
   // A pellet hit a station. One purchase per STATION_SHOOT_COOLDOWN however

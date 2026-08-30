@@ -213,10 +213,13 @@ class Devil {
   canShoot() {
     return this.state === 'up' && this.shootCd <= 0;
   }
-  inRange(playerPos) {
+  // Squared distance from the player, or -1 when out of E range - the contract
+  // Totem.useDistance() and Station.useDistance() share.
+  useDistance(playerPos) {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
-    return dx * dx + dz * dz < DEVIL_RADIUS * DEVIL_RADIUS;
+    const d2 = dx * dx + dz * dz;
+    return d2 < DEVIL_RADIUS * DEVIL_RADIUS ? d2 : -1;
   }
 
   update(dt, time, playerPos) {
@@ -320,17 +323,26 @@ export class DevilArea {
     this.devil.sink();
   }
 
-  // The claimable deal the player is standing in, or null.
-  touched(playerPos) {
+  // The NEAREST deal the player could press E on, with its squared distance,
+  // or null. Same contract and same nearest-wins reasoning as
+  // TotemArea.usable(), so main.js can rank both rows against each other.
+  usable(playerPos) {
+    let best = null;
+    let bestD = Infinity;
     for (const d of this.deals) {
-      if (d.canClaim() && d.inTouchRange(playerPos)) return d;
+      if (!d.canUse()) continue;
+      const dd = d.useDistance(playerPos);
+      if (dd < 0 || dd >= bestD) continue;
+      bestD = dd;
+      best = d;
     }
-    return null;
+    return best ? { target: best, d2: bestD } : null;
   }
 
   // The Devil, when the player is close enough to press E at him.
   heartInRange(playerPos) {
-    return this.devil.isUp() && this.devil.inRange(playerPos) ? this.devil : null;
+    const d = this.devil.isUp() ? this.devil.useDistance(playerPos) : -1;
+    return d < 0 ? null : { target: this.devil, d2: d };
   }
 
   // Appends this set's shootable parts to a raycast target list: one invisible

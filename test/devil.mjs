@@ -162,6 +162,12 @@ try {
     P.upgrades = {};
     P.rebuildMods();
     P.health = P.maxHealth;
+    // Spread is not what these tests are about - a pellet that wanders off a
+    // 1.45m box at four metres would look exactly like a mis-tagged claim box.
+    // Zeroed so the shot goes where it is aimed and the routing is the only
+    // thing under test.
+    g.player.weapon.spread = 0;
+
     // Each shot is fired from directly in front of its target down a line with
     // nothing else on it - the arena is full of crates and the two rows shadow
     // each other, and a blocked pellet would look exactly like a broken tag.
@@ -206,6 +212,50 @@ try {
     g.shoot();
     out.shotTookTotem = totem.claimed && P.maxHealth === hp3;
     out.totemStartedWave = !g.totemArea.claimed || g.devilArea.deals.every((d) => d.state !== 'up');
+
+    // --- E claims, and WALKING INTO ONE DOES NOT ---
+    // The accident this replaced: crossing the row at 10 m/s used to pick a
+    // build. Standing inside a totem for a full second must now do nothing at
+    // all, and E must take the nearest thing in reach.
+    stage();
+    const walkTotem = g.totemArea.totems.find((t) => t.state === 'up');
+    standAt(walkTotem.pos.x, walkTotem.pos.z);
+    for (let i = 0; i < 60; i++) {
+      g.time += 0.016;
+      g.player.pos.set(walkTotem.pos.x, 0, walkTotem.pos.z);
+      g._updateTotems(0.016);
+    }
+    out.walkingClaimsNothing = !walkTotem.claimed && !g.totemArea.claimed;
+    // ...and the prompt is offering it while they stand there.
+    out.promptNamesTotem = g._useTarget() && g._useTarget().kind === 'totem';
+    g.tryUse();
+    out.keyClaimedTotem = walkTotem.claimed;
+
+    // E on a deal charges max HP.
+    stage();
+    const keyDeal = g.devilArea.deals.find((d) => d.state === 'up' && d.enabled);
+    standAt(keyDeal.pos.x, keyDeal.pos.z - 1.2);
+    const hpKey = P.maxHealth;
+    out.promptNamesDeal = g._useTarget() && g._useTarget().kind === 'deal';
+    g.tryUse();
+    out.keyBoughtDeal = keyDeal.claimed && P.maxHealth === hpKey - keyDeal.offer.cost;
+
+    // E beside the Devil rerolls rather than taking the pillar behind him.
+    stage();
+    standAt(2.0, g.devilArea.devil.pos.z);
+    const hpKey2 = P.maxHealth;
+    out.promptNamesDevil = g._useTarget() && g._useTarget().kind === 'devil';
+    g.tryUse();
+    out.keyRerolled = hpKey2 - P.maxHealth === 2;
+
+    // E at a station buys ammo, even standing where a totem's range reaches.
+    stage();
+    P.reserveAmmo = 0;
+    g.credits = 5000;
+    standAt(g.totemArea.ammoStation.pos.x, g.totemArea.ammoStation.pos.z - 1);
+    out.promptNamesStation = g._useTarget() && g._useTarget().kind === 'station';
+    g.tryUse();
+    out.keyBoughtAmmo = P.reserveAmmo === 90;
 
     // --- a normal totem never offers a deal ---
     let leaked = 0;
@@ -431,6 +481,11 @@ try {
   ok('shooting the heart rerolls for 2 max HP', r.shotRerolled);
   ok('shooting a totem is still free', r.shotTookTotem);
   ok('a totem claim closes the devil', r.totemStartedWave);
+  ok('standing in a totem claims nothing', r.walkingClaimsNothing);
+  ok('E takes the totem you are standing at', r.promptNamesTotem && r.keyClaimedTotem);
+  ok('E takes a deal and charges max HP', r.promptNamesDeal && r.keyBoughtDeal);
+  ok('E at the devil rerolls', r.promptNamesDevil && r.keyRerolled);
+  ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
   ok('no deal leaks onto a free totem', r.leaked === 0);
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } finally {

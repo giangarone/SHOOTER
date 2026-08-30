@@ -35,7 +35,9 @@ export const RARITY = {
   cursed: { label: 'CURSED', color: '#ff3d00', weight: 0.3 },
   // Devil Deals. Weight 0 so a deal can never leak into a normal totem roll
   // even if the `devil` guard in rollTotems() is ever lost - the rarity gate
-  // would drop it on its own.
+  // would drop it on its own. The label and colour are what the offer CARDS
+  // used to print; they no longer do (see Totem._draw), so this entry exists
+  // purely as a weight now.
   devil: { label: 'DEVIL DEAL', color: '#ff1744', weight: 0 },
 };
 

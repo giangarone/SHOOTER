@@ -1,19 +1,22 @@
 // Wave-end upgrade totems and the two stations beside them.
 //
 // Three pillars rise out of the arena floor when a wave is cleared, each
-// showing one upgrade. The player takes one by walking into it or by shooting
-// it ANYWHERE - the pillar and the icon hovering in front of it are one target.
-// Nothing pauses: the next wave starts on a timer whether or not a choice was
-// made, and an unclaimed set simply stays standing until the wave after it is
-// cleared, when a fresh set replaces it.
+// showing one upgrade. The player takes one by shooting it ANYWHERE - the
+// pillar and the icon hovering in front of it are one target - or by pressing
+// E beside it. An unclaimed set simply stays standing until the wave after it
+// is cleared, when a fresh set replaces it.
 //
-// A TOTEM CANNOT BE TAKEN THE INSTANT IT ARRIVES
-//   Totems come up wherever the player happens to be standing, into whatever
-//   is already in the air. Two guards, because they cover different mistakes:
-//   an arm delay after the rise (ARM_TIME) catches a burst that was fired
-//   before the set existed, and touch additionally requires having been seen
-//   OUTSIDE the radius since the rise (`touchArmed`) - a timer alone does
-//   nothing for a player who never moved off the spot the pillar came up in.
+// BOTH WAYS IN ARE DELIBERATE
+//   Walking into a totem used to claim it, and no longer does. The row stands
+//   in the middle of the arena and the player crosses it at 10 m/s; a pick
+//   that cannot be undone was being made by a footstep. Now it takes a shot
+//   the player aimed or a key they pressed.
+//
+// A TOTEM CANNOT BE SHOT THE INSTANT IT ARRIVES
+//   Totems come up into whatever is already in the air, so ARM_TIME holds off
+//   claims by SHOT for a beat after the rise - otherwise clearing a wave next
+//   to the row picks your build for you. E is exempt: a key press was never
+//   the burst that was already flying.
 //
 // THE WHOLE TOTEM IS THE TARGET
 //   An earlier revision made only a small floating core claim the upgrade, so
@@ -58,9 +61,18 @@ import { buildIcon } from './icons.js';
 // weapons - main.js normalises both into the same `offer` shape, which is why
 // putting a weapon on a totem needed no changes here.
 
-// Walk this close to a totem and it is yours. Generous enough to catch a
-// player running past at full speed.
-export const TOUCH_RADIUS = 1.7;
+// Press E this close to a totem and it is yours.
+//
+// WALKING INTO A TOTEM USED TO CLAIM IT, AND NO LONGER DOES. The row stands in
+// the middle of the arena, the player is moving at 10 m/s, and a pick they
+// cannot undo was being made by a footstep - "I ran into it by accident" is
+// not a thing a build-defining choice should ever be able to hear. Both ways
+// in are now deliberate: a shot the player aimed, or a key they pressed.
+//
+// Narrower than a station's radius because the three totems are only 3.6m
+// apart. Ranges still overlap in the middle, so main.js picks the NEAREST
+// thing in range rather than the first it finds.
+export const USE_RADIUS = 2.0;
 // Seconds after a totem finishes rising before it will accept a claim. Totems
 // come up wherever the player happens to be standing, and often into the line
 // of a burst that was already in the air when the wave ended - without this,
@@ -114,6 +126,12 @@ const ICON_RZ = 0.62;
 // icons.js builds every shape at roughly half a metre, which is legible in the
 // hand and too small against a 1.15m-wide pillar seen from across the arena.
 const ICON_SCALE = 1.35;
+// The same orbit on the smaller station body: 1.0 wide and 0.5 deep, and only
+// 1.4 tall, so the icon rides lower and closer in and is scaled down to match.
+const ST_ICON_Y = 1.0;
+const ST_ICON_RX = 0.9;
+const ST_ICON_RZ = 0.55;
+const ST_ICON_SCALE = 1.0;
 
 export function hex(n) {
   return '#' + n.toString(16).padStart(6, '0');
@@ -155,13 +173,9 @@ export class Totem {
     this.rise = 0;
     this.state = 'hidden'; // hidden | rising | up | sinking
     this.claimed = false;
-    // Seconds left on the arm delay; see ARM_TIME.
+    // Seconds left on the arm delay; see ARM_TIME. It gates SHOTS only - E is
+    // a deliberate press and never needs protecting from itself.
     this.armT = ARM_TIME;
-    // False until the player has been seen OUTSIDE the touch radius since this
-    // totem rose. The arm delay alone does not cover a player who is simply
-    // standing on the spot a totem comes up in - they would still be inside it
-    // when the timer expired. Touch has to be entered, not merely occupied.
-    this.touchArmed = false;
 
     // False only for a Devil Deal the player cannot afford. An unaffordable
     // offer stays standing and stays readable - it is greyed out and inert
@@ -213,8 +227,9 @@ export class Totem {
   /**
    * Assigns an offer and starts the rise.
    *
-   * @param {object} offer  { id, name, theme, icon, rarityLabel, rarityColor,
-   *   effects, note } - see _buildOffers() in main.js.
+   * @param {object} offer  { id, name, theme, icon, effects, note } for a free
+   *   totem, plus { cost, enabled } for a Devil Deal - see _buildOffers() and
+   *   _buildDeals() in main.js.
    */
   present(offer, armTime = ARM_TIME) {
     this.offer = offer;
@@ -227,7 +242,6 @@ export class Totem {
     this.state = 'rising';
     this.rise = 0;
     this.armT = armTime;
-    this.touchArmed = false;
     this.group.visible = true;
   }
 
@@ -272,18 +286,19 @@ export class Totem {
     roundRect(c, 6, 6, 500, 12, 6);
     c.fill();
 
+    // NO RARITY LINE. It used to sit above the name, and it was the one thing
+    // on the card that changed nothing about the decision in front of the
+    // player: a common that fits the build beats a rare that does not, and
+    // printing COMMON over it only ever argued the other way. The theme bar
+    // above and the effect lines below are what the pick is actually made on.
     c.textAlign = 'center';
-    c.fillStyle = offer.rarityColor;
-    c.font = 'bold 22px system-ui, sans-serif';
-    c.fillText(offer.rarityLabel, 256, 60);
-
     c.fillStyle = '#ffffff';
     // Long weapon names need to shrink to stay on one line.
     c.font = 'bold ' + (offer.name.length > 15 ? 34 : 42) + 'px system-ui, sans-serif';
-    c.fillText(offer.name, 256, 112);
+    c.fillText(offer.name, 256, 92);
 
     c.font = 'bold 28px system-ui, sans-serif';
-    let y = 168;
+    let y = 156;
     for (const [text, sign] of offer.effects) {
       c.fillStyle = SIGN_COLOR[String(sign)];
       c.fillText(text, 256, y);
@@ -293,11 +308,16 @@ export class Totem {
     // The price, on a Devil Deal only. It sits where a free totem's OWNED note
     // sits, because the two never appear together: a deal is max: 1, so a
     // player who owns one is never offered it again.
+    //
+    // Written as a SUBTRACTION rather than as "costs N max HP". The player is
+    // reading three of these at a glance with a wave about to start; a minus
+    // sign and a number is the shortest form the price can take, and it reads
+    // the same way the red drawback lines above it do.
     if (offer.cost) {
       c.fillStyle = dim ? '#5b6785' : COST_COLOR;
-      c.font = 'bold 26px system-ui, sans-serif';
+      c.font = 'bold 30px system-ui, sans-serif';
       c.fillText(
-        dim ? 'CANNOT AFFORD' : 'COSTS ' + offer.cost + ' MAX HP',
+        dim ? 'CANNOT AFFORD' : '\u2212' + offer.cost + ' MAX HP',
         256, 292
       );
     } else if (offer.note) {
@@ -324,25 +344,29 @@ export class Totem {
     this.state = 'sinking';
   }
 
-  // Only a fully-risen, armed, unclaimed totem can be taken. Everything that
-  // grants an upgrade goes through this, so a totem cannot be claimed twice,
-  // claimed while it is still coming out of the floor, or claimed by a shot
-  // that was already in the air when it arrived.
-  canClaim() {
-    return this.state === 'up' && this.armT <= 0 && !this.claimed
+  // Whether this offer can be taken at all: risen, unclaimed, and affordable.
+  // Both ways in end up here, so an offer cannot be taken twice or taken
+  // before it has finished coming out of the floor.
+  canUse() {
+    return this.state === 'up' && !this.claimed
       && this.enabled && this.upgradeId !== null;
   }
 
-  // Touch additionally requires the player to have left the radius at least
-  // once since the rise - see `touchArmed`.
-  inTouchRange(playerPos) {
-    return this.touchArmed && this._within(playerPos);
+  // A SHOT additionally has to wait out the arm delay, because a burst fired
+  // at the enemy that ended the wave is already in the air when the row comes
+  // up and the player never chose it. A key press has no such problem.
+  canClaim() {
+    return this.canUse() && this.armT <= 0;
   }
 
-  _within(playerPos) {
+  // Squared distance from the player, or -1 when they are out of E range.
+  // Squared and unrooted because the only thing main.js does with it is
+  // compare it against the other things in reach.
+  useDistance(playerPos) {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
-    return dx * dx + dz * dz < TOUCH_RADIUS * TOUCH_RADIUS;
+    const d2 = dx * dx + dz * dz;
+    return d2 < USE_RADIUS * USE_RADIUS ? d2 : -1;
   }
 
   update(dt, time, playerPos) {
@@ -366,7 +390,6 @@ export class Totem {
     // The arm delay runs only once the pillar has landed, so a slow rise never
     // eats into it.
     if (this.state === 'up' && this.armT > 0) this.armT -= dt;
-    if (!this.touchArmed && playerPos && !this._within(playerPos)) this.touchArmed = true;
 
     // Ease-out on the way up so the pillar decelerates as it lands.
     const e = 1 - Math.pow(1 - this.rise, 3);
@@ -424,6 +447,23 @@ export class Station {
     this.body.userData.station = this;
     this.group.add(this.body);
 
+    // An icon in front of the console, orbiting to the player's side and
+    // turning to face them, exactly as a totem's does. The stations were the
+    // only things at the wave break identified by TEXT alone, which meant they
+    // were the only things that could not be told apart until the player was
+    // close enough to read them - a drum for ammo and a spiral for the reroll
+    // say which is which from the far side of the arena.
+    this.iconAnchor = new THREE.Group();
+    this.iconAnchor.position.set(0, ST_ICON_Y, ST_ICON_RZ);
+    this.iconAnchor.scale.setScalar(ST_ICON_SCALE);
+    // A crate of rounds and a toothed wheel. Both are read head-on from across
+    // the arena, which rules out the shapes that are only legible in profile -
+    // the vortex tried first is three horizontal rings and collapses to a
+    // stack of lines from the one angle the player actually sees it from.
+    this.icon = buildIcon(kind === 'ammo' ? 'ammoBox' : 'gear', this.color);
+    this.iconAnchor.add(this.icon);
+    this.group.add(this.iconAnchor);
+
     this.panel = makePanel(256, 160, 1.9, 1.2);
     this.panel.sprite.position.set(0, 1.9, 0);
     this.group.add(this.panel.sprite);
@@ -453,7 +493,11 @@ export class Station {
     this.panel.tex.needsUpdate = true;
   }
 
+  // Raises the console, or catches one that is already on its way back down.
+  // A station that is UP stays up rather than dropping and re-rising, which
+  // would be a visual reset of something that never went anywhere.
   show() {
+    if (this.state === 'up') return;
     this.state = 'rising';
     this.group.visible = true;
   }
@@ -464,16 +508,19 @@ export class Station {
   sink() {
     if (this.state !== 'hidden') this.state = 'sinking';
   }
-  inRange(playerPos) {
+  // Squared distance from the player, or -1 when out of E range - the same
+  // contract Totem.useDistance() has, so main.js can rank the two together.
+  useDistance(playerPos) {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
-    return dx * dx + dz * dz < STATION_RADIUS * STATION_RADIUS;
+    const d2 = dx * dx + dz * dz;
+    return d2 < STATION_RADIUS * STATION_RADIUS ? d2 : -1;
   }
   isUp() {
     return this.state === 'up';
   }
 
-  update(dt, time) {
+  update(dt, time, playerPos) {
     if (this.shootCd > 0) this.shootCd -= dt;
     if (this.state === 'hidden') return;
     if (this.state === 'rising') {
@@ -491,6 +538,17 @@ export class Station {
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
     this.mat.emissiveIntensity = 0.45 + Math.sin(time * 3) * 0.15;
+
+    // See the note on the totem's orbit: local +Z is the icon's front, so one
+    // angle both places it and aims it.
+    if (playerPos) {
+      const a = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
+      this.iconAnchor.position.x = Math.sin(a) * ST_ICON_RX;
+      this.iconAnchor.position.z = Math.cos(a) * ST_ICON_RZ;
+      this.iconAnchor.rotation.y = a;
+    }
+    this.iconAnchor.position.y = ST_ICON_Y + Math.sin(time * 2.4 + this.pos.x) * 0.06;
+    this.icon.userData.glow.emissiveIntensity = 1.2 + Math.sin(time * 5) * 0.3;
   }
 }
 
@@ -534,7 +592,10 @@ export class TotemArea {
       this.dismiss();
       return;
     }
-    for (const s of this.stations) if (s.state === 'hidden') s.show();
+    // Unconditional: show() itself knows to leave a standing console alone,
+    // and the old `if hidden` test missed one caught mid-sink, which then
+    // finished sinking and left the row with no shop beside it.
+    for (const s of this.stations) s.show();
   }
 
   // Sinks everything - the claimed totem, its two siblings and both stations.
@@ -543,19 +604,35 @@ export class TotemArea {
     for (const s of this.stations) s.sink();
   }
 
-  // The claimable totem the player is standing in, or null.
-  touched(playerPos) {
+  // The NEAREST totem the player could press E on, with its squared distance,
+  // or null. Nearest rather than first: at 3.6m apart with a 2m radius the
+  // middle totem's range overlaps both its neighbours', and "whichever came
+  // first in the array" would take a different one than the player is looking
+  // at.
+  usable(playerPos) {
+    let best = null;
+    let bestD = Infinity;
     for (const t of this.totems) {
-      if (t.canClaim() && t.inTouchRange(playerPos)) return t;
+      if (!t.canUse()) continue;
+      const d = t.useDistance(playerPos);
+      if (d < 0 || d >= bestD) continue;
+      bestD = d;
+      best = t;
     }
-    return null;
+    return best ? { target: best, d2: bestD } : null;
   }
 
   stationInRange(playerPos) {
+    let best = null;
+    let bestD = Infinity;
     for (const s of this.stations) {
-      if (s.isUp() && s.inRange(playerPos)) return s;
+      if (!s.isUp()) continue;
+      const d = s.useDistance(playerPos);
+      if (d < 0 || d >= bestD) continue;
+      bestD = d;
+      best = s;
     }
-    return null;
+    return best ? { target: best, d2: bestD } : null;
   }
 
   // Appends this set's shootable parts to a raycast target list. One invisible
@@ -574,6 +651,6 @@ export class TotemArea {
 
   update(dt, time, playerPos) {
     for (const t of this.totems) t.update(dt, time, playerPos);
-    for (const s of this.stations) s.update(dt, time);
+    for (const s of this.stations) s.update(dt, time, playerPos);
   }
 }
