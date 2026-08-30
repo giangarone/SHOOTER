@@ -22,6 +22,10 @@ export class UI {
     this.weaponName = $('weapon-name');
     this.vignette = $('vignette');
     this.strobe = $('strobe');
+    this.lbOver = $('lb-over');
+    this.lbStart = $('lb-start');
+    this.lbEntry = $('lb-entry');
+    this.lbName = $('lb-name');
     this.bossBar = $('boss-bar');
     this.bossName = $('boss-name');
     this.bossHp = $('boss-hp');
@@ -277,6 +281,51 @@ export class UI {
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
   }
+  // Draws a score table into `el`. `highlight` is the index of the run just
+  // played, or -1.
+  //
+  // Built with createElement and textContent rather than innerHTML, unlike the
+  // rest of this file: every other string here is ours, but a leaderboard name
+  // is typed by the player, and dropping that into innerHTML would let a name
+  // like `<img src=x onerror=...>` execute. Even on a board only its author
+  // can see, that is the wrong way round.
+  renderBoard(el, entries, highlight = -1) {
+    el.textContent = '';
+    if (!entries.length) return;
+    const title = document.createElement('div');
+    title.className = 'lb-title';
+    title.textContent = 'BEST RUNS';
+    el.appendChild(title);
+    entries.forEach((e, i) => {
+      const row = document.createElement('div');
+      row.className = i === highlight ? 'lb-row you' : 'lb-row';
+      const cell = (cls, text) => {
+        const d = document.createElement('span');
+        d.className = cls;
+        d.textContent = text;
+        row.appendChild(d);
+      };
+      cell('lb-rank', String(i + 1));
+      cell('lb-name', e.name || '---');
+      cell('lb-wave', 'WAVE ' + e.wave);
+      cell('lb-score', e.score.toLocaleString());
+      el.appendChild(row);
+    });
+  }
+
+  // Opens the name field for a qualifying run and puts the caret in it, so the
+  // player can type without hunting for the box.
+  showNameEntry(defaultName) {
+    this.lbEntry.classList.remove('hidden');
+    this.lbName.value = defaultName || '';
+    this.lbName.focus();
+    this.lbName.select();
+  }
+
+  hideNameEntry() {
+    this.lbEntry.classList.add('hidden');
+  }
+
   // Station prompt. `text` is null when the player is not near a station.
   // Compared against the last string written, so standing next to a terminal
   // does not rewrite the DOM sixty times a second.

@@ -73,6 +73,7 @@
     <div class="controls">
       <b>WASD</b> MOVE  ·  <b>MOUSE</b> AIM  ·  <b>LMB</b> SHOOT  ·  <b>R</b> RELOAD  ·  <b>SPACE</b> JUMP  ·  <b>SHIFT</b> SPRINT
     </div>
+    <div id="lb-start" class="lb"></div>
     <button id="btn-start">CLICK TO START</button>
     <button id="btn-mute-start" class="mute-btn">MUSIC ON</button>
   </div>
@@ -80,6 +81,15 @@
   <div id="overlay-over" class="overlay hidden">
     <h1 class="dead">YOU DIED</h1>
     <p class="sub" id="over-stats"></p>
+    <!-- Shown only when the run places in the top ten. -->
+    <div id="lb-entry" class="hidden">
+      <label for="lb-name">NEW HIGH SCORE &nbsp;·&nbsp; ENTER NAME</label>
+      <div class="lb-entry-row">
+        <input id="lb-name" type="text" maxlength="12" autocomplete="off" spellcheck="false"/>
+        <button id="btn-lb-save">SAVE</button>
+      </div>
+    </div>
+    <div id="lb-over" class="lb"></div>
     <button id="btn-restart">RESTART</button>
   </div>
 

@@ -134,6 +134,13 @@ Open http://localhost:8123
   sightlines and costs you cover.
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart
+- **Local leaderboard.** The ten best runs, ranked by score with the wave
+  reached as the tiebreak, shown on the title screen and after a death. A run
+  that places asks for a name, arcade style; restarting without pressing SAVE
+  banks it anyway. Kept in localStorage, so the board is per-browser: the game
+  is client-side javascript, and a shared board it could not verify would be
+  forgeable from the console in seconds. The economy is built to make runs
+  comparable - see the budget guarantees in `test/drops.mjs`.
 
 ## Upgrades
 
@@ -319,6 +326,7 @@ js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
 js/music.js         streaming soundtrack, lowpass, beat detection
 js/rig.js           the rave lighting rig: lights, beams, fixtures, cues
+js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/weapons.js       weapon stats + first-person models

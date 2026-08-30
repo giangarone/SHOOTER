@@ -274,6 +274,51 @@ html, body {
 .overlay .mute-btn.off { color: var(--dim); border-color: rgba(138, 149, 179, 0.35); }
 .overlay .mute-btn.off:hover { background: rgba(138, 149, 179, 0.12); }
 #overlay-over button:hover { background: #ff6e60; }
+/* ---- leaderboard ---- */
+.lb { width: 420px; max-width: 88vw; }
+.lb:empty { display: none; }
+.lb-title {
+  font-size: 11px; letter-spacing: 0.32em; color: var(--dim);
+  text-align: center; margin-bottom: 10px;
+}
+.lb-row {
+  display: grid; grid-template-columns: 26px 1fr auto auto;
+  gap: 12px; align-items: baseline;
+  padding: 4px 10px; font-size: 13px; color: var(--text);
+  border-bottom: 1px solid rgba(38, 44, 61, 0.7);
+}
+.lb-row .lb-rank { color: var(--dim); font-variant-numeric: tabular-nums; }
+/* The name is the only field holding text the player typed, so it is the only
+   one that can be long or awkward. Clip it rather than letting it push the
+   score column around. */
+.lb-row .lb-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: 0.08em;
+}
+.lb-row .lb-wave { color: var(--dim); font-size: 11px; letter-spacing: 0.1em; }
+.lb-row .lb-score {
+  color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.lb-row.you { background: rgba(78, 243, 255, 0.09); }
+.lb-row.you .lb-name { color: var(--cyan); }
+
+#lb-entry { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#lb-entry label {
+  font-size: 11px; letter-spacing: 0.3em; color: var(--gold);
+}
+.lb-entry-row { display: flex; gap: 8px; }
+#lb-name {
+  width: 190px; padding: 9px 12px;
+  font-family: inherit; font-size: 14px; letter-spacing: 0.22em; text-align: center;
+  color: var(--cyan); background: rgba(10, 12, 18, 0.8);
+  border: 1px solid rgba(78, 243, 255, 0.5); outline: none;
+}
+#lb-name:focus { border-color: var(--cyan); box-shadow: 0 0 14px rgba(78, 243, 255, 0.35); }
+#btn-lb-save {
+  margin-top: 0; padding: 9px 20px;
+  font-size: 11px; letter-spacing: 0.24em;
+}
+
 /* ---- credits, combo ---- */
 #credit-num {
   font-size: 14px; font-weight: 700; letter-spacing: 0.1em;

@@ -63,6 +63,7 @@ import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
 import { Rig } from './rig.js';
+import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
@@ -258,6 +259,11 @@ class Game {
     // Read before the first gesture builds the graph, so a muted player never
     // hears the opening bar leak out before the setting is applied.
     try { this.music.muted = localStorage.getItem('va-music-muted') === '1'; } catch {}
+    // Prefilled into the name field so a returning player just presses Enter.
+    this._lastName = '';
+    try { this._lastName = localStorage.getItem('va-last-name') || ''; } catch {}
+    // The run waiting to be named, or null. Guards against double submission.
+    this._pending = null;
 
     this.state = 'menu';
     this.score = 0;
@@ -489,6 +495,11 @@ class Game {
   _bind() {
     const canvas = this.renderer.domElement;
     addEventListener('keydown', (e) => {
+      // The leaderboard name field is the only text input in the game, and
+      // these handlers are on the window. Without this, typing a space into it
+      // would be swallowed by the jump binding's preventDefault, and R and E
+      // would fire game actions mid-word.
+      if (this._typing(e.target)) return;
       switch (e.code) {
         case 'KeyW': this.input.forward = true; break;
         case 'KeyS': this.input.back = true; break;
@@ -500,6 +511,7 @@ class Game {
       }
     });
     addEventListener('keyup', (e) => {
+      if (this._typing(e.target)) return;
       switch (e.code) {
         case 'KeyW': this.input.forward = false; break;
         case 'KeyS': this.input.back = false; break;
@@ -564,6 +576,9 @@ class Game {
     document.getElementById('btn-restart').addEventListener('click', (e) => {
       e.stopPropagation();
       this._audioGesture();
+      // Restarting without pressing SAVE still banks the run - losing a top-ten
+      // score because you hit the obvious button first would be indefensible.
+      this._saveScore();
       this.beginGame();
     });
     // Mute toggles live on the start and pause overlays. Both overlays are
@@ -579,6 +594,24 @@ class Game {
       });
     }
     this._syncMuteBtns();
+
+    // Name entry. Both paths go through _saveScore, which is idempotent.
+    document.getElementById('btn-lb-save').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._saveScore();
+    });
+    this.ui.lbName.addEventListener('keydown', (e) => {
+      // Enter commits. Stopped from propagating so it cannot also reach the
+      // overlay handlers and restart the run out from under the player.
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        this._saveScore();
+      }
+    });
+    // Clicking the field must not fall through to anything that restarts.
+    this.ui.lbName.addEventListener('click', (e) => e.stopPropagation());
+    this.ui.renderBoard(this.ui.lbStart, leaderboard.load(), -1);
 
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
@@ -679,6 +712,44 @@ class Game {
     return r;
   }
 
+  // True when a text field has focus, so the global key handlers stand down.
+  _typing(el) {
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  }
+
+  // Called once the run is over and the score is final. Shows the board, and
+  // opens the name field first when the run placed.
+  _postScore() {
+    this._pending = null;
+    if (leaderboard.qualifies(this.score, this.wave)) {
+      this._pending = {
+        score: this.score, wave: this.wave, kills: this.kills, combo: this.bestCombo,
+      };
+      this.ui.showNameEntry(this._lastName);
+      // The board underneath still shows the standing table, so the player can
+      // see what they are about to break into.
+      this.ui.renderBoard(this.ui.lbOver, leaderboard.load(), -1);
+    } else {
+      this.ui.hideNameEntry();
+      this.ui.renderBoard(this.ui.lbOver, leaderboard.load(), -1);
+    }
+  }
+
+  // Commits the pending run under whatever name is in the field. Safe to call
+  // twice - the second call has nothing pending and does nothing, which is what
+  // stops a double-click from writing the run in twice.
+  _saveScore() {
+    if (!this._pending) return;
+    const name = (this.ui.lbName.value || '').trim().slice(0, 12) || 'ANON';
+    this._lastName = name;
+    try { localStorage.setItem('va-last-name', name); } catch {}
+    const { list, index } = leaderboard.add({ ...this._pending, name });
+    this._pending = null;
+    this.ui.hideNameEntry();
+    this.ui.renderBoard(this.ui.lbOver, list, index);
+    this.sfx.upgrade();
+  }
+
   // Primes the audio graph and gets the soundtrack going. Every user gesture
   // that reaches audio routes through here rather than calling sfx.ensure()
   // directly, because the music has to be (re)started on a gesture too and a
@@ -701,6 +772,10 @@ class Game {
   // leftover state used to carry into the next run.
   beginGame() {
     this._audioGesture();
+    // Any unnamed run is banked before the state that produced it is reset.
+    this._saveScore();
+    this.ui.hideNameEntry();
+    this.ui.renderBoard(this.ui.lbStart, leaderboard.load(), -1);
     this.player.reset();
     this._clearEntities();
     this.score = 0;
@@ -1043,6 +1118,7 @@ class Game {
     }
     this._clearHazards();
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
+    this._postScore();
     this.sfx.kill();
   }
 
