@@ -172,8 +172,11 @@ export class Rig {
 
     // ---- animation state ---------------------------------------------------
     this.t = 0;
+    // 0..1, written every frame and read by main.js for the DOM strobe.
+    this.flash = 0;
     // One-shot cue timers. All count DOWN in seconds.
     this._waveT = 0;
+    this._dmgT = 0;
     this._staggerT = 0;
     this._enraged = false;
     // Smoothed drivers, so a mode change eases rather than snaps. Seeded on a
@@ -196,6 +199,12 @@ export class Rig {
   // room just gets slightly brighter.
   cueWaveStart() {
     this._waveT = 0.9;
+  }
+
+  // Took a hit. A hard white blink, deliberately shorter than the red damage
+  // vignette it plays over, so the two read as one event rather than two.
+  cueDamage() {
+    this._dmgT = 0.18;
   }
 
   // A boss is staggered: black out, then flare white as it recovers.
@@ -237,6 +246,7 @@ export class Rig {
 
     // ---- cue timers --------------------------------------------------------
     if (this._waveT > 0) this._waveT = Math.max(0, this._waveT - dt);
+    if (this._dmgT > 0) this._dmgT = Math.max(0, this._dmgT - dt);
     if (this._staggerT > 0) this._staggerT = Math.max(0, this._staggerT - dt);
 
     // The wave cue: the first 40% is the blackout, the rest is the hit
@@ -404,6 +414,16 @@ export class Rig {
     this.scene.fog.color.copy(this._c);
     this.scene.background.copy(this._c);
 
+    // ---- the full-screen strobe -------------------------------------------
+    // Written here, applied by main.js through ui.setStrobe. A DOM overlay is
+    // free next to lighting the whole scene, and it is the only way to get a
+    // true white-out.
+    let f = 0;
+    if (combat) f = beat * 0.42 * this._energy;
+    f = Math.max(f, this._dmgT / 0.18 * 0.55);
+    f = Math.max(f, waveHit * 0.5, stagHit * 0.7);
+    if (boss && this._enraged) f = Math.max(f, beat * 0.55);
+    this.flash = Math.min(0.8, f * (1 - this._house));
   }
 
   // Walks a spotlight's aim point around the floor. `out` is written in place.
