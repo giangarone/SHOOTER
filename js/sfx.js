@@ -135,6 +135,23 @@ export class SFX {
     this.noise({ t: 0.14, v: 0.22, f: 3200 });
     this.tone({ f: 520, f2: 880, t: 0.12, type: 'triangle', v: 0.22 });
   }
+  // The Devil arriving. A low descending pair under a dull thud - deliberately
+  // not a sting: he is announced by being there, and a fanfare would make the
+  // wave break feel like a cutscene.
+  devil() {
+    this.tone({ f: 110, f2: 42, t: 0.9, type: 'sawtooth', v: 0.16 });
+    this.tone({ f: 74, f2: 30, t: 1.1, type: 'sine', v: 0.2, delay: 0.05 });
+    this.noise({ t: 0.5, v: 0.1, f: 220, delay: 0.02 });
+  }
+
+  // A deal struck. The upgrade chime with the bottom knocked out of it, so it
+  // reads as the same KIND of event as taking a totem and never as a good one.
+  deal() {
+    this.tone({ f: 220, f2: 110, t: 0.32, type: 'square', v: 0.2 });
+    this.tone({ f: 55, f2: 44, t: 0.55, type: 'sawtooth', v: 0.22, delay: 0.02 });
+    this.noise({ t: 0.25, v: 0.14, f: 500 });
+  }
+
   denied() {
     this.tone({ f: 160, f2: 90, t: 0.12, type: 'square', v: 0.22 });
   }

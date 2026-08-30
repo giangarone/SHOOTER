@@ -1205,7 +1205,7 @@ function aiShrike(e, a) {
     // where it is AIMED, not the extent of it.
     const dy = Math.abs(ctx.player.pos.y - e.pos.y);
     if (a.dist < SHRIKE_HIT_RANGE && dy < Enemy.MELEE_REACH_Y) {
-      ctx.onHitPlayer(e.damage, e.pos);
+      ctx.onHitPlayer(e.damage, e.pos, e);
       _blinkAt.set(e.pos.x, e.pos.y, e.pos.z);
       ctx.effects.burst(_blinkAt, ENEMY_TYPES.shrike.eye, 14, 5, 2, 0.4);
       ctx.effects.addShake(0.12);
@@ -1836,7 +1836,7 @@ function aiColossus(e, a) {
     a.vx = bs.dirX * COLOSSUS_CHARGE_SPEED;
     a.vz = bs.dirZ * COLOSSUS_CHARGE_SPEED;
     if (a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
-      ctx.onHitPlayer(Math.min(COLOSSUS_CHARGE_CAP, e.damage), e.pos);
+      ctx.onHitPlayer(Math.min(COLOSSUS_CHARGE_CAP, e.damage), e.pos, e);
       ctx.effects.addShake(0.3);
       _bossAt.set(e.pos.x, 1.2, e.pos.z);
       ctx.effects.burst(_bossAt, 0xffb300, 24, 7, 2, 0.6);
@@ -1901,7 +1901,7 @@ function aiColossus(e, a) {
       e._setEyeAlert(false);
       bs.slamCd = 3.2 * e.rate;
       if (a.dist < 5.5 && _reachY(a) < BOSS_REACH_Y) {
-        ctx.onHitPlayer(Math.min(COLOSSUS_SLAM_CAP, e.damage * 0.82), e.pos);
+        ctx.onHitPlayer(Math.min(COLOSSUS_SLAM_CAP, e.damage * 0.82), e.pos, e);
       }
       _bossAt.set(e.pos.x, 0, e.pos.z);
       ctx.effects.shockwave(_bossAt, 0xff7043, 5.5, 0.4);
@@ -1964,7 +1964,7 @@ function aiSiege(e, a) {
         const fx = -Math.sin(e.group.rotation.y);
         const fz = -Math.cos(e.group.rotation.y);
         if (a.nx * fx + a.nz * fz > 0) {
-          a.ctx.onHitPlayer(Math.min(SIEGE_SWEEP_CAP, e.damage * 1.36), e.pos);
+          a.ctx.onHitPlayer(Math.min(SIEGE_SWEEP_CAP, e.damage * 1.36), e.pos, e);
         }
       }
       _bossAt.set(e.pos.x, 0, e.pos.z);
@@ -2053,7 +2053,7 @@ function aiMaw(e, a) {
     // against a ring moving 9 m/s, which clears it comfortably if it is timed.
     if (!r.hit && Math.abs(pd - r.r) < 0.7 && a.ctx.player.pos.y < 0.6) {
       r.hit = true;
-      a.ctx.onHitPlayer(Math.min(MAW_RING_CAP, e.damage * 1.54), a.ctx.player.pos);
+      a.ctx.onHitPlayer(Math.min(MAW_RING_CAP, e.damage * 1.54), a.ctx.player.pos, e);
     }
     if (r.life <= 0 || r.r > 24) {
       a.ctx.effects.markRelease(r.mark);
@@ -2075,7 +2075,7 @@ function aiMaw(e, a) {
   bs.touchCd -= a.dt;
   if (a.dist < 4 && _reachY(a) < BOSS_REACH_Y && bs.touchCd <= 0) {
     bs.touchCd = 1.4 * e.rate;
-    a.ctx.onHitPlayer(Math.min(MAW_TOUCH_CAP, e.damage * 0.77), e.pos);
+    a.ctx.onHitPlayer(Math.min(MAW_TOUCH_CAP, e.damage * 0.77), e.pos, e);
     a.ctx.effects.addShake(0.15);
   }
   if (e.status.fear > 0) return;
@@ -2217,6 +2217,11 @@ export class Enemy {
     // bosses existed, so the original six are unchanged by all of this.
     this.statusMul = def.statusMul ?? 1;
     this.slowFactor = def.slowFactor ?? SLOW_FACTOR;
+    // Absolute Zero's world slow, refreshed from ctx.mods once per update.
+    // Cached on the enemy rather than read where it is used because _effSpeed
+    // and _projScale have no ctx, and mods is a fresh object on every draft
+    // pick - a value captured at construction would go stale on the first one.
+    this._worldSlow = 1;
     this.freezeVuln = def.freezeVuln ?? FREEZE_VULN;
     // Conduit's aura, in seconds remaining. Refreshed by a live conduit every
     // frame and counted down in _tickStatus, so it lapses on its own the frame
@@ -2422,7 +2427,11 @@ export class Enemy {
   _effSpeed() {
     if (this.status.freeze > 0) return 0;
     const buff = this.buffT > 0 ? CONDUIT_SPEED : 1;
-    return (this.status.slow > 0 ? this.speed * this.slowFactor : this.speed) * buff;
+    // Absolute Zero, refreshed from ctx.mods at the top of update() because
+    // this method has no ctx and every speed read in the class goes through
+    // it. 1 for any run that has not bought the deal.
+    return (this.status.slow > 0 ? this.speed * this.slowFactor : this.speed)
+      * buff * this._worldSlow;
   }
 
   // Cryo slows the shots a slowed enemy fires as well as the enemy: a sniper
@@ -2442,9 +2451,13 @@ export class Enemy {
     // Entropy stops the timers below a health threshold, which on a normal
     // enemy is the whole point of the mutation and on a boss would mean a
     // permanent lock for the back third of the fight. Resistant types opt out.
-    const held = !ENEMY_TYPES[this.type].entropyExempt
-      && ctx.mods && ctx.mods.entropyBelow > 0
-      && this.hp <= this.maxHp * ctx.mods.entropyBelow;
+    // ETERNAL AFFLICTION rides the same branch. It is Entropy with the health
+    // threshold removed - everything, from full - so it reuses the hold rather
+    // than adding a second way for a timer to stop. Both respect entropyExempt
+    // for the same reason: a permanent lock on a boss is not a fight.
+    const held = !ENEMY_TYPES[this.type].entropyExempt && !!ctx.mods
+      && (ctx.mods.statusEternal > 0
+        || (ctx.mods.entropyBelow > 0 && this.hp <= this.maxHp * ctx.mods.entropyBelow));
     if (this.buffT > 0) this.buffT -= dt;
     if (this.wardT > 0) this.wardT -= dt;
     if (this.statusMul < 1) {
@@ -2528,7 +2541,7 @@ export class Enemy {
       this._setEyeAlert(true);
       if (this.windup <= 0) {
         this._setEyeAlert(false);
-        if (dist < hitRange && dy < Enemy.MELEE_REACH_Y) ctx.onHitPlayer(this.damage, this.pos);
+        if (dist < hitRange && dy < Enemy.MELEE_REACH_Y) ctx.onHitPlayer(this.damage, this.pos, this);
         this.attackCd = cooldown;
       }
       return false;
@@ -2545,6 +2558,7 @@ export class Enemy {
   // crowd separation, clamps it, moves, then resolves against obstacles.
   update(dt, ctx) {
     if (this.dead) return;
+    this._worldSlow = ctx.mods ? ctx.mods.worldSlow : 1;
     this._tickStatus(dt, ctx);
     if (this.dead) return;   // a damage-over-time tick can finish it off
     const sp = this._effSpeed();

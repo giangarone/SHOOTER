@@ -67,9 +67,11 @@ import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
-  UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rerollCost, effectLines,
+  UPGRADES, RARITY, AMMO_PURCHASE, rollTotems, rollDeals, rerollCost,
+  dealRerollCost, effectLines,
 } from './upgrades.js';
-import { TotemArea } from './totems.js';
+import { TotemArea, ARM_TIME_DEVIL } from './totems.js';
+import { DevilArea } from './devil.js';
 import { NavGrid } from './nav.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
 
@@ -174,6 +176,16 @@ const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
+// Deals the Devil puts up, and how likely he is to be there at all after a
+// wave the player did NOT clear cleanly. A clean wave summons him outright.
+//
+// The asymmetry is the whole design: the Devil is a REWARD for not being hit,
+// paid in the one currency being hit takes from you. A player having a bad run
+// meets him rarely, which is correct - selling max HP is the last thing they
+// should be doing - and a player having a perfect one is offered the knife
+// every single wave.
+const DEVIL_COUNT = 3;
+const DEVIL_CHANCE_HURT = 0.15;
 // Double Dash: how close together two presses of the SAME movement key have to
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
@@ -181,6 +193,16 @@ const DOUBLE_TAP_WINDOW = 0.28;
 // Ashen: how many clouds can be alive at once, and how often Neurotoxin's
 // poison is allowed to make a jump.
 const MAX_ASH_CLOUDS = 8;
+// Hellfire's trail. Sized like the magma trail it mirrors (MAX_LAVA) rather
+// than like an ash cloud: it is a LINE of small short-lived patches dropped as
+// the player runs, not a handful of big ones, and the oldest is recycled so
+// the tail burns out behind them instead of the head refusing to appear.
+const MAX_FIRE_PATCHES = 20;
+// How far the player has to move before the trail drops another patch. Small
+// enough to leave an unbroken line at a walk, large enough that standing still
+// after a reload lays one patch and not twenty.
+const FIRE_STEP = 0.85;
+const CREEP_FIRE = 0xff5a00;
 // Lingering zones that damage the PLAYER. There are two kinds and they are
 // capped separately, because they are completely different shapes of threat:
 //
@@ -271,6 +293,9 @@ class Game {
     // in the obstacle list - walking into a totem claims it, so the player can
     // never actually pass through one.
     this.totemArea = new TotemArea(this.scene);
+    // The Devil's installation, on the far side of the arena. Built once and
+    // reused like the totems, and hidden for most of a run.
+    this.devilArea = new DevilArea(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     this.ui = new UI();
@@ -387,6 +412,12 @@ class Game {
     // once; the oldest is recycled rather than the newest refused, so the
     // cloud you just made is always the one that exists.
     this._ash = [];
+    // Hellfire: the trail itself, when it is burning, and where the last patch
+    // was laid so the next one waits for FIRE_STEP of movement.
+    this._fire = [];
+    this._fireUntil = 0;
+    this._fireLastX = 0;
+    this._fireLastZ = 0;
     this._ashAt = new THREE.Vector3();
     // Player-damaging ground zones, and telegraphed impacts. Both are plain
     // data with no scene objects of their own, the same trick _ash uses: the
@@ -415,7 +446,10 @@ class Game {
       // alongside `time` - never captured, for the same reason `mods` is not.
       beat: 0,
       level: 0,
-      onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
+      // `source` is the enemy that landed the hit, where there is one. Only
+      // Thorns reads it, and it falls back to whatever is standing closest to
+      // the impact - a projectile has no owner to name.
+      onHitPlayer: (d, pos, source) => this._hurtPlayer(d, pos, source),
       addProjectile: (x, y, z, type, speedScale, spreadRad) =>
         this._spawnProjectile(x, y, z, type, speedScale, spreadRad),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
@@ -465,6 +499,11 @@ class Game {
       this._dir = 0;
       this.beginGame();
       window.__game = this;
+      // The upgrade table, for tests that need to tell a free mutation from a
+      // Devil Deal. Autotest only, like everything else in this block.
+      this.__upgradesForTest = UPGRADES;
+      // The Enemy class, so a test can stand one up without a wave.
+      this.__EnemyForTest = Enemy;
       window.__report = () => ({
         state: this.state,
         wave: this.wave,
@@ -748,6 +787,9 @@ class Game {
     this._clearHazards();
     for (const a of this._ash) this.effects.creepRelease(a.creep);
     this._ash.length = 0;
+    for (const f of this._fire) this.effects.creepRelease(f.creep);
+    this._fire.length = 0;
+    this._fireUntil = 0;
   }
 
   // Both buttons show one shared state, so muting on the pause screen is
@@ -898,6 +940,7 @@ class Game {
     this.lastGain = 0;
     this.lastPerfect = false;
     this.totemArea.dismiss();
+    this.devilArea.dismiss();
     this.wave = 0;
     this.queue.length = 0;
     this.waveState = 'idle';
@@ -932,6 +975,12 @@ class Game {
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
   // budget for it. Enemies then trickle out of the queue on spawnTimer.
   startWave() {
+    // The Devil keeps wave-break hours. An unclaimed TOTEM set is deliberately
+    // left standing into the next wave - that pick is still there to be taken -
+    // but a deal pillar standing through a fight would be a shootable box that
+    // costs health to touch by accident, in a room the player is running
+    // around at speed. He goes whether or not anything was bought.
+    this.devilArea.dismiss();
     this.wave++;
     this._cfg = waveConfig(this.wave);
     this.queue = this._cfg.queue;
@@ -976,7 +1025,11 @@ class Game {
     }
     const at = new THREE.Vector3(best.x, 0, best.z);
     resolveCircle(at, def.radius, this.arena.obstacles, BOSS_HEIGHT);
-    const boss = new Enemy(key, at, sc.hp, sc.speed, sc.dmg);
+    // EXECUTIONER, folded into the wave's own scaling rather than applied to
+    // the boss afterwards: hp here is a MULTIPLIER on the type's base block,
+    // so halving it halves both the health bar and the max the bar is drawn
+    // against. A boss already standing keeps the health it arrived with.
+    const boss = new Enemy(key, at, sc.hp * this.player.mods.bossHpMult, sc.speed, sc.dmg);
     boss.rate = sc.rate;
     boss.cycle = Math.floor((this.wave - 1) / 25);
     this.scene.add(boss.group);
@@ -1273,6 +1326,34 @@ class Game {
 
   // Reactive Plating. Detonates around the player when they are hit; damage
   // and radius both come from the mods so extra stacks widen it.
+  // THORNS. Half of what an attacker just dealt goes straight back into it.
+  //
+  // `source` is the enemy where the hit came from a body or a swing; a
+  // projectile has no owner by the time it lands, so the nearest enemy to the
+  // impact takes it instead. That is not a compromise - the thing that shot
+  // you is usually the thing standing closest to where the round hit you, and
+  // a mutation that silently did nothing against half the roster would read as
+  // broken long before anyone worked out why.
+  _thorns(d, pos, source) {
+    const frac = this.player.mods.thorns;
+    if (frac <= 0 || d <= 0) return;
+    let target = source && !source.dead ? source : null;
+    if (!target && pos) {
+      let bestD = 36;
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dd = e.pos.distanceToSquared(pos);
+        if (dd < bestD) {
+          bestD = dd;
+          target = e;
+        }
+      }
+    }
+    if (!target) return;
+    target.takeDamage(d * frac);
+    this.effects.burst(target.pos, 0xd84315, 8, 3, 1.6, 0.35);
+  }
+
   _shockwave() {
     const mods = this.player.mods;
     if (mods.shockwave <= 0) return;
@@ -1333,6 +1414,31 @@ class Game {
     en.takeDamage(m.lightningDamage);
     this._blast(this._boltAt, m.lightningSplash, m.lightningRadius, en, false);
     this.effects.lightning(en.pos.x, en.pos.z, m.lightningRadius);
+    this.sfx.kill();
+  }
+
+  // OVERLOAD. Every enemy in the arena loses a fifth of its MAXIMUM health the
+  // moment the magazine runs dry.
+  //
+  // A fraction rather than a flat number, and read off maxHp rather than off
+  // what is left, so one bar's worth is one bar's worth whether the target is
+  // a wave-4 chaser or a wave-40 boss - it is the only thing in the pool that
+  // scales with the enemy instead of with the build. It cannot finish anything
+  // on its own for the same reason it cannot be farmed: the damage is fixed
+  // and the trigger costs a whole magazine.
+  _overload() {
+    const frac = this.player.mods.overloadFrac;
+    let struck = 0;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      e.takeDamage(e.maxHp * frac);
+      struck++;
+      // The visual is capped: a wave with thirty enemies in it would otherwise
+      // spend the whole particle budget on one keypress.
+      if (struck <= 10) this.effects.lightning(e.pos.x, e.pos.z, 2.5);
+    }
+    if (!struck) return;
+    this.effects.addShake(0.3);
     this.sfx.kill();
   }
 
@@ -1545,6 +1651,31 @@ class Game {
           w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
         break;
       }
+      const deal = h.object.userData.deal;
+      if (deal) {
+        // Same contract as a totem: the pellet stops on the pillar whether or
+        // not the deal was taken. A deal the player cannot afford is a wall.
+        this._claimDeal(deal);
+        hitProp = true;
+        end = h.point;
+        this.effects.burst(end, deal.offer ? deal.offer.theme : 0xff1744,
+          w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        break;
+      }
+      const heart = h.object.userData.devilHeart;
+      if (heart) {
+        // The heart is a console, and consoles are rate-limited: a held
+        // trigger lands several pellets a second on it and every one of those
+        // would otherwise be a reroll priced in health.
+        if (heart.canShoot()) {
+          heart.shootCd = STATION_SHOOT_COOLDOWN;
+          this._rerollDeals();
+        }
+        hitProp = true;
+        end = h.point;
+        this.effects.burst(end, 0xff1744, w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        break;
+      }
       const station = h.object.userData.station;
       if (station) {
         // The pellet stops here whether or not the purchase went through -
@@ -1625,6 +1756,18 @@ class Game {
       this.effects.burst(this.player.eyeInto(this._killPos), 0x6a1b9a, 10, 4, 2, 0.35);
     }
 
+    // DEVIL'S GAMBLE, rolled once per trigger pull and applied to every pellet
+    // in it. Per SHOT and not per pellet on purpose: nine pellets each tossing
+    // their own coin would average out to almost exactly nothing, and the
+    // whole deal is that a shot is either a windfall or a waste.
+    if (mods.gamble > 0) {
+      const won = Math.random() < 0.51;
+      dmgMult *= won ? 2 : 0.5;
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), won ? 0xffd600 : 0x5b6785, 6, 3, 1.6, 0.25
+      );
+    }
+
     const w = this.player.weapon;
     this.stats.shotsFired++;
     this.sfx.shoot();
@@ -1638,6 +1781,7 @@ class Game {
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
     this.totemArea.addTargets(targets);
+    this.devilArea.addTargets(targets);
 
     // Moving costs accuracy. This used to be a sprint-key test; with the key
     // gone it reads live speed instead, which also means it fades in and out
@@ -1669,6 +1813,12 @@ class Game {
     // up or one step down however many pellets were in it, and it reads the
     // same boolean the hitmarker below does so the two can never disagree.
     this.player.bumpStreak(hitAny);
+
+    // OVERLOAD. The magazine running dry calls lightning down on the whole
+    // room. Fired here rather than in tryShoot() because it has to be the
+    // shot that emptied the gun and not the click after it, and because a
+    // fraction of MAX HP means the enemy list has to be walked anyway.
+    if (mods.overloadFrac > 0 && this.player.mag <= 0) this._overload();
 
     // One hitmarker and one sound per shot, however many pellets connected.
     if (hitAny) {
@@ -1736,18 +1886,31 @@ class Game {
 
   // Single entry point for all damage to the player, passed to enemies and
   // projectiles through their ctx. `pos` is only used to place the hit spray.
-  _hurtPlayer(d, pos) {
+  _hurtPlayer(d, pos, source = null) {
     if (this.state !== 'playing') return;
+    // Demonic Dodge's invulnerability window, before anything else - it is a
+    // second in which nothing lands at all, so there is nothing here for the
+    // ward or Evasion to spend themselves on.
+    if (this.time < this.player.invulnEnd) return;
+    // Thorns pays out on the hit that was ATTEMPTED, which is why it sits
+    // above the dodge and the ward: something reached the player either way,
+    // and an attacker that got away with it because the ward happened to be up
+    // is the one case where the mutation would read as broken.
+    this._thorns(d, pos, source);
     // Evasion, rolled before the ward: a dodge is free and the ward is a
     // limited charge, so spending the charge on a hit that was going to miss
     // anyway would be strictly worse for the player. A dodge has to be LOUD -
     // a hit that silently fails to land reads as nothing happening at all.
     if (this.player.mods.dodgeChance > 0 && Math.random() < this.player.mods.dodgeChance) {
       this.player.startDodge(this.time);
+      // Demonic Dodge's half: a second of invulnerability to leave in and
+      // three of doubled damage to answer with. A no-op for a player who owns
+      // only Evasion, which is why the roll above is shared.
+      this.player.startDodgeReward(this.time);
       this.effects.shockwave(this.player.pos, 0x18ffff, 3, 0.35);
       this.effects.burst(pos, 0x18ffff, 14, 5, 2.5, 0.4);
       this.sfx.melee();
-      this.ui.banner('DODGE');
+      this.ui.banner(this.player.mods.dodgeRage > 0 ? 'DODGE  \u00b7  RAGE' : 'DODGE');
       return;
     }
     // Holy Mantle. The ward eats the hit whole, however big it was, and is
@@ -1760,6 +1923,13 @@ class Game {
       this.ui.banner('WARD');
       return;
     }
+    // Blood Pact. Applied after the ward and the dodge, because those are
+    // about whether a hit lands at all and this is about how much it costs.
+    d *= this.player.mods.damageTakenMult;
+    // Carnage resets on any hit that actually lands, and Absolute Zero's
+    // drawback plants the player for a second. Both are the price of the deal.
+    this.player.clearCarnage();
+    this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
     this.stats.damaged += d;
     this.waveDamageTaken += d;
@@ -1831,8 +2001,15 @@ class Game {
       speed = Math.min(20, 13 + this.wave * 0.3);
       dmg = Math.min(20, 8 + this.wave * 0.8);
     }
+    // Absolute Zero applied HERE and nowhere else, so every enemy round in the
+    // game is covered by one line - including the boss volleys that pass a
+    // speedScale of 1 and never touch Enemy._projScale(). Cryo's own slow is
+    // already baked into `speedScale` by the caller, and the two multiply.
+    const slow = this.player.mods.worldSlow;
     this.projectiles.push(
-      new Projectile(this.scene, this.effects.glowTex, x, y, z, t, speed * speedScale, dmg, type)
+      new Projectile(
+        this.scene, this.effects.glowTex, x, y, z, t, speed * speedScale * slow, dmg, type
+      )
     );
   }
 
@@ -2088,6 +2265,7 @@ class Game {
         // actually taken during the fight.
         if (this._cfg.boss) this._payBossBonus();
         this._presentTotems();
+        this._presentDevil();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
@@ -2118,8 +2296,41 @@ class Game {
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
-    this.totemArea.present(this._buildOffers(), !isReroll);
+    // A totem claim is what starts the next wave, so with a Devil standing the
+    // arm delay is longer: ending the shopping trip with a pellet that was
+    // already in the air when the wave ended is a mistake the player cannot
+    // undo. Read at present() time, which is why _presentDevil() runs after
+    // this on a wave clear and re-arms them itself.
+    const arm = this.devilArea.active ? ARM_TIME_DEVIL : undefined;
+    this.totemArea.present(this._buildOffers(), !isReroll, arm);
     this._refreshStations();
+  }
+
+  /**
+   * Raises the Devil, if he is coming at all.
+   *
+   * A wave cleared without taking a point of damage summons him every time; a
+   * wave that cost the player health gives him a one-in-seven chance, and
+   * Demonic Presence buys back the certainty.
+   *
+   * Skipped outright when the totem set is empty. The wave boundary is gated
+   * on a totem claim, so a Devil standing in front of no totems would be a
+   * shop the player could never leave.
+   */
+  _presentDevil() {
+    if (!this.totemArea.active) return;
+    const certain = this.waveDamageTaken <= 0 || this.player.mods.devilAlways > 0;
+    if (!certain && Math.random() >= DEVIL_CHANCE_HURT) return;
+    const offers = this._buildDeals();
+    if (!offers.length) return;
+    this.devilArea.present(offers);
+    this._refreshDevil();
+    // The totems went up first and armed for 1.2s. Now that he is here they
+    // need the longer delay, so they are re-presented with the same offers.
+    for (const t of this.totemArea.totems) {
+      if (t.state !== 'hidden' && !t.claimed) t.armT = Math.max(t.armT, ARM_TIME_DEVIL);
+    }
+    this.sfx.devil();
   }
 
   // Puts each rolled upgrade into the shape a totem can draw.
@@ -2142,6 +2353,39 @@ class Game {
         note: owned > 0 ? 'OWNED ' + owned + ' / ' + def.max : '',
       };
     });
+  }
+
+  // The same shape _buildOffers() produces, plus the two fields that make a
+  // totem a DEAL: what it costs in max HP, and whether the player can pay it.
+  // `enabled` is what greys the pillar out and makes it refuse to be claimed -
+  // see Totem.canClaim() and Player.canPay().
+  _buildDeals() {
+    const ids = rollDeals(this.player.upgrades, DEVIL_COUNT);
+    return ids.map((id) => {
+      const def = UPGRADES[id];
+      return {
+        id,
+        name: def.name,
+        theme: def.theme,
+        icon: def.icon,
+        rarityLabel: RARITY[def.rarity].label,
+        rarityColor: RARITY[def.rarity].color,
+        effects: effectLines(def, 0),
+        cost: def.cost,
+        enabled: this.player.canPay(def.cost),
+      };
+    });
+  }
+
+  // Redraws the Devil's reroll label and re-tests every standing deal against
+  // the health the player has left. Called after anything that spends max HP,
+  // because a deal that was affordable before a purchase may not be after it.
+  _refreshDevil() {
+    const area = this.devilArea;
+    if (!area.active) return;
+    area.refresh((cost) => this.player.canPay(cost));
+    const cost = dealRerollCost(area.rerolls);
+    area.devil.setLabel(cost, this.player.canPay(cost));
   }
 
   // Redraws both station labels. Only called when something they display
@@ -2174,6 +2418,70 @@ class Game {
     this.effects.addShake(0.1);
     this.sfx.upgrade();
     this.totemArea.dismiss();
+    // The totem claim is the definitive one: it is what starts the next wave,
+    // so the Devil packs up with it whether or not anything was bought. That
+    // is the single rule at the boundary, and the Devil's own panel says so.
+    this.devilArea.dismiss();
+  }
+
+  // Buys the deal a pillar is offering. Every path in - touch and shot -
+  // funnels through here, so the price is charged in exactly one place.
+  //
+  // It deliberately does NOT dismiss anything. The totems are still standing
+  // and the wave is still waiting on them; a deal closes the Devil's shop and
+  // nothing else, so a player can take a deal and then still choose their free
+  // mutation. The other two pillars sink because the set is spent.
+  _claimDeal(deal) {
+    if (!deal.canClaim()) return;
+    const offer = deal.offer;
+    // canClaim() already refused an unaffordable deal via `enabled`, and
+    // payMaxHp refuses again on its own. Two guards on the one thing in the
+    // game that could otherwise kill a player who only pressed a button.
+    if (!this.player.payMaxHp(offer.cost)) {
+      this.sfx.denied();
+      return;
+    }
+    if (!this.player.takeUpgrade(offer.id)) return;
+    deal.claimed = true;
+
+    this.effects.burst(
+      this._killPos.set(deal.pos.x, 1.4, deal.pos.z), offer.theme, 34, 7, 2.5, 0.8
+    );
+    this.effects.shockwave(this._killPos, 0xff1744, 5, 0.5);
+    this.effects.addShake(0.16);
+    this.sfx.deal();
+    this.ui.banner(offer.name + '  \u2013' + offer.cost + ' MAX HP');
+    for (const d of this.devilArea.deals) {
+      if (d !== deal) d.sink();
+    }
+    this._refreshDevil();
+  }
+
+  // A Devil reroll. Priced in max HP rather than credits and doubling the same
+  // way the credit reroll does, so shopping the whole catalogue at one wave
+  // break costs more health than any build can spare.
+  _rerollDeals() {
+    const area = this.devilArea;
+    const cost = dealRerollCost(area.rerolls);
+    if (!area.active || area.claimed || !this.player.payMaxHp(cost)) {
+      this.sfx.denied();
+      return;
+    }
+    area.rerolls++;
+    area.present(this._buildDeals(), false);
+    this._refreshDevil();
+    this.effects.burst(area.devil.pos, 0xff1744, 20, 5, 2, 0.5);
+    this.sfx.reroll();
+  }
+
+  // Why the Devil's heart cannot be used, or null if it can. Shared by the
+  // prompt and the purchase so the two can never disagree - the same contract
+  // _stationBlocked() has.
+  _devilBlocked() {
+    const area = this.devilArea;
+    if (!area.active || area.claimed) return 'NOTHING TO REROLL';
+    if (!this.player.canPay(dealRerollCost(area.rerolls))) return 'NOT ENOUGH MAX HP';
+    return null;
   }
 
   // Ticks the installation and claims by touch. Shooting a totem is handled in
@@ -2181,10 +2489,34 @@ class Game {
   _updateTotems(dt) {
     const area = this.totemArea;
     area.update(dt, this.time, this.player.pos);
+    this.devilArea.update(dt, this.time, this.player.pos);
+
+    // The Devil first. His pillars are the ones that cost something, so a
+    // player standing between the two installations - which cannot happen,
+    // they are fourteen metres apart - would still never buy by accident.
+    const deal = this.devilArea.touched(this.player.pos);
+    if (deal) {
+      this._claimDeal(deal);
+      return;
+    }
 
     const touched = area.touched(this.player.pos);
     if (touched) {
       this._claimTotem(touched);
+      return;
+    }
+
+    // The Devil is his own console: E at his feet rerolls the set.
+    if (this.devilArea.heartInRange(this.player.pos)) {
+      const blocked = this._devilBlocked();
+      this.ui.setPrompt(
+        blocked
+          ? 'REROLL &nbsp;\u00b7&nbsp; ' + blocked
+          : '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;\u00b7&nbsp; NEW DEALS &nbsp;\u00b7&nbsp; '
+            + '<span class="prompt-cost">' + dealRerollCost(this.devilArea.rerolls)
+            + ' MAX HP</span>',
+        !!blocked
+      );
       return;
     }
 
@@ -2234,6 +2566,12 @@ class Game {
   // E at a station, from anywhere in its radius.
   tryUseStation() {
     if (this.state !== 'playing') return;
+    // The Devil is checked first for the same reason he is in _updateTotems:
+    // one key, and whichever console the player is actually standing at.
+    if (this.devilArea.heartInRange(this.player.pos)) {
+      this._rerollDeals();
+      return;
+    }
     const st = this.totemArea.stationInRange(this.player.pos);
     if (st) this._useStation(st);
   }
@@ -2389,6 +2727,29 @@ class Game {
     }
   }
 
+  // ANTIDOTE's upside. Every poisoned enemy on the floor heals the player one
+  // health a second, so the deal turns a Venom build's own damage over time
+  // into a second health bar - and is worth almost nothing to a build that
+  // cannot poison anything, which is the trade it is priced at.
+  //
+  // Accumulated as a float and spent in whole points, the same shape Ammo
+  // Fabricator uses: at one enemy the rate is under a point a frame, and
+  // truncating per frame would pay out nothing at all.
+  _poisonLeech(dt) {
+    const rate = this.player.mods.poisonLeech;
+    if (rate <= 0 || this.player.health >= this.player.maxHealth) return;
+    let poisoned = 0;
+    for (const e of this.enemies) {
+      if (!e.dead && e.status.poison > 0) poisoned++;
+    }
+    if (!poisoned) return;
+    this._leechAcc = (this._leechAcc || 0) + rate * poisoned * dt;
+    if (this._leechAcc < 1) return;
+    const whole = Math.floor(this._leechAcc);
+    this._leechAcc -= whole;
+    this.player.health = Math.min(this.player.maxHealth, this.player.health + whole);
+  }
+
   // Splitter death: three weaker, faster, smaller chasers worth no score.
   // They go to _pendingSpawns, not straight into the enemy list - see
   // _updateEnemies.
@@ -2431,6 +2792,7 @@ class Game {
     // while resolving crowding.
     const list = this.enemies;
     for (let i = 0; i < list.length; i++) list[i].update(dt, ctx);
+    this._poisonLeech(dt);
 
     // Enemies this wave still owes after this frame's deaths - the denominator
     // the drop chance is measured against. Counted once here rather than per
@@ -2588,6 +2950,75 @@ class Game {
     this.effects.burst(this._ashAt.set(pos.x, 0.4, pos.z), CREEP_ASH, 22, 4, 2.4, 0.8);
   }
 
+  // HELLFIRE. One patch of the burning trail: the same four-numbers-and-a-drip
+  // shape an ash cloud is, on its own list with its own cap.
+  //
+  // Kept apart from _ash rather than folded into it because the two are
+  // different SHAPES of zone - ash is a handful of wide clouds where enemies
+  // died, this is a line of small patches where the player ran - and one cap
+  // over both would mean a reload mid-fight quietly evicted the clouds an
+  // Ashen build had just paid for. Friendly creep, exactly like ash: standing
+  // in your own fire has to be visibly safe.
+  _addFire(x, z) {
+    if (this._fire.length >= MAX_FIRE_PATCHES) {
+      this.effects.creepRelease(this._fire.shift().creep);
+    }
+    const m = this.player.mods;
+    this._fire.push({
+      x, z, life: 2.4, dps: m.hellfireDps, radius: m.hellfireRadius, drip: 0,
+      creep: this.effects.creepAcquire(false),
+    });
+    this.effects.burst(this._ashAt.set(x, 0.3, z), CREEP_FIRE, 5, 1.8, 1.6, 0.5);
+  }
+
+  // Lays the trail while it is burning and runs the patches down behind it.
+  // Distance-gated rather than time-gated: a player standing still after a
+  // reload leaves one patch under their feet, and a player running leaves a
+  // continuous line however fast they are going.
+  _updateFire(dt) {
+    if (this.time < this._fireUntil) {
+      const dx = this.player.pos.x - this._fireLastX;
+      const dz = this.player.pos.z - this._fireLastZ;
+      if (dx * dx + dz * dz > FIRE_STEP * FIRE_STEP) {
+        this._fireLastX = this.player.pos.x;
+        this._fireLastZ = this.player.pos.z;
+        this._addFire(this.player.pos.x, this.player.pos.z);
+      }
+    }
+    for (let i = this._fire.length - 1; i >= 0; i--) {
+      const f = this._fire[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        this.effects.creepRelease(f.creep);
+        this._fire.splice(i, 1);
+        continue;
+      }
+      this.effects.creepSet(f.creep, f.x, f.z, f.radius, CREEP_FIRE, Math.min(1, f.life));
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dx = e.pos.x - f.x;
+        const dz = e.pos.z - f.z;
+        if (dx * dx + dz * dz > f.radius * f.radius) continue;
+        // `true` marks it as damage over time, the same flag ash passes, so
+        // it does not spawn a hitmarker or count as a shot that connected.
+        e.takeDamage(f.dps * dt, true);
+      }
+      // A third the rate a pool drips at: there can be twenty of these on the
+      // floor at once, and at the pool's rate one reload would stand a couple
+      // of hundred particles up in the shared buffer.
+      f.drip -= dt;
+      if (f.drip <= 0) {
+        f.drip = 0.4;
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * f.radius;
+        this.effects.burst(
+          this._ashAt.set(f.x + Math.cos(ang) * r, 0.25, f.z + Math.sin(ang) * r),
+          CREEP_FIRE, 2, 1.2, 1.5, 0.7
+        );
+      }
+    }
+  }
+
   // Runs the clouds down and tickles whatever is standing in one. Damage is
   // dealt per second of exposure, so walking through the edge of a cloud costs
   // an enemy far less than being pushed into the middle of it.
@@ -2703,7 +3134,11 @@ class Game {
       const dz = this.player.pos.z - h.z;
       // Only while the player is on the ground. A pool is something to jump
       // out of as much as to run out of.
-      if (dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
+      // ANTIDOTE. A poison pool does nothing at all - the player walks through
+      // a blight's lob. Lava is not poison and still burns, which is what
+      // keeps the deal a specialist answer rather than hazard immunity.
+      const immune = h.kind !== 'lava' && this.player.mods.poisonImmune > 0;
+      if (!immune && dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
         h.acc += h.dps * dt;
         h.tick -= dt;
         if (h.acc >= 1 && h.tick <= 0) {
@@ -2742,6 +3177,13 @@ class Game {
   // flawless bonus and still ends the run.
   _hurtPlayerDot(d) {
     if (this.state !== 'playing') return;
+    // Eternal Affliction's drawback and Blood Pact's, in that order. Neither
+    // touches the ward or Evasion, for the reason in the comment above.
+    d *= this.player.mods.hazardMult * this.player.mods.damageTakenMult;
+    // A pool bleeds a point at a time several times a second, so it is a slow
+    // and completely reliable way to lose a Carnage chain. That is correct:
+    // standing in fire is being hit.
+    this.player.clearCarnage();
     const h = this.player.takeDamage(d, this.time);
     this.stats.damaged += d;
     this.waveDamageTaken += d;
@@ -3020,7 +3462,19 @@ class Game {
         this.input.dash = null;
       }
       const reloaded = this.player.update(dt, this.input, this.arena.obstacles, this.time);
-      if (reloaded) this._reloadBurst();
+      if (reloaded) {
+        this._reloadBurst();
+        // HELLFIRE. The reload lights the player up for five seconds; the
+        // trail itself is laid by _updateFire as they move. Armed by the same
+        // one-frame signal Reload Burst rides, so a build holding both gets
+        // both off one magazine.
+        if (this.player.mods.hellfireDps > 0) {
+          this._fireUntil = this.time + this.player.mods.hellfireTime;
+          this._fireLastX = this.player.pos.x;
+          this._fireLastZ = this.player.pos.z;
+          this._addFire(this.player.pos.x, this.player.pos.z);
+        }
+      }
       // Double Jump and Double Dash raise one-shot flags rather than calling
       // effects themselves: player.js has no effects reference, and the same
       // split is already what reloadFinished uses.
@@ -3047,6 +3501,7 @@ class Game {
       // kill is collected by the sweep this frame rather than lingering a
       // frame as a dead enemy that is still being drawn.
       this._updateAsh(dt);
+      this._updateFire(dt);
       this._updateHazard(dt);
       this._updateMortars(dt);
       this._updatePoisonSpread(dt);

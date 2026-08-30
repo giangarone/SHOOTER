@@ -67,22 +67,33 @@ export const TOUCH_RADIUS = 1.7;
 // clearing a wave next to the row picks your build for you. Long enough to
 // cover a trigger already held down, short enough that a player walking in
 // deliberately never notices it.
-const ARM_TIME = 1.2;
+export const ARM_TIME = 1.2;
+// The arm delay used INSTEAD when a Devil is standing at the same wave break.
+// Taking a totem is what starts the next wave, so with a Devil up a stray
+// pellet does not merely pick a build - it ends the shopping trip. Long enough
+// that the player has to mean it.
+export const ARM_TIME_DEVIL = 2.5;
 // Press E this close to a station.
 export const STATION_RADIUS = 2.6;
 
 // Fixed positions near the arena centre, in a row the player is already facing
 // when they spawn. Checked against the platforms, crates and pillars in
 // arena.js - keep them clear if you move anything.
-const ROW_Z = -5;
+// Exported so devil.js can place its own row relative to this one rather than
+// hardcoding a second magic number that has to be kept in step.
+export const ROW_Z = -5;
 const TOTEM_X = [-3.6, 0, 3.6];
 const STATION_X = [-6.9, 6.9];
 
 const RISE_TIME = 0.7;
-const SUNK_Y = -3.4;
+export const SUNK_Y = -3.4;
+export const RISE_SECONDS = RISE_TIME;
 
 // Effect-line colours, keyed by the sign in an upgrade's `effects` entry.
 const SIGN_COLOR = { '1': '#37e08b', '-1': '#ff5a4d', '0': '#8a95b3' };
+// The price line on a Devil Deal. Not one of the SIGN_COLOR entries: a cost is
+// neither a benefit nor a drawback, it is the thing you are agreeing to.
+const COST_COLOR = '#ff1744';
 
 const PILLAR_GEOM = new THREE.BoxGeometry(1.15, 2.4, 0.5);
 // The claim volume: the pillar plus the space the icon floats in, with enough
@@ -104,13 +115,13 @@ const ICON_RZ = 0.62;
 // hand and too small against a 1.15m-wide pillar seen from across the arena.
 const ICON_SCALE = 1.35;
 
-function hex(n) {
+export function hex(n) {
   return '#' + n.toString(16).padStart(6, '0');
 }
 
 // Rounded-rect helper - the label panels are drawn, not styled, so this is the
 // only way to get a soft edge on them.
-function roundRect(c, x, y, w, h, r) {
+export function roundRect(c, x, y, w, h, r) {
   c.beginPath();
   c.moveTo(x + r, y);
   c.arcTo(x + w, y, x + w, y + h, r);
@@ -122,7 +133,7 @@ function roundRect(c, x, y, w, h, r) {
 
 // One canvas-backed billboard. Created once per totem/station and redrawn in
 // place; the texture object itself never changes.
-function makePanel(w, h, scaleX, scaleY) {
+export function makePanel(w, h, scaleX, scaleY) {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -135,10 +146,10 @@ function makePanel(w, h, scaleX, scaleY) {
 }
 
 export class Totem {
-  constructor(x, scene) {
+  constructor(x, scene, z = ROW_Z) {
     this.upgradeId = null;
     this.offer = null;
-    this.pos = new THREE.Vector3(x, 0, ROW_Z);
+    this.pos = new THREE.Vector3(x, 0, z);
     // -1 sunk, 0..1 rising, 1 fully up. Drives both the Y offset and whether
     // the totem can be claimed at all.
     this.rise = 0;
@@ -152,8 +163,14 @@ export class Totem {
     // when the timer expired. Touch has to be entered, not merely occupied.
     this.touchArmed = false;
 
+    // False only for a Devil Deal the player cannot afford. An unaffordable
+    // offer stays standing and stays readable - it is greyed out and inert
+    // rather than hidden, because "you cannot pay for this" is information and
+    // a pillar that simply never rose is not.
+    this.enabled = true;
+
     this.group = new THREE.Group();
-    this.group.position.set(x, SUNK_Y, ROW_Z);
+    this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
     // Per-instance because each totem is tinted by its upgrade's theme.
@@ -199,16 +216,17 @@ export class Totem {
    * @param {object} offer  { id, name, theme, icon, rarityLabel, rarityColor,
    *   effects, note } - see _buildOffers() in main.js.
    */
-  present(offer) {
+  present(offer, armTime = ARM_TIME) {
     this.offer = offer;
     this.upgradeId = offer.id;
     this.claimed = false;
+    this.enabled = offer.enabled !== false;
     this.pillarMat.emissive.setHex(offer.theme);
     this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
     this.rise = 0;
-    this.armT = ARM_TIME;
+    this.armT = armTime;
     this.touchArmed = false;
     this.group.visible = true;
   }
@@ -235,6 +253,12 @@ export class Totem {
     const c = this.panel.canvas.getContext('2d');
     const theme = hex(offer.theme);
     c.clearRect(0, 0, 512, 320);
+
+    // An unaffordable Devil Deal is drawn at the same reduced alpha a station
+    // uses for a purchase the wallet cannot cover (see Station.setLabel), so
+    // "you cannot have this" looks the same wherever the player meets it.
+    const dim = offer.enabled === false;
+    c.globalAlpha = dim ? 0.45 : 1;
 
     c.fillStyle = 'rgba(8, 10, 16, 0.82)';
     roundRect(c, 6, 6, 500, 308, 14);
@@ -266,12 +290,33 @@ export class Totem {
       y += 38;
     }
 
-    if (offer.note) {
+    // The price, on a Devil Deal only. It sits where a free totem's OWNED note
+    // sits, because the two never appear together: a deal is max: 1, so a
+    // player who owns one is never offered it again.
+    if (offer.cost) {
+      c.fillStyle = dim ? '#5b6785' : COST_COLOR;
+      c.font = 'bold 26px system-ui, sans-serif';
+      c.fillText(
+        dim ? 'CANNOT AFFORD' : 'COSTS ' + offer.cost + ' MAX HP',
+        256, 292
+      );
+    } else if (offer.note) {
       c.fillStyle = '#5b6785';
       c.font = '600 22px system-ui, sans-serif';
       c.fillText(offer.note, 256, 292);
     }
+    c.globalAlpha = 1;
     this.panel.tex.needsUpdate = true;
+  }
+
+  // Turns a standing offer's affordability on or off and redraws the panel.
+  // Only a Devil Deal ever uses it: what a deal costs does not change, but
+  // what the player can pay does, every time they buy one.
+  setEnabled(ok) {
+    if (!this.offer || this.enabled === ok) return;
+    this.enabled = ok;
+    this.offer.enabled = ok;
+    this._draw(this.offer);
   }
 
   sink() {
@@ -284,7 +329,8 @@ export class Totem {
   // claimed while it is still coming out of the floor, or claimed by a shot
   // that was already in the air when it arrived.
   canClaim() {
-    return this.state === 'up' && this.armT <= 0 && !this.claimed && this.upgradeId !== null;
+    return this.state === 'up' && this.armT <= 0 && !this.claimed
+      && this.enabled && this.upgradeId !== null;
   }
 
   // Touch additionally requires the player to have left the radius at least
@@ -478,10 +524,10 @@ export class TotemArea {
    * @param {boolean} resetRerolls  false when this is itself a reroll, so the
    *   escalating price is not reset by the set it just paid for.
    */
-  present(offers, resetRerolls = true) {
+  present(offers, resetRerolls = true, armTime = undefined) {
     if (resetRerolls) this.rerolls = 0;
     this.totems.forEach((t, i) => {
-      if (i < offers.length) t.present(offers[i]);
+      if (i < offers.length) t.present(offers[i], armTime);
       else t.sink();
     });
     if (!offers.length) {

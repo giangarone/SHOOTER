@@ -110,6 +110,32 @@ const DEFAULT_MODS = {
                         // cleared without taking damage. Unlike everything
                         // else here it accumulates across the run - see
                         // noHitStacks, NO_HIT_CAP and rebuildMods().
+
+  // DEVIL DEALS. Bought from the Devil with max HP rather than rolled for
+  // free, but otherwise ordinary mods: they are set by an apply() in
+  // upgrades.js and replayed by rebuildMods() like everything above. The PRICE
+  // is not here - it is paid once into maxHpDebt and never revisited.
+  carnageStep: 0,       // Carnage: damage gained per kill, lost on any hit
+  killHeal: 0,          // Blood Pact: HP healed per kill
+  damageTakenMult: 1,   // Blood Pact: multiplier on all damage the player takes
+  dodgeInvuln: 0,       // Demonic Dodge: seconds of invulnerability after a dodge
+  dodgeRage: 0,         // and the damage bonus it grants,
+  dodgeRageTime: 0,     // for this many seconds
+  hellfireDps: 0,       // Hellfire: burning trail dropped behind a reload
+  hellfireTime: 0,
+  hellfireRadius: 0,
+  statusEternal: 0,     // Eternal Affliction: enemy statuses never expire
+  hazardMult: 1,        // and pools and lava hurt this much more
+  worldSlow: 1,         // Absolute Zero: multiplier on enemy and projectile speed
+  hitFreeze: 0,         // and seconds the player is frozen by a hit
+  overloadFrac: 0,      // Overload: fraction of max HP lightning removes when
+                        // the magazine runs dry
+  bossHpMult: 1,        // Executioner: multiplier on boss health at spawn
+  poisonImmune: 0,      // Antidote: poison pools do nothing
+  poisonLeech: 0,       // and each poisoned enemy heals this much per second
+  gamble: 0,            // Devil's Gamble: 51% double damage, 49% half, per shot
+  devilAlways: 0,       // Demonic Presence: the Devil appears after every wave
+  thorns: 0,            // Thorns: fraction of a hit reflected onto the attacker
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -162,6 +188,13 @@ function dashShape(u) {
 // because main.js says the current total on the clear banner and has to agree
 // with rebuildMods about where it stops.
 export const NO_HIT_CAP = 0.4;
+// The floor a Devil Deal may never take the player below. Every price the
+// Devil charges is checked against this BEFORE it is taken (canPay), which is
+// the whole guarantee that a deal can never kill you: an unaffordable one is
+// simply inert. Twenty is a fifth of the starting pool - low enough that
+// Executioner's fifty is reachable from full, high enough that a player who
+// has sold everything they can is still standing.
+export const MIN_MAX_HEALTH = 20;
 // Collision height, a little over the 1.7 eye height. Only overhead geometry
 // cares - see the resolveCircle call in update().
 const PLAYER_HEIGHT = 1.8;
@@ -199,6 +232,22 @@ export class Player {
     this.breachReady = false;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
+    // MAX HP SOLD TO THE DEVIL, for the rest of the run. Deliberately NOT a
+    // mod: rebuildMods() replays the whole stat block from DEFAULT_MODS on
+    // every draft pick, so a debt stored there would be refunded by the next
+    // free totem the player walked into. Same reasoning as noHitStacks.
+    this.maxHpDebt = 0;
+    // Carnage's kill chain, and the two windows Demonic Dodge opens. All on
+    // the player rather than in mods, for the reason above.
+    this.carnageStacks = 0;
+    this.invulnEnd = 0;
+    this.rageEnd = 0;
+    // Absolute Zero's drawback: the player cannot move until this time.
+    this.frozenUntil = 0;
+    // Game time, written once per frame by update(). getEffectiveDamage() has
+    // no time argument and several callers of it have no clock to pass, so the
+    // timed damage windows read it from here.
+    this.now = 0;
     // EXTERNAL DRAG, metres per second, written by whatever is pulling the
     // player around - Maw's gravity well. It cannot be an addition to `vel`:
     // update() ASSIGNS vel.x/z outright whenever a movement key is held, so a
@@ -303,8 +352,12 @@ export class Player {
   // Derived stats. These are getters, not fields, because a draft pick can
   // change the underlying mods at any wave boundary - anything that cached
   // them would silently keep the pre-upgrade value for the rest of the run.
+  // The Devil's debt comes off AFTER the build's own bonuses, so a deal costs
+  // the same twenty points whether or not the player later picks up Overhealth
+  // - the price is a flat subtraction, not a share of the pool.
   get maxHealth() {
-    return Math.max(10, Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult));
+    const built = Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult);
+    return Math.max(MIN_MAX_HEALTH, built - this.maxHpDebt);
   }
   get magSize() {
     return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
@@ -411,6 +464,52 @@ export class Player {
     return true;
   }
 
+  // Whether a Devil Deal costing `cost` max HP can be bought at all.
+  //
+  // THIS IS THE ONLY GUARD THERE IS, and everything that spends max HP - a
+  // deal, a Devil reroll - asks it first. A deal the player cannot afford is
+  // not a deal that kills them: it is greyed out on its pillar and inert to
+  // both touch and shot. There is deliberately no path that takes the payment
+  // and then checks.
+  canPay(cost) {
+    return this.maxHealth - cost >= MIN_MAX_HEALTH;
+  }
+
+  // Sells `cost` max HP to the Devil, permanently. Returns false and changes
+  // nothing when it cannot be afforded.
+  payMaxHp(cost) {
+    if (!this.canPay(cost)) return false;
+    this.maxHpDebt += cost;
+    // The same clamp takeUpgrade() does, and for the same reason: the HUD must
+    // never show 78/60 after the pool shrinks under the player's current
+    // health. Note that this can LOWER current health - selling health you are
+    // standing on costs you that health now, not later.
+    this.health = Math.min(this.health, this.maxHealth);
+    return true;
+  }
+
+  // Demonic Dodge. Called by main.js on a successful dodge, alongside
+  // startDodge(): a second of invulnerability so the follow-up shot misses
+  // too, and three seconds of doubled damage to answer with.
+  startDodgeReward(time) {
+    if (this.mods.dodgeInvuln > 0) this.invulnEnd = time + this.mods.dodgeInvuln;
+    if (this.mods.dodgeRage > 0) this.rageEnd = time + this.mods.dodgeRageTime;
+  }
+
+  // Absolute Zero's drawback. The world moves a fifth slower and you stop
+  // dead for a second every time something lands.
+  freeze(time) {
+    if (this.mods.hitFreeze > 0) this.frozenUntil = time + this.mods.hitFreeze;
+  }
+
+  // Carnage. Every kill is +5% damage and any hit taken is all of it.
+  bumpCarnage() {
+    if (this.mods.carnageStep > 0) this.carnageStacks++;
+  }
+  clearCarnage() {
+    this.carnageStacks = 0;
+  }
+
   // Evasion. Called by main.js when an incoming hit is dodged; the speed
   // burst is read back in update().
   startDodge(time) {
@@ -424,6 +523,13 @@ export class Player {
     if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
       this.health = Math.min(this.maxHealth, this.health + 1);
     }
+    // Blood Pact. A certainty rather than a chance, and worth three times as
+    // much as Vampiric's tick - it is paid for in max HP and in taking a
+    // quarter more damage from everything, so it has to be felt.
+    if (this.mods.killHeal > 0) {
+      this.health = Math.min(this.maxHealth, this.health + this.mods.killHeal);
+    }
+    this.bumpCarnage();
   }
 
   // Bloodlust. `kills` is the length of the CURRENT combo; the cap is the mod
@@ -476,6 +582,14 @@ export class Player {
     this.livesUsed = 0;
     this.breachReady = false;
     this.dodgeEnd = 0;
+    // Everything the Devil left behind. maxHpDebt goes before the health
+    // assignment further down, or the new run would be born at the old one's
+    // sold-down cap.
+    this.maxHpDebt = 0;
+    this.carnageStacks = 0;
+    this.invulnEnd = 0;
+    this.rageEnd = 0;
+    this.frozenUntil = 0;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);
@@ -524,6 +638,9 @@ export class Player {
   // `time` is game time (see main.js) - used for buff expiry and regen delay,
   // not for physics. All physics uses `dt`.
   update(dt, input, obstacles, time) {
+    // Published for getEffectiveDamage(), which has no clock of its own and is
+    // called from several places that have none to give it.
+    this.now = time;
     this.fireCd -= dt;
     if (this.meleeCd > 0) this.meleeCd -= dt;
     if (this.meleeActive > 0) this.meleeActive -= dt;
@@ -588,8 +705,15 @@ export class Player {
     // Movement: build a normalised local direction, rotate it by yaw, and set
     // horizontal velocity outright. There is no acceleration - releasing the
     // keys just damps the velocity toward zero.
-    const f = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
-    const s = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    // Absolute Zero's drawback. The keys are read as if nothing were held, so
+    // the existing damp branch below brings the player to a stop rather than
+    // freezing them on the spot - a hard velocity zero on one frame is exactly
+    // what the eye reads as hitting a wall, and this is meant to read as being
+    // caught, not as a collision. Gravity, the dash already in flight and the
+    // gun all keep working; only walking stops.
+    const frozen = time < this.frozenUntil;
+    const f = frozen ? 0 : (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+    const s = frozen ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
     // Kept SEPARATE from this.vel, and that separation is what makes the dash
     // blend below honest. The damp branch feeds on the previous frame's value,
     // so if the dash wrote into this.vel the decaying half of its own envelope
@@ -834,6 +958,13 @@ export class Player {
     if (this.mods.berserk > 0) {
       d *= 1 + this.mods.berserk * (1 - this.health / this.maxHealth);
     }
+    // Carnage. Uncapped on purpose - it is the one number in the game that can
+    // run away, and the thing that stops it is a single point of damage from
+    // anywhere. A player holding thirty stacks is playing a different game to
+    // the one they were playing at zero, and they know exactly what it costs.
+    if (this.carnageStacks > 0) d *= 1 + this.mods.carnageStep * this.carnageStacks;
+    // Demonic Dodge's window, read off the frame clock published in update().
+    if (this.rageEnd > this.now) d *= 1 + this.mods.dodgeRage;
     return d;
   }
 

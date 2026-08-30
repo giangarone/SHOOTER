@@ -33,6 +33,10 @@ export const RARITY = {
   common: { label: 'COMMON', color: '#9fb4d8', weight: 1 },
   rare: { label: 'RARE', color: '#4ef3ff', weight: 0.42 },
   cursed: { label: 'CURSED', color: '#ff3d00', weight: 0.3 },
+  // Devil Deals. Weight 0 so a deal can never leak into a normal totem roll
+  // even if the `devil` guard in rollTotems() is ever lost - the rarity gate
+  // would drop it on its own.
+  devil: { label: 'DEVIL DEAL', color: '#ff1744', weight: 0 },
 };
 
 // THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
@@ -95,6 +99,36 @@ export const THEME = {
   ice: 0x7fe3ff,
   fear: 0x9d4edd,
   stone: 0x9aa5b1,
+};
+
+// DEVIL DEAL COLOURS.
+//
+// These follow THEME's rule and not a devil-red one: colour says what the
+// upgrade DOES. Antidote is green because it is about poison and Absolute Zero
+// is pale blue because it is about ice, and a run of thirteen identical
+// crimsons would have thrown away the one thing that makes a pillar readable
+// from across the arena. Most of them ARE blood and ember, because most of
+// these deals are about damage and dying - that is the subject matter doing
+// the work, not a palette rule.
+//
+// What says "this one costs you" is the PANEL: a red DEVIL DEAL header and a
+// red price line, on every one of them, which is a far stronger and more
+// specific signal than a hue could be. Kept in their own map only so the
+// deals can be shaded apart from the free pool without colliding with it.
+export const DEVIL_THEME = {
+  carnage: 0xff1744,
+  pact: 0xb71c1c,
+  dodge: 0xff4081,
+  hellfire: 0xff3d00,
+  affliction: 0x7b1fa2,
+  zero: 0x4fc3f7,
+  overload: 0xffca28,
+  executioner: 0x880e4f,
+  antidote: 0x66bb6a,
+  gamble: 0xff7043,
+  presence: 0x6d1b3d,
+  thorns: 0xd84315,
+  power: 0xe53935,
 };
 
 
@@ -817,6 +851,214 @@ export const UPGRADES = {
     effects: [['DOUBLE-TAP W A S D', NOTE], ['TO DASH. 2 CHARGES', GOOD], ['ONE BACK EVERY 2.5s', NOTE]],
     apply: (mods, n) => { mods.dashCharges = 2 * n; },
   },
+
+  // ---- DEVIL DEALS -------------------------------------------------------
+  //
+  // Everything below is flagged `devil: true` and carries a `cost` in MAX HP.
+  // They live in this same map on purpose: a deal IS a mutation - it lights a
+  // receiver plate, shows in the build sheet and rebuilds through
+  // Player.rebuildMods() exactly like the free half of the pool does. The flag
+  // is only about where it can be OFFERED, and rollTotems() is the one place
+  // that reads it.
+  //
+  // `cost` is permanent. It is the only resource in the game that never comes
+  // back, which is the whole reason the Devil is worth walking to - and why
+  // main.js refuses a deal outright rather than letting one kill you. See
+  // Player.canPay() and MIN_MAX_HEALTH.
+
+  carnage: {
+    name: 'CARNAGE',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    mark: true,
+    theme: DEVIL_THEME.carnage,
+    icon: 'claw',
+    // Named CARNAGE and not Bloodlust because BLOODLUST is already in this map
+    // above, paying fire rate for a combo. Two mutations with one name would be
+    // unreadable on the build sheet.
+    effects: [['KILLS: +5% DAMAGE', GOOD], ['STACKS, NO LIMIT', NOTE], ['RESET WHEN HURT', BAD]],
+    apply: (mods, n) => { mods.carnageStep = 0.05 * n; },
+  },
+  bloodPact: {
+    name: 'BLOOD PACT',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    theme: DEVIL_THEME.pact,
+    icon: 'drop',
+    effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE +25% DAMAGE', BAD]],
+    apply: (mods, n) => {
+      mods.killHeal = 3 * n;
+      mods.damageTakenMult *= 1 + 0.25 * n;
+    },
+  },
+  demonicDodge: {
+    name: 'DEMONIC DODGE',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    theme: DEVIL_THEME.dodge,
+    icon: 'wing',
+    // dodgeChance is the same field Evasion sets, so the two ADD - a player who
+    // owns both dodges more often, and both mutations still read as doing the
+    // thing they say. The reward on top is what makes this the devil's version.
+    effects: [['10% DODGE CHANCE', GOOD], ['DODGE: 1s INVULNERABLE', GOOD], ['AND +100% DMG FOR 3s', GOOD]],
+    apply: (mods, n) => {
+      mods.dodgeChance += 0.1 * n;
+      mods.dodgeInvuln = 1;
+      mods.dodgeRage = 1.0;
+      mods.dodgeRageTime = 3;
+    },
+  },
+  hellfire: {
+    name: 'HELLFIRE',
+    rarity: 'devil',
+    devil: true,
+    cost: 10,
+    max: 1,
+    mark: true,
+    theme: DEVIL_THEME.hellfire,
+    icon: 'flame',
+    // Armed by the reload, the same signal Reload Burst and Breach Round ride,
+    // so it pays a rhythm the player already has instead of asking for a new one.
+    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 5s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
+    apply: (mods, n) => {
+      mods.hellfireDps = 60 * n;
+      mods.hellfireTime = 5;
+      mods.hellfireRadius = 1.8;
+    },
+  },
+  eternalAffliction: {
+    name: 'ETERNAL AFFLICTION',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    mark: true,
+    theme: DEVIL_THEME.affliction,
+    icon: 'hourglass',
+    // The drafted drawback was "status effects on you last twice as long", and
+    // the player has no status effects - only hazard zones to stand out of. So
+    // the cost lands on those instead, which is the same idea in the vocabulary
+    // the game actually has.
+    effects: [['ENEMY STATUS NEVER', NOTE], ['EXPIRES', GOOD], ['POOLS & LAVA HURT 2x', BAD]],
+    apply: (mods, n) => {
+      mods.statusEternal = n;
+      mods.hazardMult *= 2;
+    },
+  },
+  absoluteZero: {
+    name: 'ABSOLUTE ZERO',
+    rarity: 'devil',
+    devil: true,
+    cost: 10,
+    max: 1,
+    theme: DEVIL_THEME.zero,
+    icon: 'icicle',
+    effects: [['ENEMIES & SHOTS', NOTE], ['MOVE 20% SLOWER', GOOD], ['HITS FREEZE YOU 1s', BAD]],
+    apply: (mods, n) => {
+      mods.worldSlow = Math.pow(0.8, n);
+      mods.hitFreeze = 1;
+    },
+  },
+  overload: {
+    name: 'OVERLOAD',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    mark: true,
+    theme: DEVIL_THEME.overload,
+    icon: 'bolt',
+    // A fraction of MAX HP rather than a flat number, so it stays worth firing
+    // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
+    // the pool that scales with the enemy instead of with the build.
+    effects: [['EMPTY THE MAGAZINE:', NOTE], ['LIGHTNING HITS ALL', GOOD], ['FOR 20% OF MAX HP', NOTE]],
+    apply: (mods, n) => { mods.overloadFrac = 0.2 * n; },
+  },
+  executioner: {
+    name: 'EXECUTIONER',
+    rarity: 'devil',
+    devil: true,
+    cost: 50,
+    max: 1,
+    theme: DEVIL_THEME.executioner,
+    icon: 'skull',
+    // The most expensive thing the Devil sells, and the only one that is worth
+    // nothing for four waves out of five. Applies to bosses spawned AFTER it is
+    // taken - a boss already standing keeps the health bar it arrived with.
+    effects: [['BOSSES HAVE 50%', NOTE], ['LESS HEALTH', GOOD]],
+    apply: (mods, n) => { mods.bossHpMult *= Math.pow(0.5, n); },
+  },
+  antidote: {
+    name: 'ANTIDOTE',
+    rarity: 'devil',
+    devil: true,
+    cost: 10,
+    max: 1,
+    theme: DEVIL_THEME.antidote,
+    icon: 'flask',
+    effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY', NOTE]],
+    apply: (mods, n) => {
+      mods.poisonImmune = n;
+      mods.poisonLeech = 1 * n;
+    },
+  },
+  devilsGamble: {
+    name: "DEVIL'S GAMBLE",
+    rarity: 'devil',
+    devil: true,
+    cost: 5,
+    max: 1,
+    mark: true,
+    theme: DEVIL_THEME.gamble,
+    icon: 'coin',
+    // Rolled once per SHOT, not per pellet: a shotgun whose nine pellets each
+    // rolled their own coin would average out to nothing, and the whole point
+    // is that a shot is either a windfall or a waste.
+    effects: [['51% OF SHOTS: 2x DMG', GOOD], ['49% OF SHOTS: HALF', BAD]],
+    apply: (mods, n) => { mods.gamble = n; },
+  },
+  demonicPresence: {
+    name: 'DEMONIC PRESENCE',
+    rarity: 'devil',
+    devil: true,
+    cost: 20,
+    max: 1,
+    theme: DEVIL_THEME.presence,
+    icon: 'vortex',
+    effects: [['THE DEVIL ALWAYS', NOTE], ['APPEARS AFTER A WAVE', GOOD]],
+    apply: (mods, n) => { mods.devilAlways = n; },
+  },
+  thorns: {
+    name: 'THORNS',
+    rarity: 'devil',
+    devil: true,
+    cost: 5,
+    max: 1,
+    theme: DEVIL_THEME.thorns,
+    icon: 'spikeShield',
+    effects: [['ATTACKERS TAKE BACK', NOTE], ['50% OF THEIR DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.thorns = 0.5 * n; },
+  },
+  darkPower: {
+    name: 'DARK POWER',
+    rarity: 'devil',
+    devil: true,
+    cost: 5,
+    max: 1,
+    theme: DEVIL_THEME.power,
+    icon: 'crystal',
+    // The cheapest deal in the pool and the only one with no drawback at all.
+    // It is what the Devil is FOR: five max HP is a real price and +20% damage
+    // is a real answer, with nothing else to weigh.
+    effects: [['+20% DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; },
+  },
 };
 
 export const UPGRADE_KEYS = Object.keys(UPGRADES);
@@ -854,6 +1096,10 @@ function rarityWeight(rarity, wave) {
 export function rollTotems(owned, wave, count = 3) {
   const pool = [];
   for (const key of UPGRADE_KEYS) {
+    // Devil Deals are sold, never given. They share this map so they behave
+    // like every other mutation once owned, but the free totems must never
+    // offer one - a deal handed over for nothing is not a deal.
+    if (UPGRADES[key].devil) continue;
     if ((owned[key] || 0) >= UPGRADES[key].max) continue;
     const w = rarityWeight(UPGRADES[key].rarity, wave);
     if (w > 0) pool.push([key, w]);
@@ -873,6 +1119,46 @@ export function rollTotems(owned, wave, count = 3) {
     pool.splice(idx, 1);
   }
   return picked;
+}
+
+/**
+ * Rolls the Devil's offer. The deal counterpart to rollTotems(), and drawn the
+ * same way - without replacement, skipping anything already owned - with one
+ * difference: the pool is FLAT. There are only thirteen deals and they are all
+ * meant to be reachable, so weighting them against each other would just make
+ * a third of the Devil's stock rare on top of already being expensive.
+ *
+ * Unlike the free pool this is NOT gated on the wave number. A wave-1 player
+ * who cleared it untouched has earned the whole catalogue; what stops them
+ * buying it is the price, which is the point of the Devil.
+ *
+ * @param {Object<string, number>} owned  stack count per upgrade id
+ * @param {number} count how many pillars to fill
+ * @returns {string[]} deal ids, shorter than `count` once the pool runs dry.
+ */
+export function rollDeals(owned, count = 3) {
+  const pool = [];
+  for (const key of UPGRADE_KEYS) {
+    if (!UPGRADES[key].devil) continue;
+    if ((owned[key] || 0) >= UPGRADES[key].max) continue;
+    pool.push(key);
+  }
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    const idx = (Math.random() * pool.length) | 0;
+    picked.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  return picked;
+}
+
+// What the nth reroll of a single Devil set costs, in MAX HP (n starts at 0):
+// 2, 4, 8, 16. Doubling for the same reason rerollCost() doubles - it stops a
+// player shopping the whole catalogue at one wave break - except the wallet
+// here is a health bar, so the ceiling arrives a great deal faster. Reset when
+// a fresh set rises.
+export function dealRerollCost(n) {
+  return 2 * Math.pow(2, n);
 }
 
 // Reroll price for the nth reroll of a single totem set (n starts at 0).
