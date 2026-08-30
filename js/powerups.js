@@ -31,12 +31,17 @@ export const POWERUP_TYPES = {
     weight: 0.45,
     sfx: 'pickupHealth',
   },
+  // RAGE. Damage AND movement, on one clock. The red pickup used to be the
+  // only buff that changed nothing about how the player moved, which made it
+  // the one you could take without changing how you played; +30% speed turns
+  // it into a window to push into the crowd with rather than a number.
   damageBoost: {
     color: 0xff3d00,
     emissive: 0xff3d00,
     duration: 10,
     apply: (player, time) => {
       player.damageMult = 1.5;
+      player.rageSpeedMult = 1.3;
       player.damageBoostEnd = time + 10;
     },
     weight: 0.25,

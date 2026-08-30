@@ -36,9 +36,20 @@
       <span id="reload-ring" class="hidden"></span>
       <span id="hitmarker"></span>
     </div>
+    <!-- Combo gauge. Bottom centre, under the crosshair rather than beside it:
+         the multiplier is the one number that changes on every kill, and it was
+         unreadable stacked in the top-right corner. Rows are built here; ui.js
+         only writes text and two transforms. -->
     <div id="combo" class="hidden">
-      <span id="combo-mult">x1.0</span>
-      <span id="combo-count">0 KILLS</span>
+      <div id="combo-head">
+        <span id="combo-mult">x1.0</span>
+        <span id="combo-count">0 KILLS</span>
+      </div>
+      <div id="combo-gauge">
+        <i id="combo-fill"></i>
+        <span class="combo-tick" style="left:33.33%"></span>
+        <span class="combo-tick" style="left:66.66%"></span>
+      </div>
       <div id="combo-bar"><i></i></div>
     </div>
     <div id="hud-bottom">

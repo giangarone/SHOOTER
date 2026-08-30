@@ -747,10 +747,17 @@ export const UPGRADES = {
     // The only PERMANENT growth in the pool, and the only reward for a skill
     // the game already measured and only ever paid in credits. It stacks for
     // the rest of the run, so a player who keeps clearing waves clean is
-    // compounding - and a single hit anywhere in a wave costs them the whole
-    // thing, which is what makes it worth playing around.
-    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+20% DAMAGE, FOREVER', GOOD], ['+20% FIRE RATE, TOO', GOOD]],
-    apply: (mods, n) => { mods.noHitBonus = 0.2 * n; },
+    // building - and a single hit anywhere in a wave costs them that wave's
+    // stack, which is what makes it worth playing around.
+    //
+    // Capped, and additively rather than compounding. Uncapped compounding was
+    // the one line in the pool with no ceiling: a player who was already good
+    // enough not to be touched kept multiplying, so by wave 30 it was worth
+    // more than the rest of the build put together. Five clean waves for a
+    // flat +40% is still the best rare in the pool and is now a target the
+    // player can actually finish.
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+8% DAMAGE & RATE', GOOD], ['STACKS TO +40%', NOTE]],
+    apply: (mods, n) => { mods.noHitBonus = 0.08 * n; },
   },
   ammoHoarder: {
     name: 'AMMO HOARDER',

@@ -58,6 +58,13 @@ import { resolveCircle, pointInObstacle, AGENT_HEIGHT, BOSS_HEIGHT } from './uti
 // before bosses existed - see the status block further down for what they do:
 //   statusMul, freezeSlow, slowFactor, freezeVuln, entropyExempt, fearMode,
 //   armor, armorDefault, boss, hitbox.
+//
+//   fly         { height } makes the type AIRBORNE. See the flight block in
+//               Enemy.update(): a flier keeps a real pos.y, so it clears low
+//               cover for free (resolveCircle already skips a box it is above),
+//               it is out of reach of a ground melee swing, and its model and
+//               hitbox ride up with it. `height` is the altitude it settles at;
+//               an ai() moves e.hoverY to climb or dive.
 export const ENEMY_TYPES = {
   chaser: {
     hp: 42, speed: 3.4, damage: 12, score: 100, color: 0xff3b30, eye: 0xffe08a,
@@ -180,6 +187,73 @@ export const ENEMY_TYPES = {
     scale: 1.2, radius: 0.52, mass: 1,
     orbit: { dist: 10, band: 2, out: 0.7, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
     build: buildWarden, ai: aiWarden,
+  },
+
+  // ---- the air roster ----------------------------------------------------
+  // Unlocked after the fourth boss. Everything before this point is solved on
+  // the floor: the player picks a lane, backs into a corner and holds an angle
+  // that only has to cover 180 degrees of ground. These two put a threat ABOVE
+  // that angle, which is the one axis twenty waves of ground enemies never
+  // asked anyone to check.
+  //
+  // They are a matched pair on purpose, and the pair is the design: one that
+  // will not come to you and one that does nothing but. Answering either one
+  // the way you answer the other is how you lose to it.
+  //
+  // Both are FRAGILE - a harrier has a third of a tank's health and a shrike
+  // less - because a target in the air is genuinely harder to hit, and paying
+  // for that twice with a health bar as well would only make them tedious.
+
+  // Stands off, high, and shoots. It cannot be reached, cannot be walked away
+  // from, and while it is at station it is armoured against a fifth of what
+  // the player can do about it - so ignoring it is a slow bleed and chasing it
+  // is a waste of a magazine.
+  //
+  // The answer is its own attack. It has to COME DOWN to fire: it drops to
+  // barely over head height for a three-round burst, and for those two seconds
+  // it is unarmoured, close, lit up and holding still. The whole enemy is one
+  // sentence - shoot it while it is shooting you - and it is the first thing
+  // in the roster whose window belongs to the PLAYER's patience rather than
+  // its own timer.
+  harrier: {
+    hp: 62, speed: 3.2, damage: 0, score: 340, color: 0x27c4ff, eye: 0xd7f4ff,
+    // Oversized against its collision circle, and deliberately: it is fought
+    // at five metres up and fifteen out, where a body sized like a chaser's is
+    // a dot. The hitbox scales with the model, so what the player shoots at is
+    // what they can see.
+    scale: 1.25, radius: 0.45, mass: 1,
+    hitbox: { r: 0.58, y: 1.0 },
+    fly: { height: 5.0 },
+    orbit: { dist: 15, band: 2.5, out: 0.9, in: -0.8, strafe: 0.45, flip: 2, flipVar: 2 },
+    // Armoured only while it is at station. Direction is not consulted, for
+    // the same reason the colossus core does not consult it: the mechanic is
+    // WHEN, and adding a WHERE on top would only find ways to refuse hits the
+    // player can see landing. armorDefault is 1, Bulwark's choice rather than
+    // Colossus's - burn and venom are supposed to be the patient answer to a
+    // thing that hides behind a window.
+    armor: (e) => (e.pos.y < HARRIER_LOW + 1.0 ? 1 : HARRIER_HIGH_ARMOR),
+    armorDefault: 1,
+    build: buildHarrier, ai: aiHarrier,
+  },
+
+  // Circles out of reach and then falls on you. No ranged attack at all: it
+  // spends its whole life either winding up a dive, in one, or climbing back
+  // out of one, and the climb is the counter - for a second and a half after
+  // every attempt it is slow, low and travelling in a straight line away from
+  // the player, which is the easiest shot either flier ever offers.
+  //
+  // The dive commits to the ground the player was standing on when it started,
+  // NOT to the player, so it is dodged rather than tanked - the same contract
+  // every telegraph in the game is written to. That is also what stops two
+  // shrikes at once being an unavoidable hit: they both aim at a spot, and
+  // moving beats both of them.
+  shrike: {
+    hp: 54, speed: 4.4, damage: 20, score: 300, color: 0xeef2ff, eye: 0xff5c7a,
+    scale: 1.15, radius: 0.45, mass: 1,
+    hitbox: { r: 0.55, y: 1.0 },
+    fly: { height: 5.2 },
+    orbit: { dist: 8, band: 2, out: 0.7, in: -0.7, strafe: 0.8, flip: 1.4, flipVar: 1.2 },
+    build: buildShrike, ai: aiShrike,
   },
 
   // ---- bosses ------------------------------------------------------------
@@ -309,6 +383,13 @@ function geo(key, make) {
 const SHARED_MATS = {
   gunmetal: new THREE.MeshStandardMaterial({ color: 0x2a2f3d, roughness: 0.4, metalness: 0.6 }),
   tankPlate: new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 0.5, metalness: 0.6 }),
+  // The furnace in a tank's chest. Emissive and NOT tinted by status, so the
+  // one part of the model that says "this is the heavy" survives being frozen
+  // or poisoned - see the note on the silhouette rules above.
+  tankFurnace: new THREE.MeshStandardMaterial({
+    color: 0xff6b00, emissive: 0xffaa00, emissiveIntensity: 1.3,
+    roughness: 0.3, metalness: 0.5,
+  }),
   sniperBarrel: new THREE.MeshStandardMaterial({ color: 0x1a1f2b, roughness: 0.3, metalness: 0.8 }),
   sniperScope: new THREE.MeshStandardMaterial({ color: 0x0a0f1a, roughness: 0.2, metalness: 0.9 }),
   splitterCore: new THREE.MeshStandardMaterial({
@@ -344,6 +425,17 @@ const SHARED_MATS = {
   wardenCrown: new THREE.MeshStandardMaterial({
     color: 0xdfe6ef, emissive: 0xfff2b0, emissiveIntensity: 1.1,
     roughness: 0.25, metalness: 0.7,
+  }),
+  // The two fliers share one design language and split it on colour: a lit
+  // underside on both (nothing else in the roster glows downward, so "it is in
+  // the air" reads before the shape does), cold blue for the one that holds
+  // station and a bare blade for the one that arrives.
+  harrierGlow: new THREE.MeshStandardMaterial({
+    color: 0x27c4ff, emissive: 0x27c4ff, emissiveIntensity: 1.5,
+    roughness: 0.3, metalness: 0.4, transparent: true, opacity: 0.85,
+  }),
+  shrikeEdge: new THREE.MeshStandardMaterial({
+    color: 0x9aa8c4, roughness: 0.2, metalness: 0.9,
   }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
@@ -431,6 +523,16 @@ const _dripAt = new THREE.Vector3();
 const _steer = { x: 0, z: 0 };
 // Petrify's reward: a frozen enemy cannot act, and takes half again as much.
 const FREEZE_VULN = 1.5;
+
+// ---- flight ---------------------------------------------------------------
+// How fast a flier closes the gap between its current altitude and the one its
+// ai() is asking for, as an exponential-approach rate. Per-enemy, because the
+// difference between a shrike FALLING out of the sky and a harrier settling
+// back to station is the whole distinction between the two types.
+const FLY_RATE_DEFAULT = 4;
+// Ceiling on altitude, so nothing can climb out of the arena's lighting or
+// past the point where a shot from the floor stops being a fair ask.
+const FLY_MAX_Y = 6.5;
 
 let idSeq = 0;
 
@@ -565,17 +667,57 @@ function buildShooter(e, g, s) {
 // it, and getting hit by it will.
 function buildTank(e, g, s) {
   const P = partsFor(e, g, s);
-  // Wide at the shoulders, narrow at the waist - the opposite taper to blight.
-  P('tankTorso', prism(0.5, 0.28, 0.72, 4), { y: 0.86, ry: Math.PI / 4 });
-  P('tankPauldron', slab(0.34, 0.36, 0.36), { x: -0.5, y: 1.06 });
-  P('tankPauldron', slab(0.34, 0.36, 0.36), { x: 0.5, y: 1.06 });
-  // Head sunk between the pauldrons rather than sitting above them.
-  P('tankHead', slab(0.26, 0.2, 0.24), { y: 1.12, z: -0.14 });
-  // Chest plate, kept in its own dark material as the armour read.
-  P('tankPlate', slab(0.66, 0.16, 0.12), { y: 0.92, z: -0.3, mat: SHARED_MATS.tankPlate });
-  P('tankLeg', slab(0.2, 0.44, 0.22), { x: -0.22, y: 0.22 });
-  P('tankLeg', slab(0.2, 0.44, 0.22), { x: 0.22, y: 0.22 });
-  eyes(P, { y: 1.14, x: 0.08, z: -0.27, r: 0.8, mat: e.eyeMat });
+  // THE HEAVY, REBUILT. The first pass was four boxes and a pair of 0.07 eye
+  // shards buried in the shadow between the pauldrons - at the range this
+  // enemy is actually fought at it read as a crate with legs, and players
+  // reported it as having no face at all, which for the type the whole brute
+  // role is named after is the worst failure a model in this roster can have.
+  //
+  // So it is rebuilt around three reads, in the order the eye picks them up:
+  // a HUNCHED, top-heavy mass on stubby splayed legs (it soaks, it does not
+  // chase), a burning FURNACE in the chest that says which way it is facing
+  // from across the arena, and a wide lit VISOR with real eyes in it, carried
+  // FORWARD of the shoulder cowls instead of sunk behind them.
+  P('tankFoot', slab(0.32, 0.12, 0.42), { x: -0.27, y: 0.06 });
+  P('tankFoot', slab(0.32, 0.12, 0.42), { x: 0.27, y: 0.06 });
+  // Short and splayed. A brute with legs it could run on would be lying, the
+  // same rule bulwark is built to.
+  P('tankLeg', prism(0.17, 0.23, 0.42, 5), { x: -0.27, y: 0.33, rz: 0.1 });
+  P('tankLeg', prism(0.17, 0.23, 0.42, 5), { x: 0.27, y: 0.33, rz: -0.1 });
+  // Narrow waist under a wide chest: the taper is what makes it read as
+  // top-heavy rather than as a box.
+  P('tankWaist', prism(0.3, 0.21, 0.22, 6), { y: 0.63 });
+  // Flattened front to back for the same reason the chaser's torso is - a
+  // six-sided prism at full depth is a cylinder from the player's eye.
+  P('tankTorso', prism(0.54, 0.33, 0.58, 6), { y: 0.94, sz: 0.72 });
+  // The furnace, recessed into the chest with a plate hooding it.
+  P('tankFurnace', prism(0.16, 0.16, 0.1, 6), {
+    y: 0.85, z: -0.31, rx: Math.PI / 2, mat: SHARED_MATS.tankFurnace, shadow: false,
+  });
+  // Brow bar over the furnace, and kept LOW: it used to sit at head height,
+  // where it hid the visor behind it - which is the exact bug this whole model
+  // exists to fix.
+  P('tankPlate', slab(0.72, 0.12, 0.14), { y: 1.02, z: -0.24, mat: SHARED_MATS.tankPlate });
+  // Shoulder cowls, angled outward and sitting ABOVE the head so the
+  // silhouette peaks at the shoulders and dips in the middle - the hunch.
+  P('tankPauldron', prism(0.2, 0.34, 0.36, 5), { x: -0.5, y: 1.14, rz: 0.32 });
+  P('tankPauldron', prism(0.2, 0.34, 0.36, 5), { x: 0.5, y: 1.14, rz: -0.32 });
+  P('tankSpike', spike(0.09, 0.24, 4), { x: -0.55, y: 1.4, rz: 0.32, mat: SHARED_MATS.tankPlate });
+  P('tankSpike', spike(0.09, 0.24, 4), { x: 0.55, y: 1.4, rz: -0.32, mat: SHARED_MATS.tankPlate });
+  // Exhaust stacks on its back, so the model has a BACK - the one angle the
+  // old tank was completely mute from.
+  P('tankStack', prism(0.06, 0.09, 0.3, 5), { x: -0.19, y: 1.28, z: 0.2, mat: SHARED_MATS.gunmetal });
+  P('tankStack', prism(0.06, 0.09, 0.3, 5), { x: 0.19, y: 1.28, z: 0.2, mat: SHARED_MATS.gunmetal });
+  // Head, jutting FORWARD out of the cowls rather than hiding between them.
+  P('tankHead', prism(0.19, 0.26, 0.26, 5), { y: 1.2, z: -0.16 });
+  // The visor. One wide lit bar on e.eyeMat, so it blinks and goes alert with
+  // the eyes and is legible as a face at any range the fight happens at.
+  P('tankVisor', slab(0.36, 0.09, 0.07), {
+    y: 1.21, z: -0.36, mat: e.eyeMat, shadow: false,
+  });
+  // And the eyes themselves, set into the visor and 25% over roster size -
+  // this is the biggest head in the early roster and they should look it.
+  eyes(P, { y: 1.21, x: 0.12, z: -0.41, r: 1.25, mat: e.eyeMat });
 }
 
 // The only tripod in the game, and the tallest thin thing in it. Read: it is
@@ -840,6 +982,266 @@ function buildWarden(e, g, s) {
   crown.scale.setScalar(s);
   e.crown = crown;
   g.add(crown);
+}
+
+// ---- the air roster ------------------------------------------------------
+// One shape language, split down the middle. BOTH are legless with a lit
+// underside, which is the shared read for "this is not on the floor" and is
+// the only thing in the roster that glows downward. Everything else about them
+// is opposed, because their behaviour is:
+//
+//   harrier  wide, flat, SYMMETRICAL, wings drooping - a platform. It holds
+//            still and works at range, so it is built like something parked.
+//   shrike   long, narrow, nose-forward, wings swept UP - a weapon. It is
+//            longer than it is tall, which nothing else here is, and the
+//            silhouette points at where it is going.
+//
+// The test is the same one the ground roster is held to: as a flat black
+// shape, against the sky, you can tell which one is about to hit you.
+
+// A gun platform that happens to hover. Flat, four-way symmetrical, and built
+// around the pod slung underneath it - the part it has to come down to use.
+function buildHarrier(e, g, s) {
+  const P = partsFor(e, g, s);
+  // Hull: a squashed hex disc. Wide and thin, so from below - which is where
+  // the player sees it from - it is a broad plate rather than a dot.
+  P('harrierHull', prism(0.36, 0.24, 0.26, 6), { y: 1.0, sz: 0.82 });
+  P('harrierSpine', spike(0.1, 0.28, 4), { y: 1.26 });
+  // Wings droop. A dihedral DOWN reads as settled weight hanging off a hover,
+  // the opposite of the shrike's raised sweep.
+  P('harrierWing', slab(0.66, 0.05, 0.22), { x: -0.46, y: 1.02, rz: 0.3, ry: 0.22 });
+  P('harrierWing', slab(0.66, 0.05, 0.22), { x: 0.46, y: 1.02, rz: -0.3, ry: -0.22 });
+  P('harrierTip', shard(0.06), { x: -0.76, y: 0.9, mat: e.eyeMat, shadow: false });
+  P('harrierTip', shard(0.06), { x: 0.76, y: 0.9, mat: e.eyeMat, shadow: false });
+  // The gun pod, hung under the hull and pointing forward. The player learns
+  // this shape as "the bit that is about to be pointed at me".
+  P('harrierPod', prism(0.09, 0.11, 0.4, 5), {
+    y: 0.84, z: -0.08, rx: -Math.PI / 2, mat: SHARED_MATS.gunmetal,
+  });
+  // Thruster plate on the belly - the hover read, and the only part still lit
+  // while the enemy is at station with its eyes shut.
+  P('harrierThruster', prism(0.16, 0.11, 0.07, 6), {
+    y: 0.84, z: 0.12, mat: SHARED_MATS.harrierGlow, shadow: false,
+  });
+  // One big forward lens over the standard pair: a sensor head, not a face.
+  P('harrierLens', shard(0.11), { y: 1.0, z: -0.3, mat: e.eyeMat, shadow: false });
+  eyes(P, { y: 1.08, x: 0.12, z: -0.22, r: 0.85, mat: e.eyeMat });
+}
+
+// A thrown spear with wings. Longer than it is tall - the only model in the
+// roster that is - and every line on it points forward.
+function buildShrike(e, g, s) {
+  const P = partsFor(e, g, s);
+  // Fuselage laid along its own line of travel, narrow end forward. rx of
+  // -PI/2 puts the prism's TOP radius at -z, which is why the small number is
+  // first: the nose is the thin end.
+  P('shrikeBody', prism(0.13, 0.28, 0.8, 5), { y: 1.0, z: 0.06, rx: -Math.PI / 2 });
+  // The spear. This is the entire enemy in one part: it has no other attack,
+  // and it kills by arriving.
+  P('shrikeBeak', spike(0.1, 0.42, 4), {
+    y: 1.0, z: -0.52, rx: -Math.PI / 2, mat: SHARED_MATS.shrikeEdge,
+  });
+  // Swept UP and FORWARD - a stoop, held. Against the harrier's droop this is
+  // the one silhouette difference readable from directly underneath.
+  P('shrikeWing', slab(0.72, 0.045, 0.28), { x: -0.44, y: 1.12, z: 0.12, rz: -0.28, ry: -0.36 });
+  P('shrikeWing', slab(0.72, 0.045, 0.28), { x: 0.44, y: 1.12, z: 0.12, rz: 0.28, ry: 0.36 });
+  P('shrikeFin', slab(0.05, 0.32, 0.28), { y: 1.18, z: 0.42 });
+  P('shrikeBarb', spike(0.05, 0.24, 4), { x: -0.14, y: 0.94, z: 0.52, rx: Math.PI / 2 });
+  P('shrikeBarb', spike(0.05, 0.24, 4), { x: 0.14, y: 0.94, z: 0.52, rx: Math.PI / 2 });
+  // Lit belly, the shared airborne read - a thin strip here rather than the
+  // harrier's plate, because this one is narrow everywhere.
+  P('shrikeBelly', slab(0.1, 0.05, 0.5), {
+    y: 0.86, z: -0.02, mat: SHARED_MATS.harrierGlow, shadow: false,
+  });
+  // Eyes set back along the head, big and close together. Red on a near-white
+  // body: the one warm thing on it, and what the player tracks in a dive.
+  eyes(P, { y: 1.08, x: 0.09, z: -0.28, r: 1.15, mat: e.eyeMat });
+}
+
+// ---- the air roster ------------------------------------------------------
+
+// HARRIER. Two altitudes and a timer between them.
+//
+// HIGH is where it lives: at station it orbits at fifteen metres, does nothing
+// at all, and takes HARRIER_HIGH_ARMOR of what it is shot with (see the type's
+// armor()). LOW is the only place it can shoot from, and the only place it can
+// properly be shot. Nothing else about it needs explaining, which is the point
+// - a flier the player cannot reason about is just an annoyance in the sky.
+//
+// It commits: once the burst starts it finishes, so a player who begins
+// punishing the descent is not left firing at something that changed its mind.
+const HARRIER_HIGH = 5.0;
+const HARRIER_LOW = 2.1;
+const HARRIER_HIGH_ARMOR = 0.2;
+const HARRIER_BURST = 3;
+const HARRIER_SHOT_GAP = 0.26;
+const HARRIER_CD = 3.4;
+// Dropping is faster than climbing back. The descent should look like a
+// decision and the climb like a retreat, and the extra half second at the
+// bottom is the window the whole enemy is built around.
+const HARRIER_DROP_RATE = 6;
+const HARRIER_RISE_RATE = 2.6;
+
+function aiHarrier(e, a) {
+  orbit(e, a, ENEMY_TYPES.harrier.orbit);
+  if (e.hCd === undefined) {
+    // Staggered at birth, so a pair that arrived together does not dive on the
+    // same frame for the rest of the wave.
+    e.hCd = 1.2 + Math.random() * 2.2;
+    e.hLeft = 0;
+    e.hGap = 0;
+  }
+
+  if (e.hLeft > 0) {
+    e.hoverY = HARRIER_LOW;
+    e.flyRate = HARRIER_DROP_RATE;
+    e._setEyeAlert(true);
+    // Only once it has actually ARRIVED. Firing on the way down would make the
+    // descent a threat rather than an opening, which is the opposite of what
+    // it is for.
+    if (e.pos.y < HARRIER_LOW + 0.7) {
+      e.hGap -= a.dt;
+      if (e.hGap <= 0) {
+        e.hGap = HARRIER_SHOT_GAP;
+        e.hLeft--;
+        a.ctx.addProjectile(e.pos.x, e.pos.y + 0.9, e.pos.z, 'harrier', 1, 0);
+        _blinkAt.set(e.pos.x, e.pos.y + 0.85, e.pos.z);
+        a.ctx.effects.burst(_blinkAt, 0x27c4ff, 7, 3, 1, 0.3);
+        if (e.hLeft <= 0) {
+          e.hCd = HARRIER_CD * e.rate;
+          e._setEyeAlert(false);
+        }
+      }
+    }
+    return;
+  }
+
+  e.hoverY = HARRIER_HIGH;
+  e.flyRate = HARRIER_RISE_RATE;
+  e.hCd -= a.dt;
+  // Range-gated on the way in, like the colossus vent: one at the far wall
+  // plinking at a player who has already disengaged is noise.
+  if (e.hCd <= 0 && a.dist < 24) {
+    e.hLeft = HARRIER_BURST;
+    e.hGap = 0.3;
+  }
+}
+
+// SHRIKE. Four states in a fixed loop, and the loop IS the fight with it:
+// circle out of reach, rear up (the tell), fall on a spot on the floor, then
+// crawl back into the sky. Two of the four are the player's turn.
+const SHRIKE_HIGH = 5.2;
+const SHRIKE_DIVE_Y = 0.9;
+// The tell. Long enough to see, react to and walk out of - it is the whole
+// reason the dive is allowed to hurt as much as it does.
+const SHRIKE_WINDUP = 0.85;
+const SHRIKE_DIVE_TIME = 1.4;
+const SHRIKE_CLIMB_TIME = 1.5;
+// Multiples of this enemy's own speed. The dive is the one movement in the
+// game that beats the player's sprint, which is why it has to commit to a spot
+// rather than track - see stepMul on Enemy for how it gets past the clamp
+// every other enemy's velocity is held to.
+const SHRIKE_DIVE_MUL = 2.9;
+const SHRIKE_HIT_RANGE = 1.9;
+
+function aiShrike(e, a) {
+  const ctx = a.ctx;
+  if (e.sState === undefined) {
+    e.sState = 'circle';
+    e.sT = 1 + Math.random() * 1.6;
+    e.stx = 0;
+    e.stz = 0;
+  }
+
+  if (e.sState === 'circle') {
+    orbit(e, a, ENEMY_TYPES.shrike.orbit);
+    e.hoverY = SHRIKE_HIGH;
+    e.flyRate = FLY_RATE_DEFAULT;
+    e.stepMul = 1.4;
+    e.sT -= a.dt;
+    if (e.sT <= 0 && a.dist < 18) {
+      e.sState = 'mark';
+      e.sT = SHRIKE_WINDUP;
+      e._setEyeAlert(true);
+    }
+    return;
+  }
+
+  if (e.sState === 'mark') {
+    // Rears up and drifts in over the player. Rising while everything else in
+    // the arena is coming DOWN the screen is the tell that carries at range,
+    // and the eyes are the one that carries up close.
+    e.hoverY = SHRIKE_HIGH + 1.0;
+    e.flyRate = 5;
+    a.vx = a.nx * a.sp * 0.5;
+    a.vz = a.nz * a.sp * 0.5;
+    e.sT -= a.dt;
+    if (e.sT <= 0) {
+      // Locked to the GROUND, not to the player. Everything telegraphed in
+      // this game commits to a place; a dive that tracked would be an
+      // unavoidable hit with a wind-up animation in front of it.
+      e.stx = ctx.player.pos.x;
+      e.stz = ctx.player.pos.z;
+      e.sState = 'dive';
+      e.sT = SHRIKE_DIVE_TIME;
+      _blinkAt.set(e.stx, 0.06, e.stz);
+      ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.shrike.eye, 2.4, 0.5);
+    }
+    return;
+  }
+
+  if (e.sState === 'dive') {
+    e.hoverY = SHRIKE_DIVE_Y;
+    e.flyRate = 11;
+    e.stepMul = SHRIKE_DIVE_MUL;
+    const dx = e.stx - e.pos.x;
+    const dz = e.stz - e.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    a.vx = (dx / d) * a.sp * SHRIKE_DIVE_MUL;
+    a.vz = (dz / d) * a.sp * SHRIKE_DIVE_MUL;
+    e.sT -= a.dt;
+    // Hits whoever is in the way, not only whoever was standing on the mark:
+    // it is a body travelling at thirteen metres a second and the mark is
+    // where it is AIMED, not the extent of it.
+    const dy = Math.abs(ctx.player.pos.y - e.pos.y);
+    if (a.dist < SHRIKE_HIT_RANGE && dy < Enemy.MELEE_REACH_Y) {
+      ctx.onHitPlayer(e.damage, e.pos);
+      _blinkAt.set(e.pos.x, e.pos.y, e.pos.z);
+      ctx.effects.burst(_blinkAt, ENEMY_TYPES.shrike.eye, 14, 5, 2, 0.4);
+      ctx.effects.addShake(0.12);
+      _shrikeClimb(e);
+      return;
+    }
+    // Out of time, or it has arrived at the spot and there was nobody on it.
+    if (e.sT <= 0 || (d < 0.9 && e.pos.y < SHRIKE_DIVE_Y + 0.5)) {
+      _blinkAt.set(e.pos.x, 0.1, e.pos.z);
+      ctx.effects.burst(_blinkAt, 0xbfd0ff, 8, 3, 1.4, 0.4);
+      _shrikeClimb(e);
+    }
+    return;
+  }
+
+  // CLIMB. The bill for a dive, hit or missed: a second and a half at half
+  // speed, going up in a straight line away from the player. This is the shot
+  // the player is meant to take, and it is why the shrike is allowed to be
+  // untouchable for the rest of its loop.
+  e.hoverY = SHRIKE_HIGH;
+  e.flyRate = 2;
+  e.stepMul = 1.4;
+  a.vx = -a.nx * a.sp * 0.5;
+  a.vz = -a.nz * a.sp * 0.5;
+  e.sT -= a.dt;
+  if (e.sT <= 0) {
+    e.sState = 'circle';
+    e.sT = 0.7 + Math.random() * 0.9;
+  }
+}
+
+function _shrikeClimb(e) {
+  e.sState = 'climb';
+  e.sT = SHRIKE_CLIMB_TIME;
+  e.stepMul = 1.4;
+  e._setEyeAlert(false);
 }
 
 // ---- bosses --------------------------------------------------------------
@@ -1286,6 +1688,53 @@ function _reachY(a) {
 const COLOSSUS_CHARGE_CAP = 52;
 const COLOSSUS_SLAM_CAP = 44;
 const COLOSSUS_CHARGE_SPEED = 14;
+// How far the charge lane reaches. Used twice - by the telegraph that draws
+// the rectangle and by the creep that burns it - so the warning and the
+// consequence cannot drift apart.
+const COLOSSUS_LANE_LEN = 22;
+// The charge burns THE RECTANGLE, not the boss's footprints. Laid down as one
+// row of patches over the whole telegraphed lane the instant the charge
+// launches, which is the only version that means anything: the rectangle was
+// already the clearest warning in the fight and, until the boss physically
+// arrived, the safest place in it - the player stepped aside, the boss went
+// past, and the lane meant nothing a second later. Burning what was ADVERTISED
+// makes the telegraph a claim on ground rather than a dodge prompt, and it
+// covers the whole 22 metres even when the charge is cut short a third of the
+// way down it by a pillar.
+//
+// Patches are placed by the LANE, so they land wherever the rectangle was -
+// including the part of it the boss never reached.
+const COLOSSUS_CREEP_RADIUS = 2.4;
+// Spaced under a radius apart, so the row overlaps into a continuous strip
+// instead of reading as stepping stones down the middle of the attack. Nine
+// patches covers the lane; the count is kept low on purpose, because creep
+// runs on a thirty-slot pool shared with blight pools and ash and a finer
+// strip would let one charge take every slot in it.
+const COLOSSUS_CREEP_STEP = 2.6;
+const COLOSSUS_CREEP_LIFE = 5;
+const COLOSSUS_CREEP_DPS = 14;
+// Nothing is laid outside the arena. A lane aimed at a near wall runs most of
+// its length through solid geometry, and a patch out there would burn a pool
+// slot on ground no one can stand on.
+const COLOSSUS_CREEP_BOUND = 21.6;
+
+// Burns the whole telegraphed rectangle, once, at the moment the charge is
+// released. `dirX/dirZ` is the lane's direction and the boss's position is its
+// near end - the same two numbers markSet drew the rectangle from.
+function _colossusBurnLane(e, ctx) {
+  const bs = e.bs;
+  for (let d = COLOSSUS_CREEP_STEP * 0.5; d < COLOSSUS_LANE_LEN; d += COLOSSUS_CREEP_STEP) {
+    const x = e.pos.x + bs.dirX * d;
+    const z = e.pos.z + bs.dirZ * d;
+    if (Math.abs(x) > COLOSSUS_CREEP_BOUND || Math.abs(z) > COLOSSUS_CREEP_BOUND) continue;
+    ctx.addHazard(x, z, COLOSSUS_CREEP_RADIUS, COLOSSUS_CREEP_LIFE, COLOSSUS_CREEP_DPS, 'lava');
+  }
+  // One splash at the boss's feet rather than one per patch: nine shockwaves
+  // on the same frame is a strobe, and the lane igniting reads as a single
+  // event because it is one.
+  _bossAt.set(e.pos.x, 0.1, e.pos.z);
+  ctx.effects.burst(_bossAt, 0xff5533, 20, 6, 1.6, 0.6);
+}
 
 // Drives the shutters and the core glow toward `open`. Eased rather than
 // snapped: the leaves visibly travelling is what turns the window into
@@ -1361,7 +1810,7 @@ function aiColossus(e, a) {
     e._setEyeAlert(true);
     // The lane is drawn at full length from the first frame so the AREA reads
     // instantly, and fills so the TIMING reads as it goes.
-    const len = 22;
+    const len = COLOSSUS_LANE_LEN;
     ctx.effects.markSet(
       bs.mark,
       e.pos.x + bs.dirX * len * 0.5, e.pos.z + bs.dirZ * len * 0.5,
@@ -1371,6 +1820,9 @@ function aiColossus(e, a) {
     if (bs.t <= 0) {
       ctx.effects.markRelease(bs.mark);
       bs.mark = -1;
+      // The rectangle the player was just shown catches fire as the boss
+      // leaves the blocks, so the warning and the burnt ground are one shape.
+      _colossusBurnLane(e, ctx);
       bs.state = 'dash';
       bs.t = 2.2;
       e._setEyeAlert(false);
@@ -1776,6 +2228,21 @@ export class Enemy {
     this.colorHex = def.color;
     this.eyeBase = def.eye;
     this.pos = pos.clone();
+    // FLIGHT. `pos.y` is a real coordinate for these and zero for everything
+    // else, which is what makes the rest of the game handle them correctly for
+    // free: resolveCircle already ignores a box the mover is above, the melee
+    // reach test already compares the two y values, and the model and its
+    // hitbox are parented to a group whose height is written from pos.y below.
+    // Nothing else in the file needed a special case.
+    this.flying = !!def.fly;
+    this.hoverY = this.flying ? def.fly.height : 0;
+    this.flyRate = FLY_RATE_DEFAULT;
+    if (this.flying) this.pos.y = this.hoverY;
+    // Ceiling on this frame's step, as a multiple of the enemy's own speed.
+    // 1.4 is the headroom crowd separation needs and is what every enemy used
+    // when the clamp was a constant; a shrike raises it for the length of a
+    // dive, which is the one attack in the game meant to outrun the player.
+    this.stepMul = 1.4;
     this.attackCd = 0.8 + Math.random();
     this.windup = 0;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
@@ -2096,7 +2563,10 @@ export class Enemy {
     let pz = nz;
     // Wide bodies steer on the grid cut for them, so they are not routed
     // through gaps they cannot fit through.
-    const nav = this.radius > 0.8 ? (ctx.navBig || ctx.nav) : ctx.nav;
+    // A flier is not on the grid. It goes over the pillars the grid exists to
+    // route around, so a heading borrowed from it would send something at five
+    // metres on a detour around a crate.
+    const nav = this.flying ? null : this.radius > 0.8 ? (ctx.navBig || ctx.nav) : ctx.nav;
     if (nav && nav.steer(this.pos.x, this.pos.z, _steer)) {
       px = _steer.x;
       pz = _steer.z;
@@ -2147,6 +2617,10 @@ export class Enemy {
     // used when every enemy was the same size.
     for (const o of ctx.enemies) {
       if (o === this) continue;
+      // Crowd separation is an XZ test, so without this a flier five metres up
+      // would shoulder the ground crowd out of the way from above - and be
+      // shoved off its own station by a chaser walking underneath it.
+      if (o.flying !== this.flying) continue;
       const ox = this.pos.x - o.pos.x;
       const oz = this.pos.z - o.pos.z;
       const d2 = ox * ox + oz * oz;
@@ -2161,7 +2635,7 @@ export class Enemy {
     }
 
     const step = Math.hypot(vx, vz);
-    const maxStep = sp * 1.4;
+    const maxStep = sp * this.stepMul;
     if (step > maxStep) {
       const k = maxStep / step;
       vx *= k;
@@ -2213,8 +2687,18 @@ export class Enemy {
     // A slow sway underneath, so an enemy is never perfectly still between
     // beats and a silent passage still leaves the crowd swaying.
     const sway = Math.sin(ctx.time * 1.8 + this.id) * 0.022 * (0.4 + ctx.level);
+    // ALTITUDE, before the model is placed. An exponential approach rather
+    // than a ramp, so a flier eases onto its station instead of arriving at
+    // it: `flyRate` is what the ai() turns up to make a descent read as a
+    // stoop and down to make a climb read as effort. A frozen flier holds the
+    // altitude it had - dropping it out of the sky would be a free kill on the
+    // one status that is already the strongest thing in the pool.
+    if (this.flying && this.status.freeze <= 0) {
+      const target = Math.min(FLY_MAX_Y, this.hoverY);
+      this.pos.y += (target - this.pos.y) * Math.min(1, dt * this.flyRate);
+    }
     const bob = this.status.freeze > 0 ? 0 : this._dance * amp + sway;
-    this.group.position.set(this.pos.x, bob, this.pos.z);
+    this.group.position.set(this.pos.x, this.pos.y + bob, this.pos.z);
     this.group.rotation.y = Math.atan2(-dx, -dz);
 
     // THE WEIGHT SHIFT. Bouncing straight up and down reads as bobbing; what
@@ -2308,6 +2792,10 @@ const PROJ_COLORS = {
   // Colossus fires only through its open vent, so the round wears the core's
   // own heat rather than the generic shooter purple.
   colossus: { core: 0xffd08a, glow: 0xff5a00, scale: 1.1 },
+  // The harrier's burst. Small and cold - it arrives from above, so it is read
+  // against the floor rather than against the skyline, and the pale core is
+  // what makes it visible down there.
+  harrier: { core: 0xd7f4ff, glow: 0x27c4ff, scale: 0.65 },
 };
 const projMats = new Map();
 

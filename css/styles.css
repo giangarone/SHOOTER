@@ -144,12 +144,13 @@ html, body {
 #ammo-reload { font-size: 11px; letter-spacing: 0.3em; color: var(--cyan); animation: pulse 0.45s infinite alternate; }
 @keyframes pulse { from { opacity: 0.25; } to { opacity: 1; } }
 
-/* Below the combo readout, which now shares this column under the score box.
-   Moving the buffs down rather than the combo across keeps every score-shaped
-   number - score, credits, multiplier - in one stack. */
+/* Directly under the score box. It used to be pushed down to clear the combo
+   readout that shared this column; the combo is a bottom-centre gauge now, so
+   the buffs take the space back and sit as close to the score stack as the
+   panel above them ends. */
 #buffs {
   position: fixed;
-  top: 132px;
+  top: 104px;
   right: 22px;
   display: flex;
   flex-direction: column;
@@ -364,26 +365,76 @@ html, body {
   color: #ffb300; text-shadow: 0 0 12px rgba(255, 179, 0, 0.5);
 }
 
-/* Under the score box, NOT under the crosshair. It used to sit 46px below
-   screen centre, which is inside the area the player is actually aiming with -
-   a number that grows, flashes and vanishes right where the eye is trying to
-   hold a target. It is a score multiplier, so it belongs with the number it
-   multiplies, and its gold reads as a set with the credits line above it. */
+/* BOTTOM CENTRE, on the sight line. It has now been in two wrong places: under
+   the crosshair, where a number that grows and flashes fights the target the
+   player is trying to hold, and then in the top-right score stack, where it was
+   correct by category and invisible in practice - nobody looks at a corner
+   during a fight. So it sits low and centred, below where the eye tracks and
+   above the HUD row, and it is a GAUGE rather than a number: the bar says how
+   close the chain is to its ceiling at a glance, and the line under it drains
+   as the window runs out, so both questions the player actually has - how good
+   is this and how long have I got - are answered without reading anything. */
 #combo {
-  position: absolute; right: 22px; top: 62px;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  position: absolute; left: 50%; bottom: 92px;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
   pointer-events: none;
 }
-#combo-mult {
-  font-size: 22px; font-weight: 900; letter-spacing: 0.06em;
-  color: var(--gold); text-shadow: 0 0 16px rgba(255, 233, 94, 0.7);
+/* The multiplier is centred on the gauge and the kill count is parked at its
+   right end, rather than the two sharing a centred row: the number the player
+   is actually reading has to sit on the screen's centre line, not next to it. */
+#combo-head {
+  position: relative; width: 260px; height: 30px;
+  display: flex; align-items: baseline; justify-content: center;
 }
-#combo-count { font-size: 9px; letter-spacing: 0.24em; color: #8a95b3; }
-#combo-bar { width: 74px; height: 2px; background: rgba(255, 255, 255, 0.14); margin-top: 3px; }
+#combo-mult {
+  font-size: 30px; font-weight: 900; letter-spacing: 0.04em;
+  color: var(--gold); text-shadow: 0 0 18px rgba(255, 233, 94, 0.75);
+  line-height: 1;
+}
+#combo-count {
+  position: absolute; right: 0; bottom: 3px;
+  font-size: 10px; letter-spacing: 0.26em; color: #8a95b3;
+}
+/* The chain's height. Width is fixed so the fill reads as a FRACTION of a
+   known ceiling - a bar that grew with the number would say nothing. */
+#combo-gauge {
+  position: relative; width: 260px; height: 9px;
+  background: rgba(10, 12, 18, 0.65);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+#combo-fill {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg, #ffc247, #ff8a1f 62%, #ff3d2e);
+  box-shadow: 0 0 14px rgba(255, 160, 40, 0.6);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+/* Where x2 and x3 fall. Notches, not labels: the player needs to know the bar
+   has landmarks, not what they are called. */
+.combo-tick {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: rgba(10, 12, 18, 0.8);
+}
+/* The decay window, drained from both ends so it empties toward the centre the
+   multiplier is sitting on. */
+#combo-bar { width: 260px; height: 2px; background: rgba(255, 255, 255, 0.12); }
 #combo-bar i {
   display: block; height: 100%; background: var(--gold);
   box-shadow: 0 0 8px var(--gold);
-  transform-origin: right center;
+  transform-origin: center;
+}
+/* Capped. The gauge cannot say any more with its length, so it says it with
+   light instead. */
+#combo.combo-max #combo-fill { animation: combo-max-pulse 0.6s infinite alternate; }
+#combo.combo-max #combo-mult {
+  color: #ff6a3d; text-shadow: 0 0 22px rgba(255, 90, 45, 0.85);
+}
+@keyframes combo-max-pulse {
+  from { box-shadow: 0 0 10px rgba(255, 90, 45, 0.5); }
+  to   { box-shadow: 0 0 26px rgba(255, 90, 45, 0.95); }
 }
 
 /* ---- terminal prompt ---- */

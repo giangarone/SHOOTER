@@ -31,12 +31,18 @@ const ROLES = {
   brute: ['tank', 'bulwark'],
   artillery: ['bomber', 'blight'],
   support: ['conduit', 'warden'],
+  // The one role whose members are not near-equivalent by accident but by
+  // construction: a harrier will not close and a shrike does nothing else, so
+  // whichever fills a slot the wave still contains "something in the air".
+  flier: ['harrier', 'shrike'],
 };
 
 // The wave a type first becomes eligible. Everything does NOT show up at once:
 // a wave-1 player meets one enemy and learns it, and the roster opens a type
 // at a time from there. A role with nothing unlocked yet simply cannot be
 // scheduled, which is why the early slot table has no `brute` line.
+export const FLIER_UNLOCK = 21;
+
 const UNLOCK = {
   chaser: 1,
   splitter: 2,
@@ -50,6 +56,12 @@ const UNLOCK = {
   blight: 12,
   magma: 13,
   warden: 14,
+  // The air opens the wave after the fourth boss. Not earlier: everything
+  // before wave 20 is a lesson in reading the FLOOR - lanes, pools, telegraph
+  // circles - and dropping a threat above the player's sight line while they
+  // are still learning that would only teach them to look in the wrong place.
+  harrier: FLIER_UNLOCK,
+  shrike: FLIER_UNLOCK,
 };
 
 // ---- bosses --------------------------------------------------------------
@@ -123,17 +135,35 @@ const SLOTS = [
 
 // Past the authored range the mix holds steady and only the count grows, up to
 // a ceiling the arena and the enemy cap can actually hold.
+// Fliers, on top of the ground count rather than carved out of it. They are a
+// NEW axis, not a reskin of an old one: taking rushers away to pay for them
+// would leave the wave the same size and quietly easier, because a player who
+// has already solved the floor trades a threat they must answer for one they
+// can ignore. So the air is an addition, and waves past 20 are meant to be
+// harder than the curve alone would have made them.
+//
+// One at a time to begin with. A pair of shrikes diving on the wave a player
+// first meets them is the kind of introduction that reads as unfair rather
+// than as new.
+function fliersFor(n) {
+  if (n < FLIER_UNLOCK) return 0;
+  return Math.min(4, 1 + Math.floor((n - FLIER_UNLOCK) / 8));
+}
+
 function slotsFor(n) {
-  if (n < SLOTS.length) return SLOTS[n];
+  const flier = fliersFor(n);
+  if (n < SLOTS.length) return flier ? { ...SLOTS[n], flier } : SLOTS[n];
   const total = Math.min(34, 20 + Math.floor(n * 0.55));
   const support = Math.min(2, 1 + Math.floor((n - 11) / 12));
   const gunner = Math.round(total * 0.24);
   const brute = Math.round(total * 0.13);
   const artillery = Math.round(total * 0.14);
-  // Rushers take the remainder so the total is exactly `total` however the
-  // rounding above lands.
+  // Rushers take the remainder so the GROUND total is exactly `total` however
+  // the rounding above lands. `flier` sits outside that sum by design.
   const rusher = total - gunner - brute - artillery - support;
-  return { rusher, gunner, brute, artillery, support };
+  const slots = { rusher, gunner, brute, artillery, support };
+  if (flier) slots.flier = flier;
+  return slots;
 }
 
 // The types of `role` that exist by wave n. Never empty for a role the
@@ -226,8 +256,13 @@ export function waveConfig(n) {
 // range to punish standing in one place, and no support (a conduit cannot buff
 // a boss anyway, so it would just be a free kill).
 const ADD_ROLES = ['rusher', 'rusher', 'rusher', 'gunner', 'gunner', 'artillery'];
+// Once the air is open, boss adds draw from it too - at one slot in seven, so
+// a boss fight gains an occasional flier rather than a screen full of them on
+// top of everything the boss is already doing.
+const ADD_ROLES_AIR = [...ADD_ROLES, 'flier'];
 
 export function pickAddType(n) {
-  const role = ADD_ROLES[(Math.random() * ADD_ROLES.length) | 0];
+  const roles = n >= FLIER_UNLOCK ? ADD_ROLES_AIR : ADD_ROLES;
+  const role = roles[(Math.random() * roles.length) | 0];
   return pickForRole(role, n);
 }

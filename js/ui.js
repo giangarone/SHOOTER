@@ -42,6 +42,7 @@ export class UI {
     this.comboMult = $('combo-mult');
     this.comboCount = $('combo-count');
     this.comboBar = $('combo-bar').firstElementChild;
+    this.comboFill = $('combo-fill');
     this.promptEl = $('prompt');
     this.shieldFx = $('shield-fx');
     this.statsPanel = $('stats-panel');
@@ -166,10 +167,15 @@ export class UI {
       this.creditNum.textContent = '$' + n.toLocaleString();
     }
   }
-  // `kills` is the current chain length and `fraction` is 0..1 of the time
-  // left before it drops. A chain of 1 shows nothing - a multiplier of x1.0
-  // on screen after every single kill is just noise.
-  setCombo(kills, mult, fraction) {
+  // `kills` is the current chain length, `level` is 0..1 of the way to the
+  // multiplier's ceiling and `fraction` is 0..1 of the time left before the
+  // chain drops. A chain of 1 shows nothing - a multiplier of x1.0 on screen
+  // after every single kill is just noise.
+  //
+  // main.js owns the ceiling and hands `level` down already divided, so the UI
+  // never has to know what COMBO_MAX is - the same reason it is handed `mult`
+  // rather than the step and the count.
+  setCombo(kills, mult, level, fraction) {
     const show = kills >= 2;
     if (this._c.comboShown !== show) {
       this._c.comboShown = show;
@@ -180,6 +186,11 @@ export class UI {
       this._c.comboKills = kills;
       this.comboMult.textContent = 'x' + mult.toFixed(1);
       this.comboCount.textContent = kills + ' KILLS';
+      // The gauge only moves when the chain does, so this is a per-kill write
+      // rather than a per-frame one.
+      const lv = Math.max(0, Math.min(1, level));
+      this.comboFill.style.transform = 'scaleX(' + lv.toFixed(3) + ')';
+      this.comboEl.classList.toggle('combo-max', lv >= 1);
     }
     const f = Math.round(Math.max(0, Math.min(1, fraction)) * 50) / 50;
     if (this._c.comboFrac !== f) {

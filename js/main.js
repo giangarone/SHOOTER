@@ -56,7 +56,7 @@
 
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
-import { Player } from './player.js';
+import { Player, NO_HIT_CAP } from './player.js';
 import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
@@ -218,6 +218,7 @@ const PROJ_IMPACT = {
   sniper: 0x00ff88,
   blight: 0xaaff2a,
   colossus: 0xff5a00,
+  harrier: 0x27c4ff,
 };
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
@@ -1129,7 +1130,7 @@ class Game {
   // something the player did not do.
   _finishBossWave() {
     for (const e of this.enemies) {
-      this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 14, 5, 2, 0.5);
+      this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.8, e.pos.z), e.colorHex, 14, 5, 2, 0.5);
       this.scene.remove(e.group);
       e.dispose();
     }
@@ -1716,7 +1717,7 @@ class Game {
         );
       }
       this.effects.burst(
-        this._killPos.set(e.pos.x, 1.1, e.pos.z), 0xffd600, 12, 4, 1.5, 0.4
+        this._killPos.set(e.pos.x, e.pos.y + 1.1, e.pos.z), 0xffd600, 12, 4, 1.5, 0.4
       );
       hit = true;
     }
@@ -1812,6 +1813,14 @@ class Game {
     if (type === 'sniper') {
       speed = Math.min(32, 22 + this.wave * 0.4);
       dmg = Math.min(22, 12 + this.wave * 0.5);
+    } else if (type === 'harrier') {
+      // Fast and light. A harrier fires THREE of these per descent, so each
+      // one has to cost well under a third of what a shooter's single round
+      // does or the burst would be the hardest hit in the wave - and it is
+      // fired from close range, at a target that has just been given a reason
+      // to stand still and shoot back.
+      speed = Math.min(26, 18 + this.wave * 0.25);
+      dmg = Math.min(11, 6 + this.wave * 0.25);
     } else if (type === 'colossus') {
       // Slower and heavier than an ordinary shooter round. The vent is the
       // window the player closes in to use, so what comes out of it has to be
@@ -2069,7 +2078,7 @@ class Game {
         // wipe the wave-clear line before it could be read.
         if (this.lastPerfect && this.player.mods.noHitBonus > 0) {
           const n = this.player.addNoHitStack();
-          const pct = Math.round((Math.pow(1 + this.player.mods.noHitBonus, n) - 1) * 100);
+          const pct = Math.round(Math.min(NO_HIT_CAP, this.player.mods.noHitBonus * n) * 100);
           this.effects.shockwave(this.player.pos, 0xeaff6b, 7, 0.7);
           msg += '  NO-HIT x' + n + ' (+' + pct + '% DMG & RATE)';
         }
@@ -2452,7 +2461,9 @@ class Game {
           this.player.reserveAmmo + this.player.mods.ammoOnKill
         );
       }
-      this.effects.burst(this._killPos.set(e.pos.x, 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
+      // e.pos.y is zero for everything on the floor, so this is unchanged for
+      // the ground roster and puts a flier's death where the flier was.
+      this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
       this.sfx.kill();
       // Loot falls where the thing died. Boss parts are excluded: the boss
       // pays out by bleeding at health thresholds and by the kill bonus, and
@@ -2896,7 +2907,10 @@ class Game {
     }
     this.ui.setScore(this.score);
     this.ui.setCredits(this.credits);
-    this.ui.setCombo(this.comboKills, this.comboMult(), this.comboTimer / COMBO_WINDOW);
+    const cm = this.comboMult();
+    this.ui.setCombo(
+      this.comboKills, cm, (cm - 1) / (COMBO_MAX - 1), this.comboTimer / COMBO_WINDOW
+    );
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);
@@ -2965,7 +2979,8 @@ class Game {
     // Only shown when the mutation that produces them is owned. A row reading
     // "0" for a stat the player has no way to earn is noise.
     if (p.mods.noHitBonus > 0) {
-      rows.push(['NO-HIT STACKS', 'x' + p.noHitStacks, p.noHitStacks > 0]);
+      const pct = Math.round(Math.min(NO_HIT_CAP, p.mods.noHitBonus * p.noHitStacks) * 100);
+      rows.push(['NO-HIT BONUS', '+' + pct + '%', p.noHitStacks > 0]);
     }
     if (p.mods.streakStep > 0) {
       const pct = Math.round(p.streak * 100);

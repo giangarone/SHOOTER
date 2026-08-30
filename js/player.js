@@ -109,7 +109,7 @@ const DEFAULT_MODS = {
   noHitBonus: 0,        // No-Hit Bonus: damage and fire rate gained per wave
                         // cleared without taking damage. Unlike everything
                         // else here it accumulates across the run - see
-                        // noHitStacks and rebuildMods().
+                        // noHitStacks, NO_HIT_CAP and rebuildMods().
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -126,12 +126,42 @@ const BASE_RESERVE = 300;
 // in the pool.
 const JUMP_V = 9;
 const AIR_JUMP_V = 11;
-// Double Dash: how long a dash lasts, how fast it travels, and how long one
-// spent charge takes to come back. 0.18s at 26 m/s is ~4.7m - far enough to
-// leave a slam or cross a lane, short enough that it is not a movement mode.
-const DASH_TIME = 0.18;
-const DASH_SPEED = 26;
+// Double Dash: how long a dash lasts, its PEAK speed, and how long one spent
+// charge takes to come back.
+//
+// THE ENVELOPE IS THE WHOLE FEATURE. The first version held a flat 26 m/s for
+// 0.18s and then dropped the player back to a walk on a single frame, which is
+// where the old "it stops dead" read came from: the arrival was a step change
+// in velocity, and a step change in velocity is exactly what the eye reads as
+// hitting something. dashShape() below replaces the rectangle with a smooth
+// curve - eased up over DASH_IN of the window, eased back down over the rest -
+// so the player accelerates INTO the dash and coasts OUT of it into their own
+// walking speed with no discontinuity anywhere.
+//
+// Mean of the shape is 0.5 by construction (both halves are smoothstep), so
+// the distance covered is DASH_SPEED * DASH_TIME * 0.5 = ~9.5m: twice the 4.7m
+// of the flat version, which is the other half of the ask.
+const DASH_TIME = 0.45;
+const DASH_SPEED = 42;
+// Fraction of the window spent ramping UP. Short: the dash still has to answer
+// a slam the frame it is pressed, so most of the curve is the exit.
+const DASH_IN = 0.22;
 const DASH_RECHARGE = 2.5;
+
+// The dash's speed envelope at `u` (0..1 through the window), 0..1.
+// smoothstep on both halves - a cubic with zero slope at each end, which is
+// the same curve a cubic-bezier ease-in-out draws. Zero slope at u=1 is the
+// part that matters: it is what makes the dash END smoothly instead of being
+// switched off.
+function dashShape(u) {
+  const t = u < DASH_IN ? u / DASH_IN : 1 - (u - DASH_IN) / (1 - DASH_IN);
+  return t * t * (3 - 2 * t);
+}
+// The ceiling on No-Hit Bonus, as a fraction. The mutation pays 8% a wave, so
+// this is reached after five clean waves and never moves again. Exported
+// because main.js says the current total on the clear banner and has to agree
+// with rebuildMods about where it stops.
+export const NO_HIT_CAP = 0.4;
 // Collision height, a little over the 1.7 eye height. Only overhead geometry
 // cares - see the resolveCircle call in update().
 const PLAYER_HEIGHT = 1.8;
@@ -177,6 +207,10 @@ export class Player {
     // every frame, so a puller has to keep asking for it.
     this.extX = 0;
     this.extZ = 0;
+    // What the movement keys asked for this frame, before the dash is mixed
+    // over it. See the note in update().
+    this.moveVX = 0;
+    this.moveVZ = 0;
     this.reloading = 0;
     this.onGround = false;
     this.lastHurt = -99;
@@ -184,6 +218,11 @@ export class Player {
     this.meleeCd = 0;
     this.meleeActive = 0;
     this.damageMult = 1;
+    // RAGE. The red pickup's other half: it moves the player as well as their
+    // damage, and it rides the SAME clock so the two can never disagree about
+    // how long the buff has left. Set by POWERUP_TYPES.damageBoost, cleared
+    // beside damageMult below.
+    this.rageSpeedMult = 1;
     this.damageBoostEnd = 0;
     this.fireRateMult = 1;
     this.fireRateBoostEnd = 0;
@@ -210,9 +249,10 @@ export class Player {
     this.jumpsLeft = 0;
     this.dashLeft = 0;
     this._dashAcc = 0;
+    this.dashStart = 0;
     this.dashEnd = 0;
-    this.dashVX = 0;
-    this.dashVZ = 0;
+    this.dashDX = 0;
+    this.dashDZ = 0;
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
@@ -291,11 +331,11 @@ export class Player {
       if (def && n > 0) def.apply(this.mods, n);
     }
     // No-Hit Bonus is applied AFTER the upgrade replay, because it multiplies
-    // whatever the build ended up with rather than being part of it. It is
-    // compounding, not additive: ten flawless waves is 2.6x, which is a lot
-    // and is meant to be - it costs a whole run of never being touched.
+    // whatever the build ended up with rather than being part of it. Additive
+    // and clamped at NO_HIT_CAP: it is a bonus the player can finish earning,
+    // not an open-ended multiplier on a run that was already going well.
     if (this.mods.noHitBonus > 0 && this.noHitStacks > 0) {
-      const k = Math.pow(1 + this.mods.noHitBonus, this.noHitStacks);
+      const k = 1 + Math.min(NO_HIT_CAP, this.mods.noHitBonus * this.noHitStacks);
       this.mods.damage *= k;
       this.mods.fireRate *= k;
     }
@@ -327,8 +367,14 @@ export class Player {
     if (!f && !sd) return false;
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
-    this.dashVX = (-sinY * f + cosY * sd) * DASH_SPEED;
-    this.dashVZ = (-cosY * f - sinY * sd) * DASH_SPEED;
+    // Stored as a unit DIRECTION, not a velocity: the speed along it is
+    // whatever dashShape says this frame.
+    this.dashDX = -sinY * f + cosY * sd;
+    this.dashDZ = -cosY * f - sinY * sd;
+    const len = Math.hypot(this.dashDX, this.dashDZ) || 1;
+    this.dashDX /= len;
+    this.dashDZ /= len;
+    this.dashStart = time;
     this.dashEnd = time + DASH_TIME;
     this.dashLeft--;
     this.dashFx = true;
@@ -337,7 +383,10 @@ export class Player {
 
   // One more flawless wave. Returns the new stack count so the caller can say
   // so on screen; a run that has not picked the mutation up never calls this.
+  // Stops counting once the stacks on the board already reach NO_HIT_CAP, so
+  // the number on the HUD never climbs past what it is actually paying.
   addNoHitStack() {
+    if (this.mods.noHitBonus * this.noHitStacks >= NO_HIT_CAP) return this.noHitStacks;
     this.noHitStacks++;
     this.rebuildMods();
     return this.noHitStacks;
@@ -411,6 +460,7 @@ export class Player {
     this.jumpsLeft = 0;
     this.dashLeft = 0;
     this._dashAcc = 0;
+    this.dashStart = 0;
     this.dashEnd = 0;
     this._prevJump = false;
     this.jumpFx = false;
@@ -430,6 +480,8 @@ export class Player {
     this.extZ = 0;
     this.pos.set(0, 0, 8);
     this.vel.set(0, 0, 0);
+    this.moveVX = 0;
+    this.moveVZ = 0;
     this.yaw = 0;
     this.pitch = 0;
     this.health = this.maxHealth;
@@ -442,6 +494,7 @@ export class Player {
     this.meleeCd = 0;
     this.meleeActive = 0;
     this.damageMult = 1;
+    this.rageSpeedMult = 1;
     this.damageBoostEnd = 0;
     this.fireRateMult = 1;
     this.fireRateBoostEnd = 0;
@@ -477,6 +530,7 @@ export class Player {
 
     if (this.damageBoostEnd > 0 && time >= this.damageBoostEnd) {
       this.damageMult = 1;
+      this.rageSpeedMult = 1;
       this.damageBoostEnd = 0;
     }
     if (this.fireRateBoostEnd > 0 && time >= this.fireRateBoostEnd) {
@@ -536,30 +590,48 @@ export class Player {
     // keys just damps the velocity toward zero.
     const f = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
     const s = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    // Kept SEPARATE from this.vel, and that separation is what makes the dash
+    // blend below honest. The damp branch feeds on the previous frame's value,
+    // so if the dash wrote into this.vel the decaying half of its own envelope
+    // would be fed back in as "the player's movement" on the next frame and
+    // integrate into a coast three times as long as the dash. moveVX/moveVZ
+    // are only ever what the KEYS asked for.
     if (f || s) {
       const len = Math.hypot(f, s);
       const fn = f / len;
       const sn = s / len;
-      // Evasion's reward for a dodge: a burst of speed to leave with.
-      const speed = BASE_SPEED * this.mods.moveMult * (time < this.dodgeEnd ? DODGE_SPEED : 1);
+      // Evasion's reward for a dodge: a burst of speed to leave with. Rage
+      // stacks multiplicatively with it, because both are short windows the
+      // player earned and neither should quietly swallow the other.
+      const speed = BASE_SPEED * this.mods.moveMult * this.rageSpeedMult
+        * (time < this.dodgeEnd ? DODGE_SPEED : 1);
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
-      this.vel.x = (-sinY * fn + cosY * sn) * speed;
-      this.vel.z = (-cosY * fn - sinY * sn) * speed;
+      this.moveVX = (-sinY * fn + cosY * sn) * speed;
+      this.moveVZ = (-cosY * fn - sinY * sn) * speed;
     } else {
       const damp = Math.pow(0.0001, dt);
-      this.vel.x *= damp;
-      this.vel.z *= damp;
+      this.moveVX *= damp;
+      this.moveVZ *= damp;
     }
+    this.vel.x = this.moveVX;
+    this.vel.z = this.moveVZ;
 
-    // A dash OVERRIDES the movement block rather than adding to it, and sits
+    // A dash BLENDS OVER the movement block rather than adding to it, and sits
     // after it for the same reason update() assigns vel.x/z in the first place:
     // anything written before the key test would be thrown away on any frame a
     // direction is held. Position is still integrated and resolved below, so a
     // dash cannot phase through a wall.
+    //
+    // The blend weight IS the envelope, which is what makes the hand-back
+    // seamless: at the peak the dash owns the velocity outright, and as the
+    // curve falls the player's own held direction fades back in underneath it
+    // until, at the last frame, the two are the same number. Nothing is ever
+    // switched off - there is no frame where the velocity jumps.
     if (time < this.dashEnd) {
-      this.vel.x = this.dashVX;
-      this.vel.z = this.dashVZ;
+      const k = dashShape((time - this.dashStart) / DASH_TIME);
+      this.vel.x = this.moveVX * (1 - k) + this.dashDX * DASH_SPEED * k;
+      this.vel.z = this.moveVZ * (1 - k) + this.dashDZ * DASH_SPEED * k;
     }
 
     this.vel.y -= 22 * dt;

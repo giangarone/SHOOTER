@@ -83,6 +83,10 @@ names.forEach((name, i) => {
       }
     }
   }
+  // A flier's constructor lifts its group to its hover altitude. This sheet is
+  // about the MODEL, and one parked five metres over the row would be off the
+  // top of the frame, so every type is stood on the floor here.
+  g.position.y = 0;
   const holder = new THREE.Object3D();
   holder.position.x = i * SPACING;
   holder.add(g);
