@@ -41,6 +41,32 @@ export const CEIL_Y = 16;
 // filter in the NavGrid constructor.
 export const CATWALK_Y = 4.6;
 
+// Base fog density. EXPONENTIAL, not linear: a linear fog has a hard near
+// plane and a hard far plane, and a room with a visible band across it reads
+// as a room. Exp2 puts haze everywhere and simply more of it further off,
+// which is what air with a smoke machine in it actually does.
+//
+// It costs nothing to switch. Both are a branch inside shaders every material
+// in this scene already runs, and the two measured identical on the software
+// rasteriser the smoke test uses. rig.js drives this value: it thickens for a
+// boss and breathes with the bass the rest of the time.
+//
+// Tuned by eye against the linear fog it replaces, and deliberately BELOW the
+// value that matches it at distance. Exp2 has one parameter, so it cannot do
+// what a near/far pair did - hold the near field perfectly clear and then band
+// off - and matching the old occlusion at 40m (0.017) put so much haze in the
+// first ten metres that the room lost its blacks and every accent turned to
+// pastel. 0.013 keeps the arena reading as a dark box with smoke in it, which
+// is the look; the far wall is a little more visible than it was, and that is
+// the price of haze everywhere else.
+//
+// IT MUST STAY MODEST: enemy colour is the game's primary read, and fog is the
+// one setting in the venue that can quietly wash all of it out at once.
+export const FOG_DENSITY = 0.013;
+// What it thickens to for a boss - the room closing in around the fight. The
+// old linear pair pulled in to 14/44 for the same effect.
+export const FOG_DENSITY_BOSS = 0.024;
+
 // ONE unit cube, scaled per mesh. Every box in the venue - walls, ceiling,
 // truss bays, speaker cabinets, catwalk decks, trims - is this geometry with a
 // different transform. Writing `new BoxGeometry` per prop would put ~60
@@ -326,7 +352,7 @@ export function buildArena(scene) {
   group.add(p2);
 
   scene.background = new THREE.Color(0x07090f);
-  scene.fog = new THREE.Fog(0x07090f, 24, 66);
+  scene.fog = new THREE.FogExp2(0x07090f, FOG_DENSITY);
 
   // Spawn points: a 3x3 grid near the arena edges, minus the centre (which is
   // on top of the middle platform and would drop spawns onto the player).

@@ -25,6 +25,7 @@
 // never has to check - and so the rig and the dancing crowd in enemy.js, which
 // read the same two numbers, can never disagree about whether the party is on.
 import * as THREE from 'three';
+import { FOG_DENSITY, FOG_DENSITY_BOSS } from './arena.js';
 
 // Ceiling height, mirrored from arena.js. The truss hangs just below it.
 const TRUSS_Y = 13.6;
@@ -57,6 +58,7 @@ const HEADS = 2;
 const BEAMS = 4;
 const BEAM_LEN = 15;
 
+
 // The palette the accents are drawn from. NO WHITE: the room's colour never
 // drops back to white between picks, it steps from one hue to the next, which
 // is what a rave rig actually does. Readability is still protected, because
@@ -70,6 +72,79 @@ const ACCENTS = [
 // reads instantly as "the set has stopped".
 const HOUSE = 0xffb060;
 
+
+// The beam's look, baked once into one shared texture.
+//
+// TWO THINGS IN ONE IMAGE, on the two axes, so a single texture fetch buys
+// both and the beams stay free:
+//
+//   v (along the shaft)  a gradient, bright at the fixture and fading to
+//                        nothing at the open end. This is what turns a cone
+//                        into a shaft of light DISSIPATING in haze - the flat
+//                        opacity it had before ended in a hard circular rim,
+//                        which is the single most artificial thing a volumetric
+//                        beam can do.
+//   u (around it)        seamless vertical streaks of varying density, so
+//                        rotating the map reads as smoke drifting through the
+//                        beam rather than as the beam itself moving.
+//
+// ConeGeometry puts v=1 at the apex, and the apex is the end at the fixture -
+// so canvas TOP is the bright end (three.js flips Y on upload by default).
+function makeBeamTexture() {
+  const W = 64;
+  const H = 128;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  // The streaks. Summed sines with integer frequencies, which is what makes
+  // the pattern seamless where u wraps: any other frequency leaves a visible
+  // vertical seam running the length of every beam in the room.
+  const streak = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    const t = (x / W) * Math.PI * 2;
+    // Centred high, and modulated shallowly. The streaks are texture on a beam,
+    // not the beam itself: at a low baseline they were eating most of the
+    // shaft's brightness to draw detail nobody can resolve on a moving cone.
+    streak[x] = 0.86
+      + 0.09 * Math.sin(t * 3 + 0.7)
+      + 0.06 * Math.sin(t * 7 + 2.1)
+      + 0.03 * Math.sin(t * 13 + 4.3);
+  }
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    // 1 at the top of the canvas (the fixture), 0 at the bottom.
+    //
+    // The exponent is the whole argument about how visible a beam is. Squared -
+    // where this started - averages a THIRD of full brightness down the shaft,
+    // so simply adding the texture dimmed the beams to about a fifth of what
+    // they had been and they all but vanished. At 1.25 the average is closer to
+    // 0.45, the shaft still fades out rather than ending in a rim, and the
+    // opacity below is what carries the rest.
+    const v = 1 - y / (H - 1);
+    const fall = Math.pow(v, 1.25);
+    for (let x = 0; x < W; x++) {
+      const a = Math.max(0, Math.min(1, streak[x] * fall));
+      const i = (y * W + x) * 4;
+      const c = (a * 255) | 0;
+      // Written into RGB *and* alpha: additive blending multiplies the
+      // material's colour by the map's RGB and its opacity by the map's alpha,
+      // so carrying the shape in both is what keeps this looking the same if
+      // the blend mode is ever changed.
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = c;
+      img.data[i + 3] = c;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  // u wraps so the map can be rotated around the shaft forever; v is clamped
+  // because the gradient along the beam is fixed to the geometry and must
+  // never repeat.
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 export class Rig {
   constructor(scene, arena) {
     this.scene = scene;
@@ -82,8 +157,6 @@ export class Rig {
     // of the arena's own lighting rather than as a magic number.
     this.baseHemi = this.lights.hemi.intensity;
     this.baseDir = this.lights.dir.intensity;
-    this.baseFogNear = scene.fog.near;
-    this.baseFogFar = scene.fog.far;
     this._fogBase = new THREE.Color(scene.fog.color.getHex());
 
     // ---- truss and fixtures ----------------------------------------------
@@ -151,9 +224,15 @@ export class Rig {
     // Shift the cone so its apex is at the pivot origin rather than its centre.
     beamGeo.translate(0, -BEAM_LEN / 2, 0);
     this.beams = [];
+    // ONE texture for all four, deliberately. Per-beam copies would let each
+    // shaft drift at its own rate, but textures are a capped resource here (the
+    // smoke test holds the whole game to twelve) and the beams hang metres
+    // apart at different angles - nobody can see them share a phase.
+    this._beamTex = makeBeamTexture();
     for (let i = 0; i < BEAMS; i++) {
       const mat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
+        map: this._beamTex,
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
@@ -380,6 +459,11 @@ export class Rig {
     }
 
     // ---- beams -------------------------------------------------------------
+    // Density crawling around the shafts. One write, outside the loop: all
+    // four beams share the texture. Slow on purpose - this is smoke drifting
+    // through a fixed beam, and anything fast enough to notice reads as the
+    // texture sliding rather than as air moving.
+    this._beamTex.offset.x = this.t * 0.035;
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
       const sw = Math.sin(this.t * 0.6 + b.phase);
@@ -387,12 +471,20 @@ export class Rig {
       b.pivot.rotation.x = Math.cos(this.t * 0.45 + b.phase * 1.3) * 0.42;
       b.mat.color.copy(this._colour);
       // Beams are the loudest thing in the room, so they are the first thing
-      // the house lights take away. Gated on `_energy` as well as the beat:
-      // shown at a flat base they read as static grey cones hanging in an idle
-      // room rather than as light.
-      const o = (0.012 + level * 0.05 + beat * 0.26 * this._energy)
+      // the house lights take away. Still gated on `_energy` as well as the
+      // beat, and that gate is deliberate: shown at a flat base they read as
+      // static grey cones hanging in an idle room rather than as light.
+      //
+      // These numbers are roughly seven times what they were, which sounds
+      // reckless and is not - the map above multiplies every fragment down by
+      // its position along the shaft, so the old values were being spent twice
+      // and the beams came out barely there. Brightness is also the one thing
+      // here that is genuinely free: it changes the VALUE written to pixels
+      // already being blended, not how many of them there are. Widening the
+      // cones would have been the expensive way to solve the same complaint.
+      const o = (0.06 + level * 0.28 + beat * 1.5 * this._energy)
         * this._energy * (1 - dark) * (1 - this._house);
-      b.mat.opacity = Math.min(0.38, o);
+      b.mat.opacity = Math.min(0.9, o);
       // An invisible mesh is culled before rasterisation; a fully transparent
       // one is still drawn. These are big double-sided additive cones, so that
       // difference is most of their cost.
@@ -457,13 +549,19 @@ export class Rig {
     }
 
     // ---- fog ---------------------------------------------------------------
-    // The room closes in for a boss and opens back up afterwards. Fog colour
-    // takes a wash of the accent so the air itself is tinted, which is most of
-    // what sells a smoke-filled venue.
-    const fogNear = boss ? 14 : this.baseFogNear;
-    const fogFar = boss ? 44 : this.baseFogFar;
-    this.scene.fog.near += (fogNear - this.scene.fog.near) * Math.min(1, dt * 1.5);
-    this.scene.fog.far += (fogFar - this.scene.fog.far) * Math.min(1, dt * 1.5);
+    // The room closes in for a boss and opens back up afterwards, and the haze
+    // BREATHES with the bass the rest of the time, so the air is part of the
+    // show rather than a fixed setting. Fog colour takes a wash of the accent
+    // too, which is most of what sells a smoke-filled venue.
+    //
+    // The bass term is held to a third: enemy colour is the game's primary
+    // read and fog is the one control in this file that can quietly wash every
+    // one of them out. The house lights thin it instead of thickening it - an
+    // intermission is the room's lights coming up, and clearing the air is
+    // half of what that looks like.
+    const fogTarget = (boss ? FOG_DENSITY_BOSS : FOG_DENSITY)
+      * (1 + level * 0.3) * (1 - this._house * 0.35);
+    this.scene.fog.density += (fogTarget - this.scene.fog.density) * Math.min(1, dt * 1.5);
     this._c.copy(this._fogBase).lerp(this._colour, 0.12 + level * 0.1);
     this.scene.fog.color.copy(this._c);
     this.scene.background.copy(this._c);

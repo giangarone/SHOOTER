@@ -18,6 +18,7 @@ import * as THREE from 'three';
 // growing the buffer.
 const MAX = 1024;
 
+
 // Points along a homing tracer. Enough that the bend reads as a curve rather
 // than as two straight lines meeting at an angle.
 const ARC_SEGMENTS = 12;
@@ -774,4 +775,5 @@ export class Effects {
     this.points.geometry.attributes.position.needsUpdate = true;
     this.points.geometry.attributes.color.needsUpdate = true;
   }
+
 }

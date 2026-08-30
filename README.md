@@ -55,6 +55,9 @@ Open http://localhost:8123
   pulse are the ones that cost you health (blight pools in toxic green, magma
   trails in molten orange). Colour and the pulse back the silhouette up, so the
   distinction survives a busy screen.
+- **A room full of smoke.** Exponential fog that thickens on the bass and closes
+  in for a boss, and light shafts off the truss that dissipate into the haze
+  rather than ending in a hard edge.
 - **A boss every five waves**, in a fixed rotation of five that repeats: the
   **Colossus** (armoured but for a red core in its chest that opens on a rhythm,
   and a telegraphed charge that knocks it out cold against a wall), **Siege**
