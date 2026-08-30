@@ -144,9 +144,12 @@ html, body {
 #ammo-reload { font-size: 11px; letter-spacing: 0.3em; color: var(--cyan); animation: pulse 0.45s infinite alternate; }
 @keyframes pulse { from { opacity: 0.25; } to { opacity: 1; } }
 
+/* Below the combo readout, which now shares this column under the score box.
+   Moving the buffs down rather than the combo across keeps every score-shaped
+   number - score, credits, multiplier - in one stack. */
 #buffs {
   position: fixed;
-  top: 72px;
+  top: 132px;
   right: 22px;
   display: flex;
   flex-direction: column;
@@ -208,6 +211,15 @@ html, body {
   box-shadow: 0 0 8px #4ef3ff;
 }
 .buff-icon.shield .buff-timer { background: #4ef3ff; }
+/* Remaining shield POINTS, over the chip. The timer bar alone says how long is
+   left but never how much is left, and the shield is spent by damage far more
+   often than it is by the clock. */
+.buff-icon .buff-label {
+  position: absolute; bottom: -1px; left: 0; right: 0;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  text-align: center; color: #0a0c12;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+}
 
 /* The rig's full-screen flash. Sits ABOVE the canvas but BELOW the HUD
    (z-index 5), so the room strobes and the readouts never do. Only `opacity`
@@ -217,6 +229,30 @@ html, body {
   position: fixed; inset: 0; pointer-events: none; z-index: 4;
   background: #fff; opacity: 0; will-change: opacity;
 }
+
+/* SHIELD. The powerup is the rarest drop in the pool and used to announce
+   itself with a 40px chip in the corner - by the time a player noticed it, it
+   was usually spent. This lights the whole frame instead, hexagon-tinted to
+   match the pickup's dome, and its opacity tracks the points REMAINING, so a
+   shield down to its last few visibly thins out before it breaks.
+
+   A screen-space rim rather than a dome on the player: in first person a dome
+   around the camera is either invisible or covers the whole view. Below the
+   vignette so a hit still reads as red over the top of it, and driven by
+   `opacity` alone, which the compositor handles without paint. */
+#shield-fx {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
+  /* Two stops, not one: the wide gradient is the barrier's body and the tight
+     one is its edge, which is what stops it reading as ambient blue lighting in
+     a room that already has plenty of it. */
+  background:
+    radial-gradient(ellipse at center, transparent 46%, rgba(78, 243, 255, 0.44) 100%),
+    radial-gradient(ellipse at center, transparent 72%, rgba(160, 252, 255, 0.38) 100%);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.35), inset 0 0 60px rgba(78, 243, 255, 0.3);
+  transition: opacity 0.18s linear;
+  animation: shield-breathe 1.9s ease-in-out infinite alternate;
+}
+@keyframes shield-breathe { from { filter: brightness(0.78); } to { filter: brightness(1.25); } }
 
 #vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
@@ -328,10 +364,14 @@ html, body {
   color: #ffb300; text-shadow: 0 0 12px rgba(255, 179, 0, 0.5);
 }
 
+/* Under the score box, NOT under the crosshair. It used to sit 46px below
+   screen centre, which is inside the area the player is actually aiming with -
+   a number that grows, flashes and vanishes right where the eye is trying to
+   hold a target. It is a score multiplier, so it belongs with the number it
+   multiplies, and its gold reads as a set with the credits line above it. */
 #combo {
-  position: absolute; left: 50%; top: calc(50% + 46px);
-  transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: absolute; right: 22px; top: 62px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
   pointer-events: none;
 }
 #combo-mult {
@@ -343,7 +383,7 @@ html, body {
 #combo-bar i {
   display: block; height: 100%; background: var(--gold);
   box-shadow: 0 0 8px var(--gold);
-  transform-origin: left center;
+  transform-origin: right center;
 }
 
 /* ---- terminal prompt ---- */
@@ -368,3 +408,68 @@ html, body {
 #prompt .prompt-cost { color: #ffb300; }
 #prompt.blocked { opacity: 0.6; }
 #prompt.blocked b { background: var(--dim); }
+
+/* ---- held-TAB build sheet -------------------------------------------------
+   Everything a run accumulates that the HUD has no room for: the mutations
+   owned and their tiers, and the numbers behind the score. Held, not toggled,
+   and the game keeps RUNNING underneath - a panel that paused the arena would
+   be a free timeout on demand, so this is a glance the player pays for.
+
+   Deliberately not an `.overlay`: those blur and dim the whole screen and take
+   the cursor. This is a panel over a live fight, so it stays off-centre of the
+   crosshair, keeps the HUD readable around it, and never captures pointer
+   events. */
+#stats-panel {
+  position: fixed; inset: 0; z-index: 8;
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 7, 11, 0.55);
+}
+#stats-card {
+  width: 620px; max-width: 92vw; max-height: 86vh; overflow: hidden;
+  padding: 22px 26px;
+  background: rgba(10, 12, 18, 0.9);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 22px 26px;
+}
+.stats-head {
+  grid-column: 1 / -1;
+  font-size: 11px; letter-spacing: 0.34em; color: var(--cyan);
+  border-bottom: 1px solid var(--line); padding-bottom: 8px;
+}
+.stats-col h3 {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3em;
+  color: var(--dim); margin-bottom: 10px;
+}
+/* Stat rows are label-left / value-right with a rule between, so the eye can
+   run down either column without reading the other. */
+.stat-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 3px 0;
+  font-size: 12px; letter-spacing: 0.06em; color: var(--dim);
+}
+.stat-row b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-row.good b { color: var(--gold); }
+
+/* One mutation. The dot carries the upgrade's own theme colour - the same
+   colour its totem and its plate on the receiver wear - so the list reads as
+   the build the player has been looking at all run, not as a fresh index. */
+.mut-row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 0;
+  font-size: 12px; letter-spacing: 0.08em; color: var(--text);
+}
+.mut-row i {
+  width: 8px; height: 8px; flex: none; border-radius: 2px;
+  background: currentColor; box-shadow: 0 0 8px currentColor;
+}
+.mut-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mut-row em {
+  font-style: normal; font-weight: 700; color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.mut-empty { font-size: 12px; color: var(--dim); letter-spacing: 0.08em; }
+/* The mutation column is the one that can overflow - a long run owns twenty
+   picks - so it scrolls inside itself rather than growing the card. */
+.stats-col.muts { max-height: 62vh; overflow-y: auto; }

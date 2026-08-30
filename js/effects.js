@@ -70,8 +70,14 @@ export function makeGlowTexture() {
 // TWO FAMILIES, and the difference is the whole point of them. A SMOOTH patch
 // is the player's - ash, the ground they made dangerous for the enemy. A
 // JAGGED one hurts THEM. That distinction is carried by the silhouette first,
-// by colour second and by the pulse third, so it survives colourblindness, a
+// by the PULSE second and by colour third, so it survives colourblindness, a
 // busy screen and a player who has never read a tooltip.
+//
+// Pulse was promoted over colour deliberately. Both families now live in warm
+// hues - ash belongs to a FIRE mutation and used to be cyan, which read as ice
+// - so hue alone no longer separates them and cannot be the second signal. A
+// hostile patch breathes hard, across its whole area; the player's own sits
+// perfectly still. See creepSet().
 const CREEP_POINTS = 64;
 
 function makeCreepShape(jagged, seed) {
@@ -581,9 +587,13 @@ export class Effects {
     // patches the player has to get out of; ground they made dangerous for the
     // enemy sits still and stays out of the way.
     if (c.hostile) {
-      const pulse = 0.78 + Math.sin(this._creepT * 4.2 + c.phase) * 0.22;
-      c.fillMat.opacity = 0.5 * k;
-      c.edgeMat.opacity = 1.0 * k * pulse;
+      // The whole patch beats, not just the rim: a rim-only pulse on a 3m pool
+      // is a thin line moving at the edge of vision, and the thing the player
+      // has to notice is the AREA. The fill's swing is the smaller of the two
+      // so the outline still leads.
+      const beat = Math.sin(this._creepT * 4.6 + c.phase);
+      c.fillMat.opacity = 0.5 * k * (0.74 + beat * 0.26);
+      c.edgeMat.opacity = 1.0 * k * (0.6 + beat * 0.4);
     } else {
       c.fillMat.opacity = 0.34 * k;
       c.edgeMat.opacity = 0.42 * k;

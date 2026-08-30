@@ -15,12 +15,13 @@ Open http://localhost:8123
 
 | Key | Action |
 | --- | --- |
-| WASD | Move |
+| WASD | Move. Double-tap one to dash, with the Double Dash mutation |
 | Mouse | Aim (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | R | Reload |
-| Space | Jump |
+| Space | Jump. Press again in midair, with the Double Jump mutation |
 | E | Buy ammo / reroll at a station |
+| Tab | Hold for the run summary: mutations owned, and the numbers behind the score |
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
 
@@ -180,8 +181,8 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 44 upgrades: 10 commons, 28 rares and 6 cursed. A specific rare
-mutation turns up in roughly 6-7% of totem sets, so a run sees a slice of the
+The pool is 48 upgrades: 10 commons, 32 rares and 6 cursed. A specific rare
+mutation turns up in roughly 5-6% of totem sets, so a run sees a slice of the
 pool rather than all of it - that is the point, but it means a new upgrade only
 matters if it is worth taking on sight, without a partner card.
 

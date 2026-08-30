@@ -868,6 +868,14 @@ const COLOSSUS_SHUT_TRAVEL = 0.46;
 // stays unmistakably RED, which is the entire point of the colour.
 const COLOSSUS_CORE_SHUT = 0.22;
 const COLOSSUS_CORE_OPEN = 1.2;
+// VENT FIRE. The open core used to be free damage: the player learned the
+// rhythm, walked in on the beat and unloaded, and the fight had nothing to say
+// about it. It now fires while it is open, so the window that lets you hurt it
+// is the window it can hurt you and standing still in front of the chest stops
+// being the answer. Three rounds in a narrow fan, on a cadence slower than the
+// window is long, so an opening is two or three volleys and never a stream.
+const COLOSSUS_VENT_SHOT_CD = 0.65;
+const COLOSSUS_VENT_FAN = 0.13;
 
 // The widest thing in the game, on two thick legs, with a shuttered core in
 // its chest.
@@ -1183,18 +1191,23 @@ function aiConduit(e, a) {
   }
 }
 
-// Lobs a pool onto where the player is going rather than where they are, so
-// standing still is the one thing that guarantees being hit by it.
+// SPITS a glob that arcs across the arena and leaves its pool where it lands.
+//
+// The pool used to be created directly at the player's feet with no projectile
+// and no travel time - mechanically it was a lead shot, but with nothing in the
+// air to read it played as the floor turning hostile at random, and there was
+// no way to answer it. Now the same lead is baked into the glob's aim (see
+// _spawnSpit in main.js, which leads by most of the real flight time), so a
+// player who keeps running in a straight line still gets caught and one who
+// breaks off does not. The threat is unchanged; it is now legible.
+//
+// Fired from the nozzle the model has always had, not from the body centre.
 function aiBlight(e, a) {
   orbit(e, a, ENEMY_TYPES.blight.orbit);
   if (e.attackCd > 0 || a.dist > 20) return;
   e.attackCd = 3.2 + Math.random() * 0.8;
   e.flash = 0.15;
-  const p = a.ctx.player;
-  a.ctx.addHazard(
-    p.pos.x + p.vel.x * 0.4, p.pos.z + p.vel.z * 0.4,
-    3.2, 6, 9
-  );
+  a.ctx.addSpit(e.pos.x + a.nx * 0.8, 1.0, e.pos.z + a.nz * 0.8);
   if (a.ctx.effects) {
     _blinkAt.set(e.pos.x, 1.1, e.pos.z);
     a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.blight.color, 10, 3, 2, 0.5);
@@ -1300,6 +1313,7 @@ function aiColossus(e, a) {
     bs.dirX = 0;
     bs.dirZ = 1;
     bs.mark = -1;
+    bs.shotCd = COLOSSUS_VENT_SHOT_CD;
   }
   const ctx = a.ctx;
   bs.fx = ctx.effects;
@@ -1321,6 +1335,10 @@ function aiColossus(e, a) {
         _bossAt.set(e.pos.x, 0.9 * bs.mScale, e.pos.z);
         ctx.effects.burst(_bossAt, 0xff2418, 12, 4, 1.5, 0.45);
       }
+      // Re-armed on every flip, so the first volley of an opening costs the
+      // same wind-up as the rest and a player who is already in position gets
+      // a moment to commit or back out.
+      bs.shotCd = COLOSSUS_VENT_SHOT_CD;
       ctx.bossEvent('vent', e);
     }
     _colossusVent(bs, a.dt, bs.weakOpen);
@@ -1399,6 +1417,25 @@ function aiColossus(e, a) {
   if (feared) {
     e._setEyeAlert(false);
     return;
+  }
+
+  // VENT FIRE. Only while the core is actually open, and only from `walk` -
+  // NOT from `stagger`, which also holds the core open. The stagger is the
+  // reward for baiting the charge into a pillar, and it is the one piece of
+  // counter-play the fight has; shooting through it would take that back.
+  // Gated on range too, so a boss at the far wall is not plinking at someone
+  // who has already disengaged.
+  if (bs.weakOpen && a.dist < 26) {
+    bs.shotCd -= a.dt;
+    if (bs.shotCd <= 0) {
+      bs.shotCd = COLOSSUS_VENT_SHOT_CD * e.rate;
+      const gy = 0.9 * bs.mScale;
+      for (let i = -1; i <= 1; i++) {
+        ctx.addProjectile(e.pos.x, gy, e.pos.z, 'colossus', 1, i * COLOSSUS_VENT_FAN);
+      }
+      _bossAt.set(e.pos.x, gy, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xff5a00, 10, 4, 1.5, 0.35);
+    }
   }
 
   // Close enough to flatten: a slow, loud, radial slam that punishes standing
@@ -2265,6 +2302,12 @@ export class Enemy {
 const PROJ_COLORS = {
   shooter: { core: 0xd08bff, glow: 0xb14aed, scale: 0.75 },
   sniper: { core: 0x88ffcc, glow: 0x00ff88, scale: 0.5 },
+  // The blight's spit and the pool it leaves wear the same toxic green, so the
+  // glob in the air and the patch it becomes are obviously one thing.
+  blight: { core: 0xd6ff8a, glow: 0xaaff2a, scale: 1.3 },
+  // Colossus fires only through its open vent, so the round wears the core's
+  // own heat rather than the generic shooter purple.
+  colossus: { core: 0xffd08a, glow: 0xff5a00, scale: 1.1 },
 };
 const projMats = new Map();
 
@@ -2336,6 +2379,70 @@ export class Projectile {
     if (this.pos.y <= 0.03) return 'wall';
     if (pointInObstacle(this.pos, ctx.obstacles)) return 'wall';
     return 'alive';
+  }
+}
+
+// The blight's spit. A lobbed glob that leaves a creep pool WHERE IT LANDS,
+// which is the whole point of it existing: the pool used to appear under the
+// player with nothing in the air to warn them.
+//
+// Ballistic rather than straight, and the arc is solved at spawn (see
+// _spawnSpit) rather than fired at a fixed elevation like Grenade: a glob that
+// visibly climbs, hangs and falls is readable from anywhere in the arena,
+// including from directly underneath, where a flat shot is a dot that does not
+// move. Horizontal speed is constant, so flight time scales with range and a
+// far-off blight telegraphs itself for over a second.
+//
+// It deals NO impact damage. The blight's own `damage` is 0 and always has
+// been - it is a zoner, the pool is the entire threat, and giving the glob a
+// hit would quietly rewrite that enemy's role.
+export class Spit {
+  constructor(scene, glowTex, x, y, z, vx, vy, vz, radius, life, dps) {
+    this.pos = new THREE.Vector3(x, y, z);
+    this.vel = new THREE.Vector3(vx, vy, vz);
+    this.radius = radius;
+    this.poolLife = life;
+    this.dps = dps;
+    this.life = 5;
+    this.type = 'blight';
+
+    const mats = projectileMats('blight', glowTex);
+    this.mesh = new THREE.Mesh(geo('spit', () => new THREE.SphereGeometry(0.22, 8, 8)), mats.core);
+    const sp = new THREE.Sprite(mats.glow);
+    sp.scale.setScalar(mats.scale);
+    this.mesh.add(sp);
+    this.mesh.position.copy(this.pos);
+    scene.add(this.mesh);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    if (this.life <= 0) return 'expired';
+    this.vel.y -= 22 * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    this.mesh.position.copy(this.pos);
+    // Wobbles as it flies. A perfect sphere on a perfect parabola reads as a
+    // UI marker; a tumbling lump reads as something an animal spat.
+    this.mesh.rotation.x += dt * 6;
+    this.mesh.rotation.y += dt * 4;
+
+    // Only the FLOOR and obstacle tops grow creep. A glob that clipped a wall
+    // mid-flight has nothing to pool on, so it just splashes.
+    if (this.pos.y <= 0.12) {
+      this.pos.y = 0.12;
+      this._land(ctx);
+      return 'landed';
+    }
+    if (pointInObstacle(this.pos, ctx.obstacles)) {
+      this._land(ctx);
+      return 'landed';
+    }
+    return 'alive';
+  }
+
+  _land(ctx) {
+    if (ctx.addHazard) ctx.addHazard(this.pos.x, this.pos.z, this.radius, this.poolLife, this.dps);
+    if (ctx.effects) ctx.effects.burst(this.pos, 0xaaff2a, 14, 4, 2, 0.45);
   }
 }
 

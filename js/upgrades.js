@@ -55,6 +55,7 @@ export const THEME = {
   fabricate: 0xffe57f,
   salvage: 0xc6ff00,
   gold: 0xf9a825,
+  hoard: 0xffea00,
   // damage
   damage: 0xff3d00,
   precision: 0xff5fd2,
@@ -64,6 +65,7 @@ export const THEME = {
   electric: 0xffee58,
   storm: 0x9fd8ff,
   flawless: 0xeaff6b,
+  streak: 0xff2e88,
   // staying alive
   vitality: 0x00e676,
   armor: 0x4ef3ff,
@@ -74,7 +76,9 @@ export const THEME = {
   // movement, and the one upgrade that pays for the absence of it
   mobility: 0x2979ff,
   poise: 0x7c4dff,
+  leap: 0x82b1ff,
   impact: 0x00e5c0,
+  surge: 0x1de9b6,
   // the shot itself: how it travels and what it costs to fire
   pierce: 0x76ff03,
   gravity: 0x536dfe,
@@ -669,7 +673,14 @@ export const UPGRADES = {
     icon: 'flask',
     // Poison and burn ONLY. Cryo, Terror and Petrify have no strength to
     // amplify, so the same trade on them would be a drawback with no upside.
-    effects: [['+50% POISON & BURN', GOOD], ['THEY LAST HALF AS LONG', BAD]],
+    // The old line read "+50% POISON & BURN", which never said WHICH axis moved
+    // - a player could not tell a stronger effect from a longer one. Name the
+    // axis on its own line and the trade reads in one pass.
+    effects: [
+      ['POISON & BURN DEAL', NOTE],
+      ['+50% DAMAGE PER SEC', GOOD],
+      ['FOR HALF AS LONG', BAD],
+    ],
     apply: (mods, n) => {
       mods.dotPower *= 1 + 0.5 * n;
       mods.dotTime *= Math.pow(0.5, n);
@@ -738,8 +749,66 @@ export const UPGRADES = {
     // the rest of the run, so a player who keeps clearing waves clean is
     // compounding - and a single hit anywhere in a wave costs them the whole
     // thing, which is what makes it worth playing around.
-    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+10% DAMAGE, FOREVER', GOOD], ['+10% FIRE RATE, TOO', GOOD]],
-    apply: (mods, n) => { mods.noHitBonus = 0.1 * n; },
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+20% DAMAGE, FOREVER', GOOD], ['+20% FIRE RATE, TOO', GOOD]],
+    apply: (mods, n) => { mods.noHitBonus = 0.2 * n; },
+  },
+  ammoHoarder: {
+    name: 'AMMO HOARDER',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.hoard,
+    icon: 'drum',
+    // Unmarked: the receiver plates say what a BULLET does, and this changes
+    // nothing about the bullet. It is the only upgrade that touches reserve
+    // CAPACITY rather than reserve income, which is what makes it worth a slot
+    // next to Scavenger and Ammo Fabricator instead of competing with them.
+    effects: [['2x MAX AMMO RESERVE', GOOD], ['300 \u2192 600 ROUNDS', NOTE]],
+    apply: (mods, n) => { mods.reserveMult = 1 + n; },
+  },
+  hotStreak: {
+    name: 'HOT STREAK',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.streak,
+    icon: 'stack',
+    // The floor is REAL: miss enough and this deals less than no upgrade at
+    // all. That is the whole pick - every other damage upgrade in the pool is
+    // free once taken, and this one asks to be earned again every magazine.
+    // It rides the same per-shot hit flag the hitmarker does, so the number
+    // can never disagree with what the player just saw.
+    effects: [['+1% DMG PER HIT', GOOD], ['-1% PER MISS', BAD], ['+30% CAP, -10% FLOOR', NOTE]],
+    apply: (mods, n) => {
+      mods.streakStep = 0.01 * n;
+      mods.streakCap = 0.3;
+      mods.streakFloor = 0.1;
+    },
+  },
+  doubleJump: {
+    name: 'DOUBLE JUMP',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.leap,
+    icon: 'spring',
+    // The air jump is deliberately STRONGER than the ground one (11 vs 9
+    // against gravity 22): a second hop that only matched the first would clear
+    // nothing the first had not already cleared. At 11 off the apex the player
+    // tops out near 4.6m, which is over every enemy in the pool and onto the
+    // high platforms.
+    effects: [['JUMP AGAIN IN MIDAIR', GOOD], ['CLEARS ~4.5m TOTAL', NOTE]],
+    apply: (mods, n) => { mods.extraJumps = n; },
+  },
+  doubleDash: {
+    name: 'DOUBLE DASH',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.surge,
+    icon: 'boost',
+    // Bound to a double-tap rather than to a key of its own because the game
+    // has no spare finger: the player is already holding a movement key, the
+    // mouse and the trigger. Tapping the direction you are ALREADY running is
+    // the one input that costs nothing to reach.
+    effects: [['DOUBLE-TAP W A S D', NOTE], ['TO DASH. 2 CHARGES', GOOD], ['ONE BACK EVERY 2.5s', NOTE]],
+    apply: (mods, n) => { mods.dashCharges = 2 * n; },
   },
 };
 

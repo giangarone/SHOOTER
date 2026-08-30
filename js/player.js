@@ -99,6 +99,13 @@ const DEFAULT_MODS = {
   lightningDamage: 0,   // straight onto the enemy that was hit
   lightningSplash: 0,   // and to everything else inside lightningRadius
   lightningRadius: 0,
+  reserveMult: 1,       // Ammo Hoarder: multiplier on reserve ammo CAPACITY
+  streakStep: 0,        // Hot Streak: damage gained per hit, lost per miss
+  streakCap: 0,         // and the ceiling and floor it is clamped between
+  streakFloor: 0,
+  extraJumps: 0,        // Double Jump: midair jumps granted per landing
+  dashCharges: 0,       // Double Dash: dashes held at once, one back per
+                        // DASH_RECHARGE seconds
   noHitBonus: 0,        // No-Hit Bonus: damage and fire rate gained per wave
                         // cleared without taking damage. Unlike everything
                         // else here it accumulates across the run - see
@@ -109,6 +116,22 @@ const DEFAULT_MODS = {
 // holding a key to move at the speed the game is balanced around was a tax
 // rather than a decision, so the walk is gone and this is what everyone gets.
 const BASE_SPEED = 10;
+// Reserve ammo capacity before Ammo Hoarder. Read through the maxReserve
+// getter, never stored, so the mutation cannot be lost by a reset().
+const BASE_RESERVE = 300;
+// Jump impulse against the 22 m/s^2 gravity in update(). The AIR jump is
+// deliberately the stronger of the two: a second hop that only matched the
+// first would clear nothing the first had not already cleared. 9 tops out at
+// 1.84m; 11 taken at that apex reaches roughly 4.6m, which is over every enemy
+// in the pool.
+const JUMP_V = 9;
+const AIR_JUMP_V = 11;
+// Double Dash: how long a dash lasts, how fast it travels, and how long one
+// spent charge takes to come back. 0.18s at 26 m/s is ~4.7m - far enough to
+// leave a slam or cross a lane, short enough that it is not a movement mode.
+const DASH_TIME = 0.18;
+const DASH_SPEED = 26;
+const DASH_RECHARGE = 2.5;
 // Collision height, a little over the 1.7 eye height. Only overhead geometry
 // cares - see the resolveCircle call in update().
 const PLAYER_HEIGHT = 1.8;
@@ -140,7 +163,6 @@ export class Player {
     this.upgrades = {};
     this.mods = { ...DEFAULT_MODS };
     this.health = 100;
-    this.maxReserve = 300;
     this.reserveAmmo = 90;
     this.fireCd = 0;
     // Breach Round: set by a finished reload, spent by the next shot.
@@ -178,6 +200,22 @@ export class Player {
     // because mods are rebuilt from the upgrade list on every draft pick, and
     // anything written into them by an event would be wiped by the next one.
     this.noHitStacks = 0;
+    // Hot Streak's live bonus, a signed damage FRACTION clamped between
+    // -streakFloor and +streakCap. On the player for the same reason
+    // noHitStacks is: a rebuildMods() would wipe it mid-magazine.
+    this.streak = 0;
+    // Double Jump / Double Dash state. `jumpsLeft` refills on landing;
+    // `dashLeft` refills on a timer. Both are one-shot FX flags read and
+    // cleared by main.js, which owns the effects system.
+    this.jumpsLeft = 0;
+    this.dashLeft = 0;
+    this._dashAcc = 0;
+    this.dashEnd = 0;
+    this.dashVX = 0;
+    this.dashVZ = 0;
+    this._prevJump = false;
+    this.jumpFx = false;
+    this.dashFx = false;
 
     // The viewmodel is built once here and parented to the camera. Building
     // one per equip would allocate geometry for the rest of the session.
@@ -237,6 +275,11 @@ export class Player {
   get fireRate() {
     return this.weapon.fireRate;
   }
+  // Ammo Hoarder. A getter rather than a field so the cap can never go stale
+  // against the build: everything else in the game only ever READS maxReserve.
+  get maxReserve() {
+    return Math.round(BASE_RESERVE * this.mods.reserveMult);
+  }
 
   // Rebuilds the whole stat block from the owned upgrade list. Always a full
   // replay from DEFAULT_MODS rather than an incremental apply - see the note
@@ -256,6 +299,40 @@ export class Player {
       this.mods.damage *= k;
       this.mods.fireRate *= k;
     }
+    // A fresh Double Dash arrives loaded. rebuildMods only runs on a draft
+    // pick, so this cannot top the charges up mid-fight - but a mutation that
+    // did nothing for the five seconds after it was taken would read as broken.
+    if (this.dashLeft < this.mods.dashCharges) this.dashLeft = this.mods.dashCharges;
+  }
+
+  // Hot Streak. Called once per SHOT with whether that shot connected - the
+  // same boolean the hitmarker is drawn from, so the bonus can never disagree
+  // with what the player just saw. A no-op for a run that has not picked the
+  // mutation up, which is why the caller does not have to test for it.
+  bumpStreak(hit) {
+    const m = this.mods;
+    if (m.streakStep <= 0) return;
+    const next = this.streak + (hit ? m.streakStep : -m.streakStep);
+    this.streak = Math.max(-m.streakFloor, Math.min(m.streakCap, next));
+  }
+
+  // Double Dash. `code` is the raw key that was double-tapped; the direction is
+  // whatever that key means RIGHT NOW, rotated by yaw exactly the way update()
+  // rotates held movement, so a dash always goes where the same key would have
+  // walked. Returns whether a charge was actually spent.
+  tryDash(code, time) {
+    if (this.mods.dashCharges <= 0 || this.dashLeft <= 0) return false;
+    const f = code === 'KeyW' ? 1 : code === 'KeyS' ? -1 : 0;
+    const sd = code === 'KeyD' ? 1 : code === 'KeyA' ? -1 : 0;
+    if (!f && !sd) return false;
+    const sinY = Math.sin(this.yaw);
+    const cosY = Math.cos(this.yaw);
+    this.dashVX = (-sinY * f + cosY * sd) * DASH_SPEED;
+    this.dashVZ = (-cosY * f - sinY * sd) * DASH_SPEED;
+    this.dashEnd = time + DASH_TIME;
+    this.dashLeft--;
+    this.dashFx = true;
+    return true;
   }
 
   // One more flawless wave. Returns the new stack count so the caller can say
@@ -330,6 +407,14 @@ export class Player {
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.
     this.noHitStacks = 0;
+    this.streak = 0;
+    this.jumpsLeft = 0;
+    this.dashLeft = 0;
+    this._dashAcc = 0;
+    this.dashEnd = 0;
+    this._prevJump = false;
+    this.jumpFx = false;
+    this.dashFx = false;
     this.rebuildMods();
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
@@ -406,6 +491,21 @@ export class Player {
     // Ammo Fabricator. Accumulated as a float and spent in whole rounds, so a
     // sub-1-round-per-second rate still pays out instead of truncating to
     // nothing every frame.
+    // Double Dash recharges one charge per DASH_RECHARGE seconds, up to the
+    // mutation's cap. The accumulator is not reset when full: a player sitting
+    // on full charges should get the next one the instant they spend one.
+    if (this.mods.dashCharges > 0) {
+      if (this.dashLeft < this.mods.dashCharges) {
+        this._dashAcc += dt;
+        while (this._dashAcc >= DASH_RECHARGE && this.dashLeft < this.mods.dashCharges) {
+          this._dashAcc -= DASH_RECHARGE;
+          this.dashLeft++;
+        }
+      } else {
+        this._dashAcc = 0;
+      }
+    }
+
     if (this.mods.ammoRegen > 0 && this.reserveAmmo < this.maxReserve) {
       this._ammoRegenAcc += this.mods.ammoRegen * dt;
       if (this._ammoRegenAcc >= 1) {
@@ -452,10 +552,29 @@ export class Player {
       this.vel.z *= damp;
     }
 
+    // A dash OVERRIDES the movement block rather than adding to it, and sits
+    // after it for the same reason update() assigns vel.x/z in the first place:
+    // anything written before the key test would be thrown away on any frame a
+    // direction is held. Position is still integrated and resolved below, so a
+    // dash cannot phase through a wall.
+    if (time < this.dashEnd) {
+      this.vel.x = this.dashVX;
+      this.vel.z = this.dashVZ;
+    }
+
     this.vel.y -= 22 * dt;
+    // Ground jump keeps its held-key behaviour - bunny-hopping down a corridor
+    // is movement the game already had. The AIR jump is edge-triggered, or a
+    // held space would spend every charge on the frame after takeoff.
+    const jumpEdge = input.jump && !this._prevJump;
+    this._prevJump = input.jump;
     if (input.jump && this.onGround) {
-      this.vel.y = 9;
+      this.vel.y = JUMP_V;
       this.onGround = false;
+    } else if (jumpEdge && this.jumpsLeft > 0) {
+      this.jumpsLeft--;
+      this.vel.y = AIR_JUMP_V;
+      this.jumpFx = true;
     }
 
     // Vertical resolution. Landing on a box only counts when falling onto its
@@ -471,6 +590,7 @@ export class Player {
       this.pos.y = 0;
       this.vel.y = 0;
       this.onGround = true;
+      this.jumpsLeft = this.mods.extraJumps;
     } else {
       for (const b of obstacles) {
         const top = b.max.y;
@@ -482,6 +602,7 @@ export class Player {
           this.pos.y = top;
           this.vel.y = 0;
           this.onGround = true;
+          this.jumpsLeft = this.mods.extraJumps;
           break;
         }
       }
@@ -635,6 +756,9 @@ export class Player {
     // Berserker pays on health MISSING, so it is worth nothing at full health
     // and everything at one. Read live rather than cached: it has to move with
     // the health bar, including upward as Vampiric heals you back out of it.
+    // Hot Streak's live bonus. Signed: a player who has been missing is dealing
+    // LESS than base here, which is the whole trade the mutation offers.
+    if (this.streak !== 0) d *= 1 + this.streak;
     if (this.mods.berserk > 0) {
       d *= 1 + this.mods.berserk * (1 - this.health / this.maxHealth);
     }

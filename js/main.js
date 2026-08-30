@@ -57,7 +57,7 @@
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player } from './player.js';
-import { Enemy, Projectile, Grenade, Shard, ENEMY_TYPES } from './enemy.js';
+import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
@@ -174,6 +174,10 @@ const CLEAR_BONUS_BASE = 60;
 const CLEAR_BONUS_PER_WAVE = 30;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
+// Double Dash: how close together two presses of the SAME movement key have to
+// be to read as a double-tap. Long enough to hit reliably mid-fight, short
+// enough that ordinary strafe-corrections never trip it by accident.
+const DOUBLE_TAP_WINDOW = 0.28;
 // Ashen: how many clouds can be alive at once, and how often Neurotoxin's
 // poison is allowed to make a jump.
 const MAX_ASH_CLOUDS = 8;
@@ -193,13 +197,28 @@ const MAX_ASH_CLOUDS = 8;
 const MAX_POOLS = 4;
 const MAX_LAVA = 24;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
-// whose it is, and the shape family answers it (see makeCreepShape in
-// effects.js) - these back it up. Ash is the player's, so it wears the
-// player's own cyan, the colour of their shots and their pickups; everything
-// that hurts THEM is hot or toxic, and nothing hostile is ever cyan.
-const CREEP_ASH = 0x3ad6ff;
+// whose it is, and the shape family answers it first (see makeCreepShape in
+// effects.js), the PULSE second - hostile patches breathe, the player's are
+// still. Colour is the third signal and no longer the deciding one, which is
+// what frees ash to be the colour it should always have been: it is the ash of
+// a fire mutation, so it is warm. It used to be cyan, which read as ice or as
+// a pickup and never as the thing Incendiary left behind.
+//
+// Ash is amber and lava is a deeper red so the two stay apart at distance
+// while both staying in the fire family; the blight's toxic green is a
+// different hue from either.
+const CREEP_ASH = 0xff8a3d;
 const CREEP_HAZARD = 0xaaff2a;
 const CREEP_LAVA = 0xff4a10;
+// Impact-puff colours for an enemy round that broke against geometry, keyed by
+// the projectile's own type so the splash matches what was in the air. Mirrors
+// PROJ_COLORS in enemy.js; a type with no entry falls back to the shooter's.
+const PROJ_IMPACT = {
+  shooter: 0xb14aed,
+  sniper: 0x00ff88,
+  blight: 0xaaff2a,
+  colossus: 0xff5a00,
+};
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
 const MAX_MORTARS = 6;
@@ -298,7 +317,15 @@ class Game {
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
     // `shootFresh` is the trigger EDGE - true only on the frame the button
     // went down. Semi-auto weapons need it; the loop clears it every frame.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, dash: null };
+    // Double Dash: the game time each movement key was last pressed FRESH, so
+    // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
+    // e.code; a key held down never writes here (see _bind).
+    this._tapT = { KeyW: -99, KeyS: -99, KeyA: -99, KeyD: -99 };
+    // Whether the held-TAB build sheet is up. Held, not toggled, so it has to
+    // be released by keyup AND by blur - alt-tabbing away with it down would
+    // otherwise leave it stuck over the fight on the way back.
+    this._statsHeld = false;
     this.emptyClickCd = 0;
 
     // Refilled and handed to the rig every frame. One object for the life of
@@ -388,9 +415,10 @@ class Game {
       beat: 0,
       level: 0,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
-      addProjectile: (x, y, z, type, speedScale) =>
-        this._spawnProjectile(x, y, z, type, speedScale),
+      addProjectile: (x, y, z, type, speedScale, spreadRad) =>
+        this._spawnProjectile(x, y, z, type, speedScale, spreadRad),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
+      addSpit: (x, y, z) => this._spawnSpit(x, y, z),
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
       addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
@@ -414,6 +442,11 @@ class Game {
       // the enemy list and a blast that cannot reach back.
       enemies: this.enemies,
       onBlast: (pos, dmg, radius) => this._blast(pos, dmg, radius, null, false),
+      // A blight's spit grows its pool where it lands, so the projectile ctx
+      // needs the same hazard hook the enemy ctx has. Kind is left to default:
+      // a spit is a pool, and it is capped against the other pools.
+      addHazard: (x, z, radius, life, dps, kind) =>
+        this._addHazard(x, z, radius, life, dps, kind),
       player: this.player,
       effects: this.effects,
       sfx: this.sfx,
@@ -501,16 +534,20 @@ class Game {
       // would fire game actions mid-word.
       if (this._typing(e.target)) return;
       switch (e.code) {
-        case 'KeyW': this.input.forward = true; break;
-        case 'KeyS': this.input.back = true; break;
-        case 'KeyA': this.input.left = true; break;
-        case 'KeyD': this.input.right = true; break;
+        case 'KeyW': this._tapMove(e.code, this.input.forward); this.input.forward = true; break;
+        case 'KeyS': this._tapMove(e.code, this.input.back); this.input.back = true; break;
+        case 'KeyA': this._tapMove(e.code, this.input.left); this.input.left = true; break;
+        case 'KeyD': this._tapMove(e.code, this.input.right); this.input.right = true; break;
         case 'Space': this.input.jump = true; e.preventDefault(); break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUseStation(); break;
         // Fullscreen is bound on the window rather than to a button alone so
         // it is reachable mid-run without giving up pointer lock to click.
         case 'KeyF': this._toggleFullscreen(); break;
+        // Held, and preventDefault for the same reason Space gets it: these
+        // listeners are on the window, and an un-prevented Tab walks browser
+        // focus off the canvas and out of pointer lock.
+        case 'Tab': this._openStats(); e.preventDefault(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -521,10 +558,15 @@ class Game {
         case 'KeyA': this.input.left = false; break;
         case 'KeyD': this.input.right = false; break;
         case 'Space': this.input.jump = false; break;
+        case 'Tab': this._closeStats(); e.preventDefault(); break;
       }
     });
-    // Losing focus mid-key would otherwise leave the player running forever.
-    addEventListener('blur', () => this._clearInput());
+    // Losing focus mid-key would otherwise leave the player running forever,
+    // or reading a stat panel it can no longer be told to close.
+    addEventListener('blur', () => {
+      this._clearInput();
+      this._closeStats();
+    });
     canvas.addEventListener('mousedown', (e) => {
       if (e.button === 0) {
         this._audioGesture();
@@ -558,6 +600,7 @@ class Game {
         if (this.state === 'playing' && !this.autoTest) {
           this.state = 'paused';
           this._clearInput();
+          this._closeStats();
           this.ui.showPause();
         }
       } else if (this.state === 'paused') {
@@ -654,6 +697,25 @@ class Game {
     i.forward = i.back = i.left = i.right = false;
     i.jump = i.shoot = i.melee = false;
     i.shootFresh = false;
+    i.dash = null;
+    for (const k in this._tapT) this._tapT[k] = -99;
+  }
+
+  // Double Dash's tap clock. `held` is whether that direction was ALREADY down
+  // when the key event arrived: a held key repeats keydown at the OS repeat
+  // rate, which would otherwise read as a double-tap the moment a player ran
+  // in a straight line. Only a fresh press is timed.
+  _tapMove(code, held) {
+    if (held) return;
+    const last = this._tapT[code];
+    if (this.time - last < DOUBLE_TAP_WINDOW) {
+      this.input.dash = code;
+      // Cleared so a third tap has to start a new pair rather than firing
+      // again off the same timestamp.
+      this._tapT[code] = -99;
+    } else {
+      this._tapT[code] = this.time;
+    }
   }
 
   _lock() {
@@ -1154,6 +1216,9 @@ class Game {
     if (this.state === 'gameover') return;
     this.state = 'gameover';
     this._clearInput();
+    // A panel held open across the death would sit over the game-over screen
+    // with no key left to release it.
+    this._closeStats();
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     const eye = this.player.eyeInto(this._killPos);
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
@@ -1599,6 +1664,11 @@ class Game {
     }
     this._shotHits.clear();
 
+    // Hot Streak rides the SHOT, not the pellet: one trigger pull is one step
+    // up or one step down however many pellets were in it, and it reads the
+    // same boolean the hitmarker below does so the two can never disagree.
+    this.player.bumpStreak(hitAny);
+
     // One hitmarker and one sound per shot, however many pellets connected.
     if (hitAny) {
       this.stats.hits++;
@@ -1722,13 +1792,32 @@ class Game {
   // baked in at spawn rather than read per frame: the round is already in the
   // air by the time the shooter thaws, and a shot that sped up mid-flight
   // would be unreadable.
-  _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1) {
+  //
+  // `spreadRad` yaws the aim off the player by that many radians, which is how
+  // a caller fires a FAN: three rounds from one muzzle at -a, 0 and +a diverge
+  // with range, where three muzzles all aiming at the player would converge and
+  // either all hit or all miss.
+  _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1, spreadRad = 0) {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     const t = this.player.eyeInto(this._aimTarget);
+    if (spreadRad) {
+      const dx = t.x - x;
+      const dz = t.z - z;
+      const c = Math.cos(spreadRad);
+      const sn = Math.sin(spreadRad);
+      t.x = x + dx * c - dz * sn;
+      t.z = z + dx * sn + dz * c;
+    }
     let speed, dmg;
     if (type === 'sniper') {
       speed = Math.min(32, 22 + this.wave * 0.4);
       dmg = Math.min(22, 12 + this.wave * 0.5);
+    } else if (type === 'colossus') {
+      // Slower and heavier than an ordinary shooter round. The vent is the
+      // window the player closes in to use, so what comes out of it has to be
+      // dodgeable at short range and cost real health if it is not.
+      speed = Math.min(17, 12 + this.wave * 0.2);
+      dmg = Math.min(24, 11 + this.wave * 0.5);
     } else {
       speed = Math.min(20, 13 + this.wave * 0.3);
       dmg = Math.min(20, 8 + this.wave * 0.8);
@@ -1744,6 +1833,49 @@ class Game {
     const speed = Math.min(18, 12 + this.wave * 0.2);
     const dmg = Math.min(28, damage + this.wave * 0.5);
     this.projectiles.push(new Grenade(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
+  }
+
+  // A blight's lobbed glob. The arc is solved here rather than fired at a fixed
+  // elevation like a grenade, because the pool has to land somewhere the player
+  // could have been: horizontal speed is constant, the flight time falls out of
+  // the range, and the vertical impulse is whatever puts the glob on the ground
+  // at the end of it.
+  //
+  // AIM LEADS BY ALMOST THE WHOLE FLIGHT. Holding a straight line has to stay
+  // punished - that was the point of the old instant pool, and a shot that
+  // systematically fell short would have replaced an unfair enemy with a
+  // harmless one. The dodge is a CHANGE OF DIRECTION, which is legible, not a
+  // reaction the player has no time to make. The 0.9 leaves just enough slack
+  // that a player already turning is out of the pool before it exists.
+  //
+  // Solved in two passes: the lead moves the aim point, which changes the range
+  // and so the flight time the lead was derived from. One pass under-leads a
+  // sprinting player by metres.
+  _spawnSpit(x, y, z) {
+    if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
+    const p = this.player;
+    const SPEED = 14;
+    const LEAD = 0.9;
+    let tx = p.pos.x;
+    let tz = p.pos.z;
+    for (let i = 0; i < 2; i++) {
+      const t = Math.min(2.2, Math.hypot(tx - x, tz - z) / SPEED);
+      // Clamped inside the walls: a lead that ran off the arena would put the
+      // pool inside the geometry, where it is neither visible nor avoidable.
+      tx = Math.max(-ARENA_BOUND + 1, Math.min(ARENA_BOUND - 1, p.pos.x + p.vel.x * t * LEAD));
+      tz = Math.max(-ARENA_BOUND + 1, Math.min(ARENA_BOUND - 1, p.pos.z + p.vel.z * t * LEAD));
+    }
+    const dx = tx - x;
+    const dz = tz - z;
+    const dist = Math.max(0.5, Math.hypot(dx, dz));
+    const t = dist / SPEED;
+    // y + vy*t - 0.5*g*t^2 = 0.12, solved for vy.
+    const vy = (0.12 - y + 0.5 * 22 * t * t) / t;
+    this.projectiles.push(new Spit(
+      this.scene, this.effects.glowTex, x, y, z,
+      (dx / dist) * SPEED, vy, (dz / dist) * SPEED,
+      3.2, 6, 9
+    ));
   }
 
   // Autotest bot: aims at the nearest enemy, holds the trigger, and wanders in
@@ -2735,7 +2867,14 @@ class Game {
       const res = pr.update(dt, ctx);
       if (res === 'alive') continue;
       if (res === 'hit') this.effects.burst(pr.pos, 0xff5555, 10, 4, 1, 0.3);
-      else if (res === 'wall') this.effects.burst(pr.pos, 0xb14aed, 8, 3, 1, 0.3);
+      // A spit paints its own landing splash inside update(), since only it
+      // knows where the pool went. Everything else gets the generic impact
+      // puff, tinted by what fired it rather than by a hardcoded purple - a
+      // green glob that broke against a wall in violet read as a second,
+      // unrelated effect.
+      else if (res === 'wall') {
+        this.effects.burst(pr.pos, PROJ_IMPACT[pr.type] || PROJ_IMPACT.shooter, 8, 3, 1, 0.3);
+      }
       this.scene.remove(pr.mesh);
       this.projectiles.splice(i, 1);
     }
@@ -2762,11 +2901,83 @@ class Game {
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);
     this.ui.setWeapon(this.player.weapon.name);
+    const shieldFrac = this.player.shieldEnd > this.time ? this.player.shield / 50 : 0;
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
-      this.player.shieldEnd > this.time ? this.player.shield / 50 : 0
+      shieldFrac,
+      this.player.shield
     );
+    this.ui.setShield(shieldFrac);
+    if (this._statsHeld) this.ui.updateStats(this._statRows());
+  }
+
+  // ---- held-TAB build sheet ------------------------------------------------
+  //
+  // Everything a run accumulates that the HUD has no room for. Held rather than
+  // toggled, and the game is NOT paused underneath: a panel that stopped the
+  // arena would be a timeout the player could call whenever they liked, so this
+  // costs them the seconds they spend reading it.
+
+  _openStats() {
+    if (this._statsHeld || this.state !== 'playing') return;
+    this._statsHeld = true;
+    this.ui.showStats(this._statMuts(), this._statRows());
+  }
+
+  _closeStats() {
+    if (!this._statsHeld) return;
+    this._statsHeld = false;
+    this.ui.hideStats();
+  }
+
+  // The owned build, in the order it was picked up, carrying each upgrade's own
+  // theme colour so the list reads as the totems the player has been walking
+  // into all run.
+  _statMuts() {
+    const out = [];
+    for (const [id, n] of Object.entries(this.player.upgrades)) {
+      const def = UPGRADES[id];
+      if (!def || n <= 0) continue;
+      out.push({ name: def.name, color: '#' + def.theme.toString(16).padStart(6, '0'), tier: n });
+    }
+    return out;
+  }
+
+  // Label/value/highlight rows. Order matters: the run's headline numbers
+  // first, then the shooting, then the live mutation counters, which are here
+  // because they have nowhere else to be seen at all.
+  _statRows() {
+    const p = this.player;
+    const st = this.stats;
+    const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
+    const rows = [
+      ['WAVE', String(this.wave)],
+      ['SCORE', String(this.score)],
+      ['CREDITS', '$' + Math.floor(this.credits)],
+      ['KILLS', String(this.kills)],
+      ['BEST COMBO', String(this.bestCombo)],
+      ['ACCURACY', acc + '%'],
+      ['DAMAGE TAKEN', String(Math.round(st.damaged))],
+      ['HEALTH', Math.ceil(p.health) + ' / ' + p.maxHealth],
+      ['AMMO', p.mag + ' + ' + p.reserveAmmo + ' / ' + p.maxReserve],
+    ];
+    // Only shown when the mutation that produces them is owned. A row reading
+    // "0" for a stat the player has no way to earn is noise.
+    if (p.mods.noHitBonus > 0) {
+      rows.push(['NO-HIT STACKS', 'x' + p.noHitStacks, p.noHitStacks > 0]);
+    }
+    if (p.mods.streakStep > 0) {
+      const pct = Math.round(p.streak * 100);
+      rows.push(['HOT STREAK', (pct > 0 ? '+' : '') + pct + '%', pct > 0]);
+    }
+    if (p.mods.dashCharges > 0) {
+      rows.push(['DASHES', p.dashLeft + ' / ' + p.mods.dashCharges, p.dashLeft > 0]);
+    }
+    if (p.mods.extraJumps > 0) {
+      rows.push(['AIR JUMPS', p.jumpsLeft + ' / ' + p.mods.extraJumps, p.jumpsLeft > 0]);
+    }
+    return rows;
   }
 
   // The frame. See the FRAME ORDER note at the top before reordering anything.
@@ -2789,8 +3000,25 @@ class Game {
         }
       }
       if (this.autoTest) this._autoInput();
+      if (this.input.dash) {
+        this.player.tryDash(this.input.dash, this.time);
+        this.input.dash = null;
+      }
       const reloaded = this.player.update(dt, this.input, this.arena.obstacles, this.time);
       if (reloaded) this._reloadBurst();
+      // Double Jump and Double Dash raise one-shot flags rather than calling
+      // effects themselves: player.js has no effects reference, and the same
+      // split is already what reloadFinished uses.
+      if (this.player.jumpFx) {
+        this.player.jumpFx = false;
+        this.effects.shockwave(this.player.pos, 0x82b1ff, 1.6, 0.22);
+        this.sfx.melee();
+      }
+      if (this.player.dashFx) {
+        this.player.dashFx = false;
+        this.effects.shockwave(this.player.pos, 0x1de9b6, 2.2, 0.22);
+        this.sfx.melee();
+      }
 
       this._updateWave(dt);
       if (this.input.shoot) this.shoot();

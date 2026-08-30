@@ -61,17 +61,36 @@
 
   <div id="buffs"></div>
 
+  <div id="shield-fx"></div>
+
   <div id="strobe"></div>
   <div id="vignette"></div>
   <div id="banner"></div>
 
   <div id="prompt" class="hidden"></div>
 
+  <!-- Held-TAB build sheet. Rows are built by ui.js; the shell is here so the
+       card and its two columns are styled once and never rebuilt. -->
+  <div id="stats-panel" class="hidden">
+    <div id="stats-card">
+      <div class="stats-head">RUN SUMMARY &nbsp;·&nbsp; HOLD TAB</div>
+      <div class="stats-col muts">
+        <h3>MUTATIONS</h3>
+        <div id="stats-muts"></div>
+      </div>
+      <div class="stats-col">
+        <h3>RUN</h3>
+        <div id="stats-run"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="overlay-start" class="overlay">
     <h1>VOID ARENA</h1>
     <p class="sub">SURVIVE THE WAVES</p>
     <div class="controls">
-      <b>WASD</b> MOVE  ·  <b>MOUSE</b> AIM  ·  <b>LMB</b> SHOOT  ·  <b>R</b> RELOAD  ·  <b>SPACE</b> JUMP  ·  <b>SHIFT</b> SPRINT  ·  <b>F</b> FULLSCREEN
+      <b>WASD</b> MOVE  ·  <b>MOUSE</b> AIM  ·  <b>LMB</b> SHOOT  ·  <b>RMB</b> MELEE  ·  <b>R</b> RELOAD<br/>
+      <b>SPACE</b> JUMP  ·  <b>E</b> USE  ·  <b>TAB</b> STATS  ·  <b>F</b> FULLSCREEN
     </div>
     <div id="lb-start" class="lb"></div>
     <button id="btn-start">CLICK TO START</button>

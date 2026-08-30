@@ -43,8 +43,17 @@ export class UI {
     this.comboCount = $('combo-count');
     this.comboBar = $('combo-bar').firstElementChild;
     this.promptEl = $('prompt');
+    this.shieldFx = $('shield-fx');
+    this.statsPanel = $('stats-panel');
+    this.statsMuts = $('stats-muts');
+    this.statsRun = $('stats-run');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
+    // Stat-row nodes for the held-TAB panel, keyed by label. Built once when
+    // the panel first opens and rewritten in place after that - rebuilding the
+    // rows every frame the key is held would thrash layout for no reason.
+    this._statRows = {};
+    this._statsOpen = false;
   }
 
   setWave(n) {
@@ -187,14 +196,31 @@ export class UI {
   }
 
   // Each argument is 0..1 of that buff's remaining duration; 0 hides its icon.
-  setBuffs(damageBoost, fireRateBoost, shield) {
+  // The shield also carries a label, because it is the one buff that is far
+  // more often spent by damage than by its clock - the timer bar alone never
+  // said how much of it was left.
+  setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0) {
     this._setBuff('damageBoost', 'damage', damageBoost);
     this._setBuff('fireRateBoost', 'firerate', fireRateBoost);
-    this._setBuff('shield', 'shield', shield);
+    this._setBuff('shield', 'shield', shield, shield > 0 ? String(Math.ceil(shieldPoints)) : '');
+  }
+
+  // The full-frame shield rim. `fraction` is the shield's remaining points over
+  // its full value; 0 clears it. Quantised before writing for the same reason
+  // setStrobe is - this runs every frame and an unrounded float would dirty the
+  // compositor on all of them.
+  setShield(fraction) {
+    const v = Math.round(Math.max(0, Math.min(1, fraction)) * 32) / 32;
+    if (this._c.shieldFx === v) return;
+    this._c.shieldFx = v;
+    // Floored well above zero while it is up: a shield at its last few points
+    // still has to read as a shield, and fading it to nothing would say it had
+    // already broken.
+    this.shieldFx.style.opacity = v > 0 ? String(0.42 + v * 0.58) : '0';
   }
 
   // Fraction is 0..1 of the buff's remaining duration; 0 hides the icon.
-  _setBuff(key, cssName, fraction) {
+  _setBuff(key, cssName, fraction, label = '') {
     let entry = this._buffEls[key];
     if (fraction <= 0) {
       if (entry && entry.shown) {
@@ -206,11 +232,15 @@ export class UI {
     if (!entry) {
       const el = document.createElement('div');
       el.className = 'buff-icon ' + cssName;
-      el.innerHTML = '<div class="buff-timer"></div>';
+      el.innerHTML = '<div class="buff-timer"></div><div class="buff-label"></div>';
       this.buffsEl.appendChild(el);
-      // The timer node is cached: querySelector on every frame for every buff
-      // is pure waste.
-      entry = { el, timer: el.querySelector('.buff-timer'), shown: false, scale: -1 };
+      // The timer and label nodes are cached: querySelector on every frame for
+      // every buff is pure waste.
+      entry = {
+        el, timer: el.querySelector('.buff-timer'),
+        label: el.querySelector('.buff-label'),
+        shown: false, scale: -1, text: null,
+      };
       this._buffEls[key] = entry;
     }
     if (!entry.shown) {
@@ -221,6 +251,10 @@ export class UI {
     if (entry.scale !== s) {
       entry.scale = s;
       entry.timer.style.transform = 'scaleX(' + s + ')';
+    }
+    if (entry.text !== label) {
+      entry.text = label;
+      entry.label.textContent = label;
     }
   }
 
@@ -342,6 +376,101 @@ export class UI {
     this.promptEl.classList.remove('hidden');
   }
 
+  // ---- held-TAB build sheet -----------------------------------------------
+  //
+  // Opened by a HELD key over a live fight, so it is built once on the way in
+  // and only its numbers are rewritten after that. The mutation list cannot
+  // change while the key is down - totems are claimed by walking into them, and
+  // the player is not walking anywhere with Tab held - so it is written on open
+  // and never touched again.
+  //
+  // `muts` is an array of { name, color, tier }, `rows` an array of
+  // [label, value, highlight] built by main.js, which owns what a run counts.
+
+  showStats(muts, rows) {
+    if (!this._statsOpen) {
+      this._statsOpen = true;
+      this._buildMuts(muts);
+      this._buildStatRows(rows);
+      this.statsPanel.classList.remove('hidden');
+      return;
+    }
+    this.updateStats(rows);
+  }
+
+  // Live numbers only. The game keeps running underneath the panel, so score,
+  // kills and ammo tick while it is open.
+  updateStats(rows) {
+    if (!this._statsOpen) return;
+    for (const [label, value] of rows) {
+      const row = this._statRows[label];
+      if (row && row.last !== value) {
+        row.last = value;
+        row.val.textContent = value;
+      }
+    }
+  }
+
+  hideStats() {
+    if (!this._statsOpen) return;
+    this._statsOpen = false;
+    this.statsPanel.classList.add('hidden');
+    // Dropped rather than kept: the next open is a different build, and a
+    // stale row cache would silently suppress the write that would fix it.
+    this._statRows = {};
+    this.statsMuts.textContent = '';
+    this.statsRun.textContent = '';
+  }
+
+  _buildMuts(muts) {
+    this.statsMuts.textContent = '';
+    if (!muts.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mut-empty';
+      empty.textContent = 'NONE YET';
+      this.statsMuts.appendChild(empty);
+      return;
+    }
+    for (const m of muts) {
+      const row = document.createElement('div');
+      row.className = 'mut-row';
+      const dot = document.createElement('i');
+      // The colour goes on the DOT, never on the row. Theme colours are picked
+      // to be read as a light on a pillar across an arena, and several of them
+      // - Berserker's near-black red, Ashen's burnt orange - are unreadable as
+      // body text on a dark panel. The dot carries the identity; the name stays
+      // legible.
+      dot.style.color = m.color;
+      const name = document.createElement('span');
+      name.textContent = m.name;
+      row.append(dot, name);
+      // A tier is only shown where there is one to show: printing "x1" on
+      // every single-tier mutation would make the stacking ones invisible.
+      if (m.tier > 1) {
+        const tier = document.createElement('em');
+        tier.textContent = 'x' + m.tier;
+        row.appendChild(tier);
+      }
+      this.statsMuts.appendChild(row);
+    }
+  }
+
+  _buildStatRows(rows) {
+    this.statsRun.textContent = '';
+    this._statRows = {};
+    for (const [label, value, highlight] of rows) {
+      const row = document.createElement('div');
+      row.className = highlight ? 'stat-row good' : 'stat-row';
+      const l = document.createElement('span');
+      l.textContent = label;
+      const v = document.createElement('b');
+      v.textContent = value;
+      row.append(l, v);
+      this.statsRun.appendChild(row);
+      this._statRows[label] = { val: v, last: value };
+    }
+  }
+
   // Called on a new game: forces every setter to repaint on the next frame and
   // hides any buff icon left over from the previous run.
   resetCache() {
@@ -350,10 +479,13 @@ export class UI {
     this.bossBar.className = 'hidden';
     this.comboEl.classList.add('hidden');
     this.promptEl.classList.add('hidden');
+    this.shieldFx.style.opacity = '0';
+    this.hideStats();
     for (const entry of Object.values(this._buffEls)) {
       entry.el.style.display = 'none';
       entry.shown = false;
       entry.scale = -1;
+      entry.text = null;
     }
   }
 }

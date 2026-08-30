@@ -290,6 +290,41 @@ const ICONS = {
     add(BOX(), DARK, [0, 0.44, 0], [0.7, 0.1, 0.7]);
     add(BOX(), DARK, [0, -0.44, 0], [0.7, 0.1, 0.7]);
   },
+  // Ammo Hoarder: a drum magazine, seen face on - a fat disc with the feed
+  // tower standing off it. The disc takes the theme colour and the tower is
+  // dark, so the silhouette is a circle with a notch rather than a plain coin.
+  drum(add, glow) {
+    add(CYL(), glow, [0, -0.06, 0], [0.66, 0.2, 0.66], [Math.PI / 2, 0, 0]);
+    add(TORUS(), DARK, [0, -0.06, 0.02], [1.5, 1.5, 1.5]);
+    add(CYL(), DARK, [0, -0.06, 0], [0.2, 0.24, 0.2], [Math.PI / 2, 0, 0]);
+    add(BOX(), DARK, [0, 0.34, 0], [0.18, 0.36, 0.18]);
+    add(CONE(), PALE, [0, 0.56, 0], [0.16, 0.16, 0.16]);
+  },
+  // Hot Streak: three bars climbing, the tallest lit. A staircase reads as a
+  // running total at a distance in a way an arrow does not.
+  stack(add, glow) {
+    add(BOX(), DARK, [-0.26, -0.24, 0], [0.2, 0.24, 0.2]);
+    add(BOX(), PALE, [0, -0.12, 0], [0.2, 0.48, 0.2]);
+    add(BOX(), glow, [0.26, 0.06, 0], [0.2, 0.84, 0.2]);
+    add(OCTA(), glow, [0.26, 0.58, 0], [0.24, 0.24, 0.24]);
+  },
+  // Double Jump: a coiled spring under a plate. Two rings and the plate lifting
+  // off them says "again, upward" without needing an arrow.
+  spring(add, glow) {
+    add(BOX(), DARK, [0, -0.36, 0], [0.62, 0.1, 0.62]);
+    add(TORUS(), glow, [0, -0.2, 0], [0.9, 0.9, 0.9], [Math.PI / 2, 0, 0]);
+    add(TORUS(), glow, [0, -0.02, 0], [0.9, 0.9, 0.9], [Math.PI / 2, 0, 0]);
+    add(BOX(), PALE, [0, 0.16, 0], [0.5, 0.1, 0.5]);
+    add(CONE(), glow, [0, 0.4, 0], [0.34, 0.34, 0.34]);
+  },
+  // Double Dash: two chevrons thrown forward, the leading one lit. Reads as
+  // motion in one direction, which is exactly what the mutation does.
+  boost(add, glow) {
+    add(CONE(), DARK, [-0.26, 0, 0], [0.44, 0.44, 0.44], [0, 0, -Math.PI / 2]);
+    add(CONE(), PALE, [0.02, 0, 0], [0.46, 0.44, 0.46], [0, 0, -Math.PI / 2]);
+    add(CONE(), glow, [0.3, 0, 0], [0.48, 0.44, 0.48], [0, 0, -Math.PI / 2]);
+    add(BOX(), glow, [-0.1, 0, 0], [0.5, 0.08, 0.08]);
+  },
   // Fallback.
   shard(add, glow) {
     add(OCTA(), glow, [0, 0, 0], [0.55, 0.55, 0.55]);
