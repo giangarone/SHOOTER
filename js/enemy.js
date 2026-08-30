@@ -1607,6 +1607,12 @@ export class Enemy {
     const def = ENEMY_TYPES[type];
     const s = def.scale;
     this.id = ++idSeq;
+    // Crowd bob state - see the dance block in update(). `danceLag` staggers
+    // this enemy's response to the beat so a room full of them reads as a
+    // crowd rather than a chorus line; it is derived from the id so it is
+    // stable for the enemy's whole life and costs no storage to randomise.
+    this._dance = 0;
+    this.danceLag = (this.id % 7) / 7;
     this.type = type;
     this.maxHp = def.hp * hpScale;
     this.hp = this.maxHp;
@@ -2043,7 +2049,32 @@ export class Enemy {
     // already done the work.
     this.blockedBy = Math.hypot(this.pos.x - ix, this.pos.z - iz) + (hitWall ? 1 : 0);
 
-    const bob = this.status.freeze > 0 ? 0 : Math.sin(ctx.time * 6 + this.id) * 0.05;
+    // THE CROWD DANCES. This is written to group.position, never to this.pos,
+    // so it is invisible to pathfinding, collision and the nav grid - all of
+    // which read this.pos. The hitbox IS parented to the group and so bobs
+    // with the model, which is what keeps shots landing where the enemy looks
+    // like it is; that also means the amplitudes below are a real (small)
+    // change to how hard a target is to hit, which is why they are small.
+    //
+    // Each beat is a hop that decays before the next one lands, rather than a
+    // sine at some guessed tempo: the hop follows the music's own onsets, so
+    // it stays in time through a tempo change or a breakdown. `danceLag`
+    // spreads the responses out over a few frames so they do not all pop on
+    // the same one - in unison it reads as a stutter, not a dance.
+    //
+    // A boss hops a third as high. Something that size travelling as far as a
+    // rusher reads as weightless rather than heavy.
+    //
+    // The lag holds `_dance` below 1, so the measured hop is about 0.12 for a
+    // rusher and 0.04 for a boss - visible across the arena, and small against
+    // a hitbox radius of 0.5 to 0.72.
+    const amp = this.boss ? 0.06 : 0.18;
+    const lag = 15 - this.danceLag * 7;
+    this._dance += (ctx.beat - this._dance) * Math.min(1, dt * lag);
+    // A slow sway underneath, so an enemy is never perfectly still between
+    // beats and a silent passage still leaves the crowd swaying.
+    const sway = Math.sin(ctx.time * 1.8 + this.id) * 0.022 * (0.4 + ctx.level);
+    const bob = this.status.freeze > 0 ? 0 : this._dance * amp + sway;
     this.group.position.set(this.pos.x, bob, this.pos.z);
     this.group.rotation.y = Math.atan2(-dx, -dz);
 

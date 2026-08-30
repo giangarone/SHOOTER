@@ -377,6 +377,10 @@ class Game {
       nav: this.nav,
       navBig: this.navBig,
       time: 0,
+      // The music, for the crowd bob in Enemy.update. Refreshed every frame
+      // alongside `time` - never captured, for the same reason `mods` is not.
+      beat: 0,
+      level: 0,
       onHitPlayer: (d, pos) => this._hurtPlayer(d, pos),
       addProjectile: (x, y, z, type, speedScale) =>
         this._spawnProjectile(x, y, z, type, speedScale),
@@ -2139,6 +2143,8 @@ class Game {
   _updateEnemies(dt) {
     const ctx = this._enemyCtx;
     ctx.time = this.time;
+    ctx.beat = this.music.beat;
+    ctx.level = this.music.level;
     // Re-read every frame, never captured: rebuildMods() replaces the whole
     // mods object on each draft pick, so a reference taken once would be the
     // pre-upgrade block for the rest of the run.

@@ -114,6 +114,11 @@ Open http://localhost:8123
   the rig flashes on the actual kick - not on a timer. It is tapped upstream of
   both the mute and the muffle, so the room keeps dancing to the track even with
   the music turned off.
+- **The crowd dances.** Enemies hop on the kick, staggered a few frames apart
+  so a room full of them reads as a crowd rather than a chorus line. Bosses hop
+  a third as high, because something that size moving as far as a rusher looks
+  weightless. It is written to the model, never to the position pathfinding
+  reads, so it cannot affect how anything routes.
 - The room reads the fight: flashes speed up as your kill chain climbs, a red
   heartbeat joins below 30% health and quickens as you drop, each wave starts
   with a blackout and a slam, and taking a hit blows the lights white.
