@@ -146,17 +146,6 @@ export function buildArena(scene) {
     box(group, platEdgeMat, p.x, p.h + 0.01, p.z, p.w + 0.04, 0.05, p.d + 0.04);
   }
 
-  // The stage: an LED backdrop standing on the centre platform. Its footprint
-  // is deliberately INSIDE the platform's own 4x4 box, so the union of the two
-  // AABBs is unchanged in XZ and the navmesh is bit-for-bit what it was.
-  const ledMat = new THREE.MeshStandardMaterial({ color: 0x05070c, emissive: 0xff2fb0, emissiveIntensity: 0.9 });
-  const stageFrameMat = new THREE.MeshStandardMaterial({ color: 0x0d1017, roughness: 0.5, metalness: 0.7 });
-  const led = box(group, ledMat, 0, 2.5, 1.6, 4, 3, 0.4);
-  led.castShadow = true;
-  meshList.push(led);
-  obstacles.push(makeAabb(0, 2.5, 1.6, 4, 3, 0.4));
-  box(group, stageFrameMat, 0, 4.05, 1.6, 4.3, 0.2, 0.6);
-
   // Low cover, now speaker cabinets. The collision box is slightly wider than
   // the mesh (1.15 vs 0.95) to compensate for the random Y rotation, which the
   // AABB can't model.
@@ -319,7 +308,7 @@ export function buildArena(scene) {
   return {
     group, obstacles, ground, meshList, spawnPoints,
     lights: { hemi, dir, p1, p2 },
-    mats: { trim: trimMat, platEdge: platEdgeMat, led: ledMat, deckEdge: deckEdgeMat },
+    mats: { trim: trimMat, platEdge: platEdgeMat, deckEdge: deckEdgeMat },
     shared: { BOX, CYL },
   };
 }

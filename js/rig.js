@@ -69,9 +69,6 @@ const ACCENTS = [
 // House lights: warm, and nothing like the combat palette, so the intermission
 // reads instantly as "the set has stopped".
 const HOUSE = 0xffb060;
-// The stage wall's resting colour. It is tinted toward the room's accent but
-// never replaced by it.
-const LED_BASE = 0xff2fb0;
 
 export class Rig {
   constructor(scene, arena) {
@@ -399,17 +396,6 @@ export class Rig {
     this.mats.trim.emissiveIntensity = trimGain * (1 - dark);
     this.mats.deckEdge.emissiveIntensity = (0.8 + beat * 1.6 * this._energy) * (1 - dark);
     this.mats.platEdge.emissiveIntensity = (0.9 + beat * 1.4 * this._energy) * (1 - dark);
-    // The LED wall keeps its OWN hue and is only tinted toward the accent.
-    // Copying the accent outright turned it white whenever the room was, and a
-    // 4x3 white slab directly ahead of the spawn is the brightest thing in the
-    // venue by a wide margin - it blew out the whole first screen.
-    // Only a quarter of the way toward the accent, and held well below 1: an
-    // emissive surface driven hard clips to white under ACES tone mapping and
-    // loses the very colour it is there to provide. The wall should read as a
-    // saturated screen, not as a lamp.
-    this._c.setHex(LED_BASE).lerp(this._colour, 0.25);
-    this.mats.led.emissive.copy(this._c);
-    this.mats.led.emissiveIntensity = Math.min(0.85, 0.3 + level * 0.25 + beat * 0.5 * this._energy) * (1 - dark);
 
     // ---- fog ---------------------------------------------------------------
     // The room closes in for a boss and opens back up afterwards. Fog colour

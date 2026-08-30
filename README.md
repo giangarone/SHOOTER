@@ -108,7 +108,7 @@ Open http://localhost:8123
   is something you hear. Mute toggle on the start and pause screens, remembered
   between sessions.
 - The arena is an enclosed venue: a closed ceiling 16 units up, a truss rig
-  hung under it, speaker stacks and a stage where the crates and platforms used
+  hung under it, speaker stacks and truss towers where the crates and pillars used
   to be.
 - **The lights run off the music.** An analyser reads the soundtrack's bass and
   the rig flashes on the actual kick - not on a timer. It is tapped upstream of
