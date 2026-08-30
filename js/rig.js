@@ -57,14 +57,14 @@ const HEADS = 2;
 const BEAMS = 4;
 const BEAM_LEN = 15;
 
-// The palette the accents are drawn from. White is IN the list, and heavily
-// weighted, because the room is meant to be a white one with colour in it
-// rather than a colour one: enemy hues cover the whole wheel and a room that
-// is permanently tinted makes two of them look alike. Roughly two thirds of
-// the picks land on white, so a colour reads as punctuation.
+// The palette the accents are drawn from. NO WHITE: the room's colour never
+// drops back to white between picks, it steps from one hue to the next, which
+// is what a rave rig actually does. Readability is still protected, because
+// the hemisphere and the key light - the light enemies are actually READ by -
+// stay white regardless (see the note at the top of this file). This is only
+// the colour in the fixtures, beams, fog and accent points.
 const ACCENTS = [
-  0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff,
-  0x4ef3ff, 0xff2fb0, 0xb14aed, 0xffb300, 0x39ff88, 0xff5a4d,
+  0x4ef3ff, 0xff2fb0, 0xb14aed, 0xffb300, 0x39ff88, 0xff5a4d, 0x3d6bff, 0xff8a1f,
 ];
 // House lights: warm, and nothing like the combat palette, so the intermission
 // reads instantly as "the set has stopped".
@@ -172,19 +172,19 @@ export class Rig {
 
     // ---- animation state ---------------------------------------------------
     this.t = 0;
-    // 0..1, written every frame and read by main.js for the DOM strobe.
-    this.flash = 0;
     // One-shot cue timers. All count DOWN in seconds.
     this._waveT = 0;
-    this._dmgT = 0;
     this._staggerT = 0;
     this._enraged = false;
-    // Smoothed drivers, so a mode change eases rather than snaps.
-    this._colour = new THREE.Color(0xffffff);
-    this._target = new THREE.Color(0xffffff);
+    // Smoothed drivers, so a mode change eases rather than snaps. Seeded on a
+    // real accent rather than white so the first frame of a run is already
+    // wearing the show's colour.
+    this._colour = new THREE.Color(ACCENTS[0]);
+    this._target = new THREE.Color(ACCENTS[0]);
     this._energy = 0;
     this._house = 0;
     this._accent = 0;
+    this._pickIdx = 0;
     // Scratch, to honour the no-allocation-in-the-loop rule.
     this._c = new THREE.Color();
   }
@@ -196,12 +196,6 @@ export class Rig {
   // room just gets slightly brighter.
   cueWaveStart() {
     this._waveT = 0.9;
-  }
-
-  // Took a hit. A hard white blink, deliberately shorter than the red damage
-  // vignette it plays over, so the two read as one event rather than two.
-  cueDamage() {
-    this._dmgT = 0.18;
   }
 
   // A boss is staggered: black out, then flare white as it recovers.
@@ -243,7 +237,6 @@ export class Rig {
 
     // ---- cue timers --------------------------------------------------------
     if (this._waveT > 0) this._waveT = Math.max(0, this._waveT - dt);
-    if (this._dmgT > 0) this._dmgT = Math.max(0, this._dmgT - dt);
     if (this._staggerT > 0) this._staggerT = Math.max(0, this._staggerT - dt);
 
     // The wave cue: the first 40% is the blackout, the rest is the hit
@@ -291,16 +284,18 @@ export class Rig {
     } else if (boss) {
       this._target.setHex(s.bossColor);
     } else {
-      // Ordinary combat: mostly white, stepping to an accent occasionally so
-      // the colour reads as punctuation rather than as the room's colour. The
-      // step clock is what holds a pick for a couple of seconds instead of
-      // reshuffling every frame.
+      // Ordinary combat: always a colour, stepping to a different one every
+      // couple of seconds. The step clock is what holds a pick instead of
+      // reshuffling every frame; the offset walk is what guarantees the next
+      // pick is never the one already showing, which would read as the colour
+      // change having stalled.
       const step = Math.floor(this.t * 0.55);
       if (step !== this._accent) {
         this._accent = step;
-        this._pick = ACCENTS[(Math.random() * ACCENTS.length) | 0];
+        this._pickIdx = (this._pickIdx + 1 + ((Math.random() * (ACCENTS.length - 1)) | 0))
+          % ACCENTS.length;
       }
-      this._target.setHex(this._pick ?? 0xffffff);
+      this._target.setHex(ACCENTS[this._pickIdx]);
     }
     this._colour.lerp(this._target, Math.min(1, dt * 4));
 
@@ -409,16 +404,6 @@ export class Rig {
     this.scene.fog.color.copy(this._c);
     this.scene.background.copy(this._c);
 
-    // ---- the full-screen strobe -------------------------------------------
-    // Written here, applied by main.js through ui.setStrobe. A DOM overlay is
-    // free next to lighting the whole scene, and it is the only way to get a
-    // true white-out.
-    let f = 0;
-    if (combat) f = beat * 0.42 * this._energy;
-    f = Math.max(f, this._dmgT / 0.18 * 0.55);
-    f = Math.max(f, waveHit * 0.5, stagHit * 0.7);
-    if (boss && this._enraged) f = Math.max(f, beat * 0.55);
-    this.flash = Math.min(0.8, f * (1 - this._house));
   }
 
   // Walks a spotlight's aim point around the floor. `out` is written in place.

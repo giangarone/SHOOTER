@@ -24,7 +24,11 @@ export class SFX {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.22;
+      // Sits against music.js's VOLUME (0.32), which runs on its own path
+      // straight to the destination. The effects are the game's feedback -
+      // shots, hits, pickups - so they are mixed to sit ON TOP of the track
+      // rather than under it.
+      this.master.gain.value = 0.38;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});

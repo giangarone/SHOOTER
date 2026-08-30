@@ -1642,9 +1642,6 @@ class Game {
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
     this.sfx.hurt();
     this.ui.damage();
-    // A hard white blink over the red vignette. Shorter than the vignette on
-    // purpose, so the two read as one hit rather than two events.
-    this.rig.cueDamage();
     if (h > 0) return;
     // Dead Cat. One revive for the whole run, not one per wave: it is the
     // upside of a permanently smaller health pool, and refilling it every wave
@@ -2552,9 +2549,6 @@ class Game {
       this._lastDotFx = this.time;
       this.ui.damage();
       this.sfx.hurt();
-      // Inside the throttle with the vignette, for the reason named above: a
-      // flinch on every damage tick really would be a strobe.
-      this.rig.cueDamage();
     }
     if (h > 0) return;
     if (this.player.livesUsed < this.player.mods.extraLives) {
@@ -2777,7 +2771,6 @@ class Game {
     // frame it happens rather than the next one.
     this.music.sample(dt);
     this.rig.update(dt, this._fillRigState());
-    this.ui.setStrobe(this.rig.flash);
 
     this.effects.update(dt);
     this.renderer.render(this.scene, this.camera);
