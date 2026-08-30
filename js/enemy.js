@@ -1613,6 +1613,12 @@ export class Enemy {
     // stable for the enemy's whole life and costs no storage to randomise.
     this._dance = 0;
     this.danceLag = (this.id % 7) / 7;
+    // Weight-shift state. `_leanSign` flips on every beat so the lean
+    // alternates sides; `_lean` chases it so the change is a shift rather
+    // than a snap, and `_beatHigh` is the edge detector that does the flip.
+    this._lean = 0;
+    this._leanSign = this.id % 2 ? 1 : -1;
+    this._beatHigh = false;
     this.type = type;
     this.maxHp = def.hp * hpScale;
     this.hp = this.maxHp;
@@ -1691,6 +1697,12 @@ export class Enemy {
     this._extraMats = [];
 
     this.group = new THREE.Group();
+    // YXZ so the dance's roll (rotation.z, in update) composes INSIDE the
+    // facing yaw: the enemy leans about its own spine rather than tipping
+    // toward a fixed world axis as it turns. Nothing writes rotation.x, and
+    // the places that read rotation.y for a facing direction are unaffected -
+    // the order only changes how y and z combine.
+    this.group.rotation.order = 'YXZ';
     this.group.position.copy(this.pos);
     // flatShading is what makes the whole roster read as cut facets. Every
     // part of every silhouette shares this one material, so a hit flash and a
@@ -2077,6 +2089,32 @@ export class Enemy {
     const bob = this.status.freeze > 0 ? 0 : this._dance * amp + sway;
     this.group.position.set(this.pos.x, bob, this.pos.z);
     this.group.rotation.y = Math.atan2(-dx, -dz);
+
+    // THE WEIGHT SHIFT. Bouncing straight up and down reads as bobbing; what
+    // makes it read as DANCING is the weight going side to side, so the lean
+    // alternates on every beat.
+    //
+    // The side is flipped by an edge detector on the beat envelope rather than
+    // by an oscillator at some assumed tempo, so it stays locked to the music
+    // for free and needs no idea of what the BPM is.
+    //
+    // The group's Euler order is YXZ (set in the constructor), which puts this
+    // roll INSIDE the yaw: the enemy leans about its own spine whichever way
+    // it happens to be facing, instead of tipping toward a fixed world axis.
+    const high = ctx.beat > 0.6;
+    if (high && !this._beatHigh) this._leanSign = -this._leanSign;
+    this._beatHigh = high;
+    this._lean += (this._leanSign - this._lean) * Math.min(1, dt * 7);
+    // Sized against the hitbox, not by eye. The hitbox is parented to the
+    // group but sits at local y ~0.8, NOT at the origin, so a roll of theta
+    // slides it sideways by sin(theta)*0.8. At the peak here that is about
+    // 0.09 - under a fifth of the smallest hitbox radius - which keeps the
+    // lean honest against a sphere the player is trying to hit.
+    // Barely perceptible on a boss, for the same reason its hop is small.
+    const leanAmp = this.boss ? 0.07 : 0.26;
+    this.group.rotation.z = this.status.freeze > 0
+      ? 0
+      : this._lean * leanAmp * (0.45 + this._dance * 0.55);
 
     if (this.flash > 0) this.flash -= dt;
     this._setFlash(this.flash > 0);

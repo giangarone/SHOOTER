@@ -20,9 +20,10 @@
 // see BY.
 //
 // WHERE THE BEAT COMES FROM: music.js taps an analyser off the raw source and
-// exposes `level` (bass energy) and `beat` (onset strength). The rig reads
-// those. When there is no music yet - the pre-gesture menu - it falls back to
-// a free-running tempo so the room is never static.
+// exposes `level` (bass energy) and `beat` (onset strength). It also owns the
+// free-running fallback for when there is nothing to listen to, so the rig
+// never has to check - and so the rig and the dancing crowd in enemy.js, which
+// read the same two numbers, can never disagree about whether the party is on.
 import * as THREE from 'three';
 
 // Ceiling height, mirrored from arena.js. The truss hangs just below it.
@@ -71,10 +72,6 @@ const HOUSE = 0xffb060;
 // The stage wall's resting colour. It is tinted toward the room's accent but
 // never replaced by it.
 const LED_BASE = 0xff2fb0;
-
-// Free-running fallback tempo, in beats per second, for when the analyser has
-// nothing to say (music not started, or a silent passage).
-const FALLBACK_BPS = 2.2;
 
 export class Rig {
   constructor(scene, arena) {
@@ -178,8 +175,6 @@ export class Rig {
 
     // ---- animation state ---------------------------------------------------
     this.t = 0;
-    // Free-running beat phase, used when the analyser has nothing.
-    this._fallbackT = 0;
     // 0..1, written every frame and read by main.js for the DOM strobe.
     this.flash = 0;
     // One-shot cue timers. All count DOWN in seconds.
@@ -227,16 +222,12 @@ export class Rig {
   update(dt, s) {
     this.t += dt;
 
-    // Beat source, with the free-running fallback for the pre-gesture menu and
-    // for silent passages.
-    let beat = s.beat;
-    let level = s.level;
-    this._fallbackT += dt * FALLBACK_BPS;
-    if (level < 0.02) {
-      const f = this._fallbackT % 1;
-      beat = Math.max(0, 1 - f * 4);
-      level = 0.35 + Math.sin(this.t * 1.4) * 0.1;
-    }
+    // Beat source. music.js already substitutes a free-running tempo when
+    // there is nothing to listen to, so these are always usable - and the
+    // crowd in enemy.js is reading the very same numbers, which is what keeps
+    // the room and the dancers in agreement.
+    const beat = s.beat;
+    const level = s.level;
 
     const combat = s.mode === 'combat' || s.mode === 'boss';
     const boss = s.mode === 'boss';

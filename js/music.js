@@ -61,6 +61,12 @@ const FLUX_DELTA = 0.015;
 // Seconds a beat suppresses the next one. 0.34 caps detection at ~176 BPM; a
 // faster track simply reports every other beat, which still looks right.
 const REFRACTORY = 0.34;
+// Below this the signal counts as nothing to listen to and the free-running
+// fallback takes over.
+const SILENT = 0.02;
+// The fallback's tempo, in beats per second - about 144 BPM, matching the
+// shipped soundtrack, so the handover in either direction is not a lurch.
+const FALLBACK_BPS = 2.4;
 
 export class Music {
   constructor(src) {
@@ -80,9 +86,15 @@ export class Music {
     // onset test measures against; `_lvl` is the smoothed output.
     this._prevE = 0;
     this._fluxAvg = 0;
+    // What the analyser actually hears, kept separate from the published
+    // values so the fallback below can replace them without feeding its own
+    // output back into the follower on the next frame.
+    this._realLvl = 0;
+    this._realBeat = 0;
     this._lvl = 0;
     this._beat = 0;
     this._beatCd = 0;
+    this._fallbackT = 0;
   }
 
   // Builds the graph and starts playback. Takes the AudioContext from SFX so
@@ -176,37 +188,52 @@ export class Music {
   // Returns zeros until the graph exists, i.e. for the whole pre-gesture menu;
   // callers must have something to fall back on.
   sample(dt) {
-    if (!this.analyser || !this.el || this.el.paused) {
-      this._lvl = 0;
-      this._beat = Math.max(0, this._beat - dt * 6);
-      return;
-    }
-    this.analyser.getByteFrequencyData(this._freq);
-    let sum = 0;
-    for (let i = BASS_LO; i < BASS_HI; i++) sum += this._freq[i];
-    const e = sum / ((BASS_HI - BASS_LO) * 255);
+    if (this.analyser && this.el && !this.el.paused) {
+      this.analyser.getByteFrequencyData(this._freq);
+      let sum = 0;
+      for (let i = BASS_LO; i < BASS_HI; i++) sum += this._freq[i];
+      const e = sum / ((BASS_HI - BASS_LO) * 255);
 
-    // SPECTRAL FLUX: how much the bass energy ROSE since the last frame. This
-    // is the measurement that finds a kick drum. Only rises count - a decay is
-    // not an onset - which is what the clamp at zero is doing.
-    const flux = Math.max(0, e - this._prevE);
-    this._prevE = e;
+      // SPECTRAL FLUX: how much the bass energy ROSE since the last frame.
+      // This is the measurement that finds a kick drum. Only rises count - a
+      // decay is not an onset - which is what the clamp at zero is doing.
+      const flux = Math.max(0, e - this._prevE);
+      this._prevE = e;
 
-    // A smoothed level for anything that wants brightness rather than rhythm.
-    this._lvl += (e - this._lvl) * Math.min(1, dt * 12);
+      // A smoothed level for anything that wants brightness rather than rhythm.
+      this._realLvl += (e - this._realLvl) * Math.min(1, dt * 12);
 
-    // The floor a flux spike has to clear, tracked slowly so it follows the
-    // track from a breakdown into a drop without ever needing a fixed number.
-    this._fluxAvg += (flux - this._fluxAvg) * Math.min(1, dt * 3);
+      // The floor a flux spike has to clear, tracked slowly so it follows the
+      // track from a breakdown into a drop without ever needing a fixed number.
+      this._fluxAvg += (flux - this._fluxAvg) * Math.min(1, dt * 3);
 
-    this._beatCd -= dt;
-    if (flux > this._fluxAvg * FLUX_MULT + FLUX_DELTA && this._beatCd <= 0) {
-      this._beat = 1;
-      this._beatCd = REFRACTORY;
+      this._beatCd -= dt;
+      if (flux > this._fluxAvg * FLUX_MULT + FLUX_DELTA && this._beatCd <= 0) {
+        this._realBeat = 1;
+        this._beatCd = REFRACTORY;
+      } else {
+        // Decays between kicks, so `beat` is an envelope a caller can fade
+        // with rather than a one-frame spike it would have to latch itself.
+        this._realBeat = Math.max(0, this._realBeat - dt * 6);
+      }
     } else {
-      // Decays between kicks, so `beat` is an envelope the rig can fade with
-      // rather than a one-frame spike it would have to latch itself.
-      this._beat = Math.max(0, this._beat - dt * 6);
+      this._realLvl = 0;
+      this._realBeat = 0;
+    }
+
+    // ONE fallback, for every consumer. The lighting rig and the dancing
+    // crowd both read `beat` and `level`, and they used to each decide
+    // separately what to do when the music said nothing - which left the
+    // lights pulsing over a frozen crowd on the pre-gesture menu, where the
+    // graph does not exist yet. Deciding it here means they cannot disagree.
+    if (this._realLvl >= SILENT) {
+      this._lvl = this._realLvl;
+      this._beat = this._realBeat;
+    } else {
+      this._fallbackT += dt * FALLBACK_BPS;
+      const f = this._fallbackT % 1;
+      this._beat = Math.max(0, 1 - f * 4);
+      this._lvl = 0.35 + Math.sin(this._fallbackT * 0.6) * 0.1;
     }
   }
 
