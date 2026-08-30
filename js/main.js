@@ -508,6 +508,9 @@ class Game {
         case 'Space': this.input.jump = true; e.preventDefault(); break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUseStation(); break;
+        // Fullscreen is bound on the window rather than to a button alone so
+        // it is reachable mid-run without giving up pointer lock to click.
+        case 'KeyF': this._toggleFullscreen(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -595,6 +598,23 @@ class Game {
     }
     this._syncMuteBtns();
 
+    // Fullscreen toggles, one per overlay, plus the F binding above. Same
+    // stopPropagation reasoning as the mute buttons: the overlays are
+    // click-to-continue and this must not also start or resume the run.
+    this._fsBtns = [document.getElementById('btn-fs-start'), document.getElementById('btn-fs-pause')];
+    for (const b of this._fsBtns) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._toggleFullscreen();
+      });
+    }
+    // The browser owns this state - Esc and the F11 key change it without
+    // going through either path above - so the label is driven by the event
+    // rather than written at the point of the toggle.
+    document.addEventListener('fullscreenchange', () => this._syncFsBtns());
+    document.addEventListener('webkitfullscreenchange', () => this._syncFsBtns());
+    this._syncFsBtns();
+
     // Name entry. Both paths go through _saveScore, which is idempotent.
     document.getElementById('btn-lb-save').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -669,6 +689,33 @@ class Game {
 
   // Both buttons show one shared state, so muting on the pause screen is
   // still muted when the start screen comes back after a death.
+  // Requests fullscreen on the whole document rather than on the canvas, so
+  // the HUD, the overlays and the strobe overlay come with it - a fullscreen
+  // canvas alone would leave the run with no health bar. The locked pointer
+  // survives because the element it is locked to is inside the one going
+  // fullscreen.
+  _toggleFullscreen() {
+    const d = document;
+    const on = d.fullscreenElement || d.webkitFullscreenElement;
+    // Both calls reject on a browser that refuses the gesture (or has
+    // fullscreen disabled by policy). Nothing to recover, so it is swallowed
+    // and the label re-syncs from the event that never arrives.
+    const p = on
+      ? (d.exitFullscreen || d.webkitExitFullscreen).call(d)
+      : (d.documentElement.requestFullscreen || d.documentElement.webkitRequestFullscreen)
+        .call(d.documentElement);
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  _syncFsBtns() {
+    if (!this._fsBtns) return;
+    const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    for (const b of this._fsBtns) {
+      b.textContent = on ? 'EXIT FULLSCREEN' : 'FULLSCREEN';
+      b.classList.toggle('off', on);
+    }
+  }
+
   _syncMuteBtns() {
     const m = this.music.muted;
     for (const b of this._muteBtns) {
@@ -917,8 +964,16 @@ class Game {
       this.rig.cueStagger();
     } else if (kind === 'recover') {
       bf.state = '';
-      bf.note = '';
+      // Back to whatever the core is doing, not to blank: a boss standing back
+      // up with its shutters still open must not read as a window that closed.
+      bf.note = enemy.bs && enemy.bs.weakOpen ? 'CORE EXPOSED' : '';
       this.rig.setEnraged(false);
+    } else if (kind === 'vent') {
+      // Colossus's chest core opening and closing. The quietest boss note
+      // there is, and it yields to STAGGERED and ENRAGED - those are one-shot
+      // events the player must not lose sight of behind a label that changes
+      // every few seconds.
+      if (!bf.state) bf.note = enemy.bs.weakOpen ? 'CORE EXPOSED' : '';
     } else if (kind === 'charge') {
       this.sfx.wave();
     } else if (kind === 'enrage') {

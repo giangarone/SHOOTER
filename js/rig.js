@@ -188,6 +188,10 @@ export class Rig {
     this._house = 0;
     this._accent = 0;
     this._pickIdx = 0;
+    // The wall chase: where the bright head currently is, as 0..1 around the
+    // perimeter, and the lagging colour every other cell wears.
+    this._chase = 0;
+    this._trail = new THREE.Color(ACCENTS[1]);
     // Scratch, to honour the no-allocation-in-the-loop rule.
     this._c = new THREE.Color();
   }
@@ -396,11 +400,61 @@ export class Rig {
     }
 
     // ---- emissive furniture -----------------------------------------------
-    // Shared materials, so one write lights every trim strip in the venue.
+    // Shared materials, so one write lights every lamp head, deck edge and
+    // platform lip in the venue.
+    //
+    // They wear the room's CURRENT colour now. They used to be a fixed cyan,
+    // which meant that every time the rig stepped onto magenta or amber the
+    // furniture stayed on the one colour that could not have come from the
+    // rig - and static light in a room full of moving light reads as scenery
+    // rather than as part of the show.
+    const emCol = this._house > 0.5 ? this._target : this._colour;
     const trimGain = 1.2 + beat * 2.4 * this._energy + heart * 2;
+    this.mats.trim.emissive.copy(emCol);
     this.mats.trim.emissiveIntensity = trimGain * (1 - dark);
+    this.mats.deckEdge.emissive.copy(emCol);
     this.mats.deckEdge.emissiveIntensity = (0.8 + beat * 1.6 * this._energy) * (1 - dark);
+    this.mats.platEdge.emissive.copy(emCol);
     this.mats.platEdge.emissiveIntensity = (0.9 + beat * 1.4 * this._energy) * (1 - dark);
+
+    // ---- the wall chase ----------------------------------------------------
+    // The head-height strips around the four walls are cut into cells with
+    // their own materials (see arena.js), and this is what that buys: a bright
+    // pulse running around the room on the beat, at the eye level the fight is
+    // actually played at. The ceiling rig is above the player's sightline for
+    // most of a run; this is the part of the show they cannot help but see.
+    const cells = this.mats.wallStrip;
+    const n = cells.length;
+    // The head walks the perimeter, faster the harder the room is being
+    // driven: a slow crawl around an idle venue, and a sprint on a big combo.
+    // The house lights stop it dead - an intermission is not a show.
+    this._chase += dt * (0.55 + this._energy * 2.6 + level * 1.8) * (1 - this._house);
+    this._chase -= Math.floor(this._chase);
+    const head = this._chase * n;
+    // A colour that lags the room's by about half a second, worn by every other
+    // cell. Through a colour step the wall is briefly two-tone, which is what
+    // stops a ring of identical cells reading as one continuous line - and it
+    // settles onto the room's colour between steps, so the walls and the
+    // ceiling are wearing the same thing most of the time. Tuned by eye: a
+    // slower lag than this and the wall never catches up, which reads as two
+    // rigs disagreeing rather than as one colour arriving.
+    this._trail.lerp(this._colour, Math.min(1, dt * 2.2));
+    const base = (0.16 + level * 0.5) * (1 - this._house) + 1.1 * this._house;
+    const cometGain = (0.7 + beat * 3.4 * this._energy) * (1 - this._house);
+    for (let i = 0; i < n; i++) {
+      const m = cells[i];
+      if (this._house > 0.5) m.emissive.copy(this._target);
+      else m.emissive.copy(i & 1 ? this._trail : this._colour);
+      // Wrapped distance to the head, so the pulse crosses the seam between
+      // the last cell and the first instead of vanishing at a corner.
+      let d = Math.abs(i - head);
+      if (d > n * 0.5) d = n - d;
+      // Squared, so the head is a bright point with a short tail rather than a
+      // broad wash - a wash is just the whole wall getting brighter.
+      const comet = Math.max(0, 1 - d / 3.5);
+      m.emissiveIntensity =
+        Math.min(5, (base + comet * comet * cometGain + heart * 1.5) * (1 - dark));
+    }
 
     // ---- fog ---------------------------------------------------------------
     // The room closes in for a boss and opens back up afterwards. Fog colour

@@ -191,38 +191,30 @@ export const ENEMY_TYPES = {
   // `hp` here is the BASE. waves.js multiplies it by a curve that reaches
   // roughly 5.9x by wave 55.
 
-  // The teaching boss. Armoured everywhere except one glowing plate that
-  // travels around its body, so damage is a question of where the player is
-  // standing rather than how long they hold the trigger. Its charge is
-  // telegraphed a full second ahead and, if the player puts a pillar or a wall
-  // behind themselves, it knocks itself down and hands over a free window.
+  // The teaching boss. Armoured everywhere except a red core in its chest,
+  // behind shutters that draw back on a fixed rhythm - so damage is a question
+  // of WHEN the player is firing rather than how long they hold the trigger.
+  // The core used to travel around the body instead, and half of every cycle
+  // it sat behind three metres of armour with no way to reach it: a mechanic
+  // the player could only wait out reads as the fight being broken. On the
+  // chest it is always in front of them, and the only question is the timing.
+  // Its charge is telegraphed a full second ahead and, if the player puts a
+  // pillar or a wall behind themselves, it knocks itself down and hands over a
+  // free window.
   colossus: {
     hp: 3600, speed: 2.0, damage: 34, score: 4000, color: 0x8c5a2b, eye: 0xffb300,
     scale: 3.2, radius: 2.0, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    // Only the weak point takes full damage, and only from the side it is
-    // facing. armorDefault is the ARMOURED value, the opposite of Bulwark's
-    // choice: a damage source that arrives without a direction must not be
-    // able to bypass the mechanic by accident.
-    armor: (e, dx, dz) => {
-      // Knocked down: the whole body is open, which is what makes baiting the
-      // charge into a wall worth doing.
-      if (e.bs.state === 'stagger') return 1;
-      const d = Math.hypot(dx, dz) || 1;
-      // WHERE THE PLATE ACTUALLY IS. The mesh hangs off its pivot along the
-      // pivot's local -z, so a pivot turned to weakAngle puts it at
-      // (-sin, -cos) - the NEGATIVE of the angle's own direction. Deriving the
-      // normal from the angle instead of from the mesh inverted the whole
-      // mechanic: the glowing plate soaked damage and the armoured back took
-      // full hits, with nothing on screen to say so.
-      const wx = -Math.sin(e.bs.weakAngle);
-      const wz = -Math.cos(e.bs.weakAngle);
-      // A shot travelling INTO the plate runs against that outward normal, so
-      // the dot product is negative; -0.57 is about 55 degrees either side.
-      return (dx / d) * wx + (dz / d) * wz < -0.57 ? 1 : 0.22;
-    },
+    // Only full damage while the core is open. Direction is deliberately NOT
+    // consulted any more: the core sits on the face the boss already turns
+    // toward the player, so a shot that reaches it came from the front by
+    // construction, and a directional test would only find ways to refuse hits
+    // the player can see landing. armorDefault matches the shut value, the
+    // opposite of Bulwark's choice: a damage source that arrives without a
+    // direction must not be able to bypass the mechanic by accident.
+    armor: (e) => (e.bs.state === 'stagger' || e.bs.weakOpen ? 1 : 0.22),
     armorDefault: 0.22,
     build: buildColossus, ai: aiColossus,
     cleanup: releaseMarks,
@@ -856,8 +848,29 @@ function buildWarden(e, g, s) {
 // to be legible at the distance the arena is fought across, so these lean on
 // overall proportion rather than on detail that would vanish.
 
-// The widest thing in the game, on two thick legs, with one plate that does
-// not match the rest of it.
+// How long the chest core stays shut and how long it stays open, in seconds.
+// The old travelling plate gave a player who kept repositioning roughly half
+// the fight at full damage, and this is tuned to land in the same place: the
+// boss's health bar falls at the pace it always did, but the player is reading
+// a rhythm instead of chasing a panel around a body they cannot see behind.
+const COLOSSUS_VENT_SHUT = 3.4;
+const COLOSSUS_VENT_OPEN = 2.6;
+// Shutter travel, in UNIT model space: where each leaf sits closed, and how
+// far out it slides. Closed at 0.26 the two leaves overlap over the core's
+// centre line and cover its full 0.85 width with no seam.
+const COLOSSUS_SHUT_X = 0.26;
+const COLOSSUS_SHUT_TRAVEL = 0.46;
+// Core brightness, shut and open. The shut value is deliberately not zero - a
+// dark core would read as damage or as a hole rather than as something waiting
+// to open. The open value is deliberately NOT higher: the renderer tone maps
+// with ACES, which desaturates anything it has to clip, and at 2.2 the core
+// came out a pale salmon against the boss's own amber room. Held at 1.2 it
+// stays unmistakably RED, which is the entire point of the colour.
+const COLOSSUS_CORE_SHUT = 0.22;
+const COLOSSUS_CORE_OPEN = 1.2;
+
+// The widest thing in the game, on two thick legs, with a shuttered core in
+// its chest.
 function buildColossus(e, g, s) {
   const P = partsFor(e, g, s);
   P('colossusTorso', prism(0.6, 0.4, 0.86, 6), { y: 0.88 });
@@ -866,32 +879,67 @@ function buildColossus(e, g, s) {
   P('colossusHead', slab(0.3, 0.24, 0.28), { y: 1.16, z: -0.16 });
   P('colossusLeg', slab(0.28, 0.5, 0.3), { x: -0.26, y: 0.25 });
   P('colossusLeg', slab(0.28, 0.5, 0.3), { x: 0.26, y: 0.25 });
-  P('colossusPlate', slab(0.8, 0.18, 0.14), { y: 0.96, z: -0.36, mat: SHARED_MATS.tankPlate });
+  // Moved to the BACK. The chest is where the weak point lives now, and two
+  // plates fighting for the same face read as one confusing lump of armour.
+  P('colossusPlate', slab(0.8, 0.18, 0.14), { y: 0.96, z: 0.36, mat: SHARED_MATS.tankPlate });
   eyes(P, { y: 1.18, x: 0.1, z: -0.31, r: 1.1, mat: e.eyeMat });
 
-  // THE WEAK POINT. Parented to a pivot at the boss's centre so the ai only
-  // has to turn one object: the plate then travels around the body without any
-  // per-frame trigonometry of its own. Its material is per-instance because it
-  // brightens when the boss is knocked down, so it is registered for disposal.
-  const pivot = new THREE.Object3D();
+  // THE WEAK POINT. Sunk into the chest, on the -z face every model in the
+  // roster fronts with, so it is square-on to the player for the whole fight.
+  // Its material is per-instance because it burns brighter as the shutters
+  // open, so it is registered for disposal.
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xffb300, emissive: 0xffb300, emissiveIntensity: 1.3,
-    roughness: 0.3, metalness: 0.5,
+    // Nearly black BASE colour: the room's light is the boss's own amber and a
+    // red-lit red surface would drift orange. All of the colour here is
+    // emissive, which no light in the room can tint.
+    color: 0x1e0402, emissive: 0xff1408, emissiveIntensity: COLOSSUS_CORE_SHUT,
+    roughness: 0.35, metalness: 0.2,
   });
   e._extraMats.push(mat);
-  // Big, and standing clear of the body. This is the single thing the player
+  // Big, and standing proud of the body. This is the single thing the player
   // has to find on a boss three metres wide, from across an arena, while being
-  // charged at - a subtle glowing panel is the same as no mechanic at all.
+  // charged at - a subtle glowing panel is the same as no mechanic at all. Red
+  // because nothing else on this model is: the eyes and the charge lane are
+  // amber, so red on the chest can only mean one thing.
   const core = new THREE.Mesh(
-    geo('colossusCore', () => new THREE.BoxGeometry(1.15, 1.5, 0.32)),
+    geo('colossusCore', () => new THREE.BoxGeometry(0.85, 0.8, 0.22)),
     mat
   );
-  core.position.z = -0.42 * s;
-  pivot.add(core);
-  pivot.position.y = 0.85 * s;
-  g.add(pivot);
-  e.bs.pivot = pivot;
+  // Set into the LOWER chest. Any higher and the shutters, which stand further
+  // forward than the head does, cover the eyes - and the eyes going alert are
+  // the telegraph for the charge, the one tell on this boss that must never be
+  // hidden by another.
+  core.position.set(0, 0.72 * s, -0.56 * s);
+  core.scale.setScalar(s);
+  g.add(core);
+
+  // The shutters. Two armoured leaves that meet over the core and slide apart
+  // to expose it; they are the TELL, and they are big and mechanical so the
+  // player reads the window opening from across the room rather than having to
+  // notice a glow change. Their closed positions overlap the core's edges, so
+  // shut really does mean covered from every angle the fight is played at.
+  const leafGeo = geo('colossusShutter', () => new THREE.BoxGeometry(0.54, 0.86, 0.16));
+  const shutters = [];
+  for (const sign of [-1, 1]) {
+    const leaf = new THREE.Mesh(leafGeo, SHARED_MATS.tankPlate);
+    leaf.position.set(sign * COLOSSUS_SHUT_X * s, 0.72 * s, -0.63 * s);
+    leaf.scale.setScalar(s);
+    leaf.castShadow = true;
+    g.add(leaf);
+    shutters.push({ mesh: leaf, sign });
+  }
+
   e.bs.coreMat = mat;
+  e.bs.coreMesh = core;
+  e.bs.shutters = shutters;
+  // The model scale, kept here because the shutters are positioned per frame
+  // and Enemy itself does not carry its type's `scale`.
+  e.bs.mScale = s;
+  // Starts shut, so the fight opens with the player learning what closed looks
+  // like before the first window arrives.
+  e.bs.weakOpen = false;
+  e.bs.ventT = COLOSSUS_VENT_SHUT;
+  e.bs.vent = 0;
 }
 
 // Legless: a wide braced platform with a barrel angled at the sky. Read: it is
@@ -1226,11 +1274,25 @@ const COLOSSUS_CHARGE_CAP = 52;
 const COLOSSUS_SLAM_CAP = 44;
 const COLOSSUS_CHARGE_SPEED = 14;
 
+// Drives the shutters and the core glow toward `open`. Eased rather than
+// snapped: the leaves visibly travelling is what turns the window into
+// something the player sees coming instead of something that has already
+// happened. `bs.vent` is the 0..1 position of that travel.
+function _colossusVent(bs, dt, open) {
+  bs.vent += ((open ? 1 : 0) - bs.vent) * Math.min(1, dt * 6);
+  const x = (COLOSSUS_SHUT_X + COLOSSUS_SHUT_TRAVEL * bs.vent) * bs.mScale;
+  for (const sh of bs.shutters) sh.mesh.position.x = sh.sign * x;
+  // A slow throb while it is open, so the exposed core is the only thing on
+  // the model that is moving in place.
+  const pulse = open ? 1 + 0.25 * Math.sin(bs.ventT * 9) : 1;
+  bs.coreMat.emissiveIntensity =
+    (COLOSSUS_CORE_SHUT + (COLOSSUS_CORE_OPEN - COLOSSUS_CORE_SHUT) * bs.vent) * pulse;
+}
+
 function aiColossus(e, a) {
   const bs = e.bs;
   if (bs.state === undefined) {
     bs.state = 'walk';
-    bs.weakAngle = Math.random() * Math.PI * 2;
     bs.t = 0;
     bs.cd = 4;
     bs.slamCd = 2;
@@ -1243,24 +1305,34 @@ function aiColossus(e, a) {
   bs.fx = ctx.effects;
   const feared = e.status.fear > 0;
 
-  // The plate keeps travelling except while the boss is down, and slows while
-  // it is charging so a player who has already lined up the weak side is not
-  // robbed of the shot by the dash itself.
-  if (bs.state !== 'stagger') {
-    bs.weakAngle += a.dt * (bs.state === 'dash' ? 0.15 : 0.55);
+  // THE CORE'S RHYTHM. It runs on its own clock, unbroken by whatever the
+  // fight is doing, because the whole point of moving the weak point off the
+  // body's surface and onto a timer was to make it something the player can
+  // learn and count on. A knockdown opens it early and holds it open, which is
+  // still the biggest window in the fight.
+  if (bs.state === 'stagger') {
+    _colossusVent(bs, a.dt, true);
+  } else {
+    bs.ventT -= a.dt;
+    if (bs.ventT <= 0) {
+      bs.weakOpen = !bs.weakOpen;
+      bs.ventT = bs.weakOpen ? COLOSSUS_VENT_OPEN : COLOSSUS_VENT_SHUT;
+      if (bs.weakOpen) {
+        _bossAt.set(e.pos.x, 0.9 * bs.mScale, e.pos.z);
+        ctx.effects.burst(_bossAt, 0xff2418, 12, 4, 1.5, 0.45);
+      }
+      ctx.bossEvent('vent', e);
+    }
+    _colossusVent(bs, a.dt, bs.weakOpen);
   }
-  // The pivot turns against the group, which is already facing the player, so
-  // the plate's angle stays absolute in world space - the player can circle to
-  // a fixed point on the floor rather than chasing a moving target twice over.
-  bs.pivot.rotation.y = bs.weakAngle - e.group.rotation.y;
 
   if (bs.state === 'stagger') {
     bs.t -= a.dt;
-    bs.coreMat.emissiveIntensity = 2.4;
     if (bs.t <= 0) {
       bs.state = 'walk';
       bs.cd = 6 * e.rate;
-      bs.coreMat.emissiveIntensity = 1.3;
+      // Handed back to the vent clock mid-cycle rather than reset, so the
+      // rhythm the player has been counting survives the knockdown.
       ctx.bossEvent('recover', e);
     }
     return;

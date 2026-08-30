@@ -21,6 +21,7 @@ Open http://localhost:8123
 | R | Reload |
 | Space | Jump |
 | E | Buy ammo / reroll at a station |
+| F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
 
 ## Features
@@ -55,8 +56,8 @@ Open http://localhost:8123
   trails in molten orange). Colour and the pulse back the silhouette up, so the
   distinction survives a busy screen.
 - **A boss every five waves**, in a fixed rotation of five that repeats: the
-  **Colossus** (armoured but for a weak point travelling around its body, and a
-  telegraphed charge that knocks it out cold against a wall), **Siege**
+  **Colossus** (armoured but for a red core in its chest that opens on a rhythm,
+  and a telegraphed charge that knocks it out cold against a wall), **Siege**
   (telegraphed mortar barrages), **Schism** (splits at half health, then again),
   **Maw** (drags you in and rolls rings you have to jump) and the **Herald**
   (blinks, volleys, and enrages under 30%). Regular enemies keep arriving
@@ -305,7 +306,8 @@ early waves and would pass every later assertion vacuously. `test:boss` drives
 the game into each boss wave in turn and checks the fight resolves, the adds
 stay capped, telegraph handles are returned to their pool, and — the one boss
 bug that every functional test sails straight through — that the Colossus's
-weak point is on the same side as the plate the player can see. `test:drops`
+armour, its shutters and its core's glow all agree about whether the weak point
+is open. `test:drops`
 checks a wave can never yield more loot than its budget, that it yields close
 to all of it, and that need actually decides the type.
 

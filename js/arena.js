@@ -89,6 +89,9 @@ export function buildArena(scene) {
   group.add(grid);
 
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2432, roughness: 0.78, metalness: 0.12 });
+  // The trim material shared by the fixtures that are NOT part of the wall
+  // chase - the lamp heads on the truss towers. rig.js writes its colour and
+  // intensity as one object, so those all pulse together.
   const trimMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.6 });
   // Four perimeter walls, floor to ceiling, each with an emissive trim strip
   // at head height. Walls are raycast targets but not obstacles: entities are
@@ -102,12 +105,51 @@ export function buildArena(scene) {
     { x: -(BOUND + 0.5), z: 0, w: 1, d: BOUND * 2 + 3 },
     { x: BOUND + 0.5, z: 0, w: 1, d: BOUND * 2 + 3 },
   ];
+  // THE WALL STRIPS ARE SEGMENTED, and this is the only place in the venue
+  // where a material is NOT shared across every prop that looks like it. Six
+  // cells per wall, each with its own material, is what lets rig.js run a
+  // pulse around the room instead of brightening all four walls at once - the
+  // difference between a lit room and a rig that is playing to the music.
+  //
+  // The cost is 24 draw calls and 24 materials in place of 4 and 1. They are
+  // identical MeshStandardMaterial configurations, so three.js compiles ONE
+  // shader program for the lot (the smoke test caps programs at 24), and the
+  // geometry is the same shared unit box every other prop uses.
+  const SEGS = 6;
+  // A gap between cells, as a fraction of the cell's length. Without it the
+  // strip is continuous and the chase reads as a smear rather than as
+  // individual cells lighting.
+  const SEG_FILL = 0.88;
+  const wallStripCells = [];
   for (const wd of wallDefs) {
     const wall = box(group, wallMat, wd.x, CEIL_Y / 2, wd.z, wd.w, CEIL_Y, wd.d);
     wall.receiveShadow = true;
     meshList.push(wall);
-    box(group, trimMat, wd.x, 3.02, wd.z, wd.w === 1 ? 1.02 : wd.w, 0.08, wd.d === 1 ? 1.02 : wd.d);
+    // `alongX` is true for the two walls that run east-west; the strip is
+    // divided along whichever of the wall's two footprint axes is the long one.
+    const alongX = wd.w > wd.d;
+    const span = alongX ? wd.w : wd.d;
+    const cell = span / SEGS;
+    for (let i = 0; i < SEGS; i++) {
+      const off = -span / 2 + cell * (i + 0.5);
+      const m = new THREE.MeshStandardMaterial({
+        color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.6,
+      });
+      const cx = wd.x + (alongX ? off : 0);
+      const cz = wd.z + (alongX ? 0 : off);
+      box(
+        group, m, cx, 3.02, cz,
+        alongX ? cell * SEG_FILL : 1.02, 0.08, alongX ? 1.02 : cell * SEG_FILL
+      );
+      wallStripCells.push({ m, a: Math.atan2(cz, cx) });
+    }
   }
+  // Sorted into a single loop around the room, so a chase that walks the array
+  // walks the perimeter and crosses the corners in order. Derived from each
+  // cell's own bearing rather than from the order the walls were built in,
+  // which would send the pulse jumping from one wall to the opposite one.
+  wallStripCells.sort((p, q) => p.a - q.a);
+  const wallStrip = wallStripCells.map((c) => c.m);
 
   // The lid. Same reasoning as the walls on shadows. It is a raycast target so
   // a shot fired straight up sparks off something instead of vanishing.
@@ -308,7 +350,7 @@ export function buildArena(scene) {
   return {
     group, obstacles, ground, meshList, spawnPoints,
     lights: { hemi, dir, p1, p2 },
-    mats: { trim: trimMat, platEdge: platEdgeMat, deckEdge: deckEdgeMat },
+    mats: { trim: trimMat, platEdge: platEdgeMat, deckEdge: deckEdgeMat, wallStrip },
     shared: { BOX, CYL },
   };
 }

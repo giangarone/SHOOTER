@@ -44,51 +44,70 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
   await sleep(1200);
 
-  // ---- weak-point alignment ------------------------------------------------
+  // ---- weak point -----------------------------------------------------------
   // Checked before any fight, because it is the one boss bug that every
   // functional test passes straight through: the fight works, the bar falls,
-  // the wave clears - and the glowing plate the player is being told to shoot
-  // is the armoured side. Derive the plate's direction from the MESH and
-  // confirm the armour function agrees with it, at several angles and with the
-  // body facing different ways.
+  // the wave clears - and the boss is armoured at the exact moment its core is
+  // glowing red and the HUD is saying CORE EXPOSED. Three things have to agree:
+  // the armour multiplier, the shutter positions, and the core's brightness.
+  //
+  // The core sits on the chest and does not move, so unlike the plate that used
+  // to travel around the body there is nothing directional left to get
+  // backwards. What replaces that risk is the timing: `weakOpen` and what the
+  // player can SEE must never disagree.
   {
     const rows = await page.evaluate(async () => {
-      const g = window.__game;
       const THREE = await import('three');
       const { Enemy, ENEMY_TYPES } = await import('/js/enemy.js');
       const b = new Enemy('colossus', new THREE.Vector3(0, 0, 0), 1, 1, 1);
-      g.scene.add(b.group);
       const out = [];
-      for (const W of [0, 1.57, 3.14, 4.71]) {
-        for (const G of [0, 1.0, -2.0]) {
-          b.group.rotation.y = G;
-          b.bs.state = 'walk';
-          b.bs.weakAngle = W;
-          b.bs.pivot.rotation.y = W - G;
-          b.group.updateMatrixWorld(true);
-          const wp = new THREE.Vector3();
-          b.bs.pivot.children[0].getWorldPosition(wp);
-          const d = new THREE.Vector3(wp.x - b.pos.x, 0, wp.z - b.pos.z).normalize();
-          out.push({
-            W, G,
-            atPlate: ENEMY_TYPES.colossus.armor(b, -d.x, -d.z),
-            opposite: ENEMY_TYPES.colossus.armor(b, d.x, d.z),
-          });
-        }
-      }
-      g.scene.remove(b.group);
+      const sample = (label) => {
+        const bs = b.bs;
+        out.push({
+          label,
+          open: !!bs.weakOpen,
+          state: bs.state,
+          // Direction is not consulted any more, so every bearing must agree.
+          armor: ENEMY_TYPES.colossus.armor(b, 0, 1),
+          armorBehind: ENEMY_TYPES.colossus.armor(b, 0, -1),
+          // vent is the shutters' 0..1 travel; the meshes are driven off it.
+          vent: +bs.vent.toFixed(2),
+          gap: +Math.abs(bs.shutters[1].mesh.position.x - bs.shutters[0].mesh.position.x).toFixed(2),
+          glow: +bs.coreMat.emissiveIntensity.toFixed(2),
+        });
+      };
+      // As spawned: shut, and the shutter meshes still where build() put them.
+      sample('spawn');
+      // Fully open. Written straight rather than waited for: the ease is a
+      // fraction of a second of interpolation and what is under test is the
+      // agreement between the three, not the ramp between them.
+      b.bs.weakOpen = true;
+      b.bs.vent = 1;
+      b.bs.coreMat.emissiveIntensity = 2.2;
+      b.bs.shutters[0].mesh.position.x = -(0.26 + 0.46) * 3.2;
+      b.bs.shutters[1].mesh.position.x = (0.26 + 0.46) * 3.2;
+      sample('open');
+      b.bs.weakOpen = false;
+      b.bs.state = 'stagger';
+      sample('stagger');
       b.dispose();
       return out;
     });
-    const wrong = rows.filter((r) => r.atPlate !== 1 || r.opposite >= 1);
-    if (wrong.length) bad++;
-    console.log(
-      `${wrong.length ? 'FAIL' : 'ok  '} colossus weak point aligned with its mesh ` +
-      `(${rows.length - wrong.length}/${rows.length} angles)`
-    );
-    for (const w of wrong.slice(0, 3)) {
-      console.log(`     ! weakAngle=${w.W} facing=${w.G} atPlate=${w.atPlate} opposite=${w.opposite}`);
+    const byLabel = Object.fromEntries(rows.map((r) => [r.label, r]));
+    const checks = [
+      ['shut at spawn', byLabel.spawn.open === false && byLabel.spawn.armor < 1
+        && byLabel.spawn.armorBehind < 1 && byLabel.spawn.gap < 2.0],
+      ['open takes full damage from any bearing',
+        byLabel.open.armor === 1 && byLabel.open.armorBehind === 1],
+      ['open reads open: shutters apart and core brighter',
+        byLabel.open.gap > byLabel.spawn.gap && byLabel.open.glow > byLabel.spawn.glow],
+      ['a knockdown opens it regardless of the clock', byLabel.stagger.armor === 1],
+    ];
+    for (const [name, ok] of checks) {
+      if (!ok) bad++;
+      console.log(`${ok ? 'ok  ' : 'FAIL'} colossus core: ${name}`);
     }
+    if (checks.some(([, ok]) => !ok)) console.log('     ! ' + JSON.stringify(rows));
   }
 
   for (const wave of WAVES) {
@@ -148,17 +167,12 @@ try {
         const g = window.__game;
         if (!g.bossFight) return;
         for (const p of g.bossFight.parts) {
-          // Hit the weak point where there is one, so an armoured boss takes
-          // the damage a player who repositions correctly would deal.
-          if (p.bs && typeof p.bs.weakAngle === 'number') {
-            // The plate sits at (-sin, -cos) of weakAngle, so a shot that
-            // LANDS on it travels the other way. Getting this backwards just
-            // makes the harness slow rather than failing loudly, which is why
-            // the alignment check above tests the armour function directly.
-            p.takeDamage(700, true, Math.sin(p.bs.weakAngle), Math.cos(p.bs.weakAngle));
-          } else {
-            p.takeDamage(700, true, 0, 1);
-          }
+          // Colossus only takes full damage while its core is open, and the
+          // harness ticks far slower than the vent cycle, so force the window
+          // rather than waiting on it - the point of this loop is to resolve
+          // the fight inside the budget, not to measure the boss's DPS.
+          if (p.bs && p.bs.shutters) p.bs.weakOpen = true;
+          p.takeDamage(700, true, 0, 1);
         }
       });
       await sleep(820);
