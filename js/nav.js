@@ -26,7 +26,7 @@
 // constructor - the distance field, the queue and the blocked mask are typed
 // arrays sized once and rewritten in place.
 
-import { segmentClear } from './utils.js';
+import { segmentClear, AGENT_HEIGHT } from './utils.js';
 
 // Half a metre. Fine enough to find the gap between two crates, coarse enough
 // that a full flood is ~8000 cells - well under a millisecond.
@@ -53,7 +53,7 @@ export class NavGrid {
    * @param {number} bound        arena half-width
    * @param {number} agentRadius  radius of the thing being routed
    */
-  constructor(obstacles, bound, agentRadius = 0.5, agentHeight = 2.5) {
+  constructor(obstacles, bound, agentRadius = 0.5, agentHeight = AGENT_HEIGHT) {
     // Ground agents path UNDER anything suspended above their heads, so the
     // catwalks are filtered out here rather than special-cased later. This one
     // list feeds the bake AND both line-of-sight tests below, so filtering

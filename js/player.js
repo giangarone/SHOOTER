@@ -109,6 +109,9 @@ const DEFAULT_MODS = {
 // holding a key to move at the speed the game is balanced around was a tax
 // rather than a decision, so the walk is gone and this is what everyone gets.
 const BASE_SPEED = 10;
+// Collision height, a little over the 1.7 eye height. Only overhead geometry
+// cares - see the resolveCircle call in update().
+const PLAYER_HEIGHT = 1.8;
 // Evasion's window after a successful dodge, and what it multiplies speed by.
 // Short on purpose: it is an escape from the hit you just avoided, not a
 // standing movement upgrade.
@@ -489,7 +492,14 @@ export class Player {
     this.pos.z += this.extZ * dt;
     this.extX = 0;
     this.extZ = 0;
-    resolveCircle(this.pos, 0.4, obstacles);
+    // The player's OWN height, not the default for a ground agent. This is
+    // load-bearing: the default is 2.5, and the player is the only mover that
+    // travels in Y, so an over-tall figure here made overhead geometry collide
+    // at the top of an ordinary jump. Under a catwalk whose underside is 4.05,
+    // 2.5 put the collision threshold at pos.y > 1.55 - below the 1.84 jump
+    // apex - so jumping on the spot flung the player a metre sideways into the
+    // wall with no input at all.
+    resolveCircle(this.pos, 0.4, obstacles, PLAYER_HEIGHT);
     // Arena walls sit at +-22; clamp inside them by the player radius.
     const B = 21.6;
     this.pos.x = Math.max(-B, Math.min(B, this.pos.x));

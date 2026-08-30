@@ -27,7 +27,7 @@
 // geometry instance and only the transform differs. Do not write
 // `new BoxGeometry` inside a loop here.
 import * as THREE from 'three';
-import { makeAabb } from './utils.js';
+import { makeAabb, AGENT_HEIGHT } from './utils.js';
 
 // Half-width of the playable floor. Walls sit just outside this; entities
 // clamp themselves to a slightly smaller bound to stay off the walls.
@@ -314,7 +314,7 @@ export function buildArena(scene) {
   // are excluded, which is what lets enemy fire pass UNDER a catwalk instead
   // of stopping dead on its underside - see the note where projectiles use it
   // in main.js. `obstacles` stays the full list, for the player's landing test.
-  const ground = obstacles.filter((o) => o.min.y <= 2.5);
+  const ground = obstacles.filter((o) => o.min.y <= AGENT_HEIGHT);
 
   return {
     group, obstacles, ground, meshList, spawnPoints,

@@ -38,9 +38,7 @@ const SWEEP = 0.7;
 // Playback level. Well under the effects so gunfire always reads over it.
 const VOLUME = 0.32;
 // Bins from the bottom of the spectrum that count as "bass" for beat
-// detection. With fftSize 256 over a 44.1kHz context each bin is ~172Hz, so
-// six bins is roughly everything under 1kHz - kick, sub, and the low end of a
-// snare, which is what a four-to-the-floor track puts its pulse in.
+// detection. With fftSize 512 over a 44.1kHz context each bin is ~86Hz.
 // Bin 0 is DC and the sub rumble under it; 1..3 is roughly 86-344Hz, which is
 // where a kick drum's fundamental lives. Starting at 1 keeps a track's overall
 // loudness out of the measurement.
@@ -82,8 +80,9 @@ export class Music {
     this._started = false;
     this.analyser = null;
     this._freq = null;
-    // Envelope-follower state for level(). `_avg` is the running bass floor the
-    // onset test measures against; `_lvl` is the smoothed output.
+    // Envelope-follower state for sample(). `_prevE` is last frame's band
+    // energy, which is what the flux is measured against; `_fluxAvg` is the
+    // running floor an onset has to clear.
     this._prevE = 0;
     this._fluxAvg = 0;
     // What the analyser actually hears, kept separate from the published

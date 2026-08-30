@@ -70,7 +70,7 @@ import {
 } from './upgrades.js';
 import { TotemArea } from './totems.js';
 import { NavGrid } from './nav.js';
-import { resolveCircle } from './utils.js';
+import { resolveCircle, BOSS_HEIGHT } from './utils.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -244,7 +244,7 @@ class Game {
     // is actually alive, which is never on a normal wave.
     // Also taller: a boss stands well clear of the perimeter catwalks that
     // ordinary enemies walk under, so anything overhead is a wall to it.
-    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, 5);
+    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list - walking into a totem claims it, so the player can
@@ -790,7 +790,7 @@ class Game {
       }
     }
     const at = new THREE.Vector3(best.x, 0, best.z);
-    resolveCircle(at, def.radius, this.arena.obstacles);
+    resolveCircle(at, def.radius, this.arena.obstacles, BOSS_HEIGHT);
     const boss = new Enemy(key, at, sc.hp, sc.speed, sc.dmg);
     boss.rate = sc.rate;
     boss.cycle = Math.floor((this.wave - 1) / 25);
@@ -897,7 +897,7 @@ class Game {
       // The score is divided rather than duplicated: splitting is the boss
       // surviving, not four more bosses to be paid for.
       child.score = Math.round(e.score * 0.5);
-      resolveCircle(child.pos, child.radius, this.arena.obstacles);
+      resolveCircle(child.pos, child.radius, this.arena.obstacles, child.collideH);
       this.scene.add(child.group);
       this._pendingSpawns.push(child);
       bf.parts.push(child);
@@ -1145,7 +1145,7 @@ class Game {
   _shove(en, dir, dist) {
     if (en.immovable) return;
     en.pos.add(this._knockback.set(dir.x, 0, dir.z).normalize().multiplyScalar(dist));
-    resolveCircle(en.pos, en.radius, this.arena.obstacles);
+    resolveCircle(en.pos, en.radius, this.arena.obstacles, en.collideH);
   }
 
   // Gravity Rounds. Drags everything around the impact toward it, the pull
@@ -1159,7 +1159,7 @@ class Game {
       if (d > radius || d < 0.001) continue;
       this._pullTo.set(point.x - e.pos.x, 0, point.z - e.pos.z).normalize();
       e.pos.addScaledVector(this._pullTo, Math.min(dist * (1 - d / radius), d));
-      resolveCircle(e.pos, e.radius, this.arena.obstacles);
+      resolveCircle(e.pos, e.radius, this.arena.obstacles, e.collideH);
     }
     this.effects.burst(point, 0x536dfe, 10, 3, 1.5, 0.35);
   }

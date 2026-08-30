@@ -5,13 +5,30 @@
 // An "obstacle" is a plain {min:{x,y,z}, max:{x,y,z}} box from makeAabb(),
 // not a THREE.Box3.
 
+// How tall an ordinary ground agent is. This is the line between "cover you
+// walk around" and "a walkway you walk under", and THREE separate systems have
+// to agree on it or they contradict each other: this collision resolver, the
+// NavGrid bake in nav.js, and the `ground` obstacle list in arena.js that
+// enemy fire collides with. They all import this rather than each spelling out
+// a number, because a catwalk that blocks pathing but not bullets - or the
+// reverse - is a maddening bug to track down.
+//
+// Movers that are not this tall pass their own: the player (shorter) and
+// bosses (much taller) both do.
+export const AGENT_HEIGHT = 2.5;
+// Bosses are 2.2x to 3.2x scale and stand several metres tall, so the
+// perimeter catwalks are a wall to them rather than something to duck under.
+// main.js bakes navBig with this, and boss collision uses it too - if the two
+// disagreed, the flow field would route a boss around a deck that collision
+// would happily let it walk through.
+export const BOSS_HEIGHT = 5;
+
 // Pushes `pos` out of any box it overlaps, along whichever axis needs the
 // smallest correction. Mutates `pos` in place.
 //
 // `height` is how tall the mover is, and only matters for geometry suspended
-// overhead - see the second skip below. The default clears every ordinary
-// enemy and the player; bosses pass their own.
-export function resolveCircle(pos, radius, obstacles, height = 2.5) {
+// overhead - see the second skip below.
+export function resolveCircle(pos, radius, obstacles, height = AGENT_HEIGHT) {
   for (const b of obstacles) {
     // Standing on top of the box: the player is supported, not intersecting,
     // so pushing sideways here would shove them off every ledge.

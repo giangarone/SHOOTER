@@ -28,7 +28,7 @@
 // damaging the player and spawning projectiles.
 
 import * as THREE from 'three';
-import { resolveCircle, pointInObstacle } from './utils.js';
+import { resolveCircle, pointInObstacle, AGENT_HEIGHT, BOSS_HEIGHT } from './utils.js';
 
 // Base stats before per-wave scaling (waves.js supplies the multipliers).
 //
@@ -1102,7 +1102,7 @@ function aiWraith(e, a) {
   }
   e.pos.x = tx;
   e.pos.z = tz;
-  resolveCircle(e.pos, e.radius, a.ctx.obstacles);
+  resolveCircle(e.pos, e.radius, a.ctx.obstacles, e.collideH);
   if (a.ctx.effects) {
     _blinkAt.set(e.pos.x, 0.9, e.pos.z);
     a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.wraith.color, 14, 5, 2, 0.45);
@@ -1209,6 +1209,19 @@ function aiWarden(e, a) {
 // solid behind you), charging (be elsewhere), knocked down (everything you
 // have). Damage is capped per attack rather than left to scale, because the
 // wave-55 multiplier on a 34 point hit would be a one-shot.
+// How far above itself a boss's ground attacks reach. Bosses stand 4-6m tall
+// so this is far more generous than MELEE_REACH_Y, and it clears a player
+// jumping from the tallest platform (1.6 + a 1.84 apex = 3.44). It stops short
+// of the perimeter catwalk decks at 4.05: like every other melee in the game,
+// a boss's swing pools below the walkways while its adds - gunners, artillery,
+// mortars - are what punish standing up there. Without this the ground
+// shockwave of a slam hit a player four metres overhead.
+const BOSS_REACH_Y = 3.6;
+// How far the player is above the arena floor. `a.dist` throughout the boss AI
+// is XZ-only - the whole game collides in 2D - so this is the missing axis.
+function _reachY(a) {
+  return Math.abs(a.ctx.player.pos.y);
+}
 const COLOSSUS_CHARGE_CAP = 52;
 const COLOSSUS_SLAM_CAP = 44;
 const COLOSSUS_CHARGE_SPEED = 14;
@@ -1280,7 +1293,7 @@ function aiColossus(e, a) {
     bs.t -= a.dt;
     a.vx = bs.dirX * COLOSSUS_CHARGE_SPEED;
     a.vz = bs.dirZ * COLOSSUS_CHARGE_SPEED;
-    if (a.dist < e.radius + 0.9) {
+    if (a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
       ctx.onHitPlayer(Math.min(COLOSSUS_CHARGE_CAP, e.damage), e.pos);
       ctx.effects.addShake(0.3);
       _bossAt.set(e.pos.x, 1.2, e.pos.z);
@@ -1326,7 +1339,9 @@ function aiColossus(e, a) {
     if (bs.slamT <= 0) {
       e._setEyeAlert(false);
       bs.slamCd = 3.2 * e.rate;
-      if (a.dist < 5.5) ctx.onHitPlayer(Math.min(COLOSSUS_SLAM_CAP, e.damage * 0.82), e.pos);
+      if (a.dist < 5.5 && _reachY(a) < BOSS_REACH_Y) {
+        ctx.onHitPlayer(Math.min(COLOSSUS_SLAM_CAP, e.damage * 0.82), e.pos);
+      }
       _bossAt.set(e.pos.x, 0, e.pos.z);
       ctx.effects.shockwave(_bossAt, 0xff7043, 5.5, 0.4);
       ctx.effects.burst(_bossAt, 0xff7043, 26, 7, 2.5, 0.6);
@@ -1384,7 +1399,7 @@ function aiSiege(e, a) {
       bs.sweepCd = 5 * e.rate;
       // Frontal half-circle rather than a full ring: getting behind it still
       // works, which is what keeps the sweep a positioning problem.
-      if (a.dist < 8) {
+      if (a.dist < 8 && _reachY(a) < BOSS_REACH_Y) {
         const fx = -Math.sin(e.group.rotation.y);
         const fz = -Math.cos(e.group.rotation.y);
         if (a.nx * fx + a.nz * fz > 0) {
@@ -1497,7 +1512,7 @@ function aiMaw(e, a) {
   // Slow, and it barely chases - the pull is what closes the distance. Touch
   // damage exists only so it cannot be hugged while the rings pass overhead.
   bs.touchCd -= a.dt;
-  if (a.dist < 4 && bs.touchCd <= 0) {
+  if (a.dist < 4 && _reachY(a) < BOSS_REACH_Y && bs.touchCd <= 0) {
     bs.touchCd = 1.4 * e.rate;
     a.ctx.onHitPlayer(Math.min(MAW_TOUCH_CAP, e.damage * 0.77), e.pos);
     a.ctx.effects.addShake(0.15);
@@ -1553,7 +1568,7 @@ function aiHerald(e, a) {
       a.ctx.effects.burst(_bossAt, 0xffd54f, 24, 6, 2, 0.6);
       e.pos.x = tx;
       e.pos.z = tz;
-      resolveCircle(e.pos, e.radius, a.ctx.obstacles);
+      resolveCircle(e.pos, e.radius, a.ctx.obstacles, e.collideH);
       _bossAt.set(e.pos.x, 1.2, e.pos.z);
       a.ctx.effects.burst(_bossAt, 0xffd54f, 24, 6, 2, 0.6);
       break;
@@ -1634,6 +1649,9 @@ export class Enemy {
     // shoved out of its own charge would not be a fight.
     this.immovable = (def.mass ?? 1) >= 4;
     this.boss = !!def.boss;
+    // How tall this thing is for the purpose of overhead geometry. A boss does
+    // not fit under a catwalk; everything else does. See AGENT_HEIGHT.
+    this.collideH = def.boss ? BOSS_HEIGHT : AGENT_HEIGHT;
     // Status resistance. The defaults are exactly what every enemy did before
     // bosses existed, so the original six are unchanged by all of this.
     this.statusMul = def.statusMul ?? 1;
@@ -2054,7 +2072,7 @@ export class Enemy {
     const hitWall = preX !== this.pos.x || preZ !== this.pos.z;
     const ix = this.pos.x;
     const iz = this.pos.z;
-    resolveCircle(this.pos, this.radius, ctx.obstacles);
+    resolveCircle(this.pos, this.radius, ctx.obstacles, this.collideH);
     // Distance collision had to move it back this frame, walls included. A
     // charging boss reads it to know it slammed into something, which is
     // cheaper and more reliable than any extra geometry: the obstacle test has
