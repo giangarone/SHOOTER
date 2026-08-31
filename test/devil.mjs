@@ -198,7 +198,7 @@ try {
     const rr = g.devilArea.rerollStation;
     standAt(rr.pos.x, rr.pos.z - 3);
     const hp2 = P.maxHealth;
-    aimAt(rr.body);
+    aimAt(rr.hit);
     g.player.mag = 30;
     g.player.fireCd = 0;
     g.shoot();
@@ -212,7 +212,7 @@ try {
     P.maxHpDebt = 20;
     const hp5 = P.maxHealth;
     standAt(hs.pos.x, hs.pos.z - 3);
-    aimAt(hs.body);
+    aimAt(hs.hit);
     g.player.mag = 30;
     g.player.fireCd = 0;
     g.shoot();

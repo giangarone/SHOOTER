@@ -2507,9 +2507,13 @@ class Game {
     area.refresh((cost) => this.player.canPay(cost));
     const cost = dealRerollCost(area.rerolls);
     area.rerollStation.setLabel('REROLL', cost + ' MAX HP', !this._stationBlocked(area.rerollStation));
+    // The only console that names its gain as well as its price. MAX HEALTH is
+    // the one purchase whose title does not say what it does - see the note on
+    // Station.setLabel - and it is also the most expensive thing in the game.
     area.healthStation.setLabel(
       MAXHP_PURCHASE.name, '$' + MAXHP_PURCHASE.cost,
-      !this._stationBlocked(area.healthStation)
+      !this._stationBlocked(area.healthStation),
+      MAXHP_PURCHASE.detail
     );
   }
 
@@ -3780,4 +3784,12 @@ class Game {
   }
 }
 
-new Game();
+// The totem cards and station plates are drawn into canvas textures ONCE and
+// then live for the rest of the run, so they cannot be drawn before the face
+// they are set in has loaded - a card that rendered in the fallback would stay
+// wrong until the next wave. The HUD is already using the font by this point
+// in practice; this makes it a guarantee rather than a race, and boots anyway
+// if the load fails so a missing font never costs the player a game.
+document.fonts.load('32px "Press Start 2P"')
+  .catch(() => {})
+  .then(() => new Game());

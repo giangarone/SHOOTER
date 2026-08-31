@@ -1,12 +1,77 @@
+/* ===========================================================================
+   VOID ARENA - interface
+   ---------------------------------------------------------------------------
+   The arena is lit, volumetric and smooth. The INTERFACE is the opposite on
+   purpose: it is the cabinet the arena is being watched through, so it is
+   drawn in hard pixels on a fixed grid, with no blur, no rounded corner and no
+   gradient that is not stepped.
+
+   Three rules hold the whole sheet together:
+
+     1. EVERY dimension is a multiple of --u (4px). Type sizes are multiples of
+        8px, which is the size Press Start 2P was drawn at - anything else
+        lands glyph edges between device pixels and the font turns to mush.
+     2. NOTHING is translucent by blur. Where the arena has to show through a
+        surface it shows through a DITHER: a 2px checker at partial alpha, the
+        way a machine with no alpha channel faked one. `backdrop-filter` is
+        gone from this file entirely.
+     3. Panels are CHAMFERED, not rounded. The 6px corner cut is the single
+        shape that repeats at every scale - plates, buttons, chips, keycaps -
+        and it is what makes a HUD element and a menu button read as parts of
+        the same machine.
+   =========================================================================== */
+
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/assets/fonts/PressStart2P-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block; /* block, not swap: a fallback face at these sizes would
+                          reflow every panel in the game on font load. */
+}
+
 :root {
+  /* grid ------------------------------------------------------------------ */
+  --u: 4px;
+
+  /* palette. Unchanged from the arena - these are the same values the lasers,
+     totem lights and pickup plates are drawn in, and the UI has no business
+     inventing colours the world does not use. */
   --bg: #0a0c12;
-  --panel: rgba(10, 12, 18, 0.55);
-  --line: #262c3d;
+  --ink: #05070b;        /* the hard shadow under every glyph */
+  --line: #2b3348;
+  --line-hi: #4a5776;
   --cyan: #4ef3ff;
   --red: #ff3b30;
   --gold: #ffe95e;
-  --dim: #5b6785;
+  --amber: #ffb300;
+  --green: #37e08b;
+  --dim: #6b789a;
   --text: #c8d2e8;
+
+  /* surfaces -------------------------------------------------------------- */
+  --fill: #0b0e16;
+  --fill-lo: #070910;
+
+  /* The chamfer. One shape, three sizes, used everywhere. */
+  --cut: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
+  );
+  --cut-sm: polygon(
+    0 4px, 4px 0, calc(100% - 4px) 0, 100% 4px,
+    100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px)
+  );
+  --cut-lg: polygon(
+    0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px)
+  );
+
+  /* The 2px checker that stands in for translucency. Two offset conic
+     gradients at 4px make a 2px checkerboard; alpha is set per surface. */
+  --dither: repeating-conic-gradient(
+    rgba(10, 12, 18, 0.86) 0% 25%, rgba(10, 12, 18, 0.4) 0% 50%
+  );
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -16,375 +81,417 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: "Press Start 2P", monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0;      /* the face carries its own sidebearings; adding
+                             tracking on top of them breaks the pixel grid */
   user-select: none;
   -webkit-user-select: none;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  text-rendering: optimizeSpeed;
 }
 
 #game { position: fixed; inset: 0; }
 #game canvas { display: block; cursor: crosshair; }
 .hidden { display: none !important; }
 
+/* ---------------------------------------------------------------------------
+   THE PLATE
+   Every framed surface in the game is one of these. `--edge` is the frame's
+   colour, `--surface` its fill. The ring is a masked pseudo-element rather
+   than a `border`, because a border is drawn OUTSIDE clip-path's chamfer and
+   would leave the four corners open.
+   --------------------------------------------------------------------------- */
+.plate {
+  position: relative;
+  clip-path: var(--cut);
+  background: var(--surface, var(--fill));
+  --edge: var(--line);
+}
+.plate::before {
+  content: ""; position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+  background: var(--edge);
+  clip-path: var(--cut);
+  padding: 2px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+/* Dithered fill, for anything sitting over the live arena. */
+.plate.see-through { background: var(--dither); background-size: 4px 4px; }
+
+/* The hard 2px shadow that makes bitmap glyphs readable against a lit 3D
+   scene. It is a SHADOW, not a glow: a halo the colour of the letters fills
+   the counters of a 8x8 face and makes it less readable, not more. */
+.sh    { text-shadow: 2px 2px 0 var(--ink); }
+.sh-sm { text-shadow: 1px 1px 0 var(--ink); }
+
+/* =========================================================================
+   HUD
+   ========================================================================= */
+
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 
 #hud-top {
-  position: absolute; top: 18px; left: 22px; right: 22px;
-  display: flex; justify-content: space-between;
+  position: absolute; top: calc(var(--u) * 5); left: calc(var(--u) * 5);
+  right: calc(var(--u) * 5);
+  display: flex; justify-content: space-between; align-items: flex-start;
 }
-#wave-box, #score-box {
-  display: flex; align-items: baseline; gap: 12px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 8px 16px;
-  backdrop-filter: blur(6px);
-}
-#wave-label, #score-label { font-size: 11px; letter-spacing: 0.28em; color: var(--dim); }
-#wave-num { font-size: 26px; font-weight: 700; color: var(--cyan); text-shadow: 0 0 14px rgba(78, 243, 255, 0.6); }
-#score-num { font-size: 26px; font-weight: 700; color: var(--gold); text-shadow: 0 0 14px rgba(255, 233, 94, 0.5); }
-#enemies-left { font-size: 11px; letter-spacing: 0.16em; color: #8a95b3; }
 
+/* NO PLATE UNDER THE CORNER READOUTS.
+   These three - the wave, the score and the ammunition - are the readings the
+   player is glancing at mid-fight, and a framed panel behind each one put a
+   solid rectangle over the corner of the arena for the whole run. They are
+   made of LIGHT now, like everything in the room they are drawn over: the
+   glyphs, their glow, and nothing else.
+
+   What replaces the panel is the 1px ink shadow on every line below. It is not
+   decoration - with no fill behind it, an 8px label crossing a lit floor or a
+   muzzle flash has no other way to hold its edge. */
+#wave-box, #score-box {
+  display: flex; flex-direction: column;
+  gap: var(--u);
+}
+#score-box { align-items: flex-end; text-align: right; }
+
+/* Section labels. 8px is the face's native size and the only place tracking
+   earns its keep - a label read as a texture rather than as a word. */
+#wave-label, #score-label {
+  font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+#wave-num {
+  font-size: 32px; color: var(--cyan);
+  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(78, 243, 255, 0.55);
+  line-height: 1;
+}
+#score-num {
+  font-size: 24px; color: var(--gold);
+  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 233, 94, 0.45);
+  line-height: 1;
+}
+/* The enemy count reads as a status line under the wave, with a square pip
+   that goes dark the moment the arena is clear. */
+#enemies-left {
+  font-size: 8px; letter-spacing: 0.12em; color: #93a0c0;
+  text-shadow: 1px 1px 0 var(--ink);
+  display: flex; align-items: center; gap: calc(var(--u) * 1.5);
+}
+#enemies-left::before {
+  content: ""; width: 6px; height: 6px; flex: none;
+  background: var(--red); box-shadow: 0 0 8px rgba(255, 59, 48, 0.8);
+}
+#enemies-left.clear { color: var(--green); }
+#enemies-left.clear::before {
+  background: var(--green); box-shadow: 0 0 8px rgba(55, 224, 139, 0.8);
+}
+#credit-num {
+  font-size: 12px; color: var(--amber);
+  text-shadow: 1px 1px 0 var(--ink), 0 0 10px rgba(255, 179, 0, 0.4);
+}
+
+/* ---- crosshair -----------------------------------------------------------
+   Four 3px blocks and a centre pip, each carrying its own 1px dark outline so
+   the reticle survives being held over a muzzle flash or a white floor light.
+   Nothing here is anti-aliased or rounded. */
 #crosshair {
   position: absolute; left: 50%; top: 50%;
-  width: 22px; height: 22px;
+  width: 26px; height: 26px;
   transform: translate(-50%, -50%);
 }
-#crosshair i { position: absolute; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
-#crosshair i:nth-child(1) { left: 50%; top: 0; width: 2px; height: 6px; transform: translateX(-50%); }
-#crosshair i:nth-child(2) { left: 50%; bottom: 0; width: 2px; height: 6px; transform: translateX(-50%); }
-#crosshair i:nth-child(3) { top: 50%; left: 0; height: 2px; width: 6px; transform: translateY(-50%); }
-#crosshair i:nth-child(4) { top: 50%; right: 0; height: 2px; width: 6px; transform: translateY(-50%); }
-/* Reload ring. A conic gradient swept by --p (0..1) and punched hollow with a
-   radial mask, so the whole indicator is one element and one custom property
-   write per frame. It sits at the crosshair because that is the one place the
-   player is already looking - the RELOADING word in the ammo box is in the
-   corner of the eye at best. */
-#reload-ring {
-  position: absolute; inset: -13px; border-radius: 50%;
-  background: conic-gradient(var(--cyan) calc(var(--p, 0) * 1turn), rgba(159, 180, 216, 0.18) 0);
-  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 76%);
-  mask: radial-gradient(closest-side, transparent 74%, #000 76%);
-  filter: drop-shadow(0 0 5px rgba(78, 243, 255, 0.55));
+#crosshair i {
+  position: absolute; background: var(--cyan);
+  box-shadow:
+    0 0 0 1px rgba(5, 7, 11, 0.9),
+    0 0 6px rgba(78, 243, 255, 0.8);
+}
+#crosshair i:nth-child(1) { left: 50%; top: 0;    width: 3px; height: 8px; transform: translateX(-50%); }
+#crosshair i:nth-child(2) { left: 50%; bottom: 0; width: 3px; height: 8px; transform: translateX(-50%); }
+#crosshair i:nth-child(3) { top: 50%; left: 0;    height: 3px; width: 8px; transform: translateY(-50%); }
+#crosshair i:nth-child(4) { top: 50%; right: 0;   height: 3px; width: 8px; transform: translateY(-50%); }
+#crosshair::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 3px; height: 3px; transform: translate(-50%, -50%);
+  background: #fff; box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9);
 }
 
-#hitmarker { position: absolute; inset: -9px; opacity: 0; transition: opacity 0.14s; }
+/* Reload ring. The sweep is still one conic gradient driven by --p, but a
+   second mask cuts it into 16 spokes, so the arc fills a SEGMENT at a time
+   rather than sliding. A smooth arc is the one thing on screen that would
+   admit the interface is vector. */
+#reload-ring {
+  position: absolute; inset: -16px;
+  background: conic-gradient(
+    var(--cyan) calc(var(--p, 0) * 1turn), rgba(120, 140, 180, 0.22) 0
+  );
+  -webkit-mask:
+    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
+    radial-gradient(closest-side, transparent 72%, #000 74%);
+  mask:
+    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
+    radial-gradient(closest-side, transparent 72%, #000 74%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  filter: drop-shadow(0 0 4px rgba(78, 243, 255, 0.6));
+}
+
+#hitmarker { position: absolute; inset: -10px; opacity: 0; transition: opacity 0.14s; }
 #hitmarker::before, #hitmarker::after {
   content: ""; position: absolute; left: 50%; top: 50%;
-  width: 18px; height: 2px; background: #fff; box-shadow: 0 0 8px #fff;
+  width: 20px; height: 3px; background: #fff;
+  box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 8px #fff;
 }
 #hitmarker::before { transform: translate(-50%, -50%) rotate(45deg); }
-#hitmarker::after { transform: translate(-50%, -50%) rotate(-45deg); }
+#hitmarker::after  { transform: translate(-50%, -50%) rotate(-45deg); }
 #hitmarker.show { opacity: 1; transition: none; }
 
+/* ---- bottom row ---------------------------------------------------------- */
 #hud-bottom {
-  position: absolute; bottom: 20px; left: 22px; right: 22px;
+  position: absolute; bottom: calc(var(--u) * 5); left: calc(var(--u) * 5);
+  right: calc(var(--u) * 5);
   display: flex; justify-content: space-between; align-items: flex-end;
 }
-#hp-box { width: 280px; }
-#hp-bar-bg { height: 14px; background: rgba(10, 12, 18, 0.65); border: 1px solid var(--line); }
-#hp-bar {
-  height: 100%; width: 100%;
-  background: linear-gradient(90deg, #37e08b, #b6f54c);
-  box-shadow: 0 0 12px rgba(55, 224, 139, 0.5);
-  transition: width 0.15s;
-}
-#hp-text { font-size: 12px; letter-spacing: 0.22em; margin-top: 5px; color: #8a95b3; }
 
-/* Boss bar. Centred and wide, directly under the wave readout: a boss is the
-   one thing on screen worth its own instrument, and it has to be legible
-   without taking the player's eyes off the crosshair. */
+/* ---- SEGMENTED BARS ------------------------------------------------------
+   Health, boss health and the combo gauge are all one component: a track that
+   is CUT INTO CELLS by a mask, with a plain-width fill inside it. The mask is
+   on the TRACK, not the fill, so the cells stay put while the fill moves -
+   the value reads as a count of lit cells rather than as a length, which is
+   the difference between a health bar you can read at a glance and one you
+   have to measure.
+
+   --cells sets the count; the gradient is written in percentages so the same
+   rule serves a 280px player bar and a 46vw boss bar. */
+.seg {
+  --cells: 20;
+  --gap: 2px;
+  position: relative;
+  background: rgba(6, 8, 13, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(43, 51, 72, 0.9);
+  -webkit-mask: repeating-linear-gradient(
+    90deg, #000 0 calc(100% / var(--cells) - var(--gap)),
+    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
+  );
+  mask: repeating-linear-gradient(
+    90deg, #000 0 calc(100% / var(--cells) - var(--gap)),
+    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
+  );
+}
+/* The fill is scaled, never resized. It is written on nearly every frame of a
+   boss fight, and `width` is a layout property - a compositor transform is the
+   difference between a bar that moves and a bar that costs a reflow to move.
+   
+   AND IT IS NOT TRANSITIONED. The first write lands while the HUD is still
+   `display: none`, and a transition started inside a hidden subtree is left
+   running with a frozen clock - the bar sticks at whatever fraction of the way
+   it got to and never arrives, which is a health bar reading a quarter full at
+   100/100. Nothing is lost: ui.js already quantises the value to whole cells,
+   so the bar was stepping between fixed positions rather than sliding, and
+   snapping is what a cell-based readout should do anyway. */
+.seg > i {
+  display: block; height: 100%; width: 100%;
+  transform-origin: left center; transform: scaleX(0);
+}
+
+#hp-box { width: 300px; display: flex; flex-direction: column; gap: calc(var(--u) * 1.5); }
+#hp-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
+}
+#hp-text { font-size: 10px; color: var(--text); letter-spacing: 0.06em; }
+#hp-bar-bg { height: calc(var(--u) * 5); --cells: 20; }
+#hp-bar {
+  background: var(--green);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(55, 224, 139, 0.5);
+}
+/* Below a third: the bar changes colour AND the readout starts to beat. Colour
+   alone is a change the player is not looking at the bar to notice. */
+#hp-box.low #hp-bar {
+  background: var(--red);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(255, 59, 48, 0.6);
+}
+#hp-box.low #hp-text { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
+#hp-box.low #hp-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
+
+@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
+
+/* ---- ammunition ---------------------------------------------------------- */
+/* Unframed, for the reason above. The min-width stays: the dashed rule beside
+   the weapon name is what gives the block its shape now that no panel does,
+   and a rule that collapses to nothing on a short name is worse than none. */
+#ammo-box {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: var(--u);
+  min-width: calc(var(--u) * 50);
+}
+#weapon-line {
+  display: flex; align-items: center; gap: calc(var(--u) * 2);
+  width: 100%; justify-content: flex-end;
+}
+#weapon-name {
+  font-size: 10px; color: var(--cyan); letter-spacing: 0.1em;
+  text-shadow: 1px 1px 0 var(--ink);
+}
+/* A 2px rule that runs from the left edge of the plate to the weapon name,
+   so the name reads as a heading on a machine rather than as a floating word. */
+#weapon-line::before {
+  content: ""; flex: 1; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);
+}
+#ammo-line { display: flex; align-items: baseline; gap: calc(var(--u) * 2); }
+#ammo-num {
+  font-size: 32px; color: #fff; line-height: 1;
+  text-shadow: 2px 2px 0 var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+#ammo-num.empty { color: var(--red); text-shadow: 2px 2px 0 var(--ink), 0 0 14px rgba(255, 59, 48, 0.6); }
+#ammo-res { font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink); }
+#ammo-res.warn { color: var(--amber); }
+#ammo-res.out  { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
+/* RELOADING is a full-width bar under the count rather than a word beside it:
+   the plate itself changing is visible in peripheral vision, and the word is
+   not. */
+#ammo-reload {
+  width: 100%; text-align: center;
+  font-size: 8px; letter-spacing: 0.24em; color: var(--ink);
+  background: var(--cyan);
+  padding: 3px 0 4px;
+  animation: blink 0.4s steps(1, end) infinite;
+}
+
+/* ---- boss ---------------------------------------------------------------
+   The name plate OVERLAPS the bar's top edge rather than stacking above it,
+   which is what makes the two read as one instrument instead of two rows. */
+/* Its top edge sits on the SAME LINE as the wave and score readouts, so the
+   three of them read as one instrument row across the top of the screen rather
+   than as a bar that floats at whatever height was left over. */
 #boss-bar {
-  position: absolute; top: 86px; left: 50%; transform: translateX(-50%);
-  width: 46vw; max-width: 620px; min-width: 280px;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: var(--panel); border: 1px solid var(--line);
-  padding: 8px 16px 10px; backdrop-filter: blur(6px);
+  position: absolute; top: calc(var(--u) * 5); left: 50%;
+  transform: translateX(-50%);
+  width: 46vw; max-width: 620px; min-width: 300px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 8) calc(var(--u) * 4) calc(var(--u) * 2.5);
+  --edge: #8a4239;
   pointer-events: none;
 }
+/* A TAB HANGING OFF THE TOP EDGE, not a plate straddling it: the frame is a
+   clip-path, and a clip-path crops anything that pokes outside it, so the name
+   is inset into the edge and chamfered on its lower corners only. */
 #boss-name {
-  font-size: 13px; letter-spacing: 0.34em; color: #ffd6c2;
-  text-shadow: 0 0 10px rgba(255, 90, 60, 0.5);
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  z-index: 3;
+  font-size: 10px; letter-spacing: 0.16em; color: #ffd6c2;
+  background: #24151a;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px));
+  box-shadow: inset 0 -2px 0 var(--edge), inset 2px 0 0 var(--edge), inset -2px 0 0 var(--edge);
+  padding: 6px calc(var(--u) * 4) 7px;
+  white-space: nowrap;
 }
-#boss-hp-bg {
-  width: 100%; height: 12px;
-  background: rgba(10, 12, 18, 0.7); border: 1px solid var(--line);
-}
+#boss-hp-bg { width: 100%; height: calc(var(--u) * 4); --cells: 32; --gap: 3px; }
 #boss-hp {
-  height: 100%; width: 100%;
-  background: linear-gradient(90deg, #ff5a4d, #ff9f43);
-  box-shadow: 0 0 14px rgba(255, 90, 77, 0.55);
-  transition: width 0.15s;
+  background: #ff5a4d;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 90, 77, 0.5);
 }
 #boss-note {
-  font-size: 11px; letter-spacing: 0.26em; color: #8a95b3; min-height: 13px;
+  font-size: 8px; letter-spacing: 0.22em; color: #93a0c0; min-height: 10px;
 }
-/* Knocked down: the bar says the armour is off as loudly as the boss does. */
-#boss-bar.vulnerable { border-color: #4ef3ff; }
+#boss-bar.vulnerable { --edge: var(--cyan); }
+#boss-bar.vulnerable #boss-name { color: var(--cyan); background: #0d2229; }
 #boss-bar.vulnerable #boss-hp {
-  background: linear-gradient(90deg, #4ef3ff, #b6f54c);
-  box-shadow: 0 0 18px rgba(78, 243, 255, 0.7);
+  background: var(--cyan);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 18px rgba(78, 243, 255, 0.7);
 }
-#boss-bar.vulnerable #boss-note { color: #4ef3ff; }
-#boss-bar.enraged { border-color: #ff2d6f; animation: bossPulse 0.7s ease-in-out infinite; }
-#boss-bar.enraged #boss-note { color: #ff2d6f; }
-@keyframes bossPulse {
-  0%, 100% { box-shadow: 0 0 0 rgba(255, 45, 111, 0); }
-  50% { box-shadow: 0 0 22px rgba(255, 45, 111, 0.55); }
-}
+#boss-bar.vulnerable #boss-note { color: var(--cyan); }
+#boss-bar.enraged { --edge: #ff2d6f; }
+#boss-bar.enraged #boss-name { color: #ff2d6f; background: #260c19; }
+#boss-bar.enraged #boss-note { color: #ff2d6f; animation: blink 0.6s steps(1, end) infinite; }
 
-#ammo-box {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-  background: var(--panel); border: 1px solid var(--line);
-  padding: 10px 18px; backdrop-filter: blur(6px);
-}
-#weapon-line { display: flex; align-items: baseline; gap: 10px; }
-#weapon-name { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; color: var(--cyan); }
-#ammo-line { display: flex; align-items: baseline; gap: 8px; }
-#ammo-num { font-size: 40px; font-weight: 700; color: #fff; }
-#ammo-res { font-size: 15px; color: var(--dim); }
-#ammo-reload { font-size: 11px; letter-spacing: 0.3em; color: var(--cyan); animation: pulse 0.45s infinite alternate; }
-@keyframes pulse { from { opacity: 0.25; } to { opacity: 1; } }
-
-/* BUFF CHIPS, beside the combo gauge. They used to sit in the top-right
-   corner under the score, where nothing else moves and nothing else is being
-   read during a fight - a buff would come and go without ever being looked at.
-   They are a centred row above the multiplier now: one place for "what is true
-   about you right now", and the eye is already there for the combo.
-
-   Positioned off the same bottom edge as #combo and centred the same way, so
-   the two stay stacked at any window size. */
+/* ---- buff chips ---------------------------------------------------------- */
 #buffs {
-  position: fixed;
-  left: 50%;
-  bottom: 152px;
+  position: fixed; left: 50%; bottom: calc(var(--u) * 43);
   transform: translateX(-50%);
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  pointer-events: none;
-  z-index: 5;
+  display: flex; gap: calc(var(--u) * 2);
+  pointer-events: none; z-index: 5;
 }
 .buff-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 44px; height: 44px;
   position: relative;
-  /* --buff is the chip's theme colour, set by ui.js from the same value the
-     pickup's plate was drawn in. */
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), 0 0 10px -2px var(--buff);
+  clip-path: var(--cut-sm);
+  background: rgba(8, 10, 16, 0.9);
+  display: flex; align-items: center; justify-content: center;
+  /* --buff is the chip's theme colour, written by ui.js from the same value
+     the pickup's plate on the arena floor was drawn in. */
+  box-shadow: inset 0 0 0 2px var(--buff), 0 0 12px -2px var(--buff);
 }
 /* THE ART IS THE PICKUP'S OWN DRAWING, rendered flat to a canvas by
    pixelIconCanvas() - see pixelicons.js. A chip and the thing on the floor it
-   stands for are the same 24x24, which is the whole reason the icons are
-   authored once and rendered twice. `pixelated` is what keeps it art rather
-   than a blurry photograph of art. */
+   stands for are the same 24x24. Untouched by this redesign. */
 .buff-icon .buff-art {
-  width: 28px;
-  height: 28px;
+  width: 28px; height: 28px;
   image-rendering: pixelated;
   filter: drop-shadow(0 0 5px var(--buff));
 }
 .buff-icon .buff-timer {
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 3px;
+  position: absolute; bottom: 3px; left: 3px; right: 3px; height: 3px;
   background: var(--buff);
-  border-radius: 0 0 7px 7px;
-  transform-origin: left center;
-  transform: scaleX(1);
+  transform-origin: left center; transform: scaleX(1);
 }
-/* Remaining shield POINTS, over the chip. The timer bar alone says how long is
-   left but never how much is left, and the shield is spent by damage far more
-   often than it is by the clock. */
+/* Remaining shield POINTS, over the chip: the timer says how long is left but
+   never how much, and the shield is spent by damage far more often than by
+   the clock. */
 .buff-icon .buff-label {
-  position: absolute; bottom: -1px; left: 0; right: 0;
-  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
-  text-align: center; color: #0a0c12;
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+  position: absolute; bottom: 7px; left: 0; right: 0;
+  font-size: 8px; text-align: center; color: #fff;
+  text-shadow: 1px 1px 0 var(--ink);
 }
 
-/* The rig's full-screen flash. Sits ABOVE the canvas but BELOW the HUD
-   (z-index 5), so the room strobes and the readouts never do. Only `opacity`
-   is ever written, which the compositor handles without layout or paint, and
-   at 0 the browser skips the layer entirely. */
-#strobe {
-  position: fixed; inset: 0; pointer-events: none; z-index: 4;
-  background: #fff; opacity: 0; will-change: opacity;
-}
-
-#vignette {
-  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
-  background: radial-gradient(ellipse at center, transparent 52%, rgba(255, 30, 30, 0.55) 100%);
-  transition: opacity 0.5s;
-}
-#vignette.flash { opacity: 1; transition: opacity 0.05s; }
-
-#banner {
-  position: fixed; top: 21%; left: 0; right: 0; z-index: 7;
-  text-align: center; pointer-events: none;
-  font-size: 46px; font-weight: 800; letter-spacing: 0.42em;
-  color: #fff; text-shadow: 0 0 26px var(--cyan);
-  opacity: 0;
-}
-#banner.show { animation: banner 2.1s forwards; }
-@keyframes banner {
-  0% { opacity: 0; transform: scale(1.18); }
-  12% { opacity: 1; transform: scale(1); }
-  72% { opacity: 1; }
-  100% { opacity: 0; transform: scale(0.98); }
-}
-
-.overlay {
-  position: fixed; inset: 0; z-index: 10;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 16px; text-align: center;
-  background: radial-gradient(ellipse at center, rgba(10, 12, 18, 0.72), rgba(5, 7, 11, 0.93));
-  backdrop-filter: blur(4px);
-  cursor: pointer;
-}
-.overlay h1 { font-size: 64px; font-weight: 900; letter-spacing: 0.35em; color: #fff; text-shadow: 0 0 32px var(--cyan); }
-.overlay h1.dead { color: var(--red); text-shadow: 0 0 32px rgba(255, 59, 48, 0.8); }
-.sub { letter-spacing: 0.32em; color: var(--dim); font-size: 13px; }
-.sub b { color: var(--cyan); font-size: 15px; }
-.controls { font-size: 13px; color: #8a95b3; letter-spacing: 0.08em; line-height: 2.2; }
-.controls b { color: var(--cyan); }
-.overlay button {
-  margin-top: 24px; padding: 15px 46px;
-  font-size: 15px; font-weight: 700; letter-spacing: 0.32em;
-  color: #0a0c12; background: var(--cyan); border: none; cursor: pointer;
-  box-shadow: 0 0 26px rgba(78, 243, 255, 0.55);
-}
-.overlay button:hover { background: #8ffaff; }
-#overlay-over button { background: var(--red); box-shadow: 0 0 26px rgba(255, 59, 48, 0.55); }
-/* The row of small toggles under the big call-to-action. Side by side rather
-   than stacked, so adding one never pushes START further from the centre. */
-.opt-row { display: flex; gap: 10px; margin-top: 4px; }
-/* Secondary next to the big call-to-action: outlined rather than filled, so
-   they never compete with START or RESUME for the first click. */
-.overlay .opt-btn {
-  margin-top: 0; padding: 9px 22px;
-  font-size: 11px; letter-spacing: 0.26em;
-  color: var(--cyan); background: none;
-  border: 1px solid rgba(78, 243, 255, 0.4); box-shadow: none;
-}
-.overlay .opt-btn:hover { background: rgba(78, 243, 255, 0.12); }
-.overlay .opt-btn.off { color: var(--dim); border-color: rgba(138, 149, 179, 0.35); }
-.overlay .opt-btn.off:hover { background: rgba(138, 149, 179, 0.12); }
-#overlay-over button:hover { background: #ff6e60; }
-/* ---- leaderboard ---- */
-.lb { width: 420px; max-width: 88vw; }
-.lb:empty { display: none; }
-.lb-title {
-  font-size: 11px; letter-spacing: 0.32em; color: var(--dim);
-  text-align: center; margin-bottom: 10px;
-}
-.lb-row {
-  display: grid; grid-template-columns: 26px 1fr auto auto;
-  gap: 12px; align-items: baseline;
-  padding: 4px 10px; font-size: 13px; color: var(--text);
-  border-bottom: 1px solid rgba(38, 44, 61, 0.7);
-}
-.lb-row .lb-rank { color: var(--dim); font-variant-numeric: tabular-nums; }
-/* The name is the only field holding text the player typed, so it is the only
-   one that can be long or awkward. Clip it rather than letting it push the
-   score column around. */
-.lb-row .lb-name {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  letter-spacing: 0.08em;
-}
-.lb-row .lb-wave { color: var(--dim); font-size: 11px; letter-spacing: 0.1em; }
-.lb-row .lb-score {
-  color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums;
-}
-.lb-row.you { background: rgba(78, 243, 255, 0.09); }
-.lb-row.you .lb-name { color: var(--cyan); }
-
-#lb-entry { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-#lb-entry label {
-  font-size: 11px; letter-spacing: 0.3em; color: var(--gold);
-}
-.lb-entry-row { display: flex; gap: 8px; }
-#lb-name {
-  width: 190px; padding: 9px 12px;
-  font-family: inherit; font-size: 14px; letter-spacing: 0.22em; text-align: center;
-  color: var(--cyan); background: rgba(10, 12, 18, 0.8);
-  border: 1px solid rgba(78, 243, 255, 0.5); outline: none;
-}
-#lb-name:focus { border-color: var(--cyan); box-shadow: 0 0 14px rgba(78, 243, 255, 0.35); }
-#btn-lb-save {
-  margin-top: 0; padding: 9px 20px;
-  font-size: 11px; letter-spacing: 0.24em;
-}
-
-/* ---- credits, combo ---- */
-#credit-num {
-  font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
-  color: #ffb300; text-shadow: 0 0 12px rgba(255, 179, 0, 0.5);
-}
-
-/* BOTTOM CENTRE, on the sight line. It has now been in two wrong places: under
-   the crosshair, where a number that grows and flashes fights the target the
-   player is trying to hold, and then in the top-right score stack, where it was
-   correct by category and invisible in practice - nobody looks at a corner
-   during a fight. So it sits low and centred, below where the eye tracks and
-   above the HUD row, and it is a GAUGE rather than a number: the bar says how
-   close the chain is to its ceiling at a glance, and the line under it drains
-   as the window runs out, so both questions the player actually has - how good
-   is this and how long have I got - are answered without reading anything. */
+/* ---- combo ---------------------------------------------------------------
+   Bottom centre, on the sight line but below where the eye tracks. It is a
+   GAUGE rather than a number: the cells say how close the chain is to its
+   ceiling at a glance, and the line under it drains as the window runs out. */
 #combo {
-  position: absolute; left: 50%; bottom: 92px;
+  position: absolute; left: 50%; bottom: calc(var(--u) * 24);
   transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 1.5);
   pointer-events: none;
 }
-/* The multiplier is centred on the gauge and the kill count is parked at its
-   right end, rather than the two sharing a centred row: the number the player
-   is actually reading has to sit on the screen's centre line, not next to it. */
 #combo-head {
-  position: relative; width: 260px; height: 30px;
-  display: flex; align-items: baseline; justify-content: center;
+  position: relative; width: 272px;
+  display: flex; align-items: flex-end; justify-content: center;
 }
 #combo-mult {
-  font-size: 30px; font-weight: 900; letter-spacing: 0.04em;
-  color: var(--gold); text-shadow: 0 0 18px rgba(255, 233, 94, 0.75);
-  line-height: 1;
+  font-size: 32px; color: var(--gold); line-height: 1.1;
+  /* A tight glow only. At 32px a wide halo in the glyphs' own colour floods
+     the counters of a bitmap face and the number stops being a number. */
+  text-shadow: 2px 2px 0 var(--ink), 0 0 10px rgba(255, 233, 94, 0.45);
 }
+/* Parked at the LEFT end of the row, not the right: the multiplier is centred
+   on the screen's midline and the chain length is the smaller reading, so the
+   two need the full width of the gauge between them. */
 #combo-count {
-  position: absolute; right: 0; bottom: 3px;
-  font-size: 10px; letter-spacing: 0.26em; color: #8a95b3;
+  position: absolute; left: 0; bottom: 4px;
+  font-size: 8px; letter-spacing: 0.16em; color: #93a0c0;
 }
-/* The chain's height. Width is fixed so the fill reads as a FRACTION of a
-   known ceiling - a bar that grew with the number would say nothing. */
-#combo-gauge {
-  position: relative; width: 260px; height: 9px;
-  background: rgba(10, 12, 18, 0.65);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(6px);
-  overflow: hidden;
-}
+#combo-gauge { width: 272px; height: 10px; --cells: 16; }
 #combo-fill {
-  display: block; height: 100%; width: 100%;
-  background: linear-gradient(90deg, #ffc247, #ff8a1f 62%, #ff3d2e);
-  box-shadow: 0 0 14px rgba(255, 160, 40, 0.6);
-  transform-origin: left center;
-  transform: scaleX(0);
+  background: var(--amber);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 12px rgba(255, 160, 40, 0.55);
 }
 /* Where x2 and x3 fall. Notches, not labels: the player needs to know the bar
    has landmarks, not what they are called. */
 .combo-tick {
-  position: absolute; top: 0; bottom: 0; width: 1px;
-  background: rgba(10, 12, 18, 0.8);
+  position: absolute; top: -3px; bottom: -3px; width: 2px; z-index: 3;
+  background: var(--text); opacity: 0.65;
 }
-/* The decay window, drained from both ends so it empties toward the centre the
-   multiplier is sitting on. */
-#combo-bar { width: 260px; height: 2px; background: rgba(255, 255, 255, 0.12); }
+/* The decay window, drained from the centre out. */
+#combo-bar { width: 272px; height: 3px; background: rgba(255, 255, 255, 0.1); }
 #combo-bar i {
   display: block; height: 100%; background: var(--gold);
   box-shadow: 0 0 8px var(--gold);
@@ -392,99 +499,548 @@ html, body {
 }
 /* Capped. The gauge cannot say any more with its length, so it says it with
    light instead. */
-#combo.combo-max #combo-fill { animation: combo-max-pulse 0.6s infinite alternate; }
+#combo.combo-max #combo-fill {
+  background: #ff6a3d;
+  animation: combo-max-pulse 0.5s steps(1, end) infinite alternate;
+}
 #combo.combo-max #combo-mult {
-  color: #ff6a3d; text-shadow: 0 0 22px rgba(255, 90, 45, 0.85);
+  color: #ff6a3d; text-shadow: 2px 2px 0 var(--ink), 0 0 12px rgba(255, 90, 45, 0.7);
 }
 @keyframes combo-max-pulse {
-  from { box-shadow: 0 0 10px rgba(255, 90, 45, 0.5); }
-  to   { box-shadow: 0 0 26px rgba(255, 90, 45, 0.95); }
+  from { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 8px rgba(255, 90, 45, 0.5); }
+  to   { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 26px rgba(255, 90, 45, 1); }
 }
 
-/* ---- terminal prompt ---- */
+/* =========================================================================
+   FULL-SCREEN EFFECTS
+   ========================================================================= */
+
+/* The rig's flash. ABOVE the canvas, BELOW the HUD, so the room strobes and
+   the readouts never do. Only `opacity` is written. */
+#strobe {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4;
+  background: #fff; opacity: 0; will-change: opacity;
+}
+
+/* Damage. Now a stepped ring of red rather than a soft radial wash - the
+   gradient has hard stops, so it reads as a frame slamming shut. */
+#vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  background: radial-gradient(
+    ellipse 78% 78% at center,
+    transparent 0 52%, rgba(255, 30, 30, 0.22) 52% 66%,
+    rgba(255, 30, 30, 0.42) 66% 82%, rgba(255, 30, 30, 0.62) 82% 100%
+  );
+  transition: opacity 0.4s steps(8, end);
+}
+#vignette.flash { opacity: 1; transition: none; }
+
+/* Wave banner. It arrives in STEPS - four discrete scales rather than a
+   smooth ease - because a smoothly tweened word in a pixel interface is the
+   one thing that gives the whole illusion away. */
+#banner {
+  position: fixed; top: 20%; left: 0; right: 0; z-index: 7;
+  text-align: center; pointer-events: none;
+  font-size: 32px; letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow: 4px 4px 0 var(--ink), 0 0 28px var(--cyan);
+  opacity: 0;
+}
+#banner.show { animation: banner 2.1s steps(1, end) forwards; }
+@keyframes banner {
+  0%   { opacity: 0; transform: scale(1.3); }
+  6%   { opacity: 1; transform: scale(1.16); }
+  10%  { opacity: 1; transform: scale(1.06); }
+  14%  { opacity: 1; transform: scale(1); }
+  74%  { opacity: 1; transform: scale(1); }
+  88%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* ---- CRT ----------------------------------------------------------------
+   Sits over EVERYTHING, including the menus, because the conceit is that the
+   whole machine is being watched through one tube. Three layers:
+
+     · the element - a phosphor tint and the corner falloff of a curved glass
+     · ::before    - scanlines, plus the vertical RGB triad of an aperture
+                     grille, both at a fixed 3px pitch so they never moire
+                     against the HUD's 4px grid
+     · ::after     - the bloom of a tube that is slightly too bright, and the
+                     dark bezel the glass is bedded into
+
+   Nothing here animates. A rolling flicker looks correct in a screenshot and
+   is genuinely unpleasant to play under for twenty minutes. */
+#crt {
+  position: fixed; inset: 0; z-index: 100;
+  pointer-events: none;
+  mix-blend-mode: normal;
+}
+#crt::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    /* scanlines */
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.32) 0 1px,
+      rgba(0, 0, 0, 0.10) 1px 2px,
+      rgba(0, 0, 0, 0)    2px 3px
+    ),
+    /* aperture grille */
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 0, 40, 0.055) 0 1px,
+      rgba(0, 255, 90, 0.055) 1px 2px,
+      rgba(0, 90, 255, 0.055) 2px 3px
+    );
+}
+#crt::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    /* curved-glass falloff: dark at the corners, brightest a third of the way
+       down where the electron gun is aimed */
+    radial-gradient(
+      ellipse 100% 92% at 50% 42%,
+      rgba(180, 230, 255, 0.05) 0%,
+      rgba(0, 0, 0, 0) 42%,
+      rgba(0, 0, 0, 0.28) 82%,
+      rgba(0, 0, 0, 0.62) 100%
+    ),
+    /* the bezel the tube is bedded into */
+    linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0, transparent 3%, transparent 97%, rgba(0, 0, 0, 0.5) 100%),
+    linear-gradient(90deg,  rgba(0, 0, 0, 0.5) 0, transparent 2%, transparent 98%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* =========================================================================
+   OVERLAYS
+   ========================================================================= */
+
+.overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--u) * 5);
+  text-align: center;
+  cursor: pointer;
+  /* NO BLUR. The arena behind a menu is shown through a 2px checker at 88%,
+     which darkens it to a texture without pretending the interface has a
+     depth-of-field. The stepped radial under it keeps the centre readable. */
+  background:
+    radial-gradient(ellipse at center, rgba(10, 12, 18, 0.55) 0 40%, rgba(5, 7, 11, 0.86) 100%),
+    var(--dither);
+  background-size: auto, 4px 4px;
+  overflow-y: auto;
+  padding: calc(var(--u) * 8) calc(var(--u) * 4);
+}
+
+/* ---- the marquee --------------------------------------------------------
+   The title is not text on a background; it is the cabinet's marquee, a plate
+   with a lit rule across it, and the composition hangs off it. */
+.marquee {
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 6) calc(var(--u) * 10) calc(var(--u) * 5);
+  --surface: rgba(6, 8, 13, 0.92);
+  /* The marquee is the one plate whose frame is LIT rather than machined: it
+     is the cabinet's sign, and it should read as switched on from across the
+     room. Every other frame in the game stays neutral. */
+  --edge: rgba(78, 243, 255, 0.4);
+  max-width: min(92vw, 760px);
+}
+.overlay h1 {
+  font-size: 40px; font-weight: 400; letter-spacing: 0.06em;
+  color: #fff; line-height: 1.2;
+  text-shadow: 4px 4px 0 var(--ink), 0 0 30px var(--cyan);
+}
+.overlay h1.dead {
+  color: var(--red);
+  text-shadow: 4px 4px 0 var(--ink), 0 0 30px rgba(255, 59, 48, 0.85);
+  animation: dead-jitter 2.4s steps(1, end) infinite;
+}
+/* A 1px twitch on a 4px grid, three times a run - the tube losing sync, not
+   a shake effect. */
+@keyframes dead-jitter {
+  0%, 96%  { transform: translate(0, 0); }
+  97%      { transform: translate(-3px, 1px); }
+  98%      { transform: translate(2px, -1px); }
+  99%, 100%{ transform: translate(0, 0); }
+}
+/* The lit rule under the title. Dashed, in the game's cyan, and it is the one
+   piece of pure decoration in the sheet that earns its place: it is what makes
+   the plate read as a marquee rather than as a box with a word in it. */
+.rule {
+  width: 100%; height: 4px;
+  background: repeating-linear-gradient(90deg, var(--cyan) 0 8px, transparent 8px 16px);
+  box-shadow: 0 0 12px rgba(78, 243, 255, 0.5);
+  opacity: 0.75;
+}
+.rule.warm {
+  background: repeating-linear-gradient(90deg, var(--red) 0 8px, transparent 8px 16px);
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.5);
+}
+.sub {
+  font-size: 10px; letter-spacing: 0.24em; color: var(--dim);
+  line-height: 2;
+}
+.sub b { color: var(--gold); font-weight: 400; }
+
+/* ---- controls, as keycaps ------------------------------------------------
+   The old version was a run-on sentence of bolded letters separated by
+   middots. At 8x8 that is unreadable and, worse, unscannable: a player
+   looking for the jump key had to read the whole line. Each binding is now a
+   physical cap with its action under it, laid out on a grid the eye can jump
+   around. */
+.controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--u) * 4) calc(var(--u) * 2);
+  width: min(90vw, 500px);
+  padding: calc(var(--u) * 4) calc(var(--u) * 5) calc(var(--u) * 5);
+  --surface: rgba(6, 8, 13, 0.9);
+}
+/* Nine bindings in a 3x3 block rather than a ragged auto-fit row: the panel is
+   read once, before the run, and a square is the shape the eye finishes. */
+.controls-head {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: calc(var(--u) * 3);
+  font-size: 8px; letter-spacing: 0.24em; color: var(--dim);
+}
+.controls-head::after {
+  content: ""; flex: 1; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);
+}
+.ctl { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 1.5); }
+/* The cap. Two inset shadows make the moulded top and the dark underside of a
+   real key; there is no blur in either. */
+.key {
+  min-width: calc(var(--u) * 9); padding: 7px 8px 8px;
+  font-size: 10px; color: var(--cyan); letter-spacing: 0.06em;
+  background: #141a28;
+  clip-path: var(--cut-sm);
+  box-shadow:
+    inset 0 0 0 2px #39445f,
+    inset 0 3px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.55);
+}
+.ctl span { font-size: 8px; letter-spacing: 0.1em; color: var(--dim); }
+
+/* ---- buttons ------------------------------------------------------------
+   A cabinet button: a lit cap standing 4px proud of its own dark socket,
+   which it drops into when pressed. The travel is real - the label moves -
+   so a click feels like it landed even with the pointer locked away. */
+.overlay button {
+  font-family: inherit; text-transform: inherit;
+  padding: calc(var(--u) * 4) calc(var(--u) * 10);
+  font-size: 12px; letter-spacing: 0.2em;
+  color: var(--ink); background: var(--cyan);
+  border: none; cursor: pointer;
+  clip-path: var(--cut);
+  box-shadow:
+    inset 0 -6px 0 rgba(0, 0, 0, 0.32),
+    inset 0 3px 0 rgba(255, 255, 255, 0.35),
+    0 0 26px rgba(78, 243, 255, 0.45);
+  transition: transform 0.06s steps(1, end), background-color 0.1s steps(2, end);
+}
+.overlay button:hover { background: #9dfbff; }
+.overlay button:active {
+  transform: translateY(4px);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.32), inset 0 3px 0 rgba(255, 255, 255, 0.3);
+}
+.overlay button:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+#overlay-over button {
+  background: var(--red); color: #fff;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 -6px 0 rgba(0, 0, 0, 0.35), inset 0 3px 0 rgba(255, 255, 255, 0.3),
+    0 0 26px rgba(255, 59, 48, 0.45);
+}
+#overlay-over button:hover { background: #ff6e60; }
+/* The blinking arrow beside the primary action. An arcade attract screen has
+   one, and it is the only thing on the start screen that moves. Drawn with
+   clip-path, not a glyph. */
+.primary-row { display: flex; align-items: center; gap: calc(var(--u) * 3); }
+.primary-row::before, .primary-row::after {
+  content: ""; width: 12px; height: 16px; flex: none;
+  background: var(--cyan);
+  animation: blink 0.7s steps(1, end) infinite;
+}
+.primary-row::before { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.primary-row::after  { clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+#overlay-over .primary-row::before, #overlay-over .primary-row::after { background: var(--red); }
+
+/* Secondary toggles. Outlined, never filled, so they cannot compete with the
+   primary action for the first click. */
+.opt-row { display: flex; gap: calc(var(--u) * 3); flex-wrap: wrap; justify-content: center; }
+.overlay .opt-btn {
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 5);
+  font-size: 8px; letter-spacing: 0.18em;
+  color: var(--cyan); background: transparent;
+  clip-path: var(--cut-sm);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
+}
+.overlay .opt-btn:hover { background: rgba(78, 243, 255, 0.14); box-shadow: inset 0 0 0 2px var(--cyan); }
+.overlay .opt-btn:active { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--cyan); }
+.overlay .opt-btn.off { color: var(--dim); box-shadow: inset 0 0 0 2px rgba(107, 120, 154, 0.4); }
+.overlay .opt-btn.off:hover { background: rgba(107, 120, 154, 0.14); box-shadow: inset 0 0 0 2px var(--dim); }
+
+/* ---- run summary strip --------------------------------------------------
+   The four numbers a finished run is judged on. A divided strip, not four
+   cards: they are one reading with four columns, and boxing each of them
+   would say they were four separate things. */
+.run-strip {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  --surface: rgba(6, 8, 13, 0.9);
+}
+.run-strip .rs {
+  display: flex; flex-direction: column; align-items: center; gap: var(--u);
+  padding: calc(var(--u) * 3) calc(var(--u) * 6);
+  position: relative;
+}
+.run-strip .rs + .rs::before {
+  content: ""; position: absolute; left: 0; top: 20%; bottom: 20%; width: 2px;
+  background: repeating-linear-gradient(180deg, var(--line) 0 4px, transparent 4px 8px);
+}
+.run-strip .rs u { text-decoration: none; font-size: 8px; letter-spacing: 0.18em; color: var(--dim); }
+.run-strip .rs b {
+  font-weight: 400; font-size: 16px; color: var(--gold);
+  text-shadow: 2px 2px 0 var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- leaderboard --------------------------------------------------------- */
+.lb {
+  width: min(92vw, 560px);
+  /* The only block on these screens whose height is DATA. A full board of ten
+     runs is 300px, which is enough to push PRESS START off a laptop screen, so
+     it scrolls inside itself rather than growing the page. */
+  max-height: 34vh; overflow-y: auto;
+}
+.lb:empty { display: none; }
+.lb-title {
+  font-size: 8px; letter-spacing: 0.3em; color: var(--dim);
+  text-align: center; padding: calc(var(--u) * 2.5) 0;
+  background: rgba(6, 8, 13, 0.9);
+  clip-path: var(--cut-sm);
+  box-shadow: inset 0 0 0 2px var(--line);
+  margin-bottom: calc(var(--u) * 2);
+}
+.lb-row {
+  display: grid;
+  /* The two right-hand columns are FIXED, not auto: with `auto` a long name
+     and a seven-figure score share whatever is left and collide on the one
+     row that matters most - the player's own. */
+  grid-template-columns: calc(var(--u) * 8) 1fr calc(var(--u) * 20) calc(var(--u) * 22);
+  gap: calc(var(--u) * 3); align-items: center;
+  padding: calc(var(--u) * 2) calc(var(--u) * 3);
+  font-size: 10px; color: var(--text);
+  text-align: left;
+}
+/* Alternating rows are DITHERED rather than tinted: a 25% checker is how a
+   machine with sixteen colours striped a table, and it reads at a glance
+   without introducing a new value into the palette. */
+.lb-row:nth-child(odd) {
+  background: repeating-conic-gradient(rgba(78, 243, 255, 0.07) 0% 25%, transparent 0% 50%);
+  background-size: 4px 4px;
+}
+.lb-row .lb-rank { color: var(--dim); font-variant-numeric: tabular-nums; }
+/* The name is the only field holding text the player typed, so it is the only
+   one that can be long or awkward. Clip it rather than letting it push the
+   score column around. */
+.lb-row .lb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-row .lb-wave { color: var(--dim); font-size: 8px; letter-spacing: 0.1em; text-align: right; }
+.lb-row .lb-score { color: var(--gold); font-variant-numeric: tabular-nums; text-align: right; }
+.lb-row.you {
+  background: rgba(78, 243, 255, 0.14);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
+  clip-path: var(--cut-sm);
+}
+.lb-row.you .lb-name { color: var(--cyan); }
+.lb-row.you .lb-rank { color: var(--cyan); }
+
+/* ---- name entry ---------------------------------------------------------- */
+#lb-entry {
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 4) calc(var(--u) * 6);
+  --surface: rgba(6, 8, 13, 0.92);
+  --edge: rgba(255, 233, 94, 0.5);
+}
+#lb-entry label {
+  font-size: 10px; letter-spacing: 0.2em; color: var(--gold);
+  text-shadow: 1px 1px 0 var(--ink);
+  animation: blink 0.9s steps(1, end) infinite;
+}
+.lb-entry-row { display: flex; gap: calc(var(--u) * 2); align-items: stretch; }
+#lb-name {
+  width: 260px; padding: calc(var(--u) * 3) calc(var(--u) * 3);
+  font-family: inherit; text-transform: uppercase;
+  font-size: 12px; letter-spacing: 0.2em; text-align: center;
+  color: var(--cyan); background: #05070b;
+  border: none; outline: none;
+  clip-path: var(--cut-sm);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
+  caret-color: var(--cyan);
+}
+#lb-name:focus { box-shadow: inset 0 0 0 2px var(--cyan), 0 0 16px rgba(78, 243, 255, 0.3); }
+#lb-name::placeholder { color: var(--dim); }
+/* SAVE belongs to the gold entry block it sits in, not to the red RESTART it
+   would otherwise match: two identical red buttons on one screen is two
+   primary actions, and only one of them ends the screen. */
+#overlay-over #btn-lb-save {
+  padding: 0 calc(var(--u) * 6);
+  font-size: 10px; letter-spacing: 0.16em;
+  color: var(--ink); background: var(--gold); text-shadow: none;
+  box-shadow:
+    inset 0 -5px 0 rgba(0, 0, 0, 0.3), inset 0 3px 0 rgba(255, 255, 255, 0.4),
+    0 0 20px rgba(255, 233, 94, 0.35);
+}
+#overlay-over #btn-lb-save:hover { background: #fff3a0; }
+
+/* ---- station prompt ------------------------------------------------------ */
 #prompt {
   position: fixed; left: 50%; top: calc(50% + 92px);
   transform: translateX(-50%);
   z-index: 6; pointer-events: none;
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 16px;
-  background: rgba(10, 12, 18, 0.72);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(6px);
-  font-size: 12px; letter-spacing: 0.18em; color: var(--text);
+  display: flex; align-items: center; gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 4);
+  --surface: rgba(6, 8, 13, 0.9);
+  font-size: 10px; letter-spacing: 0.1em; color: var(--text);
   white-space: nowrap;
 }
+/* The key in the prompt is the same cap as the ones on the start screen: a
+   player who read the controls once should recognise the shape without
+   reading the letter. */
 #prompt b {
-  display: inline-block; min-width: 18px;
-  padding: 2px 6px;
-  background: var(--cyan); color: #0a0c12;
-  font-weight: 800;
+  display: inline-block; min-width: calc(var(--u) * 6);
+  padding: 5px 7px 6px;
+  font-weight: 400; text-align: center;
+  background: #141a28; color: var(--cyan);
+  clip-path: var(--cut-sm);
+  box-shadow:
+    inset 0 0 0 2px #39445f,
+    inset 0 3px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.55);
 }
-#prompt .prompt-cost { color: #ffb300; }
-#prompt.blocked { opacity: 0.6; }
-#prompt.blocked b { background: var(--dim); }
+#prompt .prompt-cost { color: var(--amber); }
+#prompt.blocked { opacity: 0.55; }
+#prompt.blocked b { background: #1a1d26; color: var(--dim); box-shadow: inset 0 0 0 2px #2b3348; }
 
-/* ---- held-TAB build sheet -------------------------------------------------
-   Everything a run accumulates that the HUD has no room for: the mutations
-   owned and their tiers, and the numbers behind the score. Held, not toggled,
-   and the game keeps RUNNING underneath - a panel that paused the arena would
-   be a free timeout on demand, so this is a glance the player pays for.
-
-   Deliberately not an `.overlay`: those blur and dim the whole screen and take
-   the cursor. This is a panel over a live fight, so it stays off-centre of the
-   crosshair, keeps the HUD readable around it, and never captures pointer
-   events. */
+/* =========================================================================
+   HELD-TAB BUILD SHEET
+   Everything a run accumulates that the HUD has no room for. Held, not
+   toggled, and the game keeps RUNNING underneath - a panel that paused the
+   arena would be a free timeout on demand, so this is a glance the player
+   pays for. Deliberately not an `.overlay`: it never takes the cursor and
+   never covers the crosshair's own row.
+   ========================================================================= */
 #stats-panel {
   position: fixed; inset: 0; z-index: 8;
   pointer-events: none;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(5, 7, 11, 0.55);
+  background: rgba(5, 7, 11, 0.5);
 }
 #stats-card {
-  width: 620px; max-width: 92vw; max-height: 86vh; overflow: hidden;
-  padding: 22px 26px;
-  background: rgba(10, 12, 18, 0.9);
-  border: 1px solid var(--line);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  display: grid; grid-template-columns: 1fr 1fr; gap: 22px 26px;
+  width: 680px; max-width: 92vw; max-height: 86vh; overflow: hidden;
+  padding: calc(var(--u) * 6) calc(var(--u) * 7);
+  --surface: rgba(6, 8, 13, 0.94);
+  --edge: var(--line-hi);
+  display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 6) calc(var(--u) * 7);
 }
 .stats-head {
   grid-column: 1 / -1;
-  font-size: 11px; letter-spacing: 0.34em; color: var(--cyan);
-  border-bottom: 1px solid var(--line); padding-bottom: 8px;
+  display: flex; align-items: center; gap: calc(var(--u) * 3);
+  font-size: 10px; letter-spacing: 0.2em; color: var(--cyan);
+  padding-bottom: calc(var(--u) * 3);
+}
+/* The heading's rule runs to the right edge of the card, so the two columns
+   read as hanging off one header instead of floating under a word. */
+.stats-head::after {
+  content: ""; flex: 1; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line-hi) 0 4px, transparent 4px 8px);
 }
 .stats-col h3 {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.3em;
-  color: var(--dim); margin-bottom: 10px;
+  font-size: 8px; font-weight: 400; letter-spacing: 0.24em;
+  color: var(--dim); margin-bottom: calc(var(--u) * 3);
+  padding-bottom: calc(var(--u) * 2);
+  box-shadow: inset 0 -2px 0 rgba(43, 51, 72, 0.9);
 }
-/* Stat rows are label-left / value-right with a rule between, so the eye can
-   run down either column without reading the other. */
+/* Stat rows are label-left / value-right, so the eye can run down either
+   column without reading the other. */
 .stat-row {
   display: flex; justify-content: space-between; align-items: baseline;
-  gap: 12px; padding: 3px 0;
-  font-size: 12px; letter-spacing: 0.06em; color: var(--dim);
+  gap: calc(var(--u) * 3); padding: calc(var(--u) * 1.5) 0;
+  font-size: 8px; letter-spacing: 0.08em; color: var(--dim);
 }
-.stat-row b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-row.good b { color: var(--gold); }
+.stat-row b { color: var(--text); font-weight: 400; font-size: 10px; font-variant-numeric: tabular-nums; }
+.stat-row.good b { color: var(--gold); text-shadow: 1px 1px 0 var(--ink); }
 
-/* One mutation. The dot carries the upgrade's own theme colour - the same
+/* One mutation. The pip carries the upgrade's own theme colour - the same
    colour its totem and its plate on the receiver wear - so the list reads as
    the build the player has been looking at all run, not as a fresh index. */
 .mut-row {
-  display: flex; align-items: center; gap: 8px; padding: 3px 0;
-  font-size: 12px; letter-spacing: 0.08em; color: var(--text);
+  display: flex; align-items: center; gap: calc(var(--u) * 2.5);
+  padding: calc(var(--u) * 1.5) 0;
+  font-size: 8px; letter-spacing: 0.08em; color: var(--text);
 }
 .mut-row i {
-  width: 8px; height: 8px; flex: none; border-radius: 2px;
+  width: 8px; height: 8px; flex: none;
   background: currentColor; box-shadow: 0 0 8px currentColor;
 }
 .mut-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mut-row em {
-  font-style: normal; font-weight: 700; color: var(--gold);
+  font-style: normal; color: var(--gold); font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-.mut-empty { font-size: 12px; color: var(--dim); letter-spacing: 0.08em; }
+.mut-empty { font-size: 8px; color: var(--dim); letter-spacing: 0.08em; }
 /* The mutation column is the one that can overflow - a long run owns twenty
    picks - so it scrolls inside itself rather than growing the card. */
-.stats-col.muts { max-height: 62vh; overflow-y: auto; }
+.stats-col.muts { max-height: 58vh; overflow-y: auto; }
+
+/* =========================================================================
+   NARROW AND SHORT VIEWPORTS
+   The HUD is fixed-position furniture, so it does not reflow - it steps down
+   to a smaller set of sizes on the same grid.
+   ========================================================================= */
+@media (max-width: 560px) {
+  .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px), (max-height: 700px) {
+  .overlay h1 { font-size: 24px; }
+  .marquee { padding: calc(var(--u) * 4) calc(var(--u) * 5) calc(var(--u) * 4); }
+  .overlay { gap: calc(var(--u) * 3); padding: calc(var(--u) * 4); }
+  .controls {
+    gap: calc(var(--u) * 2.5) calc(var(--u) * 2);
+    padding: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 3);
+  }
+  .lb { max-height: 26vh; }
+  .lb-row { padding: calc(var(--u) * 1.5) calc(var(--u) * 3); }
+  .overlay button { padding: calc(var(--u) * 3) calc(var(--u) * 6); font-size: 10px; }
+  #banner { font-size: 20px; }
+  #wave-num { font-size: 24px; }
+  #score-num { font-size: 16px; }
+  #ammo-num { font-size: 24px; }
+  #hp-box { width: 200px; }
+  #combo-head, #combo-gauge, #combo-bar { width: 200px; }
+  .run-strip { --surface: transparent; }
+  .run-strip .rs { padding: calc(var(--u) * 2) calc(var(--u) * 3); }
+  #stats-card { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .overlay h1 { font-size: 16px; }
+  #lb-name { width: 180px; }
+  .lb-row { font-size: 8px; }
+}
+
+/* A player who has asked the system to stop moving things gets a HUD that
+   still blinks nothing. The interface loses no information: every blinking
+   element also carries colour. */
+@media (prefers-reduced-motion: reduce) {
+  #banner.show,
+  #hp-box.low #hp-text,
+  #ammo-res.out,
+  #ammo-reload,
+  #lb-entry label,
+  .overlay h1.dead,
+  .primary-row::before, .primary-row::after,
+  #combo.combo-max #combo-fill,
+  #boss-bar.enraged #boss-note { animation: none; }
+  #banner.show { opacity: 1; }
+}

@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "void-arena", "runtimeExecutable": "node", "runtimeArgs": ["server.js", "8123"], "port": 8123 }
+  ]
+}

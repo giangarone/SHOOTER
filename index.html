@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>VOID ARENA</title>
   <link rel="icon" href="data:,"/>
+  <!-- Preloaded, not just declared: every panel in the game is sized by this
+       face, and a first paint in a fallback would relayout the entire HUD. -->
+  <link rel="preload" href="/assets/fonts/PressStart2P-Regular.ttf" as="font" type="font/ttf" crossorigin/>
   <link rel="stylesheet" href="/css/styles.css"/>
   <script type="importmap">
     { "imports": { "three": "./node_modules/three/build/three.module.js" } }
@@ -17,52 +20,57 @@
     <div id="hud-top">
       <div id="wave-box">
         <span id="wave-label">WAVE</span>
-        <span id="wave-num">1</span>
-        <span id="enemies-left">ENEMIES 0</span>
+        <span id="wave-num">01</span>
+        <span id="enemies-left">00 LEFT</span>
       </div>
       <div id="score-box">
         <span id="score-label">SCORE</span>
-        <span id="score-num">0</span>
+        <span id="score-num">000000</span>
         <span id="credit-num">$0</span>
       </div>
     </div>
-    <div id="boss-bar" class="hidden">
+
+    <!-- Boss bar. Centred and wide, under the wave readout: a boss is the one
+         thing on screen worth its own instrument, and it has to be legible
+         without taking the player's eyes off the crosshair. The name plate
+         straddles the frame's top edge so the two read as one machine. -->
+    <div id="boss-bar" class="plate hidden">
       <div id="boss-name">COLOSSUS</div>
-      <div id="boss-hp-bg"><div id="boss-hp"></div></div>
+      <div id="boss-hp-bg" class="seg"><i id="boss-hp"></i></div>
       <div id="boss-note"></div>
     </div>
+
     <div id="crosshair">
       <i></i><i></i><i></i><i></i>
       <span id="reload-ring" class="hidden"></span>
       <span id="hitmarker"></span>
     </div>
-    <!-- Combo gauge. Bottom centre, under the crosshair rather than beside it:
-         the multiplier is the one number that changes on every kill, and it was
-         unreadable stacked in the top-right corner. Rows are built here; ui.js
-         only writes text and two transforms. -->
-    <!-- The buff chips live with the combo, not in the corner: both are
-         "what is true about you right now", and the eye is already on the
-         multiplier. -->
+
+    <!-- Buffs and combo share the bottom centre: both answer "what is true
+         about me right now", and the eye is already on the multiplier. -->
     <div id="buffs"></div>
     <div id="combo" class="hidden">
       <div id="combo-head">
         <span id="combo-mult">x1.0</span>
         <span id="combo-count">0 KILLS</span>
       </div>
-      <div id="combo-gauge">
+      <div id="combo-gauge" class="seg">
         <i id="combo-fill"></i>
         <span class="combo-tick" style="left:33.33%"></span>
         <span class="combo-tick" style="left:66.66%"></span>
       </div>
       <div id="combo-bar"><i></i></div>
     </div>
+
     <div id="hud-bottom">
       <div id="hp-box">
-        <div id="hp-bar-bg"><div id="hp-bar"></div></div>
-        <div id="hp-text">100 / 100</div>
+        <div id="hp-head">
+          <span>VITALS</span>
+          <span id="hp-text">100 / 100</span>
+        </div>
+        <div id="hp-bar-bg" class="seg"><i id="hp-bar"></i></div>
       </div>
       <div id="ammo-box">
-        <span id="ammo-reload" class="hidden">RELOADING</span>
         <div id="weapon-line">
           <span id="weapon-name">PULSE RIFLE</span>
         </div>
@@ -70,23 +78,22 @@
           <span id="ammo-num">30</span>
           <span id="ammo-res">/ 30</span>
         </div>
+        <span id="ammo-reload" class="hidden">RELOADING</span>
       </div>
     </div>
   </div>
-
-
 
   <div id="strobe"></div>
   <div id="vignette"></div>
   <div id="banner"></div>
 
-  <div id="prompt" class="hidden"></div>
+  <div id="prompt" class="plate hidden"></div>
 
   <!-- Held-TAB build sheet. Rows are built by ui.js; the shell is here so the
        card and its two columns are styled once and never rebuilt. -->
   <div id="stats-panel" class="hidden">
-    <div id="stats-card">
-      <div class="stats-head">RUN SUMMARY &nbsp;·&nbsp; HOLD TAB</div>
+    <div id="stats-card" class="plate">
+      <div class="stats-head">RUN SUMMARY</div>
       <div class="stats-col muts">
         <h3>MUTATIONS</h3>
         <div id="stats-muts"></div>
@@ -99,14 +106,28 @@
   </div>
 
   <div id="overlay-start" class="overlay">
-    <h1>VOID ARENA</h1>
-    <p class="sub">SURVIVE THE WAVES</p>
-    <div class="controls">
-      <b>WASD</b> MOVE  ·  <b>MOUSE</b> AIM  ·  <b>LMB</b> SHOOT  ·  <b>RMB</b> MELEE  ·  <b>R</b> RELOAD<br/>
-      <b>SPACE</b> JUMP  ·  <b>E</b> USE  ·  <b>TAB</b> STATS  ·  <b>F</b> FULLSCREEN
+    <div class="marquee plate">
+      <h1>VOID ARENA</h1>
+      <div class="rule"></div>
+      <p class="sub">SURVIVE THE WAVES</p>
     </div>
+
+    <div class="controls plate">
+      <div class="controls-head">CONTROLS</div>
+      <div class="ctl"><b class="key">WASD</b><span>MOVE</span></div>
+      <div class="ctl"><b class="key">MOUSE</b><span>AIM</span></div>
+      <div class="ctl"><b class="key">LMB</b><span>SHOOT</span></div>
+      <div class="ctl"><b class="key">RMB</b><span>MELEE</span></div>
+      <div class="ctl"><b class="key">R</b><span>RELOAD</span></div>
+      <div class="ctl"><b class="key">SPACE</b><span>JUMP</span></div>
+      <div class="ctl"><b class="key">E</b><span>USE</span></div>
+      <div class="ctl"><b class="key">TAB</b><span>STATS</span></div>
+      <div class="ctl"><b class="key">F</b><span>FULLSCREEN</span></div>
+    </div>
+
     <div id="lb-start" class="lb"></div>
-    <button id="btn-start">CLICK TO START</button>
+
+    <div class="primary-row"><button id="btn-start">PRESS START</button></div>
     <div class="opt-row">
       <button id="btn-mute-start" class="opt-btn mute-btn">MUSIC ON</button>
       <button id="btn-fs-start" class="opt-btn">FULLSCREEN</button>
@@ -114,28 +135,41 @@
   </div>
 
   <div id="overlay-over" class="overlay hidden">
-    <h1 class="dead">YOU DIED</h1>
-    <p class="sub" id="over-stats"></p>
+    <div class="marquee plate">
+      <h1 class="dead">YOU DIED</h1>
+      <div class="rule warm"></div>
+      <div id="over-stats" class="run-strip"></div>
+    </div>
+
     <!-- Shown only when the run places in the top ten. -->
-    <div id="lb-entry" class="hidden">
-      <label for="lb-name">NEW HIGH SCORE &nbsp;·&nbsp; ENTER NAME</label>
+    <div id="lb-entry" class="plate hidden">
+      <label for="lb-name">NEW HIGH SCORE - ENTER NAME</label>
       <div class="lb-entry-row">
         <input id="lb-name" type="text" maxlength="12" autocomplete="off" spellcheck="false"/>
         <button id="btn-lb-save">SAVE</button>
       </div>
     </div>
+
     <div id="lb-over" class="lb"></div>
-    <button id="btn-restart">RESTART</button>
+    <div class="primary-row"><button id="btn-restart">RESTART</button></div>
   </div>
 
   <div id="overlay-pause" class="overlay hidden">
-    <h1>PAUSED</h1>
-    <button id="btn-resume">CLICK TO RESUME</button>
+    <div class="marquee plate">
+      <h1>PAUSED</h1>
+      <div class="rule"></div>
+      <p class="sub">THE ARENA IS WAITING</p>
+    </div>
+    <div class="primary-row"><button id="btn-resume">RESUME</button></div>
     <div class="opt-row">
       <button id="btn-mute-pause" class="opt-btn mute-btn">MUSIC ON</button>
       <button id="btn-fs-pause" class="opt-btn">FULLSCREEN</button>
     </div>
   </div>
+
+  <!-- The tube. Above every layer including the menus: the conceit is that the
+       whole machine is being watched through one piece of curved glass. -->
+  <div id="crt"></div>
 
   <script type="module" src="/js/main.js"></script>
 </body>

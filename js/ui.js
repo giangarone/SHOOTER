@@ -15,6 +15,7 @@ export class UI {
     this.waveNum = $('wave-num');
     this.enemies = $('enemies-left');
     this.scoreNum = $('score-num');
+    this.hpBox = $('hp-box');
     this.hpBar = $('hp-bar');
     this.hpText = $('hp-text');
     this.ammoNum = $('ammo-num');
@@ -61,13 +62,19 @@ export class UI {
   setWave(n) {
     if (this._c.wave !== n) {
       this._c.wave = n;
-      this.waveNum.textContent = n;
+      // Zero-padded to two digits. A cabinet readout has a fixed number of
+      // cells whether they are lit or not, and a wave counter that jumps from
+      // one glyph wide to two shunts the whole plate sideways mid-run.
+      this.waveNum.textContent = String(n).padStart(2, '0');
     }
   }
   setEnemies(n) {
     if (this._c.enemies !== n) {
       this._c.enemies = n;
-      this.enemies.textContent = 'ENEMIES ' + n;
+      this.enemies.textContent = String(n).padStart(2, '0') + ' LEFT';
+      // The pip beside the count goes from red to green the instant the arena
+      // is clear - the one state change worth seeing without reading a number.
+      this.enemies.classList.toggle('clear', n === 0);
     }
   }
   /**
@@ -90,7 +97,7 @@ export class UI {
     const q = Math.round(Math.max(0, Math.min(1, frac)) * 200) / 200;
     if (this._c.bossFrac !== q) {
       this._c.bossFrac = q;
-      this.bossHp.style.width = (q * 100) + '%';
+      this.bossHp.style.transform = 'scaleX(' + q + ')';
     }
     if (this._c.bossNote !== note) {
       this._c.bossNote = note;
@@ -98,14 +105,19 @@ export class UI {
     }
     if (this._c.bossState !== state) {
       this._c.bossState = state;
-      this.bossBar.className = state || '';
+      // `plate` is structural - it carries the chamfer and the frame ring -
+      // so the state class is appended to it rather than replacing it.
+      this.bossBar.className = 'plate' + (state ? ' ' + state : '');
     }
   }
 
   setScore(n) {
     if (this._c.score !== n) {
       this._c.score = n;
-      this.scoreNum.textContent = n.toLocaleString();
+      // Six fixed cells, no separators: the arcade high-score readout. In a
+      // bitmap face a comma is a wobble in an otherwise perfect column, and a
+      // score that changes width every few kills never settles.
+      this.scoreNum.textContent = String(n).padStart(6, '0');
     }
   }
   setHealth(h, max) {
@@ -115,35 +127,29 @@ export class UI {
     if (this._c.hp === shown) return;
     this._c.hp = shown;
     const p = Math.max(0, Math.min(100, (h / max) * 100));
-    const low = p < 30;
-    this.hpBar.style.width = p + '%';
-    this.hpBar.style.background = low
-      ? 'linear-gradient(90deg,#ff3b30,#ff7a45)'
-      : 'linear-gradient(90deg,#37e08b,#b6f54c)';
-    this.hpBar.style.boxShadow = low
-      ? '0 0 12px rgba(255,59,48,0.6)'
-      : '0 0 12px rgba(55,224,139,0.5)';
+    // The bar is cut into 20 cells by a mask on its TRACK, so the width here
+    // is quantised to a whole cell: a fill that stops halfway through a cell
+    // says the interface is drawing sub-pixels, which is the one thing this
+    // HUD is built not to do.
+    const cells = Math.ceil((p / 100) * 20);
+    this.hpBar.style.transform = 'scaleX(' + (cells / 20) + ')';
+    // Colour and the beat on the readout are a CLASS now rather than three
+    // inline writes: the low state is a state of the whole box, and the
+    // stylesheet is where it belongs.
+    this.hpBox.classList.toggle('low', p < 30);
     this.hpText.textContent = shown + ' / ' + max;
   }
   setAmmo(mag, reserve, reloading) {
     if (this._c.mag !== mag) {
       this._c.mag = mag;
       this.ammoNum.textContent = mag;
-      this.ammoNum.style.color = mag === 0 ? '#ff3b30' : '#fff';
+      this.ammoNum.classList.toggle('empty', mag === 0);
     }
     if (this._c.reserve !== reserve) {
       this._c.reserve = reserve;
-      this.ammoRes.textContent = ' / ' + reserve;
-      if (reserve === 0) {
-        this.ammoRes.style.color = '#ff3b30';
-        this.ammoRes.style.animation = 'pulse 0.5s infinite alternate';
-      } else if (reserve < 30) {
-        this.ammoRes.style.color = '#ffcc00';
-        this.ammoRes.style.animation = 'none';
-      } else {
-        this.ammoRes.style.color = '#5b6785';
-        this.ammoRes.style.animation = 'none';
-      }
+      this.ammoRes.textContent = '/ ' + reserve;
+      this.ammoRes.classList.toggle('out', reserve === 0);
+      this.ammoRes.classList.toggle('warn', reserve > 0 && reserve < 30);
     }
     if (this._c.reload !== reloading) {
       this._c.reload = reloading;
@@ -321,9 +327,27 @@ export class UI {
     this.pauseOv.classList.add('hidden');
   }
   showOver(score, wave, kills, bestCombo = 0) {
-    this.overStats.innerHTML =
-      'WAVE REACHED <b>' + wave + '</b> &nbsp;·&nbsp; SCORE <b>' + score.toLocaleString() + '</b> &nbsp;·&nbsp; KILLS <b>' + kills + '</b>'
-      + ' &nbsp;·&nbsp; BEST CHAIN <b>' + bestCombo + '</b>';
+    // Four columns of one reading, not one sentence. At 8x8 a run-on line of
+    // labels and numbers separated by middots is a wall the player has to read
+    // left to right; a divided strip is scanned in a glance, and the number
+    // the player came for is the largest thing in each column.
+    this.overStats.textContent = '';
+    const stats = [
+      ['WAVE', String(wave)],
+      ['SCORE', String(score).padStart(6, '0')],
+      ['KILLS', String(kills)],
+      ['BEST CHAIN', String(bestCombo)],
+    ];
+    for (const [label, value] of stats) {
+      const cell = document.createElement('div');
+      cell.className = 'rs';
+      const l = document.createElement('u');
+      l.textContent = label;
+      const v = document.createElement('b');
+      v.textContent = value;
+      cell.append(l, v);
+      this.overStats.appendChild(cell);
+    }
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
   }
@@ -354,7 +378,11 @@ export class UI {
       cell('lb-rank', String(i + 1));
       cell('lb-name', e.name || '---');
       cell('lb-wave', 'WAVE ' + e.wave);
-      cell('lb-score', e.score.toLocaleString());
+      // Padded, not separated, to match the score readout on the HUD and the
+      // one in the run strip above the board: three different renderings of the
+      // same number on one screen is three numbers as far as the eye is
+      // concerned.
+      cell('lb-score', String(e.score).padStart(6, '0'));
       el.appendChild(row);
     });
   }
@@ -487,8 +515,9 @@ export class UI {
   // hides any buff icon left over from the previous run.
   resetCache() {
     this._c = {};
-    this.bossBar.classList.add('hidden');
-    this.bossBar.className = 'hidden';
+    this.bossBar.className = 'plate hidden';
+    this.hpBox.classList.remove('low');
+    this.enemies.classList.remove('clear');
     this.comboEl.classList.add('hidden');
     this.promptEl.classList.add('hidden');
     this.hideStats();

@@ -135,6 +135,48 @@ const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
 // neither a benefit nor a drawback, it is the thing you are agreeing to.
 const COST_COLOR = '#ff1744';
 
+// ---------------------------------------------------------------------------
+// PIXEL TEXT ON A CANVAS TEXTURE
+//
+// The cards are drawn in the same face the HUD is set in, so a floating offer
+// and the plate it will become on the TAB sheet are visibly the same machine.
+// Two things follow from the face being a bitmap one:
+//
+//   · SIZES ARE MULTIPLES OF 8. Press Start 2P was drawn on an 8x8 grid, and
+//     any other size lands its stems between texels once the card is mapped
+//     onto a quad in the arena.
+//   · IT IS ROUGHLY TWICE AS WIDE AS THE SANS IT REPLACED, so a line that fit
+//     before does not. `pxText` steps the size DOWN a 4px ladder until the
+//     line fits the width it was given, rather than letting a long name -
+//     ETERNAL AFFLICTION is eighteen characters - run off the card. Four
+//     rather than eight because the difference between a name at 24 and the
+//     effect lines at 16 is what makes the card have a hierarchy, and a
+//     coarser ladder throws long names straight down to body size.
+const PX_FONT = '"Press Start 2P", monospace';
+
+function pxText(c, text, x, y, size, maxWidth) {
+  let s = size;
+  c.font = s + 'px ' + PX_FONT;
+  while (s > 12 && c.measureText(text).width > maxWidth) {
+    s -= 4;
+    c.font = s + 'px ' + PX_FONT;
+  }
+  // Below the ladder's floor the glyphs would stop being readable at arena
+  // distance, so the last resort is a horizontal squeeze rather than a size
+  // nobody can see.
+  const w = c.measureText(text).width;
+  if (w > maxWidth) {
+    c.save();
+    c.translate(x, y);
+    c.scale(maxWidth / w, 1);
+    c.fillText(text, 0, 0);
+    c.restore();
+    return;
+  }
+  c.fillText(text, x, y);
+}
+
+
 // ---- THE OFFER IS A SHAFT OF LIGHT, NOT A PILLAR -------------------------
 //
 // An offer used to be a solid emissive box with the icon hovering in front of
@@ -286,7 +328,10 @@ function driveColumn(col, lit, floorY, time, phase) {
 // naturally shoot. Not the whole 12m shaft: a claim wants to be a shot AT the
 // offer, not any pellet that crossed the light on its way to the ceiling.
 const HIT_GEOM = new THREE.BoxGeometry(1.7, 3.2, 1.7);
-const STATION_GEOM = new THREE.BoxGeometry(1.0, 1.4, 0.5);
+// The station's claim volume, covering its column and the icon orbiting in
+// front of it. Invisible, exactly like a totem's: see the note in the Station
+// constructor for why the console lost its body.
+const STATION_HIT_GEOM = new THREE.BoxGeometry(1.4, 2.6, 1.4);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
 const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
@@ -532,14 +577,12 @@ export class Totem {
     //
     // Long weapon names need to shrink to stay on one line.
     c.fillStyle = '#ffffff';
-    c.font = 'bold ' + (offer.name.length > 15 ? 34 : 42) + 'px system-ui, sans-serif';
-    c.fillText(offer.name, 256, 92);
+    pxText(c, offer.name, 256, 92, 32, 488);
 
-    c.font = 'bold 28px system-ui, sans-serif';
     let y = 156;
     for (const [text, sign] of offer.effects) {
       c.fillStyle = SIGN_COLOR[String(sign)];
-      c.fillText(text, 256, y);
+      pxText(c, text, 256, y, 16, 460);
       y += 38;
     }
 
@@ -552,17 +595,15 @@ export class Totem {
     // sign and a number is the shortest form the price can take, and it reads
     // the same way the red drawback lines above it do.
     if (offer.cost) {
-      c.font = 'bold 30px system-ui, sans-serif';
       c.fillStyle = dim ? '#8792ad' : COST_COLOR;
-      c.fillText(
-        dim ? 'CANNOT AFFORD' : '\u2212' + offer.cost + ' MAX HP', 256, 292
+      pxText(
+        c, dim ? 'CANNOT AFFORD' : '-' + offer.cost + ' MAX HP', 256, 292, 24, 460
       );
     } else if (offer.note) {
-      c.font = '600 22px system-ui, sans-serif';
       // Lifted off the near-black it used to be. With no panel under it, a
       // note at #5b6785 is a line nobody can find in a dark room.
       c.fillStyle = '#9fb0d0';
-      c.fillText(offer.note, 256, 292);
+      pxText(c, offer.note, 256, 292, 16, 460);
     }
     c.globalAlpha = 1;
     c.shadowBlur = 0;
@@ -706,27 +747,30 @@ export class Station {
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
-    this.mat = new THREE.MeshStandardMaterial({
-      color: 0x161b26, emissive: this.color, emissiveIntensity: 0.5,
-      roughness: 0.4, metalness: 0.7,
-    });
-    // A narrower column of the station's own colour over the console. The
-    // consoles KEEP their bodies - a shop is a thing you walk up to and the
-    // totems are not - but with the room blacked out behind the offers, an
-    // unlit box at the end of the row is a box nobody finds. The light is what
-    // says there is something there; the body is what it is standing on.
+    // A narrower column of the station's own colour, and NOTHING ELSE SOLID.
+    //
+    // The consoles used to keep a physical body - a small dark box that the
+    // icon and the price hung in front of - on the argument that a shop is a
+    // thing you walk up to and a totem is not. It read as a RECTANGLE DRAWN
+    // AROUND THE ICON: the three offers in the same row are made of light and
+    // have no container at all, so the consoles at the ends of the row were
+    // the only things at the wave break wearing a frame, and a frame reads as
+    // a different KIND of thing rather than as a different price. The column,
+    // the icon and the label say everything the box was there to say, in the
+    // language the rest of the row is already written in.
     this.col = makeColumn(this.group, 0.8, 1.9);
     this.col.shaftMat.color.setHex(this.color);
     this.col.poolMat.color.setHex(this.color);
 
-    this.body = new THREE.Mesh(STATION_GEOM, this.mat);
-    this.body.position.y = 0.7;
-    this.body.castShadow = true;
-    // How main.js tells a station hit from an ordinary wall hit. The whole
-    // body is the target, the same as a totem - a station purchase is
-    // repeatable and rate-limited, so a stray hit costs a shot, not a build.
-    this.body.userData.station = this;
-    this.group.add(this.body);
+    // With the body gone the console still has to be shootable, so it takes
+    // the same invisible claim volume a totem has, sized around the column and
+    // the icon orbiting in front of it. A station purchase is repeatable and
+    // rate-limited, so a stray hit costs a shot, not a build.
+    this.hit = new THREE.Mesh(STATION_HIT_GEOM, HIT_MAT);
+    this.hit.position.y = 1.3;
+    // How main.js tells a station hit from an ordinary wall hit.
+    this.hit.userData.station = this;
+    this.group.add(this.hit);
 
     // An icon in front of the console, orbiting to the player's side and
     // turning to face them, exactly as a totem's does. The stations were the
@@ -756,10 +800,24 @@ export class Station {
     scene.add(this.group);
   }
 
-  // No card behind it, for the same reason an offer no longer has one - see
-  // the note in Totem._draw(). A dark rounded rectangle beside three columns
-  // of light is the one thing in the row that could not be made of light.
-  setLabel(title, cost, enabled) {
+  /**
+   * The console's label. No card behind it, for the same reason an offer no
+   * longer has one - see the note in Totem._draw(). A dark rounded rectangle
+   * beside three columns of light is the one thing in the row that could not
+   * be made of light.
+   *
+   * `detail` is optional and names WHAT THE PURCHASE GIVES - '+5 MAX HP'. A
+   * price with nothing to weigh it against is not a decision, and MAX HEALTH
+   * is the one console whose title does not already answer the question: AMMO
+   * and REROLL say what they do, and 'MAX HEALTH' for $5,000 could as easily
+   * be a full heal or a doubling. It is drawn in the same green an offer card
+   * writes its upsides in, so the gain reads the way every other gain in the
+   * game does.
+   *
+   * With no detail the two lines sit where they always have, so the consoles
+   * that have nothing more to say are untouched.
+   */
+  setLabel(title, cost, enabled, detail = '') {
     const c = this.panel.canvas.getContext('2d');
     const col = hex(this.color);
     c.clearRect(0, 0, 256, 160);
@@ -771,19 +829,22 @@ export class Station {
     c.fillStyle = col;
     c.shadowColor = col;
     c.shadowBlur = 18;
-    roundRect(c, 68, 20, 120, 5, 3);
+    roundRect(c, 68, detail ? 14 : 20, 120, 5, 3);
     c.fill();
 
     // Drawn once and clean, for the reason in Totem._draw(): a glow the colour
     // of the letters it sits under is a thicker, muddier version of the same
     // letters.
     c.shadowBlur = 0;
-    c.font = 'bold 34px system-ui, sans-serif';
-    c.fillText(title, 128, 74);
+    pxText(c, title, 128, detail ? 58 : 74, 24, 232);
+
+    if (detail) {
+      c.fillStyle = enabled ? SIGN_COLOR['1'] : '#8792ad';
+      pxText(c, detail, 128, 98, 16, 232);
+    }
 
     c.fillStyle = enabled ? '#ffffff' : '#8792ad';
-    c.font = 'bold 30px system-ui, sans-serif';
-    c.fillText(cost, 128, 120);
+    pxText(c, cost, 128, detail ? 138 : 120, 24, 232);
     c.globalAlpha = 1;
     this.panel.tex.needsUpdate = true;
   }
@@ -832,7 +893,6 @@ export class Station {
     }
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
-    this.mat.emissiveIntensity = 0.45 + Math.sin(time * 3) * 0.15;
     // Dimmer than an offer's: the two stations frame the row and must not
     // compete with the three things in it that are actually a choice.
     driveColumn(this.col, e * 0.65, -this.group.position.y, time, this.pos.x);
@@ -936,16 +996,17 @@ export class TotemArea {
   }
 
   // Appends this set's shootable parts to a raycast target list. One invisible
-  // box per standing totem, sized around the pillar and its icon: hitting it
-  // anywhere claims the offer and stops the pellet. Station bodies go in too -
-  // they carry userData.station and are bought by shooting them.
+  // box per standing totem or station, sized around the pillar and its icon:
+  // hitting it anywhere claims the offer, or buys from the console, and stops
+  // the pellet. The two carry different userData keys, which is how main.js
+  // tells a claim from a purchase.
   addTargets(out) {
     for (const t of this.totems) {
       if (t.state === 'hidden') continue;
       out.push(t.hit);
     }
     for (const s of this.stations) {
-      if (s.state !== 'hidden') out.push(s.body);
+      if (s.state !== 'hidden') out.push(s.hit);
     }
   }
 

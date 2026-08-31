@@ -17,6 +17,8 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.m4a': 'audio/mp4',
+  '.ttf': 'font/ttf',
+  '.woff2': 'font/woff2',
 };
 
 // Files served as a byte range rather than read whole. The soundtrack is

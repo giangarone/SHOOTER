@@ -363,7 +363,7 @@ export class DevilArea {
       out.push(d.hit);
     }
     for (const st of this.stations) {
-      if (st.state !== 'hidden') out.push(st.body);
+      if (st.state !== 'hidden') out.push(st.hit);
     }
   }
 
