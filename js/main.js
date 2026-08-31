@@ -372,7 +372,18 @@ class Game {
       // The camera's world position, so the laser bank can billboard its
       // ribbons. A reference, not a copy: the camera object outlives the run.
       camPos: null,
+      // Where the offers are standing and what colour each is - see
+      // _fillOffers(). Emptied and refilled every frame; never reallocated.
+      offers: [],
     };
+    // The entries that array is filled with. Three, because a row is three,
+    // and reused rather than rebuilt for the same reason everything else in
+    // the frame loop is.
+    this._offerSlots = [
+      { x: 0, z: 0, color: 0xffffff },
+      { x: 0, z: 0, color: 0xffffff },
+      { x: 0, z: 0, color: 0xffffff },
+    ];
 
     // Scratch objects reused every frame so the hot path allocates nothing.
     this._shakeV = new THREE.Vector3();
@@ -872,6 +883,15 @@ class Game {
     r.bar = this.music.bar;
     r.downbeat = this.music.downbeat;
     r.camPos = this.camera.position;
+    // What is standing at the wave break, for the two accent lights to park
+    // over and take their colour from - see HOUSE_ACCENT in rig.js. The
+    // TOTEMS when they are up, the Devil's deals when his row is the only one
+    // left; an empty list in the fight, which is when the accents are doing
+    // their own thing anyway.
+    //
+    // Refilled in place into a preallocated array of preallocated entries, so
+    // the loop still allocates nothing.
+    this._fillOffers(r);
     // Clamped: a health pickup can overheal past max, which would drive the
     // low-health maths backwards.
     r.healthFrac = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
@@ -884,6 +904,26 @@ class Game {
       r.bossPos = null;
     }
     return r;
+  }
+
+  // Fills `r.offers` with one {x, z, color} per standing offer, LEFT TO RIGHT.
+  // The order is what lets the rig take the outer two and straddle the row
+  // with them rather than lighting one end of it twice.
+  _fillOffers(r) {
+    const out = r.offers;
+    out.length = 0;
+    const row = this.totemArea.active ? this.totemArea.totems
+      : this.devilArea.active ? this.devilArea.deals : null;
+    if (!row) return;
+    for (const t of row) {
+      if (t.state === 'hidden' || t.claimed || !t.offer) continue;
+      // Entries are reused; only three exist and the row is at most three.
+      const slot = this._offerSlots[out.length];
+      slot.x = t.pos.x;
+      slot.z = t.pos.z;
+      slot.color = t.offer.theme;
+      out.push(slot);
+    }
   }
 
   // True when a text field has focus, so the global key handlers stand down.

@@ -217,8 +217,47 @@ const HOUSE = 0xffffff;
 // the shape of is a room they get stuck in. The fill and key keep a few
 // percent, which is enough for a silhouette and nowhere near enough to
 // compete with a column.
-const HOUSE_FILL = 0.12;
-const HOUSE_KEY = 0.08;
+// Raised twice from the 0.12 / 0.08 this started at, and the reason is worth
+// keeping: at a tenth of the fight's light the room was not dark, it was
+// ABSENT. The floor, the crates and the platform a player was about to walk
+// into all disappeared, and once nothing in the room could be seen there was
+// nothing in it to look at either - dark stopped reading as atmosphere and
+// started reading as broken.
+//
+// Half of the fight's light, then. That still reads instantly as a blackout,
+// because the fight's own light is the smaller half of what a wave looks like:
+// what actually goes away at a break is the beams, the lasers, the moving
+// heads, the accents on their orbit and the strobe. The fill and the key were
+// never the show. They are what makes the venue a place, and a place is what
+// the player is standing in while they choose.
+const HOUSE_FILL = 0.5;
+const HOUSE_KEY = 0.45;
+
+// THE OFFERS LIGHT THE ROOM. The arena's two roaming accent points are parked
+// over the outermost two columns at a break and take THOSE offers' colours.
+//
+// This is the piece that stops the break being a still photograph, and it is
+// worth being clear about why it is not a fourth colour competing with the
+// three: it is the same colour, arriving somewhere else. The columns are
+// additive geometry - they are bright but they light nothing, so the floor
+// around an offer is as black as the floor anywhere else and the whole row
+// reads as three cutouts pasted onto a dark image. Giving the offers their own
+// spill puts them IN the room instead of in front of it.
+//
+// No new lights: these two already exist and already move (see arena.js and
+// the orbit below). All that changes at a break is where they sit and what
+// colour they wear.
+const HOUSE_ACCENT = 48;
+// How fast they walk to the offers and back. Slow: it should read as the rig
+// finding the row, not as two lights teleporting on the beat.
+const HOUSE_ACCENT_EASE = 1.6;
+// And they PULL THEIR RANGE IN when they get there. A point light with the
+// arena's own 24m reach standing in the middle of the row does not light the
+// offers, it lights the building - the first pass at this washed every wall in
+// the venue lilac and undid the blackout in one line. At nine metres the spill
+// dies inside the row, which is the whole idea: the floor around an offer is
+// lit BY that offer and the rest of the room is not.
+const HOUSE_ACCENT_RANGE = 9;
 // THE EMISSIVE EDGES DO NOT DIM AT ALL. Wall strips, deck lips, platform lips,
 // fixture lenses: they burn at their combat brightness right through the
 // break, and the only thing the break takes from them is their colour.
@@ -240,7 +279,7 @@ const HOUSE_KEY = 0.08;
 const HOUSE_WALL = 1.1;
 // The air thickens a little instead of clearing. A shaft is only as visible as
 // the haze it crosses, and the columns are the whole point of the break.
-const HOUSE_FOG = 1.3;
+const HOUSE_FOG = 1.0;
 
 
 // The beam's look, baked once into one shared texture.
@@ -574,8 +613,13 @@ export class Rig {
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
       // rather than as sliding past it. The break's blackout stops it dead.
+      // It keeps stepping through the wave break. It used to stop dead there,
+      // on the argument that an intermission is the show stopping - and with
+      // the room blacked out that turned out to be the difference between a
+      // dark room and a still photograph of one. `_energy` is already at its
+      // idle floor between waves, so it walks at the slow lap rate on its own.
       const lapBeats = LAP_BEATS_IDLE + (LAP_BEATS_HOT - LAP_BEATS_IDLE) * this._energy;
-      this._chaseTarget += (1 / lapBeats) * (1 - this._house);
+      this._chaseTarget += 1 / lapBeats;
     }
 
     // ---- cue timers --------------------------------------------------------
@@ -662,7 +706,9 @@ export class Rig {
       * (1 - h * (1 - HOUSE_KEY));
 
     // ---- the colour accents ------------------------------------------------
-    // The two roaming accent points go out with everything else at the break.
+    // In the fight: two points wearing the room's colour, orbiting out of
+    // phase. At a break: parked over the outer two offers, wearing THEIR
+    // colours - see HOUSE_ACCENT.
     const accentGain = (1 - dark) * (0.45 + level * 0.9 + beat * 1.5 * this._energy)
       * (1 - this._house * 0.94);
     const p1 = this.lights.p1;
@@ -681,10 +727,30 @@ export class Rig {
       p2.intensity += 26 * heart;
     }
     // Orbit the accents around the room while the show is on.
-    if (this._house < 0.9) {
-      const a = this.t * 0.5;
-      p1.position.set(Math.cos(a) * 13, 3.6, Math.sin(a) * 13);
-      p2.position.set(Math.cos(a + Math.PI) * 13, 3.6, Math.sin(a + Math.PI) * 13);
+    const a = this.t * 0.5;
+    this._orbit(p1, Math.cos(a) * 13, 3.6, Math.sin(a) * 13, dt);
+    this._orbit(p2, Math.cos(a + Math.PI) * 13, 3.6, Math.sin(a + Math.PI) * 13, dt);
+    // ...and at a break they walk off the orbit and stand over the row.
+    //
+    // `s.offers` is up to three {x, z, color} entries, refilled by main.js from
+    // whatever is actually standing - the totems, or the Devil's deals when
+    // his row is the one up. The OUTER two are taken so the pair straddles the
+    // row rather than doubling up on one end of it; with a single offer left
+    // standing they both take it.
+    if (this._house > 0.001 && s.offers && s.offers.length) {
+      const o1 = s.offers[0];
+      const o2 = s.offers[s.offers.length - 1];
+      // Low, so the pool lands on the floor around the column rather than
+      // washing the whole room from head height.
+      this._toward(p1, o1, dt);
+      this._toward(p2, o2, dt);
+      // Breathing out of phase, the same as in the fight - two lights holding
+      // still at a fixed value is the thing that made the break read as a
+      // photograph.
+      const b1 = 0.75 + 0.25 * Math.sin(this.t * 1.1);
+      const b2 = 0.75 + 0.25 * Math.sin(this.t * 1.1 + Math.PI);
+      p1.intensity += HOUSE_ACCENT * this._house * b1;
+      p2.intensity += HOUSE_ACCENT * this._house * b2;
     }
 
     // ---- moving heads (the two real lights) -------------------------------
@@ -791,6 +857,14 @@ export class Rig {
     this.lasers.update(dt, s.camPos, this._laserColour, punch, laserMaster);
 
     // ---- emissive furniture -----------------------------------------------
+    // THE PHRASE BREATH, hoisted here because both the furniture and the fog
+    // read it. Over the four bars of a look it swells and falls once, driven
+    // by the bar clock rather than by wall time so the swell arrives with the
+    // phrase it belongs to. Sixteen beats of a look, counted from the two
+    // counters the rig already keeps.
+    const step = (this._barsHeld * 4 + s.bar) / (LOOK_BARS * 4);
+    const breath = 0.5 - 0.5 * Math.cos(step * Math.PI * 2);
+
     // Shared materials, so one write lights every lamp head, deck edge and
     // platform lip in the venue.
     //
@@ -808,7 +882,13 @@ export class Rig {
     // Untouched by the break - see HOUSE_WALL. These are the edges a player
     // crossing a dark floor is reading, and they read by being lights rather
     // than by being lit.
-    const emGain = 1 - dark;
+    //
+    // What the break DOES give them is the phrase breath. In the fight they
+    // are driven by the beat and never sit still; at a break the beat term is
+    // gone, and an edge holding one exact value for fifteen seconds is the
+    // difference between a lit room and a screenshot of one. This is a slow
+    // swell over four bars, not a pulse - it should be felt rather than seen.
+    const emGain = (1 - dark) * (1 + this._house * (breath - 0.5) * 0.5);
     this.mats.trim.emissive.copy(emCol);
     this.mats.trim.emissiveIntensity = trimGain * emGain;
     this.mats.deckEdge.emissive.copy(emCol);
@@ -846,7 +926,11 @@ export class Rig {
     // rigs disagreeing rather than as one colour arriving.
     this._trail.lerp(this._colour, Math.min(1, dt * 2.2));
     const base = (0.16 + level * 0.5) * (1 - this._house) + HOUSE_WALL * this._house;
-    const cometGain = (0.7 + beat * 3.4 * this._energy) * (1 - this._house);
+    // The comet survives the break at a fixed strength instead of riding the
+    // beat: the track is muffled and the rig is not playing to it, but one
+    // bright cell walking the wall is what says the venue is still running.
+    const cometGain = (0.7 + beat * 3.4 * this._energy) * (1 - this._house)
+      + 1.1 * this._house;
     for (let i = 0; i < n; i++) {
       const m = cells[i];
       // The two-tone lag holds through the break as well: both colours are
@@ -882,11 +966,7 @@ export class Rig {
     // every shaft in the room brighter as it comes in, because a beam is only
     // as visible as the smoke it is crossing.
     //
-    // Driven by the bar clock rather than by wall time, so the swell arrives
-    // with the phrase it belongs to. Sixteen beats of a look, counted from the
-    // two counters the rig already keeps.
-    const step = (this._barsHeld * 4 + s.bar) / (LOOK_BARS * 4);
-    const breath = 0.5 - 0.5 * Math.cos(step * Math.PI * 2);
+    // `breath` is computed up with the furniture, which reads it too.
     const fogTarget = (boss ? FOG_DENSITY_BOSS : FOG_DENSITY)
       * (1 + level * 0.3 + breath * FOG_BREATH)
       * (1 + this._house * (HOUSE_FOG - 1));
@@ -895,7 +975,7 @@ export class Rig {
     // The far wall and the sky go to black with the room. Fog colour is also
     // the background here, so leaving it at its lit value would put a grey
     // halo behind three columns standing in the dark.
-    if (this._house > 0.001) this._c.multiplyScalar(1 - this._house * 0.85);
+    if (this._house > 0.001) this._c.multiplyScalar(1 - this._house * 0.55);
     this.scene.fog.color.copy(this._c);
     this.scene.background.copy(this._c);
 
@@ -909,6 +989,38 @@ export class Rig {
     f = Math.max(f, waveHit * 0.5, stagHit * 0.7);
     if (boss && this._enraged) f = Math.max(f, beat * 0.55);
     this.flash = Math.min(0.8, f * (1 - this._house));
+  }
+
+  // Moves an accent towards a point on its orbit. Eased rather than set, so
+  // that a light coming BACK from an offer at the start of a wave slides home
+  // instead of jumping - the position is shared between the two modes and the
+  // handover has to be invisible.
+  _orbit(light, x, y, z, dt) {
+    const k = Math.min(1, dt * 2.5) * (1 - this._house);
+    light.position.x += (x - light.position.x) * k;
+    light.position.y += (y - light.position.y) * k;
+    light.position.z += (z - light.position.z) * k;
+  }
+
+  // Walks an accent to an offer's column, pulls its range in and takes the
+  // offer's colour. `o` is one of the {x, z, color} entries main.js hands the
+  // rig.
+  //
+  // The POSITION eases frame to frame, because it is persistent state and a
+  // light that jumped between the orbit and the row would read as a cut. The
+  // COLOUR and the RANGE do not: both are written from scratch every frame by
+  // the code above this, so easing them here would only ever apply one frame's
+  // worth of the walk and the light would sit at its combat value forever -
+  // which is exactly the bug this replaced. They are mixed by `_house`, which
+  // is already the eased quantity.
+  _toward(light, o, dt) {
+    const k = Math.min(1, dt * HOUSE_ACCENT_EASE) * this._house;
+    light.position.x += (o.x - light.position.x) * k;
+    light.position.y += (2.0 - light.position.y) * k;
+    light.position.z += (o.z - light.position.z) * k;
+    this._c.setHex(o.color);
+    light.color.lerp(this._c, this._house);
+    light.distance = 24 + (HOUSE_ACCENT_RANGE - 24) * this._house;
   }
 
   // Walks a spotlight's aim point around the floor. `out` is written in place.
