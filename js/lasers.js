@@ -148,11 +148,17 @@ const GLOW_R = 0.5;
 // The halo against the core. Under one, so the core reads as a separate,
 // harder thing sitting inside it rather than as the peak of one smooth blob.
 const HALO = 0.55;
+// A beam meeting a surface square on makes a round spot; one arriving at a
+// shallow angle makes a long one, because the same round cross-section is
+// being spread over more surface - by exactly 1/cos of the incidence angle.
+// That ratio runs away to infinity as a ray goes parallel to the floor, and a
+// twenty-metre smear is not a light pool, so it is capped.
+const STRETCH_MAX = 3.0;
 // How bright a spot is against the ray that made it. Over one: see above.
 const IMPACT_GAIN = 1.35;
-// Pushed this far towards the camera off the surface it sits on. The point is
-// exactly ON the wall, and a billboard coplanar with a wall z-fights with it.
-const IMPACT_LIFT = 0.06;
+// Pushed this far off the surface, ALONG ITS NORMAL. The point is exactly on
+// the wall, and geometry coplanar with a wall z-fights with it.
+const IMPACT_LIFT = 0.05;
 
 // ---- strays ----------------------------------------------------------------
 // Single rays from nowhere in particular, in bursts of one to five, lasting a
@@ -169,21 +175,6 @@ const STRAY_OUT = 0.12;
 function distance(x, y, z, p) {
   const dx = x - p.x, dy = y - p.y, dz = z - p.z;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-// How far a ray from (ox,oy,oz) along (dx,dy,dz) travels before it leaves the
-// room. Slab intersection against the six planes, nearest positive hit.
-function exitT(ox, oy, oz, dx, dy, dz) {
-  let t = MAX_LEN;
-  if (dx > 1e-6) t = Math.min(t, (BOUND - ox) / dx);
-  else if (dx < -1e-6) t = Math.min(t, (-BOUND - ox) / dx);
-  if (dz > 1e-6) t = Math.min(t, (BOUND - oz) / dz);
-  else if (dz < -1e-6) t = Math.min(t, (-BOUND - oz) / dz);
-  if (dy > 1e-6) t = Math.min(t, (CEIL_Y - oy) / dy);
-  else if (dy < -1e-6) t = Math.min(t, -oy / dy);
-  // Never zero: a degenerate ribbon would still be submitted and would still
-  // cost a triangle, and it can produce a NaN normal on the way.
-  return Math.max(0.6, t);
 }
 
 function dynamic(array, itemSize) {
@@ -397,26 +388,93 @@ export class Lasers {
     this._n = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._up = new THREE.Vector3();
+    // Surface normal of the last hit found by _exit(), pointing back into the
+    // room. Kept as fields rather than returned, so the hot path allocates
+    // nothing to carry two values out of one function.
+    this._hitNx = 0; this._hitNy = 1; this._hitNz = 0;
   }
 
-  // Writes one landing spot into the impact pool: a billboarded fan with a
-  // hard core and a soft halo, both carried in the vertex alpha.
-  _impact(x, y, z, alpha, camPos) {
+  // How far a ray from (ox,oy,oz) along (dx,dy,dz) travels before it leaves
+  // the room, and which of the six planes it leaves through. Slab
+  // intersection, nearest positive hit.
+  //
+  // The plane is the whole reason this is not just a distance: knowing WHICH
+  // surface was struck gives the impact decal its orientation for free. The
+  // normal is the opposite of the ray's own direction on the winning axis,
+  // because a ray heading at +x leaves through the +x wall, whose inward face
+  // points back at -x.
+  _exit(ox, oy, oz, dx, dy, dz) {
+    let t = MAX_LEN, axis = 1, sign = 1;
+    if (dx > 1e-6) {
+      const h = (BOUND - ox) / dx;
+      if (h < t) { t = h; axis = 0; sign = -1; }
+    } else if (dx < -1e-6) {
+      const h = (-BOUND - ox) / dx;
+      if (h < t) { t = h; axis = 0; sign = 1; }
+    }
+    if (dz > 1e-6) {
+      const h = (BOUND - oz) / dz;
+      if (h < t) { t = h; axis = 2; sign = -1; }
+    } else if (dz < -1e-6) {
+      const h = (-BOUND - oz) / dz;
+      if (h < t) { t = h; axis = 2; sign = 1; }
+    }
+    if (dy > 1e-6) {
+      const h = (CEIL_Y - oy) / dy;
+      if (h < t) { t = h; axis = 1; sign = -1; }
+    } else if (dy < -1e-6) {
+      const h = -oy / dy;
+      if (h < t) { t = h; axis = 1; sign = 1; }
+    }
+    this._hitNx = axis === 0 ? sign : 0;
+    this._hitNy = axis === 1 ? sign : 0;
+    this._hitNz = axis === 2 ? sign : 0;
+    // Never zero: a degenerate ribbon would still be submitted and would still
+    // cost a triangle, and it can produce a NaN basis on the way.
+    return Math.max(0.6, t);
+  }
+
+  // Writes one landing spot into the impact pool: a hard core and a soft halo,
+  // both carried in the vertex alpha.
+  //
+  // IT IS A DECAL, NOT A BILLBOARD, and that is the whole point of it. A disc
+  // turned to face the camera stands UP out of the floor when you look along
+  // the floor, and the floor's own depth then slices it off in a dead straight
+  // line - a hard cut across what is supposed to be a soft pool. Lying it in
+  // the surface instead leaves nothing to cut: the geometry is parallel to
+  // what it sits on and a few centimetres in front of it.
+  //
+  // Seen at a grazing angle it foreshortens into a thin ellipse, which is not
+  // a defect - it is what a pool of light on a floor does, and it is the thing
+  // that makes it read as being ON the floor.
+  //
+  // The spot is STRETCHED along the ray's own direction in the plane. A beam
+  // meeting a surface square on makes a circle; one arriving shallow spreads
+  // the same cross-section over 1/cos of the surface, which is a streak. Only
+  // one axis of the ellipse grows - across the beam nothing has changed.
+  _impact(x, y, z, alpha, camPos, dx, dy, dz) {
     if (this._impactCount >= IMPACT_SLOTS || alpha <= 0.004) return;
     const slot = this._impactCount++;
     const verts = 1 + IMPACT_SEGS * 2;
     const pos = this._impactPos, col = this._impactCol;
     let o = slot * verts * 3, c = slot * verts * 4;
 
-    // A basis facing the camera. Built from the spot's own line of sight
-    // rather than from the camera's orientation, which the rig is not given.
-    this._n.set(camPos.x - x, camPos.y - y, camPos.z - z);
-    const d = this._n.length() || 1;
-    this._n.multiplyScalar(1 / d);
-    this._right.set(0, 1, 0).cross(this._n);
-    if (this._right.lengthSq() < 1e-6) this._right.set(1, 0, 0);
+    this._n.set(this._hitNx, this._hitNy, this._hitNz);
+    // The long axis: the ray's direction flattened into the surface. It
+    // vanishes for a ray arriving dead square, which is exactly the case where
+    // the spot is a circle and the direction does not matter - so any
+    // perpendicular will do there.
+    const along = dx * this._n.x + dy * this._n.y + dz * this._n.z;
+    this._right.set(dx - this._n.x * along, dy - this._n.y * along, dz - this._n.z * along);
+    if (this._right.lengthSq() < 1e-8) {
+      this._right.set(this._n.y, this._n.z, this._n.x);
+      this._right.addScaledVector(this._n, -this._right.dot(this._n));
+    }
     this._right.normalize();
     this._up.crossVectors(this._n, this._right);
+    // 1/cos of the incidence angle, capped. `along` is that cosine already,
+    // the ray and the normal both being unit length.
+    const stretch = Math.min(STRETCH_MAX, 1 / Math.max(Math.abs(along), 1e-3));
 
     const cx = x + this._n.x * IMPACT_LIFT;
     const cy = y + this._n.y * IMPACT_LIFT;
@@ -428,7 +486,7 @@ export class Lasers {
       const a = ring ? 0 : alpha * HALO;
       for (let seg = 0; seg < IMPACT_SEGS; seg++) {
         const t = (seg / IMPACT_SEGS) * Math.PI * 2;
-        const ux = Math.cos(t) * r, uy = Math.sin(t) * r;
+        const ux = Math.cos(t) * r * stretch, uy = Math.sin(t) * r;
         pos[o] = cx + this._right.x * ux + this._up.x * uy;
         pos[o + 1] = cy + this._right.y * ux + this._up.y * uy;
         pos[o + 2] = cz + this._right.z * ux + this._up.z * uy;
@@ -593,11 +651,13 @@ export class Lasers {
   // Writes one camera-facing ribbon and returns the new write offset. `far`,
   // when given, receives the ray's landing point for the fill to reuse.
   _ribbon(buf, o, ax, ay, az, d, wa, camPos, far, slot, spot) {
-    const t = exitT(ax, ay, az, d.x, d.y, d.z);
+    // _exit also records which of the six planes was struck; the decal below
+    // reads its normal straight out of that.
+    const t = this._exit(ax, ay, az, d.x, d.y, d.z);
     const bx = ax + d.x * t, by = ay + d.y * t, bz = az + d.z * t;
     if (far) { far[slot * 3] = bx; far[slot * 3 + 1] = by; far[slot * 3 + 2] = bz; }
     // Where it lands. The one place the ray's whole energy arrives at once.
-    this._impact(bx, by, bz, spot, camPos);
+    this._impact(bx, by, bz, spot, camPos, d.x, d.y, d.z);
     // Billboard: the ribbon's width runs across both the ray and the line of
     // sight, so it keeps its thickness however it is viewed. Edge-on the cross
     // collapses, which is correct - a laser aimed at your eye is a dot.
