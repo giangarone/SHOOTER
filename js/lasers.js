@@ -97,9 +97,12 @@ const EASE = 1.6;
 // Brightness of a lit fan, the peak of a pulsing one, and the ceiling both are
 // clamped to. A pulse peaks higher than a sustain holds, because it is dark
 // most of the time and has to pay for the gap.
-const SUSTAIN = 0.95;
-const PULSE = 1.25;
-const MAX_OP = 0.95;
+// Kept just under the clamp at full drive rather than over it: a value that
+// saturates spends the top of the room's energy range flat, and the last bit
+// of a big combo stops showing up in the light.
+const SUSTAIN = 1.05;
+const PULSE = 1.4;
+const MAX_OP = 1.0;
 // Chance a pair pulses rather than sustains, decided per phrase.
 const PULSE_CHANCE = 0.3;
 // The soft wedge, against the rays' own brightness. Low both because it is
@@ -116,16 +119,50 @@ const APERTURE_FLOOR = 0.35;
 // arrive later in a phrase only read as arriving because something else left.
 const MAX_BARS = 4;
 
+// How many single rays the stray pool holds. Declared up here because the
+// impact pool below is sized to cover every ray in the room at once.
+const STRAYS = 8;
+
+// ---- impacts ---------------------------------------------------------------
+// The spot where a ray lands. A laser in a real room is two things you see: the
+// line through the haze, and the burning dot on whatever it is pointed at - and
+// the dot is the brighter of the two, because it is all of the beam's energy
+// arriving at one place instead of the fraction of it that scatters off smoke
+// on the way. Without it the rays look like they are drawn over the room rather
+// than shone into it.
+//
+// A small hard core at the point itself, and a wider soft halo around it that
+// falls to nothing. Both are one billboarded fan per impact: a centre vertex,
+// an inner ring at the core's edge, and an outer ring at the halo's, with the
+// falloff carried in the vertex alpha exactly as the wedge's is. No texture -
+// the budget is full at twelve - and a hexagon is round enough at this size.
+//
+// ONE MESH FOR EVERY IMPACT IN THE ROOM, banks and strays together, because
+// each impact's brightness is written into its own vertices rather than taken
+// from the material. That is also what lets a pulsing pair's spots pulse while
+// a sustaining pair's hold, on the same draw call.
+const IMPACT_SEGS = 6;
+const IMPACT_SLOTS = 3 * 2 * RAYS + STRAYS;
+const CORE_R = 0.09;
+const GLOW_R = 0.5;
+// The halo against the core. Under one, so the core reads as a separate,
+// harder thing sitting inside it rather than as the peak of one smooth blob.
+const HALO = 0.55;
+// How bright a spot is against the ray that made it. Over one: see above.
+const IMPACT_GAIN = 1.35;
+// Pushed this far towards the camera off the surface it sits on. The point is
+// exactly ON the wall, and a billboard coplanar with a wall z-fights with it.
+const IMPACT_LIFT = 0.06;
+
 // ---- strays ----------------------------------------------------------------
 // Single rays from nowhere in particular, in bursts of one to five, lasting a
 // second or so. The banks above are a rig: symmetric, on the bar, doing
 // something legible. These are the opposite and that is their whole job - a
 // room where everything is on the grid reads as a screensaver, and a few
 // lights doing something unaccountable is what makes the rest look deliberate.
-const STRAYS = 8;
 const STRAY_CHANCE = 0.22;
 const STRAY_LIFE = [0.35, 1.6];
-const STRAY_GAIN = 0.8;
+const STRAY_GAIN = 0.95;
 // Seconds of fade at the end of a stray's life. Short: a laser switches off.
 const STRAY_OUT = 0.12;
 
@@ -313,11 +350,92 @@ export class Lasers {
     this.strayMesh.renderOrder = 4;
     parent.add(this.strayMesh);
 
+    // ---- the impact pool ---------------------------------------------------
+    // Every ray in the room lands somewhere, so the pool is sized for all of
+    // them at once and slots are handed out in whatever order the frame writes
+    // them. Unused slots are collapsed to alpha zero rather than removed.
+    const verts = 1 + IMPACT_SEGS * 2;
+    this._impactPos = new Float32Array(IMPACT_SLOTS * verts * 3);
+    this._impactCol = new Float32Array(IMPACT_SLOTS * verts * 4);
+    const tris = IMPACT_SEGS * 3;
+    const iIdx = new Uint16Array(IMPACT_SLOTS * tris * 3);
+    for (let i = 0; i < IMPACT_SLOTS; i++) {
+      const v = i * verts;
+      let k = i * tris * 3;
+      for (let seg = 0; seg < IMPACT_SEGS; seg++) {
+        const a = 1 + seg, b = 1 + ((seg + 1) % IMPACT_SEGS);
+        const c = 1 + IMPACT_SEGS + seg, d = 1 + IMPACT_SEGS + ((seg + 1) % IMPACT_SEGS);
+        // The core, as a fan from the centre out to the inner ring.
+        iIdx[k++] = v; iIdx[k++] = v + a; iIdx[k++] = v + b;
+        // The halo, as a band from the inner ring out to the outer one.
+        iIdx[k++] = v + a; iIdx[k++] = v + c; iIdx[k++] = v + d;
+        iIdx[k++] = v + a; iIdx[k++] = v + d; iIdx[k++] = v + b;
+      }
+    }
+    this.impactGeo = new THREE.BufferGeometry();
+    this.impactGeo.setAttribute('position', dynamic(this._impactPos, 3));
+    this.impactGeo.setAttribute('color', dynamic(this._impactCol, 4));
+    this.impactGeo.setIndex(new THREE.BufferAttribute(iIdx, 1));
+    this.impactGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 70);
+    this.impactMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 1, vertexColors: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      side: THREE.DoubleSide, fog: false,
+    });
+    this.impactMesh = new THREE.Mesh(this.impactGeo, this.impactMat);
+    this.impactMesh.frustumCulled = false;
+    // Over the rays: the spot is the brightest thing either of them makes.
+    this.impactMesh.renderOrder = 5;
+    parent.add(this.impactMesh);
+    this._impactCount = 0;
+
     // Scratch, so the per-frame maths allocates nothing.
     this._v = new THREE.Vector3();
     this._d = new THREE.Vector3();
     this._side = new THREE.Vector3();
     this._toCam = new THREE.Vector3();
+    this._n = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._up = new THREE.Vector3();
+  }
+
+  // Writes one landing spot into the impact pool: a billboarded fan with a
+  // hard core and a soft halo, both carried in the vertex alpha.
+  _impact(x, y, z, alpha, camPos) {
+    if (this._impactCount >= IMPACT_SLOTS || alpha <= 0.004) return;
+    const slot = this._impactCount++;
+    const verts = 1 + IMPACT_SEGS * 2;
+    const pos = this._impactPos, col = this._impactCol;
+    let o = slot * verts * 3, c = slot * verts * 4;
+
+    // A basis facing the camera. Built from the spot's own line of sight
+    // rather than from the camera's orientation, which the rig is not given.
+    this._n.set(camPos.x - x, camPos.y - y, camPos.z - z);
+    const d = this._n.length() || 1;
+    this._n.multiplyScalar(1 / d);
+    this._right.set(0, 1, 0).cross(this._n);
+    if (this._right.lengthSq() < 1e-6) this._right.set(1, 0, 0);
+    this._right.normalize();
+    this._up.crossVectors(this._n, this._right);
+
+    const cx = x + this._n.x * IMPACT_LIFT;
+    const cy = y + this._n.y * IMPACT_LIFT;
+    const cz = z + this._n.z * IMPACT_LIFT;
+    pos[o] = cx; pos[o + 1] = cy; pos[o + 2] = cz; o += 3;
+    col[c] = 1; col[c + 1] = 1; col[c + 2] = 1; col[c + 3] = alpha; c += 4;
+    for (let ring = 0; ring < 2; ring++) {
+      const r = ring ? GLOW_R : CORE_R;
+      const a = ring ? 0 : alpha * HALO;
+      for (let seg = 0; seg < IMPACT_SEGS; seg++) {
+        const t = (seg / IMPACT_SEGS) * Math.PI * 2;
+        const ux = Math.cos(t) * r, uy = Math.sin(t) * r;
+        pos[o] = cx + this._right.x * ux + this._up.x * uy;
+        pos[o + 1] = cy + this._right.y * ux + this._up.y * uy;
+        pos[o + 2] = cz + this._right.z * ux + this._up.z * uy;
+        o += 3;
+        col[c] = 1; col[c + 1] = 1; col[c + 2] = 1; col[c + 3] = a; c += 4;
+      }
+    }
   }
 
   // A new four-bar phrase. Recasts every pair: whether it plays, when it comes
@@ -389,6 +507,10 @@ export class Lasers {
   // energy, the house lights and the blackout cue.
   update(dt, camPos, colour, punch, master) {
     const ease = Math.min(1, dt * EASE);
+    // Impact slots are handed out in whatever order this frame writes rays, so
+    // the count restarts here and whatever is left over is cleared at the end.
+    const usedLast = this._impactCount;
+    this._impactCount = 0;
     for (let i = 0; i < this.banks.length; i++) {
       const b = this.banks[i];
       // INSTANT, not eased. A lamp with a shutter is on or it is off, and the
@@ -415,12 +537,27 @@ export class Lasers {
 
       b.roll += SWEEP_RATE * dt * b.spin;
       b.spread += (b.spreadTo - b.spread) * ease;
-      this._write(b, camPos);
+      this._write(b, camPos, lit * IMPACT_GAIN);
     }
     this._writeStrays(dt, camPos, colour, master);
+
+    // Everything the pool held last frame and does not this one goes to alpha
+    // zero. Only the difference is touched: rewriting all sixty-two slots on
+    // every frame to clear a handful of them is work for nothing.
+    const verts = 1 + IMPACT_SEGS * 2;
+    for (let i = this._impactCount; i < usedLast; i++) {
+      const c = i * verts * 4;
+      for (let v = 0; v < verts; v++) this._impactCol[c + v * 4 + 3] = 0;
+    }
+    this.impactMesh.visible = this._impactCount > 0 || usedLast > 0;
+    if (this.impactMesh.visible) {
+      this.impactMat.color.copy(colour);
+      this.impactGeo.attributes.position.needsUpdate = true;
+      this.impactGeo.attributes.color.needsUpdate = true;
+    }
   }
 
-  _write(b, camPos) {
+  _write(b, camPos, spot) {
     const ray = b._rayPos, fill = b._fillPos, far = b._far;
     const cr = Math.cos(b.roll), sr = Math.sin(b.roll);
     let o = 0, f = 0;
@@ -436,7 +573,7 @@ export class Lasers {
         const a = ((r / (RAYS - 1)) * 2 - 1) * b.spread;
         const ca = Math.cos(a), sa = Math.sin(a);
         this._d.copy(em.u).multiplyScalar(ca).addScaledVector(this._v, sa);
-        o = this._ribbon(ray, o, ax, ay, az, this._d, wa, camPos, far, r);
+        o = this._ribbon(ray, o, ax, ay, az, this._d, wa, camPos, far, r, spot);
       }
 
       // The wedge: one triangle from the lens out to each adjacent pair of far
@@ -455,10 +592,12 @@ export class Lasers {
 
   // Writes one camera-facing ribbon and returns the new write offset. `far`,
   // when given, receives the ray's landing point for the fill to reuse.
-  _ribbon(buf, o, ax, ay, az, d, wa, camPos, far, slot) {
+  _ribbon(buf, o, ax, ay, az, d, wa, camPos, far, slot, spot) {
     const t = exitT(ax, ay, az, d.x, d.y, d.z);
     const bx = ax + d.x * t, by = ay + d.y * t, bz = az + d.z * t;
     if (far) { far[slot * 3] = bx; far[slot * 3 + 1] = by; far[slot * 3 + 2] = bz; }
+    // Where it lands. The one place the ray's whole energy arrives at once.
+    this._impact(bx, by, bz, spot, camPos);
     // Billboard: the ribbon's width runs across both the ray and the line of
     // sight, so it keeps its thickness however it is viewed. Edge-on the cross
     // collapses, which is correct - a laser aimed at your eye is a dot.
@@ -477,6 +616,7 @@ export class Lasers {
 
   _writeStrays(dt, camPos, colour, master) {
     const pos = this._strayPos, col = this._strayCol;
+    const strayLit = Math.min(MAX_OP, STRAY_GAIN * master);
     let any = false;
     for (let i = 0; i < this.strays.length; i++) {
       const s = this.strays[i];
@@ -502,14 +642,15 @@ export class Lasers {
       s.dir.applyAxisAngle(s.axis, s.rate * dt).normalize();
       this._toCam.copy(camPos).sub(s.pos);
       const wa = Math.max(MIN_W, distance(s.pos.x, s.pos.y, s.pos.z, camPos) * PX * WIDTH_PX);
-      this._ribbon(pos, i * 12, s.pos.x, s.pos.y, s.pos.z, s.dir, wa, camPos, null, 0);
+      this._ribbon(pos, i * 12, s.pos.x, s.pos.y, s.pos.z, s.dir, wa, camPos, null, 0,
+        a * strayLit * IMPACT_GAIN);
       for (let v = 0; v < 4; v++) {
         col[c + v * 4] = 1; col[c + v * 4 + 1] = 1; col[c + v * 4 + 2] = 1;
         col[c + v * 4 + 3] = a;
       }
     }
-    this.strayMat.opacity = Math.min(MAX_OP, STRAY_GAIN * master);
-    this.strayMesh.visible = any && this.strayMat.opacity > 0.006;
+    this.strayMat.opacity = strayLit;
+    this.strayMesh.visible = any && strayLit > 0.006;
     if (!this.strayMesh.visible) return;
     this.strayMat.color.copy(colour);
     this.strayGeo.attributes.position.needsUpdate = true;
