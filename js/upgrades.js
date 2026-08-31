@@ -838,7 +838,10 @@ export const UPGRADES = {
     // has no spare finger: the player is already holding a movement key, the
     // mouse and the trigger. Tapping the direction you are ALREADY running is
     // the one input that costs nothing to reach.
-    effects: [['DOUBLE-TAP W A S D', NOTE], ['TO DASH. 2 CHARGES', GOOD], ['ONE BACK EVERY 2.5s', NOTE]],
+    //
+    // W ONLY - see Player.tryDash. A dash that could go backwards was a free
+    // disengage rather than a commitment, and the commitment is the cost.
+    effects: [['DOUBLE-TAP W', NOTE], ['TO DASH FORWARD', GOOD], ['2 CHARGES, 2.5s EACH', NOTE]],
     apply: (mods, n) => { mods.dashCharges = 2 * n; },
   },
 
@@ -867,8 +870,16 @@ export const UPGRADES = {
     // Named CARNAGE and not Bloodlust because BLOODLUST is already in this map
     // above, paying fire rate for a combo. Two mutations with one name would be
     // unreadable on the build sheet.
-    effects: [['KILLS: +5% DAMAGE', GOOD], ['STACKS, NO LIMIT', NOTE], ['RESET WHEN HURT', BAD]],
-    apply: (mods, n) => { mods.carnageStep = 0.05 * n; },
+    // A CAP, and a smaller step under it. Uncapped at 5% a kill it was the
+    // best damage in the game after twenty kills and absurd after fifty - a
+    // deal whose price stopped mattering. At 1% to a ceiling of +100% the
+    // hundred-kill chain is the target rather than the accident, and the
+    // thing it costs you is still that any hit at all takes it all back.
+    effects: [['KILLS: +1% DAMAGE', GOOD], ['UP TO +100%', NOTE], ['RESET WHEN HURT', BAD]],
+    apply: (mods, n) => {
+      mods.carnageStep = 0.01 * n;
+      mods.carnageMax = 1.0 * n;
+    },
   },
   bloodPact: {
     name: 'BLOOD PACT',

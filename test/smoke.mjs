@@ -9,7 +9,7 @@ const CHROME =
 // Caps the game promises to hold. Mirrors the constants in js/main.js.
 const MAX_ACTIVE_PICKUPS = 12;
 const MAX_ACTIVE_AMMO = 5;
-const MAX_PROJECTILES = 48;
+const MAX_PROJECTILES = 72;
 
 if (!existsSync(CHROME)) {
   console.error('No Chrome found. Set CHROME env to a Chrome/Chromium binary.');

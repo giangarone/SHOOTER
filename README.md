@@ -15,7 +15,7 @@ Open http://localhost:8123
 
 | Key | Action |
 | --- | --- |
-| WASD | Move. Double-tap one to dash, with the Double Dash mutation |
+| WASD | Move. Double-tap W to dash forward, with the Double Dash mutation |
 | Mouse | Aim (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | R | Reload |
@@ -62,7 +62,9 @@ Open http://localhost:8123
 - **A boss every five waves**, in a fixed rotation of five that repeats: the
   **Colossus** (armoured but for a red core in its chest that opens on a rhythm,
   and a telegraphed charge that knocks it out cold against a wall), **Siege**
-  (telegraphed mortar barrages), **Schism** (splits at half health, then again),
+  (telegraphed mortar barrages), **Schism** (fires eight rounds at once in every direction after a wind-up,
+  and splits three times over - two halves, then four, then eight, so it gets
+  more dangerous as it comes apart),
   **Maw** (drags you in and rolls rings you have to jump) and the **Herald**
   (blinks, volleys, and enrages under 30%). Regular enemies keep arriving
   throughout; killing the boss ends the wave and pays out. It does NOT refill
@@ -74,13 +76,25 @@ Open http://localhost:8123
   fills each slot is rolled from that role's members, who are balanced to be
   near-equivalent. Two runs face the same difficulty and a different fight,
   which is what keeps scores comparable.
-- **Pickups drop off the enemies you kill**, not from timers around the map.
-  Each wave carries a fixed loot budget spread evenly across its kills, so a
-  wave always contains the same amount however it is played; what each drop
-  turns out to BE is weighted by what you are short of, so a player on full
-  health and full ammo gets buffs instead. Bosses shed a pickup at each
+- **Pickups drop off the enemies you kill**, not from timers around the map,
+  and every kill rolls for them independently. There is no per-wave budget:
+  a wave used to carry a fixed number of pickups spread evenly across its
+  kills, which made the loot a constant and the drops a schedule you learned
+  to wait out. Now roughly one kill in seven drops something, most of it ammo,
+  and the buffs are genuinely rare - a damage or fire-rate boost is about one
+  kill in seventy, a magnet one in eighty, a shield one in a hundred and
+  twenty. Only health and ammo scale with need: their chances climb as those
+  bars empty, steeply near empty, so a player in trouble gets more of what
+  keeps them alive and never more damage. Bosses still shed a pickup at each
   quarter of their health, and if you are starving with no kills coming, one
   is placed near you so the fight cannot dead-end.
+- **Six pickups, each a pixel-art plate** wearing the same 24x24 drawing its
+  HUD chip does - one authored icon, rendered as extruded voxels in the world
+  and flat to a canvas in the HUD, so the thing you picked up and the thing
+  telling you it is active are visibly the same object. They turn to face you
+  rather than spinning: a flat plate on a spin is edge-on twice a revolution.
+  The newest of them is the **MAGNET**, which sweeps every money orb on the
+  floor to you at once, wherever they are.
 - **Upgrade totems**: clearing a wave raises three pillars near the arena
   centre, each showing one upgrade as short colour-coded lines - benefits
   green, drawbacks red - with its own theme colour and a pixel-art icon
@@ -159,8 +173,9 @@ Open http://localhost:8123
   that places asks for a name, arcade style; restarting without pressing SAVE
   banks it anyway. Kept in localStorage, so the board is per-browser: the game
   is client-side javascript, and a shared board it could not verify would be
-  forgeable from the console in seconds. The economy is built to make runs
-  comparable - see the budget guarantees in `test/drops.mjs`.
+  forgeable from the console in seconds. Runs are no longer guaranteed the
+  same loot - drops are rolled per kill now - but the RATES are pinned down,
+  in `test/drops.mjs`.
 
 ## Upgrades
 

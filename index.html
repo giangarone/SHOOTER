@@ -40,6 +40,10 @@
          the multiplier is the one number that changes on every kill, and it was
          unreadable stacked in the top-right corner. Rows are built here; ui.js
          only writes text and two transforms. -->
+    <!-- The buff chips live with the combo, not in the corner: both are
+         "what is true about you right now", and the eye is already on the
+         multiplier. -->
+    <div id="buffs"></div>
     <div id="combo" class="hidden">
       <div id="combo-head">
         <span id="combo-mult">x1.0</span>
@@ -70,9 +74,7 @@
     </div>
   </div>
 
-  <div id="buffs"></div>
 
-  <div id="shield-fx"></div>
 
   <div id="strobe"></div>
   <div id="vignette"></div>

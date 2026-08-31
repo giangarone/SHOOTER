@@ -6,6 +6,8 @@
 // Writing unconditionally would cause layout work 60 times a second.
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
+import { pixelIconCanvas } from './pixelicons.js';
+
 export class UI {
   constructor() {
     const $ = (id) => document.getElementById(id);
@@ -44,7 +46,6 @@ export class UI {
     this.comboBar = $('combo-bar').firstElementChild;
     this.comboFill = $('combo-fill');
     this.promptEl = $('prompt');
-    this.shieldFx = $('shield-fx');
     this.statsPanel = $('stats-panel');
     this.statsMuts = $('stats-muts');
     this.statsRun = $('stats-run');
@@ -206,32 +207,27 @@ export class UI {
     }
   }
 
-  // Each argument is 0..1 of that buff's remaining duration; 0 hides its icon.
-  // The shield also carries a label, because it is the one buff that is far
-  // more often spent by damage than by its clock - the timer bar alone never
-  // said how much of it was left.
+  // Each argument is 0..1 of that buff's remaining duration; 0 hides its chip.
+  //
+  // The chips sit beside the combo gauge, and they are the ONLY thing that
+  // says a buff is up. The shield used to light the whole frame as well, which
+  // was the loudest element in the game for the rarest pickup in it and hid
+  // the room behind a blue wash for fifteen seconds at a time. The chip does
+  // the same job: it carries a points label as well as a timer, because the
+  // shield is far more often spent by damage than by its clock.
   setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0) {
-    this._setBuff('damageBoost', 'damage', damageBoost);
-    this._setBuff('fireRateBoost', 'firerate', fireRateBoost);
-    this._setBuff('shield', 'shield', shield, shield > 0 ? String(Math.ceil(shieldPoints)) : '');
-  }
-
-  // The full-frame shield rim. `fraction` is the shield's remaining points over
-  // its full value; 0 clears it. Quantised before writing for the same reason
-  // setStrobe is - this runs every frame and an unrounded float would dirty the
-  // compositor on all of them.
-  setShield(fraction) {
-    const v = Math.round(Math.max(0, Math.min(1, fraction)) * 32) / 32;
-    if (this._c.shieldFx === v) return;
-    this._c.shieldFx = v;
-    // Floored well above zero while it is up: a shield at its last few points
-    // still has to read as a shield, and fading it to nothing would say it had
-    // already broken.
-    this.shieldFx.style.opacity = v > 0 ? String(0.42 + v * 0.58) : '0';
+    this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost);
+    this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost);
+    this._setBuff(
+      'shield', 'pickShield', 0x4ef3ff, shield,
+      shield > 0 ? String(Math.ceil(shieldPoints)) : ''
+    );
   }
 
   // Fraction is 0..1 of the buff's remaining duration; 0 hides the icon.
-  _setBuff(key, cssName, fraction, label = '') {
+  // `icon` is a pixelicons.js key and `color` the theme it is drawn in - the
+  // same pair the pickup on the floor was built from.
+  _setBuff(key, icon, color, fraction, label = '') {
     let entry = this._buffEls[key];
     if (fraction <= 0) {
       if (entry && entry.shown) {
@@ -242,8 +238,13 @@ export class UI {
     }
     if (!entry) {
       const el = document.createElement('div');
-      el.className = 'buff-icon ' + cssName;
+      el.className = 'buff-icon';
       el.innerHTML = '<div class="buff-timer"></div><div class="buff-label"></div>';
+      // Drawn once, here, and never again: pixelIconCanvas walks 576 cells.
+      const art = pixelIconCanvas(icon, color, 2);
+      art.className = 'buff-art';
+      el.insertBefore(art, el.firstChild);
+      el.style.setProperty('--buff', '#' + color.toString(16).padStart(6, '0'));
       this.buffsEl.appendChild(el);
       // The timer and label nodes are cached: querySelector on every frame for
       // every buff is pure waste.
@@ -490,7 +491,6 @@ export class UI {
     this.bossBar.className = 'hidden';
     this.comboEl.classList.add('hidden');
     this.promptEl.classList.add('hidden');
-    this.shieldFx.style.opacity = '0';
     this.hideStats();
     for (const entry of Object.values(this._buffEls)) {
       entry.el.style.display = 'none';

@@ -3,10 +3,17 @@
 // A pickup is a floating mesh plus an additive glow sprite. It is collected by
 // proximity (no raycast) and despawns after PICKUP_LIFETIME.
 //
-// Adding a type means: an entry in POWERUP_TYPES with a `weight` and an `sfx`
-// name that matches a method on SFX, and a geometry in GEOMS under the same
-// key. `apply(player, time)` mutates the player directly; timed buffs set an
-// end time that Player.update() watches for.
+// Adding a type means: an entry in POWERUP_TYPES with a per-kill `chance` and
+// an `sfx` name that matches a method on SFX, and an `icon` naming a drawing in
+// tools/pixelart/icons.py. `apply(player, time)` mutates the player directly;
+// timed buffs set an end time that Player.update() watches for.
+//
+// PICKUPS ARE PIXEL ART. Each one is the same extruded 24x24 plate the totems
+// wear, built once per type and cloned per instance so the geometry cache is
+// hit exactly six times in a run. They face the player rather than spinning:
+// a flat plate on a spin turns edge-on twice a revolution and disappears, and
+// a pickup that vanishes for a third of every second in a firefight is worse
+// than one with no animation at all.
 //
 // TWO RULES THAT COST A LOT WHEN BROKEN:
 //   1. Never give a pickup a real light. three.js keys shader programs on the
@@ -17,7 +24,7 @@
 //      dispose() on them would break every other pickup of that type.
 
 import * as THREE from 'three';
-import { waveEnemyCount } from './waves.js';
+import { buildPixelIcon } from './pixelicons.js';
 import { BOUND } from './arena.js';
 
 export const POWERUP_TYPES = {
@@ -28,7 +35,9 @@ export const POWERUP_TYPES = {
     apply: (player) => {
       player.health = Math.min(player.maxHealth + 25, player.health + 25);
     },
-    weight: 0.45,
+    chance: 0.04,
+    needy: 0.10,
+    icon: 'pickHealth',
     sfx: 'pickupHealth',
   },
   // RAGE. Damage AND movement, on one clock. The red pickup used to be the
@@ -44,7 +53,8 @@ export const POWERUP_TYPES = {
       player.rageSpeedMult = 1.3;
       player.damageBoostEnd = time + 10;
     },
-    weight: 0.25,
+    chance: 0.015,
+    icon: 'pickDamage',
     sfx: 'pickupBuff',
   },
   fireRateBoost: {
@@ -55,7 +65,8 @@ export const POWERUP_TYPES = {
       player.fireRateMult = 1.7;
       player.fireRateBoostEnd = time + 8;
     },
-    weight: 0.2,
+    chance: 0.015,
+    icon: 'pickRate',
     sfx: 'pickupBuff',
   },
   shield: {
@@ -66,17 +77,36 @@ export const POWERUP_TYPES = {
       player.shield = 50;
       player.shieldEnd = time + 15;
     },
-    weight: 0.1,
+    chance: 0.008,
+    icon: 'pickShield',
     sfx: 'pickupShield',
+  },
+  // MAGNET. Every money orb on the floor, at once, wherever it is - the same
+  // sweep the end of a wave does, bought early. It has no duration and no
+  // stat: it is a button that pays out, which is why it can afford to be
+  // rarer than the buffs without ever feeling like a wasted drop.
+  //
+  // main.js handles the sweep itself (see _updatePickups): the orbs are not
+  // the player's and apply() only ever gets the player.
+  magnet: {
+    color: 0xb14aed,
+    emissive: 0xb14aed,
+    chance: 0.012,
+    icon: 'pickMagnet',
+    apply: () => {},
+    sfx: 'pickupMagnet',
   },
 };
 
-// Ammo is deliberately not in POWERUP_TYPES: it is not part of the weighted
-// buff roll, and pickDropType weighs it against health on its own terms.
+// Ammo is deliberately not in POWERUP_TYPES: it is not one of the buffs, and
+// rollDrop gives it a need term and a cap of its own.
 export const AMMO_PICKUP = {
   color: 0xffd600,
   emissive: 0xffd600,
   amount: 45,
+  chance: 0.06,
+  needy: 0.12,
+  icon: 'pickAmmo',
   apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 45);
   },
@@ -96,33 +126,44 @@ export const PICKUP_BLINK_TIME = 5;
 // across the arena without strobing.
 const BLINK_RATE = 5;
 
-// NEED-WEIGHTED DROP TYPE.
+// WHAT A KILL DROPS.
 //
-// The wave decides HOW MANY pickups drop; this decides WHICH. That split is
-// deliberate. Scaling the drop RATE with how badly the player is doing would
-// hand more resources to the player who played worse, which flattens the skill
-// curve and makes two leaderboard scores less comparable. Scaling only the
-// COMPOSITION keeps the loot per run identical and simply stops the game
-// handing out a health pack to someone on full health.
+// There is no budget any more. A wave used to carry a fixed number of pickups
+// (0.3 per enemy) spread across its kills, which made the loot per wave a
+// constant and every kill's chance a function of how many enemies were left.
+// That guaranteed two runs of the same wave the same amount of loot - a real
+// property, and the reason it was built that way - but it also meant the drops
+// arrived on a schedule, and a schedule is something a player learns to wait
+// out rather than to be surprised by.
 //
-// Health and ammo weights climb as their bar empties, squared so the pull is
-// gentle at three-quarters full and overwhelming near empty. Both fall to zero
-// when full, at which point only the buffs can roll - which is what makes a
-// well-supplied player start seeing damage and fire-rate drops instead.
-const BUFF_KEYS = ['damageBoost', 'fireRateBoost', 'shield'];
-// Total weight the three buffs share between them, against a need weight that
-// reaches NEED_PEAK at an empty bar. Buffs stay reachable at moderate need and
-// vanish in an emergency.
-const BUFF_WEIGHT = 1.0;
-const NEED_PEAK = 4.0;
+// So: every kill rolls each drop INDEPENDENTLY, at a flat chance, and nothing
+// is remembered between kills. A wave can be dry and the next can be generous,
+// which is the point.
+//
+// Health and ammo, and only those two, get a need term on top: `chance` is
+// what they roll at on a full bar and `chance + needy` is what they roll at on
+// an empty one, squared between the two so the pull is gentle at three
+// quarters full and steep near empty. The buffs never scale - a player who is
+// doing badly gets more of what keeps them alive, not more damage.
+//
+// ONE DROP PER KILL AT MOST. The categories are rolled in need order and the
+// first hit wins, so a kill can never carpet the floor, and the rarer buffs
+// are never crowded out by a needy player's ammo roll being tested first -
+// they are simply less likely than it, which is what the numbers say.
 
-function needWeight(frac) {
+// The order categories are offered in. Need first: a starving player's ammo
+// matters more than a shield they will not live to use.
+const ROLL_ORDER = ['ammo', 'health', 'damageBoost', 'fireRateBoost', 'magnet', 'shield'];
+
+// The need curve. `frac` is how full the bar is; the result is 0 at full and 1
+// at empty, squared so it stays out of the way until things are actually bad.
+function needScale(frac) {
   const lack = Math.max(0, 1 - frac);
-  return lack * lack * NEED_PEAK;
+  return lack * lack;
 }
 
 /**
- * Chooses what a drop should be, given how the player is doing.
+ * Rolls one kill's drop.
  *
  * @param {number} hpFrac    health / maxHealth
  * @param {number} ammoFrac  (reserve + mag) / maxReserve
@@ -130,119 +171,59 @@ function needWeight(frac) {
  *   ammo as it should. An empty player killing a whole wave would otherwise
  *   carpet the floor in crates, all of one shape, most of them redundant by
  *   the time the second is collected.
- * @returns {string} a spawnable type key: 'ammo' or a POWERUP_TYPES key
+ * @returns {string|null} a spawnable type key, or null for nothing at all -
+ *   which is what most kills return.
  */
-export function pickDropType(hpFrac, ammoFrac, allowAmmo = true) {
-  const wHealth = needWeight(hpFrac);
-  const wAmmo = allowAmmo ? needWeight(ammoFrac) : 0;
-  let total = wHealth + wAmmo;
-  for (const k of BUFF_KEYS) total += POWERUP_TYPES[k].weight * BUFF_WEIGHT;
-
-  let r = Math.random() * total;
-  r -= wHealth;
-  if (r <= 0) return 'health';
-  r -= wAmmo;
-  if (r <= 0) return 'ammo';
-  let last = BUFF_KEYS[BUFF_KEYS.length - 1];
-  for (const k of BUFF_KEYS) {
-    r -= POWERUP_TYPES[k].weight * BUFF_WEIGHT;
-    if (r <= 0) return k;
-    last = k;
-  }
-  return last;
-}
-
-// The shield dome is deliberately small: at its original size it swallowed
-// the floor around it and read as arena geometry rather than as a pickup.
-function createHexDomeGeometry(radius = 0.5, height = 0.62) {
-  const geom = new THREE.BufferGeometry();
-  const positions = [];
-  const indices = [];
-  const segments = 6;
-  const rings = 4;
-
-  for (let r = 0; r <= rings; r++) {
-    const v = r / rings;
-    const y = v * height;
-    const ringRadius = radius * (1 - v * 0.3);
-    for (let s = 0; s < segments; s++) {
-      const angle = (s / segments) * Math.PI * 2;
-      positions.push(Math.cos(angle) * ringRadius, y, Math.sin(angle) * ringRadius);
+export function rollDrop(hpFrac, ammoFrac, allowAmmo = true) {
+  for (const key of ROLL_ORDER) {
+    if (key === 'ammo' && !allowAmmo) continue;
+    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
+    let p = def.chance;
+    if (def.needy) {
+      p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
     }
+    if (Math.random() < p) return key;
   }
+  return null;
+}
 
-  for (let r = 0; r < rings; r++) {
-    for (let s = 0; s < segments; s++) {
-      const a = r * segments + s;
-      const b = r * segments + ((s + 1) % segments);
-      const c = (r + 1) * segments + s;
-      const d = (r + 1) * segments + ((s + 1) % segments);
-      indices.push(a, b, d, d, c, a);
+/**
+ * The chance a single kill drops anything at all, for tests and for tuning.
+ * Exact rather than a sum: the categories are independent rolls, so this is
+ * one minus the chance every one of them misses.
+ */
+export function dropChance(hpFrac, ammoFrac, allowAmmo = true) {
+  let miss = 1;
+  for (const key of ROLL_ORDER) {
+    if (key === 'ammo' && !allowAmmo) continue;
+    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
+    let p = def.chance;
+    if (def.needy) {
+      p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
     }
+    miss *= 1 - p;
   }
-
-  geom.setIndex(indices);
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geom.computeVertexNormals();
-  return geom;
+  return 1 - miss;
 }
 
-function createPlusGeometry(size = 0.4, thickness = 0.12) {
-  const shape = new THREE.Shape();
-  const w = size;
-  const t = size * 0.4;
-
-  shape.moveTo(-t, -w);
-  shape.lineTo(t, -w);
-  shape.lineTo(t, -t);
-  shape.lineTo(w, -t);
-  shape.lineTo(w, t);
-  shape.lineTo(t, t);
-  shape.lineTo(t, w);
-  shape.lineTo(-t, w);
-  shape.lineTo(-t, t);
-  shape.lineTo(-w, t);
-  shape.lineTo(-w, -t);
-  shape.lineTo(-t, -t);
-  shape.lineTo(-t, -w);
-
-  return new THREE.ExtrudeGeometry(shape, {
-    depth: thickness,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.03,
-    bevelThickness: 0.03,
-  });
-}
-
-const DOME_GEOM = createHexDomeGeometry();
-
-// Geometries and materials are shared across every pickup instance and live
-// for the lifetime of the page, so nothing here is ever disposed.
-const GEOMS = {
-  ammo: new THREE.OctahedronGeometry(0.35, 0),
-  health: createPlusGeometry(),
-  damageBoost: new THREE.TetrahedronGeometry(0.38, 0),
-  fireRateBoost: new THREE.DodecahedronGeometry(0.32, 0),
-  shield: DOME_GEOM,
-};
-
-const coreMats = new Map();
-function coreMaterial(typeKey, def) {
-  let m = coreMats.get(typeKey);
-  if (!m) {
-    m = new THREE.MeshStandardMaterial({
-      color: def.color,
-      emissive: def.emissive,
-      emissiveIntensity: 1.2,
-      roughness: 0.3,
-      metalness: 0.7,
-      transparent: true,
-      opacity: 0.9,
-    });
-    coreMats.set(typeKey, m);
+// PIXEL PLATES. One extruded 24x24 icon per type, built once and cloned per
+// pickup: pixelicons.js caches the geometry by key+colour, so six calls in a
+// run cover every pickup the arena will ever hold, and a clone shares both the
+// geometry and the material with its template. Nothing here is ever disposed -
+// see rule 2 at the top of this file.
+// The plate comes out of pixelicons.js at ~0.62m across (24 pixels at PX), so
+// this is a fraction of a metre and not a pixel size - a pickup a little
+// smaller than a totem's icon, which is what it should read as.
+const ICON_SCALE = 0.85;
+const iconTemplates = new Map();
+function pickupIcon(typeKey, def) {
+  let t = iconTemplates.get(typeKey);
+  if (!t) {
+    t = buildPixelIcon(def.icon, def.color);
+    t.scale.setScalar(ICON_SCALE);
+    iconTemplates.set(typeKey, t);
   }
-  return m;
+  return t.clone();
 }
 
 const glowMats = new Map();
@@ -253,30 +234,16 @@ function glowMaterial(typeKey, def, glowTex) {
       map: glowTex,
       color: def.color,
       transparent: true,
-      opacity: 0.85,
+      // Softer than it used to be. The plate IS the pickup now, and a halo
+      // bright enough to be the thing you see from across the room was also
+      // bright enough to wash the drawing out from two metres away.
+      opacity: 0.5,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
     glowMats.set(typeKey, m);
   }
   return m;
-}
-
-let SHIELD_DOME_MAT = null;
-function shieldDomeMaterial() {
-  if (!SHIELD_DOME_MAT) {
-    SHIELD_DOME_MAT = new THREE.MeshStandardMaterial({
-      color: 0x4ef3ff,
-      emissive: 0x4ef3ff,
-      emissiveIntensity: 0.8,
-      roughness: 0.2,
-      metalness: 0.8,
-      transparent: true,
-      opacity: 0.25,
-      side: THREE.DoubleSide,
-    });
-  }
-  return SHIELD_DOME_MAT;
 }
 
 // One pickup in the arena. main.js owns the list, calls update() each frame,
@@ -296,31 +263,25 @@ export class Powerup {
     this.despawnTime = PICKUP_LIFETIME;
     this.dead = false;
     this.bobOffset = Math.random() * Math.PI * 2;
-    this.rotSpeed = 0.5 + Math.random() * 0.5;
 
-    this.core = new THREE.Mesh(GEOMS[typeKey] || GEOMS.ammo, coreMaterial(typeKey, this.type));
-    this.core.position.set(this.pos.x, 0.5, this.pos.z);
+    this.core = pickupIcon(typeKey, this.type);
+    this.core.position.set(this.pos.x, 0.62, this.pos.z);
     scene.add(this.core);
-
-    this.dome = null;
-    if (typeKey === 'shield') {
-      this.dome = new THREE.Mesh(DOME_GEOM, shieldDomeMaterial());
-      this.dome.position.set(this.pos.x, 0.7, this.pos.z);
-      scene.add(this.dome);
-    }
 
     // An additive sprite instead of a PointLight: a real light would change the
     // scene's light count on every spawn/despawn, which forces three.js to
     // recompile every material in the scene and stalls the frame.
     this.glow = new THREE.Sprite(glowMaterial(typeKey, this.type, glowTex));
-    this.glow.scale.setScalar(1.8);
+    this.glow.scale.setScalar(1.15);
     this.glow.position.set(this.pos.x, 0.7, this.pos.z);
     scene.add(this.glow);
   }
 
-  // Bob, spin and pulse. Sets `dead` when its lifetime runs out; main.js
+  // Bob, face, and pulse. Sets `dead` when its lifetime runs out; main.js
   // removes dead pickups from its list on the same pass.
-  update(dt, time) {
+  //
+  // `facing` is where the player is standing, so the plate can turn to them.
+  update(dt, time, facing = null) {
     if (this.dead) return;
 
     const age = time - this.spawnTime;
@@ -337,19 +298,20 @@ export class Powerup {
     if (this.core.visible !== on) {
       this.core.visible = on;
       this.glow.visible = on;
-      if (this.dome) this.dome.visible = on;
     }
 
     const bob = Math.sin(time * 2 + this.bobOffset) * 0.15;
-    this.core.position.y = 0.5 + bob;
-    this.core.rotation.y += this.rotSpeed * dt;
-    this.glow.position.y = 0.7 + bob;
-    this.glow.scale.setScalar(1.8 + Math.sin(time * 5 + this.bobOffset) * 0.25);
-
-    if (this.dome) {
-      this.dome.position.y = 0.7 + bob;
-      this.dome.rotation.y += this.rotSpeed * dt * 0.7;
+    this.core.position.y = 0.62 + bob;
+    // Turned to the player, not spun. A flat plate on a spin is edge-on twice
+    // a revolution, and a pickup that disappears for a third of every second
+    // in a firefight is worse than one that never moves at all. The tilt is
+    // what stops it reading as a decal painted on the air.
+    if (facing) {
+      this.core.rotation.y = Math.atan2(facing.x - this.pos.x, facing.z - this.pos.z);
     }
+    this.core.rotation.z = Math.sin(time * 1.6 + this.bobOffset) * 0.09;
+    this.glow.position.y = 0.7 + bob;
+    this.glow.scale.setScalar(1.15 + Math.sin(time * 5 + this.bobOffset) * 0.18);
   }
 
   // Proximity collection. Compares against the player's FEET position, so the
@@ -360,7 +322,7 @@ export class Powerup {
 
   // Dragged toward the player by the same magnet that collects money orbs -
   // see _magnetPickups in main.js. Every mesh has to be moved, not just `pos`:
-  // the x and z of the core, dome and glow are written once at construction
+  // the x and z of the plate and its glow are written once at construction
   // and only their y is touched per frame.
   moveTo(x, z) {
     this.pos.x = x;
@@ -369,10 +331,6 @@ export class Powerup {
     this.core.position.z = z;
     this.glow.position.x = x;
     this.glow.position.z = z;
-    if (this.dome) {
-      this.dome.position.x = x;
-      this.dome.position.z = z;
-    }
   }
 
   // Removes from the scene only - see rule 2 at the top of this file.
@@ -381,20 +339,8 @@ export class Powerup {
     if (this.dead) return;
     this.dead = true;
     this.scene.remove(this.core);
-    if (this.dome) this.scene.remove(this.dome);
     this.scene.remove(this.glow);
   }
-}
-
-// Pickups a wave is worth, scaled off its enemy count. main.js spends this
-// budget across the wave's KILLS rather than on a timer, so this is the whole
-// loot a wave contains and it cannot be exceeded however the wave is played.
-//
-// Higher than the old figure because ammo used to arrive on a second timer of
-// its own, outside the budget entirely; one number now has to cover what the
-// two of them did.
-export function calcDropsForWave(wave) {
-  return Math.max(3, Math.round(waveEnemyCount(wave) * 0.3));
 }
 
 // Pickups land anywhere on the floor rather than on the enemy spawn grid,

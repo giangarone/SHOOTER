@@ -350,10 +350,14 @@ try {
     take('darkPower');
     out.darkPower = +(P.getEffectiveDamage(100)).toFixed(1);
 
-    // CARNAGE: five kills, then a hit
+    // CARNAGE: a chain, the cap, then a hit
     take('carnage');
     P.carnageStacks = 5;
     out.carnage5 = +(P.getEffectiveDamage(100)).toFixed(1);
+    // Well past the hundred kills the cap is reached at: the ceiling is the
+    // whole point of the rework, and an uncapped step would sail past here.
+    P.carnageStacks = 400;
+    out.carnageCapped = +(P.getEffectiveDamage(100)).toFixed(1);
     g._hurtPlayer(1, P.pos, null);
     out.carnageAfterHit = +(P.getEffectiveDamage(100)).toFixed(1);
 
@@ -482,7 +486,8 @@ try {
   });
   console.log(JSON.stringify({ ...r, mechanics: m }, null, 2));
   ok('dark power: +20% damage', m.darkPower === 120);
-  ok('carnage: five kills is +25%', m.carnage5 === 125);
+  ok('carnage: five kills is +5%', m.carnage5 === 105);
+  ok('carnage: the chain caps at +100%', m.carnageCapped === 200, String(m.carnageCapped));
   ok('carnage: a hit wipes the chain', m.carnageAfterHit === 100);
   ok('blood pact: a kill heals 3', m.pactHealed);
   ok('blood pact: hits cost 25% more', m.pactExtraDamage === 25);

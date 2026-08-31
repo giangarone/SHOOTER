@@ -1999,18 +1999,72 @@ function aiSiege(e, a) {
   }
 }
 
-// SCHISM. Ordinary melee pressure; the fight is in what happens when the bar
-// crosses a threshold. main.js owns the actual split - see _splitBoss - because
-// the enemy list and the boss part list both live there.
+// SCHISM. Melee pressure, a radial volley, and the split.
+//
+// It used to be melee and the split alone, which made it the one boss you
+// could fight from across the room: back off, shoot, and the whole fight was
+// a walk backwards. The BURST is what closes that off - eight rounds at once,
+// evenly around the circle, so distance stops being safety and the answer is
+// to be behind cover or moving across it rather than away from it.
+//
+// EVERY PART FIRES. Four halves each throwing eight rounds is the point of
+// splitting it: the boss gets more dangerous as it comes apart, not less.
+// The cooldown is per part and randomised at spawn, so the halves fall out of
+// step with each other instead of firing as one wall.
+const SCHISM_BURST_CD = 4.2;
+const SCHISM_BURST_SHOTS = 8;
+// Seconds the core flares before the rounds leave. The volley covers every
+// bearing, so it cannot be dodged by direction - only by reading it early and
+// getting something between you and it.
+const SCHISM_TELL = 0.45;
+// Split thresholds, in fractions of the part's own health pool. THREE of them
+// now: 2 parts, then 4, then 8. Each one only ever fires once because a
+// child's health is reset on the way out of _splitBoss.
+const SCHISM_SPLITS = [0.5, 0.25, 0.12];
+
 function aiSchism(e, a) {
   const bs = e.bs;
+  // TWO separate guards, and they must stay separate: _splitBoss hands a child
+  // its parent's `tier` at birth, so a tier test would leave every child with
+  // an undefined burst clock - which decrements to NaN and silently never
+  // fires. The split halves are exactly the parts the volley matters most on.
   if (bs.tier === undefined) bs.tier = 0;
+  if (bs.burstCd === undefined) {
+    // Randomised so the parts of a split boss never fire together.
+    bs.burstCd = 1.5 + Math.random() * SCHISM_BURST_CD;
+    bs.tell = 0;
+  }
   aiMelee(e, a);
   e.coreMesh.rotation.y += a.dt * 2.5;
   e.ringMesh.rotation.x += a.dt * 1.8;
-  // Two thresholds, and each one only ever fires once because the child's
-  // health is reset on the way out of _splitBoss.
-  if (bs.tier < 2 && e.hp <= e.maxHp * (bs.tier === 0 ? 0.5 : 0.25)) {
+
+  if (bs.tell > 0) {
+    bs.tell -= a.dt;
+    // The wind-up IS the core spinning up and swelling - no extra geometry and
+    // nothing to clean up if the part dies mid-tell.
+    e.coreMesh.rotation.y += a.dt * 9;
+    const k = 1 + (1 - Math.max(0, bs.tell) / SCHISM_TELL) * 0.7;
+    e.ringMesh.scale.setScalar(k);
+    if (bs.tell <= 0) {
+      e.ringMesh.scale.setScalar(1);
+      const y = 1.0 * (e.group.scale.y || 1);
+      for (let i = 0; i < SCHISM_BURST_SHOTS; i++) {
+        a.ctx.addProjectile(
+          e.pos.x, y, e.pos.z, 'schism', 1, (i / SCHISM_BURST_SHOTS) * Math.PI * 2
+        );
+      }
+      _bossAt.set(e.pos.x, y, e.pos.z);
+      a.ctx.effects.burst(_bossAt, ENEMY_TYPES.schism.color, 18, 6, 1.5, 0.4);
+    }
+  } else {
+    bs.burstCd -= a.dt;
+    if (bs.burstCd <= 0 && a.dist < 26) {
+      bs.burstCd = SCHISM_BURST_CD * e.rate + Math.random() * 1.2;
+      bs.tell = SCHISM_TELL;
+    }
+  }
+
+  if (bs.tier < SCHISM_SPLITS.length && e.hp <= e.maxHp * SCHISM_SPLITS[bs.tier]) {
     bs.tier++;
     a.ctx.bossEvent('split', e);
   }
@@ -2810,6 +2864,10 @@ const PROJ_COLORS = {
   // against the floor rather than against the skyline, and the pale core is
   // what makes it visible down there.
   harrier: { core: 0xd7f4ff, glow: 0x27c4ff, scale: 0.65 },
+  // Schism's radial volley, in the boss's own violet. Eight of these are in
+  // the air at once, so they are small: a fan of shooter-sized rounds reads as
+  // a wall and there would be no gap to move through.
+  schism: { core: 0xffb0ff, glow: 0xd500f9, scale: 0.6 },
 };
 const projMats = new Map();
 

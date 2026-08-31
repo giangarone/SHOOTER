@@ -110,6 +110,81 @@ try {
     if (checks.some(([, ok]) => !ok)) console.log('     ! ' + JSON.stringify(rows));
   }
 
+  // ---- schism: the splits and the volley ------------------------------------
+  // Both of Schism's mechanics are invisible to the loop below, which chips
+  // every boss down as fast as it can and so never lets the health bar rest on
+  // a threshold. Driven by hand here instead:
+  //
+  //   three tiers    2 parts, then 4, then 8 - the fight gets MORE dangerous
+  //                  as it comes apart, which is the whole design
+  //   the volley     eight rounds, every bearing, after a wind-up. Fired by
+  //                  every part, so it has to survive the splits.
+  {
+    const r = await page.evaluate(async () => {
+      const g = window.__game;
+      g.wave = 14;
+      g.enemies.forEach((e) => { e.dead = true; });
+      g.queue.length = 0;
+      g.totemArea.dismiss?.();
+      g.waveState = 'idle';
+      g.interT = 0.05;
+      g.player.health = 100000;
+      g.player.maxHealth = 100000;
+      await new Promise((done) => {
+        const t = setInterval(() => {
+          if (g.bossFight && g.bossFight.parts.length) { clearInterval(t); done(); }
+        }, 60);
+      });
+
+      // Walk every part just under the next threshold in turn and let the AI
+      // notice. Each pass doubles the part count.
+      const parts = [g.bossFight.parts.length];
+      for (const frac of [0.49, 0.24, 0.11]) {
+        for (const p of g.bossFight.parts) p.hp = p.maxHp * frac;
+        await new Promise((r) => setTimeout(r, 500));
+        parts.push(g.bossFight.parts.length);
+      }
+
+      // The volley. One part, armed by hand, counted as it lands: the tell has
+      // to elapse before anything is fired, which is the property worth
+      // checking - an instant eight-way burst is not dodgeable.
+      // Counted as they are SPAWNED, not as they are in the air: a round that
+      // has already hit a wall is still a round that was fired, and the parts
+      // stand close to cover.
+      const part = g.bossFight.parts[0];
+      const orig = g._spawnProjectile.bind(g);
+      let fired = 0;
+      let firedAt = 0;
+      g._spawnProjectile = (x, y, z, type, ss, sr) => {
+        if (type === 'schism') { fired++; firedAt = firedAt || performance.now(); }
+        return orig(x, y, z, type, ss, sr);
+      };
+      // Only this part is armed; the others are pushed well out so their own
+      // cooldowns cannot land inside the window and inflate the count.
+      for (const p of g.bossFight.parts) { p.bs.burstCd = 999; p.bs.tell = 0; }
+      const armedAt = performance.now();
+      part.bs.burstCd = 0;
+      await new Promise((r) => setTimeout(r, 100));
+      const duringTell = fired;
+      await new Promise((r) => setTimeout(r, 1400));
+      g._spawnProjectile = orig;
+      return { parts, duringTell, fired, delay: firedAt ? firedAt - armedAt : -1 };
+    });
+    const step = (n, want) => {
+      const ok = r.parts[n] === want;
+      if (!ok) bad++;
+      console.log(`${ok ? 'ok  ' : 'FAIL'} schism: tier ${n} is ${want} parts  got=${r.parts[n]}`);
+    };
+    step(0, 1); step(1, 2); step(2, 4); step(3, 8);
+    const volleyOk = r.fired === 8;
+    if (!volleyOk) bad++;
+    console.log(`${volleyOk ? 'ok  ' : 'FAIL'} schism: the volley is eight rounds  fired=${r.fired}`);
+    const tellOk = r.duringTell === 0 && r.delay > 100;
+    if (!tellOk) bad++;
+    console.log(`${tellOk ? 'ok  ' : 'FAIL'} schism: nothing leaves during the wind-up  `
+      + `early=${r.duringTell} delay=${Math.round(r.delay)}ms`);
+  }
+
   for (const wave of WAVES) {
     errors.length = 0;
     // Jump to the wave before the boss and let the normal flow start it, so

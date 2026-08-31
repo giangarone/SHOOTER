@@ -146,6 +146,11 @@ try {
     const g = window.__game;
     const origDrop = g._dropMoney;
     g._dropMoney = () => {};
+    // The bot can walk over a MAGNET pickup mid-test, and that sweeps the
+    // whole floor - including the one orb this is measuring the radius with.
+    // Held off for the duration rather than hoping it does not happen.
+    const origVac = g.money.vacuum;
+    g.money.vacuum = () => {};
     // Radius per tier, run through the upgrade's own apply() rather than a
     // copy of its formula - the point is that the CATALOGUE moves the radius,
     // so a retune there has to show up here.
@@ -184,6 +189,7 @@ try {
     g.player.mods.magnetMult = 1;
     g.money.clear();
     g._dropMoney = origDrop;
+    g.money.vacuum = origVac;
     return { base: BASE_MAGNET_RADIUS, radii, ignored, taken };
   });
   check('the base radius is the base radius', magnet.radii[0] === magnet.base,

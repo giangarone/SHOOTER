@@ -66,7 +66,7 @@ import { Music } from './music.js';
 import { Rig } from './rig.js';
 import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
-import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
+import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
   UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rollDeals, rerollCost,
@@ -94,16 +94,16 @@ const MAX_ACTIVE_AMMO = 5;
 // ---- drops ---------------------------------------------------------------
 // Pickups come off the enemies that die, not from timers around the map.
 //
-// A wave carries a fixed budget (calcDropsForWave) and each kill's chance to
-// drop is `budget remaining / enemies remaining`, so the budget is always
-// spent in full and always spread evenly - a wave contains the same loot
-// whether it is cleared fast or slow, which is what keeps two runs comparable.
-// What each drop turns out to BE is need-weighted; how MUCH drops is not.
+// EVERY KILL ROLLS, and nothing is remembered between kills - see rollDrop in
+// powerups.js for the chances and for what replaced the old fixed budget. A
+// wave can be dry and the next generous; that is the point of rolling rather
+// than scheduling. Health and ammo, and only those two, get likelier as the
+// bars they refill empty.
 //
-// Boss waves cannot use a budget: their adds are endless, so there is no
-// denominator. They pay out per add kill at a flat rate, plus the boss itself
-// shedding a pickup as it crosses each health threshold.
-const BOSS_ADD_DROP_CHANCE = 0.2;
+// The boss still sheds a pickup as it crosses each health threshold. A boss
+// fight is the longest stretch in the game with almost nothing dying in it,
+// and a run of bad rolls across its few add kills would leave the player with
+// nothing at all for forty seconds.
 const BOSS_BLEED_THRESHOLDS = [0.75, 0.5, 0.25];
 
 // The safety net. Kill drops alone would be a death spiral: out of ammo means
@@ -127,8 +127,13 @@ const SPAWN_RETRY = 2;
 // could hold the pool full for seconds at a time - which would silently
 // cancel Reload Burst, an upgrade the player paid for. Enemies stop at
 // MAX_ENEMY_PROJECTILES, so eight slots are always there for the shards.
-const MAX_PROJECTILES = 48;
-const MAX_ENEMY_PROJECTILES = 40;
+//
+// Raised once more for Schism's radial volley: at its last tier there are
+// eight parts throwing eight rounds each, and while their cooldowns are
+// deliberately out of step, a ceiling of forty would have silently eaten
+// whole volleys - and a volley that only half arrives is unreadable.
+const MAX_PROJECTILES = 72;
+const MAX_ENEMY_PROJECTILES = 64;
 const EMPTY_CLICK_COOLDOWN = 0.35;
 
 // Seconds a station ignores further hits after one is bought by shooting it.
@@ -366,8 +371,7 @@ class Game {
     this.powerups = [];
     this.queue = [];
     this._cfg = waveConfig(1);
-    // Pickups this wave still has to give, and the safety-net countdown.
-    this.dropsLeft = 0;
+    // The drop safety net's countdown.
     this._reliefT = RELIEF_INTERVAL;
     this.spawnTimer = 0;
     // The live boss fight, or null. `parts` is every entity that counts as the
@@ -844,7 +848,6 @@ class Game {
     this.money.clear();
     this._pendingSpawns.length = 0;
     this._bigAlive = 0;
-    this.dropsLeft = 0;
     this._reliefT = RELIEF_INTERVAL;
     this.bossFight = null;
     this.ui.setBoss(null, 0, '', '');
@@ -1054,7 +1057,6 @@ class Game {
     this.waveState = 'idle';
     this.interT = 1.2;
     this.spawnTimer = 0;
-    this.dropsLeft = 0;
     this._reliefT = RELIEF_INTERVAL;
     this.emptyClickCd = 0;
     this.stats.shotsFired = 0;
@@ -1105,8 +1107,6 @@ class Game {
 
     this.waveDamageTaken = 0;
     this.player.armWard();
-    // The wave's whole loot budget, spent across its kills.
-    this.dropsLeft = calcDropsForWave(this.wave);
     this._reliefT = RELIEF_INTERVAL;
     if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
   }
@@ -1199,7 +1199,9 @@ class Game {
       // every few seconds.
       if (!bf.state) bf.note = enemy.bs.weakOpen ? 'CORE EXPOSED' : '';
     } else if (kind === 'charge') {
-      this.sfx.wave();
+      // NO SOUND. The charge is already announced by the boss squaring up and
+      // by the room; a fanfare on top of it fired every few seconds for the
+      // length of the fight, which is how a telegraph turns into noise.
     } else if (kind === 'enrage') {
       bf.state = 'enraged';
       bf.note = 'ENRAGED';
@@ -1244,10 +1246,13 @@ class Game {
       // The geometry cache bakes `scale` per TYPE, so a child cannot have its
       // own - visual size comes from the group, exactly as a splitter's minis
       // do. Collision and melee reach follow through `radius`.
-      const shrink = tier === 1 ? 0.68 : 0.46;
+      // Three tiers now, so three steps down. The last one is small and fast
+      // and there are eight of them - the fight ends as a swarm of the thing
+      // it started as.
+      const shrink = tier === 1 ? 0.68 : tier === 2 ? 0.46 : 0.32;
       child.group.scale.setScalar(shrink);
       child.radius = ENEMY_TYPES.schism.radius * shrink;
-      child.speed = e.speed * (tier === 1 ? 1.2 : 1.4);
+      child.speed = e.speed * (tier === 1 ? 1.2 : tier === 2 ? 1.4 : 1.55);
       // The score is divided rather than duplicated: splitting is the boss
       // surviving, not four more bosses to be paid for.
       child.score = Math.round(e.score * 0.5);
@@ -2098,6 +2103,12 @@ class Game {
       // to stand still and shoot back.
       speed = Math.min(26, 18 + this.wave * 0.25);
       dmg = Math.min(11, 6 + this.wave * 0.25);
+    } else if (type === 'schism') {
+      // Eight at once, so each is cheap: the volley has to cost real health
+      // when it catches you standing in the open and be survivable when one
+      // round clips you on the way past.
+      speed = Math.min(19, 13 + this.wave * 0.22);
+      dmg = Math.min(14, 7 + this.wave * 0.3);
     } else if (type === 'colossus') {
       // Slower and heavier than an ordinary shooter round. The vent is the
       // window the player closes in to use, so what comes out of it has to be
@@ -2545,10 +2556,12 @@ class Game {
   // Buys the deal a pillar is offering. Every path in - touch and shot -
   // funnels through here, so the price is charged in exactly one place.
   //
-  // It deliberately does NOT dismiss anything. The totems are still standing
-  // and the wave is still waiting on them; a deal closes the Devil's shop and
-  // nothing else, so a player can take a deal and then still choose their free
-  // mutation. The other two pillars sink because the set is spent.
+  // The TOTEMS are left standing: the wave is still waiting on them, and a
+  // player who takes a deal still has their free mutation to choose. What does
+  // go is everything of the Devil's - the pillar just claimed along with the
+  // two beside it, his consoles and the Devil himself. He used to stay up
+  // behind a spent shop with the taken pillar still glowing, which read as an
+  // offer that was still open.
   _claimDeal(deal, byKey = false) {
     if (!(byKey ? deal.canUse() : deal.canClaim())) return;
     const offer = deal.offer;
@@ -2569,10 +2582,7 @@ class Game {
     this.effects.addShake(0.16);
     this.sfx.deal();
     this.ui.banner(offer.name + '  \u2013' + offer.cost + ' MAX HP');
-    for (const d of this.devilArea.deals) {
-      if (d !== deal) d.sink();
-    }
-    this._refreshDevil();
+    this.devilArea.dismiss();
   }
 
   // A Devil reroll. Priced in max HP rather than credits and doubling the same
@@ -2825,31 +2835,27 @@ class Game {
     this._reliefT = RELIEF_INTERVAL;
   }
 
-  // One kill's roll. `remaining` is how many more enemies this wave still has
-  // to give, which is what makes the budget land evenly instead of all at the
-  // start or all at the end.
-  _rollDrop(pos, remaining) {
+  // One kill's roll. Independent of every other kill's - there is no budget
+  // and no memory; see the note above rollDrop in powerups.js.
+  _rollDrop(pos) {
     if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
-    let chance;
-    if (this.bossFight) {
-      // No fixed denominator on a boss wave - the adds never stop.
-      chance = BOSS_ADD_DROP_CHANCE;
-    } else {
-      if (this.dropsLeft <= 0) return;
-      chance = this.dropsLeft / Math.max(1, remaining);
-    }
-    if (Math.random() >= chance) return;
-    if (!this.bossFight) this.dropsLeft--;
-    this._spawnDrop(pos);
+    const kind = rollDrop(
+      this.player.health / this.player.maxHealth,
+      (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
+      this._ammoActive() < MAX_ACTIVE_AMMO
+    );
+    if (kind) this._placeDrop(kind, pos);
   }
 
-  // Places one drop, choosing what it is from what the player is short of.
-  _spawnDrop(pos) {
-    const hpFrac = this.player.health / this.player.maxHealth;
-    const ammoFrac = (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve;
-    let ammoActive = 0;
-    for (const p of this.powerups) if (p.typeKey === 'ammo') ammoActive++;
-    const kind = pickDropType(hpFrac, ammoFrac, ammoActive < MAX_ACTIVE_AMMO);
+  _ammoActive() {
+    let n = 0;
+    for (const p of this.powerups) if (p.typeKey === 'ammo') n++;
+    return n;
+  }
+
+  // Places a drop of a KNOWN kind. The boss bleed and the relief net both know
+  // what they want; only a kill has to roll for it.
+  _placeDrop(kind, pos) {
     this.powerups.push(
       spawnDropAt(kind, pos, this.scene, this.effects.glowTex, this.time)
     );
@@ -2870,7 +2876,14 @@ class Game {
       && frac <= BOSS_BLEED_THRESHOLDS[bf.bleedAt]) {
       bf.bleedAt++;
       const part = bf.parts[0];
-      if (part) this._spawnDrop(part.pos);
+      if (!part || this.powerups.length >= MAX_ACTIVE_PICKUPS) continue;
+      // Need-first, like a kill's roll, but guaranteed: whichever bar is
+      // emptier, and ammo when they are level - a boss fight is where the
+      // reserve goes.
+      const hpFrac = this.player.health / this.player.maxHealth;
+      const ammoFrac = (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve;
+      const wantAmmo = ammoFrac <= hpFrac && this._ammoActive() < MAX_ACTIVE_AMMO;
+      this._placeDrop(wantAmmo ? 'ammo' : 'health', part.pos);
     }
   }
 
@@ -2927,13 +2940,20 @@ class Game {
   _updatePickups(dt) {
     for (let i = this.powerups.length - 1; i >= 0; i--) {
       const p = this.powerups[i];
-      p.update(dt, this.time);
+      p.update(dt, this.time, this.player.pos);
       if (p.dead) {
         this.powerups.splice(i, 1);
         continue;
       }
       if (p.tryPickup(this.player.pos)) {
         p.type.apply(this.player, this.time);
+        // THE MAGNET. The only pickup whose effect is not on the player, so it
+        // is the only one main.js has to know by name: everything on the floor
+        // comes in at once, the same sweep a wave clear does.
+        if (p.typeKey === 'magnet') {
+          this.money.vacuum();
+          this.effects.shockwave(this.player.pos, p.type.color, 9, 0.5);
+        }
         this.sfx[p.type.sfx]();
         this.effects.burst(p.pos, p.type.color, 16, 4, 2, 0.5);
         p.destroy();
@@ -3009,12 +3029,6 @@ class Game {
     for (let i = 0; i < list.length; i++) list[i].update(dt, ctx);
     this._poisonLeech(dt);
 
-    // Enemies this wave still owes after this frame's deaths - the denominator
-    // the drop chance is measured against. Counted once here rather than per
-    // death, so several kills in one frame all price against the same figure.
-    let remaining = this.queue.length;
-    for (let i = 0; i < list.length; i++) if (!list[i].dead) remaining++;
-
     let write = 0;
     let big = 0;
     for (let i = 0; i < list.length; i++) {
@@ -3050,7 +3064,7 @@ class Game {
       // Loot falls where the thing died. Boss parts are excluded: the boss
       // pays out by bleeding at health thresholds and by the kill bonus, and
       // letting the final part roll as well would double-pay the same kill.
-      if (!e.boss) this._rollDrop(e.pos, remaining);
+      if (!e.boss) this._rollDrop(e.pos);
       else this._bossDeathPos.copy(e.pos);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
@@ -3581,14 +3595,12 @@ class Game {
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);
     this.ui.setWeapon(this.player.weapon.name);
-    const shieldFrac = this.player.shieldEnd > this.time ? this.player.shield / 50 : 0;
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
-      shieldFrac,
+      this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
       this.player.shield
     );
-    this.ui.setShield(shieldFrac);
     if (this._statsHeld) this.ui.updateStats(this._statRows());
   }
 

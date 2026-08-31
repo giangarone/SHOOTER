@@ -837,6 +837,85 @@ def _(c):
     c.rect(6.8, 10.5, 9.8, 12.8, E)                             # cell
 
 
+# ---- the pickups ----------------------------------------------------------
+#
+# The six things that fall out of a dead enemy. These are the only icons drawn
+# for objects the player picks UP rather than for something a mutation does, so
+# they share a rule of their own: each is ONE object filling the frame, with no
+# secondary marks, because they are read at a glance while something is trying
+# to kill you - and, unlike a totem's icon, from any distance and any angle.
+
+
+@icon('pickAmmo')           # the ammo drop
+def _(c):
+    # A magazine, seen flat. The station's icon is a BOX of them; this is the
+    # single mag that comes off a body, which is the difference between the two.
+    c.rect(9.5, 1.5, 14.5, 6, S)               # feed lips, narrower than the body
+    c.rect(7, 6, 17, 21, S)                    # the body
+    c.rect(7, 18.5, 17, 21, E)                 # floor plate
+    for y in (8, 12):                          # rounds showing through
+        c.rect(9, y, 15, y + 2.6, E)
+
+
+@icon('pickHealth')         # the health drop
+def _(c):
+    # A cross, not a heart: the heart is the MAX HEALTH station, and a pickup
+    # that tops you up must not wear the icon of the thing that raises the bar.
+    c.rect(9, 2.5, 15, 21.5, S)
+    c.rect(2.5, 9, 21.5, 15, S)
+    c.rect(10.5, 4.5, 13.5, 19.5, E)
+    c.rect(4.5, 10.5, 19.5, 13.5, E)
+
+
+@icon('pickDamage')         # RAGE - damage and move speed
+def _(c):
+    # A fist. The buff is the one that makes you push INTO the crowd, and a
+    # blade or a chevron would say "weapon" rather than "you, harder". The
+    # knuckles are bumps on the SILHOUETTE and not grooves inside it: grooves
+    # vanish at the size this is read at.
+    for x in (5, 8.4, 11.8):
+        c.disc(x + 1.7, 8.6, 2.7, S)           # three knuckles along the top
+    c.rect(5, 8, 15.5, 17.5, S)                # the hand
+    c.rect(15, 10.5, 19, 15, S)                # thumb, folded across
+    c.rect(6.5, 17, 15, 21.5, S)               # wrist
+    c.rect(6.5, 19, 15, 21.5, E)               # and its cuff
+    c.rect(6, 11.5, 15, 13.5, E)               # the line the fingers close on
+
+
+@icon('pickRate')           # fire rate
+def _(c):
+    # A bolt. Rate of fire is the one pickup whose meaning is SPEED rather than
+    # force, and the bolt is the only shape in the set that says that outright.
+    c.poly([(13.5, 1.5), (5, 13), (10.5, 13), (8.5, 22.5), (18.5, 10),
+            (12.5, 10), (15.5, 1.5)], S)
+    c.poly([(12.8, 4.5), (8.2, 11.5), (12.2, 11.5), (10.6, 18),
+            (15.6, 11.2), (11.8, 11.2), (13.6, 4.5)], E)
+
+
+@icon('pickShield')         # the shield
+def _(c):
+    c.poly([(12, 1.5), (21.5, 5.5), (21.5, 13), (12, 22.5), (2.5, 13),
+            (2.5, 5.5)], S)
+    c.poly([(12, 5.5), (18.5, 8.2), (18.5, 12.5), (12, 18.5), (5.5, 12.5),
+            (5.5, 8.2)], E)
+    c.poly([(12, 9), (15.5, 10.5), (15.5, 12.5), (12, 15.5), (8.5, 12.5),
+            (8.5, 10.5)], S)
+
+
+@icon('pickMagnet')         # sweeps every money orb on the floor to you
+def _(c):
+    # A horseshoe magnet, and the ONE place in the set where that shape is
+    # allowed: SCAVENGER draws a magnet too, but it is a mutation icon on a
+    # totem and this is an object on the floor, so the two are never read side
+    # by side. The poles are the lit part - the pull is what it does.
+    c.arc(12, 13.5, 8.4, 3.6, 180, 360, S)
+    c.rect(3.6, 13.5, 7.2, 20.5, S)
+    c.rect(16.8, 13.5, 20.4, 20.5, S)
+    c.rect(3.6, 17.5, 7.2, 20.5, E)
+    c.rect(16.8, 17.5, 20.4, 20.5, E)
+    c.disc(12, 4.6, 3.0, E)                    # the orb, on its way in
+
+
 # Icons whose tones are authored outright and must not go through the shared
 # lighting pass again. Only the reference icon is in here.
 RAW = {'venom'}

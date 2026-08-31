@@ -144,16 +144,21 @@ html, body {
 #ammo-reload { font-size: 11px; letter-spacing: 0.3em; color: var(--cyan); animation: pulse 0.45s infinite alternate; }
 @keyframes pulse { from { opacity: 0.25; } to { opacity: 1; } }
 
-/* Directly under the score box. It used to be pushed down to clear the combo
-   readout that shared this column; the combo is a bottom-centre gauge now, so
-   the buffs take the space back and sit as close to the score stack as the
-   panel above them ends. */
+/* BUFF CHIPS, beside the combo gauge. They used to sit in the top-right
+   corner under the score, where nothing else moves and nothing else is being
+   read during a fight - a buff would come and go without ever being looked at.
+   They are a centred row above the multiplier now: one place for "what is true
+   about you right now", and the eye is already there for the combo.
+
+   Positioned off the same bottom edge as #combo and centred the same way, so
+   the two stay stacked at any window size. */
 #buffs {
   position: fixed;
-  top: 104px;
-  right: 22px;
+  left: 50%;
+  bottom: 152px;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   pointer-events: none;
   z-index: 5;
@@ -166,19 +171,23 @@ html, body {
   border: 1px solid var(--line);
   backdrop-filter: blur(6px);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+  /* --buff is the chip's theme colour, set by ui.js from the same value the
+     pickup's plate was drawn in. */
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), 0 0 10px -2px var(--buff);
 }
-.buff-icon::before {
-  content: "";
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  background: currentColor;
-  opacity: 0.9;
+/* THE ART IS THE PICKUP'S OWN DRAWING, rendered flat to a canvas by
+   pixelIconCanvas() - see pixelicons.js. A chip and the thing on the floor it
+   stands for are the same 24x24, which is the whole reason the icons are
+   authored once and rendered twice. `pixelated` is what keeps it art rather
+   than a blurry photograph of art. */
+.buff-icon .buff-art {
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 5px var(--buff));
 }
 .buff-icon .buff-timer {
   position: absolute;
@@ -186,32 +195,11 @@ html, body {
   left: 0;
   right: 0;
   height: 3px;
-  background: currentColor;
+  background: var(--buff);
   border-radius: 0 0 7px 7px;
   transform-origin: left center;
   transform: scaleX(1);
 }
-.buff-icon.damage { color: #ff3d00; }
-.buff-icon.damage::before {
-  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-  background: #ff3d00;
-  box-shadow: 0 0 8px #ff3d00;
-}
-.buff-icon.damage .buff-timer { background: #ff3d00; }
-.buff-icon.firerate { color: #2979ff; }
-.buff-icon.firerate::before {
-  background: #2979ff;
-  box-shadow: 0 0 8px #2979ff;
-  clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
-}
-.buff-icon.firerate .buff-timer { background: #2979ff; }
-.buff-icon.shield { color: #4ef3ff; }
-.buff-icon.shield::before {
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: #4ef3ff;
-  box-shadow: 0 0 8px #4ef3ff;
-}
-.buff-icon.shield .buff-timer { background: #4ef3ff; }
 /* Remaining shield POINTS, over the chip. The timer bar alone says how long is
    left but never how much is left, and the shield is spent by damage far more
    often than it is by the clock. */
@@ -230,30 +218,6 @@ html, body {
   position: fixed; inset: 0; pointer-events: none; z-index: 4;
   background: #fff; opacity: 0; will-change: opacity;
 }
-
-/* SHIELD. The powerup is the rarest drop in the pool and used to announce
-   itself with a 40px chip in the corner - by the time a player noticed it, it
-   was usually spent. This lights the whole frame instead, hexagon-tinted to
-   match the pickup's dome, and its opacity tracks the points REMAINING, so a
-   shield down to its last few visibly thins out before it breaks.
-
-   A screen-space rim rather than a dome on the player: in first person a dome
-   around the camera is either invisible or covers the whole view. Below the
-   vignette so a hit still reads as red over the top of it, and driven by
-   `opacity` alone, which the compositor handles without paint. */
-#shield-fx {
-  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
-  /* Two stops, not one: the wide gradient is the barrier's body and the tight
-     one is its edge, which is what stops it reading as ambient blue lighting in
-     a room that already has plenty of it. */
-  background:
-    radial-gradient(ellipse at center, transparent 46%, rgba(78, 243, 255, 0.44) 100%),
-    radial-gradient(ellipse at center, transparent 72%, rgba(160, 252, 255, 0.38) 100%);
-  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.35), inset 0 0 60px rgba(78, 243, 255, 0.3);
-  transition: opacity 0.18s linear;
-  animation: shield-breathe 1.9s ease-in-out infinite alternate;
-}
-@keyframes shield-breathe { from { filter: brightness(0.78); } to { filter: brightness(1.25); } }
 
 #vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;

@@ -21,6 +21,7 @@
 // the thing that fails first.
 import { UPGRADES } from '../js/upgrades.js';
 import { WEAPONS } from '../js/weapons.js';
+import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PIXEL_ICON_KEYS, resolveIcon, GRID } from '../js/pixelicons.js';
 
 // Icons used by things that are not upgrades. Stations and weapons name their
@@ -36,6 +37,11 @@ const STATION_ICONS = {
   MAXHP_STATION: 'heart',
 };
 
+// The pickups. Unlike an upgrade, a pickup names its drawing explicitly
+// (`icon` on its entry in powerups.js), so these can drift the same way the
+// stations can - and a pickup with no drawing is a crash the first time an
+// enemy dies, which is the worst place in the game to find one.
+
 let fails = 0;
 const ok = (name, cond, extra = '') => {
   console.log((cond ? 'ok   ' : 'FAIL ') + name + (extra ? '  ' + extra : ''));
@@ -46,6 +52,8 @@ const drawn = new Set(PIXEL_ICON_KEYS);
 const users = {};
 for (const id of Object.keys(UPGRADES)) users[id] = UPGRADES[id].name;
 for (const [name, icon] of Object.entries(STATION_ICONS)) users[icon] = name;
+for (const [key, def] of Object.entries(POWERUP_TYPES)) users[def.icon] = 'PICKUP ' + key;
+users[AMMO_PICKUP.icon] = 'PICKUP ammo';
 for (const w of Object.values(WEAPONS)) if (w.icon) users[w.icon] = 'WEAPON ' + w.name;
 
 const missing = Object.entries(users).filter(([k]) => !drawn.has(k));
@@ -81,6 +89,7 @@ ok('no drawing is blank', empty.length === 0, empty.join(', '));
 console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +
   `${Object.keys(STATION_ICONS).length} stations + ` +
+  `${Object.keys(POWERUP_TYPES).length + 1} pickups + ` +
   `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons) ` +
   `over ${PIXEL_ICON_KEYS.length} drawings`
 );

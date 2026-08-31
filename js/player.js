@@ -118,6 +118,7 @@ const DEFAULT_MODS = {
   // upgrades.js and replayed by rebuildMods() like everything above. The PRICE
   // is not here - it is paid once into maxHpDebt and never revisited.
   carnageStep: 0,       // Carnage: damage gained per kill, lost on any hit
+  carnageMax: 0,        // and the ceiling it climbs to
   killHeal: 0,          // Blood Pact: HP healed per kill
   damageTakenMult: 1,   // Blood Pact: multiplier on all damage the player takes
   dodgeInvuln: 0,       // Demonic Dodge: seconds of invulnerability after a dodge
@@ -411,24 +412,20 @@ export class Player {
     this.streak = Math.max(-m.streakFloor, Math.min(m.streakCap, next));
   }
 
-  // Double Dash. `code` is the raw key that was double-tapped; the direction is
-  // whatever that key means RIGHT NOW, rotated by yaw exactly the way update()
-  // rotates held movement, so a dash always goes where the same key would have
-  // walked. Returns whether a charge was actually spent.
+  // Double Dash. `code` is the raw key that was double-tapped.
+  //
+  // FORWARD ONLY. It used to dash whichever way the tapped key walked, which
+  // made a back-tap the safest button in the game: the dash's whole cost is
+  // that it commits you to a direction, and committing to AWAY costs nothing.
+  // W is the only key that spends a charge now, so the dash is a way into a
+  // fight rather than a free disengage. Returns whether a charge was spent.
   tryDash(code, time) {
     if (this.mods.dashCharges <= 0 || this.dashLeft <= 0) return false;
-    const f = code === 'KeyW' ? 1 : code === 'KeyS' ? -1 : 0;
-    const sd = code === 'KeyD' ? 1 : code === 'KeyA' ? -1 : 0;
-    if (!f && !sd) return false;
-    const sinY = Math.sin(this.yaw);
-    const cosY = Math.cos(this.yaw);
-    // Stored as a unit DIRECTION, not a velocity: the speed along it is
-    // whatever dashShape says this frame.
-    this.dashDX = -sinY * f + cosY * sd;
-    this.dashDZ = -cosY * f - sinY * sd;
-    const len = Math.hypot(this.dashDX, this.dashDZ) || 1;
-    this.dashDX /= len;
-    this.dashDZ /= len;
+    if (code !== 'KeyW') return false;
+    // Straight down the camera's own bearing, which is what W means at the
+    // moment it is pressed.
+    this.dashDX = -Math.sin(this.yaw);
+    this.dashDZ = -Math.cos(this.yaw);
     this.dashStart = time;
     this.dashEnd = time + DASH_TIME;
     this.dashLeft--;
@@ -964,7 +961,9 @@ export class Player {
     // run away, and the thing that stops it is a single point of damage from
     // anywhere. A player holding thirty stacks is playing a different game to
     // the one they were playing at zero, and they know exactly what it costs.
-    if (this.carnageStacks > 0) d *= 1 + this.mods.carnageStep * this.carnageStacks;
+    if (this.carnageStacks > 0) {
+      d *= 1 + Math.min(this.mods.carnageMax, this.mods.carnageStep * this.carnageStacks);
+    }
     // Demonic Dodge's window, read off the frame clock published in update().
     if (this.rageEnd > this.now) d *= 1 + this.mods.dodgeRage;
     return d;

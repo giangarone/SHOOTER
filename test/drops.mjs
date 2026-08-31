@@ -1,17 +1,24 @@
 // Drop-system test.
 //
 // The smoke test only checks that nothing crashes or leaks; the properties
-// that make drops FAIR are invisible to it. This checks the three that matter:
+// that make drops FAIR are invisible to it. Drops are rolled per kill now
+// rather than paid out of a per-wave budget (see rollDrop in powerups.js),
+// so what is worth pinning down has changed with them:
 //
-//   the budget is a ceiling      a wave can never yield more loot than
-//                                calcDropsForWave, however it is played
-//   the budget is actually spent clearing a wave yields close to all of it,
-//                                so the ceiling is not hiding a drought
-//   need picks the type          low health drops health, low ammo drops ammo,
-//                                and a player with full bars gets buffs
+//   the rates are the rates     a kill drops at the advertised chance, and
+//                               the buffs stay rare - they are the numbers the
+//                               whole economy of a wave is tuned against, and
+//                               nothing else in the game would notice if one
+//                               of them silently doubled
+//   need moves health and ammo  and ONLY health and ammo: a player doing badly
+//                               gets more of what keeps them alive, never more
+//                               damage
+//   one drop per kill at most   so a single death can never carpet the floor
 //
-// The first two together are the leaderboard guarantee: two runs of the same
-// wave get the same amount of loot. Only its composition varies.
+// The old budget assertions are gone with the budget. What replaced the
+// guarantee they encoded - two runs of a wave get the same loot - is nothing:
+// that was the cost of rolling rather than scheduling, and it was paid on
+// purpose.
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
@@ -42,83 +49,78 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load' });
   await sleep(1500);
 
-  // ---- type selection responds to need ----
-  const mix = await page.evaluate(async () => {
-    const { pickDropType } = await import('/js/powerups.js');
-    const roll = (hp, ammo) => {
-      const t = {};
-      for (let i = 0; i < 4000; i++) {
-        const k = pickDropType(hp, ammo);
-        t[k] = (t[k] || 0) + 1;
+  // ---- the advertised rates are the real rates ----
+  const rates = await page.evaluate(async () => {
+    const { rollDrop, dropChance, POWERUP_TYPES, AMMO_PICKUP } = await import('/js/powerups.js');
+    const N = 200000;
+    const sample = (hp, ammo, allowAmmo = true) => {
+      const t = { nothing: 0 };
+      for (let i = 0; i < N; i++) {
+        const k = rollDrop(hp, ammo, allowAmmo);
+        if (!k) t.nothing++;
+        else t[k] = (t[k] || 0) + 1;
       }
-      for (const k in t) t[k] = +(t[k] / 4000).toFixed(3);
+      for (const k in t) t[k] = t[k] / N;
       return t;
     };
     return {
-      hurt: roll(0.15, 1),
-      dry: roll(1, 0.08),
-      both: roll(0.2, 0.2),
-      full: roll(1, 1),
+      full: sample(1, 1),
+      hurt: sample(0.1, 1),
+      dry: sample(1, 0.05),
+      noAmmo: sample(1, 0.05, false),
+      // What the module itself says it should be doing, to check the sample
+      // against rather than against numbers copied into this file.
+      wantFull: dropChance(1, 1),
+      wantDry: dropChance(1, 0.05),
+      chances: {
+        health: POWERUP_TYPES.health.chance,
+        damageBoost: POWERUP_TYPES.damageBoost.chance,
+        fireRateBoost: POWERUP_TYPES.fireRateBoost.chance,
+        magnet: POWERUP_TYPES.magnet.chance,
+        shield: POWERUP_TYPES.shield.chance,
+        ammo: AMMO_PICKUP.chance,
+      },
     };
   });
-  check('low health mostly drops health', (mix.hurt.health || 0) > 0.75,
-    `health=${mix.hurt.health} of ${JSON.stringify(mix.hurt)}`);
-  check('low ammo mostly drops ammo', (mix.dry.ammo || 0) > 0.75,
-    `ammo=${mix.dry.ammo}`);
-  check('both low splits between them', (mix.both.health || 0) > 0.3 && (mix.both.ammo || 0) > 0.3,
-    `health=${mix.both.health} ammo=${mix.both.ammo}`);
-  check('full bars drop only buffs',
-    !mix.full.health && !mix.full.ammo,
-    JSON.stringify(mix.full));
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+  const anything = (t) => 1 - t.nothing;
 
-  // ---- budget is a ceiling, and is spent ----
-  // Run several waves with the player unkillable, counting every drop.
-  const waves = [3, 7, 12, 18];
-  for (const w of waves) {
-    const res = await page.evaluate(async (wave) => {
-      const g = window.__game;
-      const { calcDropsForWave } = await import('/js/powerups.js');
-      g.wave = wave - 1;
-      g.enemies.forEach((e) => { e.dead = true; });
-      g.queue.length = 0;
-      g.powerups.forEach((p) => p.destroy());
-      g.powerups.length = 0;
-      g.waveState = 'idle';
-      g.interT = 0.05;
-      // maxHealth is a getter; keep the player alive by topping health up.
-      g.player.health = g.player.maxHealth;
-      // Count every drop this wave by wrapping the spawner.
-      let dropped = 0;
-      const orig = g._spawnDrop.bind(g);
-      g._spawnDrop = (pos) => { dropped++; return orig(pos); };
-      let relief = 0;
-      const origR = g._updateReliefDrop.bind(g);
-      g._updateReliefDrop = (dt) => {
-        const before = g.powerups.length;
-        origR(dt);
-        if (g.powerups.length > before) relief++;
-      };
-      // Let the wave start, then kill everything as it arrives.
-      const budget = calcDropsForWave(wave);
-      const deadline = Date.now() + 22000;
-      await new Promise((done) => {
-        const t = setInterval(() => {
-          g.player.health = g.player.maxHealth;
-          g.player.reserveAmmo = 0; g.player.mag = 0;   // keep need high
-          for (const e of g.enemies) e.takeDamage(1e6, true, 0, 1);
-          const cleared = g.waveState !== 'active' && g.wave === wave;
-          if (cleared || Date.now() > deadline) { clearInterval(t); done(); }
-        }, 120);
-      });
-      g._spawnDrop = orig;
-      g._updateReliefDrop = origR;
-      return { wave: g.wave, budget, dropped, relief, left: g.dropsLeft };
-    }, w);
-    check(`wave ${w} drops never exceed budget`, res.dropped <= res.budget,
-      `dropped=${res.dropped} budget=${res.budget}`);
-    check(`wave ${w} budget mostly spent`, res.dropped >= Math.ceil(res.budget * 0.6),
-      `dropped=${res.dropped}/${res.budget} left=${res.left}`);
+  check('most kills drop nothing', rates.full.nothing > 0.8,
+    `nothing=${rates.full.nothing.toFixed(3)}`);
+  check('the overall rate matches dropChance()',
+    near(anything(rates.full), rates.wantFull, 0.006),
+    `sampled=${anything(rates.full).toFixed(4)} stated=${rates.wantFull.toFixed(4)}`);
+  check('the overall rate matches dropChance() when starving',
+    near(anything(rates.dry), rates.wantDry, 0.008),
+    `sampled=${anything(rates.dry).toFixed(4)} stated=${rates.wantDry.toFixed(4)}`);
+
+  // Each buff at its own advertised chance, within sampling noise. Ammo is
+  // rolled first and eats a little of everything after it, which is why these
+  // are checked at the "full bars" sample where its rate is lowest - and why
+  // the tolerance is a fraction of the chance rather than an absolute.
+  for (const [key, want] of Object.entries(rates.chances)) {
+    if (key === 'ammo' || key === 'health') continue;
+    check(`${key} drops at ~${(want * 100).toFixed(1)}% a kill`,
+      near(rates.full[key] || 0, want, want * 0.25),
+      `sampled=${((rates.full[key] || 0) * 100).toFixed(2)}%`);
   }
+
+  // ---- need moves health and ammo, and nothing else ----
+  check('low health raises the health rate',
+    (rates.hurt.health || 0) > (rates.full.health || 0) * 2.5,
+    `full=${(rates.full.health || 0).toFixed(3)} hurt=${(rates.hurt.health || 0).toFixed(3)}`);
+  check('low ammo raises the ammo rate',
+    (rates.dry.ammo || 0) > (rates.full.ammo || 0) * 2.5,
+    `full=${(rates.full.ammo || 0).toFixed(3)} dry=${(rates.dry.ammo || 0).toFixed(3)}`);
+  check('need never raises a buff rate',
+    near(rates.hurt.shield || 0, rates.full.shield || 0, 0.004)
+    && near(rates.hurt.damageBoost || 0, rates.full.damageBoost || 0, 0.006),
+    `shield ${(rates.full.shield || 0).toFixed(4)} -> ${(rates.hurt.shield || 0).toFixed(4)}`);
+  check('the ammo cap suppresses ammo entirely', !rates.noAmmo.ammo,
+    `ammo=${rates.noAmmo.ammo}`);
+  check('a starving player still sees buffs',
+    (rates.dry.damageBoost || 0) > 0.005,
+    `damage=${(rates.dry.damageBoost || 0).toFixed(4)}`);
 
   // ---- boss bleeds at its thresholds ----
   const boss = await page.evaluate(async () => {
@@ -132,8 +134,8 @@ try {
       const t = setInterval(() => { if (g.bossFight) { clearInterval(t); r(); } }, 60);
     });
     let bled = 0;
-    const orig = g._spawnDrop.bind(g);
-    g._spawnDrop = (pos) => { bled++; return orig(pos); };
+    const orig = g._placeDrop.bind(g);
+    g._placeDrop = (kind, pos) => { bled++; return orig(kind, pos); };
     const b = g.bossFight.parts[0];
     const seen = [];
     // Walk the boss down through every threshold.
@@ -142,7 +144,7 @@ try {
       await new Promise((r) => setTimeout(r, 260));
       seen.push({ f, bled });
     }
-    g._spawnDrop = orig;
+    g._placeDrop = orig;
     clearInterval(alive);
     return { seen, bled, thresholds: g.bossFight ? g.bossFight.bleedAt : -1 };
   });

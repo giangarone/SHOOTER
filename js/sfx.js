@@ -199,6 +199,15 @@ export class SFX {
     this.tone({ f: f * 0.62, f2: f, t: 0.09, type: 'sine', v: 0.22 });
     this.tone({ f: f * 1.5, f2: f * 2, t: 0.06, type: 'sine', v: 0.07, delay: 0.02 });
   }
+  // The magnet. A rising sweep with a soft thump under it - the sound of the
+  // floor being pulled in, played once for however many orbs answer it. The
+  // orb blips that follow are the payoff, so this deliberately does not
+  // compete with them: it opens the moment rather than filling it.
+  pickupMagnet() {
+    this.tone({ f: 180, f2: 900, t: 0.28, type: 'sine', v: 0.26 });
+    this.tone({ f: 90, f2: 60, t: 0.22, type: 'triangle', v: 0.18 });
+    this.noise({ t: 0.3, v: 0.1, f: 1400, delay: 0.04 });
+  }
   pickupShield() {
     this.tone({ f: 330, f2: 660, t: 0.2, type: 'sine', v: 0.3 });
     this.noise({ t: 0.3, v: 0.15, f: 2000 });
