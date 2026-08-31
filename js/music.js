@@ -154,6 +154,11 @@ export class Music {
     this._downbeat = false;
     this._bpm = 0;
     this._synced = false;
+    // Keeps a four-count running when the map is not driving, off the
+    // detector's own beats, so anything reading `bar` always has one. It is a
+    // count, not a bar: nothing here knows where the ONE is, which is why
+    // `downbeat` stays false and `synced` says so.
+    this._barCount = 0;
     this._cal = null;
   }
 
@@ -343,7 +348,8 @@ export class Music {
       this._synced = true;
     } else {
       this._realBeat = this._fluxBeat;
-      this._bar = 0;
+      if (fired) this._barCount = (this._barCount + 1) & 3;
+      this._bar = this._barCount;
       this._downbeat = false;
       this._bpm = 0;
       this._synced = false;
@@ -365,6 +371,9 @@ export class Music {
       // it is driving only the BRIGHTNESS needs standing in for. Without the
       // map there is nothing to go on and the whole thing free-runs.
       this._beat = this._synced ? this._realBeat : Math.max(0, 1 - f * 4);
+      // Nothing is playing, so the detector fires nothing and the count above
+      // would sit still. The free-running tempo is the only clock left.
+      if (!this._synced) this._bar = Math.floor(this._fallbackT) & 3;
       this._lvl = 0.35 + Math.sin(this._fallbackT * 0.6) * 0.1;
     }
   }

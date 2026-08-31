@@ -19,11 +19,17 @@
 // the beams, the fog and the floor accents: things you look AT, not light you
 // see BY.
 //
-// WHERE THE BEAT COMES FROM: music.js taps an analyser off the raw source and
-// exposes `level` (bass energy) and `beat` (onset strength). It also owns the
-// free-running fallback for when there is nothing to listen to, so the rig
-// never has to check - and so the rig and the dancing crowd in enemy.js, which
-// read the same two numbers, can never disagree about whether the party is on.
+// WHERE THE BEAT COMES FROM: music.js reads a beat map analysed offline from
+// the soundtrack and exposes `level` (bass energy), `beat` (an envelope that
+// peaks on the hit), `bar` (0..3 through the bar) and `downbeat`. It also owns
+// the fallback for when there is nothing to listen to, so the rig never has to
+// check - and so the rig and the dancing crowd in enemy.js, which read the
+// same numbers, can never disagree about whether the party is on.
+//
+// `bar` IS THE BEAT EDGE. It steps exactly once per beat, so comparing it with
+// last frame's value is an exact beat trigger - no threshold on the envelope,
+// no risk of a long frame firing twice or a short one missing. Everything in
+// here that moves in time with the music hangs off that comparison.
 import * as THREE from 'three';
 import { FOG_DENSITY, FOG_DENSITY_BOSS } from './arena.js';
 
@@ -57,6 +63,55 @@ const HEADS = 2;
 // 6 it started at - those two extra cones measured about 2fps.
 const BEAMS = 4;
 const BEAM_LEN = 15;
+
+// BEAM FIGURES. The four beams are aimed as a SET, not individually, and the
+// set changes shape on every beat. Which is the whole point: four lights each
+// picking their own angle reads as four lights, but four lights moving into a
+// shape reads as one rig, and a shape that repeats every bar is something the
+// eye learns to predict. Anticipating the next move is the difference between
+// lights that react to the music and lights that dance to it.
+//
+// A figure is an aim direction per beam, built from where that beam hangs:
+//   IN     every beam tilts toward the middle of the room
+//   OUT    every beam tilts away from it
+//   CW/CCW every beam tilts along the tangent, all the same way round, which
+//          reads as the whole set shearing sideways
+const FIG_IN = 0;
+const FIG_CW = 1;
+const FIG_OUT = 2;
+const FIG_CCW = 3;
+// One programme is the four figures a bar walks through, one per beat. Several
+// of them, changed every few bars, because a single repeating bar stops being
+// a pattern and becomes wallpaper about a minute in.
+const PROGRAMMES = [
+  [FIG_IN, FIG_CW, FIG_OUT, FIG_CCW],   // sweeping round
+  [FIG_IN, FIG_OUT, FIG_IN, FIG_OUT],   // breathing in and out
+  [FIG_CW, FIG_CCW, FIG_CW, FIG_CCW],   // shearing side to side
+  [FIG_IN, FIG_CW, FIG_IN, FIG_CCW],    // returning to the middle on the odds
+];
+// Bars before the programme changes. Four is one phrase, which is where a
+// track tends to change anyway.
+const PROG_BARS = 4;
+// How far the beams tilt off vertical at full energy, in radians. This is the
+// range the old continuous sway used, kept deliberately: the change here is
+// WHEN they move, not how far.
+const BEAM_TILT = 0.42;
+// How fast a beam closes on its new aim. High: the point of moving on the beat
+// is that the movement is over by the time the next one lands, so it reads as
+// a head slamming into position rather than as a drift that happens to start
+// in the right place.
+const BEAM_SNAP = 26;
+
+// How much harder the emissive furniture hits on the ONE than on the other
+// three beats. Every beat used to be identical, which is why a room full of
+// pulsing edges read as flicker rather than as a bar you could feel.
+const DOWNBEAT_ACCENT = 1.7;
+
+// Beats the wall comet takes to get once around the room, at rest and when the
+// room is being driven hardest. Both are multiples of four, so the comet
+// crosses the same corner on the same beat of the bar every lap.
+const LAP_BEATS_IDLE = 32;
+const LAP_BEATS_HOT = 8;
 
 
 // The palette the accents are drawn from. NO WHITE: the room's colour never
@@ -246,11 +301,30 @@ export class Rig {
       const mesh = new THREE.Mesh(beamGeo, mat);
       pivot.add(mesh);
       this.group.add(pivot);
-      this.beams.push({ pivot, mat, phase: (i / BEAMS) * Math.PI * 2 });
+      // The unit vector from this beam toward the middle of the room, and the
+      // tangent at right angles to it. Every figure is one of these four
+      // directions, so aiming is a multiply rather than a special case per
+      // beam - and the shapes stay correct whatever the ring's radius is.
+      this.beams.push({
+        pivot,
+        mat,
+        inX: -Math.cos(ang), inZ: -Math.sin(ang),
+        tanX: -Math.sin(ang), tanZ: Math.cos(ang),
+        // Where it is aiming now, and where the last beat told it to aim.
+        aimZ: 0, aimX: 0, tgtZ: 0, tgtX: 0,
+      });
     }
 
     // ---- animation state ---------------------------------------------------
     this.t = 0;
+    // Last frame's position in the bar. A change in it is a beat; -1 means
+    // nothing has been seen yet, so the first frame counts as one.
+    this._lastBar = -1;
+    this._prog = 0;
+    this._barsSeen = 0;
+    // The comet's target position on the wall, in cells. It is advanced in a
+    // step on each beat and chased smoothly, rather than being driven by dt.
+    this._chaseTarget = 0;
     // 0..1, written every frame and read by main.js for the DOM strobe.
     this.flash = 0;
     // One-shot cue timers. All count DOWN in seconds.
@@ -299,6 +373,30 @@ export class Rig {
     this._enraged = on;
   }
 
+  // Points the four beams at the figure this beat calls for. Called once per
+  // beat from update(); the easing towards what it sets happens per frame.
+  //
+  // The aim is built from each beam's own inward and tangent vectors, so one
+  // figure index produces four different angles that together make one shape.
+  // A cone hangs pointing down: rotating it about Z swings its tip towards +X,
+  // and about X towards -Z, which is where the signs below come from.
+  _cueBeams(bar) {
+    const fig = PROGRAMMES[this._prog][bar & 3];
+    // Idle rooms get a narrower figure. The shape is the same, just smaller -
+    // the room should look like it is holding back, not like a different rig.
+    const tilt = BEAM_TILT * (0.35 + this._energy * 0.65);
+    for (let i = 0; i < this.beams.length; i++) {
+      const b = this.beams[i];
+      let x, z;
+      if (fig === FIG_IN) { x = b.inX; z = b.inZ; }
+      else if (fig === FIG_OUT) { x = -b.inX; z = -b.inZ; }
+      else if (fig === FIG_CW) { x = b.tanX; z = b.tanZ; }
+      else { x = -b.tanX; z = -b.tanZ; }
+      b.tgtZ = x * tilt;
+      b.tgtX = -z * tilt;
+    }
+  }
+
   // `s` is a scratch object owned by main.js and refilled each frame, so this
   // allocates nothing. Fields: mode, beat, level, healthFrac, comboMult,
   // bossColor, bossPos.
@@ -326,6 +424,29 @@ export class Rig {
     const comboDrive = Math.min(1, (s.comboMult - 1) / 2);
     const energyTarget = combat ? 0.55 + comboDrive * 0.45 : 0.12;
     this._energy += (energyTarget - this._energy) * Math.min(1, dt * 2.5);
+
+    // ---- the beat itself ---------------------------------------------------
+    // `bar` steps once per beat, so this fires exactly once per beat however
+    // long or short the frame was. Everything that CUES rather than drifts is
+    // decided here; the frame-by-frame code below only eases towards it.
+    if (s.bar !== this._lastBar) {
+      const first = this._lastBar < 0;
+      this._lastBar = s.bar;
+      if (s.downbeat || first) {
+        // A new bar. Change the programme every phrase, so the room has a
+        // pattern to learn without it becoming the only pattern it has.
+        if (++this._barsSeen % PROG_BARS === 0) {
+          this._prog = (this._prog + 1) % PROGRAMMES.length;
+        }
+      }
+      this._cueBeams(s.bar);
+      // The comet steps a fixed share of the wall on every beat. A lap takes a
+      // whole number of BARS, so it passes the same corner on the same beat
+      // every time round - which is what makes it read as counting the music
+      // rather than as sliding past it. The house lights stop it dead.
+      const lapBeats = LAP_BEATS_IDLE + (LAP_BEATS_HOT - LAP_BEATS_IDLE) * this._energy;
+      this._chaseTarget += (1 / lapBeats) * (1 - this._house);
+    }
 
     // ---- cue timers --------------------------------------------------------
     if (this._waveT > 0) this._waveT = Math.max(0, this._waveT - dt);
@@ -464,11 +585,17 @@ export class Rig {
     // through a fixed beam, and anything fast enough to notice reads as the
     // texture sliding rather than as air moving.
     this._beamTex.offset.x = this.t * 0.035;
+    // Aim eases towards whatever the last beat cued, fast enough to be over
+    // before the next one. This used to be a pair of sines on wall-clock time,
+    // which meant the loudest thing in the room was the one thing in it moving
+    // to nothing in particular.
+    const snap = Math.min(1, dt * BEAM_SNAP);
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
-      const sw = Math.sin(this.t * 0.6 + b.phase);
-      b.pivot.rotation.z = sw * 0.42;
-      b.pivot.rotation.x = Math.cos(this.t * 0.45 + b.phase * 1.3) * 0.42;
+      b.aimZ += (b.tgtZ - b.aimZ) * snap;
+      b.aimX += (b.tgtX - b.aimX) * snap;
+      b.pivot.rotation.z = b.aimZ;
+      b.pivot.rotation.x = b.aimX;
       b.mat.color.copy(this._colour);
       // Beams are the loudest thing in the room, so they are the first thing
       // the house lights take away. Still gated on `_energy` as well as the
@@ -501,13 +628,17 @@ export class Rig {
     // rig - and static light in a room full of moving light reads as scenery
     // rather than as part of the show.
     const emCol = this._house > 0.5 ? this._target : this._colour;
-    const trimGain = 1.2 + beat * 2.4 * this._energy + heart * 2;
+    // The ONE hits harder than the other three. Four identical pulses per bar
+    // is a flicker; one big one and three small ones is a bar, and the room
+    // suddenly has a downbeat you can feel without being told about it.
+    const hit = beat * this._energy * (s.downbeat ? DOWNBEAT_ACCENT : 1);
+    const trimGain = 1.2 + hit * 2.4 + heart * 2;
     this.mats.trim.emissive.copy(emCol);
     this.mats.trim.emissiveIntensity = trimGain * (1 - dark);
     this.mats.deckEdge.emissive.copy(emCol);
-    this.mats.deckEdge.emissiveIntensity = (0.8 + beat * 1.6 * this._energy) * (1 - dark);
+    this.mats.deckEdge.emissiveIntensity = (0.8 + hit * 1.6) * (1 - dark);
     this.mats.platEdge.emissive.copy(emCol);
-    this.mats.platEdge.emissiveIntensity = (0.9 + beat * 1.4 * this._energy) * (1 - dark);
+    this.mats.platEdge.emissiveIntensity = (0.9 + hit * 1.4) * (1 - dark);
 
     // ---- the wall chase ----------------------------------------------------
     // The head-height strips around the four walls are cut into cells with
@@ -517,11 +648,18 @@ export class Rig {
     // most of a run; this is the part of the show they cannot help but see.
     const cells = this.mats.wallStrip;
     const n = cells.length;
-    // The head walks the perimeter, faster the harder the room is being
-    // driven: a slow crawl around an idle venue, and a sprint on a big combo.
-    // The house lights stop it dead - an intermission is not a show.
-    this._chase += dt * (0.55 + this._energy * 2.6 + level * 1.8) * (1 - this._house);
-    this._chase -= Math.floor(this._chase);
+    // The head no longer walks the perimeter on wall-clock time. It is given a
+    // step on each beat (see update() above) and chases it, so it SURGES on the
+    // hit and settles between - which is the same distance travelled, arriving
+    // in time with the music instead of merely near it. Fast enough to be
+    // mostly there by the next beat; not instant, because a comet that
+    // teleports is four separate bright cells, not a comet.
+    this._chase += (this._chaseTarget - this._chase) * Math.min(1, dt * 9);
+    // Both wrap together, so the difference above never sees the seam. Keyed
+    // on the CHASER, which trails the target: wrapping when the target passes
+    // 1 instead would leave the chaser just below zero and put the head off
+    // the end of the cell ring.
+    if (this._chase >= 1) { this._chase -= 1; this._chaseTarget -= 1; }
     const head = this._chase * n;
     // A colour that lags the room's by about half a second, worn by every other
     // cell. Through a colour step the wall is briefly two-tone, which is what

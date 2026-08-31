@@ -360,8 +360,8 @@ class Game {
     // Refilled and handed to the rig every frame. One object for the life of
     // the game, per the no-allocation rule below.
     this._rigState = {
-      mode: 'idle', beat: 0, level: 0, healthFrac: 1, comboMult: 1,
-      bossColor: 0xffffff, bossPos: null,
+      mode: 'idle', beat: 0, level: 0, bar: 0, downbeat: false,
+      healthFrac: 1, comboMult: 1, bossColor: 0xffffff, bossPos: null,
     };
 
     // Scratch objects reused every frame so the hot path allocates nothing.
@@ -853,6 +853,11 @@ class Game {
         : 'idle';
     r.beat = this.music.beat;
     r.level = this.music.level;
+    // Position in the bar and whether this beat is the ONE. music.js keeps
+    // both running whether or not the beat map is driving, so the rig never
+    // has to ask which source it is getting.
+    r.bar = this.music.bar;
+    r.downbeat = this.music.downbeat;
     // Clamped: a health pickup can overheal past max, which would drive the
     // low-health maths backwards.
     r.healthFrac = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
