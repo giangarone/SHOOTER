@@ -137,15 +137,14 @@ const BEAM_DOWNBEAT = 1.35;
 // Each look says how much of each instrument is lit. They are all available at
 // any point in a run; only how hard they are driven follows the room's energy.
 // The laser bank runs its own choreography inside a phrase - which of its
-// three pairs play, when each comes in, whether it stabs or sustains - so a
-// look here only says how much of each INSTRUMENT the room wants. Two shows on
-// one bar clock, rather than one show driving everything.
-const LOOKS = [
-  { beams: 1.0, lasers: 0.0 },   // the cones alone
-  { beams: 0.0, lasers: 1.0 },   // the lasers alone
-  { beams: 1.0, lasers: 0.9 },   // everything
-  { beams: 0.45, lasers: 0.7 },  // both, held back
-];
+// three pairs play, when each comes in, whether it sustains or pulses - so a
+// look only says how much of the LASERS the room wants on top of that.
+//
+// The four beams are not in the table. They used to be, and taking them out is
+// deliberate: they are the room's constant, the one thing always burning that
+// everything else is measured against. A room where every instrument can go
+// away has nothing to come back to.
+const LOOKS = [1.0, 0.55, 0.85, 0.0];
 // Bars a look is held for. Four is the phrase this music is built out of, so a
 // change lands where the track tends to change too. Eight was the first guess
 // and it was wrong for a game rather than for a club: at 145 BPM it holds a
@@ -515,10 +514,11 @@ export class Rig {
         }
         this.lasers.bar(this._barsHeld);
       }
-      // Only the beams take a cue from the beat now. The lasers are told about
-      // BARS, above, and nothing else - see the division of labour at the top
-      // of lasers.js.
       this._cueBeams();
+      // The pairs that pulse read the beat envelope for themselves; this is
+      // for the strays, which fire in bursts off the beat even though nothing
+      // about where they go is on the grid.
+      this.lasers.beat();
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
@@ -672,7 +672,7 @@ export class Rig {
     // One stab shape for all four - they fire together, which is what makes
     // the figure they are holding legible as a single shape.
     const punch = Math.pow(beat, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
-    const look = LOOKS[this._look];
+    const laserLook = LOOKS[this._look];
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
       b.aimZ += (b.tgtZ - b.aimZ) * snap;
@@ -696,7 +696,7 @@ export class Rig {
       // Everything multiplies `punch`, nothing is added to it, so when the
       // envelope reaches zero so does the beam - which is the whole point.
       const o = punch * (BEAM_PUNCH * this._energy + level * BEAM_GLOW)
-        * this._energy * (1 - dark) * (1 - this._house) * look.beams;
+        * this._energy * (1 - dark) * (1 - this._house);
       b.mat.opacity = Math.min(0.9, o);
       // An invisible mesh is culled before rasterisation; a fully transparent
       // one is still drawn. These are big double-sided additive cones, so that
@@ -720,8 +720,8 @@ export class Rig {
     // own the movement, and a laser that blinked on every kick would only be
     // the beams again in a thinner shape.
     const laserMaster = (0.6 + level * 0.4) * (0.4 + this._energy * 0.6)
-      * (1 - dark) * (1 - this._house) * look.lasers;
-    this.lasers.update(dt, s.camPos, this._laserColour, laserMaster);
+      * (1 - dark) * (1 - this._house) * laserLook;
+    this.lasers.update(dt, s.camPos, this._laserColour, punch, laserMaster);
 
     // ---- emissive furniture -----------------------------------------------
     // Shared materials, so one write lights every lamp head, deck edge and
