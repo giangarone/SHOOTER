@@ -102,6 +102,29 @@ const BEAM_TILT = 0.42;
 // in the right place.
 const BEAM_SNAP = 26;
 
+// BEAM BRIGHTNESS IS A STAB, NOT A GLOW. The beams used to sit at a level-fed
+// base and swell on the beat, which left them lit most of the time - and a
+// continuously lit shaft that swings to a new angle reads as a prop being
+// rotated rather than as a light being fired.
+//
+// BEAM_SHARP is what does the work. `beat` is an envelope that falls linearly
+// to zero over about a sixth of a second, and raising it to a power leaves the
+// peak at 1 while collapsing the tail: at 100ms after the hit it is down to a
+// tenth instead of four tenths. It also quiets the anticipation lift that
+// music.js puts in front of every beat, from 0.3 to well under a tenth, so the
+// beams stay dark right up until the hit while everything else in the room
+// still leans into it.
+//
+// The base is deliberately not zero. Beams that go fully dark between hits
+// stop being part of the room - the venue loses its shape and the effect reads
+// as a fault rather than as a rig - so a little is left burning.
+const BEAM_BASE = 0.05;
+const BEAM_GLOW = 0.10;
+const BEAM_PUNCH = 1.5;
+const BEAM_SHARP = 2.2;
+// The ONE is a bigger stab, for the same reason the furniture accents it.
+const BEAM_DOWNBEAT = 1.35;
+
 // How much harder the emissive furniture hits on the ONE than on the other
 // three beats. Every beat used to be identical, which is why a room full of
 // pulsing edges read as flicker rather than as a bar you could feel.
@@ -590,6 +613,9 @@ export class Rig {
     // which meant the loudest thing in the room was the one thing in it moving
     // to nothing in particular.
     const snap = Math.min(1, dt * BEAM_SNAP);
+    // One stab shape for all four - they fire together, which is what makes
+    // the figure they are holding legible as a single shape.
+    const punch = Math.pow(beat, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
       b.aimZ += (b.tgtZ - b.aimZ) * snap;
@@ -602,14 +628,15 @@ export class Rig {
       // beat, and that gate is deliberate: shown at a flat base they read as
       // static grey cones hanging in an idle room rather than as light.
       //
-      // These numbers are roughly seven times what they were, which sounds
-      // reckless and is not - the map above multiplies every fragment down by
-      // its position along the shaft, so the old values were being spent twice
-      // and the beams came out barely there. Brightness is also the one thing
-      // here that is genuinely free: it changes the VALUE written to pixels
-      // already being blended, not how many of them there are. Widening the
-      // cones would have been the expensive way to solve the same complaint.
-      const o = (0.06 + level * 0.28 + beat * 1.5 * this._energy)
+      // The peak is roughly seven times what it was before the rig was
+      // rebuilt, which sounds reckless and is not - the map above multiplies
+      // every fragment down by its position along the shaft, so the old values
+      // were being spent twice and the beams came out barely there. Brightness
+      // is also the one thing here that is genuinely free: it changes the
+      // VALUE written to pixels already being blended, not how many of them
+      // there are. Widening the cones would have been the expensive way to
+      // solve the same complaint.
+      const o = (BEAM_BASE + level * BEAM_GLOW + punch * BEAM_PUNCH * this._energy)
         * this._energy * (1 - dark) * (1 - this._house);
       b.mat.opacity = Math.min(0.9, o);
       // An invisible mesh is culled before rasterisation; a fully transparent
