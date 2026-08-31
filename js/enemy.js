@@ -2304,6 +2304,8 @@ export class Enemy {
     this.stepMul = 1.4;
     this.attackCd = 0.8 + Math.random();
     this.windup = 0;
+    // Seconds left on a swing that has already been thrown - see _meleeCycle.
+    this.swing = 0;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
     this.strafeT = 1 + Math.random() * 2;
     // Wraith's teleport timer. Staggered at birth so a group that spawned
@@ -2587,21 +2589,96 @@ export class Enemy {
   // cover the raised platforms, which are well inside a swing's reach.
   static MELEE_REACH_Y = 2.4;
 
-  // Wind up a melee swing, then land it if the player is still in range.
+  // How long a swing stays LIVE once the windup ends. The hit used to be
+  // tested on the single frame the windup crossed zero, which made a landed
+  // blow a coin flip on frame timing: at 10 m/s the player crosses 17cm per
+  // frame, so a swing sampled one frame early or late reads a different world.
+  // A window this long is ~11 frames at 60fps and is tested on every one of
+  // them, so the swing connects if the player is inside its arc AT ANY POINT
+  // while the arm is coming down - which is what a swing is.
+  static SWING_ACTIVE = 0.18;
+
+  // How far past its own body an enemy counts as TOUCHING the player. The
+  // player collides as a 0.4m circle (see player.js), so this is the two
+  // bodies meeting plus a hand's reach.
+  static CONTACT_PAD = 0.55;
+
+  /**
+   * One step of a melee attacker's attack. Returns true when the enemy is free
+   * to keep walking, false while it is committed to a swing.
+   *
+   * THREE WAYS THIS RESOLVES, IN PRIORITY ORDER
+   *
+   *   1. CONTACT. If the player is inside the enemy's body, it hits, now,
+   *      whatever the animation was doing.
+   *   2. The swing's ACTIVE WINDOW - the arc is live for SWING_ACTIVE seconds
+   *      and lands the first frame the player is inside `hitRange`.
+   *   3. WINDUP - the telegraph, unchanged.
+   *
+   * RULE 1 IS THE FIX FOR THE BUG THIS WHOLE METHOD EXISTED WITH.
+   * A hit was previously reachable ONLY through the animation: get within
+   * `startRange`, wind up for `windupTime`, and test `hitRange` when the
+   * windup expired. Run the numbers on a chaser - windup 0.45s, hit reach
+   * 2.2m - against a player moving at BASE_SPEED 10 m/s, and the attack is
+   * unlandable by construction: the player covers 4.5m during the windup, so
+   * by the time the swing resolves they are twice the reach away. A player who
+   * simply ran through a pack of chasers took nothing at all, from any of
+   * them, ever. The same arithmetic broke all seven melee types - only the
+   * exact distance at which they became free varied.
+   *
+   * So the attack no longer depends on an animation completing. Touching the
+   * enemy is the attack; the wind-up swing is how it reaches a player who is
+   * NOT touching it. Both are the same blow, and both are gated by the SAME
+   * `attackCd`, so no enemy can deal more damage per second than it could
+   * before - a chaser still hits at most once every 1.1s. What changed is that
+   * running past one is no longer a way of making it hit zero times.
+   */
   _meleeCycle(dt, dist, ctx, windupTime, startRange, hitRange, cooldown) {
     const dy = Math.abs(ctx.player.pos.y - this.pos.y);
+    const inReach = dy < Enemy.MELEE_REACH_Y;
+
+    // 1. CONTACT. Checked first and from any state, including mid-windup: a
+    //    player who runs into a wound-up enemy is hit BY that swing rather
+    //    than by a second one, which is why this consumes the windup instead
+    //    of queueing behind it.
+    if (inReach && this.attackCd <= 0 && dist < this.radius + Enemy.CONTACT_PAD) {
+      ctx.onHitPlayer(this.damage, this.pos, this);
+      this.attackCd = cooldown;
+      this.windup = 0;
+      this.swing = 0;
+      this._setEyeAlert(false);
+      // Free to walk. It has already spent its blow and is on cooldown, so
+      // rooting it here would only make it easier to leave behind.
+      return true;
+    }
+
+    // 2. The live swing.
+    if (this.swing > 0) {
+      this.swing -= dt;
+      if (inReach && dist < hitRange) {
+        ctx.onHitPlayer(this.damage, this.pos, this);
+        this.swing = 0;
+      }
+      if (this.swing <= 0) this._setEyeAlert(false);
+      return false;
+    }
+
+    // 3. The telegraph.
     if (this.windup > 0) {
       this.windup -= dt;
       this._setEyeAlert(true);
       if (this.windup <= 0) {
-        this._setEyeAlert(false);
-        if (dist < hitRange && dy < Enemy.MELEE_REACH_Y) ctx.onHitPlayer(this.damage, this.pos, this);
+        // The cooldown is charged HERE, not on the hit, so a swing that finds
+        // nothing still costs the enemy its attack - the same trade a whiff
+        // has always been.
         this.attackCd = cooldown;
+        this.swing = Enemy.SWING_ACTIVE;
       }
       return false;
     }
+
     this._setEyeAlert(false);
-    if (dist < startRange && dy < Enemy.MELEE_REACH_Y && this.attackCd <= 0) {
+    if (dist < startRange && inReach && this.attackCd <= 0) {
       this.windup = windupTime;
       return false;
     }
@@ -2644,8 +2721,10 @@ export class Enemy {
     let vz = 0;
 
     if (this.status.freeze > 0) {
-      // Petrified: no movement, no attack, and any half-wound swing is lost.
+      // Petrified: no movement, no attack, and any half-wound swing is lost -
+      // including one already in the air.
       this.windup = 0;
+      this.swing = 0;
       this._setEyeAlert(false);
     } else if (this.status.fear > 0 && ENEMY_TYPES[this.type].fearMode !== 'stagger') {
       // Terror: run from the player and do not attack. sp is unchanged, so a
@@ -2656,6 +2735,7 @@ export class Enemy {
       // it falls through to its own ai(), which checks status.fear itself and
       // holds position without attacking.
       this.windup = 0;
+      this.swing = 0;
       this._setEyeAlert(false);
       vx = -nx * sp;
       vz = -nz * sp;
