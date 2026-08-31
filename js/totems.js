@@ -109,7 +109,19 @@ export const SUNK_Y = -3.4;
 export const RISE_SECONDS = RISE_TIME;
 
 // Effect-line colours, keyed by the sign in an upgrade's `effects` entry.
-const SIGN_COLOR = { '1': '#37e08b', '-1': '#ff5a4d', '0': '#8a95b3' };
+//
+// SATURATED, NOT TASTEFUL. These three colours are the fastest thing on the
+// card: the player reads GREEN and RED before they read a single word, and
+// what the card is FOR is saying which lines are the upside and which are the
+// price. The muted pair they replace (a soft mint and a coral) were chosen to
+// sit nicely on a dark panel, and once the panel went away they were two
+// pastels floating in a black room - close enough in value that a drawback
+// could be mistaken for a benefit at a glance, which is the one mistake this
+// card exists to prevent.
+//
+// The neutral is deliberately still quiet. It is for lines that are neither,
+// and a third loud colour would cost the other two their meaning.
+const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
 // The price line on a Devil Deal. Not one of the SIGN_COLOR entries: a cost is
 // neither a benefit nor a drawback, it is the thing you are agreeing to.
 const COST_COLOR = '#ff1744';
@@ -269,11 +281,9 @@ const STATION_GEOM = new THREE.BoxGeometry(1.0, 1.4, 0.5);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
 const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
-// The icon ORBITS the pillar to stay on the player's side of it and turns to
-// face them, so it is legible from any angle without the pillar having to go
-// translucent. The radii are elliptical because the pillar is: 1.15 wide and
-// 0.5 deep, so a circular orbit at any radius that cleared the sides would
-// leave the icon floating absurdly far off the front.
+// The icon ORBITS to stay on the player's side of its column and turns to face
+// them, so it is legible from any angle.
+//
 // CIRCULAR NOW, AND TIGHT. The ellipse was the pillar's shape: 1.15 wide and
 // 0.5 deep, so a circular orbit big enough to clear the sides left the icon
 // floating absurdly far off the front. With the pillar gone there is nothing
@@ -283,7 +293,7 @@ const ICON_Y = 1.5;
 const ICON_RX = 0.5;
 const ICON_RZ = 0.5;
 // icons.js builds every shape at roughly half a metre, which is legible in the
-// hand and too small against a 1.15m-wide pillar seen from across the arena.
+// hand and too small inside a 2.5m-wide column seen from across the arena.
 const ICON_SCALE = 1.35;
 // The same orbit on the smaller station body: 1.0 wide and 0.5 deep, and only
 // 1.4 tall, so the icon rides lower and closer in and is scaled down to match.
@@ -291,6 +301,27 @@ const ST_ICON_Y = 1.0;
 const ST_ICON_RX = 0.9;
 const ST_ICON_RZ = 0.55;
 const ST_ICON_SCALE = 1.0;
+
+// HOW FAR THE CARD STANDS OUT OF ITS OWN LIGHT.
+//
+// The card used to hang on the column's axis, which put a sheet of additive
+// light between the player and every word on it. Additive is the problem: it
+// only ever ADDS, so a lit shaft crossing dark text raises the text towards
+// the shaft's own colour and there is no amount of contrast in the canvas that
+// can win that fight - the darker a glyph is drawn, the more of the light
+// behind it shows through.
+//
+// So the card orbits out to the player's side of the column, the same way the
+// icon does, and stops clear of the shaft's outside edge. Nothing renders
+// between the words and the eye any more. It is a metre and a bit of movement
+// and it is the whole fix; every other approach (a glow under the text, a
+// darker panel, a brighter fill) was an attempt to be legible THROUGH the
+// light instead of stepping out of it.
+//
+// The card keeps its height, so the row still reads as three columns with
+// three labels at one level rather than as three signs at different depths.
+const PANEL_R = 2.0;
+const ST_PANEL_R = 1.4;
 
 export function hex(n) {
   return '#' + n.toString(16).padStart(6, '0');
@@ -315,8 +346,34 @@ export function makePanel(w, h, scaleX, scaleY) {
   canvas.width = w;
   canvas.height = h;
   const tex = new THREE.CanvasTexture(canvas);
+  // The canvas is authored in sRGB - #ffffff means #ffffff - so it has to be
+  // DECODED as sRGB when sampled. Left at the default, three.js treats the
+  // texel as linear and re-encodes it on output, which lightens every mid tone
+  // on the card and is why the effect lines never looked like the colours they
+  // were written as.
+  tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })
+    // FOG OFF. Everything else in this file already opts out of the haze, and
+    // the card is the reason the rule exists: a sprite lit by fog is mixed
+    // towards the fog colour by distance, so white text read from across the
+    // arena was arriving as grey - and grey is what it looked like, because
+    // the fog colour is nearly black now that the room goes dark at the break.
+    // The canvas says #ffffff and the pixels have to say it too.
+    new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false, fog: false,
+      // AND NO TONE MAPPING. This is the other half of "the card says what the
+      // canvas says", and it is the bigger half: the renderer runs ACES
+      // filmic tone mapping over the whole scene, which is right for light and
+      // wrong for text - ACES rolls the top of the range off, so pure white
+      // arrives on screen at about 91% and every saturated colour is pulled
+      // towards the middle. A card is not a surface being lit, it is a thing
+      // being READ, and it is the one thing in the room that should come out
+      // of the pipe exactly as it was drawn.
+      //
+      // Paired with the sRGB decode above, the round trip is now exact: white
+      // is 255, and the green and the red are the values in SIGN_COLOR.
+      toneMapped: false,
+    })
   );
   sprite.scale.set(scaleX, scaleY, 1);
   return { canvas, tex, sprite };
@@ -588,6 +645,11 @@ export class Totem {
       this.iconAnchor.position.x = Math.sin(a) * ICON_RX;
       this.iconAnchor.position.z = Math.cos(a) * ICON_RZ;
       this.iconAnchor.rotation.y = a;
+      // The card rides the same angle, further out - see PANEL_R. A sprite is
+      // already camera-facing, so all it needs is to be on the near side of
+      // the light rather than inside it.
+      this.panel.sprite.position.x = Math.sin(a) * PANEL_R;
+      this.panel.sprite.position.z = Math.cos(a) * PANEL_R;
     }
     this.iconAnchor.position.y = ICON_Y + Math.sin(time * 2.4 + this.pos.x) * 0.07;
     if (this.icon) {
@@ -596,14 +658,34 @@ export class Totem {
   }
 }
 
-// A small console beside the totems. Two exist: one sells ammo, one rerolls
-// the set. Both are bought by shooting them or by pressing E in range, and
-// neither disturbs the totems.
+// The look of each kind of console: what colour it burns and what shape sits
+// in front of it. Keyed by `kind`, which is also what main.js branches on to
+// decide what a purchase actually does - so adding a console is a row here and
+// a case there, and nothing in this file has to learn what it sells.
+//
+// The two Devil-row consoles are in the same table as the two totem-row ones
+// because they ARE the same object: same body, same column, same two ways in.
+// Only the prices differ, and prices do not live here.
+const STATION_LOOK = {
+  ammo: { color: 0xffd600, icon: 'ammoBox' },
+  reroll: { color: 0x4ef3ff, icon: 'gear' },
+  // The Devil's pair. Red, both of them - his row wears one colour the way the
+  // offers each wear their own, so a console standing in it reads as HIS
+  // before it reads as a shop.
+  maxhp: { color: 0xff1744, icon: 'heart' },
+  dealReroll: { color: 0xff1744, icon: 'gear' },
+};
+
+// A small console beside a row of offers. Four exist: ammo and reroll beside
+// the totems, max health and reroll beside the Devil's deals. All are bought
+// by shooting them or by pressing E in range, and none disturbs the row it
+// stands in.
 export class Station {
-  constructor(x, kind, scene) {
-    this.kind = kind; // 'ammo' | 'reroll'
-    this.pos = new THREE.Vector3(x, 0, ROW_Z);
-    this.color = kind === 'ammo' ? 0xffd600 : 0x4ef3ff;
+  constructor(x, kind, scene, z = ROW_Z) {
+    this.kind = kind; // 'ammo' | 'reroll' | 'maxhp' | 'dealReroll'
+    this.pos = new THREE.Vector3(x, 0, z);
+    const look = STATION_LOOK[kind];
+    this.color = look.color;
     this.state = 'hidden';
     this.rise = 0;
     // A station is bought by shooting it, and the guns here fire far faster
@@ -612,7 +694,7 @@ export class Station {
     this.shootCd = 0;
 
     this.group = new THREE.Group();
-    this.group.position.set(x, SUNK_Y, ROW_Z);
+    this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
     this.mat = new THREE.MeshStandardMaterial({
@@ -646,11 +728,16 @@ export class Station {
     this.iconAnchor = new THREE.Group();
     this.iconAnchor.position.set(0, ST_ICON_Y, ST_ICON_RZ);
     this.iconAnchor.scale.setScalar(ST_ICON_SCALE);
-    // A crate of rounds and a toothed wheel. Both are read head-on from across
-    // the arena, which rules out the shapes that are only legible in profile -
-    // the vortex tried first is three horizontal rings and collapses to a
-    // stack of lines from the one angle the player actually sees it from.
-    this.icon = buildIcon(kind === 'ammo' ? 'ammoBox' : 'gear', this.color);
+    // A crate of rounds, a toothed wheel, a heart. All are read head-on from
+    // across the arena, which rules out the shapes that are only legible in
+    // profile - the vortex tried first is three horizontal rings and collapses
+    // to a stack of lines from the one angle the player actually sees it from.
+    //
+    // The two rerolls SHARE the wheel deliberately. One shape means one thing
+    // is the rule the icon catalogue is built on, and these two do the same
+    // thing in two different rows; giving the Devil's a shape of its own would
+    // be teaching a second symbol for something the player already knows.
+    this.icon = buildIcon(look.icon, this.color);
     this.iconAnchor.add(this.icon);
     this.group.add(this.iconAnchor);
 
@@ -749,6 +836,8 @@ export class Station {
       this.iconAnchor.position.x = Math.sin(a) * ST_ICON_RX;
       this.iconAnchor.position.z = Math.cos(a) * ST_ICON_RZ;
       this.iconAnchor.rotation.y = a;
+      this.panel.sprite.position.x = Math.sin(a) * ST_PANEL_R;
+      this.panel.sprite.position.z = Math.cos(a) * ST_PANEL_R;
     }
     this.iconAnchor.position.y = ST_ICON_Y + Math.sin(time * 2.4 + this.pos.x) * 0.06;
     this.icon.userData.glow.emissiveIntensity = 1.2 + Math.sin(time * 5) * 0.3;

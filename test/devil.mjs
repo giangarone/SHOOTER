@@ -191,15 +191,43 @@ try {
     out.shotBoughtDeal = dealTarget.claimed && P.maxHealth === hpBefore - dealTarget.offer.cost;
     out.shotDidNotStartWave = g.totemArea.active && !g.totemArea.claimed;
 
-    // The heart, through the same raycast.
+    // His REROLL CONSOLE, through the same raycast. It used to be his heart;
+    // he sells nothing himself any more, and nothing on the figure is a
+    // raycast target at all.
     stage();
-    standAt(2.0, g.devilArea.devil.pos.z);
+    const rr = g.devilArea.rerollStation;
+    standAt(rr.pos.x, rr.pos.z - 3);
     const hp2 = P.maxHealth;
-    aimAt(g.devilArea.devil.hit);
+    aimAt(rr.body);
     g.player.mag = 30;
     g.player.fireCd = 0;
     g.shoot();
     out.shotRerolled = hp2 - P.maxHealth === 2;
+
+    // His MAX HEALTH console: $5,000 for +5, once per visit. The only thing in
+    // the game that gives max HP back.
+    stage();
+    const hs = g.devilArea.healthStation;
+    g.credits = 12000;
+    P.maxHpDebt = 20;
+    const hp5 = P.maxHealth;
+    standAt(hs.pos.x, hs.pos.z - 3);
+    aimAt(hs.body);
+    g.player.mag = 30;
+    g.player.fireCd = 0;
+    g.shoot();
+    out.boughtHealth = P.maxHealth - hp5 === 5 && g.credits === 7000;
+    // Spent for the visit: the console goes down and a second shot buys
+    // nothing, however much money is left.
+    out.healthConsoleSank = hs.state === 'sinking' || hs.state === 'hidden';
+    const hp6 = P.maxHealth;
+    g.player.mag = 30;
+    g.player.fireCd = 0;
+    g.shoot();
+    out.healthOncePerVisit = P.maxHealth === hp6 && g.credits === 7000;
+    // And a fresh visit brings it back.
+    stage();
+    out.healthReturns = g.devilArea.healthAvailable;
 
     // And a free totem is still free.
     stage();
@@ -240,13 +268,28 @@ try {
     g.tryUse();
     out.keyBoughtDeal = keyDeal.claimed && P.maxHealth === hpKey - keyDeal.offer.cost;
 
-    // E beside the Devil rerolls rather than taking the pillar behind him.
+    // E at his reroll console. It ranks as an ordinary station now, alongside
+    // the two beside the totems.
     stage();
-    standAt(2.0, g.devilArea.devil.pos.z);
+    standAt(g.devilArea.rerollStation.pos.x, g.devilArea.rerollStation.pos.z - 1.5);
     const hpKey2 = P.maxHealth;
-    out.promptNamesDevil = g._useTarget() && g._useTarget().kind === 'devil';
+    const useDevilRr = g._useTarget();
+    out.promptNamesDevilStation =
+      !!useDevilRr && useDevilRr.kind === 'station' && useDevilRr.target.kind === 'dealReroll';
     g.tryUse();
     out.keyRerolled = hpKey2 - P.maxHealth === 2;
+
+    // NOTHING ON THE FIGURE IS A TARGET. Standing at his feet must offer
+    // nothing, and a shot into his chest must be an ordinary miss.
+    // Beside him and BEHIND the row - far enough that no deal and neither
+    // console is in reach, so anything E offers here would have to be him.
+    stage();
+    standAt(1.6, g.devilArea.devil.pos.z + 0.9);
+    const useAtDevil = g._useTarget();
+    out.devilOffersNothing = !useAtDevil;
+    const hpDevil = P.maxHealth;
+    g.tryUse();
+    out.devilChargesNothing = P.maxHealth === hpDevil;
 
     // E at a station buys ammo, even standing where a totem's range reaches.
     stage();
@@ -482,13 +525,19 @@ try {
   ok('demonic presence is certain', r.presenceRate === 1);
   ok('shooting a pillar buys the deal', r.shotBoughtDeal);
   ok('a bought deal leaves the totems up', r.shotDidNotStartWave);
-  ok('shooting the heart rerolls for 2 max HP', r.shotRerolled);
+  ok('shooting his reroll console costs 2 max HP', r.shotRerolled);
+  ok('his max-health console pays 5 max HP for $5,000', r.boughtHealth);
+  ok('the max-health console sinks once bought', r.healthConsoleSank);
+  ok('max health is once per visit', r.healthOncePerVisit);
+  ok('a fresh visit offers max health again', r.healthReturns);
+  ok('the figure itself offers nothing', r.devilOffersNothing);
+  ok('the figure itself charges nothing', r.devilChargesNothing);
   ok('shooting a totem is still free', r.shotTookTotem);
   ok('a totem claim closes the devil', r.totemStartedWave);
   ok('standing in a totem claims nothing', r.walkingClaimsNothing);
   ok('E takes the totem you are standing at', r.promptNamesTotem && r.keyClaimedTotem);
   ok('E takes a deal and charges max HP', r.promptNamesDeal && r.keyBoughtDeal);
-  ok('E at the devil rerolls', r.promptNamesDevil && r.keyRerolled);
+  ok('E at his reroll console rerolls', r.promptNamesDevilStation && r.keyRerolled);
   ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
   ok('no deal leaks onto a free totem', r.leaked === 0);
   ok('no console errors', errors.length === 0, errors.join(' | '));

@@ -1176,6 +1176,33 @@ export function rerollCost(n) {
 // The one thing credits buy outright, sold from a station beside the totems.
 // Healing and shields deliberately are not for sale: health is what upgrades
 // and regeneration are for, and being able to buy safety flattened the wave.
+// The Devil's other console: the only thing in the game that gives max health
+// BACK. His deals are the one price that cannot be earned back, and that was
+// true to the point of being a trap - a run that took two deals early had no
+// answer to it for the next thirty waves.
+//
+// PRICED SO IT IS A DECISION. $5,000 is several waves of shooting, and it is
+// competing with the ammo and the rerolls for the same wallet. It is bought
+// once per Devil visit (devil.js sinks the console after) rather than as many
+// times as the bank allows, so a late run cannot simply stand at the break and
+// convert its whole balance into health.
+//
+// It grants the CURRENT health too. The debt it pays off would otherwise leave
+// the player at the same number they were on with a bigger bar behind it,
+// which reads as nothing having happened for five thousand dollars.
+export const MAXHP_PURCHASE = {
+  name: 'MAX HEALTH',
+  detail: '+5 MAX HP',
+  cost: 5000,
+  apply: (player) => {
+    // Straight against the Devil's ledger, which is where every max-HP price
+    // in the game is charged. It can go NEGATIVE, and that is the point: the
+    // fifth purchase on a run that never took a deal is +25 over base.
+    player.maxHpDebt -= 5;
+    player.health = Math.min(player.maxHealth, player.health + 5);
+  },
+};
+
 export const AMMO_PURCHASE = {
   name: 'AMMO',
   detail: '+90 ROUNDS',

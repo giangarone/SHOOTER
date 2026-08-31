@@ -67,7 +67,7 @@ import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
 import {
-  UPGRADES, AMMO_PURCHASE, rollTotems, rollDeals, rerollCost,
+  UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rollDeals, rerollCost,
   dealRerollCost, effectLines,
 } from './upgrades.js';
 import { TotemArea, ARM_TIME_DEVIL } from './totems.js';
@@ -133,6 +133,13 @@ const EMPTY_CLICK_COOLDOWN = 0.35;
 // A held trigger lands several pellets per second on the same box, and every
 // one of those would otherwise be a separate purchase.
 const STATION_SHOOT_COOLDOWN = 0.25;
+
+// What a console is called when the prompt has to say why it cannot be used.
+// Four consoles now stand at a wave break - two beside the totems, two beside
+// the Devil's deals - and a blocked line has to name the one being looked at.
+const STATION_TITLE = {
+  ammo: 'AMMO', reroll: 'REROLL', maxhp: 'MAX HEALTH', dealReroll: 'REROLL',
+};
 
 // NO-SPAWN BUBBLE. No enemy is ever placed closer than this to the player.
 // The spawn grid sits near the arena edges, but the player is free to stand on
@@ -1684,20 +1691,6 @@ class Game {
           w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
         break;
       }
-      const heart = h.object.userData.devilHeart;
-      if (heart) {
-        // The heart is a console, and consoles are rate-limited: a held
-        // trigger lands several pellets a second on it and every one of those
-        // would otherwise be a reroll priced in health.
-        if (heart.canShoot()) {
-          heart.shootCd = STATION_SHOOT_COOLDOWN;
-          this._rerollDeals();
-        }
-        hitProp = true;
-        end = h.point;
-        this.effects.burst(end, 0xff1744, w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
-        break;
-      }
       const station = h.object.userData.station;
       if (station) {
         // The pellet stops here whether or not the purchase went through -
@@ -2404,7 +2397,11 @@ class Game {
     if (!area.active) return;
     area.refresh((cost) => this.player.canPay(cost));
     const cost = dealRerollCost(area.rerolls);
-    area.devil.setLabel(cost, this.player.canPay(cost));
+    area.rerollStation.setLabel('REROLL', cost + ' MAX HP', !this._stationBlocked(area.rerollStation));
+    area.healthStation.setLabel(
+      MAXHP_PURCHASE.name, '$' + MAXHP_PURCHASE.cost,
+      !this._stationBlocked(area.healthStation)
+    );
   }
 
   // Redraws both station labels. Only called when something they display
@@ -2497,16 +2494,6 @@ class Game {
     this.sfx.reroll();
   }
 
-  // Why the Devil's heart cannot be used, or null if it can. Shared by the
-  // prompt and the purchase so the two can never disagree - the same contract
-  // _stationBlocked() has.
-  _devilBlocked() {
-    const area = this.devilArea;
-    if (!area.active || area.claimed) return 'NOTHING TO REROLL';
-    if (!this.player.canPay(dealRerollCost(area.rerolls))) return 'NOT ENOUGH MAX HP';
-    return null;
-  }
-
   // Ticks both installations and writes the E prompt. Shooting is handled in
   // shoot(), which already has the raycast; NOTHING is claimed by walking into
   // it any more - see the note at the top of totems.js.
@@ -2527,13 +2514,13 @@ class Game {
    * What E would act on right now, or null.
    *
    * ONE RESOLVER FOR THE PROMPT AND THE KEY, so the line on screen can never
-   * name something other than what the press does. Five things can be in
-   * reach - three totems, three deals, the Devil's heart, two stations - and
-   * several of their radii overlap, so the NEAREST wins rather than whichever
-   * happened to be checked first.
+   * name something other than what the press does. Eight things can be in
+   * reach - three totems, three deals and four consoles - and several of their
+   * radii overlap, so the NEAREST wins rather than whichever happened to be
+   * checked first.
    *
    * @returns {?{kind: string, target: object}} kind is 'totem' | 'deal' |
-   *   'devil' | 'station'.
+   *   'station'.
    */
   _useTarget() {
     let best = null;
@@ -2546,7 +2533,8 @@ class Game {
     consider(this.totemArea.usable(this.player.pos), 'totem');
     consider(this.totemArea.stationInRange(this.player.pos), 'station');
     consider(this.devilArea.usable(this.player.pos), 'deal');
-    consider(this.devilArea.heartInRange(this.player.pos), 'devil');
+    // His two consoles rank with the other two: same kind, same resolver.
+    consider(this.devilArea.stationInRange(this.player.pos), 'station');
     return best;
   }
 
@@ -2563,30 +2551,35 @@ class Game {
         false,
       ];
     }
-    if (use.kind === 'devil') {
-      const blocked = this._devilBlocked();
-      return [
-        blocked
-          ? 'REROLL &nbsp;\u00b7&nbsp; ' + blocked
-          : '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;\u00b7&nbsp; NEW DEALS &nbsp;\u00b7&nbsp; '
-            + '<span class="prompt-cost">\u2212' + dealRerollCost(this.devilArea.rerolls)
-            + ' MAX HP</span>',
-        !!blocked,
-      ];
-    }
     const blocked = this._stationBlocked(t);
-    if (blocked) {
-      return [(t.kind === 'ammo' ? 'AMMO' : 'REROLL') + ' &nbsp;·&nbsp; ' + blocked, true];
-    }
+    if (blocked) return [STATION_TITLE[t.kind] + ' &nbsp;·&nbsp; ' + blocked, true];
+    const lead = '<b>SHOOT</b> / <b>E</b> ';
     if (t.kind === 'ammo') {
       return [
-        '<b>SHOOT</b> / <b>E</b> ' + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
+        lead + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
         + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + AMMO_PURCHASE.cost + '</span>',
         false,
       ];
     }
+    if (t.kind === 'maxhp') {
+      return [
+        lead + MAXHP_PURCHASE.name + ' &nbsp;·&nbsp; ' + MAXHP_PURCHASE.detail
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + MAXHP_PURCHASE.cost + '</span>',
+        false,
+      ];
+    }
+    // The two rerolls read the same except for what they redraw and what they
+    // cost - his is the one priced in flesh.
+    if (t.kind === 'dealReroll') {
+      return [
+        lead + 'REROLL &nbsp;·&nbsp; NEW DEALS &nbsp;·&nbsp; '
+        + '<span class="prompt-cost">\u2212' + dealRerollCost(this.devilArea.rerolls)
+        + ' MAX HP</span>',
+        false,
+      ];
+    }
     return [
-      '<b>SHOOT</b> / <b>E</b> REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
+      lead + 'REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
       + '<span class="prompt-cost">$' + rerollCost(this.totemArea.rerolls) + '</span>',
       false,
     ];
@@ -2606,6 +2599,19 @@ class Game {
       if (this.credits < AMMO_PURCHASE.cost) return 'NEED $' + AMMO_PURCHASE.cost;
       return null;
     }
+    if (st.kind === 'maxhp') {
+      if (!this.devilArea.healthAvailable) return 'ALREADY BOUGHT';
+      if (this.credits < MAXHP_PURCHASE.cost) return 'NEED $' + MAXHP_PURCHASE.cost;
+      return null;
+    }
+    if (st.kind === 'dealReroll') {
+      const area = this.devilArea;
+      if (!area.active || area.claimed) return 'NOTHING TO REROLL';
+      // Priced in max HP, so the wallet is not what is asked - canPay() is,
+      // and it refuses any price that would take the player to the floor.
+      if (!this.player.canPay(dealRerollCost(area.rerolls))) return 'NOT ENOUGH MAX HP';
+      return null;
+    }
     const cost = rerollCost(this.totemArea.rerolls);
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
     if (this.credits < cost) return 'NEED $' + cost;
@@ -2622,7 +2628,6 @@ class Game {
     if (!use) return;
     if (use.kind === 'totem') this._claimTotem(use.target, true);
     else if (use.kind === 'deal') this._claimDeal(use.target, true);
-    else if (use.kind === 'devil') this._rerollDeals();
     else this._useStation(use.target);
   }
 
@@ -2647,6 +2652,19 @@ class Game {
       this.credits -= AMMO_PURCHASE.cost;
       AMMO_PURCHASE.apply(this.player, this.time);
       this.sfx.buy();
+    } else if (st.kind === 'maxhp') {
+      this.credits -= MAXHP_PURCHASE.cost;
+      MAXHP_PURCHASE.apply(this.player);
+      // Spent for this visit: the console goes down on the spot rather than
+      // standing there greyed out, because unlike an unaffordable deal there
+      // is nothing left for it to say.
+      this.devilArea.spendHealth();
+      this.ui.banner(MAXHP_PURCHASE.name + '  ' + MAXHP_PURCHASE.detail);
+      this.sfx.buy();
+    } else if (st.kind === 'dealReroll') {
+      // Charged inside _rerollDeals(), in max HP, along with every other guard
+      // that purchase needs - this console is only the way in.
+      this._rerollDeals();
     } else {
       this.credits -= rerollCost(this.totemArea.rerolls);
       this.totemArea.rerolls++;
@@ -2655,6 +2673,7 @@ class Game {
     }
     this.effects.burst(st.pos, st.color, 16, 5, 2, 0.45);
     this._refreshStations();
+    this._refreshDevil();
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.

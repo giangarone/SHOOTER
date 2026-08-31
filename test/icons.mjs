@@ -17,7 +17,15 @@ import { WEAPONS } from '../js/weapons.js';
 // Icons used by things that are not upgrades. They share the catalogue, so
 // they have to be counted when checking for collisions - the ammo and reroll
 // consoles stand in the same row as the totems.
-const STATION_ICONS = { AMMO_STATION: 'ammoBox', REROLL_STATION: 'gear' };
+// The two REROLL consoles - one beside the totems, one beside the Devil's
+// deals - deliberately share the wheel and are listed once. One shape means
+// one thing is the rule; these two do the same thing in two rows, and teaching
+// a second symbol for it would break the rule rather than keep it.
+const STATION_ICONS = {
+  AMMO_STATION: 'ammoBox',
+  REROLL_STATIONS: 'gear',
+  MAXHP_STATION: 'heart',
+};
 
 let fails = 0;
 const ok = (name, cond, extra = '') => {

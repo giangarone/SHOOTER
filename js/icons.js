@@ -622,6 +622,21 @@ const ICONS = {
     add(TORUS(), glow, [0.24, 0, 0], [0.94, 0.94, 0.45], [0, -0.5, 0]);
     add(SPHERE(), PALE, [0, 0, 0.06], [0.15, 0.15, 0.15]);
   },
+  // The Devil's max-health console: a heart, built the way HIS is - two lobes
+  // over a point. It is deliberately the same shape as the thing in his chest,
+  // because the console took that job over from it: the heart used to be what
+  // you shot, and now it is what you buy from.
+  //
+  // Solid strokes, no negative space - see the rule at the top of this file.
+  // A heart drawn as an outline is a filled blob at fifteen metres.
+  heart(add, glow) {
+    add(SPHERE(), glow, [-0.13, 0.1, 0], [0.28, 0.28, 0.2]);
+    add(SPHERE(), glow, [0.13, 0.1, 0], [0.28, 0.28, 0.2]);
+    add(CONE(), glow, [0, -0.14, 0], [0.4, 0.4, 0.2], [Math.PI, 0, 0]);
+    // One pale highlight off-centre, so the two lobes read as a form with a
+    // light on it rather than as a flat cutout.
+    add(SPHERE(), PALE, [-0.11, 0.16, 0.09], [0.09, 0.09, 0.06]);
+  },
   // Fallback.
   shard(add, glow) {
     add(OCTA(), glow, [0, 0, 0], [0.55, 0.55, 0.55]);

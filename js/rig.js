@@ -219,11 +219,25 @@ const HOUSE = 0xffffff;
 // compete with a column.
 const HOUSE_FILL = 0.12;
 const HOUSE_KEY = 0.08;
-// The venue's own emissive edges - wall strips, deck lips, fixture lenses -
-// keep a low ember rather than going out completely. It is what stops the
-// blackout reading as a rendering failure, it is the edge a player crossing a
-// dark floor is reading, and it is what the three columns are seen AGAINST.
-const HOUSE_EMBER = 0.1;
+// THE EMISSIVE EDGES DO NOT DIM AT ALL. Wall strips, deck lips, platform lips,
+// fixture lenses: they burn at their combat brightness right through the
+// break, and the only thing the break takes from them is their colour.
+//
+// That is not a contradiction of the blackout above. The two things being
+// controlled here are different: the LIGHT in the room (fill, key, heads,
+// accents) goes away, and the lit EDGES stay. What is dark is the air and
+// every surface that has to be lit by something; what is bright is every
+// surface that is a light itself. The result is a black room drawn in white
+// lines, with three columns of colour standing in it - which is a far sharper
+// picture than a black room drawn in dim grey lines, and it keeps the floor
+// plan readable at a glance while the offers stay the only colour on screen.
+//
+// The wall strips get a number of their own because theirs is a floor rather
+// than a multiplier: their combat brightness is mostly the comet running
+// around the room on the beat, and the comet is one of the things the break
+// stops dead. Without a floor they would fall to the bass term, which is
+// almost nothing with the track muffled.
+const HOUSE_WALL = 1.1;
 // The air thickens a little instead of clearing. A shaft is only as visible as
 // the haze it crosses, and the columns are the whole point of the break.
 const HOUSE_FOG = 1.3;
@@ -703,8 +717,7 @@ export class Rig {
     // Every housing on the truss, including the eight with no light behind
     // them. A bright spot travels around the ring on the beat, which is what
     // makes the ceiling read as a rig rather than as two lamps and scenery.
-    const lensBase = (0.25 + level * 0.8 + beat * 3.2 * this._energy) * (1 - dark)
-      * (1 - this._house * (1 - HOUSE_EMBER));
+    const lensBase = (0.25 + level * 0.8 + beat * 3.2 * this._energy) * (1 - dark);
     for (let i = 0; i < this.fixtureMats.length; i++) {
       const fm = this.fixtureMats[i];
       fm.emissive.copy(this._colour);
@@ -792,10 +805,10 @@ export class Rig {
     // suddenly has a downbeat you can feel without being told about it.
     const hit = beat * this._energy * (s.downbeat ? DOWNBEAT_ACCENT : 1);
     const trimGain = 1.2 + hit * 2.4 + heart * 2;
-    // Down to the ember at the break, along with everything else the venue
-    // lights itself by. The platform and deck lips are the ones that matter:
-    // they are the edges a player crossing a dark floor is reading.
-    const emGain = (1 - dark) * (1 - this._house * (1 - HOUSE_EMBER));
+    // Untouched by the break - see HOUSE_WALL. These are the edges a player
+    // crossing a dark floor is reading, and they read by being lights rather
+    // than by being lit.
+    const emGain = 1 - dark;
     this.mats.trim.emissive.copy(emCol);
     this.mats.trim.emissiveIntensity = trimGain * emGain;
     this.mats.deckEdge.emissive.copy(emCol);
@@ -832,7 +845,7 @@ export class Rig {
     // slower lag than this and the wall never catches up, which reads as two
     // rigs disagreeing rather than as one colour arriving.
     this._trail.lerp(this._colour, Math.min(1, dt * 2.2));
-    const base = (0.16 + level * 0.5) * (1 - this._house) + HOUSE_EMBER * this._house;
+    const base = (0.16 + level * 0.5) * (1 - this._house) + HOUSE_WALL * this._house;
     const cometGain = (0.7 + beat * 3.4 * this._energy) * (1 - this._house);
     for (let i = 0; i < n; i++) {
       const m = cells[i];

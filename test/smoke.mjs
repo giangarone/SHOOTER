@@ -125,7 +125,17 @@ try {
     // blow straight through.
     ['texture count non-decreasing',
       samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
-    ['texture count bounded', peak.textures <= 12],
+    // THIRTEEN, and here is every one of them: ten canvas panels (three totem
+    // cards, three Devil deal cards, four console labels), the shared glow dot
+    // every particle and pickup tints, the rig's beam gradient and the laser
+    // bank's. The cap moved from twelve when the Devil's heart stopped being
+    // his console and two consoles took its place - one panel out, two in.
+    //
+    // It is a BUDGET, not a leak canary: the check above ('non-decreasing') is
+    // what catches a texture being allocated per wave. This one catches the
+    // budget being spent without anyone noticing, which is why raising it is a
+    // deliberate edit with a list attached rather than a nudge.
+    ['texture count bounded', peak.textures <= 13],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

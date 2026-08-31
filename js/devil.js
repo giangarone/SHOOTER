@@ -25,19 +25,26 @@
 //   site rather than at the payment site on purpose - by the time anything
 //   asks Player.payMaxHp(), the answer is already known to be yes.
 //
-// THE DEVIL HIMSELF IS THE REROLL CONSOLE
-//   There is no second Station. He stands behind the row with a red heart at
-//   chest height: press E in range or put a round through the heart and the
-//   set is redrawn for 2 max HP, doubling. The heart is the only part of him
-//   that is a raycast target - the rest is scenery, so a shot that goes wide
-//   of it is a miss rather than an accidental purchase.
+// TWO CONSOLES FRAME HIS ROW, AND HE IS NOT ONE OF THEM
+//   MAX HEALTH on the left, REROLL on the right - ordinary Stations, the same
+//   class the ammo and reroll consoles beside the totems are, at the same
+//   spacing. He sells nothing himself and nothing on him can be shot: the
+//   heart used to be the reroll console and being able to buy from him made
+//   him furniture. A figure the player is meant to be wary of cannot also be
+//   the vending machine.
+//
+//   MAX HEALTH is the only thing in the game that gives max HP back, and it is
+//   the reason his row is not a one-way door: +5 for $5,000, once per visit,
+//   priced so that buying it is a wave's worth of shooting rather than change
+//   from a pocket. REROLL still costs 2 max HP and still doubles - his
+//   currency, unchanged, just bought from a console instead of a body.
 //
 // Same performance rules as totems.js and arena.js: no PointLights, built once
 // at startup and reused for every set, canvases redrawn rather than
 // reallocated, nothing ever disposed because nothing is ever discarded.
 
 import * as THREE from 'three';
-import { Totem, makePanel, hex, roundRect, SUNK_Y, ROW_Z } from './totems.js';
+import { Totem, Station, SUNK_Y, ROW_Z } from './totems.js';
 
 // The row sits opposite the totems across the player's spawn at z = 8, far
 // enough that neither installation can be walked into while heading for the
@@ -45,11 +52,23 @@ import { Totem, makePanel, hex, roundRect, SUNK_Y, ROW_Z } from './totems.js';
 // platform at (8, 8) and the truss towers at (0, 14) and (3, 14).
 export const DEVIL_ROW_Z = -ROW_Z + 4.5; //  9.5
 const DEAL_X = [-3.6, 0, 3.6];
+// The two consoles that frame his row, at the same spacing the totem row uses.
+// MAX HEALTH on the left, REROLL on the right.
+//
+// Both used to be ONE thing: his heart. Shooting it rerolled the deals, and
+// there was nowhere at all to buy health back. That was wrong twice over - it
+// made the figure a vending machine, which costs him every bit of menace he
+// has, and it hid a purchase inside a body the player is meant to be wary of.
+// He is scenery now. What he sells stands in front of him, in the same shape
+// the game already taught at the totem row.
+//
+// The arena furniture that used to sit at these two spots was moved to make
+// room (see the platform list in arena.js) - a console you cannot walk up to
+// is a console that does not exist.
+const DEVIL_STATION_X = [-6.9, 6.9];
 // He stands behind the middle pillar, between it and the towers at the wall.
 const DEVIL_Z = DEVIL_ROW_Z + 2.6;
-// Press E this close to him. Slightly wider than a station's radius: he is a
-// large object and standing at his feet should be enough.
-export const DEVIL_RADIUS = 3.0;
+
 
 const RISE_TIME = 0.7;
 
@@ -57,10 +76,6 @@ const RISE_TIME = 0.7;
 // arena.js uses for the venue. The horns are the one cone in the file.
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const HORN = new THREE.ConeGeometry(0.15, 0.8, 6);
-// The heart's claim volume. Invisible but raycast, exactly like a totem's
-// `hit` box - three.js raycasts geometry, not visibility.
-const HEART_HIT_GEOM = new THREE.BoxGeometry(0.9, 0.9, 0.9);
-const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 
 // Near-black, so the silhouette reads as an absence rather than as a prop. The
 // only colour on him is the heart and the eyes, which is what the eye goes to.
@@ -93,16 +108,13 @@ function part(group, mat, x, y, z, w, h, d) {
   return m;
 }
 
-// The figure. Scenery apart from the heart, which is the console.
+// The figure. Pure scenery: he rises, he breathes, he turns to watch, and
+// nothing on him can be shot or used. What he sells stands in front of him.
 class Devil {
   constructor(scene) {
     this.pos = new THREE.Vector3(0, 0, DEVIL_Z);
     this.state = 'hidden'; // hidden | rising | up | sinking
     this.rise = 0;
-    // Same reasoning as Station.shootCd: the guns here fire far faster than
-    // anyone means to buy, and a reroll priced in health must never go off
-    // eight times because a burst landed on the heart.
-    this.shootCd = 0;
 
     this.group = new THREE.Group();
     this.group.position.set(0, SUNK_Y, DEVIL_Z);
@@ -112,7 +124,7 @@ class Devil {
     // cabinet with a light on it; a devil has to read as a figure at fifteen
     // metres, and the thing that makes a silhouette read as a body is being
     // taller than it is wide. He still overtops the player by half again -
-    // anything at human scale next to a 2.4m pillar is a prop, not a host.
+    // anything at human scale beside a 12m column of light is a prop, not a host.
     part(this.group, SKIN, 0, 1.55, 0, 0.92, 1.7, 0.56).castShadow = true;
     part(this.group, SKIN, 0, 0.42, 0, 0.82, 0.9, 0.55);
     part(this.group, BONE, 0, 2.44, 0, 1.34, 0.22, 0.6);
@@ -126,7 +138,7 @@ class Devil {
     part(this.group, SKIN, 0.68, 1.55, 0, 0.26, 1.5, 0.3);
 
     // Horns and eyes. The eyes are the only lit parts besides the heart, and
-    // small next to it, so the heart stays the thing you aim at.
+    // small next to it, so the heart stays what the eye goes to.
     this.glowMat = new THREE.MeshStandardMaterial({
       color: HEART_COLOR, emissive: HEART_COLOR, emissiveIntensity: 1.2,
       roughness: 0.3, metalness: 0.4,
@@ -141,11 +153,18 @@ class Devil {
 
     // THE HEART. Two lobes over a point, small enough to be a heart and not a
     // chest plate - the first pass was a 0.42m slab across the whole torso,
-    // which read as armour with a light behind it. It is the console, so it
-    // has to look like something you could put a round through.
+    // which read as armour with a light behind it.
     //
-    // Its own material, so the beat below can drive it without dragging the
-    // eyes along, and the only raycast target on the whole figure.
+    // IT IS NOT A CONSOLE ANY MORE. It used to be the one thing on him you
+    // could shoot, and rerolling his deals was done by putting a round through
+    // it. Two consoles stand in front of him now and he sells nothing himself,
+    // which is the version that works: a figure you can BUY from is furniture,
+    // and the only thing he was ever for is being the reason the row is worth
+    // being wary of. Nothing on him is a raycast target - a shot at the Devil
+    // is a wasted shot, and that is the correct answer.
+    //
+    // The heart keeps its own material so the beat below can drive it without
+    // dragging the eyes along.
     this.heartMat = new THREE.MeshStandardMaterial({
       color: HEART_COLOR, emissive: HEART_COLOR, emissiveIntensity: 2.2,
       roughness: 0.25, metalness: 0.5,
@@ -157,47 +176,7 @@ class Devil {
     this.heart = part(this.group, this.heartMat, 0, 1.75, 0.3, 0.2, 0.2, 0.16);
     this.heart.rotation.z = Math.PI / 4;
 
-    this.hit = new THREE.Mesh(HEART_HIT_GEOM, HIT_MAT);
-    this.hit.position.set(0, 1.82, 0.32);
-    // How main.js tells a heart hit from an ordinary wall hit.
-    this.hit.userData.devilHeart = this;
-    this.group.add(this.hit);
-
-    this.panel = makePanel(320, 160, 2.4, 1.2);
-    this.panel.sprite.position.set(0, 4.05, 0);
-    this.group.add(this.panel.sprite);
-
     scene.add(this.group);
-  }
-
-  // The reroll price, and whether it can currently be paid. Same two-state
-  // label a Station draws, for the same reason: the player must be able to see
-  // that a thing is unaffordable without walking into it to find out.
-  setLabel(cost, enabled) {
-    const c = this.panel.canvas.getContext('2d');
-    c.clearRect(0, 0, 320, 160);
-    c.fillStyle = 'rgba(8, 10, 16, 0.85)';
-    roundRect(c, 4, 4, 312, 152, 10);
-    c.fill();
-    c.strokeStyle = hex(HEART_COLOR);
-    c.lineWidth = 2;
-    c.stroke();
-
-    c.textAlign = 'center';
-    c.globalAlpha = enabled ? 1 : 0.4;
-    c.fillStyle = hex(HEART_COLOR);
-    c.font = 'bold 32px system-ui, sans-serif';
-    c.fillText('REROLL', 160, 58);
-    c.fillStyle = enabled ? '#ffffff' : '#5b6785';
-    c.font = 'bold 26px system-ui, sans-serif';
-    c.fillText(cost + ' MAX HP', 160, 104);
-    c.globalAlpha = 1;
-    // The one line that has to be here rather than on a deal panel: the deals
-    // say what they cost, and only this says what ENDS the break.
-    c.fillStyle = '#5b6785';
-    c.font = '600 17px system-ui, sans-serif';
-    c.fillText('A TOTEM STARTS THE WAVE', 160, 138);
-    this.panel.tex.needsUpdate = true;
   }
 
   show() {
@@ -210,20 +189,8 @@ class Devil {
   isUp() {
     return this.state === 'up';
   }
-  canShoot() {
-    return this.state === 'up' && this.shootCd <= 0;
-  }
-  // Squared distance from the player, or -1 when out of E range - the contract
-  // Totem.useDistance() and Station.useDistance() share.
-  useDistance(playerPos) {
-    const dx = playerPos.x - this.pos.x;
-    const dz = playerPos.z - this.pos.z;
-    const d2 = dx * dx + dz * dz;
-    return d2 < DEVIL_RADIUS * DEVIL_RADIUS ? d2 : -1;
-  }
 
   update(dt, time, playerPos) {
-    if (this.shootCd > 0) this.shootCd -= dt;
     if (this.state === 'hidden') return;
     if (this.state === 'rising') {
       this.rise = Math.min(1, this.rise + dt / RISE_TIME);
@@ -271,13 +238,29 @@ export class DevilArea {
       return t;
     });
     this.devil = new Devil(scene);
+    // His two consoles, at the ends of the row. Ordinary Stations - see the
+    // note by DEVIL_STATION_X.
+    this.healthStation = new Station(DEVIL_STATION_X[0], 'maxhp', scene, DEVIL_ROW_Z);
+    this.rerollStation = new Station(DEVIL_STATION_X[1], 'dealReroll', scene, DEVIL_ROW_Z);
+    this.stations = [this.healthStation, this.rerollStation];
     // Rerolls bought against the CURRENT set; reset every time one rises.
     this.rerolls = 0;
+    // ONE MAX HEALTH PER VISIT. Bought, the console sinks and does not come
+    // back until he does - which is what keeps a very large bank from simply
+    // buying its way out of every deal it ever took, at a wave break that is
+    // already standing still.
+    this.healthBought = false;
   }
 
   // True while any part of the installation is still standing.
   get active() {
     return this.devil.state !== 'hidden' || this.deals.some((d) => d.state !== 'hidden');
+  }
+
+  // Whether the max-health console is standing and unspent. main.js asks
+  // before it charges, and asks again to draw the label.
+  get healthAvailable() {
+    return this.healthStation.isUp() && !this.healthBought;
   }
 
   // True once a deal from the current set has been bought. Unlike a totem
@@ -305,6 +288,13 @@ export class DevilArea {
       else d.sink();
     });
     this.devil.show();
+    // A reroll re-presents the set and must NOT hand the health back: the
+    // console is spent for the visit, not for the set.
+    if (resetRerolls) this.healthBought = false;
+    for (const st of this.stations) {
+      if (st === this.healthStation && this.healthBought) continue;
+      st.show();
+    }
   }
 
   // Redraws the standing deals against a changed wallet. Called after a
@@ -320,7 +310,15 @@ export class DevilArea {
 
   dismiss() {
     for (const d of this.deals) d.sink();
+    for (const st of this.stations) st.sink();
     this.devil.sink();
+  }
+
+  // The max-health console is spent for this visit: it goes down on the spot
+  // and the flag is what stops present() raising it again on a reroll.
+  spendHealth() {
+    this.healthBought = true;
+    this.healthStation.sink();
   }
 
   // The NEAREST deal the player could press E on, with its squared distance,
@@ -339,25 +337,39 @@ export class DevilArea {
     return best ? { target: best, d2: bestD } : null;
   }
 
-  // The Devil, when the player is close enough to press E at him.
-  heartInRange(playerPos) {
-    const d = this.devil.isUp() ? this.devil.useDistance(playerPos) : -1;
-    return d < 0 ? null : { target: this.devil, d2: d };
+  // The NEAREST of his two consoles in E range. Same contract as
+  // TotemArea.stationInRange(), so main.js ranks all four consoles, both rows
+  // of offers and nothing else against each other in one pass.
+  stationInRange(playerPos) {
+    let best = null;
+    let bestD = Infinity;
+    for (const st of this.stations) {
+      if (!st.isUp()) continue;
+      const d = st.useDistance(playerPos);
+      if (d < 0 || d >= bestD) continue;
+      bestD = d;
+      best = st;
+    }
+    return best ? { target: best, d2: bestD } : null;
   }
 
   // Appends this set's shootable parts to a raycast target list: one invisible
-  // box per standing pillar, plus the heart. The figure itself is not a target
-  // - a shot that goes wide of the heart should be a miss, not a purchase.
+  // box per standing deal, plus the two console bodies. NOTHING ON THE FIGURE
+  // IS A TARGET - a shot at the Devil is a wasted shot, which is the answer
+  // that keeps him a presence rather than a shop front.
   addTargets(out) {
     for (const d of this.deals) {
       if (d.state === 'hidden') continue;
       out.push(d.hit);
     }
-    if (this.devil.state !== 'hidden') out.push(this.devil.hit);
+    for (const st of this.stations) {
+      if (st.state !== 'hidden') out.push(st.body);
+    }
   }
 
   update(dt, time, playerPos) {
     for (const d of this.deals) d.update(dt, time, playerPos);
+    for (const st of this.stations) st.update(dt, time, playerPos);
     this.devil.update(dt, time, playerPos);
   }
 }

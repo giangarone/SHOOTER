@@ -198,11 +198,24 @@ export function buildArena(scene) {
   const platEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.2 });
   // Raised platforms - solid, and jumpable via the step-up test in player.js.
   // h is the height of the top surface.
+  //
+  // TWO OF THEM MOVED, AND ONLY TWO. The note above is still the rule - these
+  // footprints are what enemy pathing is baked from and what the combat
+  // spacing was tuned around - but the Devil's row grew two consoles at
+  // x = +-6.9, z = 9.5, and the platforms at (8, 8) and (-9, 9) stood exactly
+  // where a player has to be able to walk up to one. A console you cannot
+  // reach is not a console.
+  //
+  // They moved OUT along the same diagonal rather than shrinking or
+  // disappearing: same size, same height, same job holding the two far corners,
+  // pushed back to the +Z corners so the whole band across z = 9.5 is open from
+  // wall to wall. The middle of the floor, where the fight actually happens, is
+  // untouched.
   const platforms = [
     { x: 0, z: 0, w: 4, d: 4, h: 1.0 },
     { x: -8, z: -8, w: 5, d: 4, h: 1.2 },
-    { x: 8, z: 8, w: 6, d: 5, h: 1.3 },
-    { x: -9, z: 9, w: 4, d: 4, h: 1.6 },
+    { x: 12, z: 13.5, w: 6, d: 5, h: 1.3 },
+    { x: -12.5, z: 13.5, w: 4, d: 4, h: 1.6 },
     { x: 9, z: -9, w: 4, d: 4, h: 1.5 },
   ];
   for (const p of platforms) {
