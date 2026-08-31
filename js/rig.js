@@ -161,6 +161,12 @@ const LOOK_BARS = 4;
 const AMBIENT_FILL = 0.45;
 const AMBIENT_KEY = 0.78;
 
+// How far the haze swells over a phrase, as a fraction of its base density.
+// Held well under the boss step: fog is the one control in this file that can
+// quietly wash every enemy colour out, and the point is for the air to move,
+// not for the room to disappear into it.
+const FOG_BREATH = 0.35;
+
 // How much harder the emissive furniture hits on the ONE than on the other
 // three beats. Every beat used to be identical, which is why a room full of
 // pulsing edges read as flicker rather than as a bar you could feel.
@@ -373,7 +379,7 @@ export class Rig {
     // ---- the laser bank ----------------------------------------------------
     // Owns its own geometry and material; adds no lights, so the contract at
     // the top of this file is untouched.
-    this.lasers = new Lasers(this.group);
+    this.lasers = new Lasers(this.group, arena.shared.BOX);
     // The lasers' colour: the room's own, kept saturated.
     this._laserColour = new THREE.Color(0xffffff);
     this._hsl = { h: 0, s: 0, l: 0 };
@@ -509,8 +515,10 @@ export class Rig {
         }
         this.lasers.bar(this._barsHeld);
       }
+      // Only the beams take a cue from the beat now. The lasers are told about
+      // BARS, above, and nothing else - see the division of labour at the top
+      // of lasers.js.
       this._cueBeams();
-      this.lasers.cue();
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
@@ -707,11 +715,13 @@ export class Rig {
     // single wavelength and never is. Same hue, always at its strength.
     this._colour.getHSL(this._hsl);
     this._laserColour.setHSL(this._hsl.h, 1, 0.5);
-    // What the ROOM allows. Which pairs are lit, and whether each stabs on
-    // this or sustains through the phrase, is the bank's own business.
-    const laserMaster = (0.55 + level * 0.45) * (0.35 + this._energy * 0.65)
+    // What the ROOM allows. Which pairs are lit is the bank's own business,
+    // and nothing in it answers the beat: the beams own the hits, the lasers
+    // own the movement, and a laser that blinked on every kick would only be
+    // the beams again in a thinner shape.
+    const laserMaster = (0.6 + level * 0.4) * (0.4 + this._energy * 0.6)
       * (1 - dark) * (1 - this._house) * look.lasers;
-    this.lasers.update(dt, s.camPos, this._laserColour, punch, laserMaster);
+    this.lasers.update(dt, s.camPos, this._laserColour, laserMaster);
 
     // ---- emissive furniture -----------------------------------------------
     // Shared materials, so one write lights every lamp head, deck edge and
@@ -792,8 +802,20 @@ export class Rig {
     // one of them out. The house lights thin it instead of thickening it - an
     // intermission is the room's lights coming up, and clearing the air is
     // half of what that looks like.
+    // AND IT BREATHES ON THE PHRASE. The bass term above is a wobble; this is
+    // an inhale. Over the four bars of a look the haze thickens and thins
+    // once, which does two things at the same time: it gives the air a slow
+    // rhythm of its own under everything that is punctuating, and it makes
+    // every shaft in the room brighter as it comes in, because a beam is only
+    // as visible as the smoke it is crossing.
+    //
+    // Driven by the bar clock rather than by wall time, so the swell arrives
+    // with the phrase it belongs to. Sixteen beats of a look, counted from the
+    // two counters the rig already keeps.
+    const step = (this._barsHeld * 4 + s.bar) / (LOOK_BARS * 4);
+    const breath = 0.5 - 0.5 * Math.cos(step * Math.PI * 2);
     const fogTarget = (boss ? FOG_DENSITY_BOSS : FOG_DENSITY)
-      * (1 + level * 0.3) * (1 - this._house * 0.35);
+      * (1 + level * 0.3 + breath * FOG_BREATH) * (1 - this._house * 0.35);
     this.scene.fog.density += (fogTarget - this.scene.fog.density) * Math.min(1, dt * 1.5);
     this._c.copy(this._fogBase).lerp(this._colour, 0.12 + level * 0.1);
     this.scene.fog.color.copy(this._c);
