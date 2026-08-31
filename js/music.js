@@ -107,6 +107,29 @@ const SLEW = 0.05;
 // clock jumps to the new position instead of crawling to it.
 const RESYNC = 0.35;
 
+// THE INTRO. The track no longer starts at 0:00, and it no longer waits for a
+// run to begin - it is playing under the menu, from a random point in the
+// first ninety minutes, so a session does not always open on the same two
+// songs. Three hours of soundtrack is wasted if everyone only ever hears the
+// front of it.
+//
+// A random point lands wherever it lands, and a good share of a dance record
+// is a drop. Cutting into the middle of one at full volume is a jump scare, so
+// the first ten seconds are a fade: the gain rises from silence and the lowpass
+// opens from under the music, which is the same "behind a door" sweep the
+// muffle uses, run slowly and in reverse. Long enough to feel like the room
+// letting you in rather than a fade-in someone forgot to shorten.
+const INTRO_SEC = 10;
+// Where the intro's cutoff starts. Below MUFFLED_HZ: the muffle is meant to
+// leave the melody recognisable, and this is meant to leave almost nothing,
+// so that what happens over the ten seconds is the track ARRIVING.
+const INTRO_HZ = 120;
+// The window the random start is drawn from, in seconds - 0:00 to 1:30:00.
+// Not the whole file, so a start never lands close enough to the end to wrap
+// during the fade, and so the tail stays somewhere a long session gets to
+// rather than somewhere a short one opens on.
+const START_WINDOW = 5400;
+
 export class Music {
   constructor(src) {
     this.src = src;
@@ -117,6 +140,10 @@ export class Music {
     // Last cutoff we ramped towards. Guards the ramp so holding a state does
     // not restack an identical automation event every frame.
     this._target = FULL_HZ;
+    // Audio-clock time the ten-second fade finishes, or 0 once it has. While
+    // it is running the filter belongs to the intro and setMuffled() aims at
+    // this instead of at its own short sweep.
+    this._introEnd = 0;
     this.muted = false;
     this._started = false;
     this.analyser = null;
@@ -205,16 +232,41 @@ export class Music {
       // on a sweep sounds like a whistle chasing the music down.
       this.filter.Q.value = 0.0001;
       this.gain = ctx.createGain();
-      this.gain.gain.value = this.muted ? 0 : VOLUME;
+      // Silent to begin with. The ramp is scheduled below, once the graph is
+      // connected - starting at VOLUME and ramping down would put a full-level
+      // frame out first, which is the click this whole file exists to avoid.
+      this.gain.gain.value = 0;
 
       this.node.connect(this.filter);
       this.filter.connect(this.gain);
       this.gain.connect(ctx.destination);
       // The branch. Note it is NOT connected onward to anything.
       this.node.connect(this.analyser);
+
+      // A random point in the first ninety minutes. currentTime cannot be
+      // written before the element knows how long the file is, and on a cold
+      // load it does not yet, so the seek waits for the metadata when it has
+      // to. Setting it late is harmless: the playback clock treats a jump
+      // bigger than RESYNC as a seek and re-seeds itself.
+      const seek = Math.random() * START_WINDOW;
+      if (this.el.readyState >= 1) this.el.currentTime = seek;
+      else this.el.addEventListener('loadedmetadata', () => { this.el.currentTime = seek; }, { once: true });
+
+      // The fade. `_introEnd` is on the AUDIO clock, which is what the ramps
+      // below are scheduled against, and it is what setMuffled() reads to know
+      // it should retarget the intro sweep rather than cut across it.
+      const now = ctx.currentTime;
+      this._introEnd = now + INTRO_SEC;
+      this.filter.frequency.setValueAtTime(INTRO_HZ, now);
+      this.filter.frequency.exponentialRampToValueAtTime(this._target, this._introEnd);
+      this.gain.gain.setValueAtTime(0, now);
+      this.gain.gain.linearRampToValueAtTime(this.muted ? 0 : VOLUME, this._introEnd);
     }
-    // Rejects when the browser is not satisfied the gesture was real. Not an
-    // error worth surfacing: the next gesture calls start() again.
+    // Rejects when the browser is not satisfied the gesture was real, which is
+    // the NORMAL case for the call the game makes at launch - autoplay is
+    // blocked until the player touches something. Not an error worth
+    // surfacing: the next gesture calls start() again, the graph above is
+    // already built, and playback picks up from the same random point.
     this.el.play().catch(() => {});
   }
 
@@ -258,12 +310,30 @@ export class Music {
   // Sweeps the cutoff between clean and muffled. `on` true = muffled.
   // Called every frame from the game loop, so it must be cheap and idempotent
   // when nothing has changed.
+  //
+  // While the ten-second intro fade is still running it owns the filter, and a
+  // change here only moves where that fade lands.
   setMuffled(on) {
     const to = on ? MUFFLED_HZ : FULL_HZ;
-    if (!this.filter || to === this._target) return;
+    if (to === this._target) return;
     this._target = to;
+    // No graph yet - the state was set before the first gesture got through.
+    // start() reads `_target` when it builds one, so the intro will open onto
+    // the right cutoff rather than onto a stale one.
+    if (!this.filter) return;
     const p = this.filter.frequency;
     const now = this.filter.context.currentTime;
+    if (now < this._introEnd) {
+      // Mid-fade. Retarget the intro's own sweep rather than cutting across it
+      // with a 0.7s one: a state change during the fade - the player starting
+      // a run before the room has finished opening up - should change where
+      // the ten seconds ARRIVE, not abandon them.
+      p.cancelScheduledValues(now);
+      p.setValueAtTime(Math.max(p.value, 1), now);
+      p.exponentialRampToValueAtTime(to, this._introEnd);
+      return;
+    }
+    this._introEnd = 0;
     // Cancel-and-hold from the CURRENT value, not from the last target: a
     // state that flips mid-sweep has to continue from where the sweep
     // actually got to, or it jumps.
@@ -487,7 +557,13 @@ export class Music {
     g.setValueAtTime(g.value, now);
     // Short ramp rather than a straight assignment: a gain step is a
     // discontinuity in the waveform, and that is an audible click.
-    g.linearRampToValueAtTime(on ? 0 : VOLUME, now + 0.12);
+    //
+    // Unmuting during the intro finishes on the intro's clock instead, not on
+    // this one. Someone who launches with the music muted and turns it on two
+    // seconds in should get the same slow arrival as everyone else, rather
+    // than the drop the fade exists to protect them from.
+    const end = on ? now + 0.12 : Math.max(now + 0.12, this._introEnd);
+    g.linearRampToValueAtTime(on ? 0 : VOLUME, end);
   }
 
   toggleMute() {

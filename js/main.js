@@ -491,6 +491,9 @@ class Game {
     };
 
     this._bind();
+    // Try to get the music going straight away. Blocked until the player
+    // touches something, on every browser that matters - see _audioGesture().
+    this._audioGesture();
     this.ui.showStart();
     this.last = performance.now();
     this.renderer.setAnimationLoop((now) => this._loop(now));
@@ -914,6 +917,13 @@ class Game {
   // that reaches audio routes through here rather than calling sfx.ensure()
   // directly, because the music has to be (re)started on a gesture too and a
   // gesture that primed only one of the two was the original bug here.
+  //
+  // Also called once at launch, before any gesture exists. That call builds
+  // the graph and picks the track's random start point, and the browser then
+  // refuses to actually play - which is fine and expected. The first real
+  // gesture calls this again and playback begins, already set up. The point is
+  // that the soundtrack belongs to the GAME rather than to a run: it is under
+  // the menu, and starting a run is not where it begins.
   _audioGesture() {
     this.sfx.ensure();
     this.music.start(this.sfx.ctx);
