@@ -73,6 +73,14 @@ const FLY = 0;
 const SETTLED = 1;
 const HOME = 2;
 
+// How many pixels the orb is drawn across. Odd, so the disc has a middle
+// column and a middle row and reads as symmetrical; small, because the whole
+// point is that the blocks are visible.
+const ORB_PIXELS = 11.0;
+// Per-orb hue offset, as a fraction of the colour wheel either way. 0.02 is
+// about seven degrees - a shade, not a colour.
+const HUE_SPREAD = 0.02;
+
 // RAINBOW, ALL THE WAY THROUGH.
 //
 // The whole orb wears the room's colour - hue from one uHue uniform that
@@ -81,12 +89,16 @@ const HOME = 2;
 // together when the ceiling does. Two uniform writes a frame; no colour buffer
 // and no per-orb work on the CPU at all.
 //
+// The per-orb offset is deliberately tiny. It is there so a pile of orbs is
+// not one flat sheet of a single colour - the eye picks out individual orbs in
+// a heap because their neighbours are a shade off - and NOT to make them
+// multicoloured: at any moment every orb in the room is recognisably the same
+// colour as every other, and that colour is the room's.
+//
 // What keeps them readable against a floor that is ALREADY washed in that same
-// cycling colour is not hue, it is VALUE: the centre burns out to white and
-// the edge is fully saturated, so an orb is a hard bright point on a dim wash
-// whatever colour the room is currently wearing. That contrast is the thing to
-// protect if these are ever retuned - a flatter, softer orb disappears into
-// the floor exactly when there are most of them.
+// cycling colour is not hue, it is the DRAWING: a hard pixel edge, a rim tone
+// darker than the body, and a flat highlight block. A soft, gradient orb
+// dissolves into the floor exactly when there are most of them.
 const VERT = `
   uniform float uTime;
   uniform float uScale;
@@ -123,28 +135,43 @@ const FRAG = `
     return clamp(abs(k * 6.0 - 3.0) - 1.0, 0.0, 1.0);
   }
   void main() {
-    // Radial distance across the point sprite, 0 at the centre, 1 at the edge.
-    float d = length(gl_PointCoord - 0.5) * 2.0;
-    if (d > 1.0) discard;
-    vec3 hue = hue2rgb(fract(uHue + vHue));
-    // The edge is shifted a little further round the wheel than the body, so
-    // the orb has an iridescent lip rather than one flat colour - it is what
-    // makes a sphere out of a disc without a single lighting term.
-    vec3 lip = hue2rgb(fract(uHue + vHue + 0.11));
-    // Three parts, and the proportions matter: a SOLID disc so the orb reads
-    // as an object rather than as a lens flare, a narrow ring around it, and a
-    // wide soft halo underneath both so a floor of them still glows. A fat,
-    // fuzzy core is the failure mode here - it turns two hundred orbs into fog.
-    float core = smoothstep(0.46, 0.06, d);
-    float ring = smoothstep(0.42, 0.60, d) * smoothstep(0.88, 0.62, d);
-    float halo = smoothstep(1.0, 0.42, d) * 0.3;
-    // The white-hot centre. This is what separates an orb from the floor wash
-    // it is lying on, so it is a term of its own and not a lightened hue.
-    float hot = smoothstep(0.24, 0.0, d);
-    vec3 c = hue * (core * 1.8 + halo) + lip * ring * 2.3 + vec3(1.0) * hot * 1.5;
-    float a = (core + ring * 0.95 + halo * 0.55 + hot * 0.6) * vFade;
-    if (a <= 0.003) discard;
-    gl_FragColor = vec4(c, a);
+    // DRAWN IN PIXELS, NOT IN CURVES. The sprite is divided into a grid of
+    // ORB_PIXELS cells and everything below is measured in WHOLE CELLS, so
+    // every edge in the orb - the disc, the rim, the highlight - lands on a
+    // cell boundary. The grid is in SPRITE space, so the blocks scale with the
+    // orb: it is the same drawing at any distance instead of a dot up close
+    // and a smear far away.
+    vec2 px = floor(gl_PointCoord * ${ORB_PIXELS.toFixed(1)});
+    float mid = (${ORB_PIXELS.toFixed(1)} - 1.0) * 0.5;
+    float r = length(px - mid);
+    // The glow under the orb is the one thing that must NOT be blocky, or
+    // every orb wears a square halo. Measured off the raw coordinate.
+    float halo = smoothstep(1.0, 0.55, length(gl_PointCoord - 0.5) * 2.0) * 0.3;
+    vec3 base = hue2rgb(fract(uHue + vHue));
+
+    // Outside the disc: glow only.
+    if (r > mid + 0.4) {
+      float a = halo * vFade;
+      if (a <= 0.004) discard;
+      gl_FragColor = vec4(base * 0.9, a);
+      return;
+    }
+
+    // Two flat tones and one highlight block, no gradient anywhere. The rim is
+    // what gives the disc an edge against a floor wearing the same colour; the
+    // highlight is a BLOCK and not a radius, because a small circle on an
+    // eleven-pixel grid comes out as a plus sign.
+    // One cell of rim, dark enough to survive the brightness the body is
+    // pushed to - at 0.55 it vanished, because a saturated hue times 1.4 is
+    // already clipped and the difference never reached the screen.
+    vec3 c = r > mid - 1.0 ? base * 0.42 : base;
+    vec2 hl = abs(px - vec2(mid - 1.5, mid - 2.5));
+    if (hl.x < 1.0 && hl.y < 1.0) c = mix(base, vec3(1.0), 0.55);
+    // Pushed past 1 on purpose: the body clips toward white and reads as LIT
+    // rather than painted, which is what these lost when the white centre
+    // went. The rim is a fraction of the same number, so it stays a step down
+    // however far the body is pushed.
+    gl_FragColor = vec4(c * 1.8 + base * halo, vFade);
   }
 `;
 
@@ -279,10 +306,10 @@ export class MoneyOrbs {
     this.vel[i3] = vx; this.vel[i3 + 1] = vy; this.vel[i3 + 2] = vz;
     this.value[i] = value;
     this.size[i] = sizeFor(value);
-    // Each orb sits at a fixed offset around the wheel from the room's colour,
-    // so a pile of them is a spread of neighbouring hues rather than one flat
-    // sheet - and the whole pile still swings when the room does.
-    this.hue[i] = Math.random() * 0.16 - 0.08;
+    // A fixed offset around the wheel from the room's colour. Kept to a few
+    // degrees: enough that two orbs side by side are not the same pixel, far
+    // too little to read as a different colour.
+    this.hue[i] = (Math.random() * 2 - 1) * HUE_SPREAD;
     this.phase[i] = Math.random() * Math.PI * 2;
     this.born[i] = this.time;
     this.state[i] = FLY;
@@ -470,11 +497,11 @@ export class MoneyOrbs {
 // colour is what says "money", and splitting it by denomination as well would
 // cost the orbs the thing that makes them one readable class of object.
 function sizeFor(v) {
-  // Point sizes, so the visible disc is a little under half of each - see the
-  // core term in the fragment shader.
-  if (v >= 100) return 0.66;
-  if (v >= 25) return 0.50;
-  return 0.38;
+  // Point sizes in metres. The pixel disc fills almost the whole sprite now
+  // (everything out to 0.94), so these are close to the orb's real diameter.
+  if (v >= 100) return 0.58;
+  if (v >= 25) return 0.45;
+  return 0.34;
 }
 
 const HSL = { h: 0, s: 0, l: 0 };

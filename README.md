@@ -93,10 +93,10 @@ Open http://localhost:8123
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
-  MONEY ORBS where the enemy died - rainbow, cycling in time with the ceiling
-  lights and burning white-hot at the centre so they stay readable against a
-  floor washed in that same colour - and you have to go and take the ground
-  you killed on. Orbs inside a small radius fly to you on their own
+  MONEY ORBS where the enemy died - chunky pixel-art spheres drawn on an
+  eleven-pixel grid in the shader, wearing the ceiling's own colour with a few
+  degrees of hue between one orb and the next so a heap of them is not one flat
+  sheet - and you have to go and take the ground you killed on. Orbs inside a small radius fly to you on their own
   (Lodestone widens it, and pulls ammo and health with it), everything still
   down there is swept up automatically when the wave ends, and anything you
   never went near times out after twenty seconds. However many are on the
