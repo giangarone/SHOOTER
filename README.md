@@ -332,7 +332,8 @@ js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
 js/music.js         streaming soundtrack, lowpass, playback clock, beat
 js/beatmap.js       the pre-analysed beat grid and its lookup
-js/rig.js           the rave lighting rig: lights, beams, fixtures, cues
+js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
+js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase

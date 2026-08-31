@@ -362,6 +362,9 @@ class Game {
     this._rigState = {
       mode: 'idle', beat: 0, level: 0, bar: 0, downbeat: false,
       healthFrac: 1, comboMult: 1, bossColor: 0xffffff, bossPos: null,
+      // The camera's world position, so the laser bank can billboard its
+      // ribbons. A reference, not a copy: the camera object outlives the run.
+      camPos: null,
     };
 
     // Scratch objects reused every frame so the hot path allocates nothing.
@@ -861,6 +864,7 @@ class Game {
     // has to ask which source it is getting.
     r.bar = this.music.bar;
     r.downbeat = this.music.downbeat;
+    r.camPos = this.camera.position;
     // Clamped: a health pickup can overheal past max, which would drive the
     // low-health maths backwards.
     r.healthFrac = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
