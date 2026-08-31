@@ -38,6 +38,8 @@ const DEFAULT_MODS = {
   ammoRegen: 0,         // reserve rounds per second
   creditMult: 1,        // multiplier on credits earned
   ammoOnKill: 0,        // reserve rounds granted per kill
+  magnetMult: 1,        // Lodestone: multiplier on the money-orb collection
+                        // radius (and, at a reduced rate, on the pickup one)
   bloodlust: 0,         // Bloodlust: fire rate gained per kill in the combo
   bloodlustMax: 0,      // Bloodlust: kills past which it stops climbing
   shockwave: 0,         // damage dealt to nearby enemies when hit

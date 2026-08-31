@@ -29,15 +29,22 @@
 //   wide and high over the arena, and a stray shot up there should stay a miss.
 //
 // EACH OFFER HAS ITS OWN COLOUR AND ICON
-//   `theme` tints the shaft, the pool, the card and the icon; `icon` names a 3D
-//   object from icons.js that says what the upgrade does before the text is
-//   legible - a flame for Incendiary, an icicle for Cryo. Both come straight
-//   off the offer, so this file still knows nothing about upgrades.
+//   `theme` tints the shaft, the pool, the card and the icon; the icon itself
+//   is a 24x24 pixel-art plate from pixelicons.js, looked up by the offer's own
+//   id, that says what the upgrade does before the text is legible - a flame
+//   for Incendiary, a snowflake for Cryo. Both come straight off the offer, so
+//   this file still knows nothing about upgrades.
+//
+//   ONE ICON PER OFFER, GUARANTEED BY THE KEY. The catalogue is keyed by
+//   upgrade id, so two upgrades cannot end up wearing one shape however the
+//   pool is edited - the failure the old 3D catalogue needed a test to catch
+//   is now unrepresentable. test/icons.mjs checks the other direction, that
+//   every id has a drawing.
 //
 //   The icon ORBITS the axis of its column to whatever side the player is on
-//   and turns to face them, rather than being billboarded: billboarding a 3D
-//   shape flattens it, and a shape left to spin on its own hides itself
-//   edge-on for a third of every turn.
+//   and turns to face them. It is flat art, so facing the player is the only
+//   angle that means anything; the orbit is what keeps it legible from
+//   anywhere in the arena rather than only from the front of its column.
 //
 // PERFORMANCE RULES, same as arena.js and powerups.js:
 //   1. No PointLights, ever. three.js keys its shader programs on the scene's
@@ -52,10 +59,12 @@
 //   3. Icons are built on first sight and KEPT, one per offer id per totem,
 //      hidden rather than thrown away. That bounds them by the size of the
 //      upgrade pool instead of by the number of waves survived, and the
-//      geometry behind them is shared across every icon in the game.
+//      geometry behind them is cached per (offer, colour) inside pixelicons.js,
+//      so three totems showing the same offer across three waves share one
+//      buffer rather than building three.
 
 import * as THREE from 'three';
-import { buildIcon } from './icons.js';
+import { buildPixelIcon } from './pixelicons.js';
 import { makeGlowTexture } from './effects.js';
 // A totem draws whatever it is handed. It knows nothing about upgrades or
 // weapons - main.js normalises both into the same `offer` shape, which is why
@@ -292,8 +301,8 @@ const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 const ICON_Y = 1.5;
 const ICON_RX = 0.5;
 const ICON_RZ = 0.5;
-// icons.js builds every shape at roughly half a metre, which is legible in the
-// hand and too small inside a 2.5m-wide column seen from across the arena.
+// pixelicons.js builds every plate at roughly 0.6m across, which is legible in
+// the hand and too small inside a 2.5m-wide column seen from across the arena.
 const ICON_SCALE = 1.35;
 // The same orbit on the smaller station body: 1.0 wide and 0.5 deep, and only
 // 1.4 tall, so the icon rides lower and closer in and is scaled down to match.
@@ -436,9 +445,9 @@ export class Totem {
   /**
    * Assigns an offer and starts the rise.
    *
-   * @param {object} offer  { id, name, theme, icon, effects, note } for a free
+   * @param {object} offer  { id, name, theme, effects, note } for a free
    *   totem, plus { cost, enabled } for a Devil Deal - see _buildOffers() and
-   *   _buildDeals() in main.js.
+   *   _buildDeals() in main.js. `id` doubles as the icon key.
    */
   present(offer, armTime = ARM_TIME) {
     this.offer = offer;
@@ -456,13 +465,13 @@ export class Totem {
   }
 
   // Swaps in this offer's icon, building it the first time this totem is asked
-  // for it. Keyed by offer id rather than by icon name: two upgrades can share
-  // a shape (Overclock and Arc Rounds are both lightning) but never a colour,
-  // and the colour is baked into the icon's material when it is built.
+  // for it. The offer's id is both the cache key and the icon key - the
+  // catalogue is keyed by upgrade id, so there is no second name to keep in
+  // step and no way for two offers to collide on one drawing.
   _showIcon(offer) {
     let icon = this._icons.get(offer.id);
     if (!icon) {
-      icon = buildIcon(offer.icon || 'shard', offer.theme);
+      icon = buildPixelIcon(offer.id, offer.theme);
       this._icons.set(offer.id, icon);
       this.iconAnchor.add(icon);
     }
@@ -728,16 +737,15 @@ export class Station {
     this.iconAnchor = new THREE.Group();
     this.iconAnchor.position.set(0, ST_ICON_Y, ST_ICON_RZ);
     this.iconAnchor.scale.setScalar(ST_ICON_SCALE);
-    // A crate of rounds, a toothed wheel, a heart. All are read head-on from
-    // across the arena, which rules out the shapes that are only legible in
-    // profile - the vortex tried first is three horizontal rings and collapses
-    // to a stack of lines from the one angle the player actually sees it from.
+    // A crate of rounds, a pair of chasing arrows, a heart. Stations are the
+    // only things here that name their icon explicitly - an offer's icon is
+    // its own id - because a console is not an upgrade and has no id to use.
     //
-    // The two rerolls SHARE the wheel deliberately. One shape means one thing
+    // The two rerolls SHARE the arrows deliberately. One shape means one thing
     // is the rule the icon catalogue is built on, and these two do the same
     // thing in two different rows; giving the Devil's a shape of its own would
     // be teaching a second symbol for something the player already knows.
-    this.icon = buildIcon(look.icon, this.color);
+    this.icon = buildPixelIcon(look.icon, this.color);
     this.iconAnchor.add(this.icon);
     this.group.add(this.iconAnchor);
 

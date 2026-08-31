@@ -11,6 +11,7 @@
     "test:drops": "node test/drops.mjs",
     "test:seeker": "node test/seeker.mjs",
     "test:devil": "node test/devil.mjs",
+    "test:money": "node test/money.mjs",
     "test:icons": "node test/icons.mjs"
   },
   "dependencies": {

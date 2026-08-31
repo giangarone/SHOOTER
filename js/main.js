@@ -34,7 +34,8 @@
 //   1. player.update      moves the player and the camera
 //   2. _updateWave        spawns enemies and pickups
 //   3. shoot / melee      raycasts against enemy hitboxes
-//   4. _updatePickups     proximity collection
+//   4. _updateMoney       money orbs, the magnet, and the balance
+//   4b. _updatePickups    proximity collection
 //   5. _updateEnemies     AI, then remove the dead
 //   6. _updateProjectiles movement and player hits
 //   7. shake, HUD, render
@@ -66,6 +67,7 @@ import { Rig } from './rig.js';
 import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { calcDropsForWave, pickDropType, spawnDropAt, spawnRelief } from './powerups.js';
+import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
   UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rollDeals, rerollCost,
   dealRerollCost, effectLines,
@@ -178,9 +180,15 @@ const COMBO_MAX = 3;
 // Credits per enemy are derived from its score so the two curves cannot drift
 // apart. Splitter children score 0 and so are worth nothing, deliberately -
 // otherwise splitters would be the best credit source in the game.
-const CREDITS_PER_SCORE = 0.1;
-const CLEAR_BONUS_BASE = 60;
-const CLEAR_BONUS_PER_WAVE = 30;
+//
+// 0.18 rather than the 0.1 it was for most of the game's life, because KILLS
+// ARE NOW THE ONLY INCOME. The flat wave-clear bonus is gone (see _finishWave):
+// it paid out a third to a half of a wave's money for standing still at the
+// moment the last enemy died, which is the one moment in a wave that asks
+// nothing of the player. Everything it used to pay now has to be picked up off
+// the floor, and this is the dial that keeps a run's total roughly where it
+// was - plus a margin for the orbs that time out uncollected.
+const CREDITS_PER_SCORE = 0.18;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
 // Deals the Devil puts up, and how likely he is to be there at all after a
@@ -252,9 +260,24 @@ const PROJ_IMPACT = {
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
 const MAX_MORTARS = 6;
-// The boss kill's own payout, separate from the wave clear bonus.
+// The boss kill's own payout - and, now that the flat clear bonus is gone, the
+// only lump sum left in the game. It is paid in orbs like everything else.
 const BOSS_BONUS_BASE = 400;
 const BOSS_BONUS_PER_WAVE = 60;
+// Orbs the boss payout splits into. Far above the cap on an ordinary kill's
+// drop: the point of the boss shower is the FLOOR being covered, so the
+// denomination stays small and the count does the work.
+const BOSS_ORBS = 40;
+// What a wave cleared without taking a single point of damage pays, and the
+// orbs it arrives in. This is the flat clear bonus's only surviving half - it
+// is paid ONLY for a flawless wave, which is what it is for.
+const FLAWLESS_BONUS_BASE = 60;
+const FLAWLESS_BONUS_PER_WAVE = 30;
+const FLAWLESS_ORBS = 8;
+// Ammo and health are pulled from this fraction of the money radius, at this
+// many metres a second at the very centre of it.
+const MAGNET_PICKUP_FRACTION = 0.55;
+const PICKUP_PULL_SPEED = 9;
 // Display names, kept out of ENEMY_TYPES because nothing else in the game
 // needs an enemy to have one.
 const BOSS_NAMES = {
@@ -308,6 +331,10 @@ class Game {
     this.devilArea = new DevilArea(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
+    // Every credit in the game, lying on the floor. One Points object for the
+    // lot of them - see the header of money.js.
+    this.money = new MoneyOrbs(this.scene);
+    this.money.setViewport(this.renderer.domElement.height, this.camera.fov);
     this.ui = new UI();
     this.sfx = new SFX();
     this.music = new Music('/assets/audio/soundtrack.m4a');
@@ -330,9 +357,8 @@ class Game {
     this.bestCombo = 0;
     // Reset at the start of every wave; drives the perfect-clear bonus.
     this.waveDamageTaken = 0;
-    // Credits paid by the last wave clear, and whether it was flawless. Both
-    // are shown in the wave-cleared banner.
-    this.lastGain = 0;
+    // Whether the last wave was cleared without taking damage. Drives the
+    // flawless orb shower, the No-Hit stack and the banner.
     this.lastPerfect = false;
     this.wave = 0;
     this.enemies = [];
@@ -388,6 +414,16 @@ class Game {
     // Scratch objects reused every frame so the hot path allocates nothing.
     this._shakeV = new THREE.Vector3();
     this._killPos = new THREE.Vector3();
+    // Where the last boss part died, so the kill's orb shower comes out of the
+    // corpse rather than out of the player. Boss parts die during the enemy
+    // sweep; the payout is made at the wave clear a frame or two later.
+    this._bossDeathPos = new THREE.Vector3();
+    // Bound once. money.update() calls it per orb collected, and allocating a
+    // closure per frame for that is the kind of garbage this loop is careful
+    // not to make.
+    this._onOrb = (v) => this._collectOrb(v);
+    // Set by _collectOrb, consumed once per frame by _updateMoney.
+    this._creditsDirty = false;
     this._aimTarget = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
     this._rayEnd = new THREE.Vector3();
@@ -557,6 +593,7 @@ class Game {
         damaged: this.stats.damaged,
         health: Math.round(this.player.health),
         powerups: this.powerups.length,
+        moneyOrbs: this.money.count,
         ammoPickups: this.powerups.reduce((n, p) => n + (p.typeKey === 'ammo' ? 1 : 0), 0),
         projectiles: this.projectiles.length,
         // Leak canaries. `geometries` is everything the renderer still holds
@@ -756,6 +793,8 @@ class Game {
       this.camera.aspect = viewportAspect();
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
+      // Orb point sizes are in pixels, so they scale off the canvas height.
+      this.money.setViewport(this.renderer.domElement.height, this.camera.fov);
     });
   }
 
@@ -802,6 +841,7 @@ class Game {
     this.projectiles.length = 0;
     for (const p of this.powerups) p.destroy();
     this.powerups.length = 0;
+    this.money.clear();
     this._pendingSpawns.length = 0;
     this._bigAlive = 0;
     this.dropsLeft = 0;
@@ -1006,7 +1046,6 @@ class Game {
     this.comboTimer = 0;
     this.bestCombo = 0;
     this.waveDamageTaken = 0;
-    this.lastGain = 0;
     this.lastPerfect = false;
     this.totemArea.dismiss();
     this.devilArea.dismiss();
@@ -1277,9 +1316,15 @@ class Game {
   _payBossBonus() {
     const bonus = BOSS_BONUS_BASE + BOSS_BONUS_PER_WAVE * this.wave;
     this.score += bonus * 4;
-    const paid = this._award(bonus);
+    // The one payout in the game that is still a lump sum, and it arrives as a
+    // shower: BOSS_ORBS orbs thrown wide from where the boss was standing, so
+    // the reward for the fight is a floor covered in money rather than a
+    // number that changed in the corner of the screen. The wave-clear vacuum
+    // that follows sweeps up anything the player does not walk over.
+    const at = this._bossDeathPos;
+    this.money.spawn(at, bonus * this.player.mods.creditMult, BOSS_ORBS, 7.5);
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
-    this.ui.banner('BOSS DOWN  +$' + paid);
+    this.ui.banner('BOSS DOWN  +$' + Math.round(bonus * this.player.mods.creditMult));
   }
 
   spawnEnemy(type) {
@@ -1371,17 +1416,24 @@ class Game {
     return Math.min(COMBO_MAX, 1 + COMBO_STEP * (this.comboKills - 1));
   }
 
-  // Single entry point for earning credits, so Scavenger's creditMult applies
-  // everywhere without each caller having to remember it.
-  _award(amount) {
-    if (amount <= 0) return 0;
-    const paid = Math.round(amount * this.player.mods.creditMult);
-    this.credits += paid;
-    // Station labels show whether the player can currently afford them, so a
-    // balance change has to redraw them. Only fires on a kill or a wave clear,
-    // never per frame.
-    if (this.totemArea.active) this._refreshStations();
-    return paid;
+  // MONEY DROPPED, not money earned. Everything a kill is worth goes onto the
+  // floor as orbs and the balance only moves when they are collected.
+  //
+  // Midas's creditMult is applied HERE rather than at collection, so the orbs
+  // that hit the floor are already worth what the player's build says they are
+  // worth - a Midas run visibly drops more money, which is the whole point of
+  // taking it - and so a mid-run pick can never retroactively revalue orbs
+  // that were already lying there.
+  _dropMoney(pos, amount) {
+    if (amount <= 0) return;
+    this.money.spawn(pos, amount * this.player.mods.creditMult);
+  }
+
+  // An orb reached the player. The single entry point for the balance going
+  // up; the value is already final by the time it gets here.
+  _collectOrb(value) {
+    this.credits += value;
+    this._creditsDirty = true;
   }
 
   // Extends the kill chain. Called once per enemy death, before the credit is
@@ -2300,9 +2352,26 @@ class Game {
         this._clearHazards();
         this.waveState = 'intermission';
         this.score += 100 * this.wave;
-        this._payClearBonus();
-        let msg = 'WAVE ' + this.wave + ' CLEARED  +$' + this.lastGain;
-        if (this.lastPerfect) msg += '  FLAWLESS';
+        this.lastPerfect = this.waveDamageTaken <= 0;
+        // Everything still on the floor comes in, so a wave's money can never
+        // be lost to the shopping trip that follows it.
+        this.money.vacuum();
+        let msg = 'WAVE ' + this.wave + ' CLEARED';
+        if (this.lastPerfect) {
+          // WHAT FLAWLESS PAYS NOW. The clear bonus used to double for a wave
+          // taken without damage, which was the game's loudest "you were not
+          // hit" signal; with the flat bonus gone it is paid as a shower of
+          // orbs at the player's feet instead. Same reward, and it arrives as
+          // something that happens in the room rather than as a bigger number
+          // in a banner.
+          this.money.spawn(
+            this.player.pos,
+            (FLAWLESS_BONUS_BASE + FLAWLESS_BONUS_PER_WAVE * this.wave)
+              * this.player.mods.creditMult,
+            FLAWLESS_ORBS, 5.5
+          );
+          msg += '  FLAWLESS';
+        }
         // No-Hit Bonus. Read from the same flag the clear bonus just set, so
         // the two can never disagree about what flawless means, and banked on
         // the player rather than in mods - see Player.addNoHitStack. It is
@@ -2317,8 +2386,8 @@ class Game {
         }
         this.ui.banner(msg);
         this.sfx.wave();
-        // After the clear bonus, so the flawless test still reads the damage
-        // actually taken during the fight.
+        // After the flawless test above, so it still reads the damage actually
+        // taken during the fight.
         if (this._cfg.boss) this._payBossBonus();
         this._presentTotems();
         this._presentDevil();
@@ -2338,15 +2407,6 @@ class Game {
       this.interT -= dt;
       if (this.interT <= 0) this.startWave();
     }
-  }
-
-  // Wave-clear payout. A wave cleared without taking a single point of damage
-  // pays double - the clearest signal the game has that playing well is worth
-  // more than playing safe.
-  _payClearBonus() {
-    const base = CLEAR_BONUS_BASE + CLEAR_BONUS_PER_WAVE * this.wave;
-    this.lastPerfect = this.waveDamageTaken <= 0;
-    this.lastGain = this._award(this.lastPerfect ? base * 2 : base);
   }
 
   // Raises a fresh set of three totems. Called on every wave clear, so a set
@@ -2399,7 +2459,6 @@ class Game {
         id,
         name: def.name,
         theme: def.theme,
-        icon: def.icon,
         // Resolved against what the player already owns, so a stacking
         // upgrade shows the tier it moves them from and the one it moves
         // them to rather than the whole ladder.
@@ -2421,7 +2480,6 @@ class Game {
         id,
         name: def.name,
         theme: def.theme,
-        icon: def.icon,
         effects: effectLines(def, 0),
         cost: def.cost,
         enabled: this.player.canPay(def.cost),
@@ -2816,6 +2874,54 @@ class Game {
     }
   }
 
+  // The money-orb collection radius the player currently has, in metres.
+  // Lodestone is the only thing that widens it.
+  _magnetRadius() {
+    return BASE_MAGNET_RADIUS * this.player.mods.magnetMult;
+  }
+
+  // Ticks the orbs on the floor and banks whatever the player swept up.
+  //
+  // The whole balance is only pushed to the HUD and the station labels when it
+  // actually changed, and once for the frame however many orbs arrived: the
+  // vacuum at a wave clear can deliver forty in a handful of frames, and
+  // redrawing four station labels per orb is exactly the kind of thing that
+  // turns a reward into a stutter.
+  _updateMoney(dt) {
+    const got = this.money.update(
+      dt, this.player.pos, this._magnetRadius(), this._onOrb
+    );
+    if (got > 0) this.sfx.coin();
+    if (this._creditsDirty) {
+      this._creditsDirty = false;
+      if (this.totemArea.active) this._refreshStations();
+    }
+  }
+
+  // AMMO AND HEALTH COME TO YOU TOO, at a fraction of the money radius. The
+  // orbs are the reason the magnet exists, but a pickup lying a metre from
+  // your feet while orbs fly past it into your chest reads as a bug, so the
+  // same pull applies to them - shortened, because a crate is worth walking
+  // for in a way that eight dollars is not.
+  _magnetPickups(dt) {
+    const r = this._magnetRadius() * MAGNET_PICKUP_FRACTION;
+    const r2 = r * r;
+    const p = this.player.pos;
+    for (const q of this.powerups) {
+      const dx = p.x - q.pos.x;
+      const dz = p.z - q.pos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > r2 || d2 < 0.0004) continue;
+      const d = Math.sqrt(d2);
+      // Eases in with distance: barely a nudge at the edge of the radius,
+      // decisive once it is close, so a pickup never looks like it is fleeing
+      // toward the player from across the room.
+      const pull = PICKUP_PULL_SPEED * (1 - d / r) * dt;
+      const k = Math.min(1, pull / d);
+      q.moveTo(q.pos.x + dx * k, q.pos.z + dz * k);
+    }
+  }
+
   // Ticks pickups and collects any the player is standing on. Iterates
   // backwards so removals don't skip entries.
   _updatePickups(dt) {
@@ -2924,7 +3030,12 @@ class Game {
       this._bumpCombo();
       const mult = this.comboMult();
       this.score += Math.round(e.score * mult);
-      this._award(e.score * CREDITS_PER_SCORE * mult);
+      // MONEY IS NOT AWARDED HERE ANY MORE. The kill drops orbs where it died
+      // and the balance moves when the player picks them up - see
+      // _collectOrb. The combo multiplier is still applied at the moment of
+      // death, so a chain is worth what it was worth when it happened rather
+      // than what it is worth when the money is collected.
+      this._dropMoney(e.pos, e.score * CREDITS_PER_SCORE * mult);
       this.player.onKill(this.time);
       if (this.player.mods.ammoOnKill > 0) {
         this.player.reserveAmmo = Math.min(
@@ -2940,6 +3051,7 @@ class Game {
       // pays out by bleeding at health thresholds and by the kill bonus, and
       // letting the final part roll as well would double-pay the same kill.
       if (!e.boss) this._rollDrop(e.pos, remaining);
+      else this._bossDeathPos.copy(e.pos);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
       const m = this.player.mods;
@@ -3457,7 +3569,10 @@ class Game {
       this.ui.setBoss(null, 0, '', '');
     }
     this.ui.setScore(this.score);
-    this.ui.setCredits(this.credits);
+    // The balance is a float now - orb values are an exact split of a kill's
+    // payout - so it is floored for display and for the run summary. Nothing
+    // is lost: the fraction is still in the balance and still spends.
+    this.ui.setCredits(Math.floor(this.credits));
     const cm = this.comboMult();
     this.ui.setCombo(
       this.comboKills, cm, (cm - 1) / (COMBO_MAX - 1), this.comboTimer / COMBO_WINDOW
@@ -3604,6 +3719,10 @@ class Game {
       // fire cooldown is dropped, not queued.
       this.input.shootFresh = false;
       if (this.input.melee) this.tryMelee();
+      // Money before the pickups: both read the player position this frame,
+      // and the orbs are what the magnet radius is really about.
+      this._updateMoney(dt);
+      this._magnetPickups(dt);
       this._updatePickups(dt);
       this._updateTotems(dt);
       // Ash and the poison spread run BEFORE the enemy sweep so anything they
@@ -3640,6 +3759,9 @@ class Game {
     this.music.sample(dt);
     this.rig.update(dt, this._fillRigState());
     this.ui.setStrobe(this.rig.flash);
+    // The orbs' rim colour rides the ceiling. One uniform, read after the rig
+    // has settled this frame's colour so the two are never a frame apart.
+    this.money.setHouseColour(this.rig.houseColour);
 
     this.effects.update(dt);
     this.renderer.render(this.scene, this.camera);

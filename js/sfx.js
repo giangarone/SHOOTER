@@ -6,6 +6,14 @@
 // over tone() and noise(). Powerups reference them by name: the `sfx` string on
 // a pickup type in powerups.js must match a method here.
 
+// The money-orb ladder: a C major pentatonic, which has no interval in it that
+// can sound wrong against the track whatever key the track is in.
+const COIN_LADDER = [523.25, 587.33, 698.46, 783.99, 880.0];
+// Minimum seconds between two orb blips, and the silence that resets the
+// ladder to the bottom.
+const COIN_GAP = 0.035;
+const COIN_RESET = 0.5;
+
 export class SFX {
   constructor() {
     this.ctx = null;
@@ -13,6 +21,9 @@ export class SFX {
     // Only used to time the reload's final click. Must match
     // Player.reloadTime in player.js.
     this.reloadDur = 1.4;
+    // Ladder state for coin(). Context time, so it survives a pause.
+    this._coinAt = -10;
+    this._coinStep = 0;
   }
 
   // Must be called from a user gesture: browsers refuse to start an
@@ -157,6 +168,36 @@ export class SFX {
   }
   credits() {
     this.tone({ f: 1180, t: 0.04, v: 0.14, type: 'sine' });
+  }
+
+  // A MONEY ORB COLLECTED. Bubbly rather than metallic: two sines gliding up a
+  // fifth, no noise layer at all, because this is the most-played sound in the
+  // game and anything with an edge on it becomes unbearable by wave five.
+  //
+  // Three things stop a stream of them turning into a wall of noise:
+  //   1. A hard throttle. Orbs arrive several per frame during the wave-clear
+  //      vacuum; anything inside COIN_GAP of the last one is simply dropped.
+  //   2. A rising ladder. Consecutive pickups climb a pentatonic scale and
+  //      wrap an octave up, so a sweep across the floor plays as a run rather
+  //      than as the same blip forty times.
+  //   3. A reset. Half a second of silence drops the ladder back to the
+  //      bottom, so a single orb picked up in isolation always sounds the
+  //      same, and only an actual chain climbs.
+  // The small random detune on top is what keeps two orbs collected in the
+  // same breath from sounding like one doubled sample.
+  coin() {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    if (now - this._coinAt < COIN_GAP) return;
+    this._coinStep = now - this._coinAt > COIN_RESET ? 0 : this._coinStep + 1;
+    this._coinAt = now;
+    const step = this._coinStep % COIN_LADDER.length;
+    const oct = Math.min(2, Math.floor(this._coinStep / COIN_LADDER.length));
+    const f = COIN_LADDER[step] * Math.pow(2, oct) * (0.985 + Math.random() * 0.03);
+    // The glide is what makes it a bubble instead of a beep: it arrives from
+    // under the note rather than starting on it.
+    this.tone({ f: f * 0.62, f2: f, t: 0.09, type: 'sine', v: 0.22 });
+    this.tone({ f: f * 1.5, f2: f * 2, t: 0.06, type: 'sine', v: 0.07, delay: 0.02 });
   }
   pickupShield() {
     this.tone({ f: 330, f2: 660, t: 0.2, type: 'sine', v: 0.3 });

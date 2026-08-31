@@ -507,6 +507,13 @@ export class Rig {
     this._c = new THREE.Color();
   }
 
+  // The colour the room is currently wearing, live. Read by the money orbs so
+  // their rim rides the ceiling; a reference rather than a copy, so it costs
+  // nothing to ask for every frame. Do not mutate it.
+  get houseColour() {
+    return this._colour;
+  }
+
   // ---- cues: one-shot events fired from main.js at existing transitions ----
 
   // A wave starts: cut the room to black for a beat, then let everything hit

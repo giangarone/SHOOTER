@@ -2,30 +2,31 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Pixel icon test - VENOM ROUNDS</title>
+<title>Pixel icon &mdash; in the column</title>
 <script type="importmap">
   { "imports": { "three": "./node_modules/three/build/three.module.js" } }
 </script>
 <style>
   body { margin:0; background:#0b0d12; color:#cfd6e4; font:12px ui-monospace,monospace; }
-  header { padding:10px 14px; border-bottom:1px solid #222836; display:flex; gap:14px; align-items:center; }
+  header { padding:10px 14px; border-bottom:1px solid #222836; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
   h1 { font-size:12px; margin:0; letter-spacing:.14em; color:#dfe8ff; }
   label { display:flex; gap:6px; align-items:center; opacity:.8; }
-  input[type=range] { width:160px; }
-  .wrap { display:flex; gap:0; flex-wrap:wrap; }
+  select, input[type=range] { font:inherit; }
+  select { background:#222836; color:#cfd6e4; border:1px solid #384154; padding:3px 6px; }
+  .wrap { display:flex; flex-wrap:wrap; }
   .pane { padding:14px; }
   .pane + .pane { border-left:1px solid #222836; }
   h2 { font-size:11px; letter-spacing:.14em; color:#8a95b3; margin:0 0 10px; font-weight:normal; }
   canvas { display:block; image-rendering:pixelated; }
-  .note { color:#6b7794; margin-top:8px; max-width:360px; line-height:1.6; }
-  .swatches { display:flex; gap:0; margin-top:10px; }
-  .sw { width:44px; height:26px; display:flex; align-items:flex-end; justify-content:center;
-        font-size:9px; color:#0b0d12; }
+  .note { color:#6b7794; margin-top:8px; max-width:400px; line-height:1.6; }
+  .swatches { display:flex; margin-top:10px; }
+  .sw { width:44px; height:24px; display:flex; align-items:flex-end; justify-content:center; font-size:9px; color:#0b0d12; }
 </style>
 </head>
 <body>
 <header>
-  <h1>VENOM ROUNDS &mdash; 24&times;24 pixel test</h1>
+  <h1 id="title">&mdash;</h1>
+  <label>icon <select id="pick"></select></label>
   <label>distance <input id="dist" type="range" min="1" max="14" step="0.1" value="2.6"></label>
   <label><input id="orbit" type="checkbox" checked> swing past</label>
   <label><input id="beam" type="checkbox" checked> light column</label>
@@ -39,31 +40,76 @@
     <div class="swatches" id="pal"></div>
   </div>
   <div class="pane">
-    <h2>IN THE COLUMN &mdash; new pixel icon</h2>
-    <canvas id="new" width="440" height="440" style="width:440px;height:440px"></canvas>
+    <h2>IN THE COLUMN</h2>
+    <canvas id="view" width="440" height="440" style="width:440px;height:440px"></canvas>
     <div class="note">Flat art, three pixels of thickness behind it, unlit. The only thing that
-      says it is solid is the darker colour on the side walls as it swings past.</div>
-  </div>
-  <div class="pane">
-    <h2>IN THE COLUMN &mdash; current 3D icon</h2>
-    <canvas id="old" width="440" height="440" style="width:440px;height:440px"></canvas>
-    <div class="note">Today's <code>flask</code>. Same column, same camera, same distance, so the
-      comparison is only ever about the icon.</div>
+      says it is solid is the darker colour on the side walls as it swings past. The totem never
+      free-spins an icon &mdash; it yaws it to face the player &mdash; so this is the whole range
+      of angles it is ever seen at.</div>
   </div>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
-import { buildIcon } from './js/icons.js';
-import { buildPixelIcon, resolveIcon, pixelPalette, GRID } from './js/pixelicons.js';
+import { buildPixelIcon, resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
+import { UPGRADES } from './js/upgrades.js';
 
-const POISON = 0x39d353;       // THEME.poison, what VENOM ROUNDS wears
-const ICON_SCALE = 1.35;       // totems.js
-const pal = pixelPalette(POISON);
+const EXTRA = {
+  ammoBox: { name: 'AMMO STATION', theme: 0xffd600 },
+  gear: { name: 'REROLL STATION', theme: 0x4ef3ff },
+  heart: { name: 'MAX HEALTH STATION', theme: 0xff1744 },
+  gun: { name: 'WEAPON OFFER', theme: 0x9fb4d8 },
+};
+const meta = (k) => UPGRADES[k] || EXTRA[k];
 
-// ---- flat view: the art at 16x, nothing three.js about it ----------------
-{
-  const cells = resolveIcon('venomRound');
+const pick = document.getElementById('pick');
+for (const k of PIXEL_ICON_KEYS) {
+  const o = document.createElement('option');
+  o.value = k;
+  o.textContent = meta(k).name;
+  pick.appendChild(o);
+}
+pick.value = 'venom';
+
+const ICON_SCALE = 1.35;                 // what totems.js scales an icon to
+const R = 440;
+const dpr = Math.min(2, devicePixelRatio);
+const cv = document.getElementById('view');
+cv.width = cv.height = R * dpr;
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+renderer.setPixelRatio(1);
+renderer.setSize(R * dpr, R * dpr, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // the same one main.js uses
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 40);
+const scene = new THREE.Scene();
+// No lights at all: the icons are MeshBasic, and the moment one rakes across
+// the face it stops being flat art.
+const anchor = new THREE.Group();
+anchor.scale.setScalar(ICON_SCALE);
+scene.add(anchor);
+// A stand-in for the totem's shaft of light: additive, theme-coloured, and
+// BEHIND the icon, which is the condition that kills negative space.
+const shaftMat = new THREE.MeshBasicMaterial({
+  transparent: true, opacity: 0.11, blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide, depthWrite: false,
+});
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 7, 24, 1, true), shaftMat);
+shaft.position.set(0, 0, -0.5);
+scene.add(shaft);
+
+let icon = null;
+function select(key) {
+  const d = meta(key);
+  document.getElementById('title').textContent = (d.devil ? '◆ ' : '') + d.name;
+  document.getElementById('title').style.color = '#' + d.theme.toString(16).padStart(6, '0');
+  shaftMat.color.setHex(d.theme);
+
+  if (icon) anchor.remove(icon);
+  icon = buildPixelIcon(key, d.theme);
+  anchor.add(icon);
+
+  const pal = pixelPalette(d.theme);
+  const cells = resolveIcon(key);
   const ctx = document.getElementById('flat').getContext('2d');
   const S = 384 / GRID;
   ctx.fillStyle = '#12151d';
@@ -77,88 +123,32 @@ const pal = pixelPalette(POISON);
     }
   }
   const pals = document.getElementById('pal');
+  pals.textContent = '';
   for (const k of ['0', '1', '2', '3', '4', 'side']) {
-    const d = document.createElement('div');
-    d.className = 'sw';
-    d.style.background = '#' + pal[k].getHexString();
-    d.textContent = k;
-    if (k === '0' || k === 'side' || k === '1') d.style.color = '#8a95b3';
-    pals.appendChild(d);
+    const el = document.createElement('div');
+    el.className = 'sw';
+    el.style.background = '#' + pal[k].getHexString();
+    el.textContent = k;
+    if (k !== '3' && k !== '4' && k !== '2') el.style.color = '#8a95b3';
+    pals.appendChild(el);
   }
 }
-
-// ---- two identical scenes, one icon each ---------------------------------
-function makeScene(icon, lit) {
-  const scene = new THREE.Scene();
-  if (lit) {
-    // Only the 3D catalogue needs these. The pixel plate is MeshBasic: the
-    // moment a light rakes across it, it stops being flat art.
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 2.0);
-    key.position.set(3, 5, 4);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.6);
-    fill.position.set(-3, 1, 2);
-    scene.add(fill);
-  }
-  // A stand-in for the totem's shaft of light: additive, theme-coloured, and
-  // BEHIND the icon, which is the condition that kills negative space.
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.95, 0.95, 7, 24, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: POISON, transparent: true, opacity: 0.11,
-      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
-  shaft.position.set(0, 0, -0.5);
-  scene.add(shaft);
-  const anchor = new THREE.Group();
-  anchor.scale.setScalar(ICON_SCALE);
-  anchor.add(icon);
-  scene.add(anchor);
-  return { scene, anchor, shaft };
-}
-
-const R = 440;
-const dpr = Math.min(2, devicePixelRatio);
-function makeView(canvasId, icon, lit) {
-  const cv = document.getElementById(canvasId);
-  cv.width = cv.height = R * dpr;
-  cv.style.width = cv.style.height = R + 'px';
-  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
-  renderer.setPixelRatio(1);
-  renderer.setSize(R * dpr, R * dpr, false);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 40);
-  return { renderer, camera, ...makeScene(icon, lit) };
-}
-
-const views = [
-  makeView('new', buildPixelIcon('venomRound', POISON), false),
-  makeView('old', buildIcon('flask', POISON), true),
-];
+pick.onchange = () => select(pick.value);
+select(pick.value);
 
 const dist = document.getElementById('dist');
 const orbit = document.getElementById('orbit');
 const beam = document.getElementById('beam');
-
 function frame(t) {
   const time = t * 0.001;
-  // The totem yaws the icon to face the player - it never free-spins - so the
-  // only motion worth checking is the swing as the player walks past.
-  const yaw = orbit.checked ? Math.sin(time * 0.6) * 0.75 : 0;
-  for (const v of views) {
-    v.anchor.rotation.y = yaw;
-    v.anchor.position.y = Math.sin(time * 2.4) * 0.07;
-    v.shaft.visible = beam.checked;
-    v.camera.position.set(0, 0, +dist.value);
-    v.camera.lookAt(0, 0, 0);
-    // What totems.js writes every frame.
-    if (v.anchor.children[0].userData.glow) {
-      v.anchor.children[0].userData.glow.emissiveIntensity = 1.35 + Math.sin(time * 5) * 0.35;
-    }
-    v.renderer.render(v.scene, v.camera);
-  }
+  anchor.rotation.y = orbit.checked ? Math.sin(time * 0.6) * 0.75 : 0;
+  anchor.position.y = Math.sin(time * 2.4) * 0.07;
+  shaft.visible = beam.checked;
+  camera.position.set(0, 0, +dist.value);
+  camera.lookAt(0, 0, 0);
+  // What totems.js writes every frame.
+  icon.userData.glow.emissiveIntensity = 1.35 + Math.sin(time * 5) * 0.35;
+  renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Pixel icon contact sheet</title>
+<script type="importmap">
+  { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+</script>
+<style>
+  body { margin:0; background:#0b0d12; color:#cfd6e4; font:11px ui-monospace,monospace; }
+  #bar { position:sticky; top:0; z-index:2; background:#11141c; border-bottom:1px solid #222836;
+         padding:8px 12px; display:flex; gap:12px; align-items:center; }
+  button { background:#222836; color:#cfd6e4; border:1px solid #384154; padding:4px 10px;
+           cursor:pointer; font:inherit; }
+  button.on { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+  #hint { margin-left:auto; opacity:.55; }
+  #grid { display:grid; grid-template-columns:repeat(5, 150px); gap:2px; padding:8px; }
+  .cell { background:#12151d; border:1px solid #1c2230; padding:5px; text-align:center; }
+  .cell canvas { display:block; margin:0 auto; image-rendering:pixelated; }
+  .n { margin-top:4px; font-weight:bold; letter-spacing:.06em; font-size:10px; }
+  .d { opacity:.5; margin-top:2px; font-size:9px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="big" class="on">120px</button>
+  <button id="small">28px &mdash; arena range</button>
+  <button id="flat">no shading</button>
+  <span id="hint"></span>
+</div>
+<div id="grid"></div>
+<script type="module">
+import { resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
+import { UPGRADES } from './js/upgrades.js';
+
+// Sixty-five icons only have to do one job - be told apart from the other
+// sixty-four at a glance - and that is a judgement you can only make with all
+// of them on screen at once. Same argument as icon-viewer.html, no renderer.
+const EXTRA = {
+  ammoBox: { name: 'AMMO STATION', theme: 0xffd600 },
+  gear: { name: 'REROLL STATION', theme: 0x4ef3ff },
+  heart: { name: 'MAX HEALTH STATION', theme: 0xff1744 },
+  gun: { name: 'WEAPON OFFER', theme: 0x9fb4d8 },
+};
+
+const grid = document.getElementById('grid');
+const cells = [];
+for (const key of PIXEL_ICON_KEYS) {
+  const d = UPGRADES[key] || EXTRA[key];
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const cv = document.createElement('canvas');
+  cell.appendChild(cv);
+  const n = document.createElement('div');
+  n.className = 'n';
+  n.textContent = (d.devil ? '◆ ' : '') + d.name;
+  n.style.color = '#' + d.theme.toString(16).padStart(6, '0');
+  cell.appendChild(n);
+  const k = document.createElement('div');
+  k.className = 'd';
+  k.textContent = key;
+  cell.appendChild(k);
+  grid.appendChild(cell);
+  cells.push({ key, cv, pal: pixelPalette(d.theme), art: resolveIcon(key) });
+}
+document.getElementById('hint').textContent = cells.length + ' icons, 24×24 each';
+
+let size = 120;
+let flat = false;
+function paint() {
+  for (const c of cells) {
+    const S = size / GRID;
+    c.cv.width = size; c.cv.height = size;
+    c.cv.style.width = c.cv.style.height = size + 'px';
+    const ctx = c.cv.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    for (let y = 0; y < GRID; y++) {
+      for (let x = 0; x < GRID; x++) {
+        let t = c.art[y][x];
+        if (t === '.') continue;
+        // "no shading" collapses the ramp to a silhouette: the fastest way to
+        // see whether two icons are the same shape wearing different tones.
+        if (flat) t = t === '0' ? '0' : '3';
+        ctx.fillStyle = '#' + c.pal[t].getHexString();
+        ctx.fillRect(x * S, y * S, S, S);
+      }
+    }
+  }
+}
+const bigB = document.getElementById('big');
+const smallB = document.getElementById('small');
+const flatB = document.getElementById('flat');
+bigB.onclick = () => { size = 120; bigB.classList.add('on'); smallB.classList.remove('on'); paint(); };
+smallB.onclick = () => { size = 28; smallB.classList.add('on'); bigB.classList.remove('on'); paint(); };
+flatB.onclick = () => { flat = !flat; flatB.classList.toggle('on', flat); paint(); };
+paint();
+</script>
+</body>
+</html>

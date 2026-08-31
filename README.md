@@ -83,7 +83,7 @@ Open http://localhost:8123
   is placed near you so the fight cannot dead-end.
 - **Upgrade totems**: clearing a wave raises three pillars near the arena
   centre, each showing one upgrade as short colour-coded lines - benefits
-  green, drawbacks red - with its own theme colour and a small 3D icon
+  green, drawbacks red - with its own theme colour and a pixel-art icon
   that orbits round to whatever side you are standing on: a flame for
   Incendiary, an icicle for Cryo, a coin for Midas Touch. Walk into one or
   shoot it anywhere to take it. Upgrades are permanent for the run and stack,
@@ -92,8 +92,23 @@ Open http://localhost:8123
   leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
+- **Money is on the floor.** Kills do not pay into the balance - they drop
+  MONEY ORBS where the enemy died - rainbow, cycling in time with the ceiling
+  lights and burning white-hot at the centre so they stay readable against a
+  floor washed in that same colour - and you have to go and take the ground
+  you killed on. Orbs inside a small radius fly to you on their own
+  (Lodestone widens it, and pulls ammo and health with it), everything still
+  down there is swept up automatically when the wave ends, and anything you
+  never went near times out after twenty seconds. However many are on the
+  floor, all of them together are one draw call and one buffer - a settled orb
+  is not simulated at all, it bobs and blinks in the shader. Orbs cap at 250:
+  past that a new drop merges into the nearest one and makes it bigger, so the
+  cap can never cost you a credit.
 - **Credits and combos**: kills pay credits scaled by a kill-chain multiplier
-  (up to x3), and a wave cleared without taking damage pays double.
+  (up to x3). There is no flat wave-clear bonus - it paid out a third of a
+  wave's money for the one moment in a wave that asks nothing of you - so
+  every credit now has to be collected. What clearing a wave unhurt pays is a
+  SHOWER of orbs at your feet, and a boss dies in a floor full of them.
 - Escalating waves with per-wave HP / speed / damage scaling
 - **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
   to it, so a run's identity comes from the build rather than from the weapon.
@@ -219,20 +234,34 @@ marksmanship test nobody asked for, and a totem that is half inert reads as a
 bug. The floating label panel above is deliberately outside the box: it hangs
 wide and high over the arena, and a stray shot up there stays a miss.
 
-Each upgrade carries an `icon` naming a shape in `js/icons.js` alongside its
-`theme`. Icons are assembled from one shared set of eight unit primitives -
-box, sphere, cone, cylinder, torus, and three polyhedra - scaled and rotated
-per part, so a new icon costs no GPU memory. Never add a bespoke geometry
-there. A totem builds an icon the first time it shows one and keeps it hidden
-afterwards, which bounds the count by the size of the upgrade pool rather than
-by how many waves have passed.
+Each offer's icon is a 24x24 pixel-art plate from `js/pixelicons.js`, looked up
+by the upgrade's own id - entries do not name an icon, so two mutations cannot
+end up wearing one shape however the pool is edited. The art is flat and 2D; the
+object is not, carrying three pixels of extrusion behind the face so it reads as
+a thick cutout turning in the light rather than a sticker. Each plate is one
+merged, vertex-coloured, unlit mesh with the interior faces omitted, so it is a
+single draw call and takes no light - the shading is painted into the tones.
+Four of the five tones are derived from the offer's `theme`, so one drawing
+works for any colour. A totem builds an icon the first time it shows one and
+keeps it hidden afterwards, which bounds the count by the size of the upgrade
+pool rather than by how many waves have passed.
+
+The drawings themselves live in `tools/pixelart/`, not in the JS: shapes in
+`icons.py`, a shared lighting pass in `canvas.py`, and `build.py` to regenerate
+the table. The lighting pass is the point - it puts the shadow on the lower
+right and the highlight on the upper left of every form in the catalogue, so
+sixty-five icons look like one set instead of sixty-five decisions about where
+the light is. `pixel-icon-sheet.html` shows all of them at once, which is the
+only way to tell whether two read alike; `pixel-icon-viewer.html` puts any one
+of them in a mock column.
 
 The icon **orbits** its pillar to whatever side the player is on and turns to
-face them, so it is legible from every angle. The alternative considered was a
-translucent pillar with a fully billboarded icon; translucency washes out the
-theme colour, which is the thing carrying meaning at distance, and billboarding
-a 3D shape flattens it. Orbiting keeps the pillar solid and the icon presenting
-its front. The radii are elliptical (1.0 x 0.62) because the pillar is - a
+face them, so it is legible from every angle. This is also why the art can be
+flat: the totem never free-spins an icon, so facing the player is the only
+angle that ever means anything. The alternative considered was a translucent
+pillar with a fully billboarded icon; translucency washes out the theme colour,
+which is the thing carrying meaning at distance. Orbiting keeps the pillar
+solid and the icon presenting its front. The radii are elliptical (1.0 x 0.62) because the pillar is - a
 circular orbit wide enough to clear the sides leaves the icon absurdly far off
 the front.
 
@@ -303,6 +332,7 @@ geometries must not grow as enemies spawn and die.
 ```bash
 npm run test:boss
 npm run test:drops
+npm run test:money
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -313,7 +343,11 @@ bug that every functional test sails straight through — that the Colossus's
 armour, its shutters and its core's glow all agree about whether the weak point
 is open. `test:drops`
 checks a wave can never yield more loot than its budget, that it yields close
-to all of it, and that need actually decides the type.
+to all of it, and that need actually decides the type. `test:money` checks the
+two properties that keep the orb economy honest — that a kill's orbs add up to
+exactly what the kill was worth, and that the 250-orb cap merges rather than
+discards — along with the wave-clear sweep emptying the floor from anywhere in
+the arena and Lodestone actually widening the radius.
 
 ## Structure
 
@@ -326,7 +360,7 @@ js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         enemy AI (chaser / shooter) + projectiles
 js/nav.js           navigation grid + flow field enemies steer by
-js/icons.js         3D totem icons, built from shared primitives
+js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
@@ -337,10 +371,17 @@ js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
+js/money.js         money orbs: one Points pool, the magnet, the wave sweep
 js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
+test/money.mjs      the orb economy conserves what a kill was worth
+test/icons.mjs      every offer has a drawing and every drawing an offer
+pixel-icon-sheet.html    all 66 icons at once, at full size and at arena range
+pixel-icon-viewer.html   one icon at a time, in a mock column
+enemy-viewer.html        the enemy roster as flat silhouettes
+tools/pixelart/          the icon drawings + the shared lighting pass
 tools/analyze_beats.py   offline beat analysis -> soundtrack.beats.json
 tools/verify_beats.py    renders an excerpt with a click on every mapped beat
 assets/audio/soundtrack.beats.json   the beat map (generated, committed)

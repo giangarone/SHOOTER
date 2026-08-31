@@ -358,6 +358,23 @@ export class Powerup {
     return playerPos.distanceTo(this.pos) < 1.2;
   }
 
+  // Dragged toward the player by the same magnet that collects money orbs -
+  // see _magnetPickups in main.js. Every mesh has to be moved, not just `pos`:
+  // the x and z of the core, dome and glow are written once at construction
+  // and only their y is touched per frame.
+  moveTo(x, z) {
+    this.pos.x = x;
+    this.pos.z = z;
+    this.core.position.x = x;
+    this.core.position.z = z;
+    this.glow.position.x = x;
+    this.glow.position.z = z;
+    if (this.dome) {
+      this.dome.position.x = x;
+      this.dome.position.z = z;
+    }
+  }
+
   // Removes from the scene only - see rule 2 at the top of this file.
   // Idempotent: pickup and despawn can both reach it.
   destroy() {
