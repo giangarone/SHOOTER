@@ -136,13 +136,15 @@ const BEAM_DOWNBEAT = 1.35;
 //
 // Each look says how much of each instrument is lit. They are all available at
 // any point in a run; only how hard they are driven follows the room's energy.
+// The laser bank runs its own choreography inside a phrase - which of its
+// three pairs play, when each comes in, whether it stabs or sustains - so a
+// look here only says how much of each INSTRUMENT the room wants. Two shows on
+// one bar clock, rather than one show driving everything.
 const LOOKS = [
-  //  name       beams  lasers  sweeping  white
-  { beams: 1.0, lasers: 0.0, sweep: false, white: false },  // cones alone
-  { beams: 0.0, lasers: 1.0, sweep: false, white: false },  // lasers alone
-  { beams: 1.0, lasers: 0.9, sweep: false, white: false },  // everything
-  { beams: 0.0, lasers: 0.8, sweep: true, white: false },   // a slow turning fan
-  { beams: 0.3, lasers: 1.0, sweep: false, white: true },   // white strobe
+  { beams: 1.0, lasers: 0.0 },   // the cones alone
+  { beams: 0.0, lasers: 1.0 },   // the lasers alone
+  { beams: 1.0, lasers: 0.9 },   // everything
+  { beams: 0.45, lasers: 0.7 },  // both, held back
 ];
 // Bars a look is held for. Four is the phrase this music is built out of, so a
 // change lands where the track tends to change too. Eight was the first guess
@@ -150,10 +152,14 @@ const LOOKS = [
 // look for thirteen seconds, so a whole wave would show three of them and the
 // one with the lasers off would feel like something had broken.
 const LOOK_BARS = 4;
-// How far round the wheel the lasers sit from the room's colour, in hue.
-// Not 0.5: an exact complement of a saturated colour reads as a clash, and
-// slightly off it reads as two colours chosen together.
-const LASER_HUE = 0.42;
+// AMBIENT FILL, cut back from what arena.js declares. The hemisphere is flat
+// light with no direction in it, and flat light is exactly what stops a beam
+// or a laser reading as bright - a shaft is only bright RELATIVE to the room
+// it crosses. So the fill takes the bigger cut and the directional key takes a
+// smaller one, because the key is what gives enemies their shape and the
+// silhouettes still have to be readable at a glance.
+const AMBIENT_FILL = 0.45;
+const AMBIENT_KEY = 0.78;
 
 // How much harder the emissive furniture hits on the ONE than on the other
 // three beats. Every beat used to be identical, which is why a room full of
@@ -263,8 +269,8 @@ export class Rig {
 
     // Base values, captured so every effect below is expressed as a multiplier
     // of the arena's own lighting rather than as a magic number.
-    this.baseHemi = this.lights.hemi.intensity;
-    this.baseDir = this.lights.dir.intensity;
+    this.baseHemi = this.lights.hemi.intensity * AMBIENT_FILL;
+    this.baseDir = this.lights.dir.intensity * AMBIENT_KEY;
     this._fogBase = new THREE.Color(scene.fog.color.getHex());
 
     // ---- truss and fixtures ----------------------------------------------
@@ -368,8 +374,7 @@ export class Rig {
     // Owns its own geometry and material; adds no lights, so the contract at
     // the top of this file is untouched.
     this.lasers = new Lasers(this.group);
-    // The lasers' colour, held away from the room's on the hue wheel and
-    // recomputed whenever the room's moves.
+    // The lasers' colour: the room's own, kept saturated.
     this._laserColour = new THREE.Color(0xffffff);
     this._hsl = { h: 0, s: 0, l: 0 };
 
@@ -498,10 +503,14 @@ export class Rig {
           this._barsHeld = 0;
           this._look = (this._look + 1 + ((Math.random() * (LOOKS.length - 1)) | 0))
             % LOOKS.length;
+          // The laser bank recasts itself on the same boundary: same phrase,
+          // its own decisions inside it.
+          this.lasers.phrase();
         }
+        this.lasers.bar(this._barsHeld);
       }
       this._cueBeams();
-      this.lasers.cue(LOOKS[this._look].sweep);
+      this.lasers.cue();
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
@@ -692,24 +701,17 @@ export class Rig {
     // wheel. One colour is a mood and two is a show: it is the cheapest thing
     // in this file that makes the venue look twice as full, because every
     // crossing of the two is a place the eye has something to resolve.
-    if (look.white) {
-      this._laserColour.setRGB(1, 1, 1);
-    } else {
-      this._colour.getHSL(this._hsl);
-      // Forced back up to full saturation. The room's colour is lerping
-      // between accents and spends time desaturated in the middle of a step;
-      // a laser is a single wavelength and is never washed out.
-      // Lightness at a half, not above it: over a half is white mixed into the
-      // hue, and additive blending will do all the brightening that is wanted
-      // without also washing the colour out of it.
-      this._laserColour.setHSL((this._hsl.h + LASER_HUE) % 1, 1, 0.5);
-    }
-    // Gated by the same stab the beams use, so the two instruments hit
-    // together even when only one of them is in the look. The house lights
-    // take the lasers away entirely - an intermission is not a show.
-    const laserGain = punch * (0.85 + level * 0.5) * (0.35 + this._energy * 0.65)
+    // The room's own colour, at full saturation and half lightness. Not a copy
+    // of `_colour` itself: that value is lerping between accents and spends
+    // the middle of every step washed out towards grey, while a laser is a
+    // single wavelength and never is. Same hue, always at its strength.
+    this._colour.getHSL(this._hsl);
+    this._laserColour.setHSL(this._hsl.h, 1, 0.5);
+    // What the ROOM allows. Which pairs are lit, and whether each stabs on
+    // this or sustains through the phrase, is the bank's own business.
+    const laserMaster = (0.55 + level * 0.45) * (0.35 + this._energy * 0.65)
       * (1 - dark) * (1 - this._house) * look.lasers;
-    this.lasers.update(dt, s.camPos, this._laserColour, laserGain, look.sweep);
+    this.lasers.update(dt, s.camPos, this._laserColour, punch, laserMaster);
 
     // ---- emissive furniture -----------------------------------------------
     // Shared materials, so one write lights every lamp head, deck edge and
