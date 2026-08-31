@@ -330,7 +330,8 @@ js/icons.js         3D totem icons, built from shared primitives
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
-js/music.js         streaming soundtrack, lowpass, beat detection
+js/music.js         streaming soundtrack, lowpass, playback clock, beat
+js/beatmap.js       the pre-analysed beat grid and its lookup
 js/rig.js           the rave lighting rig: lights, beams, fixtures, cues
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
@@ -339,4 +340,41 @@ js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
+tools/analyze_beats.py   offline beat analysis -> soundtrack.beats.json
+tools/verify_beats.py    renders an excerpt with a click on every mapped beat
+assets/audio/soundtrack.beats.json   the beat map (generated, committed)
+```
+
+## Beats
+
+The lights and the crowd move to `assets/audio/soundtrack.beats.json`, which is
+analysed offline rather than found live. Live detection can only ever fire
+*after* a transient, it mistakes busy passages for beats, and its timing wanders
+by tens of milliseconds - none of which is fixable from inside a frame loop.
+The file is analysed once instead, with the whole three hours visible at a time.
+
+The map is not a list of beat times. Inside one song the beats are very nearly
+periodic, so each segment stores the *line* through them - an anchor and a
+period - and the times are computed back out by arithmetic. Fitting over
+hundreds of beats averages the detector's jitter away, and the whole soundtrack
+comes to about 50 KB. Segments where a line did not fit keep their raw beat
+times and are marked `quantized: false`; at the time of writing 91% of the
+runtime is on a fitted grid, with a median jitter of 9 ms.
+
+Live detection is still there, as the fallback for when the map is missing or
+has nothing to say about the moment.
+
+Regenerating it (needs `ffmpeg` on PATH):
+
+```bash
+python3 -m venv .venv-beat
+.venv-beat/bin/pip install -r tools/requirements.txt
+.venv-beat/bin/python tools/analyze_beats.py
+```
+
+The only test that means anything is listening to it. `verify_beats.py` renders
+excerpts with a click on every mapped beat, a higher click on the downbeat:
+
+```bash
+.venv-beat/bin/python tools/verify_beats.py --spread 6 --dur 16 --out-dir /tmp
 ```
