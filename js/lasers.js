@@ -1,6 +1,5 @@
 // The laser bank: three mirrored pairs of fan projectors hung on the truss,
-// firing down and across the room, plus a pool of strays that answer to
-// nothing.
+// firing down and across the room.
 //
 // WHY THIS IS NOT MORE BEAMS. The beams in rig.js are soft textured cones that
 // fade along their length - light you can see the air in. A laser is the
@@ -29,8 +28,15 @@
 // once, and half the rig fires into the wall behind it and is silently eaten.
 //
 // NOTHING STAYS ON. A pair plays for at most one phrase and then has to sit
-// out; a stray lives a second or so. Light that is always there stops being an
-// event, and the room only has moments if it also has gaps.
+// out. Light that is always there stops being an event, and the room only has
+// moments if it also has gaps.
+//
+// EVERY RAY IN HERE BELONGS TO A FAN. There was a pool of loose single rays
+// for a while - fired off random beats, in random directions, from random
+// points on the truss - on the theory that a room entirely on the grid reads
+// as a screensaver. It does not work. A lone ray with no fan behind it does
+// not read as a laser off doing its own thing; it reads as one that has come
+// adrift from the rig, and the rig is what the room is selling.
 //
 // Nothing here allocates after construction, and no light is created - a laser
 // is geometry, so the rig's light-count contract is untouched.
@@ -119,10 +125,6 @@ const APERTURE_FLOOR = 0.35;
 // arrive later in a phrase only read as arriving because something else left.
 const MAX_BARS = 4;
 
-// How many single rays the stray pool holds. Declared up here because the
-// impact pool below is sized to cover every ray in the room at once.
-const STRAYS = 8;
-
 // ---- impacts ---------------------------------------------------------------
 // The spot where a ray lands. A laser in a real room is two things you see: the
 // line through the haze, and the burning dot on whatever it is pointed at - and
@@ -137,12 +139,11 @@ const STRAYS = 8;
 // falloff carried in the vertex alpha exactly as the wedge's is. No texture -
 // the budget is full at twelve - and a hexagon is round enough at this size.
 //
-// ONE MESH FOR EVERY IMPACT IN THE ROOM, banks and strays together, because
-// each impact's brightness is written into its own vertices rather than taken
-// from the material. That is also what lets a pulsing pair's spots pulse while
+// ONE MESH FOR EVERY IMPACT IN THE ROOM, because each impact's brightness is
+// written into its own vertices rather than taken from the material. That is also what lets a pulsing pair's spots pulse while
 // a sustaining pair's hold, on the same draw call.
 const IMPACT_SEGS = 6;
-const IMPACT_SLOTS = 3 * 2 * RAYS + STRAYS;
+const IMPACT_SLOTS = 3 * 2 * RAYS;
 const CORE_R = 0.09;
 const GLOW_R = 0.5;
 // The halo against the core. Under one, so the core reads as a separate,
@@ -159,18 +160,6 @@ const IMPACT_GAIN = 1.35;
 // Pushed this far off the surface, ALONG ITS NORMAL. The point is exactly on
 // the wall, and geometry coplanar with a wall z-fights with it.
 const IMPACT_LIFT = 0.05;
-
-// ---- strays ----------------------------------------------------------------
-// Single rays from nowhere in particular, in bursts of one to five, lasting a
-// second or so. The banks above are a rig: symmetric, on the bar, doing
-// something legible. These are the opposite and that is their whole job - a
-// room where everything is on the grid reads as a screensaver, and a few
-// lights doing something unaccountable is what makes the rest look deliberate.
-const STRAY_CHANCE = 0.22;
-const STRAY_LIFE = [0.35, 1.6];
-const STRAY_GAIN = 0.95;
-// Seconds of fade at the end of a stray's life. Short: a laser switches off.
-const STRAY_OUT = 0.12;
 
 function distance(x, y, z, p) {
   const dx = x - p.x, dy = y - p.y, dz = z - p.z;
@@ -303,43 +292,6 @@ export class Lasers {
     const housingMat = new THREE.MeshBasicMaterial({ color: 0x0b0e14 });
     this.banks = RIG_POINTS.map((pt) => new Bank(parent, pt, boxGeo, apertureGeo, housingMat));
     this.banks.forEach((b, i) => { b.spin = i & 1 ? -1 : 1; });
-
-    // ---- the stray pool ----------------------------------------------------
-    // One mesh for all of them. A stray that is not alive is written as a
-    // degenerate quad at the origin with alpha zero, so the pool never changes
-    // size and nothing is ever created or destroyed mid-run.
-    this.strays = [];
-    for (let i = 0; i < STRAYS; i++) {
-      this.strays.push({
-        alive: false, life: 0, max: 1,
-        pos: new THREE.Vector3(), dir: new THREE.Vector3(),
-        axis: new THREE.Vector3(0, 1, 0), rate: 0,
-      });
-    }
-    this._strayPos = new Float32Array(STRAYS * 4 * 3);
-    this._strayCol = new Float32Array(STRAYS * 4 * 4);
-    const sIdx = new Uint16Array(STRAYS * 6);
-    for (let i = 0; i < STRAYS; i++) {
-      const v = i * 4, k = i * 6;
-      sIdx[k] = v; sIdx[k + 1] = v + 1; sIdx[k + 2] = v + 2;
-      sIdx[k + 3] = v; sIdx[k + 4] = v + 2; sIdx[k + 5] = v + 3;
-    }
-    this.strayGeo = new THREE.BufferGeometry();
-    this.strayGeo.setAttribute('position', dynamic(this._strayPos, 3));
-    // Alpha per VERTEX because it is per RAY: one material's opacity cannot
-    // give eight strays eight different lifetimes.
-    this.strayGeo.setAttribute('color', dynamic(this._strayCol, 4));
-    this.strayGeo.setIndex(new THREE.BufferAttribute(sIdx, 1));
-    this.strayGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 70);
-    this.strayMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0, vertexColors: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-      side: THREE.DoubleSide, fog: false,
-    });
-    this.strayMesh = new THREE.Mesh(this.strayGeo, this.strayMat);
-    this.strayMesh.frustumCulled = false;
-    this.strayMesh.renderOrder = 4;
-    parent.add(this.strayMesh);
 
     // ---- the impact pool ---------------------------------------------------
     // Every ray in the room lands somewhere, so the pool is sized for all of
@@ -535,31 +487,6 @@ export class Lasers {
     }
   }
 
-  // A beat. The banks do not listen - the pulsing ones read the envelope in
-  // update() rather than being cued - but the strays fire from here, so that
-  // even the part of the rig that is off the grid arrives on it.
-  beat() {
-    if (Math.random() > STRAY_CHANCE) return;
-    let want = 1 + ((Math.random() * 5) | 0);
-    for (let i = 0; i < this.strays.length && want > 0; i++) {
-      const s = this.strays[i];
-      if (s.alive) continue;
-      want--;
-      s.alive = true;
-      s.life = 0;
-      s.max = STRAY_LIFE[0] + Math.random() * (STRAY_LIFE[1] - STRAY_LIFE[0]);
-      // Somewhere along the truss, pointing anywhere it can still reach the
-      // room from - mostly down, because that is where a ceiling fires.
-      s.pos.set((Math.random() * 2 - 1) * 18, HEIGHT, (Math.random() * 2 - 1) * 18);
-      const az = Math.random() * Math.PI * 2;
-      const el = -0.9 + Math.random() * 1.0;
-      const c = Math.cos(el);
-      s.dir.set(Math.cos(az) * c, Math.sin(el), Math.sin(az) * c).normalize();
-      s.axis.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-      s.rate = (0.15 + Math.random() * 0.5) * (Math.random() < 0.5 ? -1 : 1);
-    }
-  }
-
   // `punch` is the beat envelope the beams stab on, read only by the pairs
   // that pulse. `master` is what the ROOM allows: the look's multiplier, the
   // energy, the house lights and the blackout cue.
@@ -597,7 +524,6 @@ export class Lasers {
       b.spread += (b.spreadTo - b.spread) * ease;
       this._write(b, camPos, lit * IMPACT_GAIN);
     }
-    this._writeStrays(dt, camPos, colour, master);
 
     // Everything the pool held last frame and does not this one goes to alpha
     // zero. Only the difference is touched: rewriting all sixty-two slots on
@@ -672,48 +598,5 @@ export class Lasers {
     buf[o + 6] = bx - sx * wb; buf[o + 7] = by - sy * wb; buf[o + 8] = bz - sz * wb;
     buf[o + 9] = bx + sx * wb; buf[o + 10] = by + sy * wb; buf[o + 11] = bz + sz * wb;
     return o + 12;
-  }
-
-  _writeStrays(dt, camPos, colour, master) {
-    const pos = this._strayPos, col = this._strayCol;
-    const strayLit = Math.min(MAX_OP, STRAY_GAIN * master);
-    let any = false;
-    for (let i = 0; i < this.strays.length; i++) {
-      const s = this.strays[i];
-      const c = i * 16;
-      if (!s.alive) {
-        if (col[c + 3] !== 0) {
-          for (let v = 0; v < 4; v++) col[c + v * 4 + 3] = 0;
-        }
-        continue;
-      }
-      s.life += dt;
-      if (s.life >= s.max) {
-        s.alive = false;
-        for (let v = 0; v < 4; v++) col[c + v * 4 + 3] = 0;
-        continue;
-      }
-      any = true;
-      // Full brightness the whole way, then out. A stray does not dim in, it
-      // appears; the only ramp is the short one at the end, and even that is
-      // there to stop a single-frame disappearance reading as a dropped frame.
-      const left = s.max - s.life;
-      const a = left < STRAY_OUT ? left / STRAY_OUT : 1;
-      s.dir.applyAxisAngle(s.axis, s.rate * dt).normalize();
-      this._toCam.copy(camPos).sub(s.pos);
-      const wa = Math.max(MIN_W, distance(s.pos.x, s.pos.y, s.pos.z, camPos) * PX * WIDTH_PX);
-      this._ribbon(pos, i * 12, s.pos.x, s.pos.y, s.pos.z, s.dir, wa, camPos, null, 0,
-        a * strayLit * IMPACT_GAIN);
-      for (let v = 0; v < 4; v++) {
-        col[c + v * 4] = 1; col[c + v * 4 + 1] = 1; col[c + v * 4 + 2] = 1;
-        col[c + v * 4 + 3] = a;
-      }
-    }
-    this.strayMat.opacity = strayLit;
-    this.strayMesh.visible = any && strayLit > 0.006;
-    if (!this.strayMesh.visible) return;
-    this.strayMat.color.copy(colour);
-    this.strayGeo.attributes.position.needsUpdate = true;
-    this.strayGeo.attributes.color.needsUpdate = true;
   }
 }

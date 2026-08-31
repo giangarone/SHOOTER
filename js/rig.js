@@ -514,11 +514,9 @@ export class Rig {
         }
         this.lasers.bar(this._barsHeld);
       }
+      // Only the beams take a cue from a beat. The pairs that pulse read the
+      // envelope for themselves in the laser bank's own update.
       this._cueBeams();
-      // The pairs that pulse read the beat envelope for themselves; this is
-      // for the strays, which fire in bursts off the beat even though nothing
-      // about where they go is on the grid.
-      this.lasers.beat();
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
