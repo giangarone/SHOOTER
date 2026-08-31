@@ -74,9 +74,11 @@ const BEAM_LEN = 15;
 // reason to keep watching. Being ON the beat was right; being IN UNISON on it
 // was not, and those are separate things.
 //
-// So: random direction per beam, and BEAM_SPREAD scatters the moves in time so
-// they never start together. A real rig's heads are mechanical and never
-// arrive at once; that scatter is most of why one looks alive.
+// So: random direction per beam, all cued on the beat and moving together. The
+// scatter that briefly sat here - a few tens of milliseconds of jitter on when
+// each beam left - is gone: it broke the unison, and it also broke the thing
+// worth having, which is that every move lands exactly on the hit. Randomness
+// belongs in WHERE they go, not in WHEN.
 //
 // How far the beams tilt off vertical at full energy, in radians. This is the
 // range the original continuous sway used - the change through all of this has
@@ -86,20 +88,23 @@ const BEAM_TILT = 0.42;
 // angles land near the last one often enough to look like a stall, and a light
 // that does not visibly move on the beat reads as one that missed it.
 const BEAM_MIN_TURN = 0.35;
-// Seconds of scatter across the four beams' moves. Long enough to break the
-// unison, short enough that every beam has still moved well before the next
-// beat lands - at 145 BPM a beat is 0.41s.
-const BEAM_SPREAD = 0.11;
 // How fast a beam closes on its new aim. High: the point of moving on the beat
 // is that the movement is over by the time the next one lands, so it reads as
 // a head slamming into position rather than as a drift that happens to start
 // in the right place.
 const BEAM_SNAP = 26;
 
-// BEAM BRIGHTNESS IS A STAB, NOT A GLOW. The beams used to sit at a level-fed
-// base and swell on the beat, which left them lit most of the time - and a
-// continuously lit shaft that swings to a new angle reads as a prop being
-// rotated rather than as a light being fired.
+// BEAM BRIGHTNESS IS A SHUTTER, NOT A DIMMER. Between hits the beams are at
+// exactly zero and are not drawn at all. They swelled from a level-fed base at
+// first, which left them lit most of the time - a continuously lit shaft that
+// swings to a new angle reads as a prop being rotated rather than as a light
+// being fired - and then sat at a small floor, which was the same argument
+// half-made. A real rig's heads have a mechanical shutter and it is binary.
+//
+// The level of the music no longer adds a floor; it scales the PEAK. That is
+// what makes zero actually reachable: a term that is added survives however
+// far the envelope falls, so a floor anywhere in the sum is a floor in the
+// result.
 //
 // BEAM_SHARP is what does the work. `beat` is an envelope that falls linearly
 // to zero over about a sixth of a second, and raising it to a power leaves the
@@ -109,10 +114,14 @@ const BEAM_SNAP = 26;
 // beams stay dark right up until the hit while everything else in the room
 // still leans into it.
 //
-// The base is deliberately not zero. Beams that go fully dark between hits
-// stop being part of the room - the venue loses its shape and the effect reads
-// as a fault rather than as a rig - so a little is left burning.
-const BEAM_BASE = 0.05;
+// The room does not lose its shape when they go: the wall strips, the fixture
+// lenses, the fog and every emissive edge in the venue are all still lit, and
+// they are what the space reads by. The beams were never the furniture.
+//
+// It is also the cheapest the beams have ever been. Four big double-sided
+// additive cones are skipped entirely on the two thirds of frames where they
+// are dark, because a mesh with `visible` false is culled before rasterising
+// while a fully transparent one is still drawn.
 const BEAM_GLOW = 0.10;
 const BEAM_PUNCH = 1.5;
 const BEAM_SHARP = 2.2;
@@ -322,10 +331,9 @@ export class Rig {
         pivot,
         mat,
         // Where it is aiming now, where the last beat told it to aim, the
-        // compass direction that target came from (kept so the next turn can
-        // be made big enough to see), and how long it still waits before it
-        // starts moving there.
-        aimZ: 0, aimX: 0, tgtZ: 0, tgtX: 0, dir: ang, wait: 0,
+        // compass direction that target came from, kept so the next turn can
+        // be made big enough to see.
+        aimZ: 0, aimX: 0, tgtZ: 0, tgtX: 0, dir: ang,
       });
     }
 
@@ -407,10 +415,6 @@ export class Rig {
       const tilt = reach * (0.55 + Math.random() * 0.45);
       b.tgtZ = Math.cos(b.dir) * tilt;
       b.tgtX = -Math.sin(b.dir) * tilt;
-      // The scatter. Without it four beams start moving on the same frame,
-      // which is what made the choreographed version read as one object being
-      // rotated rather than as four lights.
-      b.wait = Math.random() * BEAM_SPREAD;
     }
   }
 
@@ -604,13 +608,10 @@ export class Rig {
     const punch = Math.pow(beat, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
-      if (b.wait > 0) b.wait -= dt;
-      else {
-        b.aimZ += (b.tgtZ - b.aimZ) * snap;
-        b.aimX += (b.tgtX - b.aimX) * snap;
-        b.pivot.rotation.z = b.aimZ;
-        b.pivot.rotation.x = b.aimX;
-      }
+      b.aimZ += (b.tgtZ - b.aimZ) * snap;
+      b.aimX += (b.tgtX - b.aimX) * snap;
+      b.pivot.rotation.z = b.aimZ;
+      b.pivot.rotation.x = b.aimX;
       b.mat.color.copy(this._colour);
       // Beams are the loudest thing in the room, so they are the first thing
       // the house lights take away. Still gated on `_energy` as well as the
@@ -625,7 +626,9 @@ export class Rig {
       // VALUE written to pixels already being blended, not how many of them
       // there are. Widening the cones would have been the expensive way to
       // solve the same complaint.
-      const o = (BEAM_BASE + level * BEAM_GLOW + punch * BEAM_PUNCH * this._energy)
+      // Everything multiplies `punch`, nothing is added to it, so when the
+      // envelope reaches zero so does the beam - which is the whole point.
+      const o = punch * (BEAM_PUNCH * this._energy + level * BEAM_GLOW)
         * this._energy * (1 - dark) * (1 - this._house);
       b.mat.opacity = Math.min(0.9, o);
       // An invisible mesh is culled before rasterisation; a fully transparent
