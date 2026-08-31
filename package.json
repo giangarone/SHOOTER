@@ -10,7 +10,8 @@
     "test:boss": "node test/boss.mjs",
     "test:drops": "node test/drops.mjs",
     "test:seeker": "node test/seeker.mjs",
-    "test:devil": "node test/devil.mjs"
+    "test:devil": "node test/devil.mjs",
+    "test:icons": "node test/icons.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

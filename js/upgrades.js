@@ -20,7 +20,10 @@
 //
 // ADDING AN UPGRADE
 //   Add an entry here with a unique key, a `rarity` from RARITY, a `max` stack
-//   count, and an apply(). If it needs a stat that does not exist yet, add the
+//   count, an apply(), and an `icon` NO OTHER ENTRY USES - add a new shape to
+//   icons.js rather than borrowing one, because a shape worn by two mutations
+//   teaches the player the wrong thing about both. `npm run test:icons` fails
+//   the moment two entries share one. If it needs a stat that does not exist yet, add the
 //   field to DEFAULT_MODS in player.js and read it wherever it applies. If it
 //   needs to react to an event (a kill, a hit taken) rather than change a
 //   stat, add the mod field here and the hook in main.js.
@@ -186,7 +189,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 5,
     theme: THEME.rate,
-    icon: 'bolt',
+    icon: 'throttle',
     effects: (n) => [['FIRE RATE ' + step(n, pctUp(20)), GOOD]],
     apply: (mods, n) => { mods.fireRate *= 1 + 0.2 * n; },
   },
@@ -258,7 +261,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.salvage,
-    icon: 'ammoBox',
+    icon: 'magnet',
     effects: (n) => [
       ['AMMO / KILL ' + step(n, (k) => '+' + 2 * k), GOOD],
       ['KILLS REFILL RESERVE', NOTE],
@@ -294,7 +297,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 3,
     theme: THEME.shock,
-    icon: 'spikeShield',
+    icon: 'shockRing',
     effects: (n) => [
       ['SHOCKWAVE WHEN HIT', GOOD],
       ['DAMAGE ' + step(n, (k) => String(45 * k)), NOTE],
@@ -310,7 +313,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.frenzy,
-    icon: 'claw',
+    icon: 'tally',
     // A gun that starts worse and is bought back by the kill chain. Tied to
     // the COMBO rather than to a timer of its own: the run already has one
     // clock for "are you still killing", and a second one beside it would be
@@ -331,7 +334,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 3,
     theme: THEME.fabricate,
-    icon: 'gear',
+    icon: 'hopper',
     effects: (n) => [['AMMO / SEC ' + step(n, (k) => '+' + 2.5 * k), GOOD]],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
@@ -430,7 +433,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.electric,
-    icon: 'bolt',
+    icon: 'arc',
     effects: [['CHAINS TO 1 ENEMY', GOOD], ['CHAIN HITS FOR 40%', NOTE]],
     apply: (mods, n) => {
       mods.chainDamage = 0.4 * n;
@@ -492,7 +495,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.precision,
-    icon: 'crosshair',
+    icon: 'twinShot',
     effects: [['EVERY SHOT FIRES 2x', GOOD], ['60% DAMAGE EACH', BAD]],
     apply: (mods, n) => {
       mods.volley = 1 + n;
@@ -538,7 +541,7 @@ export const UPGRADES = {
     max: 3,
     mark: true,
     theme: THEME.pierce,
-    icon: 'bullet',
+    icon: 'pierce',
     effects: (n) => [
       ['PIERCE ' + step(n, (k) => String(k)), GOOD],
       ['ENEMIES PER SHOT', NOTE],
@@ -567,7 +570,7 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 2,
     theme: THEME.rage,
-    icon: 'claw',
+    icon: 'pulse',
     // Deliberately no numbers: the shape of the deal is the whole pick, and a
     // percentage that only pays at an HP the player is trying not to be at
     // told them less than the sentence does.
@@ -582,7 +585,7 @@ export const UPGRADES = {
     rarity: 'cursed',
     max: 1,
     theme: THEME.burden,
-    icon: 'bullet',
+    icon: 'trio',
     effects: [['+70% DAMAGE', GOOD], ['3 AMMO PER SHOT', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.7 * n;
@@ -594,7 +597,7 @@ export const UPGRADES = {
     rarity: 'cursed',
     max: 1,
     theme: THEME.hex,
-    icon: 'skull',
+    icon: 'sigil',
     // The floor is the whole reason this is playable: without it a held
     // trigger kills you from full health with no enemy in the room.
     effects: [['20% OF SHOTS: 2x DMG', GOOD], ['THOSE COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
@@ -608,7 +611,7 @@ export const UPGRADES = {
     rarity: 'common',
     max: 3,
     theme: THEME.feed,
-    icon: 'ammoBox',
+    icon: 'belt',
     effects: (n) => [
       [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
       ['FIRE FROM THE RESERVE', NOTE],
@@ -635,7 +638,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.shrapnel,
-    icon: 'burst',
+    icon: 'flechette',
     effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 25 DMG EACH', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
     apply: (mods, n) => {
       mods.reloadShards = 8 * n;
@@ -648,7 +651,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.ice,
-    icon: 'icicle',
+    icon: 'shatter',
     effects: [['FROZEN DEAD SHATTER', GOOD], ['60 DMG IN 3.5m', NOTE]],
     apply: (mods, n) => {
       mods.shatterDamage = 60 * n;
@@ -683,7 +686,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.poison,
-    icon: 'flask',
+    icon: 'spore',
     // Slowing a poisoned enemy would have been Cryo Rounds with a different
     // name - Cryo already halves their speed and their shots. Spreading is the
     // thing only poison does.
@@ -706,7 +709,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.fire,
-    icon: 'flask',
+    icon: 'trefoil',
     // Poison and burn ONLY. Cryo, Terror and Petrify have no strength to
     // amplify, so the same trade on them would be a drawback with no upside.
     // The old line read "+50% POISON & BURN", which never said WHICH axis moved
@@ -728,7 +731,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.charge,
-    icon: 'bomb',
+    icon: 'plunger',
     // Armed by the reload rather than by a timer, so it rewards a rhythm the
     // player already has instead of asking them to stand still and not shoot.
     effects: [['1st SHOT AFTER EVERY', GOOD], ['RELOAD EXPLODES', GOOD], ['70 DMG IN 4m', NOTE]],
@@ -890,7 +893,7 @@ export const UPGRADES = {
     cost: 20,
     max: 1,
     theme: DEVIL_THEME.pact,
-    icon: 'drop',
+    icon: 'chalice',
     effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE +25% DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.killHeal = 3 * n;
@@ -904,7 +907,7 @@ export const UPGRADES = {
     cost: 20,
     max: 1,
     theme: DEVIL_THEME.dodge,
-    icon: 'wing',
+    icon: 'batWing',
     // dodgeChance is the same field Evasion sets, so the two ADD - a player who
     // owns both dodges more often, and both mutations still read as doing the
     // thing they say. The reward on top is what makes this the devil's version.
@@ -924,7 +927,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: DEVIL_THEME.hellfire,
-    icon: 'flame',
+    icon: 'firetrail',
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
     effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 5s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
@@ -942,7 +945,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: DEVIL_THEME.affliction,
-    icon: 'hourglass',
+    icon: 'infinity',
     // The drafted drawback was "status effects on you last twice as long", and
     // the player has no status effects - only hazard zones to stand out of. So
     // the cost lands on those instead, which is the same idea in the vocabulary
@@ -960,7 +963,7 @@ export const UPGRADES = {
     cost: 10,
     max: 1,
     theme: DEVIL_THEME.zero,
-    icon: 'icicle',
+    icon: 'snowflake',
     effects: [['ENEMIES & SHOTS', NOTE], ['MOVE 20% SLOWER', GOOD], ['HITS FREEZE YOU 1s', BAD]],
     apply: (mods, n) => {
       mods.worldSlow = Math.pow(0.8, n);
@@ -975,7 +978,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: DEVIL_THEME.overload,
-    icon: 'bolt',
+    icon: 'discharge',
     // A fraction of MAX HP rather than a flat number, so it stays worth firing
     // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
     // the pool that scales with the enemy instead of with the build.
@@ -989,7 +992,7 @@ export const UPGRADES = {
     cost: 50,
     max: 1,
     theme: DEVIL_THEME.executioner,
-    icon: 'skull',
+    icon: 'axe',
     // The most expensive thing the Devil sells, and the only one that is worth
     // nothing for four waves out of five. Applies to bosses spawned AFTER it is
     // taken - a boss already standing keeps the health bar it arrived with.
@@ -1003,7 +1006,7 @@ export const UPGRADES = {
     cost: 10,
     max: 1,
     theme: DEVIL_THEME.antidote,
-    icon: 'flask',
+    icon: 'capsule',
     effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY', NOTE]],
     apply: (mods, n) => {
       mods.poisonImmune = n;
@@ -1018,7 +1021,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: DEVIL_THEME.gamble,
-    icon: 'coin',
+    icon: 'dice',
     // Rolled once per SHOT, not per pellet: a shotgun whose nine pellets each
     // rolled their own coin would average out to nothing, and the whole point
     // is that a shot is either a windfall or a waste.
@@ -1032,7 +1035,7 @@ export const UPGRADES = {
     cost: 20,
     max: 1,
     theme: DEVIL_THEME.presence,
-    icon: 'vortex',
+    icon: 'horns',
     effects: [['THE DEVIL ALWAYS', NOTE], ['APPEARS AFTER A WAVE', GOOD]],
     apply: (mods, n) => { mods.devilAlways = n; },
   },
@@ -1054,7 +1057,7 @@ export const UPGRADES = {
     cost: 5,
     max: 1,
     theme: DEVIL_THEME.power,
-    icon: 'crystal',
+    icon: 'sword',
     // The cheapest deal in the pool and the only one with no drawback at all.
     // It is what the Devil is FOR: five max HP is a real price and +20% damage
     // is a real answer, with nothing else to weigh.
