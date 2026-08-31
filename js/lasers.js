@@ -489,7 +489,7 @@ export class Lasers {
 
   // `punch` is the beat envelope the beams stab on, read only by the pairs
   // that pulse. `master` is what the ROOM allows: the look's multiplier, the
-  // energy, the house lights and the blackout cue.
+  // energy, the wave break and the blackout cue.
   update(dt, camPos, colour, punch, master) {
     const ease = Math.min(1, dt * EASE);
     // Impact slots are handed out in whatever order this frame writes rays, so

@@ -1,10 +1,10 @@
 // Wave-end upgrade totems and the two stations beside them.
 //
-// Three pillars rise out of the arena floor when a wave is cleared, each
-// showing one upgrade. The player takes one by shooting it ANYWHERE - the
-// pillar and the icon hovering in front of it are one target - or by pressing
-// E beside it. An unclaimed set simply stays standing until the wave after it
-// is cleared, when a fresh set replaces it.
+// Three shafts of light drop out of the truss when a wave is cleared, each
+// standing over one upgrade's icon. The player takes one by shooting it
+// ANYWHERE - the column and the icon turning inside it are one target - or by
+// pressing E beside it. An unclaimed set simply stays lit until the wave after
+// it is cleared, when a fresh set replaces it.
 //
 // BOTH WAYS IN ARE DELIBERATE
 //   Walking into a totem used to claim it, and no longer does. The row stands
@@ -24,21 +24,20 @@
 //   build for you. It cost more than it saved: hitting a wobbling 27cm orb
 //   mid-fight is a marksmanship test nobody asked for, and the totem reads as
 //   one object, so half of it being inert reads as a bug. Claiming is now a
-//   single invisible box around the pillar and its icon (`hit` below). The
-//   floating label panel above is deliberately NOT part of it - it hangs wide
-//   and high over the arena, and a stray shot up there should stay a miss.
+//   single invisible box around the foot of the column and its icon (`hit`
+//   below). The floating card above is deliberately NOT part of it - it hangs
+//   wide and high over the arena, and a stray shot up there should stay a miss.
 //
 // EACH OFFER HAS ITS OWN COLOUR AND ICON
-//   `theme` tints the pillar, the panel and the icon; `icon` names a small 3D
+//   `theme` tints the shaft, the pool, the card and the icon; `icon` names a 3D
 //   object from icons.js that says what the upgrade does before the text is
 //   legible - a flame for Incendiary, an icicle for Cryo. Both come straight
 //   off the offer, so this file still knows nothing about upgrades.
 //
-//   The icon ORBITS its pillar to whatever side the player is on and turns to
-//   face them. The alternative considered was a translucent pillar with a
-//   billboarded icon: translucency washes out the theme colour, which is the
-//   thing carrying meaning at distance, and billboarding a 3D shape flattens
-//   it. Orbiting keeps the pillar solid and the icon presenting its front.
+//   The icon ORBITS the axis of its column to whatever side the player is on
+//   and turns to face them, rather than being billboarded: billboarding a 3D
+//   shape flattens it, and a shape left to spin on its own hides itself
+//   edge-on for a third of every turn.
 //
 // PERFORMANCE RULES, same as arena.js and powerups.js:
 //   1. No PointLights, ever. three.js keys its shader programs on the scene's
@@ -57,6 +56,7 @@
 
 import * as THREE from 'three';
 import { buildIcon } from './icons.js';
+import { makeGlowTexture } from './effects.js';
 // A totem draws whatever it is handed. It knows nothing about upgrades or
 // weapons - main.js normalises both into the same `offer` shape, which is why
 // putting a weapon on a totem needed no changes here.
@@ -79,12 +79,19 @@ export const USE_RADIUS = 2.0;
 // clearing a wave next to the row picks your build for you. Long enough to
 // cover a trigger already held down, short enough that a player walking in
 // deliberately never notices it.
-export const ARM_TIME = 1.2;
+//
+// It runs only once the totem has LANDED, so the real wait after a wave ends
+// is this plus the 0.7s rise. At 1.2 that was nearly two seconds in front of
+// an offer that would not take a shot, which reads as the game being
+// unresponsive far more often than it saves a build - the burst that killed
+// the last enemy is spent well inside the rise on its own.
+export const ARM_TIME = 0.45;
 // The arm delay used INSTEAD when a Devil is standing at the same wave break.
 // Taking a totem is what starts the next wave, so with a Devil up a stray
 // pellet does not merely pick a build - it ends the shopping trip. Long enough
-// that the player has to mean it.
-export const ARM_TIME_DEVIL = 2.5;
+// that the player has to mean it - but held to the same proportion of the old
+// pair, not left at a figure that now feels like a lockout beside it.
+export const ARM_TIME_DEVIL = 1.0;
 // Press E this close to a station.
 export const STATION_RADIUS = 2.6;
 
@@ -107,10 +114,157 @@ const SIGN_COLOR = { '1': '#37e08b', '-1': '#ff5a4d', '0': '#8a95b3' };
 // neither a benefit nor a drawback, it is the thing you are agreeing to.
 const COST_COLOR = '#ff1744';
 
-const PILLAR_GEOM = new THREE.BoxGeometry(1.15, 2.4, 0.5);
-// The claim volume: the pillar plus the space the icon floats in, with enough
-// margin that a shot grazing either edge still counts.
-const HIT_GEOM = new THREE.BoxGeometry(1.45, 2.6, 1.3);
+// ---- THE OFFER IS A SHAFT OF LIGHT, NOT A PILLAR -------------------------
+//
+// An offer used to be a solid emissive box with the icon hovering in front of
+// it, and the box was the problem: a tinted rectangle standing on the floor of
+// a room whose entire language is beams, haze and lasers reads as a signpost
+// borrowed from another game. What stands there now is the light itself - a
+// shaft dropped out of the truss in the offer's colour, a pool where it lands,
+// and the icon turning inside it. Nothing solid is left, so nothing has to be
+// lit, and the wave break looks like the rig picking three things out of a
+// dark room rather than like three props being wheeled on.
+//
+// It costs nothing the pillar did not: same rules as the rest of this file, so
+// NO PointLight. The column is additive geometry and reads by itself.
+//
+// THE SHAFT CARRIES ITS GRADIENT IN ITS VERTICES, NOT IN A TEXTURE. The rig's
+// beams use a canvas for exactly this, and the same trick a second time would
+// have cost a texture the game does not have: the smoke test holds it to
+// twelve, and eight columns sharing one image still leaves that image
+// competing with the panels, the icons and the glow dot. So the fade along the
+// shaft and the streaks around it are baked into the colour attribute of one
+// shared geometry, which every column then tints through its own material.
+// A vertex colour costs nothing to sample and nothing to store.
+//
+// The pool on the floor is the glow dot every particle and pickup in the game
+// already uses (effects.js hands out exactly one), so the two things a column
+// is made of add no textures at all.
+const SHAFT_TOP = 12.6;
+// Narrow where it leaves the truss, wide where it lands: a shaft converging
+// upward is what says the source is far away and above.
+const SHAFT_R_TOP = 0.42;
+const SHAFT_R_BOT = 1.25;
+// Rings up the shaft. One would leave the fade a straight line between the two
+// ends; the falloff below is a curve, and six segments is where it stops
+// reading as a taper and starts reading as light thinning out.
+const SHAFT_RINGS = 6;
+// Faces around it. Also how many streaks it can carry, since the streaks are
+// one value per column of vertices.
+const SHAFT_SIDES = 16;
+// How fast the shaft turns on its own axis, in radians per second. This is the
+// haze moving through a fixed beam - the same thing the rig gets by scrolling
+// its beam texture - so it is deliberately slow enough that nobody catches it
+// as rotation.
+const SHAFT_DRIFT = 0.16;
+// The pool on the floor, in metres of radius. Wider than the shaft it belongs
+// to, because light landing on a floor spreads across it - and because in a
+// blacked-out room the pool is the only thing telling the player where the
+// ground under an offer actually is.
+const POOL_R = 2.9;
+let SHAFT_GEOM = null;
+let POOL_GEOM = null;
+let POOL_TEX = null;
+
+// Built on the first column rather than at import: the pool's texture needs a
+// canvas, and a canvas at module scope breaks every tool that imports this
+// file without a DOM.
+function shaftAssets() {
+  if (SHAFT_GEOM) return;
+  SHAFT_GEOM = new THREE.CylinderGeometry(
+    SHAFT_R_TOP, SHAFT_R_BOT, SHAFT_TOP, SHAFT_SIDES, SHAFT_RINGS, true
+  );
+  // Cylinders are centred on their middle; this puts the open foot at y = 0 so
+  // a column's origin is where it meets the floor.
+  SHAFT_GEOM.translate(0, SHAFT_TOP / 2, 0);
+  const uv = SHAFT_GEOM.attributes.uv;
+  const col = new Float32Array(uv.count * 3);
+  for (let i = 0; i < uv.count; i++) {
+    // CylinderGeometry runs v from 0 at the TOP down to 1 at the bottom, so
+    // this flips it: `up` is 0 at the foot and 1 at the truss.
+    const up = 1 - uv.getY(i);
+    // The profile is the whole argument about whether this reads as light or
+    // as a plastic cone, and it is not a straight fade either way.
+    //
+    //   - It DISSOLVES at the very top. A shaft that is at its brightest where
+    //     the geometry stops ends in a hard rim twelve metres up, which is the
+    //     single most artificial thing a beam can do. The last eighth of it
+    //     goes out, so the column arrives out of a dark ceiling.
+    //   - It is brightest through the UPPER BODY, where nothing has to be read
+    //     through it.
+    //   - It EASES OFF at the foot, which is the opposite of what a real beam
+    //     does and is deliberate: the foot is where the icon turns and the
+    //     card hangs, and an additive surface at full strength in front of
+    //     them washes out the two things the player is there to look at. The
+    //     pool on the floor is what says the light landed.
+    const fall = 0.22 + 0.78 * Math.pow(up, 0.9) * (1 - Math.pow(up, 8));
+    // Streaks around it. Integer frequencies of the way round, so the pattern
+    // closes seamlessly where the last column of vertices meets the first.
+    const a = uv.getX(i) * Math.PI * 2;
+    const streak = 0.88 + 0.08 * Math.sin(a * 3 + 0.4) + 0.04 * Math.sin(a * 7 + 2.6);
+    const v = Math.max(0, Math.min(1, fall * streak));
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = v;
+  }
+  SHAFT_GEOM.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  POOL_GEOM = new THREE.PlaneGeometry(1, 1);
+  POOL_GEOM.rotateX(-Math.PI / 2);
+  POOL_TEX = makeGlowTexture();
+}
+
+// One shaft and the pool under it, tinted per offer. `parent` keeps them, but
+// they are pinned to the FLOOR every frame rather than riding the group's
+// rise: light from the ceiling does not come up out of the ground, so a
+// column fades in where it already is while the icon and the card rise into
+// it.
+function makeColumn(parent, rBot = SHAFT_R_BOT, poolR = POOL_R) {
+  shaftAssets();
+  const shaftMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, vertexColors: true, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+    side: THREE.DoubleSide, fog: false,
+  });
+  const shaft = new THREE.Mesh(SHAFT_GEOM, shaftMat);
+  shaft.scale.set(rBot / SHAFT_R_BOT, 1, rBot / SHAFT_R_BOT);
+  parent.add(shaft);
+  const poolMat = new THREE.MeshBasicMaterial({
+    map: POOL_TEX, color: 0xffffff, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  });
+  const pool = new THREE.Mesh(POOL_GEOM, poolMat);
+  pool.scale.set(poolR * 2, 1, poolR * 2);
+  parent.add(pool);
+  return { shaft, shaftMat, pool, poolMat };
+}
+
+// Drives one column. `lit` is 0..1 - the rise, dimmed for an offer that cannot
+// be afforded - and `floorY` is where the world floor sits in the parent's own
+// space, which is the negative of however far the group has sunk.
+function driveColumn(col, lit, floorY, time, phase) {
+  // A slow breath, not a flicker. Fast movement here would read as a fault in
+  // the light; this is haze crossing a fixed beam.
+  const b = 0.86 + 0.14 * Math.sin(time * 1.7 + phase);
+  // The streaks turn with the shaft. See SHAFT_DRIFT: this is haze crossing a
+  // fixed light, and it is the only reason the column is not a static prop
+  // once it has faded in.
+  col.shaft.rotation.y = time * SHAFT_DRIFT + phase;
+  col.shaft.position.y = floorY;
+  col.pool.position.y = floorY + 0.03;
+  col.shaftMat.opacity = 0.4 * lit * b;
+  col.poolMat.opacity = 0.85 * lit * (0.82 + 0.18 * Math.sin(time * 1.7 + phase));
+  // An invisible mesh is culled before rasterising; a transparent one is still
+  // drawn, and these are tall double-sided additive surfaces. Same reason the
+  // rig hides its beams between hits.
+  col.shaft.visible = col.shaftMat.opacity > 0.01;
+  col.pool.visible = col.poolMat.opacity > 0.01;
+}
+
+// The claim volume: the foot of the shaft and the space the icon turns in,
+// with enough margin that a shot grazing either edge still counts. Taller and
+// wider than the pillar it replaces - there is no longer a solid object to aim
+// at, so the target has to cover the part of the column a player would
+// naturally shoot. Not the whole 12m shaft: a claim wants to be a shot AT the
+// offer, not any pellet that crossed the light on its way to the ceiling.
+const HIT_GEOM = new THREE.BoxGeometry(1.7, 3.2, 1.7);
 const STATION_GEOM = new THREE.BoxGeometry(1.0, 1.4, 0.5);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
@@ -120,9 +274,14 @@ const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 // translucent. The radii are elliptical because the pillar is: 1.15 wide and
 // 0.5 deep, so a circular orbit at any radius that cleared the sides would
 // leave the icon floating absurdly far off the front.
+// CIRCULAR NOW, AND TIGHT. The ellipse was the pillar's shape: 1.15 wide and
+// 0.5 deep, so a circular orbit big enough to clear the sides left the icon
+// floating absurdly far off the front. With the pillar gone there is nothing
+// to clear, so the icon rides close to the axis of its own light and simply
+// turns to face the player - which is what the orbit was ever for.
 const ICON_Y = 1.5;
-const ICON_RX = 1.0;
-const ICON_RZ = 0.62;
+const ICON_RX = 0.5;
+const ICON_RZ = 0.5;
 // icons.js builds every shape at roughly half a metre, which is legible in the
 // hand and too small against a 1.15m-wide pillar seen from across the arena.
 const ICON_SCALE = 1.35;
@@ -187,21 +346,14 @@ export class Totem {
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
-    // Per-instance because each totem is tinted by its upgrade's theme.
-    this.pillarMat = new THREE.MeshStandardMaterial({
-      color: 0x161b26, emissive: 0xffffff, emissiveIntensity: 0.25,
-      roughness: 0.4, metalness: 0.7,
-    });
-    this.pillar = new THREE.Mesh(PILLAR_GEOM, this.pillarMat);
-    this.pillar.position.y = 1.2;
-    this.pillar.castShadow = true;
-    this.group.add(this.pillar);
+    // Per-instance because each column wears its own upgrade's theme.
+    this.col = makeColumn(this.group);
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
     // anywhere on the totem takes the upgrade and stops there.
     this.hit = new THREE.Mesh(HIT_GEOM, HIT_MAT);
-    this.hit.position.set(0, 1.25, 0.2);
+    this.hit.position.set(0, 1.6, 0);
     // How main.js tells a totem hit from an ordinary wall hit.
     this.hit.userData.totem = this;
     this.group.add(this.hit);
@@ -236,7 +388,8 @@ export class Totem {
     this.upgradeId = offer.id;
     this.claimed = false;
     this.enabled = offer.enabled !== false;
-    this.pillarMat.emissive.setHex(offer.theme);
+    this.col.shaftMat.color.setHex(offer.theme);
+    this.col.poolMat.color.setHex(offer.theme);
     this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
@@ -274,17 +427,24 @@ export class Totem {
     const dim = offer.enabled === false;
     c.globalAlpha = dim ? 0.45 : 1;
 
-    c.fillStyle = 'rgba(8, 10, 16, 0.82)';
-    roundRect(c, 6, 6, 500, 308, 14);
-    c.fill();
-    c.strokeStyle = theme;
-    c.lineWidth = 3;
-    c.stroke();
-    // A thicker bar across the top so the theme colour reads even when the
-    // text is too far away to make out.
+    // NO CARD BEHIND THE TEXT. The dark rounded rectangle with a coloured
+    // border was the same complaint as the pillar in a smaller shape: a piece
+    // of interface pinned into the world, and the one thing in the wave break
+    // that could not have been made of light. What holds the words together now
+    // is the dark room they are read in - see the note on the text below.
+    //
+    // The bar across the top stays, floating clear of the words: it is what
+    // carries the theme colour at the distance where the text is not yet
+    // legible, and dropping it would have cost the only thing the panel says
+    // from across the arena.
     c.fillStyle = theme;
-    roundRect(c, 6, 6, 500, 12, 6);
+    c.shadowColor = theme;
+    c.shadowBlur = 26;
+    roundRect(c, 96, 16, 320, 7, 4);
     c.fill();
+    // Cleared immediately: a shadow left set on the context would be inherited
+    // by every line of text below, which is exactly what this card is not.
+    c.shadowBlur = 0;
 
     // NO RARITY LINE. It used to sit above the name, and it was the one thing
     // on the card that changed nothing about the decision in front of the
@@ -292,8 +452,20 @@ export class Totem {
     // printing COMMON over it only ever argued the other way. The theme bar
     // above and the effect lines below are what the pick is actually made on.
     c.textAlign = 'center';
-    c.fillStyle = '#ffffff';
+    // NO GLOW ON THE WORDS. The first pass at this card drew every line twice,
+    // a wide soft halo under solid glyphs, on the theory that light-coloured
+    // text needs its own light to sit in once the panel behind it is gone. It
+    // does not: a halo in the SAME colour as the glyphs it surrounds thickens
+    // every stroke and fills every counter - the hole in an `e`, the gap in an
+    // `a` - and the result is text that looks lit and reads worse than plain
+    // text would. The letters are drawn once, at full opacity, and the card is
+    // legible because the room behind it is dark.
+    //
+    // The bar above keeps its glow. It is a shape, not a word, and nothing has
+    // to be read through it.
+    //
     // Long weapon names need to shrink to stay on one line.
+    c.fillStyle = '#ffffff';
     c.font = 'bold ' + (offer.name.length > 15 ? 34 : 42) + 'px system-ui, sans-serif';
     c.fillText(offer.name, 256, 92);
 
@@ -314,18 +486,20 @@ export class Totem {
     // sign and a number is the shortest form the price can take, and it reads
     // the same way the red drawback lines above it do.
     if (offer.cost) {
-      c.fillStyle = dim ? '#5b6785' : COST_COLOR;
       c.font = 'bold 30px system-ui, sans-serif';
+      c.fillStyle = dim ? '#8792ad' : COST_COLOR;
       c.fillText(
-        dim ? 'CANNOT AFFORD' : '\u2212' + offer.cost + ' MAX HP',
-        256, 292
+        dim ? 'CANNOT AFFORD' : '\u2212' + offer.cost + ' MAX HP', 256, 292
       );
     } else if (offer.note) {
-      c.fillStyle = '#5b6785';
       c.font = '600 22px system-ui, sans-serif';
+      // Lifted off the near-black it used to be. With no panel under it, a
+      // note at #5b6785 is a line nobody can find in a dark room.
+      c.fillStyle = '#9fb0d0';
       c.fillText(offer.note, 256, 292);
     }
     c.globalAlpha = 1;
+    c.shadowBlur = 0;
     this.panel.tex.needsUpdate = true;
   }
 
@@ -391,9 +565,16 @@ export class Totem {
     // eats into it.
     if (this.state === 'up' && this.armT > 0) this.armT -= dt;
 
-    // Ease-out on the way up so the pillar decelerates as it lands.
+    // Ease-out on the way up so the icon and its card decelerate as they land.
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
+
+    // The column stays where the floor is and comes UP IN BRIGHTNESS instead,
+    // which is the one thing that separates a light from a prop. An offer that
+    // cannot be afforded burns low, the same way its card is drawn faded: it
+    // is still there to be read, and it is visibly not on.
+    driveColumn(this.col, e * (this.enabled ? 1 : 0.4),
+      -this.group.position.y, time, this.pos.x);
 
     // The icon rides around to the player's side of the pillar and turns to
     // face them. Two problems, one fix: an icon parked on the front face is
@@ -438,6 +619,15 @@ export class Station {
       color: 0x161b26, emissive: this.color, emissiveIntensity: 0.5,
       roughness: 0.4, metalness: 0.7,
     });
+    // A narrower column of the station's own colour over the console. The
+    // consoles KEEP their bodies - a shop is a thing you walk up to and the
+    // totems are not - but with the room blacked out behind the offers, an
+    // unlit box at the end of the row is a box nobody finds. The light is what
+    // says there is something there; the body is what it is standing on.
+    this.col = makeColumn(this.group, 0.8, 1.9);
+    this.col.shaftMat.color.setHex(this.color);
+    this.col.poolMat.color.setHex(this.color);
+
     this.body = new THREE.Mesh(STATION_GEOM, this.mat);
     this.body.position.y = 0.7;
     this.body.castShadow = true;
@@ -471,24 +661,34 @@ export class Station {
     scene.add(this.group);
   }
 
+  // No card behind it, for the same reason an offer no longer has one - see
+  // the note in Totem._draw(). A dark rounded rectangle beside three columns
+  // of light is the one thing in the row that could not be made of light.
   setLabel(title, cost, enabled) {
     const c = this.panel.canvas.getContext('2d');
+    const col = hex(this.color);
     c.clearRect(0, 0, 256, 160);
-    c.fillStyle = 'rgba(8, 10, 16, 0.82)';
-    roundRect(c, 4, 4, 248, 152, 10);
-    c.fill();
-    c.strokeStyle = hex(this.color);
-    c.lineWidth = 2;
-    c.stroke();
 
     c.textAlign = 'center';
-    c.globalAlpha = enabled ? 1 : 0.4;
-    c.fillStyle = hex(this.color);
+    c.globalAlpha = enabled ? 1 : 0.45;
+    // The colour bar, floating clear of the words: it is what says which
+    // console this is from further away than the text can be read.
+    c.fillStyle = col;
+    c.shadowColor = col;
+    c.shadowBlur = 18;
+    roundRect(c, 68, 20, 120, 5, 3);
+    c.fill();
+
+    // Drawn once and clean, for the reason in Totem._draw(): a glow the colour
+    // of the letters it sits under is a thicker, muddier version of the same
+    // letters.
+    c.shadowBlur = 0;
     c.font = 'bold 34px system-ui, sans-serif';
-    c.fillText(title, 128, 62);
-    c.fillStyle = enabled ? '#ffffff' : '#5b6785';
+    c.fillText(title, 128, 74);
+
+    c.fillStyle = enabled ? '#ffffff' : '#8792ad';
     c.font = 'bold 30px system-ui, sans-serif';
-    c.fillText(cost, 128, 112);
+    c.fillText(cost, 128, 120);
     c.globalAlpha = 1;
     this.panel.tex.needsUpdate = true;
   }
@@ -538,6 +738,9 @@ export class Station {
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
     this.mat.emissiveIntensity = 0.45 + Math.sin(time * 3) * 0.15;
+    // Dimmer than an offer's: the two stations frame the row and must not
+    // compete with the three things in it that are actually a choice.
+    driveColumn(this.col, e * 0.65, -this.group.position.y, time, this.pos.x);
 
     // See the note on the totem's orbit: local +Z is the icon's front, so one
     // angle both places it and aims it.

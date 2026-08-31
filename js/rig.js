@@ -187,9 +187,46 @@ const LAP_BEATS_HOT = 8;
 const ACCENTS = [
   0x4ef3ff, 0xff2fb0, 0xb14aed, 0xffb300, 0x39ff88, 0xff5a4d, 0x3d6bff, 0xff8a1f,
 ];
-// House lights: warm, and nothing like the combat palette, so the intermission
-// reads instantly as "the set has stopped".
-const HOUSE = 0xffb060;
+// The intermission ember, and it is WHITE - the one colour that is not in the
+// show. Everything the venue lights itself by wears this at a wave break: the
+// wall strips, the deck and platform lips, the fixture lenses.
+//
+// It used to be a warm amber, on the argument that house lights in a club are
+// warm and nothing like the set's palette. That argument survives; the amber
+// does not. The break now exists to put three coloured columns in a black
+// room, and an amber wall strip is a fourth colour in that room competing with
+// them for the only thing the player is there to decide. Colourless furniture
+// is what makes the offers the only colour on screen - which is the whole
+// point of turning the lights off in the first place.
+const HOUSE = 0xffffff;
+
+// THE INTERMISSION IS A BLACKOUT, NOT HOUSE LIGHTS.
+//
+// It used to be the opposite: the wave break brought the lights UP, warm and
+// wide, the way a venue does when the set ends. It was the right idea for a
+// club and the wrong one for this game. What is standing in the room at a wave
+// break is three columns of coloured light with an upgrade in each, and a lit
+// room is exactly what stops a shaft of light reading as bright - the offer
+// the whole break exists for was the dimmest thing on screen.
+//
+// So the break kills the room instead. Everything below multiplies down
+// towards these, and what is left to see by is the offers themselves.
+//
+// HOW DARK IS THE ONE JUDGEMENT CALL HERE. Not zero: the player still has to
+// walk a floor with crates and platforms on it, and a room they cannot read
+// the shape of is a room they get stuck in. The fill and key keep a few
+// percent, which is enough for a silhouette and nowhere near enough to
+// compete with a column.
+const HOUSE_FILL = 0.12;
+const HOUSE_KEY = 0.08;
+// The venue's own emissive edges - wall strips, deck lips, fixture lenses -
+// keep a low ember rather than going out completely. It is what stops the
+// blackout reading as a rendering failure, it is the edge a player crossing a
+// dark floor is reading, and it is what the three columns are seen AGAINST.
+const HOUSE_EMBER = 0.1;
+// The air thickens a little instead of clearing. A shaft is only as visible as
+// the haze it crosses, and the columns are the whole point of the break.
+const HOUSE_FOG = 1.3;
 
 
 // The beam's look, baked once into one shared texture.
@@ -420,7 +457,8 @@ export class Rig {
   // ---- cues: one-shot events fired from main.js at existing transitions ----
 
   // A wave starts: cut the room to black for a beat, then let everything hit
-  // at once. The blackout is what makes the hit land - without it a bright
+  // at once. It plays out of the break's blackout, which is why the hit is the
+  // half that matters here - the room was already dark. The blackout is what makes the hit land - without it a bright
   // room just gets slightly brighter.
   cueWaveStart() {
     this._waveT = 0.9;
@@ -482,9 +520,10 @@ export class Rig {
     const combat = s.mode === 'combat' || s.mode === 'boss';
     const boss = s.mode === 'boss';
 
-    // `_house` crossfades the whole rig between show and house lights, so the
-    // intermission eases in rather than cutting. It mirrors the music's own
-    // 0.7s lowpass sweep closely enough that the two feel like one change.
+    // `_house` crossfades the whole rig from the show into the blackout the
+    // wave break plays in (see the HOUSE_* constants), so the intermission
+    // eases in rather than cutting. It mirrors the music's own 0.7s lowpass
+    // sweep closely enough that the two feel like one change.
     const houseTarget = s.mode === 'house' ? 1 : 0;
     this._house += (houseTarget - this._house) * Math.min(1, dt * 3);
 
@@ -520,7 +559,7 @@ export class Rig {
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
-      // rather than as sliding past it. The house lights stop it dead.
+      // rather than as sliding past it. The break's blackout stops it dead.
       const lapBeats = LAP_BEATS_IDLE + (LAP_BEATS_HOT - LAP_BEATS_IDLE) * this._energy;
       this._chaseTarget += (1 / lapBeats) * (1 - this._house);
     }
@@ -568,6 +607,11 @@ export class Rig {
     // ---- colour ------------------------------------------------------------
     // Pick what the accents are wearing. Boss colour wins over everything
     // except the enrage red, because on a boss wave the room IS the boss.
+    // The break steers the whole room's colour to white on its way in. Every
+    // surface below reads `_colour`, so this one line is what drains the hue
+    // out of the wall strips, the floor lips and the fixture lenses together -
+    // and it EASES there with everything else rather than switching, which the
+    // half-way tests that used to sit on each of those surfaces did not.
     if (this._house > 0.5) {
       this._target.setHex(HOUSE);
     } else if (boss && this._enraged) {
@@ -593,13 +637,20 @@ export class Rig {
     // ---- the white key light ----------------------------------------------
     // Only intensity moves. Hue never does.
     const beatLift = combat ? beat * 0.5 * this._energy : 0;
-    const houseLift = this._house * 0.9;
-    const k = (1 - dark) * (1 + beatLift + houseLift + waveHit * 0.8 + stagHit * 1.4);
-    this.lights.hemi.intensity = this.baseHemi * (0.5 + 0.5 * k) * (boss ? 0.72 : 1);
-    this.lights.dir.intensity = this.baseDir * k * (boss ? 0.62 : 1);
+    const k = (1 - dark) * (1 + beatLift + waveHit * 0.8 + stagHit * 1.4);
+    // The break drags both towards their floor. Crossfaded rather than cut, so
+    // the room falls away over the same 0.7s the music takes to duck - the two
+    // are one change and must not arrive separately.
+    const h = this._house;
+    this.lights.hemi.intensity = this.baseHemi * (0.5 + 0.5 * k) * (boss ? 0.72 : 1)
+      * (1 - h * (1 - HOUSE_FILL));
+    this.lights.dir.intensity = this.baseDir * k * (boss ? 0.62 : 1)
+      * (1 - h * (1 - HOUSE_KEY));
 
     // ---- the colour accents ------------------------------------------------
-    const accentGain = (1 - dark) * (0.45 + level * 0.9 + beat * 1.5 * this._energy);
+    // The two roaming accent points go out with everything else at the break.
+    const accentGain = (1 - dark) * (0.45 + level * 0.9 + beat * 1.5 * this._energy)
+      * (1 - this._house * 0.94);
     const p1 = this.lights.p1;
     const p2 = this.lights.p2;
     p1.color.copy(this._colour);
@@ -635,23 +686,28 @@ export class Rig {
       } else {
         this._sweepTarget(sp.target.position, h, this._house > 0.5 ? 0.1 : 0.55);
       }
-      sp.color.copy(this._house > 0.5 ? this._target : this._colour);
+      sp.color.copy(this._colour);
       const solo = 0.55 + 0.45 * Math.sin(this.t * 2.1 + h.phase);
       // They hang 13m up and a SpotLight falls off over `distance`, so most of
       // the intensity is spent just getting down to the floor.
       sp.intensity = (1 - dark) * (70 + level * 130 + beat * 240 * this._energy) * solo * (0.35 + this._energy);
-      // House lights: wide, dim, warm, and no strobing.
-      if (this._house > 0.01) sp.intensity = sp.intensity * (1 - this._house) + 95 * this._house;
+      // And the two real heads shutter off entirely. They are the only lights
+      // in the room that throw a pool on the floor, which is exactly what the
+      // columns are now doing - two white pools sweeping through three
+      // coloured ones is the one thing that would read as the rig arguing with
+      // itself.
+      sp.intensity *= 1 - this._house;
     }
 
     // ---- fixture lenses ----------------------------------------------------
     // Every housing on the truss, including the eight with no light behind
     // them. A bright spot travels around the ring on the beat, which is what
     // makes the ceiling read as a rig rather than as two lamps and scenery.
-    const lensBase = (0.25 + level * 0.8 + beat * 3.2 * this._energy) * (1 - dark);
+    const lensBase = (0.25 + level * 0.8 + beat * 3.2 * this._energy) * (1 - dark)
+      * (1 - this._house * (1 - HOUSE_EMBER));
     for (let i = 0; i < this.fixtureMats.length; i++) {
       const fm = this.fixtureMats[i];
-      fm.emissive.copy(this._house > 0.5 ? this._target : this._colour);
+      fm.emissive.copy(this._colour);
       const chase = 0.45 + 0.55 * Math.sin(this.t * (2 + this._energy * 4) - i * 0.9);
       fm.emissiveIntensity = Math.min(5, lensBase * chase + heart * 1.6);
     }
@@ -679,7 +735,7 @@ export class Rig {
       b.pivot.rotation.x = b.aimX;
       b.mat.color.copy(this._colour);
       // Beams are the loudest thing in the room, so they are the first thing
-      // the house lights take away. Still gated on `_energy` as well as the
+      // the break takes away. Still gated on `_energy` as well as the
       // beat, and that gate is deliberate: shown at a flat base they read as
       // static grey cones hanging in an idle room rather than as light.
       //
@@ -730,18 +786,22 @@ export class Rig {
     // furniture stayed on the one colour that could not have come from the
     // rig - and static light in a room full of moving light reads as scenery
     // rather than as part of the show.
-    const emCol = this._house > 0.5 ? this._target : this._colour;
+    const emCol = this._colour;
     // The ONE hits harder than the other three. Four identical pulses per bar
     // is a flicker; one big one and three small ones is a bar, and the room
     // suddenly has a downbeat you can feel without being told about it.
     const hit = beat * this._energy * (s.downbeat ? DOWNBEAT_ACCENT : 1);
     const trimGain = 1.2 + hit * 2.4 + heart * 2;
+    // Down to the ember at the break, along with everything else the venue
+    // lights itself by. The platform and deck lips are the ones that matter:
+    // they are the edges a player crossing a dark floor is reading.
+    const emGain = (1 - dark) * (1 - this._house * (1 - HOUSE_EMBER));
     this.mats.trim.emissive.copy(emCol);
-    this.mats.trim.emissiveIntensity = trimGain * (1 - dark);
+    this.mats.trim.emissiveIntensity = trimGain * emGain;
     this.mats.deckEdge.emissive.copy(emCol);
-    this.mats.deckEdge.emissiveIntensity = (0.8 + hit * 1.6) * (1 - dark);
+    this.mats.deckEdge.emissiveIntensity = (0.8 + hit * 1.6) * emGain;
     this.mats.platEdge.emissive.copy(emCol);
-    this.mats.platEdge.emissiveIntensity = (0.9 + hit * 1.4) * (1 - dark);
+    this.mats.platEdge.emissiveIntensity = (0.9 + hit * 1.4) * emGain;
 
     // ---- the wall chase ----------------------------------------------------
     // The head-height strips around the four walls are cut into cells with
@@ -772,12 +832,14 @@ export class Rig {
     // slower lag than this and the wall never catches up, which reads as two
     // rigs disagreeing rather than as one colour arriving.
     this._trail.lerp(this._colour, Math.min(1, dt * 2.2));
-    const base = (0.16 + level * 0.5) * (1 - this._house) + 1.1 * this._house;
+    const base = (0.16 + level * 0.5) * (1 - this._house) + HOUSE_EMBER * this._house;
     const cometGain = (0.7 + beat * 3.4 * this._energy) * (1 - this._house);
     for (let i = 0; i < n; i++) {
       const m = cells[i];
-      if (this._house > 0.5) m.emissive.copy(this._target);
-      else m.emissive.copy(i & 1 ? this._trail : this._colour);
+      // The two-tone lag holds through the break as well: both colours are
+      // walking to white together, so the wall arrives colourless without ever
+      // being flat while it gets there.
+      m.emissive.copy(i & 1 ? this._trail : this._colour);
       // Wrapped distance to the head, so the pulse crosses the seam between
       // the last cell and the first instead of vanishing at a corner.
       let d = Math.abs(i - head);
@@ -797,9 +859,9 @@ export class Rig {
     //
     // The bass term is held to a third: enemy colour is the game's primary
     // read and fog is the one control in this file that can quietly wash every
-    // one of them out. The house lights thin it instead of thickening it - an
-    // intermission is the room's lights coming up, and clearing the air is
-    // half of what that looks like.
+    // one of them out. The break THICKENS it - the room going dark is the
+    // room's lights going out, and the only things still burning are three
+    // shafts, which are worth exactly as much as the haze they cross.
     // AND IT BREATHES ON THE PHRASE. The bass term above is a wobble; this is
     // an inhale. Over the four bars of a look the haze thickens and thins
     // once, which does two things at the same time: it gives the air a slow
@@ -813,9 +875,14 @@ export class Rig {
     const step = (this._barsHeld * 4 + s.bar) / (LOOK_BARS * 4);
     const breath = 0.5 - 0.5 * Math.cos(step * Math.PI * 2);
     const fogTarget = (boss ? FOG_DENSITY_BOSS : FOG_DENSITY)
-      * (1 + level * 0.3 + breath * FOG_BREATH) * (1 - this._house * 0.35);
+      * (1 + level * 0.3 + breath * FOG_BREATH)
+      * (1 + this._house * (HOUSE_FOG - 1));
     this.scene.fog.density += (fogTarget - this.scene.fog.density) * Math.min(1, dt * 1.5);
     this._c.copy(this._fogBase).lerp(this._colour, 0.12 + level * 0.1);
+    // The far wall and the sky go to black with the room. Fog colour is also
+    // the background here, so leaving it at its lit value would put a grey
+    // halo behind three columns standing in the dark.
+    if (this._house > 0.001) this._c.multiplyScalar(1 - this._house * 0.85);
     this.scene.fog.color.copy(this._c);
     this.scene.background.copy(this._c);
 

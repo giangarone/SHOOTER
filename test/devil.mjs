@@ -94,7 +94,7 @@ try {
     // --- a hurt wave summons him rarely ---
     // dismiss() starts a SINK, and nothing here runs frames for it to finish
     // in, so the area has to be forced hidden between rolls or every iteration
-    // would read the previous one's pillars as still standing.
+    // would read the previous one's columns as still standing.
     const hide = () => {
       g.devilArea.dismiss();
       for (const d of g.devilArea.deals) { d.state = 'hidden'; d.claimed = false; }
@@ -147,7 +147,7 @@ try {
       g.waveDamageTaken = 0;
       g._presentTotems();
       g._presentDevil();
-      // Long enough to cover the rise plus the longest arm delay (2.5s with a
+      // Long enough to cover the rise plus the longest arm delay (1s with a
       // Devil standing), or nothing is claimable yet.
       for (let i = 0; i < 260; i++) {
         g.time += 0.016;
@@ -463,7 +463,11 @@ try {
   ok('devil certain after a clean wave', r.devilAfterClean);
   ok('three deals offered', r.dealCount === 3);
   ok('every deal is priced', r.allPriced);
-  ok('totems re-armed longer', r.totemArm >= 2.4, String(r.totemArm));
+  // ARM_TIME_DEVIL, less whatever the sampling frame ate. Both arm delays came
+  // down when the wave break stopped being a menu you waited on - what this
+  // guards is that a Devil standing at the break still arms the totems LONGER
+  // than the 0.45s a free break gives them, not any particular number.
+  ok('totems re-armed longer', r.totemArm >= 0.9, String(r.totemArm));
   ok('a deal costs exactly its price', r.paid);
   ok('the deal is owned', r.owned);
   ok('health clamped to the new max', r.healthClamped);

@@ -40,8 +40,16 @@ const BOLT_LIFE = 0.22;
 const BOLT_FORKS = 3;
 
 // Soft radial white dot, tinted per-use by material colour. Shared by the
-// particles, the projectile glows and the pickup glows.
+// particles, the projectile glows, the pickup glows and the pools the wave-end
+// light columns cast on the floor.
+//
+// ONE OF THESE EXISTS. It is memoised rather than built per caller because the
+// smoke test holds the whole game to twelve textures, and a second identical
+// 64x64 gradient is a whole texture spent on a copy: nothing here reads the
+// image differently, every user tints it through its own material colour.
+let GLOW_TEX = null;
 export function makeGlowTexture() {
+  if (GLOW_TEX) return GLOW_TEX;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;
   const ctx = cv.getContext('2d');
@@ -51,7 +59,8 @@ export function makeGlowTexture() {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(cv);
+  GLOW_TEX = new THREE.CanvasTexture(cv);
+  return GLOW_TEX;
 }
 
 // Ground shapes for CREEP - the persistent patch a lingering zone leaves on

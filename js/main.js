@@ -848,9 +848,9 @@ class Game {
   // loop allocates nothing.
   //
   // `mode` is derived from the SAME condition the music muffle uses, so the
-  // house lights and the muffled track can never disagree about whether the
-  // party is on: combat is the only state that is neither muffled nor lit by
-  // the house lights.
+  // room's blackout and the muffled track can never disagree about whether the
+  // party is on: combat is the only state that is neither muffled nor played
+  // in the dark.
   _fillRigState() {
     const r = this._rigState;
     const combat = this.state === 'playing' && this.waveState === 'active';
@@ -2348,7 +2348,7 @@ class Game {
     if (!offers.length) return;
     this.devilArea.present(offers);
     this._refreshDevil();
-    // The totems went up first and armed for 1.2s. Now that he is here they
+    // The totems went up first and armed for ARM_TIME. Now that he is here they
     // need the longer delay, so they are re-presented with the same offers.
     for (const t of this.totemArea.totems) {
       if (t.state !== 'hidden' && !t.claimed) t.armT = Math.max(t.armT, ARM_TIME_DEVIL);

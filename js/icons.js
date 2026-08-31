@@ -1,5 +1,5 @@
 // Small 3D icons for the wave-end totems: one recognisable object per offer,
-// hovering in front of the pillar and tinted by that offer's theme colour.
+// turning inside that offer's column of light and tinted to match it.
 // A totem is read from across the arena, at a glance, mid-fight - the icon is
 // what carries when the text is still too small to make out, so it has to be
 // a silhouette rather than a model. Six or seven parts is the budget.
@@ -13,8 +13,8 @@
 //   that does not exist, which buildIcon() quietly answers with `shard`.
 //
 // AN ICON'S IDENTITY CANNOT BE ITS NEGATIVE SPACE.
-//   It hovers in front of a pillar wearing the SAME theme colour, so any gap
-//   you are meant to see through is filled in by the pillar behind it. A
+//   It turns inside a shaft of light wearing the SAME theme colour, so any gap
+//   you are meant to see through is filled in by the lit haze behind it. A
 //   horseshoe magnet drawn as a ring with its lower arc masked is a perfect
 //   horseshoe on a contact sheet and a filled blob on a totem. Carry the shape
 //   in solid strokes; see `magnet`.
@@ -122,7 +122,7 @@ const ICONS = {
   },
   // Ammo economy: an open crate with the rounds standing up in it. The crate
   // takes the theme colour and the rounds are pale - the reverse reads as a
-  // dark slab against a pillar already wearing that same colour.
+  // dark slab against a column already wearing that same colour.
   ammoBox(add, glow) {
     add(BOX(), glow, [0, -0.1, 0], [0.44, 0.28, 0.3]);
     add(BOX(), DARK, [0, -0.1, 0.16], [0.3, 0.14, 0.02]);
@@ -253,7 +253,7 @@ const ICONS = {
     add(OCTA(), PALE, [-0.17, 0.1, -0.04], [0.14, 0.26, 0.14], [0, 0, -0.3]);
   },
   // Knockback: a hammer, pale head and a glowing collar. A head in the theme
-  // colour alone disappears into the pillar behind it, which wears the same.
+  // colour alone disappears into the column behind it, which wears the same.
   hammer(add, glow) {
     add(BOX(), PALE, [0, 0.17, 0], [0.44, 0.22, 0.22]);
     add(BOX(), glow, [0, 0.17, 0], [0.16, 0.26, 0.26]);
@@ -485,7 +485,7 @@ const ICONS = {
   //
   // BUILT AS A SOLID U, and that is not a stylistic choice. The first pass was
   // a ring with a dark block over its lower arc - which is a horseshoe on a
-  // contact sheet and a filled circle on a TOTEM, because the pillar standing
+  // contact sheet and a filled circle on a TOTEM, because the light standing
   // behind the icon wears the same theme colour and simply fills the gap back
   // in. Any icon whose identity lives in negative space fails here. Three
   // thick bars carry the shape in the strokes instead, and the two pole tips
