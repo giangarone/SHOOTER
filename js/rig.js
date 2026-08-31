@@ -64,38 +64,32 @@ const HEADS = 2;
 const BEAMS = 4;
 const BEAM_LEN = 15;
 
-// BEAM FIGURES. The four beams are aimed as a SET, not individually, and the
-// set changes shape on every beat. Which is the whole point: four lights each
-// picking their own angle reads as four lights, but four lights moving into a
-// shape reads as one rig, and a shape that repeats every bar is something the
-// eye learns to predict. Anticipating the next move is the difference between
-// lights that react to the music and lights that dance to it.
+// BEAM AIMING. Each beam picks its own angle, on the beat, at random.
 //
-// A figure is an aim direction per beam, built from where that beam hangs:
-//   IN     every beam tilts toward the middle of the room
-//   OUT    every beam tilts away from it
-//   CW/CCW every beam tilts along the tangent, all the same way round, which
-//          reads as the whole set shearing sideways
-const FIG_IN = 0;
-const FIG_CW = 1;
-const FIG_OUT = 2;
-const FIG_CCW = 3;
-// One programme is the four figures a bar walks through, one per beat. Several
-// of them, changed every few bars, because a single repeating bar stops being
-// a pattern and becomes wallpaper about a minute in.
-const PROGRAMMES = [
-  [FIG_IN, FIG_CW, FIG_OUT, FIG_CCW],   // sweeping round
-  [FIG_IN, FIG_OUT, FIG_IN, FIG_OUT],   // breathing in and out
-  [FIG_CW, FIG_CCW, FIG_CW, FIG_CCW],   // shearing side to side
-  [FIG_IN, FIG_CW, FIG_IN, FIG_CCW],    // returning to the middle on the odds
-];
-// Bars before the programme changes. Four is one phrase, which is where a
-// track tends to change anyway.
-const PROG_BARS = 4;
+// They were choreographed for a while: all four moving into one shape - in,
+// out, crossed - on a cycle that repeated every bar. On paper that is what a
+// rig does, and in the room it was worse. Four lights slamming into the same
+// pose on the same frame stop reading as four lights and start reading as one
+// object being rotated, and a shape the eye can predict removes the only
+// reason to keep watching. Being ON the beat was right; being IN UNISON on it
+// was not, and those are separate things.
+//
+// So: random direction per beam, and BEAM_SPREAD scatters the moves in time so
+// they never start together. A real rig's heads are mechanical and never
+// arrive at once; that scatter is most of why one looks alive.
+//
 // How far the beams tilt off vertical at full energy, in radians. This is the
-// range the old continuous sway used, kept deliberately: the change here is
-// WHEN they move, not how far.
+// range the original continuous sway used - the change through all of this has
+// been WHEN they move, not how far.
 const BEAM_TILT = 0.42;
+// Smallest turn a beam will make, as a fraction of half a turn. Purely random
+// angles land near the last one often enough to look like a stall, and a light
+// that does not visibly move on the beat reads as one that missed it.
+const BEAM_MIN_TURN = 0.35;
+// Seconds of scatter across the four beams' moves. Long enough to break the
+// unison, short enough that every beam has still moved well before the next
+// beat lands - at 145 BPM a beat is 0.41s.
+const BEAM_SPREAD = 0.11;
 // How fast a beam closes on its new aim. High: the point of moving on the beat
 // is that the movement is over by the time the next one lands, so it reads as
 // a head slamming into position rather than as a drift that happens to start
@@ -324,17 +318,14 @@ export class Rig {
       const mesh = new THREE.Mesh(beamGeo, mat);
       pivot.add(mesh);
       this.group.add(pivot);
-      // The unit vector from this beam toward the middle of the room, and the
-      // tangent at right angles to it. Every figure is one of these four
-      // directions, so aiming is a multiply rather than a special case per
-      // beam - and the shapes stay correct whatever the ring's radius is.
       this.beams.push({
         pivot,
         mat,
-        inX: -Math.cos(ang), inZ: -Math.sin(ang),
-        tanX: -Math.sin(ang), tanZ: Math.cos(ang),
-        // Where it is aiming now, and where the last beat told it to aim.
-        aimZ: 0, aimX: 0, tgtZ: 0, tgtX: 0,
+        // Where it is aiming now, where the last beat told it to aim, the
+        // compass direction that target came from (kept so the next turn can
+        // be made big enough to see), and how long it still waits before it
+        // starts moving there.
+        aimZ: 0, aimX: 0, tgtZ: 0, tgtX: 0, dir: ang, wait: 0,
       });
     }
 
@@ -343,8 +334,6 @@ export class Rig {
     // Last frame's position in the bar. A change in it is a beat; -1 means
     // nothing has been seen yet, so the first frame counts as one.
     this._lastBar = -1;
-    this._prog = 0;
-    this._barsSeen = 0;
     // The comet's target position on the wall, in cells. It is advanced in a
     // step on each beat and chased smoothly, rather than being driven by dt.
     this._chaseTarget = 0;
@@ -396,27 +385,32 @@ export class Rig {
     this._enraged = on;
   }
 
-  // Points the four beams at the figure this beat calls for. Called once per
-  // beat from update(); the easing towards what it sets happens per frame.
+  // Throws each beam at a fresh random angle. Called once per beat from
+  // update(); the easing towards what it sets happens per frame.
   //
-  // The aim is built from each beam's own inward and tangent vectors, so one
-  // figure index produces four different angles that together make one shape.
-  // A cone hangs pointing down: rotating it about Z swings its tip towards +X,
+  // A cone hangs pointing down: rotating it about Z swings its tip towards +X
   // and about X towards -Z, which is where the signs below come from.
-  _cueBeams(bar) {
-    const fig = PROGRAMMES[this._prog][bar & 3];
-    // Idle rooms get a narrower figure. The shape is the same, just smaller -
-    // the room should look like it is holding back, not like a different rig.
-    const tilt = BEAM_TILT * (0.35 + this._energy * 0.65);
+  _cueBeams() {
+    // An idle room aims narrower. Same behaviour, smaller - it should look
+    // like the rig is holding back, not like a different rig.
+    const reach = BEAM_TILT * (0.35 + this._energy * 0.65);
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
-      let x, z;
-      if (fig === FIG_IN) { x = b.inX; z = b.inZ; }
-      else if (fig === FIG_OUT) { x = -b.inX; z = -b.inZ; }
-      else if (fig === FIG_CW) { x = b.tanX; z = b.tanZ; }
-      else { x = -b.tanX; z = -b.tanZ; }
-      b.tgtZ = x * tilt;
-      b.tgtX = -z * tilt;
+      // Turn by at least BEAM_MIN_TURN of a half-circle, either way round,
+      // rather than picking an absolute angle: two independent random draws
+      // land close together often enough that some beats would show a light
+      // barely moving, and the beat it did not answer is the one you notice.
+      const turn = (BEAM_MIN_TURN + Math.random() * (1 - BEAM_MIN_TURN)) * Math.PI;
+      b.dir += Math.random() < 0.5 ? -turn : turn;
+      // Tilt varies too. All four at full reach every time is its own kind of
+      // uniform, just a less obvious one than moving together.
+      const tilt = reach * (0.55 + Math.random() * 0.45);
+      b.tgtZ = Math.cos(b.dir) * tilt;
+      b.tgtX = -Math.sin(b.dir) * tilt;
+      // The scatter. Without it four beams start moving on the same frame,
+      // which is what made the choreographed version read as one object being
+      // rotated rather than as four lights.
+      b.wait = Math.random() * BEAM_SPREAD;
     }
   }
 
@@ -453,16 +447,8 @@ export class Rig {
     // long or short the frame was. Everything that CUES rather than drifts is
     // decided here; the frame-by-frame code below only eases towards it.
     if (s.bar !== this._lastBar) {
-      const first = this._lastBar < 0;
       this._lastBar = s.bar;
-      if (s.downbeat || first) {
-        // A new bar. Change the programme every phrase, so the room has a
-        // pattern to learn without it becoming the only pattern it has.
-        if (++this._barsSeen % PROG_BARS === 0) {
-          this._prog = (this._prog + 1) % PROGRAMMES.length;
-        }
-      }
-      this._cueBeams(s.bar);
+      this._cueBeams();
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
@@ -618,10 +604,13 @@ export class Rig {
     const punch = Math.pow(beat, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
-      b.aimZ += (b.tgtZ - b.aimZ) * snap;
-      b.aimX += (b.tgtX - b.aimX) * snap;
-      b.pivot.rotation.z = b.aimZ;
-      b.pivot.rotation.x = b.aimX;
+      if (b.wait > 0) b.wait -= dt;
+      else {
+        b.aimZ += (b.tgtZ - b.aimZ) * snap;
+        b.aimX += (b.tgtX - b.aimX) * snap;
+        b.pivot.rotation.z = b.aimZ;
+        b.pivot.rotation.x = b.aimX;
+      }
       b.mat.color.copy(this._colour);
       // Beams are the loudest thing in the room, so they are the first thing
       // the house lights take away. Still gated on `_energy` as well as the
