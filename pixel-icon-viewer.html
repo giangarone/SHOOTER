@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Pixel icon test - VENOM ROUNDS</title>
+<script type="importmap">
+  { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+</script>
+<style>
+  body { margin:0; background:#0b0d12; color:#cfd6e4; font:12px ui-monospace,monospace; }
+  header { padding:10px 14px; border-bottom:1px solid #222836; display:flex; gap:14px; align-items:center; }
+  h1 { font-size:12px; margin:0; letter-spacing:.14em; color:#dfe8ff; }
+  label { display:flex; gap:6px; align-items:center; opacity:.8; }
+  input[type=range] { width:160px; }
+  .wrap { display:flex; gap:0; flex-wrap:wrap; }
+  .pane { padding:14px; }
+  .pane + .pane { border-left:1px solid #222836; }
+  h2 { font-size:11px; letter-spacing:.14em; color:#8a95b3; margin:0 0 10px; font-weight:normal; }
+  canvas { display:block; image-rendering:pixelated; }
+  .note { color:#6b7794; margin-top:8px; max-width:360px; line-height:1.6; }
+  .swatches { display:flex; gap:0; margin-top:10px; }
+  .sw { width:44px; height:26px; display:flex; align-items:flex-end; justify-content:center;
+        font-size:9px; color:#0b0d12; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VENOM ROUNDS &mdash; 24&times;24 pixel test</h1>
+  <label>distance <input id="dist" type="range" min="1" max="14" step="0.1" value="2.6"></label>
+  <label><input id="orbit" type="checkbox" checked> swing past</label>
+  <label><input id="beam" type="checkbox" checked> light column</label>
+</header>
+<div class="wrap">
+  <div class="pane">
+    <h2>THE ART &mdash; flat, 24&times;24</h2>
+    <canvas id="flat" width="384" height="384" style="width:384px;height:384px"></canvas>
+    <div class="note">The whole icon is this and nothing else. The outline is generated from the
+      silhouette, so it is exactly one pixel on every icon in the catalogue.</div>
+    <div class="swatches" id="pal"></div>
+  </div>
+  <div class="pane">
+    <h2>IN THE COLUMN &mdash; new pixel icon</h2>
+    <canvas id="new" width="440" height="440" style="width:440px;height:440px"></canvas>
+    <div class="note">Flat art, three pixels of thickness behind it, unlit. The only thing that
+      says it is solid is the darker colour on the side walls as it swings past.</div>
+  </div>
+  <div class="pane">
+    <h2>IN THE COLUMN &mdash; current 3D icon</h2>
+    <canvas id="old" width="440" height="440" style="width:440px;height:440px"></canvas>
+    <div class="note">Today's <code>flask</code>. Same column, same camera, same distance, so the
+      comparison is only ever about the icon.</div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { buildIcon } from './js/icons.js';
+import { buildPixelIcon, resolveIcon, pixelPalette, GRID } from './js/pixelicons.js';
+
+const POISON = 0x39d353;       // THEME.poison, what VENOM ROUNDS wears
+const ICON_SCALE = 1.35;       // totems.js
+const pal = pixelPalette(POISON);
+
+// ---- flat view: the art at 16x, nothing three.js about it ----------------
+{
+  const cells = resolveIcon('venomRound');
+  const ctx = document.getElementById('flat').getContext('2d');
+  const S = 384 / GRID;
+  ctx.fillStyle = '#12151d';
+  ctx.fillRect(0, 0, 384, 384);
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const t = cells[y][x];
+      if (t === '.') continue;
+      ctx.fillStyle = '#' + pal[t].getHexString();
+      ctx.fillRect(x * S, y * S, S, S);
+    }
+  }
+  const pals = document.getElementById('pal');
+  for (const k of ['0', '1', '2', '3', '4', 'side']) {
+    const d = document.createElement('div');
+    d.className = 'sw';
+    d.style.background = '#' + pal[k].getHexString();
+    d.textContent = k;
+    if (k === '0' || k === 'side' || k === '1') d.style.color = '#8a95b3';
+    pals.appendChild(d);
+  }
+}
+
+// ---- two identical scenes, one icon each ---------------------------------
+function makeScene(icon, lit) {
+  const scene = new THREE.Scene();
+  if (lit) {
+    // Only the 3D catalogue needs these. The pixel plate is MeshBasic: the
+    // moment a light rakes across it, it stops being flat art.
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 2.0);
+    key.position.set(3, 5, 4);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.6);
+    fill.position.set(-3, 1, 2);
+    scene.add(fill);
+  }
+  // A stand-in for the totem's shaft of light: additive, theme-coloured, and
+  // BEHIND the icon, which is the condition that kills negative space.
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.95, 0.95, 7, 24, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: POISON, transparent: true, opacity: 0.11,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+    }),
+  );
+  shaft.position.set(0, 0, -0.5);
+  scene.add(shaft);
+  const anchor = new THREE.Group();
+  anchor.scale.setScalar(ICON_SCALE);
+  anchor.add(icon);
+  scene.add(anchor);
+  return { scene, anchor, shaft };
+}
+
+const R = 440;
+const dpr = Math.min(2, devicePixelRatio);
+function makeView(canvasId, icon, lit) {
+  const cv = document.getElementById(canvasId);
+  cv.width = cv.height = R * dpr;
+  cv.style.width = cv.style.height = R + 'px';
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(R * dpr, R * dpr, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 40);
+  return { renderer, camera, ...makeScene(icon, lit) };
+}
+
+const views = [
+  makeView('new', buildPixelIcon('venomRound', POISON), false),
+  makeView('old', buildIcon('flask', POISON), true),
+];
+
+const dist = document.getElementById('dist');
+const orbit = document.getElementById('orbit');
+const beam = document.getElementById('beam');
+
+function frame(t) {
+  const time = t * 0.001;
+  // The totem yaws the icon to face the player - it never free-spins - so the
+  // only motion worth checking is the swing as the player walks past.
+  const yaw = orbit.checked ? Math.sin(time * 0.6) * 0.75 : 0;
+  for (const v of views) {
+    v.anchor.rotation.y = yaw;
+    v.anchor.position.y = Math.sin(time * 2.4) * 0.07;
+    v.shaft.visible = beam.checked;
+    v.camera.position.set(0, 0, +dist.value);
+    v.camera.lookAt(0, 0, 0);
+    // What totems.js writes every frame.
+    if (v.anchor.children[0].userData.glow) {
+      v.anchor.children[0].userData.glow.emissiveIntensity = 1.35 + Math.sin(time * 5) * 0.35;
+    }
+    v.renderer.render(v.scene, v.camera);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
