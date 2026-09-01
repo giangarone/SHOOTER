@@ -114,17 +114,21 @@ try {
   // (0, 14) and every result was a miss for the wrong reason.
   const lane = (dz) => [6, dz];
 
-  // Enemy 1.5m to the right at 10m out - about 8 degrees off, inside the cone.
-  const nearMissOff = await run({ from: [6, 4], enemies: [[7.5, -6]], seeker: false, aimDist: 10 });
+  // Enemy 0.9m to the right at 10m out - about 5 degrees off, inside the 6
+  // degree cone, and still clear of the 0.5m hitbox so it is a genuine miss
+  // without Seeker. The gap between those two bounds is what the mutation
+  // lives in, and halving the cone narrowed it: at the old 1.5m the shot is
+  // now outside the cone and this reads as a wide miss.
+  const nearMissOff = await run({ from: [6, 4], enemies: [[6.9, -6]], seeker: false, aimDist: 10 });
   check('without Seeker a near miss misses', nearMissOff.hurt[0] === 0,
     `damage=${nearMissOff.hurt[0]}`);
 
-  const nearMissOn = await run({ from: [6, 4], enemies: [[7.5, -6]], seeker: true, aimDist: 10 });
+  const nearMissOn = await run({ from: [6, 4], enemies: [[6.9, -6]], seeker: true, aimDist: 10 });
   check('with Seeker a near miss lands', nearMissOn.hurt[0] > 0,
     `damage=${nearMissOn.hurt[0]} arcs=${nearMissOn.arcs}`);
   check('a homed shot draws its curve', nearMissOn.arcs > 0, `arcs=${nearMissOn.arcs}`);
 
-  // 6m off at 10m out - about 31 degrees, well outside the cone.
+  // 6m off at 10m out - about 31 degrees, far outside the cone.
   const wide = await run({ from: [6, 4], enemies: [[12, -6]], seeker: true, aimDist: 10 });
   check('a wide miss still misses', wide.hurt[0] === 0, `damage=${wide.hurt[0]}`);
 
@@ -146,7 +150,7 @@ try {
 
   // Two enemies both inside the cone, with pierce owned. Exactly one may be hit.
   const noChain = await run({
-    from: [6, 4], enemies: [[7.4, -6], [4.6, -6]], seeker: true, pierce: true,
+    from: [6, 4], enemies: [[6.9, -6], [5.1, -6]], seeker: true, pierce: true,
     aimDist: 10,
   });
   const struck = noChain.hurt.filter((h) => h > 0).length;
@@ -159,12 +163,29 @@ try {
     // the game in whatever state the last shot did; put it back to playing so
     // the pool is actually ticked.
     g.state = 'playing';
+    // RELEASE THE TRIGGER FIRST. The rig pulls it and never lets go, so the
+    // player carries on auto-firing through the wait below - and with Seeker
+    // owned and enemies still standing, every homed shot lays down a FRESH
+    // arc. The pool was draining correctly the whole time; the check just kept
+    // catching a curve that was born in the last few frames of the window.
+    //
+    // The enemies are deliberately LEFT STANDING. Clearing them empties the
+    // wave, which ends it, and a game that is no longer in a live wave stops
+    // ticking effects at all - the arcs then sit at full life forever and the
+    // check fails for the opposite reason. Silence the gun, not the field.
+    // The trigger cannot just be released: ?autotest runs a bot that re-arms
+    // it every frame (see Game._autoInput), so the flag is back to true before
+    // the next tick. Switching the bot off is what actually stops the gun.
+    g.autoTest = false;
+    g.input.shoot = false;
+    g.input.shootFresh = false;
     const t0 = g.effects.arcs.filter((a) => a.life > 0).length;
     await new Promise((r) => setTimeout(r, 900));
     return {
       t0,
       live: g.effects.arcs.filter((a) => a.life > 0).length,
       visible: g.effects.arcs.filter((a) => a.line.visible).length,
+      fired: g.player.mag,
     };
   });
   check('arc pool drains', drained.live === 0 && drained.visible === 0,

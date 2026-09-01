@@ -235,15 +235,15 @@ export const UPGRADES = {
     // there is no natural trickle underneath it any more (see Player's mods
     // block), so this is a real pick rather than a bigger version of something
     // every run already had. Priced accordingly: 2 HP/s is slow enough that it
-    // never wins a fight on its own, and the 3s window means it only pays a
+    // never wins a fight on its own, and the 5s window means it only pays a
     // player who actually broke contact. It does not tick in the wave break.
     effects: (n) => [
       ['REGEN ' + step(n, (k) => 2 * k + ' HP/s'), GOOD],
-      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(2, 4 - k))), GOOD],
+      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(4, 6 - k))), GOOD],
       ['IN COMBAT ONLY', NOTE],
     ],
     apply: (mods, n) => {
-      mods.regenDelay = Math.max(2, 4 - n);
+      mods.regenDelay = Math.max(4, 6 - n);
       mods.regenRate = 2 * n;
     },
   },
@@ -306,10 +306,10 @@ export const UPGRADES = {
   combatStims: {
     name: 'COMBAT STIMS',
     rarity: 'common',
-    max: 3,
+    max: 2,
     theme: THEME.mobility,
-    effects: (n) => [['MOVE SPEED ' + step(n, pctUp(15)), GOOD]],
-    apply: (mods, n) => { mods.moveMult *= 1 + 0.15 * n; },
+    effects: (n) => [['MOVE SPEED ' + step(n, pctUp(30)), GOOD]],
+    apply: (mods, n) => { mods.moveMult *= 1 + 0.30 * n; },
   },
   vampiric: {
     name: 'VAMPIRIC ROUNDS',
@@ -763,9 +763,15 @@ export const UPGRADES = {
     // touched, so this can never drag a bullet off the weak point the player
     // deliberately lined up - it only takes the shots that were going to hit
     // a wall and gives them somewhere to go.
-    effects: [['MISSED SHOTS CURVE', GOOD], ['TO A TARGET IN 12 deg', NOTE], ['HITS ARE NEVER MOVED', NOTE]],
+    effects: [['MISSED SHOTS CURVE', GOOD], ['TO A TARGET IN 6 deg', NOTE], ['HITS ARE NEVER MOVED', NOTE]],
     apply: (mods, n) => {
-      mods.homingAngle = 0.21 * n;
+      // HALVED from 12 degrees. At 12 the cone was wide enough that aiming
+      // roughly at a crowd hit something every time, which is the whole gun
+      // rather than a rescue for the shots that deserved one. Halving the
+      // half-angle takes roughly three quarters of the solid angle with it, so
+      // this is a real cut and not a trim - a miss now has to be close to a
+      // hit before the curve will pick it up.
+      mods.homingAngle = 0.105 * n;
       mods.homingRange = 30;
     },
   },

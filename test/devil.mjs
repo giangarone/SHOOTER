@@ -296,12 +296,19 @@ try {
     stage();
     const totem = g.totemArea.totems.find((t) => t.state === 'up');
     standAt(totem.pos.x, totem.pos.z + 4);
-    const hp3 = P.maxHealth;
+    // FREE MEANS THE DEVIL DID NOT CHARGE, which is maxHpDebt - not that max
+    // health came out unchanged. The offers are random, and some of them
+    // legitimately MOVE the number: shoot a Bulwark totem and max health goes
+    // up 50 because that is what Bulwark does. Comparing maxHealth made this
+    // check fail whenever the roll put a max-health upgrade under the shot,
+    // which is the upgrade working rather than the totem charging for it.
+    const debt3 = P.maxHpDebt;
     aimAt(totem.hit);
     g.player.mag = 30;
     g.player.fireCd = 0;
     g.shoot();
-    out.shotTookTotem = totem.claimed && P.maxHealth === hp3;
+    out.shotTookTotem = totem.claimed && P.maxHpDebt === debt3;
+    out.shotTotemName = totem.offer && totem.offer.name;
     out.totemStartedWave = !g.totemArea.claimed || g.devilArea.deals.every((d) => d.state !== 'up');
 
     // --- E claims, and WALKING INTO ONE DOES NOT ---
@@ -499,11 +506,19 @@ try {
     const hpPool = P.health;
     for (let i = 0; i < 20; i++) { g.time += 0.05; g._updateHazard(0.05); }
     out.poolImmune = P.health >= hpPool;
-    const sick = spawn('chaser', 3, 0);
+    // PINNED AND OUT OF REACH. The leech pays 1 HP a second per poisoned
+    // enemy and this window is worth a few points, so a chaser left free to
+    // walk in and land one hit takes more than the whole test measures - which
+    // is what made this a coin flip on whether it closed the distance in time
+    // rather than a check on the deal. Speed 0 keeps it where it is put, and
+    // the window is long enough that the payout clears the noise.
+    const sick = spawn('chaser', 12, 0);
+    sick.speed = 0;
     sick.applyStatus('poison', 10, 1);
     P.health = 50;
-    tick(30);
+    tick(60);
     out.poisonLeech = P.health > 50;
+    out.poisonLeechHp = P.health;
 
     // ETERNAL AFFLICTION: a status put on an enemy never runs out
     take('eternalAffliction');
@@ -564,7 +579,7 @@ try {
   ok('overload: 20% of max HP off everything', m.overload);
   ok('hellfire: the trail burns', m.hellfire);
   ok('antidote: pools do nothing', m.poolImmune);
-  ok('antidote: poisoned enemies heal you', m.poisonLeech);
+  ok('antidote: poisoned enemies heal you', m.poisonLeech, `hp=${m.poisonLeechHp}`);
   ok('eternal affliction: statuses never end', m.eternal);
   ok('eternal affliction: pools hurt double', m.hazardDouble === 20, String(m.hazardDouble));
   ok('executioner: bosses arrive at half', m.executioner);
@@ -608,7 +623,7 @@ try {
   ok('a fresh visit offers max health again', r.healthReturns);
   ok('the figure itself offers nothing', r.devilOffersNothing);
   ok('the figure itself charges nothing', r.devilChargesNothing);
-  ok('shooting a totem is still free', r.shotTookTotem);
+  ok('shooting a totem is still free', r.shotTookTotem, String(r.shotTotemName));
   ok('a totem claim closes the devil', r.totemStartedWave);
   ok('standing in a totem claims nothing', r.walkingClaimsNothing);
   ok('E takes the totem you are standing at', r.promptNamesTotem && r.keyClaimedTotem);

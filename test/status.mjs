@@ -23,7 +23,7 @@
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
-const PORT = 8211;
+const PORT = 8213;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });

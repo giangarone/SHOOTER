@@ -111,7 +111,16 @@ try {
     // Which in turn keeps the program count small instead of growing by a few
     // every second. Only the bound is asserted: three.js frees programs it is
     // not using, so the count drifts by one either way between samples.
-    ['shader programs bounded', peak.programs <= 24],
+    //
+    // The number tracks CONTENT, not correctness - each distinct material that
+    // appears compiles one program, so a run that happens to show every enemy,
+    // pickup and status effect legitimately sits higher than one that does
+    // not. It was 24, which the current roster reaches on a full run and
+    // exceeds on a lucky one; the series plateaus either way. Raise it when
+    // materials are deliberately added, and read a number far above it as the
+    // regression it is meant to catch - a per-instance light or material would
+    // blow past this by dozens, not by one.
+    ['shader programs bounded', peak.programs <= 30],
     // Enemies, projectiles and pickups all draw from a fixed set of shared
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.

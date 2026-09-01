@@ -36,7 +36,7 @@ export const POWERUP_TYPES = {
       player.health = Math.min(player.maxHealth + 25, player.health + 25);
     },
     chance: 0.04,
-    needy: 0.10,
+    needy: 0.04,
     icon: 'pickHealth',
     sfx: 'pickupHealth',
   },
@@ -53,7 +53,7 @@ export const POWERUP_TYPES = {
       player.rageSpeedMult = 1.3;
       player.damageBoostEnd = time + 10;
     },
-    chance: 0.015,
+    chance: 0.005,
     icon: 'pickDamage',
     sfx: 'pickupBuff',
   },
@@ -65,7 +65,7 @@ export const POWERUP_TYPES = {
       player.fireRateMult = 1.7;
       player.fireRateBoostEnd = time + 8;
     },
-    chance: 0.015,
+    chance: 0.005,
     icon: 'pickRate',
     sfx: 'pickupBuff',
   },
@@ -77,7 +77,7 @@ export const POWERUP_TYPES = {
       player.shield = 50;
       player.shieldEnd = time + 15;
     },
-    chance: 0.008,
+    chance: 0.005,
     icon: 'pickShield',
     sfx: 'pickupShield',
   },
@@ -91,7 +91,7 @@ export const POWERUP_TYPES = {
   magnet: {
     color: 0xb14aed,
     emissive: 0xb14aed,
-    chance: 0.012,
+    chance: 0.005,
     icon: 'pickMagnet',
     apply: () => {},
     sfx: 'pickupMagnet',
@@ -105,7 +105,7 @@ export const AMMO_PICKUP = {
   emissive: 0xffd600,
   amount: 45,
   chance: 0.06,
-  needy: 0.12,
+  needy: 0.06,
   icon: 'pickAmmo',
   apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 45);
@@ -143,7 +143,9 @@ const BLINK_RATE = 5;
 // Health and ammo, and only those two, get a need term on top: `chance` is
 // what they roll at on a full bar and `chance + needy` is what they roll at on
 // an empty one, squared between the two so the pull is gentle at three
-// quarters full and steep near empty. The buffs never scale - a player who is
+// quarters full and steep near empty. `needy` is held EQUAL to `chance`, so a
+// bar on empty at most doubles the rate - the bailout is a nudge, not a
+// different game being played by whoever is losing. The buffs never scale - a player who is
 // doing badly gets more of what keeps them alive, not more damage.
 //
 // ONE DROP PER KILL AT MOST. The categories are rolled in need order and the

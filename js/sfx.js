@@ -107,6 +107,10 @@ export class SFX {
     this.tone({ f: 420, t: 0.05, v: 0.3, delay: 0.12 });
     this.tone({ f: 560, t: 0.06, v: 0.35, delay: this.reloadDur - 0.1 });
   }
+  // NOT the wave stinger any more, despite the name: wave start and wave
+  // clear are deliberately silent. What is left are the three moments that
+  // still earn a fanfare - a boss arriving, a boss enraging, and a schism
+  // splitting - which is why the sound survives the removal.
   wave() {
     this.tone({ f: 330, t: 0.12, v: 0.3 });
     this.tone({ f: 440, t: 0.12, v: 0.3, delay: 0.14 });

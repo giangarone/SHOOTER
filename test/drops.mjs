@@ -106,20 +106,31 @@ try {
   }
 
   // ---- need moves health and ammo, and nothing else ----
-  check('low health raises the health rate',
-    (rates.hurt.health || 0) > (rates.full.health || 0) * 2.5,
-    `full=${(rates.full.health || 0).toFixed(3)} hurt=${(rates.hurt.health || 0).toFixed(3)}`);
-  check('low ammo raises the ammo rate',
-    (rates.dry.ammo || 0) > (rates.full.ammo || 0) * 2.5,
-    `full=${(rates.full.ammo || 0).toFixed(3)} dry=${(rates.dry.ammo || 0).toFixed(3)}`);
+  // The need term is held equal to the base chance, so an empty bar at most
+  // DOUBLES the rate - checked from both sides. The lower bound is what says
+  // need still does something; the upper is what says the bailout stays a
+  // nudge. The samples here sit at 0.81 and 0.90 of the squared need curve,
+  // so they land just under the 2x ceiling rather than on it.
+  const ratio = (a, b) => (b > 0 ? a / b : 0);
+  const healthRatio = ratio(rates.hurt.health || 0, rates.full.health || 0);
+  const ammoRatio = ratio(rates.dry.ammo || 0, rates.full.ammo || 0);
+  check('low health raises the health rate, capped at 2x',
+    healthRatio > 1.5 && healthRatio <= 2.05,
+    `full=${(rates.full.health || 0).toFixed(3)} hurt=${(rates.hurt.health || 0).toFixed(3)} x${healthRatio.toFixed(2)}`);
+  check('low ammo raises the ammo rate, capped at 2x',
+    ammoRatio > 1.5 && ammoRatio <= 2.05,
+    `full=${(rates.full.ammo || 0).toFixed(3)} dry=${(rates.dry.ammo || 0).toFixed(3)} x${ammoRatio.toFixed(2)}`);
   check('need never raises a buff rate',
     near(rates.hurt.shield || 0, rates.full.shield || 0, 0.004)
     && near(rates.hurt.damageBoost || 0, rates.full.damageBoost || 0, 0.006),
     `shield ${(rates.full.shield || 0).toFixed(4)} -> ${(rates.hurt.shield || 0).toFixed(4)}`);
   check('the ammo cap suppresses ammo entirely', !rates.noAmmo.ammo,
     `ammo=${rates.noAmmo.ammo}`);
+  // Floor is well under the 0.5% base: ammo is rolled first and eats into it,
+  // so a starving player sees the buffs at a shade under their flat rate - the
+  // point is that they are still reachable, not that they are undiminished.
   check('a starving player still sees buffs',
-    (rates.dry.damageBoost || 0) > 0.005,
+    (rates.dry.damageBoost || 0) > 0.003,
     `damage=${(rates.dry.damageBoost || 0).toFixed(4)}`);
 
   // ---- boss bleeds at its thresholds ----

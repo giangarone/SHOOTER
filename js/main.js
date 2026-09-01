@@ -1402,7 +1402,6 @@ class Game {
     this.bossFight = null;
     this.ui.setWave(this.wave);
     this.ui.banner('WAVE ' + this.wave);
-    this.sfx.wave();
     // Blackout, then the whole rig hits at once. The dark beat before it is
     // what makes the hit land - a bright room just getting brighter reads as
     // nothing at all.
@@ -2727,7 +2726,6 @@ class Game {
           msg += '  NO-HIT x' + n + ' (+' + pct + '% DMG & RATE)';
         }
         this.ui.banner(msg);
-        this.sfx.wave();
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
         if (this._cfg.boss) this._payBossBonus();

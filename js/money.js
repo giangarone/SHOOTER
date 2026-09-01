@@ -55,12 +55,12 @@ const COLLECT_RADIUS = 0.7;
 // purpose: at half this the player had to walk over each orb almost exactly,
 // which turned collecting a wave's money into tidying up rather than into
 // moving through the room.
-export const BASE_MAGNET_RADIUS = 5;
+export const BASE_MAGNET_RADIUS = 5.5;
 // How hard the magnet pulls, in metres per second per second, and the speed it
 // gives up trying to add to. An orb accelerates the whole way in, so it snaps
 // into the player rather than drifting after them.
-const PULL_ACCEL = 46;
-const PULL_MAX_SPEED = 26;
+const PULL_ACCEL = 90;
+const PULL_MAX_SPEED = 42;
 // Gravity on an orb that is still in the air, and what a floor bounce keeps.
 const GRAVITY = 22;
 const BOUNCE = 0.34;

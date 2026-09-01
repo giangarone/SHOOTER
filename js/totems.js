@@ -980,9 +980,15 @@ export class Station {
       pxText(c, detail, 128, 98, 16, 232);
     }
 
-    c.fillStyle = enabled ? '#ffffff' : '#8792ad';
-    pxText(c, cost, 128, detail ? 138 : 120, 24, 232);
+    // THE PRICE IS ALWAYS LEGIBLE. Everything else on a console the player
+    // cannot afford dims, because that is what says they cannot afford it -
+    // but a price they cannot read is a price they cannot plan against, and
+    // the most expensive purchase in the game is the one they most need to
+    // read. So the cost line alone is drawn white and at full alpha in both
+    // states, and the dimmed bar and title carry the disabled signal.
     c.globalAlpha = 1;
+    c.fillStyle = '#ffffff';
+    pxText(c, cost, 128, detail ? 138 : 120, 24, 232);
     this.panel.tex.needsUpdate = true;
   }
 
