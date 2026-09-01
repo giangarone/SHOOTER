@@ -1021,7 +1021,7 @@ export const UPGRADES = {
     cost: 20,
     max: 1,
     theme: DEVIL_THEME.presence,
-    effects: [['THE DEVIL ALWAYS', NOTE], ['APPEARS AFTER A WAVE', GOOD]],
+    effects: [['THE DEVIL ALWAYS', NOTE], ['APPEARS AFTER A BOSS', GOOD]],
     apply: (mods, n) => { mods.devilAlways = n; },
   },
   thorns: {

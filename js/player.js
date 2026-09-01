@@ -137,7 +137,7 @@ const DEFAULT_MODS = {
   poisonImmune: 0,      // Antidote: poison pools do nothing
   poisonLeech: 0,       // and each poisoned enemy heals this much per second
   gamble: 0,            // Devil's Gamble: 51% double damage, 49% half, per shot
-  devilAlways: 0,       // Demonic Presence: the Devil appears after every wave
+  devilAlways: 0,       // Demonic Presence: the Devil appears after every boss
   thorns: 0,            // Thorns: fraction of a hit reflected onto the attacker
 };
 

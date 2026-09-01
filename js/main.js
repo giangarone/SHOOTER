@@ -196,16 +196,30 @@ const COMBO_MAX = 3;
 const CREDITS_PER_SCORE = 0.18;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
-// Deals the Devil puts up, and how likely he is to be there at all after a
-// wave the player did NOT clear cleanly. A clean wave summons him outright.
+// Deals the Devil puts up, and how likely he is to be there at all.
 //
-// The asymmetry is the whole design: the Devil is a REWARD for not being hit,
-// paid in the one currency being hit takes from you. A player having a bad run
-// meets him rarely, which is correct - selling max HP is the last thing they
-// should be doing - and a player having a perfect one is offered the knife
-// every single wave.
+// HE KEEPS BOSS HOURS. He used to come at the end of any wave - certain after a
+// clean one, one-in-seven otherwise - which on a run going well meant a second
+// shop to read at nearly every break. Two sets of offers, back to back, every
+// ninety seconds: the deals stopped being a decision and became paperwork, and
+// nothing that arrives every time can feel like a visitation. So he is now tied
+// to the BOSS wave and nothing else, which puts him on the run's existing
+// five-wave rhythm and makes his row something the player travels towards.
+//
+// WHAT HE IS PAID IN, still, is not being hit. The block of five waves ending
+// at the boss is scored on how many of them cost the player no health - NOT
+// consecutively, because one unlucky bomber should not wipe out four waves of
+// clean play, and a streak rule turns a mechanic that rewards skill into one
+// that punishes variance. Four of the five summons him outright, which is
+// reachable while still eating a hit from the boss itself - the wave most
+// likely to land one. Below that the odds fall away a quarter at a time, down
+// to a floor that is small but not zero: a run going badly is exactly the run
+// that should not be selling max HP, and meeting him anyway once in ten blocks
+// keeps him a presence rather than a reward tier.
+//
+// Indexed by clean waves in the block, capped at 4.
 const DEVIL_COUNT = 3;
-const DEVIL_CHANCE_HURT = 0.15;
+const DEVIL_CHANCE = [0.10, 0.25, 0.50, 0.75, 1];
 // Double Dash: how close together two presses of the SAME movement key have to
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
@@ -365,6 +379,9 @@ class Game {
     // Whether the last wave was cleared without taking damage. Drives the
     // flawless orb shower, the No-Hit stack and the banner.
     this.lastPerfect = false;
+    // Waves cleared without damage since the last boss. Not consecutive - see
+    // DEVIL_CHANCE - and zeroed by _presentDevil() at every boss.
+    this.cleanWaves = 0;
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -1050,6 +1067,7 @@ class Game {
     this.bestCombo = 0;
     this.waveDamageTaken = 0;
     this.lastPerfect = false;
+    this.cleanWaves = 0;
     this.totemArea.dismiss();
     this.devilArea.dismiss();
     this.wave = 0;
@@ -2364,6 +2382,12 @@ class Game {
         this.waveState = 'intermission';
         this.score += 100 * this.wave;
         this.lastPerfect = this.waveDamageTaken <= 0;
+        // The Devil's ledger for this block of five. Counted here rather than
+        // read at the boss, because a wave the player never has to think about
+        // again is exactly where a running tally belongs - and it is
+        // deliberately never shown: the odds are meant to be felt as "he turns
+        // up when I play well", not audited against a number on the HUD.
+        if (this.lastPerfect) this.cleanWaves++;
         // Everything still on the floor comes in, so a wave's money can never
         // be lost to the shopping trip that follows it.
         this.money.vacuum();
@@ -2436,18 +2460,27 @@ class Game {
   /**
    * Raises the Devil, if he is coming at all.
    *
-   * A wave cleared without taking a point of damage summons him every time; a
-   * wave that cost the player health gives him a one-in-seven chance, and
-   * Demonic Presence buys back the certainty.
+   * BOSS WAVES ONLY, on odds bought by the block of five that just ended - see
+   * DEVIL_CHANCE. Demonic Presence makes him certain, but does NOT move him off
+   * the boss: it upgrades the player's odds, not his schedule, because a mod
+   * that put him back at every wave break would hand back the exact glut the
+   * boss gating exists to remove.
+   *
+   * The block counter is cleared here whether or not he actually came, so the
+   * next five waves are always scored from zero and a roll that missed cannot
+   * be re-rolled by anything later.
    *
    * Skipped outright when the totem set is empty. The wave boundary is gated
    * on a totem claim, so a Devil standing in front of no totems would be a
    * shop the player could never leave.
    */
   _presentDevil() {
+    if (!this._cfg.boss) return;
+    const clean = Math.min(this.cleanWaves, DEVIL_CHANCE.length - 1);
+    this.cleanWaves = 0;
     if (!this.totemArea.active) return;
-    const certain = this.waveDamageTaken <= 0 || this.player.mods.devilAlways > 0;
-    if (!certain && Math.random() >= DEVIL_CHANCE_HURT) return;
+    const certain = this.player.mods.devilAlways > 0;
+    if (!certain && Math.random() >= DEVIL_CHANCE[clean]) return;
     const offers = this._buildDeals();
     if (!offers.length) return;
     this.devilArea.present(offers);
@@ -2767,9 +2800,10 @@ class Game {
     } else if (st.kind === 'maxhp') {
       this.credits -= MAXHP_PURCHASE.cost;
       MAXHP_PURCHASE.apply(this.player);
-      // Spent for this visit: the console goes down on the spot rather than
-      // standing there greyed out, because unlike an unaffordable deal there
-      // is nothing left for it to say.
+      // Counts against the visit's allowance. The console stays up until that
+      // is spent and then goes down on the spot rather than standing there
+      // greyed out, because unlike an unaffordable deal there is nothing left
+      // for it to say.
       this.devilArea.spendHealth();
       this.ui.banner(MAXHP_PURCHASE.name + '  ' + MAXHP_PURCHASE.detail);
       this.sfx.buy();

@@ -72,6 +72,9 @@ const DEVIL_Z = DEVIL_ROW_Z + 2.6;
 
 const RISE_TIME = 0.7;
 
+// Max-health purchases allowed per visit - see the note in the constructor.
+const MAX_HEALTH_BUYS = 3;
+
 // One shared unit box for the whole figure, scaled per part - the same idiom
 // arena.js uses for the venue. The horns are the one cone in the file.
 const BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -245,11 +248,13 @@ export class DevilArea {
     this.stations = [this.healthStation, this.rerollStation];
     // Rerolls bought against the CURRENT set; reset every time one rises.
     this.rerolls = 0;
-    // ONE MAX HEALTH PER VISIT. Bought, the console sinks and does not come
-    // back until he does - which is what keeps a very large bank from simply
-    // buying its way out of every deal it ever took, at a wave break that is
-    // already standing still.
-    this.healthBought = false;
+    // MAX HEALTH BUYS SPENT THIS VISIT, capped at MAX_HEALTH_BUYS. It was one,
+    // back when he came at the end of any wave; he keeps boss hours now, so the
+    // same allowance across five waves has to arrive in a single trip or a run
+    // simply cannot buy its health back fast enough to keep trading for deals.
+    // The cap is what still stops a very large bank buying its way out of every
+    // deal it ever took, at a wave break that is already standing still.
+    this.healthBuys = 0;
   }
 
   // True while any part of the installation is still standing.
@@ -260,7 +265,7 @@ export class DevilArea {
   // Whether the max-health console is standing and unspent. main.js asks
   // before it charges, and asks again to draw the label.
   get healthAvailable() {
-    return this.healthStation.isUp() && !this.healthBought;
+    return this.healthStation.isUp() && this.healthBuys < MAX_HEALTH_BUYS;
   }
 
   // True once a deal from the current set has been bought. Unlike a totem
@@ -288,11 +293,11 @@ export class DevilArea {
       else d.sink();
     });
     this.devil.show();
-    // A reroll re-presents the set and must NOT hand the health back: the
+    // A reroll re-presents the set and must NOT hand the allowance back: the
     // console is spent for the visit, not for the set.
-    if (resetRerolls) this.healthBought = false;
+    if (resetRerolls) this.healthBuys = 0;
     for (const st of this.stations) {
-      if (st === this.healthStation && this.healthBought) continue;
+      if (st === this.healthStation && this.healthBuys >= MAX_HEALTH_BUYS) continue;
       st.show();
     }
   }
@@ -314,11 +319,13 @@ export class DevilArea {
     this.devil.sink();
   }
 
-  // The max-health console is spent for this visit: it goes down on the spot
-  // and the flag is what stops present() raising it again on a reroll.
+  // One max-health purchase. The console stays up for the second and third and
+  // then sinks on the spot - there is no counter anywhere, so the allowance is
+  // read off the console itself: it is there until it is not. The count is also
+  // what stops present() raising it again on a reroll once it is spent.
   spendHealth() {
-    this.healthBought = true;
-    this.healthStation.sink();
+    this.healthBuys++;
+    if (this.healthBuys >= MAX_HEALTH_BUYS) this.healthStation.sink();
   }
 
   // The NEAREST deal the player could press E on, with its squared distance,

@@ -33,7 +33,15 @@ try {
     const P = g.player;
     const UP = g.__upgradesForTest;
 
-    // --- clean wave: the Devil is certain ---
+    // He keeps BOSS HOURS now, so every summon in this file has to stage one:
+    // a boss config plus a block of five waves the player got through clean.
+    const boss = (clean = 4) => {
+      g._cfg.boss = true;
+      g.cleanWaves = clean;
+    };
+
+    // --- a full clean block at a boss: the Devil is certain ---
+    boss(4);
     g.waveDamageTaken = 0;
     g.totemArea.dismiss();
     g.devilArea.dismiss();
@@ -100,27 +108,66 @@ try {
       for (const d of g.devilArea.deals) { d.state = 'hidden'; d.claimed = false; }
       g.devilArea.devil.state = 'hidden';
     };
-    let seen = 0;
-    for (let i = 0; i < 400; i++) {
+    // Each rung of DEVIL_CHANCE, sampled. Cleared blocks buy the odds; the
+    // damage taken on the boss wave itself never enters into it.
+    const rate = (clean, n = 400) => {
+      let seen = 0;
+      for (let i = 0; i < n; i++) {
+        hide();
+        boss(clean);
+        g.waveDamageTaken = 10;
+        g._presentTotems();
+        g._presentDevil();
+        if (g.devilArea.active) seen++;
+      }
+      return seen / n;
+    };
+    out.rate0 = rate(0);
+    out.rate2 = rate(2);
+    out.rate4 = rate(4, 40);
+
+    // --- and the ledger is spent whether or not he came ---
+    hide();
+    boss(3);
+    g._presentTotems();
+    g._presentDevil();
+    out.ledgerCleared = g.cleanWaves === 0;
+
+    // --- a NON-boss wave never summons him, however clean the block ---
+    let offBoss = 0;
+    for (let i = 0; i < 60; i++) {
       hide();
-      g.waveDamageTaken = 10;
+      boss(4);
+      g._cfg.boss = false;
+      g.waveDamageTaken = 0;
       g._presentTotems();
       g._presentDevil();
-      if (g.devilArea.active) seen++;
+      if (g.devilArea.active) offBoss++;
     }
-    out.hurtRate = seen / 400;
+    out.offBossRate = offBoss / 60;
 
-    // --- Demonic Presence makes it certain again ---
+    // --- Demonic Presence makes it certain again, at a boss and only there ---
     P.mods.devilAlways = 1;
     let always = 0;
     for (let i = 0; i < 30; i++) {
       hide();
+      boss(0);
       g.waveDamageTaken = 10;
       g._presentTotems();
       g._presentDevil();
       if (g.devilArea.active) always++;
     }
     out.presenceRate = always / 30;
+    let presenceOffBoss = 0;
+    for (let i = 0; i < 30; i++) {
+      hide();
+      boss(4);
+      g._cfg.boss = false;
+      g._presentTotems();
+      g._presentDevil();
+      if (g.devilArea.active) presenceOffBoss++;
+    }
+    out.presenceOffBossRate = presenceOffBoss / 30;
     P.mods.devilAlways = 0;
 
     // --- the SHOOT paths, which is where the two installations could be
@@ -144,6 +191,7 @@ try {
       hide();
       g.totemArea.dismiss();
       for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
+      boss(4);
       g.waveDamageTaken = 0;
       g._presentTotems();
       g._presentDevil();
@@ -217,14 +265,29 @@ try {
     g.player.fireCd = 0;
     g.shoot();
     out.boughtHealth = P.maxHealth - hp5 === 5 && g.credits === 7000;
-    // Spent for the visit: the console goes down and a second shot buys
-    // nothing, however much money is left.
+    // THREE PER VISIT. The console has to still be standing after the first,
+    // because there is no counter drawn anywhere - the console being up IS the
+    // allowance, and sinking it early would read as "sold out" a purchase and a
+    // half too soon.
+    out.healthStandsAfterOne = hs.isUp();
+    // Topped back up between shots: what is under test here is the ALLOWANCE,
+    // and an empty wallet would stop the run for the wrong reason.
+    const buy = () => {
+      g.credits = 12000;
+      g.player.mag = 30;
+      g.player.fireCd = 0;
+      hs.shootCd = 0;
+      g.shoot();
+      return 12000 - g.credits;
+    };
+    out.secondCharged = buy() === 5000;
+    out.thirdCharged = buy() === 5000;
+    out.boughtThree = P.maxHealth - hp5 === 15;
+    // And on the third it goes down, so a fourth shot buys nothing however
+    // much money is left.
     out.healthConsoleSank = hs.state === 'sinking' || hs.state === 'hidden';
     const hp6 = P.maxHealth;
-    g.player.mag = 30;
-    g.player.fireCd = 0;
-    g.shoot();
-    out.healthOncePerVisit = P.maxHealth === hp6 && g.credits === 7000;
+    out.healthCapPerVisit = buy() === 0 && P.maxHealth === hp6;
     // And a fresh visit brings it back.
     stage();
     out.healthReturns = g.devilArea.healthAvailable;
@@ -508,7 +571,7 @@ try {
   ok("devil's gamble is wired", m.gambleSet);
   ok('demonic presence is wired', m.presenceSet);
 
-  ok('devil certain after a clean wave', r.devilAfterClean);
+  ok('devil certain after a fully clean block', r.devilAfterClean);
   ok('three deals offered', r.dealCount === 3);
   ok('every deal is priced', r.allPriced);
   // ARM_TIME_DEVIL, less whatever the sampling frame ate. Both arm delays came
@@ -526,14 +589,22 @@ try {
   ok('unaffordable deals are greyed', r.allGreyed);
   ok('nothing could spend past the floor', r.survivedFloor >= 20, String(r.survivedFloor));
   ok('the player is still alive', r.stillAlive);
-  ok('hurt wave summons rarely', r.hurtRate > 0.05 && r.hurtRate < 0.28, String(r.hurtRate));
+  ok('a block with no clean waves summons rarely', r.rate0 > 0.02 && r.rate0 < 0.20, String(r.rate0));
+  ok('two clean waves is about half', r.rate2 > 0.38 && r.rate2 < 0.62, String(r.rate2));
+  ok('four clean waves is certain', r.rate4 === 1, String(r.rate4));
+  ok('the block ledger is spent either way', r.ledgerCleared);
+  ok('he never comes off a boss wave', r.offBossRate === 0, String(r.offBossRate));
   ok('demonic presence is certain', r.presenceRate === 1);
+  ok('demonic presence still keeps boss hours', r.presenceOffBossRate === 0, String(r.presenceOffBossRate));
   ok('shooting a pillar buys the deal', r.shotBoughtDeal);
   ok('a bought deal leaves the totems up', r.shotDidNotStartWave);
   ok('shooting his reroll console costs 2 max HP', r.shotRerolled);
   ok('his max-health console pays 5 max HP for $5,000', r.boughtHealth);
-  ok('the max-health console sinks once bought', r.healthConsoleSank);
-  ok('max health is once per visit', r.healthOncePerVisit);
+  ok('the max-health console stands after one buy', r.healthStandsAfterOne);
+  ok('the second and third are charged $5,000 each', r.secondCharged && r.thirdCharged);
+  ok('three buys pay 15 max HP', r.boughtThree);
+  ok('the max-health console sinks on the third', r.healthConsoleSank);
+  ok('max health is capped at three per visit', r.healthCapPerVisit);
   ok('a fresh visit offers max health again', r.healthReturns);
   ok('the figure itself offers nothing', r.devilOffersNothing);
   ok('the figure itself charges nothing', r.devilChargesNothing);
