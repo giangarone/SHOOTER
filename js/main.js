@@ -60,6 +60,7 @@ import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player, NO_HIT_CAP } from './player.js';
 import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
+import { CrtPass } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
@@ -317,6 +318,10 @@ class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     document.getElementById('game').appendChild(this.renderer.domElement);
+    // The tube. Everything from here on renders THROUGH this - see crt.js for
+    // why the scanlines are not in it.
+    this.crt = new CrtPass(this.renderer);
+    this.crt.setSize(innerWidth, innerHeight);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.1, 200);
@@ -814,6 +819,7 @@ class Game {
       this.camera.aspect = viewportAspect();
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
+      this.crt.setSize(innerWidth, innerHeight);
       // Orb point sizes are in pixels, so they scale off the canvas height.
       this.money.setViewport(this.renderer.domElement.height, this.camera.fov);
     });
@@ -3814,7 +3820,7 @@ class Game {
     this.money.setHouseColour(this.rig.houseColour);
 
     this.effects.update(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.crt.render(this.scene, this.camera, dt);
   }
 }
 
