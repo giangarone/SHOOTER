@@ -365,6 +365,10 @@ class Game {
     // Read before the first gesture builds the graph, so a muted player never
     // hears the opening bar leak out before the setting is applied.
     try { this.music.muted = localStorage.getItem('va-music-muted') === '1'; } catch {}
+    // Same treatment as the mute above, and read before the first frame: the
+    // beat strobe is a photosensitivity setting, so someone who turned it off
+    // must never see it fire once on the way back in.
+    try { this.rig.beatFlash = localStorage.getItem('va-beat-flash') !== '0'; } catch {}
     // Prefilled into the name field so a returning player just presses Enter.
     this._lastName = '';
     try { this._lastName = localStorage.getItem('va-last-name') || ''; } catch {}
@@ -771,6 +775,25 @@ class Game {
     }
     this._syncMuteBtns();
 
+    // Beat-strobe toggle. Same overlays, same stopPropagation reasoning.
+    this._flashBtns = [document.getElementById('btn-flash-start'), document.getElementById('btn-flash-pause')];
+    for (const b of this._flashBtns) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.rig.beatFlash = !this.rig.beatFlash;
+        // The strobe holds whatever opacity the last frame left on it, and a
+        // paused game does not tick the rig - so clear it here or turning the
+        // setting off mid-pause leaves the screen washed until the resume.
+        if (!this.rig.beatFlash) {
+          this.rig.flash = 0;
+          this.ui.setStrobe(0);
+        }
+        this._saveBeatFlash();
+        this._syncFlashBtns();
+      });
+    }
+    this._syncFlashBtns();
+
     // Fullscreen toggles, one per overlay, plus the F binding above. Same
     // stopPropagation reasoning as the mute buttons: the overlays are
     // click-to-continue and this must not also start or resume the run.
@@ -922,10 +945,22 @@ class Game {
     }
   }
 
+  _syncFlashBtns() {
+    const on = this.rig.beatFlash;
+    for (const b of this._flashBtns) {
+      b.textContent = on ? 'FLASH ON' : 'FLASH OFF';
+      b.classList.toggle('off', !on);
+    }
+  }
+
   // Storage throws in private-mode Safari and when cookies are blocked, and a
   // failed preference save is not worth taking the game down for.
   _saveMuted() {
     try { localStorage.setItem('va-music-muted', this.music.muted ? '1' : '0'); } catch {}
+  }
+
+  _saveBeatFlash() {
+    try { localStorage.setItem('va-beat-flash', this.rig.beatFlash ? '1' : '0'); } catch {}
   }
 
   // Fills the object the rig reads. Mutates in place and returns it, so the

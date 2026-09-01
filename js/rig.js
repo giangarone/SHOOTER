@@ -485,6 +485,11 @@ export class Rig {
     this._chaseTarget = 0;
     // 0..1, written every frame and read by main.js for the DOM strobe.
     this.flash = 0;
+    // Player setting. When false the strobe still fires for HITS - damage, a
+    // wave landing, a stagger - and never on the beat. The two are separated
+    // here rather than at the DOM end because muting the strobe entirely
+    // would take the damage feedback with it, and that one is information.
+    this.beatFlash = true;
     // One-shot cue timers. All count DOWN in seconds.
     this._waveT = 0;
     this._dmgT = 0;
@@ -991,10 +996,10 @@ export class Rig {
     // free next to lighting the whole scene, and it is the only way to get a
     // true white-out.
     let f = 0;
-    if (combat) f = beat * 0.42 * this._energy;
+    if (combat && this.beatFlash) f = beat * 0.42 * this._energy;
     f = Math.max(f, this._dmgT / 0.18 * 0.55);
     f = Math.max(f, waveHit * 0.5, stagHit * 0.7);
-    if (boss && this._enraged) f = Math.max(f, beat * 0.55);
+    if (boss && this._enraged && this.beatFlash) f = Math.max(f, beat * 0.55);
     this.flash = Math.min(0.8, f * (1 - this._house));
   }
 
