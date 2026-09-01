@@ -25,6 +25,50 @@ Open http://localhost:8123
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
 
+### DualSense
+
+A PlayStation 5 controller is supported end to end — the arena, the shop, the
+menus and the name entry. It is a hard gate: the pad is identified by its
+vendor and product id, and anything else is ignored so that every glyph on
+screen is one the player is actually holding.
+
+| Button | Action |
+| --- | --- |
+| Left stick | Move. Analogue — a half push is a walk |
+| Right stick | Aim |
+| R2 | Shoot |
+| L2 | Hold to focus: the view slows for a precise shot |
+| L1 | Dash, with the Double Dash mutation |
+| R3 | Melee |
+| Cross | Jump. Press again in midair, with the Double Jump mutation |
+| Square | Reload |
+| Circle | Take a mutation, buy, reroll — and BACK on any menu |
+| Triangle | Hold for the run summary |
+| Options | Pause, resume, and start a run from the menu |
+| D-pad | Walk the menus; Cross confirms |
+
+Picking the pad up switches the interface with it: the prompts name buttons
+instead of keys, the control sheet on the start screen becomes the one above,
+and the menus grow a selection the D-pad walks. Touching the keyboard or moving
+the mouse switches it straight back. Nothing has to be enabled and nothing is
+remembered — the game follows the player's hands.
+
+SETTINGS grows a CONTROLLER block once a pad has been seen: look sensitivity
+(eight steps), aim assist, vibration and inverted look, all stored in
+localStorage.
+
+Aim assist is two things. **Slowdown** drops the stick's turn rate while the
+reticle is already over a target, so the player's own correction is finest
+exactly where it needs to be. **Magnetism** adds a gentle rotation toward the
+target — scaled by how hard the player is pushing, so it helps a turn that is
+already happening and does nothing at all for a player who has let go. Both
+work inside an 8.6-degree cone, only on targets in line of sight, and both can
+be turned off.
+
+One thing a browser will not let the game do: a gamepad press is not a "user
+gesture", so a player who never touches the mouse cannot start the audio
+context. The start screen says so, and one click anywhere fixes it.
+
 ## Features
 
 - First-person camera with pointer-lock mouse aiming
@@ -348,6 +392,7 @@ geometries must not grow as enemies spawn and die.
 npm run test:boss
 npm run test:drops
 npm run test:money
+npm run test:pad
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -362,7 +407,13 @@ to all of it, and that need actually decides the type. `test:money` checks the
 two properties that keep the orb economy honest — that a kill's orbs add up to
 exactly what the kill was worth, and that the 250-orb cap merges rather than
 discards — along with the wave-clear sweep emptying the floor from anywhere in
-the arena and Lodestone actually widening the radius.
+the arena and Lodestone actually widening the radius. `test:pad` stands a synthetic
+DualSense behind `navigator.getGamepads` and plays the game with it: it asserts
+the pad is recognised and a non-Sony one is not, that CROSS on the start screen
+starts the run without the same held press also reading as a jump, that the
+left stick is analogue, that L2 slows the view, that aim assist works inside
+its cone and not outside it, and that a controller unplugged mid-run pauses
+instead of leaving the player standing.
 
 ## Structure
 
@@ -389,10 +440,13 @@ js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
 js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
+js/pad.js           the DualSense: polling, deadzones, button edges, rumble
+js/padmenu.js       button glyphs, the menu focus driver, the name keyboard
 js/utils.js         collision + misc helpers
 test/smoke.mjs      headless smoke test
 test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer
+test/pad.mjs        controller support, driven by a synthetic DualSense
 pixel-icon-sheet.html    all 66 icons at once, at full size and at arena range
 pixel-icon-viewer.html   one icon at a time, in a mock column
 enemy-viewer.html        the enemy roster as flat silhouettes

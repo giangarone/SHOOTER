@@ -910,9 +910,18 @@ export class Player {
     // what the eye reads as hitting a wall, and this is meant to read as being
     // caught, not as a collision. Gravity, the dash already in flight and the
     // gun all keep working; only walking stops.
+    //
+    // ANALOGUE OR DIGITAL. A pad writes `moveF`/`moveS` as a deflection in
+    // [-1, 1] and a keyboard leaves them null, in which case the keys stand in
+    // as a hard +-1. Everything below is the same arithmetic for both: a stick
+    // pushed to the corner produces exactly the numbers W+D does, so no walking
+    // speed, no acceleration curve and no dash blend has to know which device
+    // is driving it.
     const frozen = time < this.frozenUntil;
-    const f = frozen ? 0 : (input.forward ? 1 : 0) - (input.back ? 1 : 0);
-    const s = frozen ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    const f = frozen ? 0
+      : (input.moveF != null ? input.moveF : (input.forward ? 1 : 0) - (input.back ? 1 : 0));
+    const s = frozen ? 0
+      : (input.moveS != null ? input.moveS : (input.right ? 1 : 0) - (input.left ? 1 : 0));
     // Kept SEPARATE from this.vel, and that separation is what makes the dash
     // blend below honest. The damp branch feeds on the previous frame's value,
     // so if the dash wrote into this.vel the decaying half of its own envelope
@@ -921,8 +930,14 @@ export class Player {
     // are only ever what the KEYS asked for.
     if (f || s) {
       const len = Math.hypot(f, s);
-      const fn = f / len;
-      const sn = s / len;
+      // The direction is normalised and the SPEED is the stick's deflection,
+      // capped at one. For the keyboard that cap is always what is hit - a
+      // diagonal is 1.414 long before it is clamped, which is the same
+      // no-faster-on-the-diagonal rule this line has always enforced - and for
+      // a stick it is what makes a half-pushed one a walk.
+      const mag = Math.min(1, len);
+      const fn = (f / len) * mag;
+      const sn = (s / len) * mag;
       // Evasion's reward for a dodge: a burst of speed to leave with. Rage
       // stacks multiplicatively with it, because both are short windows the
       // player earned and neither should quietly swallow the other.

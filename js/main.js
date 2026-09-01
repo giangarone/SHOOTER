@@ -77,12 +77,19 @@ import {
 import { TotemArea, ARM_TIME_DEVIL } from './totems.js';
 import { DevilArea } from './devil.js';
 import { NavGrid } from './nav.js';
+import { Pad, BTN } from './pad.js';
+import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
 // headless Chrome can't grant.
 const autotest = new URLSearchParams(location.search).has('autotest');
+// The controller harness. NOT the bot: it hands out the same `window.__game`
+// handle and nothing else, because the whole point of test/pad.mjs is to drive
+// the real input path with a synthetic DualSense and watch what the game does
+// with it. A bot writing `input` underneath that would be measuring itself.
+const padtest = new URLSearchParams(location.search).has('padtest');
 
 // Pickup budget. Every pickup in the arena is a draw call and a collision
 // check, and unbounded spawning was the cause of the arena filling with ammo.
@@ -247,6 +254,49 @@ const DEVIL_CHANCE = [0.10, 0.25, 0.50, 0.75, 1];
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
 const DOUBLE_TAP_WINDOW = 0.28;
+
+// ---- the controller -------------------------------------------------------
+//
+// Everything the pad needs that is about the GAME rather than about the
+// hardware. The device itself - deadzones, edges, rumble - is pad.js.
+
+// Turn rate at full stick deflection, radians per second, at the middle
+// sensitivity setting. Roughly 150 degrees a second, which is a console
+// shooter's default and about a fifth of what a mouse does across a desk.
+const LOOK_RATE = 2.6;
+// The response curve on stick deflection. Above 1, so the first half of the
+// stick's travel is worth much less than the second: that is what buys fine
+// aim near the centre without giving up the fast turn at the edge. A linear
+// stick is the single biggest reason a pad feels imprecise.
+const LOOK_EXP = 1.7;
+// Sensitivity steps shown in SETTINGS, and the multiplier the ends map to.
+const SENS_STEPS = 8;
+const SENS_DEFAULT = 5;
+const SENS_MIN = 0.5;
+const SENS_MAX = 2;
+// L2. Not an aim-down-sights - this gun has no sights - but a precision mode:
+// hold it and the view turns at a third of the rate for the length of a shot.
+const FOCUS_SCALE = 0.34;
+
+// AIM ASSIST, in two halves that do different jobs.
+//
+// SLOWDOWN is the honest one: while the reticle is over something the stick
+// turns more slowly, so the player's own correction is finer exactly where
+// they need it to be. It never moves the view on its own.
+//
+// MAGNETISM is a gentle rotation toward the target, and it only runs while the
+// player is ALREADY pushing a stick - it helps a turn that was happening
+// anyway and never aims for a player who has let go. That gate is what keeps
+// it from reading as the game playing itself.
+const ASSIST_CONE = 0.15;      // radians of angular error it works inside
+const ASSIST_RANGE = 45;       // metres; nothing further is a target
+const ASSIST_SLOW = 0.45;      // stick rate at dead centre
+const ASSIST_PULL = 0.35;      // radians per second of pull, at full effort
+
+// How far the mouse must actually travel to hand control back to the
+// keyboard. A resting mouse jitters by a pixel, and a mode that flipped on
+// that would swap every prompt on screen while the player was using the pad.
+const MOUSE_WAKE = 6;
 // Ashen: how many clouds can be alive at once, and how often Neurotoxin's
 // poison is allowed to make a jump.
 const MAX_ASH_CLOUDS = 8;
@@ -473,6 +523,27 @@ class Game {
         this._setShakeScale(Math.max(0, Math.min(SHAKE_MAX, Math.round(n / SHAKE_STEP) * SHAKE_STEP)));
       }
     } catch {}
+    // ---- the controller ---------------------------------------------------
+    //
+    // The pad is POLLED, not listened to (the Gamepad API has no events), so
+    // it is ticked from the frame loop like anything else in the game - see
+    // _padUpdate. Both objects exist whether or not a controller is plugged
+    // in; a pad that is never connected costs one array read a frame.
+    this.pad = new Pad();
+    this.menu = new MenuDriver();
+    // Which device the player has their hands on RIGHT NOW. Everything the
+    // player can see follows it - the prompts, the control sheet, the menu
+    // selection - and it flips on use rather than on connection, so a pad left
+    // plugged in changes nothing until it is picked up.
+    this.inputMode = 'kbm';
+    // The overlay the menu driver was last pointed at, so the pad's default
+    // selection is only chosen when the screen actually changes.
+    this._padRoot = null;
+    this._padSens = SENS_DEFAULT;
+    this._aimAssist = true;
+    this._invertLook = false;
+    this._loadPadPrefs();
+
     // Prefilled into the name field so a returning player just presses Enter.
     this._lastName = '';
     try { this._lastName = localStorage.getItem('va-last-name') || ''; } catch {}
@@ -516,7 +587,10 @@ class Game {
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
     // `shootFresh` is the trigger EDGE - true only on the frame the button
     // went down. Semi-auto weapons need it; the loop clears it every frame.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, dash: null };
+    // `moveF`/`moveS` are the ANALOGUE pair, in [-1, 1], and they are null
+    // whenever the keyboard is what is driving - see the movement block in
+    // player.js, which falls back to the booleans when they are.
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, dash: null, moveF: null, moveS: null };
     // Double Dash: the game time each movement key was last pressed FRESH, so
     // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
     // e.code; a key held down never writes here (see _bind).
@@ -562,6 +636,10 @@ class Game {
     // Set by _collectOrb, consumed once per frame by _updateMoney.
     this._creditsDirty = false;
     this._aimTarget = new THREE.Vector3();
+    // The eye, for the aim-assist sweep. Its own vector rather than a shared
+    // one because the sweep runs before the shot does and _killPos is in use
+    // by then.
+    this._assistEye = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
     this._rayEnd = new THREE.Vector3();
     this._screen = new THREE.Vector2();
@@ -749,6 +827,7 @@ class Game {
         programs: this.renderer.info.programs.length,
       });
     }
+    if (padtest) window.__game = this;
   }
 
   // Test helper: unique geometries reachable from the scene graph.
@@ -779,6 +858,10 @@ class Game {
       // would be swallowed by the jump binding's preventDefault, and R and E
       // would fire game actions mid-word.
       if (this._typing(e.target)) return;
+      // Any key at all hands control back to the keyboard. The player's hands
+      // are the only authority on which device is in use, and this is what
+      // they say.
+      this._setInputMode('kbm');
       switch (e.code) {
         case 'KeyW': this._tapMove(e.code, this.input.forward); this.input.forward = true; break;
         case 'KeyS': this._tapMove(e.code, this.input.back); this.input.back = true; break;
@@ -817,8 +900,12 @@ class Game {
     addEventListener('blur', () => {
       this._clearInput();
       this._closeStats();
+      // A pad keeps buzzing while the tab is in the background, which is the
+      // one piece of this game that can follow the player out of it.
+      this.pad.stopRumble();
     });
     canvas.addEventListener('mousedown', (e) => {
+      this._setInputMode('kbm');
       if (e.button === 0) {
         this._audioGesture();
         if (this.state === 'playing') {
@@ -840,6 +927,11 @@ class Game {
       if (e.button === 2) this.input.melee = false;
     });
     document.addEventListener('mousemove', (e) => {
+      // A real shove of the mouse, not the pixel of jitter a resting one
+      // makes - see MOUSE_WAKE. Checked before the pointer-lock test below so
+      // that moving the mouse during pad play still takes the game back to
+      // keyboard prompts, which is the moment the player expects it.
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > MOUSE_WAKE) this._setInputMode('kbm');
       if (this.state !== 'playing' || this.autoTest) return;
       if (document.pointerLockElement !== canvas) return;
       this.player.yaw -= e.movementX * 0.0021;
@@ -848,11 +940,12 @@ class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement !== canvas) {
-        if (this.state === 'playing' && !this.autoTest) {
-          this.state = 'paused';
-          this._clearInput();
-          this._closeStats();
-          this.ui.showPause();
+        // Losing the pointer is only a pause for a MOUSE player. Pad play does
+        // not hold the pointer at all - _setInputMode releases it on the way
+        // in - so without this test picking up the controller would pause the
+        // game on the very frame it started reading it.
+        if (this.state === 'playing' && !this.autoTest && this.inputMode !== 'pad') {
+          this.pause();
         }
       } else if (this.state === 'paused') {
         this.state = 'playing';
@@ -934,6 +1027,70 @@ class Game {
       this._stepShake(1);
     });
     this._syncShake();
+
+    // ---- the controller rows ------------------------------------------------
+    //
+    // Hidden until a DualSense has been seen (body.pad-seen, set in
+    // _padUpdate), so a keyboard player never reads four rows about a device
+    // that is not in the room.
+    this._sensPips = [];
+    const sensRow = document.getElementById('sens-pips');
+    for (let i = 0; i < SENS_STEPS; i++) {
+      const pip = document.createElement('i');
+      sensRow.appendChild(pip);
+      this._sensPips.push(pip);
+    }
+    this._sensVal = document.getElementById('sens-val');
+    this._sensDown = document.getElementById('btn-sens-down');
+    this._sensUp = document.getElementById('btn-sens-up');
+    this._sensDown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepSens(-1);
+    });
+    this._sensUp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepSens(1);
+    });
+    this._assistBtn = document.getElementById('btn-assist');
+    this._assistBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._aimAssist = !this._aimAssist;
+      this._savePadPrefs();
+      this._syncPadBtns();
+    });
+    this._rumbleBtn = document.getElementById('btn-rumble');
+    this._rumbleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.pad.rumbleOn = !this.pad.rumbleOn;
+      // A motor left spinning by the effect that was running when the setting
+      // was turned off would outlive the setting itself.
+      if (!this.pad.rumbleOn) this.pad.stopRumble();
+      else this.pad.rumble(0.4, 0.3, 140, 2);
+      this._savePadPrefs();
+      this._syncPadBtns();
+    });
+    this._invertBtn = document.getElementById('btn-invert');
+    this._invertBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._invertLook = !this._invertLook;
+      this._savePadPrefs();
+      this._syncPadBtns();
+    });
+    this._syncPadBtns();
+    this._syncSens();
+
+    // The on-screen keyboard, built once. It only ever appears in pad mode -
+    // see the .pad-only rule - and it writes straight into the same field the
+    // keyboard player types in, so there is one name and one save path.
+    this._kbEl = document.getElementById('kb');
+    buildNameKeyboard(
+      this._kbEl,
+      (ch) => this._nameChar(ch),
+      () => this._nameDelete(),
+      () => this._saveScore()
+    );
+    this._audioHint = document.getElementById('audio-hint');
+    this._controlsEl = document.querySelector('.controls');
 
     // Opening and closing the two sub-screens. The buttons that open them sit
     // on overlays that are themselves click-to-continue, so every one of these
@@ -1026,6 +1183,8 @@ class Game {
     i.jump = i.shoot = i.melee = false;
     i.shootFresh = false;
     i.dash = null;
+    i.moveF = null;
+    i.moveS = null;
     for (const k in this._tapT) this._tapT[k] = -99;
   }
 
@@ -1047,6 +1206,10 @@ class Game {
   }
 
   _lock() {
+    // Pad play does not hold the pointer - see _setInputMode. Asking for it
+    // here would pull the cursor into the canvas behind a controller player's
+    // back and hand Escape a second, unexplained meaning.
+    if (this.inputMode === 'pad') return;
     const p = this.renderer.domElement.requestPointerLock();
     if (p && p.catch) p.catch(() => {});
   }
@@ -1191,6 +1354,426 @@ class Game {
   _subScreenOpen() {
     return !this.ui.settingsOv.classList.contains('hidden')
       || !this.ui.scoresOv.classList.contains('hidden');
+  }
+
+
+  // ===========================================================================
+  // THE CONTROLLER
+  // ===========================================================================
+  //
+  // pad.js reads the hardware. Everything here is what a button MEANS, and it
+  // is written to one rule: the pad and the keyboard drive the same game
+  // through the same `input` object and the same methods. There is no
+  // controller code path through the simulation - tryUse() does not know what
+  // pressed it - which is why the two can be swapped mid-run without anything
+  // in the arena noticing.
+
+  /**
+   * Hands the game to a device. Called from every keyboard and mouse handler
+   * with 'kbm', and from _padUpdate with 'pad' the moment the pad is touched.
+   * Cheap to call with the mode it is already in, which it is, sixty times a
+   * second.
+   */
+  _setInputMode(mode) {
+    if (this.inputMode === mode) return;
+    this.inputMode = mode;
+    document.body.classList.toggle('pad-mode', mode === 'pad');
+    // The control sheet on the start screen is the one piece of UI that is not
+    // rebuilt from the prompt path every frame, so it is rewritten here.
+    if (this._controlsEl) renderControls(this._controlsEl, mode === 'pad');
+    if (mode === 'pad') {
+      // POINTER LOCK IS A MOUSE IDEA. Holding it through pad play would trap
+      // the cursor for no reason and, worse, hand the browser a way to pause
+      // the game (Escape) that the player never asked for. Released here, and
+      // the pointerlockchange handler above knows not to read the release as a
+      // pause because the mode is already set.
+      if (document.pointerLockElement) document.exitPointerLock();
+      // Whatever the keyboard was holding when the player put it down.
+      this._clearInput();
+      this._padRoot = null;
+    } else {
+      // Whatever the pad was holding when it was put down - including the
+      // trigger. A run that kept firing because the player reached for the
+      // keyboard mid-burst would be this seam's one unforgivable bug.
+      this._clearInput();
+      this.pad.stopRumble();
+      this.menu.clear();
+      this._padRoot = null;
+      // The sound notice is a pad problem - a keyboard player's first press
+      // already unlocked the context.
+      if (this._audioHint) this._audioHint.classList.add('hidden');
+    }
+  }
+
+  /**
+   * The pad's frame. Runs in EVERY state - the menus need it as much as the
+   * arena does - and before anything reads `this.input`, so a press made this
+   * frame is acted on this frame.
+   *
+   * @param {number} dt real seconds, not game time: menu repeat has to work on
+   *   a paused game.
+   */
+  _padUpdate(dt) {
+    // The bot drives `input` directly and must never have it written out from
+    // under it by a pad someone left plugged into the test machine.
+    if (this.autoTest) return;
+    const pad = this.pad;
+    pad.poll(dt);
+    if (pad.justConnected) {
+      // Never taken off again. The settings rows stay reachable for the rest
+      // of the session even if the pad is unplugged, which is where a player
+      // who has just unplugged one goes looking.
+      document.body.classList.add('pad-seen');
+    }
+    if (pad.justDisconnected && this.inputMode === 'pad') {
+      // A controller pulled mid-fight is not a reason to die. The pause is the
+      // safe state, and it is also the screen that explains itself.
+      this.pause();
+      this._setInputMode('kbm');
+    }
+    if (pad.active) this._setInputMode('pad');
+    if (this.inputMode !== 'pad' || !pad.connected) return;
+
+    if (this.state === 'playing') this._padPlay(dt);
+    else this._padMenu();
+    this._syncAudioHint();
+  }
+
+  // The pad while the arena is live.
+  _padPlay(dt) {
+    const pad = this.pad;
+    const i = this.input;
+
+    // Movement. The analogue pair is what player.js actually walks on; the
+    // booleans are kept in step underneath for the handful of places that ask
+    // "is the player holding a direction" rather than "which way".
+    i.moveF = pad.move.y;
+    i.moveS = pad.move.x;
+    i.forward = pad.move.y > 0.2;
+    i.back = pad.move.y < -0.2;
+    i.right = pad.move.x > 0.2;
+    i.left = pad.move.x < -0.2;
+
+    this._padLook(dt);
+
+    i.jump = pad.down(BTN.CROSS);
+    i.melee = pad.down(BTN.R3);
+    // R2 is the trigger and the trigger is the gun. `shootFresh` is the edge
+    // the semi-automatic weapons read - the same one a mouse click raises.
+    i.shoot = pad.down(BTN.R2);
+    if (pad.pressed(BTN.R2)) i.shootFresh = true;
+
+    if (pad.pressed(BTN.SQUARE)) this.tryReload();
+    if (pad.pressed(BTN.CIRCLE)) this.tryUse();
+    // DASH on a button rather than on a double-tap of the stick. Same dash the
+    // keyboard gets - forward, along the camera's bearing - so a mutation that
+    // was balanced around one is not quietly better on the other.
+    if (pad.pressed(BTN.L1)) i.dash = 'KeyW';
+    // TRIANGLE is HELD, exactly as TAB is: the build sheet costs the player
+    // the seconds they spend reading it and the arena keeps running under it.
+    if (pad.down(BTN.TRIANGLE)) this._openStats();
+    else this._closeStats();
+    if (pad.pressed(BTN.OPTIONS)) {
+      pad.consume(BTN.OPTIONS);
+      this.pause();
+    }
+  }
+
+  /**
+   * The right stick, and the aim assist that rides on it.
+   *
+   * Frame-rate independent by construction: the stick gives a POSITION and
+   * this turns it into a rate, so the same push turns the same distance at 30
+   * frames a second as at 144. (The mouse handler above is the opposite - a
+   * mouse gives a delta, and multiplying that by dt would be the bug.)
+   */
+  _padLook(dt) {
+    const pad = this.pad;
+    const p = this.player;
+    const mag = pad.look.mag;
+    const assist = this._aimAssist ? this._assistTarget() : null;
+
+    let rate = LOOK_RATE * this._sensMult();
+    // FOCUS. A held L2 slows the view down for a precise shot - the pad's
+    // answer to lifting a mouse and putting it down again.
+    if (pad.down(BTN.L2)) rate *= FOCUS_SCALE;
+    // Slowdown assist: the closer the reticle already is, the finer the stick
+    // gets. This moves nothing on its own - it only makes the player's own
+    // correction smaller.
+    if (assist) rate *= ASSIST_SLOW + (1 - ASSIST_SLOW) * assist.t;
+
+    if (mag > 0) {
+      // The curve is applied to the MAGNITUDE and the direction is left alone,
+      // so a stick pushed diagonally still turns diagonally. Curving each axis
+      // separately is the classic version of this bug: it bends every diagonal
+      // toward the nearest cardinal.
+      const shaped = Math.pow(mag, LOOK_EXP) / mag;
+      const step = shaped * rate * dt;
+      p.yaw -= pad.look.x * step;
+      p.pitch += pad.look.y * (this._invertLook ? -1 : 1) * step;
+    }
+
+    // Magnetism, and the two things that hold it down.
+    //
+    // It is SCALED BY EFFORT - how hard the player is actually pushing either
+    // stick - which makes it a help with a turn that is already happening
+    // rather than a turn of its own. At zero effort it is zero: a player who
+    // has let go is not aiming, and a view that crept toward an enemy on its
+    // own would be the game taking the shot.
+    //
+    // And it FADES AT THE EDGE of the cone rather than at the centre, so it is
+    // strongest where the player has nearly got there and weakest where they
+    // might be aiming past this enemy at another one.
+    const effort = Math.min(1, mag + pad.move.mag);
+    if (assist && effort > 0) {
+      const pull = ASSIST_PULL * (1 - assist.t) * effort * dt;
+      // Clamped to what is left of the error, so it can close a gap but never
+      // cross it and start pulling the other way.
+      p.yaw += Math.max(-pull, Math.min(pull, assist.dYaw));
+      p.pitch += Math.max(-pull, Math.min(pull, assist.dPitch));
+    }
+    p.pitch = Math.max(-1.5, Math.min(1.5, p.pitch));
+  }
+
+  // The sensitivity setting as a multiplier. Eight steps, a half rate at the
+  // bottom and double at the top, which is the range a pad needs to cover
+  // everyone from a first controller to someone who plays on the highest
+  // setting of everything.
+  _sensMult() {
+    return SENS_MIN + (this._padSens - 1) * ((SENS_MAX - SENS_MIN) / (SENS_STEPS - 1));
+  }
+
+  /**
+   * The enemy the aim assist is currently working on, or null.
+   *
+   * The NEAREST TO THE CROSSHAIR wins, not the nearest in the world: assist is
+   * about the thing the player is already pointing at. Everything is measured
+   * in yaw/pitch error rather than in screen space because that is the space
+   * the correction is applied in, and converting twice would only introduce a
+   * disagreement between the test and the pull.
+   *
+   * @returns {?{t: number, dYaw: number, dPitch: number}} `t` is how far out
+   *   the reticle is as a fraction of the cone - 0 dead on, 1 at the edge.
+   */
+  _assistTarget() {
+    const p = this.player;
+    const eye = p.eyeInto(this._assistEye);
+    let best = null;
+    let bestErr = ASSIST_CONE;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const dx = e.pos.x - eye.x;
+      const dz = e.pos.z - eye.z;
+      const flat = Math.hypot(dx, dz);
+      if (flat > ASSIST_RANGE || flat < 0.001) continue;
+      // Aimed at the hit sphere, not at the feet: e.pos is on the floor, and
+      // an assist that pulled there would drag every shot into the ground.
+      const dy = e.pos.y + e.hitbox.position.y - eye.y;
+      // Forward is (-sin yaw, -cos yaw) - see player.forwardInto - so this is
+      // the yaw that would point straight at the target.
+      let dYaw = Math.atan2(-dx, -dz) - p.yaw;
+      dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+      const dPitch = Math.atan2(dy, flat) - p.pitch;
+      const err = Math.hypot(dYaw, dPitch);
+      if (err >= bestErr) continue;
+      // Only the leader pays for a line-of-sight test. Assist through a wall
+      // would drag the player's aim onto something they cannot shoot, which is
+      // worse than no assist at all.
+      if (!this._losClear(eye, e.pos.x, eye.y + dy, e.pos.z)) continue;
+      bestErr = err;
+      best = best || { t: 0, dYaw: 0, dPitch: 0 };
+      best.t = err / ASSIST_CONE;
+      best.dYaw = dYaw;
+      best.dPitch = dPitch;
+    }
+    return best;
+  }
+
+  /**
+   * Segment-versus-box sweep from the eye to a point, against the arena's
+   * static cover. The standard slab test: clip the segment against each pair
+   * of planes and see whether anything survives.
+   *
+   * Only the static obstacles are considered - enemies do not block assist,
+   * because a target hidden behind another target is still a target.
+   */
+  _losClear(eye, tx, ty, tz) {
+    const dx = tx - eye.x;
+    const dy = ty - eye.y;
+    const dz = tz - eye.z;
+    for (const b of this.arena.obstacles) {
+      let t0 = 0;
+      let t1 = 1;
+      let blocked = true;
+      for (let axis = 0; axis < 3 && blocked; axis++) {
+        const o = axis === 0 ? eye.x : axis === 1 ? eye.y : eye.z;
+        const d = axis === 0 ? dx : axis === 1 ? dy : dz;
+        const lo = axis === 0 ? b.min.x : axis === 1 ? b.min.y : b.min.z;
+        const hi = axis === 0 ? b.max.x : axis === 1 ? b.max.y : b.max.z;
+        if (Math.abs(d) < 1e-6) {
+          // Parallel to this pair of planes: either it starts between them and
+          // this axis says nothing, or it never enters the box at all.
+          if (o < lo || o > hi) blocked = false;
+          continue;
+        }
+        let a = (lo - o) / d;
+        let c = (hi - o) / d;
+        if (a > c) { const tmp = a; a = c; c = tmp; }
+        if (a > t0) t0 = a;
+        if (c < t1) t1 = c;
+        if (t0 > t1) blocked = false;
+      }
+      if (blocked) return false;
+    }
+    return true;
+  }
+
+  // The pad on a menu. One driver walks whichever overlay is on top; see
+  // padmenu.js for why the navigation is geometric rather than a list.
+  _padMenu() {
+    const pad = this.pad;
+    const root = this._menuRoot();
+    if (root !== this._padRoot) {
+      this._padRoot = root;
+      this.menu.setRoot(root);
+      // A qualifying death asks for a name, so the selection starts on the
+      // keyboard rather than on RESTART - the button that would throw the
+      // entry away is the last thing to put the cursor on.
+      if (root === this.ui.overOv && !this.ui.lbEntry.classList.contains('hidden')) {
+        this.menu.focus(this._kbEl.querySelector('.kb-key'));
+      }
+    }
+    if (!root) return;
+
+    // The stick and the D-pad both steer. navY is +1 for up, and the driver
+    // works in screen space where down is positive, so it is flipped here
+    // rather than inside pad.js - the pad has no opinion about screens.
+    if (pad.navX || pad.navY) this.menu.move(pad.navX, -pad.navY);
+
+    if (pad.pressed(BTN.CROSS)) {
+      pad.consume(BTN.CROSS);
+      // Every menu press is also the audio gesture, for the same reason the
+      // mouse handlers are - though see _syncAudioHint for why a pad alone
+      // cannot always finish the job.
+      this._audioGesture();
+      this.menu.activate();
+    }
+    if (pad.pressed(BTN.CIRCLE)) {
+      pad.consume(BTN.CIRCLE);
+      // BACK, and on the death screen it is the delete key for the name being
+      // entered - there is nothing else for BACK to mean there.
+      if (this._subScreenOpen()) this._closeSubScreen();
+      else if (this.state === 'paused') this.resume();
+      else if (this.state === 'gameover' && !this.ui.lbEntry.classList.contains('hidden')) {
+        this._nameDelete();
+      }
+    }
+    if (pad.pressed(BTN.SQUARE) && this.state === 'gameover'
+      && !this.ui.lbEntry.classList.contains('hidden')) {
+      pad.consume(BTN.SQUARE);
+      this._nameChar(' ');
+    }
+    if (pad.pressed(BTN.OPTIONS)) {
+      pad.consume(BTN.OPTIONS);
+      // START, in the arcade sense: it starts and it un-pauses, and it does
+      // nothing at all on a screen that is layered over one of those.
+      if (this._subScreenOpen()) this._closeSubScreen();
+      else if (this.state === 'paused') this.resume();
+      else if (this.state === 'menu') this.beginGame();
+      else if (this.state === 'gameover') { this._saveScore(); this.beginGame(); }
+    }
+  }
+
+  // The overlay the pad is currently pointed at, or null if the arena is what
+  // is on screen. The sub-screens are checked first because they sit OVER the
+  // menu that opened them and that menu is still in the document.
+  _menuRoot() {
+    if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
+    if (!this.ui.scoresOv.classList.contains('hidden')) return this.ui.scoresOv;
+    if (this.state === 'menu') return this.ui.startOv;
+    if (this.state === 'paused') return this.ui.pauseOv;
+    if (this.state === 'gameover') return this.ui.overOv;
+    return null;
+  }
+
+  // Letters, from the on-screen keyboard. Written straight into the same field
+  // the keyboard player types in, so _saveScore has one place to read from.
+  // maxlength does not apply to a value set from script, hence the guard.
+  _nameChar(ch) {
+    const el = this.ui.lbName;
+    if (el.value.length >= 12) return;
+    el.value += ch;
+    // The same blip a coin makes. A key that types in silence on a machine
+    // where everything else answers reads as a key that did not register.
+    this.sfx.coin();
+  }
+
+  _nameDelete() {
+    const el = this.ui.lbName;
+    el.value = el.value.slice(0, -1);
+  }
+
+  // A gamepad press is NOT a user gesture as far as a browser is concerned, so
+  // a player who never touches the mouse can leave the start screen with the
+  // audio context still suspended and no way to tell why the game is silent.
+  // One click anywhere fixes it, and this is the line that says so.
+  _syncAudioHint() {
+    if (!this._audioHint) return;
+    const blocked = this.state === 'menu'
+      && (!this.sfx.ctx || this.sfx.ctx.state !== 'running');
+    this._audioHint.classList.toggle('hidden', !blocked);
+  }
+
+  // ---- controller settings --------------------------------------------------
+
+  _stepSens(dir) {
+    const next = Math.max(1, Math.min(SENS_STEPS, this._padSens + dir));
+    if (next === this._padSens) return;
+    this._padSens = next;
+    this._savePadPrefs();
+    this._syncSens();
+    // Felt, not just read: the same nudge the pad gives when a setting lands.
+    this.pad.rumble(0.25, 0.2, 70, 1);
+  }
+
+  _syncSens() {
+    for (let i = 0; i < this._sensPips.length; i++) {
+      this._sensPips[i].className = i < this._padSens ? 'on' : '';
+    }
+    this._sensVal.textContent = String(this._padSens);
+    this._sensDown.disabled = this._padSens <= 1;
+    this._sensUp.disabled = this._padSens >= SENS_STEPS;
+  }
+
+  _syncPadBtns() {
+    const set = (btn, on) => {
+      btn.textContent = on ? 'ON' : 'OFF';
+      btn.classList.toggle('off', !on);
+    };
+    set(this._assistBtn, this._aimAssist);
+    set(this._rumbleBtn, this.pad.rumbleOn);
+    set(this._invertBtn, this._invertLook);
+  }
+
+  _loadPadPrefs() {
+    try {
+      const n = Number(localStorage.getItem('va-pad-sens'));
+      if (Number.isFinite(n) && n >= 1 && n <= SENS_STEPS) this._padSens = Math.round(n);
+      // Absent means default, which is why each of these tests for the string
+      // that turns it off rather than for the one that turns it on.
+      this._aimAssist = localStorage.getItem('va-pad-assist') !== '0';
+      this._invertLook = localStorage.getItem('va-pad-invert') === '1';
+      this.pad.rumbleOn = localStorage.getItem('va-pad-rumble') !== '0';
+    } catch {}
+  }
+
+  _savePadPrefs() {
+    try {
+      localStorage.setItem('va-pad-sens', String(this._padSens));
+      localStorage.setItem('va-pad-assist', this._aimAssist ? '1' : '0');
+      localStorage.setItem('va-pad-invert', this._invertLook ? '1' : '0');
+      localStorage.setItem('va-pad-rumble', this.pad.rumbleOn ? '1' : '0');
+    } catch {}
   }
 
   // Storage throws in private-mode Safari and when cookies are blocked, and a
@@ -1371,6 +1954,21 @@ class Game {
     this.ui.resetCache();
     this.ui.showHud();
     if (!this.autoTest) this._lock();
+  }
+
+  // THE ONE WAY IN to the pause state. Three things reach it - losing pointer
+  // lock, OPTIONS on the pad, and a controller being unplugged - and all of
+  // them owe the same tidying up, which is why none of them writes `state`
+  // themselves any more.
+  pause() {
+    if (this.state !== 'playing') return;
+    this.state = 'paused';
+    this._clearInput();
+    this._closeStats();
+    // A motor still running over a paused game is the pad saying the fight is
+    // still happening.
+    this.pad.stopRumble();
+    this.ui.showPause();
   }
 
   resume() {
@@ -1724,6 +2322,9 @@ class Game {
     this._postScore();
     // The heaviest the sound goes. This is the run ending, not a body.
     this.sfx.death(1.2);
+    // And the heaviest the pad goes, at a priority nothing else in the game
+    // uses - there is nothing left that could need to interrupt it.
+    this.pad.rumble(1, 0.8, 700, 4);
   }
 
   // Current credit/score multiplier from the live kill chain.
@@ -2199,6 +2800,10 @@ class Game {
     const w = this.player.weapon;
     this.stats.shotsFired++;
     this.sfx.shoot();
+    // Recoil, in the hands. Scaled by the same number the camera kick is, so a
+    // scattergun is felt as a scattergun without the two ever disagreeing, and
+    // short enough that a held trigger reads as a stutter rather than a hum.
+    this.pad.rumble(0.18 + w.shake * 1.4, 0.42, 55, 1);
 
     const muzzle = this.player.muzzleInto(this._muzzle);
     this.effects.flash(muzzle);
@@ -2307,8 +2912,12 @@ class Game {
     if (hit) {
       this.ui.hitMarker();
       this.effects.addShake(0.08);
+      this.pad.rumble(0.7, 0.4, 130, 2);
     } else {
       this.effects.addShake(0.03);
+      // A swing that caught nothing still moved the arm. Much lighter, so the
+      // difference between a hit and a miss is felt without being read.
+      this.pad.rumble(0.2, 0.15, 70, 1);
     }
   }
 
@@ -2366,6 +2975,11 @@ class Game {
     this.effects.addShake(0.25);
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
     this.sfx.hurt();
+    // The loudest thing that happens on a normal frame, and it outranks the
+    // trigger: a shot fired on the frame the player was hit must not be what
+    // they feel. Scaled by the bite the hit actually took out of them.
+    const bite = Math.min(1, this.player.lastDamageTaken / Math.max(1, this.player.maxHealth * 0.3));
+    this.pad.rumble(0.55 + bite * 0.45, 0.5, 160 + bite * 140, 3);
     this.ui.damage();
     // A hard white blink over the red vignette. Shorter than the vignette on
     // purpose, so the two read as one hit rather than two events.
@@ -2887,6 +3501,7 @@ class Game {
     );
     this.effects.addShake(0.1);
     this.sfx.upgrade();
+    this.pad.rumble(0.5, 0.6, 220, 2);
     this.totemArea.dismiss();
     // The totem claim is the definitive one: it is what starts the next wave,
     // so the Devil packs up with it whether or not anything was bought. That
@@ -2922,6 +3537,8 @@ class Game {
     this.effects.shockwave(this._killPos, 0xff1744, 5, 0.5);
     this.effects.addShake(0.16);
     this.sfx.deal();
+    // The Devil's is longer and lower than a totem's. It cost health.
+    this.pad.rumble(0.8, 0.35, 420, 3);
     this.ui.banner(offer.name + '  \u2013' + offer.cost + ' MAX HP');
     this.devilArea.dismiss();
   }
@@ -2987,22 +3604,36 @@ class Game {
     return best;
   }
 
-  // The prompt line for whatever E is currently pointed at, as [html, blocked].
+  /**
+   * The keys a prompt names, in the language of whatever is in the player's
+   * hands. ONE PLACE, for the same reason _useTarget is one place: a prompt
+   * that named a key the player is not holding would be worse than no prompt.
+   *
+   * SHOOT stays a word in both. It is the action - shoot the thing - and the
+   * button that does it is already named on the control sheet.
+   */
+  _useLead() {
+    if (this.inputMode !== 'pad') return '<b>SHOOT</b> / <b>E</b> ';
+    return cap('R2') + ' / ' + cap('circle') + ' ';
+  }
+
+  // The prompt line for whatever USE is currently pointed at, as
+  // [html, blocked].
   _usePrompt(use) {
     const t = use.target;
+    const lead = this._useLead();
     if (use.kind === 'totem') {
-      return ['<b>SHOOT</b> / <b>E</b> TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
+      return [lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
     }
     if (use.kind === 'deal') {
       return [
-        '<b>SHOOT</b> / <b>E</b> TAKE &nbsp;·&nbsp; ' + t.offer.name
+        lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name
         + ' &nbsp;·&nbsp; <span class="prompt-cost">\u2212' + t.offer.cost + ' MAX HP</span>',
         false,
       ];
     }
     const blocked = this._stationBlocked(t);
     if (blocked) return [STATION_TITLE[t.kind] + ' &nbsp;·&nbsp; ' + blocked, true];
-    const lead = '<b>SHOOT</b> / <b>E</b> ';
     if (t.kind === 'ammo') {
       return [
         lead + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
@@ -3095,6 +3726,9 @@ class Game {
   _useStation(st) {
     if (this._stationBlocked(st)) {
       this.sfx.denied();
+      // A refusal has to be felt, or a player who cannot afford something
+      // presses again and again into silence.
+      this.pad.rumble(0.15, 0.5, 60, 1);
       return;
     }
     if (st.kind === 'ammo') {
@@ -3451,6 +4085,9 @@ class Game {
       // the ground roster and puts a flier's death where the flier was.
       this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
       this.sfx.kill(e.radius);
+      // A tick per body, sized by the body. Same priority as the shot that
+      // caused it, so the two blend into one event rather than fighting.
+      this.pad.rumble(0.2 + Math.min(0.5, e.radius * 0.4), 0.3, 70, 1);
       // Loot falls where the thing died. Boss parts are excluded: the boss
       // pays out by bleeding at health thresholds and by the kill bonus, and
       // letting the final part roll as well would double-pay the same kill.
@@ -4139,6 +4776,12 @@ class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
 
+    // THE PAD, FIRST AND IN EVERY STATE. It drives the menus as well as the
+    // arena, so it cannot sit inside the `playing` branch, and anything it
+    // writes into `input` has to be there before the player reads it below.
+    // Real seconds, not game time: a menu still has to repeat on a paused game.
+    this._padUpdate(dt);
+
     if (this.state === 'playing') {
       // Game time only advances while playing, otherwise a long pause would
       // silently burn through buff timers and pickup lifetimes.
@@ -4166,6 +4809,9 @@ class Game {
       );
       if (reloaded) {
         this._reloadBurst();
+        // The magazine seating. Two motors, briefly, low on the strong one -
+        // it is a mechanism, not an impact.
+        this.pad.rumble(0.25, 0.35, 90, 1);
         // HELLFIRE. The reload lights the player up for five seconds; the
         // trail itself is laid by _updateFire as they move. Armed by the same
         // one-frame signal Reload Burst rides, so a build holding both gets
@@ -4184,11 +4830,15 @@ class Game {
         this.player.jumpFx = false;
         this.effects.shockwave(this.player.pos, 0x82b1ff, 1.6, 0.22);
         this.sfx.melee();
+        this.pad.rumble(0.3, 0.2, 80, 1);
       }
       if (this.player.dashFx) {
         this.player.dashFx = false;
         this.effects.shockwave(this.player.pos, 0x1de9b6, 2.2, 0.22);
         this.sfx.melee();
+        // A dash is the biggest thing the player does that nothing hits them
+        // for, so it is the one movement that gets a shove rather than a tick.
+        this.pad.rumble(0.55, 0.3, 150, 2);
       }
 
       this._updateWave(dt);

@@ -1258,3 +1258,146 @@ html, body {
   #boss-bar.enraged #boss-note { animation: none; }
   #banner.show { opacity: 1; }
 }
+
+/* =========================================================================
+   CONTROLLER
+   -------------------------------------------------------------------------
+   The pad changes three things on screen and nothing else: the prompts name
+   buttons instead of keys, the menus grow a selection the player can see, and
+   a keyboard appears where the game asks for letters.
+
+   TWO CLASSES ON <body> drive all of it:
+     .pad-seen  a DualSense has been connected at some point this session -
+                unlocks the CONTROLLER settings block, and never comes off.
+     .pad-mode  the pad is what is being played on RIGHT NOW. Goes on and off
+                as the player's hands move between the pad and the keyboard,
+                which is why nothing under it may be expensive to toggle.
+   ========================================================================= */
+
+/* Rows that belong to a controller that may not exist. Hidden by default and
+   revealed per element type, because `display` is not one value here: the
+   settings rows are flex, their headings are flex, the notes are blocks. */
+.pad-only { display: none !important; }
+body.pad-seen .set-row.pad-only,
+body.pad-seen .set-head.pad-only { display: flex !important; }
+body.pad-seen p.pad-only { display: block !important; }
+body.pad-mode #kb.pad-only { display: flex !important; }
+
+/* No cursor over a game being played on a pad. Pointer lock normally hides it
+   and pad play does not use pointer lock - see _setInputMode in main.js - so
+   without this the arrow sits in the middle of the arena all run. */
+body.pad-mode #game canvas { cursor: none; }
+
+/* ---- button glyphs ------------------------------------------------------
+   Drawn, not typed: Press Start 2P has no circle or triangle in it, and a
+   literal one would render as a tofu box in every prompt in the game. Crisp
+   edges and a 2px stroke, so they are made of the same pixels as the keycaps
+   they sit inside. The colours are the one place the interface leaves its own
+   palette - a PlayStation face button is known by its colour first. */
+.gl {
+  width: 12px; height: 12px; display: block; margin: 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  shape-rendering: crispEdges;
+}
+.g-cross    { color: #82b1ff; }
+.g-circle   { color: #ff5b6e; }
+.g-triangle { color: #37e08b; }
+.g-square   { color: #ff7ad9; }
+/* A cap holding a word rather than a shape - L1, OPTIONS, L STICK. The pad has
+   these printed on it, so the word IS the glyph. */
+.pad-cap.wide { font-size: 8px; letter-spacing: 0.08em; }
+.controls.pad .key { min-width: calc(var(--u) * 14); }
+#prompt b.pad-cap { padding: 6px 7px; }
+
+/* ---- menu selection -----------------------------------------------------
+   A pad has no pointer, so the selection has to be as loud as a hover is
+   obvious. Gold rather than cyan: every button on these screens is already
+   cyan, and a cyan ring around a cyan button is a ring nobody sees.
+
+   AND IT IS DRAWN INSIDE THE BUTTON, never as an `outline`. Every control in
+   this cabinet is chamfered with clip-path, and clip-path cuts an outline off
+   at the shape's edge - the ring simply does not paint. (Which is also why
+   the :focus-visible rule further up this sheet has never been visible on
+   these buttons.) Inset shadows and a fill are the only marks that survive
+   the clip, so the selection is a lit cap rather than a ring around one. */
+/* Both selectors, every time, because the death screen paints its buttons
+   through `#overlay-over button` and an id beats any number of classes. The
+   pad selection has to win on EVERY screen or it is not a selection. */
+.overlay .pad-focus,
+#overlay-over .pad-focus {
+  color: var(--ink);
+  background: var(--gold);
+  box-shadow:
+    inset 0 0 0 3px var(--ink),
+    inset 0 -6px 0 rgba(0, 0, 0, 0.28),
+    inset 0 3px 0 rgba(255, 255, 255, 0.4),
+    0 0 26px rgba(255, 233, 94, 0.5);
+}
+/* The outlined controls keep their outlined shape - a filled cap where every
+   neighbour is a hollow one would read as a different KIND of control rather
+   than as the selected one. */
+.overlay .opt-btn.pad-focus,
+.overlay .step-btn.pad-focus,
+.overlay .kb-key.pad-focus,
+#overlay-over .kb-key.pad-focus {
+  color: var(--gold);
+  background: rgba(255, 233, 94, 0.16);
+  box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 233, 94, 0.35);
+}
+/* The name field is a text box. Filling it gold would read as a button that
+   has been pressed, so it takes the ring alone. */
+#lb-name.pad-focus {
+  color: var(--gold);
+  background: #05070b;
+  box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 233, 94, 0.3);
+  caret-color: var(--gold);
+}
+
+/* ---- the name keyboard --------------------------------------------------
+   Four rows of ten, walked by the same geometric focus driver that walks
+   every other screen - a grid is only geometry, so it needs no special case.
+   Keys are square and small: forty of them at menu-button size would be a
+   screen of its own. */
+.kb {
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(var(--u) * 1.5);
+  margin-top: calc(var(--u) * 3);
+}
+.kb-row { display: flex; gap: calc(var(--u) * 1.5); }
+.overlay .kb-key,
+#overlay-over .kb-key {
+  width: calc(var(--u) * 8); height: calc(var(--u) * 8);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; font-size: 10px; letter-spacing: 0;
+  color: var(--cyan); background: transparent;
+  clip-path: var(--cut-sm);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
+  text-shadow: none;
+}
+.overlay .kb-key:hover,
+#overlay-over .kb-key:hover { background: rgba(78, 243, 255, 0.14); }
+/* The three keys that are not letters. Wider, and OK is the one filled key on
+   the board because it is the only one that ends the screen. */
+#overlay-over .kb-space { width: calc(var(--u) * 18); font-size: 8px; }
+#overlay-over .kb-del {
+  width: calc(var(--u) * 12); font-size: 8px; color: var(--amber);
+  box-shadow: inset 0 0 0 2px rgba(255, 179, 0, 0.5);
+}
+#overlay-over .kb-ok {
+  width: calc(var(--u) * 12); font-size: 8px;
+  color: var(--ink); background: var(--gold);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+}
+#overlay-over .kb-ok:hover { background: #fff3a0; }
+
+/* The sound notice under PRESS START. Amber, because it is the one line on the
+   screen that is asking for something rather than telling. */
+#audio-hint {
+  color: var(--amber);
+  text-align: center;
+  animation: blink 1.2s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #audio-hint { animation: none; }
+}

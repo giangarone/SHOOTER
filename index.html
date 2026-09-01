@@ -129,6 +129,11 @@
          START off the bottom of a laptop screen the moment it had ten rows in
          it. It is its own screen now. -->
     <div class="primary-row"><button id="btn-start">PRESS START</button></div>
+    <!-- Shown only when the sound is still locked and the pad is what is being
+         played on: a controller press is not a "user gesture" as far as the
+         browser is concerned, so no amount of pressing X will start the audio
+         context. One click anywhere will, and the player has to be told. -->
+    <p id="audio-hint" class="set-note hidden">CLICK ONCE TO ENABLE SOUND</p>
     <div class="opt-row">
       <button id="btn-settings-start" class="opt-btn">SETTINGS</button>
       <button id="btn-scores-start" class="opt-btn">HIGH SCORES</button>
@@ -150,6 +155,11 @@
         <input id="lb-name" type="text" maxlength="12" autocomplete="off" spellcheck="false"/>
         <button id="btn-lb-save">SAVE</button>
       </div>
+      <!-- The pad cannot type. Built once by padmenu.js and shown only while
+           the controller is the thing in the player's hands - a keyboard
+           player already has one, and a second one on screen would be a
+           question about which of the two the game wants them to use. -->
+      <div id="kb" class="kb pad-only"></div>
     </div>
 
     <div id="lb-over" class="lb"></div>
@@ -206,6 +216,34 @@
         </div>
       </div>
       <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
+
+      <!-- CONTROLLER. Hidden until a DualSense has actually been seen this
+           session (body.pad-seen): four rows about a device that is not
+           plugged in is four rows of noise on the only settings screen the
+           game has. -->
+      <div class="set-head pad-only">CONTROLLER</div>
+      <div class="set-row pad-only">
+        <span class="set-label">LOOK SENSITIVITY</span>
+        <div class="stepper">
+          <button id="btn-sens-down" class="step-btn" type="button" aria-label="Lower look sensitivity">-</button>
+          <div id="sens-pips" class="pips"></div>
+          <b id="sens-val">5</b>
+          <button id="btn-sens-up" class="step-btn" type="button" aria-label="Higher look sensitivity">+</button>
+        </div>
+      </div>
+      <div class="set-row pad-only">
+        <span class="set-label">AIM ASSIST</span>
+        <button id="btn-assist" class="opt-btn">ON</button>
+      </div>
+      <div class="set-row pad-only">
+        <span class="set-label">VIBRATION</span>
+        <button id="btn-rumble" class="opt-btn">ON</button>
+      </div>
+      <div class="set-row pad-only">
+        <span class="set-label">INVERT LOOK</span>
+        <button id="btn-invert" class="opt-btn">OFF</button>
+      </div>
+      <p class="set-note pad-only">HOLD L2 TO FOCUS - THE VIEW SLOWS FOR A PRECISE SHOT</p>
     </div>
 
     <div class="primary-row"><button id="btn-settings-back">BACK</button></div>
