@@ -2081,7 +2081,11 @@ class Game {
   // the nearest hit wins whatever it is and walls correctly block shots.
   shoot() {
     const res = this.player.tryShoot(this.input.shootFresh);
-    if (res === 'empty') {
+    // FEAR. The gun refuses, and it has to SAY so: the chip in the HUD
+    // explains why but only to a player who looks away from the fight to read
+    // it. Same click and the same throttle a dry magazine gets, for the same
+    // reason - a held trigger would otherwise open a voice every frame.
+    if (res === 'empty' || res === 'feared') {
       // Held trigger on an empty gun would otherwise fire a WebAudio voice
       // every single frame.
       if (this.emptyClickCd <= 0) {
@@ -2284,8 +2288,9 @@ class Game {
     this.player.clearCarnage();
     this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
-    this.stats.damaged += d;
-    this.waveDamageTaken += d;
+    // What LANDED, not what was thrown: curse is applied inside takeDamage.
+    this.stats.damaged += this.player.lastDamageTaken;
+    this.waveDamageTaken += this.player.lastDamageTaken;
     this._shockwave();
     this.effects.addShake(0.25);
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
@@ -3731,8 +3736,8 @@ class Game {
     // standing in fire is being hit.
     this.player.clearCarnage();
     const h = this.player.takeDamage(d, this.time);
-    this.stats.damaged += d;
-    this.waveDamageTaken += d;
+    this.stats.damaged += this.player.lastDamageTaken;
+    this.waveDamageTaken += this.player.lastDamageTaken;
     // Throttled: the vignette flashing on every tick reads as a strobe.
     if (this.time - (this._lastDotFx || 0) > 0.5) {
       this._lastDotFx = this.time;
@@ -3912,6 +3917,7 @@ class Game {
       this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
       this.player.shield
     );
+    this.ui.setStatuses(this.player);
     if (this._statsHeld) this.ui.updateStats(this._statRows());
   }
 
@@ -4059,6 +4065,13 @@ class Game {
       this._updateAsh(dt);
       this._updateFire(dt);
       this._updateHazard(dt);
+      // FIRE and POISON on the PLAYER. player.update() ran the timers and put
+      // the fractional damage on a tab; this is where it is paid, through the
+      // same sink a hazard pool uses - throttled vignette, throttled sound,
+      // Carnage broken, and the game-over path the player class cannot reach
+      // on its own.
+      const dot = this.player.drainStatusDamage();
+      if (dot > 0) this._hurtPlayerDot(dot);
       this._updateMortars(dt);
       this._updatePoisonSpread(dt);
       this._updateEnemies(dt);

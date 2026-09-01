@@ -81,6 +81,12 @@ NOTE = {
     'lightningWizard': 'LIGHTNING WIZARD - hits call it down from above.',
     'carnage': 'CARNAGE - damage stacked on kills, lost the moment you are hurt.',
     'demonicPresence': 'DEMONIC PRESENCE - he is the mutation, so he is the icon.',
+    'statusFire': 'BURNING - a status on the PLAYER. Damage over time.',
+    'statusPoison': 'POISONED - a status on the player. Damage over time.',
+    'statusFear': 'AFRAID - a status on the player. The trigger does nothing.',
+    'statusWeakness': 'WEAKENED - a status on the player. Your shots hit softer.',
+    'statusCurse': 'CURSED - a status on the player. Everything hurts 25% more.',
+    'statusSlowness': 'SLOWED - a status on the player. You move at a fraction.',
     'gear': 'REROLL STATIONS.',
     'gun': 'WEAPON OFFER.',
 }

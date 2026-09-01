@@ -7,6 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
+import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 export class UI {
   constructor() {
@@ -228,18 +229,49 @@ export class UI {
   // the same job: it carries a points label as well as a timer, because the
   // shield is far more often spent by damage than by its clock.
   setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0) {
-    this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost);
-    this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost);
+    this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost, '', false, 0);
+    this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost, '', false, 1);
     this._setBuff(
       'shield', 'pickShield', 0x4ef3ff, shield,
-      shield > 0 ? String(Math.ceil(shieldPoints)) : ''
+      shield > 0 ? String(Math.ceil(shieldPoints)) : '', false, 2
     );
+  }
+
+  // STATUS EFFECTS, in the same strip as the buffs and to the right of them.
+  //
+  // ONE STRIP, NOT TWO. A second row would have the player checking two places
+  // to know what is happening to them, and the thing they need to know first
+  // is not "how many buffs" or "how many debuffs" - it is what is on them at
+  // all. What separates the two is the CHIP, not its position: a status wears
+  // a hostile frame (see .buff-icon.bad) so good and bad never have to be told
+  // apart by reading the art.
+  //
+  // Driven straight off the player and the table in status.js rather than off
+  // an argument per effect, because unlike the three buffs this list is meant
+  // to grow: a seventh status needs no change in this file.
+  setStatuses(player) {
+    for (const key of PLAYER_STATUS_KEYS) {
+      const def = PLAYER_STATUS[key];
+      this._setBuff(
+        'st_' + key, def.icon, def.color, player.statusFraction(key),
+        '', true, 10 + PLAYER_STATUS_KEYS.indexOf(key)
+      );
+    }
   }
 
   // Fraction is 0..1 of the buff's remaining duration; 0 hides the icon.
   // `icon` is a pixelicons.js key and `color` the theme it is drawn in - the
-  // same pair the pickup on the floor was built from.
-  _setBuff(key, icon, color, fraction, label = '') {
+  // same pair the pickup on the floor was built from. `bad` marks it as
+  // something done TO the player rather than something they picked up, and
+  // `order` fixes its place in the strip.
+  //
+  // THE PLACE IS EXPLICIT because the chips are created lazily, in whatever
+  // order the run happens to hand them out. Left to the DOM, the strip would
+  // lay itself out differently in every run - and a row of icons that is not
+  // in the same order twice cannot be read at a glance, which is the only
+  // thing it is for. Buffs take 0-2 and statuses 10 up, so the two groups
+  // never interleave however they arrive.
+  _setBuff(key, icon, color, fraction, label = '', bad = false, order = 0) {
     let entry = this._buffEls[key];
     if (fraction <= 0) {
       if (entry && entry.shown) {
@@ -250,13 +282,14 @@ export class UI {
     }
     if (!entry) {
       const el = document.createElement('div');
-      el.className = 'buff-icon';
+      el.className = bad ? 'buff-icon bad' : 'buff-icon';
       el.innerHTML = '<div class="buff-timer"></div><div class="buff-label"></div>';
       // Drawn once, here, and never again: pixelIconCanvas walks 576 cells.
       const art = pixelIconCanvas(icon, color, 2);
       art.className = 'buff-art';
       el.insertBefore(art, el.firstChild);
       el.style.setProperty('--buff', '#' + color.toString(16).padStart(6, '0'));
+      el.style.order = order;
       this.buffsEl.appendChild(el);
       // The timer and label nodes are cached: querySelector on every frame for
       // every buff is pure waste.

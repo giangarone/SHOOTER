@@ -919,3 +919,95 @@ def _(c):
 # Icons whose tones are authored outright and must not go through the shared
 # lighting pass again. Only the reference icon is in here.
 RAW = {'venom'}
+
+
+# ---- the player's status effects ------------------------------------------
+#
+# What something ELSE has done to YOU. These are the only icons in the set that
+# stand for a bad thing, and they are read in the HUD - four or five of them in
+# a row, 28px wide, while the arena is trying to kill you - so they follow the
+# pickups' rule and then tighten it: ONE object, filling the frame, and no two
+# of the six may share a silhouette family. That is why poison is a droplet
+# rather than a skull (curse is the skull-adjacent sigil), and why fear is a
+# face with no cranium ridge (TERROR already owns the skull).
+
+
+@icon('statusFire')         # burning: damage over time
+def _(c):
+    # One tongue, bigger than INCENDIARY's and with no second flame off the
+    # pinch: on a chip the size of a thumbnail a two-flame silhouette reads as
+    # a blur, and this one has to be legible at a glance rather than admired.
+    flame(c, 12, 22.0, 9.4, 21.0, S)
+    flame(c, 11.4, 20.6, 4.4, 12.5, E)
+
+
+@icon('statusPoison')       # damage over time
+def _(c):
+    # A droplet with the bubbles coming off it. VENOM ROUNDS is a poisoned
+    # CARTRIDGE - what your bullets carry; this is the stuff itself, in you.
+    # The droplet is drawn here rather than with drop(): that helper's tail is
+    # a spike two pixels wide at the top, which survives on a totem two metres
+    # tall and disappears on a 28px chip.
+    c.disc(12, 15.6, 6.6, S)
+    c.poly([(12, 4.0), (18.0, 16.0), (6.0, 16.0)], S)
+    c.disc(12, 15.8, 3.4, E)
+    c.disc(6.0, 6.4, 2.6, E)                   # bubbles, off to either side
+    c.disc(18.4, 4.6, 2.0, E)
+
+
+@icon('statusFear')         # the trigger does nothing
+def _(c):
+    # A face mid-scream. No jaw and no teeth, which is what keeps it clear of
+    # TERROR's skull, and the mouth is a hole rather than a shape: the eye
+    # finds a black oval in a lit face faster than it finds any drawn feature.
+    # Nothing floats off the head - detached marks at this size read as dirt.
+    ellipse(c, 12, 12.4, 8.0, 9.6, S)
+    c.disc(8.7, 9.6, 2.6, E)                   # eyes, wide
+    c.disc(15.3, 9.6, 2.6, E)
+    ellipse(c, 12, 17.2, 2.8, 3.8, DEEP)       # the mouth
+
+
+@icon('statusWeakness')     # your weapon hits softer
+def _(c):
+    # A cracked round and, beside it, the direction the number went. The round
+    # is the STRUCTURE and the arrow is the ENERGY, so the lit part of the icon
+    # is the part that names the effect - the rule the whole set runs on.
+    # SNAPPED IN TWO, not cracked. A crack is a one-pixel scratch and a
+    # one-pixel scratch is invisible on a chip; a round in two pieces with a
+    # gap between them and the halves out of line says the same thing with the
+    # SILHOUETTE, which survives at any size.
+    bullet(c, 3.0, 1.8, 6.2, 9.4, S, S, 0.0)   # the case, square-cut
+    bullet(c, 4.8, 13.0, 6.2, 9.4, S, S, 0.5)  # the nose, dropped and offset
+    arrow(c, 17.4, 3.5, 17.4, 21.0, E, 3.4, 6.8)
+
+
+@icon('statusCurse')        # everything hurts you 25% more
+def _(c):
+    # A horned sigil, not a skull: TERROR wears the skull and the two would
+    # collapse into one another on a HUD chip. The mark is a ring because a
+    # curse is a thing PUT ON you, and the horns are what say whose it is.
+    c.ring(12, 14.6, 7.8, 3.0, S)
+    c.poly([(6.8, 11.4), (17.2, 11.4), (12, 19.4)], E)   # the point-down mark
+    for s in (-1, 1):                          # horns, grown off the ring
+        c.poly([(12 + 4.6 * s, 8.4), (12 + 8.2 * s, 8.6),
+                (12 + 10.4 * s, 1.5), (12 + 6.6 * s, 6.2)], S)
+
+
+@icon('statusSlowness')     # you move at a fraction of your pace
+def _(c):
+    # Ball and chain. An hourglass would have been the obvious pick and is
+    # wrong twice over: every chip in the HUD already carries a timer bar, and
+    # this effect is about MOVEMENT rather than about time passing.
+    #
+    # DRAWN CUFF FIRST, BALL LAST. The chain runs under the ball, and a link
+    # laid down after it punches its own hole straight through the silhouette.
+    c.ring(6.0, 5.6, 4.2, 2.4, S)              # the cuff
+    # The links are discs with a hole punched through rather than rings: a
+    # one-pixel ring wall is exactly the detail that dissolves on a chip, and
+    # a link that dissolves leaves the ball and the cuff floating apart.
+    for f in (0.34, 0.60):
+        lx, ly = 6.0 + 8.4 * f, 5.6 + 10.4 * f
+        c.disc(lx, ly, 2.4, S)
+        c.disc(lx, ly, 1.0, DEEP)
+    c.disc(15.4, 16.8, 6.6, S)                 # the ball, over the chain
+    c.disc(13.4, 14.8, 3.0, E)                 # the highlight, upper left

@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { resolveCircle } from './utils.js';
 import { UPGRADES } from './upgrades.js';
 import { WEAPONS, STARTING_WEAPON, setGunMarks } from './weapons.js';
+import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 // Every stat an upgrade is allowed to touch, at its un-upgraded value.
 //
@@ -337,6 +338,25 @@ export class Player {
     this.fireRateBoostEnd = 0;
     this.shield = 0;
     this.shieldEnd = 0;
+    // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
+    // Seconds remaining per key, and the duration each was applied WITH, which
+    // is the only thing the HUD's timer bar can measure its fraction against.
+    // Both are built from the table so a new effect needs no field here.
+    this.status = {};
+    this.statusFull = {};
+    for (const k of PLAYER_STATUS_KEYS) {
+      this.status[k] = 0;
+      this.statusFull[k] = 1;
+    }
+    // Damage over time is billed in WHOLE POINTS. Fire at 7/s over a 90Hz
+    // frame is 0.078 of a point, and a hit that small rounds to nothing at
+    // every sink it could go through - the health bar, the run summary, the
+    // damage vignette. It accumulates here instead and main.js drains it (see
+    // drainStatusDamage), which is also what puts it through the game-over
+    // path: the player class cannot end a run on its own.
+    this._statusDot = 0;
+    // What the last takeDamage() call actually cost, after curse - see there.
+    this.lastDamageTaken = 0;
     this.bloodlustStacks = 0;
     this._ammoRegenAcc = 0;
     // Holy Mantle's charge, re-armed at every wave start, and Dead Cat's
@@ -558,6 +578,116 @@ export class Player {
     if (this.mods.hitFreeze > 0) this.frozenUntil = time + this.mods.hitFreeze;
   }
 
+  // ---- status effects ------------------------------------------------------
+  //
+  // Everything the arena can do TO the player that lasts. See status.js for
+  // the table; the hooks are deliberately spread thin - one multiplier read in
+  // the movement branch, one in getEffectiveDamage(), one at the top of
+  // takeDamage() and one refusal in tryShoot() - because a status that has to
+  // be special-cased at twenty call sites is a status that will be forgotten
+  // at the twenty-first.
+
+  /**
+   * Puts a status on the player. REFRESHES rather than stacks: the longer of
+   * the new duration and what is already running wins, and the effect's
+   * strength never changes. Two burning hits leave you burning once.
+   *
+   * @param {string} kind  a key of PLAYER_STATUS
+   * @param {number} [dur] seconds; the table's own duration when omitted
+   * @returns {boolean} whether anything was applied
+   */
+  applyStatus(kind, dur) {
+    const def = PLAYER_STATUS[kind];
+    if (!def) return false;
+    const d = dur > 0 ? dur : def.duration;
+    // The full duration is what the HUD's timer bar measures against. While an
+    // effect is running it only ever GROWS - a two-second top-up landing on a
+    // five-second burn must not snap the bar to full and then drain it five
+    // times as fast - but a fresh application starts the bar over from the
+    // duration it was actually given, whatever the last one was.
+    this.statusFull[kind] =
+      this.status[kind] > 0 ? Math.max(this.statusFull[kind], d, this.status[kind]) : d;
+    this.status[kind] = Math.max(this.status[kind], d);
+    return true;
+  }
+
+  hasStatus(kind) {
+    return this.status[kind] > 0;
+  }
+
+  // 0..1 of the effect's remaining time, for the HUD chip. 0 when it is off.
+  statusFraction(kind) {
+    const t = this.status[kind];
+    return t > 0 ? Math.min(1, t / this.statusFull[kind]) : 0;
+  }
+
+  clearStatuses() {
+    for (const k of PLAYER_STATUS_KEYS) {
+      this.status[k] = 0;
+      this.statusFull[k] = 1;
+    }
+    this._statusDot = 0;
+  }
+
+  // Whole points of damage-over-time owed since the last call, taken off the
+  // books. main.js bills them through _hurtPlayerDot, which is the only path
+  // that can end a run - see the note beside _statusDot.
+  drainStatusDamage() {
+    if (this._statusDot < 1) return 0;
+    const whole = Math.floor(this._statusDot);
+    this._statusDot -= whole;
+    return whole;
+  }
+
+  // One status step: run the timers down and accrue what the two
+  // damage-over-time effects owe. Called at the top of update().
+  //
+  // NOT GATED ON `combat`. A burn does not politely stop at the end of a wave,
+  // and the timers are short enough that nothing can be banked in the shop -
+  // walking into the break on fire means finishing the burn there.
+  _tickStatus(dt) {
+    for (const k of PLAYER_STATUS_KEYS) {
+      if (this.status[k] <= 0) continue;
+      const dps = PLAYER_STATUS[k].dps;
+      // Charged for the part of the tick the effect was actually live, so the
+      // last frame of a burn does not bill a whole one.
+      if (dps) this._statusDot += dps * Math.min(dt, this.status[k]);
+      this.status[k] -= dt;
+      if (this.status[k] <= 0) {
+        this.status[k] = 0;
+        this.statusFull[k] = 1;
+      }
+    }
+  }
+
+  // Movement, outgoing damage and incoming damage, in that order. Each walks
+  // the whole table rather than naming its effect, so an effect that gains a
+  // second multiplier later needs no change here.
+  statusSpeedMult() {
+    let m = 1;
+    for (const k of PLAYER_STATUS_KEYS) {
+      const f = PLAYER_STATUS[k].speedMult;
+      if (f && this.status[k] > 0) m *= f;
+    }
+    return m;
+  }
+  statusDamageMult() {
+    let m = 1;
+    for (const k of PLAYER_STATUS_KEYS) {
+      const f = PLAYER_STATUS[k].damageMult;
+      if (f && this.status[k] > 0) m *= f;
+    }
+    return m;
+  }
+  statusTakenMult() {
+    let m = 1;
+    for (const k of PLAYER_STATUS_KEYS) {
+      const f = PLAYER_STATUS[k].takenMult;
+      if (f && this.status[k] > 0) m *= f;
+    }
+    return m;
+  }
+
   // Carnage. Every kill is +5% damage and any hit taken is all of it.
   bumpCarnage() {
     if (this.mods.carnageStep > 0) this.carnageStacks++;
@@ -671,6 +801,7 @@ export class Player {
     this.fireRateBoostEnd = 0;
     this.shield = 0;
     this.shieldEnd = 0;
+    this.clearStatuses();
   }
 
   // Eye position (feet + 1.7) written into `v`. Takes an out-param so the hot
@@ -708,6 +839,7 @@ export class Player {
     // Published for getEffectiveDamage(), which has no clock of its own and is
     // called from several places that have none to give it.
     this.now = time;
+    this._tickStatus(dt);
     this.fireCd -= dt;
     if (this.meleeCd > 0) this.meleeCd -= dt;
     if (this.meleeActive > 0) this.meleeActive -= dt;
@@ -795,6 +927,7 @@ export class Player {
       // stacks multiplicatively with it, because both are short windows the
       // player earned and neither should quietly swallow the other.
       const speed = BASE_SPEED * this.mods.moveMult * this.rageSpeedMult
+        * this.statusSpeedMult()
         * (time < this.dodgeEnd ? DODGE_SPEED : 1);
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
@@ -981,6 +1114,12 @@ export class Player {
   tryShoot(triggerFresh) {
     const w = this.weapon;
     if (this.reloading > 0 || this.fireCd > 0) return null;
+    // FEAR. The trigger, and only the trigger: reload, melee, dash and jump
+    // all still work, so the window is one to move in rather than one to
+    // watch. Reported rather than swallowed, so main.js can click at the
+    // player - a trigger pull that does nothing at all and says nothing at all
+    // reads as a broken gun.
+    if (this.status.fear > 0) return 'feared';
     if (!w.auto && !triggerFresh) return null;
     if (this.mag <= 0) {
       this.startReload();
@@ -1018,6 +1157,16 @@ export class Player {
   // Shield soaks damage first and fully - a hit that breaks the shield does
   // not carry the remainder through to health. Returns remaining health.
   takeDamage(d, time) {
+    // CURSE, applied before the shield rather than after it: the effect says
+    // every source hurts 25% more, and a shield point is as much a thing the
+    // player has to spend as a health point is.
+    //
+    // Published as `lastDamageTaken` because this is the LAST place the number
+    // changes: main.js bills the run summary and the wave's damage total off
+    // what actually landed, and reading its own pre-curse figure would leave
+    // the summary quietly understating every cursed hit of the run.
+    d *= this.statusTakenMult();
+    this.lastDamageTaken = d;
     if (this.shield > 0) {
       this.shield = Math.max(0, this.shield - d);
       if (this.shield <= 0) {
@@ -1035,7 +1184,7 @@ export class Player {
   // speed, so the bonus fades in as the player settles and drops the moment
   // they move - it is not a key check, and there is no key to check.
   getEffectiveDamage(base) {
-    let d = base * this.damageMult * this.mods.damage;
+    let d = base * this.damageMult * this.mods.damage * this.statusDamageMult();
     if (this.mods.steady > 0) {
       d *= 1 + this.mods.steady * this.stillness;
     }

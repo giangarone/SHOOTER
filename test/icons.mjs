@@ -22,6 +22,7 @@
 import { UPGRADES } from '../js/upgrades.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
+import { PLAYER_STATUS } from '../js/status.js';
 import { PIXEL_ICON_KEYS, resolveIcon, GRID } from '../js/pixelicons.js';
 
 // Icons used by things that are not upgrades. Stations and weapons name their
@@ -54,6 +55,10 @@ for (const id of Object.keys(UPGRADES)) users[id] = UPGRADES[id].name;
 for (const [name, icon] of Object.entries(STATION_ICONS)) users[icon] = name;
 for (const [key, def] of Object.entries(POWERUP_TYPES)) users[def.icon] = 'PICKUP ' + key;
 users[AMMO_PICKUP.icon] = 'PICKUP ammo';
+// The player's status effects. Like a pickup, each names its drawing on its
+// own entry, so the same drift is possible and the same crash - buildPixelIcon
+// throws - waits at the other end of it.
+for (const [key, def] of Object.entries(PLAYER_STATUS)) users[def.icon] = 'STATUS ' + key;
 for (const w of Object.values(WEAPONS)) if (w.icon) users[w.icon] = 'WEAPON ' + w.name;
 
 const missing = Object.entries(users).filter(([k]) => !drawn.has(k));
@@ -90,6 +95,7 @@ console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +
   `${Object.keys(STATION_ICONS).length} stations + ` +
   `${Object.keys(POWERUP_TYPES).length + 1} pickups + ` +
+  `${Object.keys(PLAYER_STATUS).length} statuses + ` +
   `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons) ` +
   `over ${PIXEL_ICON_KEYS.length} drawings`
 );
