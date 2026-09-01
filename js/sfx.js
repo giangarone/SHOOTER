@@ -24,6 +24,8 @@ export class SFX {
     // Ladder state for coin(). Context time, so it survives a pause.
     this._coinAt = -10;
     this._coinStep = 0;
+    // Which kill texture played last, so the next one can avoid it. See kill().
+    this._killTex = -1;
   }
 
   // Must be called from a user gesture: browsers refuse to start an
@@ -64,9 +66,16 @@ export class SFX {
     o.stop(now + t + 0.03);
   }
 
-  // One burst of lowpassed white noise, fading out over its length.
+  // One burst of filtered white noise, fading out over its length.
   // f is the filter cutoff here, not a pitch.
-  noise({ t = 0.1, v = 0.5, f = 1000, delay = 0 }) {
+  //
+  // `f2` sweeps the cutoff to a second value across the burst and `mode`
+  // picks the filter. Both default to the old behaviour - a flat lowpass -
+  // so every sound written before them is untouched. They exist because a
+  // cutoff that MOVES is the only way to get a noise burst to change
+  // character as it plays, and a burst that changes character is the
+  // difference between a texture and an event. See kill().
+  noise({ t = 0.1, v = 0.5, f = 1000, delay = 0, f2 = 0, mode = 'lowpass' }) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime + delay;
     const len = Math.max(1, Math.floor(this.ctx.sampleRate * t));
@@ -76,8 +85,9 @@ export class SFX {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const flt = this.ctx.createBiquadFilter();
-    flt.type = 'lowpass';
-    flt.frequency.value = f;
+    flt.type = mode;
+    flt.frequency.setValueAtTime(f, now);
+    if (f2) flt.frequency.exponentialRampToValueAtTime(Math.max(20, f2), now + t);
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(v, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + t);
@@ -88,16 +98,114 @@ export class SFX {
   }
 
   // ---- named sounds ----
+  // A shot is three layers stacked inside 100ms: a bright CRACK that gives it
+  // its attack, a mid BODY that gives it size, and a sub THUMP that gives it
+  // weight. The old shot had a body and a little thump but no crack at all,
+  // which is what made it read as a soft pop - the transient is the part the
+  // ear hears as force, and it has to be short enough to be felt rather than
+  // heard as its own noise burst.
+  //
+  // The pitch jitter is what stops a held trigger from becoming one flat
+  // repeated tone. Real repeated shots are never identical, and at this depth
+  // the variation is felt rather than noticed.
   shoot() {
-    this.noise({ t: 0.09, v: 0.5, f: 2600 });
-    this.tone({ f: 180, f2: 60, t: 0.08, type: 'square', v: 0.25 });
+    const k = 0.94 + Math.random() * 0.12;
+    this.noise({ t: 0.02, v: 0.5, f: 7000 });
+    this.noise({ t: 0.07, v: 0.3, f: 1500 });
+    this.tone({ f: 150 * k, f2: 46, t: 0.09, type: 'triangle', v: 0.42 });
   }
+  // THE HITMARKER. Fires once per shot that connects (see _shoot), so its
+  // whole job is to separate a hit from a miss without becoming fatiguing at
+  // several a second.
+  //
+  // Two things make it audible UNDER the gun rather than buried by it. It
+  // sits in a narrow band around 3kHz, which is above the shot's body and
+  // below its crack - the shot is loudest either side of this window. And it
+  // lands 30ms LATE, after the shot's transient has decayed, which is both
+  // what makes it survive the mix and what makes it read as caused by the
+  // shot rather than as part of the same noise.
+  //
+  // Pitchless, like the kill: at this rate of fire a note would be the first
+  // thing to grate.
   hit() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.noise({ t: r(0.012, 0.02), v: 0.34, f: r(2600, 3800), mode: 'bandpass', delay: 0.03 });
+    this.noise({ t: 0.012, v: 0.14, f: r(6000, 8200), mode: 'highpass', delay: 0.03 });
+  }
+
+  // The old hit sound, kept for the two moments that are not hitmarkers: a
+  // boss staggering and a ward eating a hit. Both are single, punctuating
+  // events where a soft chime is right and a hitmarker tick would vanish.
+  impact() {
     this.tone({ f: 880, f2: 440, t: 0.06, type: 'triangle', v: 0.3 });
   }
-  kill() {
-    this.noise({ t: 0.25, v: 0.5, f: 900 });
-    this.tone({ f: 220, f2: 40, t: 0.3, type: 'sawtooth', v: 0.3 });
+  // NO PITCH ANYWHERE IN HERE, deliberately - not a note, and not a falling
+  // sub either. Every layer is noise, so there is nothing the ear can hear as
+  // a tone and nothing that can land in or out of key with the track.
+  //
+  // TWO THINGS KEEP IT FROM GOING STALE, because this is the most frequent
+  // sound in the game after the gun and a fixed recipe played a thousand
+  // times a run stops being an event and becomes a tick.
+  //
+  // ROTATION. Three textures with their own character - a dry thud, a bright
+  // shatter, a gritty tear - and never the same one twice running. Random
+  // parameters alone only ever vary the COLOUR of one sound; swapping the
+  // recipe varies its identity, which is what the ear actually tracks.
+  //
+  // WEIGHT. `size` is the dead thing's collision radius, normalised around
+  // the 0.5 the standard roster shares. Big things ring lower and longer,
+  // small things brighter and shorter, so the sound says what died as well as
+  // that something did - and the variation stops being arbitrary, because it
+  // is now carrying information.
+  //
+  // Inside a texture the parameters are still randomised, and the debris
+  // chips vary in COUNT and SPACING, so the rhythm differs kill to kill too.
+  kill(size = 0.5) {
+    const r = (a, b) => a + Math.random() * (b - a);
+    // Clamped so a boss part cannot drag the sound somewhere the mix has
+    // never heard, and a chip cannot turn into a whistle.
+    const w = Math.max(0.75, Math.min(2.4, size / 0.5));
+    const low = (f) => f / w;
+    const dur = (t) => t * (0.75 + w * 0.35);
+
+    const last = this._killTex;
+    let tex = Math.floor(Math.random() * 3);
+    if (tex === last) tex = (tex + 1 + Math.floor(Math.random() * 2)) % 3;
+    this._killTex = tex;
+
+    let chips;
+    if (tex === 0) {
+      // DRY THUD. Almost no top end - it lands and stops. The quietest of the
+      // three, which is what keeps a crowd going down together from piling up.
+      this.noise({ t: r(0.014, 0.022), v: 0.3, f: r(2800, 4600), mode: 'highpass' });
+      this.noise({ t: dur(0.11), v: 0.55, f: low(r(130, 200)) });
+      chips = 1;
+    } else if (tex === 1) {
+      // BRIGHT SHATTER. Hard transient and a band falling away underneath it,
+      // with the most debris of the three - the one that reads as breaking.
+      this.noise({ t: r(0.02, 0.032), v: 0.45, f: r(5200, 9000), mode: 'highpass' });
+      this.noise({
+        t: dur(0.13), v: 0.34, f: r(3200, 4800), f2: low(r(500, 900)), mode: 'bandpass',
+      });
+      this.noise({ t: dur(0.09), v: 0.4, f: low(r(150, 220)) });
+      chips = 3;
+    } else {
+      // GRITTY TEAR. The longest sweep and the narrowest band, so it comes
+      // apart slowly rather than snapping - the one that reads as tearing.
+      this.noise({ t: r(0.018, 0.028), v: 0.34, f: r(3600, 6000), mode: 'highpass' });
+      this.noise({
+        t: dur(0.19), v: 0.4, f: r(1400, 2400), f2: low(r(260, 480)), mode: 'bandpass',
+      });
+      this.noise({ t: dur(0.1), v: 0.45, f: low(r(120, 180)) });
+      chips = 2;
+    }
+
+    for (let i = 0; i < chips; i++) {
+      this.noise({
+        t: r(0.012, 0.03), v: r(0.09, 0.18), f: low(r(1800, 6500)),
+        mode: 'bandpass', delay: r(0.03, 0.16),
+      });
+    }
   }
   hurt() {
     this.tone({ f: 110, f2: 55, t: 0.25, type: 'sawtooth', v: 0.45 });

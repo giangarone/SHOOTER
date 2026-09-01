@@ -136,12 +136,28 @@ try {
         }, 60);
       });
 
+      // DRIVEN ON FIXED TICKS, NOT ON THE CLOCK. Everything below used to
+      // wait on real time, which really meant waiting on the frame loop - and
+      // a headless Chrome sharing a machine with another suite gets starved of
+      // frames. The volley then fired nothing at all and the checks failed on
+      // the harness rather than on the boss. Both mechanics are written in
+      // game time (a.dt), so game time is what drives them here.
+      const DT = 1 / 60;
+      let clock = 0;
+      const run = (seconds) => {
+        for (let i = 0; i < Math.round(seconds / DT); i++) {
+          clock += DT;
+          g.time += DT;
+          g._updateEnemies(DT);
+        }
+      };
+
       // Walk every part just under the next threshold in turn and let the AI
       // notice. Each pass doubles the part count.
       const parts = [g.bossFight.parts.length];
       for (const frac of [0.49, 0.24, 0.11]) {
         for (const p of g.bossFight.parts) p.hp = p.maxHp * frac;
-        await new Promise((r) => setTimeout(r, 500));
+        run(0.5);
         parts.push(g.bossFight.parts.length);
       }
 
@@ -152,23 +168,30 @@ try {
       // has already hit a wall is still a round that was fired, and the parts
       // stand close to cover.
       const part = g.bossFight.parts[0];
+      // The volley only arms inside 26m (see aiSchism), so the player has to
+      // be standing near the part under test rather than wherever the fight
+      // happened to leave them - otherwise the burst never comes and the
+      // count is zero for a reason that has nothing to do with the volley.
+      g.player.pos.set(part.pos.x + 3, 0, part.pos.z);
       const orig = g._spawnProjectile.bind(g);
       let fired = 0;
-      let firedAt = 0;
+      let firedAt = -1;
       g._spawnProjectile = (x, y, z, type, ss, sr) => {
-        if (type === 'schism') { fired++; firedAt = firedAt || performance.now(); }
+        if (type === 'schism') { fired++; if (firedAt < 0) firedAt = clock; }
         return orig(x, y, z, type, ss, sr);
       };
       // Only this part is armed; the others are pushed well out so their own
       // cooldowns cannot land inside the window and inflate the count.
       for (const p of g.bossFight.parts) { p.bs.burstCd = 999; p.bs.tell = 0; }
-      const armedAt = performance.now();
+      clock = 0;
       part.bs.burstCd = 0;
-      await new Promise((r) => setTimeout(r, 100));
+      run(0.1);
       const duringTell = fired;
-      await new Promise((r) => setTimeout(r, 1400));
+      run(1.4);
       g._spawnProjectile = orig;
-      return { parts, duringTell, fired, delay: firedAt ? firedAt - armedAt : -1 };
+      // Reported in ms so the assertion and the failure line below read the
+      // same as they always have - it is game time now, not wall time.
+      return { parts, duringTell, fired, delay: firedAt >= 0 ? firedAt * 1000 : -1 };
     });
     const step = (n, want) => {
       const ok = r.parts[n] === want;

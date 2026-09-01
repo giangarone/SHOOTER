@@ -4118,7 +4118,7 @@ export class Grenade {
       ctx.effects.burst(this.pos, 0xff4400, 28, 8, 3, 0.6);
       ctx.effects.burst(this.pos, 0xffaa00, 16, 5, 2, 0.4);
     }
-    if (ctx.sfx) ctx.sfx.kill();
+    if (ctx.sfx) ctx.sfx.kill(this.radius);
     this.mesh.visible = false;
   }
 }

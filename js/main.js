@@ -1493,7 +1493,7 @@ class Game {
       bf.state = 'vulnerable';
       bf.note = 'STAGGERED';
       this.ui.banner('STAGGERED');
-      this.sfx.hit();
+      this.sfx.impact();
       // Black out, then flare white as it comes back up.
       this.rig.cueStagger();
     } else if (kind === 'recover') {
@@ -1722,7 +1722,8 @@ class Game {
     this._clearHazards();
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this._postScore();
-    this.sfx.kill();
+    // The heaviest the sound goes. This is the run ending, not a body.
+    this.sfx.kill(1.2);
   }
 
   // Current credit/score multiplier from the live kill chain.
@@ -1850,7 +1851,7 @@ class Game {
     en.takeDamage(m.lightningDamage);
     this._blast(this._boltAt, m.lightningSplash, m.lightningRadius, en, false);
     this.effects.lightning(en.pos.x, en.pos.z, m.lightningRadius);
-    this.sfx.kill();
+    this.sfx.kill(en.radius);
   }
 
   // OVERLOAD. Every enemy in the arena loses a fifth of its MAXIMUM health the
@@ -2348,7 +2349,7 @@ class Game {
       this.player.wardReady = false;
       this.effects.shockwave(this.player.pos, 0x4ef3ff, 3.5, 0.4);
       this.effects.burst(pos, 0x4ef3ff, 16, 5, 2, 0.5);
-      this.sfx.hit();
+      this.sfx.impact();
       this.ui.banner('WARD');
       return;
     }
@@ -3451,7 +3452,7 @@ class Game {
       // e.pos.y is zero for everything on the floor, so this is unchanged for
       // the ground roster and puts a flier's death where the flier was.
       this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
-      this.sfx.kill();
+      this.sfx.kill(e.radius);
       // Loot falls where the thing died. Boss parts are excluded: the boss
       // pays out by bleeding at health thresholds and by the kill bonus, and
       // letting the final part roll as well would double-pay the same kill.
