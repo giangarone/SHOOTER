@@ -37,6 +37,15 @@ const GLOW_THRESHOLD = 0.62;
 const GLOW_STRENGTH = 0.42;
 // Amplitude of the per-pixel noise, on a 0-1 signal.
 const NOISE = 0.022;
+// Quantisation steps per channel, before dithering. This is the one knob in
+// here that is NOT a display artifact: a tube did not posterise, a machine
+// with a small palette did, and it did it before the signal ever reached the
+// glass - which is why it happens ahead of the grain below. It is the same
+// trick the overlays already pull with their 2px checker (see --dither in
+// styles.css), applied to the arena instead of faked behind a menu. 16 is
+// deliberately mild: enough that the rig's washes band into steps, not enough
+// to cost an enemy silhouette across the arena.
+const LEVELS = 16;
 // Divisor for the glow targets. Quarter res in each axis - the blur is meant
 // to be a halo, and running it at full res costs sixteen times the fill for a
 // result nobody can tell apart.
@@ -87,10 +96,21 @@ const COMPOSITE_FRAG = /* glsl */ `
   uniform float uAberration;
   uniform float uGlow;
   uniform float uNoise;
+  uniform float uLevels;
+  uniform float uPixel;
   varying vec2 vUv;
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+
+  // Ordered dither, 4x4. Built by recursion rather than read out of a const
+  // array, because indexing an array by a varying value is not something
+  // GLSL ES 1.00 will compile - and this is two mods and a multiply anyway.
+  float bayer2(vec2 p) { return mod(2.0 * p.x + 3.0 * p.y, 4.0); }
+  float bayer4(vec2 p) {
+    vec2 q = mod(p, 4.0);
+    return (4.0 * bayer2(mod(q, 2.0)) + bayer2(floor(q * 0.5))) / 16.0;
   }
 
   void main() {
@@ -110,9 +130,24 @@ const COMPOSITE_FRAG = /* glsl */ `
 
     col += texture2D(tGlow, uv).rgb * uGlow;
 
+    // Screen pixels, not device pixels. Everything below is a fixed-size grid
+    // and has to keep that size on a retina panel, or the dither lands at half
+    // scale there and stops matching the overlays' checker.
+    vec2 px = gl_FragCoord.xy / uPixel;
+
+    // Posterise, with the error pushed into a 4x4 ordered dither. Done in
+    // roughly perceptual space: quantising the linear signal directly would
+    // spend most of its levels on highlights and band this game's darks into
+    // mud, which is exactly where it is being looked at.
+    vec3 g = pow(max(col, 0.0), vec3(0.4545));
+    g = floor(g * uLevels + 0.5 + (bayer4(px) - 0.5)) / uLevels;
+    col = pow(clamp(g, 0.0, 1.0), vec3(2.2));
+
     // Analog grain. Keyed off the fragment rather than the UV so it stays a
-    // fixed size on screen instead of stretching with the warp.
-    col += (hash(gl_FragCoord.xy + fract(uTime) * vec2(37.0, 17.0)) - 0.5) * uNoise;
+    // fixed size on screen instead of stretching with the warp. After the
+    // quantiser, not before: this is the tube's noise, and nothing downstream
+    // of a tube gets to re-quantise it.
+    col += (hash(px + fract(uTime) * vec2(37.0, 17.0)) - 0.5) * uNoise;
 
     // The tube's edge. The warp pulls UVs past the frame at the corners, and
     // this both blacks that out and feathers it, so the glass ends on a soft
@@ -178,6 +213,8 @@ export class CrtPass {
         uAberration: { value: ABERRATION },
         uGlow: { value: GLOW_STRENGTH },
         uNoise: { value: NOISE },
+        uLevels: { value: LEVELS },
+        uPixel: { value: 1 },
       },
       vertexShader: QUAD_VERT,
       fragmentShader: COMPOSITE_FRAG,
@@ -194,6 +231,7 @@ export class CrtPass {
   // the same resolution the renderer is already drawing at.
   setSize(width, height) {
     const dpr = this.renderer.getPixelRatio();
+    this._composite.uniforms.uPixel.value = dpr;
     const w = Math.max(1, Math.floor(width * dpr));
     const h = Math.max(1, Math.floor(height * dpr));
     this._scene_rt.setSize(w, h);

@@ -167,8 +167,12 @@
     </div>
   </div>
 
-  <!-- The tube. Above every layer including the menus: the conceit is that the
-       whole machine is being watched through one piece of curved glass. -->
+  <!-- The tube, in two layers, and they are separate elements for a reason
+       CSS forces on us: the scanlines blend in `overlay` against everything
+       beneath them, and a blended pseudo-element only ever blends within its
+       own parent - nesting it inside #crt would have it composite against
+       nothing and paint flat grey. The bezel below must NOT blend. -->
+  <div id="scanlines"></div>
   <div id="crt"></div>
 
   <script type="module" src="/js/main.js"></script>

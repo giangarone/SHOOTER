@@ -565,12 +565,31 @@ html, body {
    the bezel - because the HUD and the menus have to sit under the same grid
    as the arena or the illusion is only skin deep.
 
-   The scanlines are the effect. A 3px pitch: one hard dark line, two clear
-   rows. A 2px line on a 4px pitch was tried and is heavier than this game
-   wants - it starts reading as a shutter over the arena rather than as the
-   grain of a tube. Fixed in CSS pixels and never scaled, so the pitch cannot
-   drift into the HUD's 4px grid, and hard-stopped rather than ramped so each
-   line survives any DPR instead of dissolving into a grey wash.
+   The scanlines are the effect. A 1px line on a 3px pitch, and the layer is
+   blended in OVERLAY rather than painted over the top. That blend mode is the
+   entire reason this version works.
+
+   The problem it solves: a scanline is read as CONTRAST between rows, while
+   the screen's brightness is read as their average, and painting flat black
+   moves both at once - which is why every attempt to make these more visible
+   also dimmed the arena. Painting a translucent white row alongside fixed the
+   dimming and cost the contrast instead: white over a near-black arena lifts
+   the blacks, and this game is almost entirely blacks.
+
+   Overlay is the way out, and it is also just what a tube does. It pivots
+   around mid grey: rows darker than 128 multiply, lighter rows screen, and
+   both leave black exactly black. So the lines modulate what is LIT - the
+   floor panels, the lasers, the HUD - and do nothing at all to the empty dark
+   the arena is mostly made of. Nothing to dim, nothing to wash out, and the
+   line weight now scales with the brightness of what it crosses.
+
+   The three greys are the knob: their spread from 128 is the line's strength,
+   and 128 itself is a no-op row. A 2px line on a 4px pitch was tried at 0.34
+   and at 0.26 and is not what this game wants.
+
+   Fixed in CSS pixels and never scaled, so the pitch cannot drift into the
+   HUD's 4px grid, and hard-stopped rather than ramped so each line survives
+   any DPR instead of dissolving into a grey wash.
 
    No aperture grille any more. It was the noisiest thing in the old effect,
    and the pass's aberration now does the colour-fringe job properly.
@@ -581,12 +600,15 @@ html, body {
   position: fixed; inset: 0; z-index: 100;
   pointer-events: none;
 }
-#crt::before {
-  content: ""; position: absolute; inset: 0;
+#scanlines {
+  position: fixed; inset: 0; z-index: 99;
+  pointer-events: none;
+  mix-blend-mode: overlay;
   background: repeating-linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.46) 0 1px,
-    rgba(0, 0, 0, 0)    1px 3px
+    rgb(58, 58, 58)    0 1px,
+    rgb(128, 128, 128) 1px 2px,
+    rgb(168, 168, 168) 2px 3px
   );
 }
 #crt::after {
