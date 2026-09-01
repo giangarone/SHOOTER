@@ -13,11 +13,12 @@
 //   1. the scene, into a half-float target
 //   2. a bright-pass extract into a quarter-res target
 //   3. two separable blurs of that, ping-ponged
-//   4. the composite: barrel warp, radial aberration, glow, noise, edge mask
+//   4. the composite: barrel warp, radial aberration, glow, dither, edge mask
 //
-// NOTHING HERE ROLLS OR FLICKERS. The only animated term is the noise hash,
-// at an amplitude you notice as texture and never as motion. A rolling bar
-// looks right in a screenshot and is miserable to play under.
+// NOTHING HERE MOVES. Not a rolling bar, not a flicker, and no grain either -
+// analog noise was tried and cut. Every animated tube artifact looks right in
+// a screenshot and is miserable to play under for twenty minutes, so this
+// pass is now purely a function of the frame it is handed.
 
 import * as THREE from 'three';
 
@@ -35,8 +36,6 @@ const ABERRATION = 0.0022;
 // flashes and the orbs, not the floor.
 const GLOW_THRESHOLD = 0.62;
 const GLOW_STRENGTH = 0.42;
-// Amplitude of the per-pixel noise, on a 0-1 signal.
-const NOISE = 0.022;
 // Quantisation steps per channel, before dithering. This is the one knob in
 // here that is NOT a display artifact: a tube did not posterise, a machine
 // with a small palette did, and it did it before the signal ever reached the
@@ -91,18 +90,12 @@ const BLUR_FRAG = /* glsl */ `
 const COMPOSITE_FRAG = /* glsl */ `
   uniform sampler2D tScene;
   uniform sampler2D tGlow;
-  uniform float uTime;
   uniform float uCurve;
   uniform float uAberration;
   uniform float uGlow;
-  uniform float uNoise;
   uniform float uLevels;
   uniform float uPixel;
   varying vec2 vUv;
-
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-  }
 
   // Ordered dither, 4x4. Built by recursion rather than read out of a const
   // array, because indexing an array by a varying value is not something
@@ -130,6 +123,16 @@ const COMPOSITE_FRAG = /* glsl */ `
 
     col += texture2D(tGlow, uv).rgb * uGlow;
 
+    // ACES, by hand, here rather than in the scene's own materials. three
+    // SKIPS tone mapping whenever a render target is bound (WebGLRenderer
+    // gates it on currentRenderTarget === null), so the moment this pass
+    // existed the arena silently lost the curve it was lit and colour-picked
+    // under. Everything above this line is scene-referred and may exceed 1;
+    // everything below it is display-referred 0-1.
+    #if defined( TONE_MAPPING )
+      col = toneMapping( col );
+    #endif
+
     // Screen pixels, not device pixels. Everything below is a fixed-size grid
     // and has to keep that size on a retina panel, or the dither lands at half
     // scale there and stops matching the overlays' checker.
@@ -143,12 +146,6 @@ const COMPOSITE_FRAG = /* glsl */ `
     g = floor(g * uLevels + 0.5 + (bayer4(px) - 0.5)) / uLevels;
     col = pow(clamp(g, 0.0, 1.0), vec3(2.2));
 
-    // Analog grain. Keyed off the fragment rather than the UV so it stays a
-    // fixed size on screen instead of stretching with the warp. After the
-    // quantiser, not before: this is the tube's noise, and nothing downstream
-    // of a tube gets to re-quantise it.
-    col += (hash(px + fract(uTime) * vec2(37.0, 17.0)) - 0.5) * uNoise;
-
     // The tube's edge. The warp pulls UVs past the frame at the corners, and
     // this both blacks that out and feathers it, so the glass ends on a soft
     // line rather than a stair-stepped one.
@@ -156,13 +153,18 @@ const COMPOSITE_FRAG = /* glsl */ `
     col *= smoothstep(0.0, 0.0025, min(d.x, d.y));
 
     gl_FragColor = vec4(col, 1.0);
+
+    // The other half of the same omission: a custom ShaderMaterial gets no
+    // automatic sRGB encode, so without this the whole game was being shown
+    // as raw linear - which is a LOT darker, and was being mistaken for the
+    // scanlines being too heavy.
+    #include <colorspace_fragment>
   }
 `;
 
 export class CrtPass {
   constructor(renderer) {
     this.renderer = renderer;
-    this._time = 0;
 
     // One quad, one camera, reused by all four passes. The vertex shader
     // ignores the camera entirely - position is already in clip space - but
@@ -208,17 +210,17 @@ export class CrtPass {
       uniforms: {
         tScene: { value: this._scene_rt.texture },
         tGlow: { value: this._glowB.texture },
-        uTime: { value: 0 },
         uCurve: { value: CURVE },
         uAberration: { value: ABERRATION },
         uGlow: { value: GLOW_STRENGTH },
-        uNoise: { value: NOISE },
         uLevels: { value: LEVELS },
         uPixel: { value: 1 },
       },
       vertexShader: QUAD_VERT,
       fragmentShader: COMPOSITE_FRAG,
-      toneMapped: false,
+      // TRUE here, unlike the two passes above: this is the one that reaches
+      // the canvas, so it is the one that owes the image its tone curve.
+      toneMapped: true,
       depthTest: false,
       depthWrite: false,
     });
@@ -248,7 +250,7 @@ export class CrtPass {
     this.renderer.render(this._scene, this._camera);
   }
 
-  render(scene, camera, dt = 0) {
+  render(scene, camera) {
     const r = this.renderer;
 
     r.setRenderTarget(this._scene_rt);
@@ -266,9 +268,7 @@ export class CrtPass {
     this._draw(this._blur, this._glowA);
 
     // The vertical blur landed back in A, so that is what the composite reads.
-    this._time += dt;
     this._composite.uniforms.tGlow.value = this._glowA.texture;
-    this._composite.uniforms.uTime.value = this._time;
     this._draw(this._composite, null);
   }
 

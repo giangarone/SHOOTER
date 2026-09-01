@@ -3820,7 +3820,7 @@ class Game {
     this.money.setHouseColour(this.rig.houseColour);
 
     this.effects.update(dt);
-    this.crt.render(this.scene, this.camera, dt);
+    this.crt.render(this.scene, this.camera);
   }
 }
 
