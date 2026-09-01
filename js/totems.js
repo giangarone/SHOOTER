@@ -1,8 +1,8 @@
 // Wave-end upgrade totems and the two stations beside them.
 //
-// Three shafts of light drop out of the truss when a wave is cleared, each
-// standing over one upgrade's icon. The player takes one by shooting it
-// ANYWHERE - the column and the icon turning inside it are one target - or by
+// Three marks of light appear on the floor when a wave is cleared, each with
+// one upgrade's icon turning over it. The player takes one by shooting it
+// ANYWHERE - the mark and the icon above it are one target - or by
 // pressing E beside it. An unclaimed set simply stays lit until the wave after
 // it is cleared, when a fresh set replaces it.
 //
@@ -24,12 +24,12 @@
 //   build for you. It cost more than it saved: hitting a wobbling 27cm orb
 //   mid-fight is a marksmanship test nobody asked for, and the totem reads as
 //   one object, so half of it being inert reads as a bug. Claiming is now a
-//   single invisible box around the foot of the column and its icon (`hit`
+//   single invisible box around the mark on the floor and its icon (`hit`
 //   below). The floating card above is deliberately NOT part of it - it hangs
 //   wide and high over the arena, and a stray shot up there should stay a miss.
 //
 // EACH OFFER HAS ITS OWN COLOUR AND ICON
-//   `theme` tints the shaft, the pool, the card and the icon; the icon itself
+//   `theme` tints the floor mark, the card and the icon; the icon itself
 //   is a 24x24 pixel-art plate from pixelicons.js, looked up by the offer's own
 //   id, that says what the upgrade does before the text is legible - a flame
 //   for Incendiary, a snowflake for Cryo. Both come straight off the offer, so
@@ -41,10 +41,10 @@
 //   is now unrepresentable. test/icons.mjs checks the other direction, that
 //   every id has a drawing.
 //
-//   The icon ORBITS the axis of its column to whatever side the player is on
+//   The icon ORBITS the axis of its mark to whatever side the player is on
 //   and turns to face them. It is flat art, so facing the player is the only
 //   angle that means anything; the orbit is what keeps it legible from
-//   anywhere in the arena rather than only from the front of its column.
+//   anywhere in the arena rather than only from one side of the row.
 //
 // PERFORMANCE RULES, same as arena.js and powerups.js:
 //   1. No PointLights, ever. three.js keys its shader programs on the scene's
@@ -177,165 +177,297 @@ function pxText(c, text, x, y, size, maxWidth) {
 }
 
 
-// ---- THE OFFER IS A SHAFT OF LIGHT, NOT A PILLAR -------------------------
+// ---- AN OFFER IS A MARK ON THE FLOOR, NOT A SHAFT OF LIGHT ---------------
 //
-// An offer used to be a solid emissive box with the icon hovering in front of
-// it, and the box was the problem: a tinted rectangle standing on the floor of
-// a room whose entire language is beams, haze and lasers reads as a signpost
-// borrowed from another game. What stands there now is the light itself - a
-// shaft dropped out of the truss in the offer's colour, a pool where it lands,
-// and the icon turning inside it. Nothing solid is left, so nothing has to be
-// lit, and the wave break looks like the rig picking three things out of a
-// dark room rather than like three props being wheeled on.
+// This has been a solid emissive pillar, then a 12.6m shaft dropped out of the
+// truss, and is now a pool of light on the ground with a ring around it. Each
+// change was made for the same reason and the shaft failed it the same way the
+// pillar did: SOMETHING WAS STANDING BETWEEN THE PLAYER AND THE OFFER.
 //
-// It costs nothing the pillar did not: same rules as the rest of this file, so
-// NO PointLight. The column is additive geometry and reads by itself.
+// The shaft was an additive DoubleSide cylinder about 1.15m wide at icon
+// height, and the icon turns at 0.5m off the axis - inside it. So the near
+// wall of the light was drawn OVER the icon every frame, and additive only
+// ever adds, so no amount of contrast in the icon could win: the brighter the
+// column, the more washed out the thing it was supposed to be advertising.
+// The card had already fled the same problem by orbiting out to PANEL_R; the
+// icon never could, because the icon is what the light is pointing at.
 //
-// THE SHAFT CARRIES ITS GRADIENT IN ITS VERTICES, NOT IN A TEXTURE. The rig's
-// beams use a canvas for exactly this, and the same trick a second time would
-// have cost a texture the game does not have: the smoke test holds it to
-// twelve, and eight columns sharing one image still leaves that image
-// competing with the panels, the icons and the glow dot. So the fade along the
-// shaft and the streaks around it are baked into the colour attribute of one
-// shared geometry, which every column then tints through its own material.
-// A vertex colour costs nothing to sample and nothing to store.
+// So the light now lies on the ground. Nothing renders between the eye and
+// the offer at any angle, and the two things the player is there to read -
+// the icon and the card - stand in clear air.
 //
-// The pool on the floor is the glow dot every particle and pickup in the game
-// already uses (effects.js hands out exactly one), so the two things a column
-// is made of add no textures at all.
-const SHAFT_TOP = 12.6;
-// Narrow where it leaves the truss, wide where it lands: a shaft converging
-// upward is what says the source is far away and above.
-const SHAFT_R_TOP = 0.42;
-const SHAFT_R_BOT = 1.25;
-// Rings up the shaft. One would leave the fade a straight line between the two
-// ends; the falloff below is a curve, and six segments is where it stops
-// reading as a taper and starts reading as light thinning out.
-const SHAFT_RINGS = 6;
-// Faces around it. Also how many streaks it can carry, since the streaks are
-// one value per column of vertices.
-const SHAFT_SIDES = 16;
-// How fast the shaft turns on its own axis, in radians per second. This is the
-// haze moving through a fixed beam - the same thing the rig gets by scrolling
-// its beam texture - so it is deliberately slow enough that nobody catches it
-// as rotation.
-const SHAFT_DRIFT = 0.16;
-// The pool on the floor, in metres of radius. Wider than the shaft it belongs
-// to, because light landing on a floor spreads across it - and because in a
-// blacked-out room the pool is the only thing telling the player where the
-// ground under an offer actually is.
-const POOL_R = 2.9;
-let SHAFT_GEOM = null;
+// WHAT REPLACES THE VERTICAL READ. A 12m column was visible across a blacked
+// out arena and a floor decal is not, so the mark cannot just be the old pool
+// left behind on its own - a soft-edged disc with nothing else to it reads as
+// a smudge on the floor rather than as an offer. Four parts do the job the
+// shaft did:
+//
+//   1. THE POOL. The soft tinted glow, as before. It is the light itself and
+//      it says where the ground under an offer is.
+//   2. THE RIM. A dashed ring turning slowly at the pool's edge. This is the
+//      part that makes the mark read as PUT THERE rather than spilled: a soft
+//      gradient has no outline, and an outline is what the eye finds first in
+//      a dark room. Dashed and turning rather than solid and still, because a
+//      solid circle is a decal and a moving one is a thing that is ON.
+//   3. THE RIPPLE. A second ring born at the middle every couple of seconds
+//      and expanding out through the rim, fading as it goes. This is the
+//      "come here" the column used to shout by being tall.
+//   4. THE HAZE. An ankle-high flare of light standing off the pool,
+//      brightest where it meets the floor and gone a foot up. It gives the
+//      mark volume so it is not a sticker, and it is deliberately far below
+//      ICON_Y - it stops long before it reaches anything anyone has to read.
+//
+//      IT HAS TO STAY ALMOST INVISIBLE. The first cut of this was 0.45m tall
+//      at half opacity and it read as a brass TUB with the icon sitting down
+//      inside it - which is the pillar all over again, a solid prop wearing
+//      the offer's colour. Additive light on a black floor goes solid far
+//      sooner than it looks like it will on paper. Short, faint and flared
+//      wide is the difference between spill and a container.
+//
+// THEY ARE TIGHTER THAN THE OLD POOL, AND THAT IS THE POINT. The pool was
+// 2.9m of radius on totems standing 3.6m apart, so neighbouring pools already
+// overlapped by more than half. That was survivable while the shafts were the
+// thing being read - three columns are obviously three - but with the floor
+// carrying the whole read, three overlapping discs merge into one lit strip
+// and the row stops looking like three separate choices. Everything here fits
+// inside the spacing with dark ground left between, because the gap is what
+// makes them count as three.
+//
+// NO TEXTURES, AT ALL. The texture budget in test/smoke.mjs is fully spent at
+// thirteen, so every part of this is either the shared glow dot effects.js
+// already hands out or geometry carrying its own gradient in a vertex colour
+// attribute - the same trick the shaft used for its falloff, which is the one
+// thing about the shaft worth keeping. A vertex colour costs nothing to
+// sample and nothing to store.
+//
+// Same rules as the rest of this file: NO PointLight, and the meshes are
+// built once per totem and reused for the whole session.
+
+// The soft glow disc, in metres of radius. See the note above about the row
+// spacing: this is the outermost thing a totem puts on the floor and two of
+// them 3.6m apart have to leave dark ground between.
+const POOL_R = 1.7;
+// Where the dashed rim sits, inside the pool's falloff so the ring reads as
+// the edge of the light rather than as a hoop lying outside it.
+const RIM_R = 1.28;
+// How fast the rim turns, in radians per second. Slow: this is a light that
+// is on, not a loading spinner. It is the same argument SHAFT_DRIFT made.
+const RIM_SPIN = 0.5;
+// Seconds between ripples. Long enough that it reads as a pulse rather than
+// as an animation running.
+const RIPPLE_PERIOD = 2.2;
+// How high the ground haze stands. ICON_Y is 1.5 and the card is higher
+// still; this has to stop well short of both, and does.
+const HAZE_H = 0.3;
+
+// Rim ring geometry. Three rows of vertices across the band - inner, middle,
+// outer - coloured 0/1/0 so the band fades out on both edges without a
+// texture, and stepped along its length into dashes the same way.
+const RIM_SEGS = 128;
+const RIM_DASHES = 9;
+// Fraction of each dash slot that is lit. Under a half reads as a dotted
+// line; this is a ring with breaks in it.
+const RIM_DUTY = 0.62;
+// How much of a slot the dash takes to fade in and out, as a fraction. Zero
+// would alias into a flickering picket fence as the ring turns; this softens
+// the ends over about three segments.
+const RIM_SOFT = 0.09;
+// Radial half-width of the rim band, as a fraction of RIM_R.
+const RIM_W = 0.085;
+
 let POOL_GEOM = null;
 let POOL_TEX = null;
+let RIM_GEOM = null;
+let RIPPLE_GEOM = null;
+let HAZE_GEOM = null;
+
+// A flat annulus of unit radius lying in the XZ plane, with a soft-edged
+// radial profile baked into its vertex colours. `dashes` of 0 gives a solid
+// ring; anything else breaks it up. Shared by the rim and the ripple, which
+// differ only in whether they are broken and how wide they are.
+function makeRingGeom(halfWidth, dashes) {
+  const rows = [1 - halfWidth, 1, 1 + halfWidth];
+  const pos = [];
+  const col = [];
+  const idx = [];
+  for (let s = 0; s <= RIM_SEGS; s++) {
+    const f = s / RIM_SEGS;
+    const a = f * Math.PI * 2;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    // The dash profile. `edge` is the distance to the nearer end of the lit
+    // part of this slot, so it goes negative in the gaps and the clamp turns
+    // that into darkness.
+    let dash = 1;
+    if (dashes > 0) {
+      const slot = (f * dashes) % 1;
+      const edge = Math.min(slot, RIM_DUTY - slot);
+      dash = Math.max(0, Math.min(1, edge / RIM_SOFT));
+    }
+    for (let r = 0; r < 3; r++) {
+      pos.push(ca * rows[r], 0, sa * rows[r]);
+      // 0 at both edges of the band, full in the middle.
+      const v = (r === 1 ? 1 : 0) * dash;
+      col.push(v, v, v);
+    }
+    if (s < RIM_SEGS) {
+      const b = s * 3;
+      idx.push(b, b + 1, b + 4, b, b + 4, b + 3);
+      idx.push(b + 1, b + 2, b + 5, b + 1, b + 5, b + 4);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  return g;
+}
 
 // Built on the first column rather than at import: the pool's texture needs a
 // canvas, and a canvas at module scope breaks every tool that imports this
 // file without a DOM.
-function shaftAssets() {
-  if (SHAFT_GEOM) return;
-  SHAFT_GEOM = new THREE.CylinderGeometry(
-    SHAFT_R_TOP, SHAFT_R_BOT, SHAFT_TOP, SHAFT_SIDES, SHAFT_RINGS, true
-  );
-  // Cylinders are centred on their middle; this puts the open foot at y = 0 so
-  // a column's origin is where it meets the floor.
-  SHAFT_GEOM.translate(0, SHAFT_TOP / 2, 0);
-  const uv = SHAFT_GEOM.attributes.uv;
-  const col = new Float32Array(uv.count * 3);
-  for (let i = 0; i < uv.count; i++) {
-    // CylinderGeometry runs v from 0 at the TOP down to 1 at the bottom, so
-    // this flips it: `up` is 0 at the foot and 1 at the truss.
-    const up = 1 - uv.getY(i);
-    // The profile is the whole argument about whether this reads as light or
-    // as a plastic cone, and it is not a straight fade either way.
-    //
-    //   - It DISSOLVES at the very top. A shaft that is at its brightest where
-    //     the geometry stops ends in a hard rim twelve metres up, which is the
-    //     single most artificial thing a beam can do. The last eighth of it
-    //     goes out, so the column arrives out of a dark ceiling.
-    //   - It is brightest through the UPPER BODY, where nothing has to be read
-    //     through it.
-    //   - It EASES OFF at the foot, which is the opposite of what a real beam
-    //     does and is deliberate: the foot is where the icon turns and the
-    //     card hangs, and an additive surface at full strength in front of
-    //     them washes out the two things the player is there to look at. The
-    //     pool on the floor is what says the light landed.
-    const fall = 0.22 + 0.78 * Math.pow(up, 0.9) * (1 - Math.pow(up, 8));
-    // Streaks around it. Integer frequencies of the way round, so the pattern
-    // closes seamlessly where the last column of vertices meets the first.
-    const a = uv.getX(i) * Math.PI * 2;
-    const streak = 0.88 + 0.08 * Math.sin(a * 3 + 0.4) + 0.04 * Math.sin(a * 7 + 2.6);
-    const v = Math.max(0, Math.min(1, fall * streak));
-    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = v;
-  }
-  SHAFT_GEOM.setAttribute('color', new THREE.BufferAttribute(col, 3));
+function markAssets() {
+  if (POOL_GEOM) return;
   POOL_GEOM = new THREE.PlaneGeometry(1, 1);
   POOL_GEOM.rotateX(-Math.PI / 2);
   POOL_TEX = makeGlowTexture();
+  RIM_GEOM = makeRingGeom(RIM_W, RIM_DASHES);
+  // The ripple is solid - a dashed ring travelling outwards reads as debris -
+  // and wider, because a ring that is moving wants a softer edge than one
+  // that is parked.
+  RIPPLE_GEOM = makeRingGeom(0.16, 0);
+  // The knee-high haze: an open cylinder of unit radius and unit height,
+  // flaring very slightly outward, at full strength where it meets the floor
+  // and gone by the top. That is the opposite of the shaft's profile and it
+  // is the whole difference between light lying on the ground and light
+  // falling onto it.
+  HAZE_GEOM = new THREE.CylinderGeometry(1.32, 1, 1, 24, 3, true);
+  HAZE_GEOM.translate(0, 0.5, 0);
+  const uv = HAZE_GEOM.attributes.uv;
+  const hcol = new Float32Array(uv.count * 3);
+  for (let i = 0; i < uv.count; i++) {
+    // v runs 0 at the top to 1 at the bottom, so this is 1 at the floor.
+    const up = 1 - uv.getY(i);
+    const fall = Math.pow(1 - up, 2.6);
+    // The same integer-frequency streaks the shaft carried, so the haze has
+    // something to be when it turns. Seamless where the last column of
+    // vertices meets the first.
+    const a = uv.getX(i) * Math.PI * 2;
+    const streak = 0.82 + 0.12 * Math.sin(a * 3 + 0.4) + 0.06 * Math.sin(a * 5 + 2.6);
+    const v = Math.max(0, Math.min(1, fall * streak));
+    hcol[i * 3] = hcol[i * 3 + 1] = hcol[i * 3 + 2] = v;
+  }
+  HAZE_GEOM.setAttribute('color', new THREE.BufferAttribute(hcol, 3));
 }
 
-// One shaft and the pool under it, tinted per offer. `parent` keeps them, but
-// they are pinned to the FLOOR every frame rather than riding the group's
-// rise: light from the ceiling does not come up out of the ground, so a
-// column fades in where it already is while the icon and the card rise into
-// it.
-function makeColumn(parent, rBot = SHAFT_R_BOT, poolR = POOL_R) {
-  shaftAssets();
-  const shaftMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, vertexColors: true, transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-    side: THREE.DoubleSide, fog: false,
-  });
-  const shaft = new THREE.Mesh(SHAFT_GEOM, shaftMat);
-  shaft.scale.set(rBot / SHAFT_R_BOT, 1, rBot / SHAFT_R_BOT);
-  parent.add(shaft);
-  const poolMat = new THREE.MeshBasicMaterial({
-    map: POOL_TEX, color: 0xffffff, transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-  });
-  const pool = new THREE.Mesh(POOL_GEOM, poolMat);
-  pool.scale.set(poolR * 2, 1, poolR * 2);
-  parent.add(pool);
-  return { shaft, shaftMat, pool, poolMat };
+// One floor mark, tinted per offer. `parent` keeps the meshes, but they are
+// pinned to the FLOOR every frame rather than riding the group's rise: this
+// is light ON the ground, so it fades up where it already is while the icon
+// and the card rise out of it.
+//
+// The two radii are the caller's whole say in how big the mark is - a station
+// takes a smaller one - and everything inside scales off them together, so
+// the rim never drifts out of its pool.
+function makeMark(parent, rimR = RIM_R, poolR = POOL_R) {
+  markAssets();
+  // One material per part per totem because each wears its own offer's
+  // theme; the geometry behind them is shared by every mark in the game.
+  const mat = (geom, extra) => {
+    const m = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      ...extra,
+    });
+    const mesh = new THREE.Mesh(geom, m);
+    parent.add(mesh);
+    return { mesh, m };
+  };
+  const poolPart = mat(POOL_GEOM, { map: POOL_TEX });
+  poolPart.mesh.scale.set(poolR * 2, 1, poolR * 2);
+  const rimPart = mat(RIM_GEOM, { vertexColors: true, side: THREE.DoubleSide });
+  rimPart.mesh.scale.setScalar(rimR);
+  const ripplePart = mat(RIPPLE_GEOM, { vertexColors: true, side: THREE.DoubleSide });
+  const hazePart = mat(HAZE_GEOM, { vertexColors: true, side: THREE.DoubleSide });
+  hazePart.mesh.scale.set(rimR, HAZE_H, rimR);
+  return {
+    pool: poolPart.mesh, poolMat: poolPart.m,
+    rim: rimPart.mesh, rimMat: rimPart.m,
+    ripple: ripplePart.mesh, rippleMat: ripplePart.m,
+    haze: hazePart.mesh, hazeMat: hazePart.m,
+    rimR,
+  };
 }
 
-// Drives one column. `lit` is 0..1 - the rise, dimmed for an offer that cannot
+// Sets the colour of every part of a mark at once. Callers used to tint the
+// shaft and the pool by hand, which is two lines that have to be kept in step
+// and were about to become five.
+function tintMark(mark, hexColor) {
+  mark.poolMat.color.setHex(hexColor);
+  mark.rimMat.color.setHex(hexColor);
+  mark.rippleMat.color.setHex(hexColor);
+  mark.hazeMat.color.setHex(hexColor);
+}
+
+// Drives one mark. `lit` is 0..1 - the rise, dimmed for an offer that cannot
 // be afforded - and `floorY` is where the world floor sits in the parent's own
 // space, which is the negative of however far the group has sunk.
-function driveColumn(col, lit, floorY, time, phase) {
+function driveMark(mark, lit, floorY, time, phase) {
   // A slow breath, not a flicker. Fast movement here would read as a fault in
-  // the light; this is haze crossing a fixed beam.
+  // the light.
   const b = 0.86 + 0.14 * Math.sin(time * 1.7 + phase);
-  // The streaks turn with the shaft. See SHAFT_DRIFT: this is haze crossing a
-  // fixed light, and it is the only reason the column is not a static prop
-  // once it has faded in.
-  col.shaft.rotation.y = time * SHAFT_DRIFT + phase;
-  col.shaft.position.y = floorY;
-  col.pool.position.y = floorY + 0.03;
-  col.shaftMat.opacity = 0.4 * lit * b;
-  col.poolMat.opacity = 0.85 * lit * (0.82 + 0.18 * Math.sin(time * 1.7 + phase));
-  // An invisible mesh is culled before rasterising; a transparent one is still
-  // drawn, and these are tall double-sided additive surfaces. Same reason the
-  // rig hides its beams between hits.
-  col.shaft.visible = col.shaftMat.opacity > 0.01;
-  col.pool.visible = col.poolMat.opacity > 0.01;
+  // Everything lies within a few centimetres of the floor, and all of it is
+  // additive with depth writing off, so the small offsets are only there to
+  // keep the flat pieces off the floor plane itself and out of each other.
+  mark.pool.position.y = floorY + 0.03;
+  mark.rim.position.y = floorY + 0.05;
+  mark.ripple.position.y = floorY + 0.04;
+  mark.haze.position.y = floorY;
+
+  mark.poolMat.opacity = 0.7 * lit * (0.82 + 0.18 * Math.sin(time * 1.7 + phase));
+  // The rim turns. This is the one part of the mark that is unambiguously
+  // moving, and it is what stops a floor decal reading as paint.
+  mark.rim.rotation.y = time * RIM_SPIN + phase;
+  mark.rimMat.opacity = 0.95 * lit * b;
+  // The haze turns the other way and slower, so the two never lock into
+  // looking like one rotating object.
+  mark.haze.rotation.y = -time * RIM_SPIN * 0.45 + phase;
+  mark.hazeMat.opacity = 0.16 * lit * b;
+
+  // The ripple. `t` is 0..1 across one period, offset by phase so the three
+  // totems in a row do not pulse in lockstep - a row breathing as one reads
+  // as one object, and these are three choices.
+  const t = ((time / RIPPLE_PERIOD) + phase * 0.37) % 1;
+  // It starts inside the rim and travels out past it, so it reads as leaving
+  // rather than as landing on the ring and stopping.
+  const rr = mark.rimR * (0.28 + 1.05 * t);
+  mark.ripple.scale.setScalar(rr);
+  // Bright as it is born, gone before it gets far. Squared so it spends most
+  // of the period faint and the pulse is an event rather than a throb.
+  mark.rippleMat.opacity = 0.7 * lit * Math.pow(1 - t, 2.2);
+
+  // An invisible mesh is culled before rasterising; a transparent one is
+  // still drawn. Same reason the rig hides its beams between hits.
+  mark.pool.visible = mark.poolMat.opacity > 0.01;
+  mark.rim.visible = mark.rimMat.opacity > 0.01;
+  mark.ripple.visible = mark.rippleMat.opacity > 0.01;
+  mark.haze.visible = mark.hazeMat.opacity > 0.01;
 }
 
-// The claim volume: the foot of the shaft and the space the icon turns in,
+// The claim volume: the mark on the floor and the space the icon turns in,
 // with enough margin that a shot grazing either edge still counts. Taller and
-// wider than the pillar it replaces - there is no longer a solid object to aim
-// at, so the target has to cover the part of the column a player would
-// naturally shoot. Not the whole 12m shaft: a claim wants to be a shot AT the
-// offer, not any pellet that crossed the light on its way to the ceiling.
+// wider than the pillar this all started as - there is no longer a solid
+// object to aim at, so the target has to cover the space a player would
+// naturally shoot at. It stays a box around the offer rather than growing to
+// cover the whole mark: a claim wants to be a shot AT the icon, not any
+// pellet that clipped the far edge of the light on the ground.
 const HIT_GEOM = new THREE.BoxGeometry(1.7, 3.2, 1.7);
-// The station's claim volume, covering its column and the icon orbiting in
-// front of it. Invisible, exactly like a totem's: see the note in the Station
+// The station's claim volume, covering its mark and the icon orbiting over
+// it. Invisible, exactly like a totem's: see the note in the Station
 // constructor for why the console lost its body.
 const STATION_HIT_GEOM = new THREE.BoxGeometry(1.4, 2.6, 1.4);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
 const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
-// The icon ORBITS to stay on the player's side of its column and turns to face
+// The icon ORBITS to stay on the player's side of its mark and turns to face
 // them, so it is legible from any angle.
 //
 // CIRCULAR NOW, AND TIGHT. The ellipse was the pillar's shape: 1.15 wide and
@@ -347,7 +479,7 @@ const ICON_Y = 1.5;
 const ICON_RX = 0.5;
 const ICON_RZ = 0.5;
 // pixelicons.js builds every plate at roughly 0.6m across, which is legible in
-// the hand and too small inside a 2.5m-wide column seen from across the arena.
+// the hand and too small over a 3.4m-wide mark seen from across the arena.
 const ICON_SCALE = 1.35;
 // The same orbit on the smaller station body: 1.0 wide and 0.5 deep, and only
 // 1.4 tall, so the icon rides lower and closer in and is scaled down to match.
@@ -356,26 +488,24 @@ const ST_ICON_RX = 0.9;
 const ST_ICON_RZ = 0.55;
 const ST_ICON_SCALE = 1.0;
 
-// HOW FAR THE CARD STANDS OUT OF ITS OWN LIGHT.
+// HOW FAR THE CARD RIDES OFF THE AXIS OF ITS MARK.
 //
-// The card used to hang on the column's axis, which put a sheet of additive
-// light between the player and every word on it. Additive is the problem: it
-// only ever ADDS, so a lit shaft crossing dark text raises the text towards
-// the shaft's own colour and there is no amount of contrast in the canvas that
-// can win that fight - the darker a glyph is drawn, the more of the light
-// behind it shows through.
+// This used to be 2.0 and 1.4, which is a long way out, and none of it was
+// about the card: a shaft of light stood on this spot and the card had to
+// clear its outside edge or be read THROUGH an additive surface, which is a
+// fight no amount of contrast in the canvas can win. With the light lying on
+// the floor there is nothing left to step out of, so the card comes back in
+// and rides the same small orbit the icon does.
 //
-// So the card orbits out to the player's side of the column, the same way the
-// icon does, and stops clear of the shaft's outside edge. Nothing renders
-// between the words and the eye any more. It is a metre and a bit of movement
-// and it is the whole fix; every other approach (a glow under the text, a
-// darker panel, a brighter fill) was an attempt to be legible THROUGH the
-// light instead of stepping out of it.
+// It is directly over the icon again, which is what it always wanted to be:
+// the shape and the words describing it are one stacked object that swings
+// together as the player moves, instead of a label hanging a couple of metres
+// off to the side of the thing it names.
 //
-// The card keeps its height, so the row still reads as three columns with
-// three labels at one level rather than as three signs at different depths.
-const PANEL_R = 2.0;
-const ST_PANEL_R = 1.4;
+// The card keeps its height, so the row still reads as three marks with three
+// labels at one level rather than as three signs at different depths.
+const PANEL_R = 0.5;
+const ST_PANEL_R = 0.7;
 
 export function hex(n) {
   return '#' + n.toString(16).padStart(6, '0');
@@ -457,8 +587,8 @@ export class Totem {
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
-    // Per-instance because each column wears its own upgrade's theme.
-    this.col = makeColumn(this.group);
+    // Per-instance because each mark wears its own upgrade's theme.
+    this.mark = makeMark(this.group);
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
@@ -479,7 +609,14 @@ export class Totem {
     this.icon = null;
 
     this.panel = makePanel(512, 320, 3.5, 2.2);
-    this.panel.sprite.position.set(0, 3.35, 0);
+    // HOW HIGH THE CARD HANGS. It was 3.35, which left a clear half metre of
+    // empty air between the last line of an offer's description and the icon
+    // the description belongs to - and on a two-effect card with no note the
+    // canvas runs out well before its bottom edge, so the real gap read wider
+    // still. The two are one thing being described and they now sit as one
+    // thing. Not lower than this: the row keeps its labels at a single height
+    // and the card must clear the icon's bob and the mark's haze under it.
+    this.panel.sprite.position.set(0, 3.02, 0);
     this.group.add(this.panel.sprite);
 
     scene.add(this.group);
@@ -499,8 +636,7 @@ export class Totem {
     this.upgradeId = offer.id;
     this.claimed = false;
     this.enabled = offer.enabled !== false;
-    this.col.shaftMat.color.setHex(offer.theme);
-    this.col.poolMat.color.setHex(offer.theme);
+    tintMark(this.mark, offer.theme);
     this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
@@ -676,11 +812,11 @@ export class Totem {
     const e = 1 - Math.pow(1 - this.rise, 3);
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
 
-    // The column stays where the floor is and comes UP IN BRIGHTNESS instead,
-    // which is the one thing that separates a light from a prop. An offer that
+    // The mark stays on the floor and comes UP IN BRIGHTNESS instead, which
+    // is the one thing that separates a light from a prop. An offer that
     // cannot be afforded burns low, the same way its card is drawn faded: it
     // is still there to be read, and it is visibly not on.
-    driveColumn(this.col, e * (this.enabled ? 1 : 0.4),
+    driveMark(this.mark, e * (this.enabled ? 1 : 0.4),
       -this.group.position.y, time, this.pos.x);
 
     // The icon rides around to the player's side of the pillar and turns to
@@ -714,7 +850,7 @@ export class Totem {
 // a case there, and nothing in this file has to learn what it sells.
 //
 // The two Devil-row consoles are in the same table as the two totem-row ones
-// because they ARE the same object: same body, same column, same two ways in.
+// because they ARE the same object: same mark, same icon, same two ways in.
 // Only the prices differ, and prices do not live here.
 const STATION_LOOK = {
   ammo: { color: 0xffd600, icon: 'ammoBox' },
@@ -747,7 +883,7 @@ export class Station {
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
-    // A narrower column of the station's own colour, and NOTHING ELSE SOLID.
+    // A smaller mark in the station's own colour, and NOTHING ELSE SOLID.
     //
     // The consoles used to keep a physical body - a small dark box that the
     // icon and the price hung in front of - on the argument that a shop is a
@@ -755,16 +891,17 @@ export class Station {
     // AROUND THE ICON: the three offers in the same row are made of light and
     // have no container at all, so the consoles at the ends of the row were
     // the only things at the wave break wearing a frame, and a frame reads as
-    // a different KIND of thing rather than as a different price. The column,
+    // a different KIND of thing rather than as a different price. The mark,
     // the icon and the label say everything the box was there to say, in the
     // language the rest of the row is already written in.
-    this.col = makeColumn(this.group, 0.8, 1.9);
-    this.col.shaftMat.color.setHex(this.color);
-    this.col.poolMat.color.setHex(this.color);
+    // Smaller than an offer's mark in both radii: the stations frame the row
+    // and must not read as a fourth and fifth choice in it.
+    this.mark = makeMark(this.group, 0.85, 1.15);
+    tintMark(this.mark, this.color);
 
     // With the body gone the console still has to be shootable, so it takes
-    // the same invisible claim volume a totem has, sized around the column and
-    // the icon orbiting in front of it. A station purchase is repeatable and
+    // the same invisible claim volume a totem has, sized around the mark and
+    // the icon orbiting over it. A station purchase is repeatable and
     // rate-limited, so a stray hit costs a shot, not a build.
     this.hit = new THREE.Mesh(STATION_HIT_GEOM, HIT_MAT);
     this.hit.position.y = 1.3;
@@ -803,7 +940,7 @@ export class Station {
   /**
    * The console's label. No card behind it, for the same reason an offer no
    * longer has one - see the note in Totem._draw(). A dark rounded rectangle
-   * beside three columns of light is the one thing in the row that could not
+   * beside three marks of light is the one thing in the row that could not
    * be made of light.
    *
    * `detail` is optional and names WHAT THE PURCHASE GIVES - '+5 MAX HP'. A
@@ -895,7 +1032,7 @@ export class Station {
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
     // Dimmer than an offer's: the two stations frame the row and must not
     // compete with the three things in it that are actually a choice.
-    driveColumn(this.col, e * 0.65, -this.group.position.y, time, this.pos.x);
+    driveMark(this.mark, e * 0.65, -this.group.position.y, time, this.pos.x);
 
     // See the note on the totem's orbit: local +Z is the icon's front, so one
     // angle both places it and aims it.

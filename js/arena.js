@@ -237,8 +237,48 @@ export function buildArena(scene) {
   // AABB can't model.
   const speakerMat = new THREE.MeshStandardMaterial({ color: 0x191d26, roughness: 0.85, metalness: 0.1 });
   const coneMat = new THREE.MeshStandardMaterial({ color: 0x1c1f28, roughness: 0.6, metalness: 0.4 });
+  //
+  // TWO OF THESE MOVED, AND FOR THE SAME REASON THE PLATFORMS DID.
+  //
+  // (-2, -5.5) stood INSIDE the totem row - 1.6m from the middle offer and
+  // 1.6m from the left one, close enough to sit in both of their floor marks.
+  // (3.5, -3) stood two metres directly in FRONT of the right offer, on the
+  // line every player walks up to read it, and cut the foot of that offer out
+  // of the picture.
+  //
+  // Neither was a fair piece of cover. A speaker cabinet in the middle of the
+  // row is not something the player chose to fight behind; it is furniture
+  // standing between them and a build-defining choice, which is the one thing
+  // the wave break has to be clear of. It mattered more once the offers became
+  // marks ON THE FLOOR: a shaft of light twelve metres tall cleared a 0.95m box
+  // and a pool of light lying on the ground does not.
+  //
+  // THE KEEP-CLEAR RULE, so this does not drift back. It is two tests, and
+  // every piece of floor furniture in this file passes both:
+  //
+  //   1. NOTHING IN FRONT OF A ROW. |x| <= 9.5 and z from the row line to a
+  //      metre and a half in front of it - z -5..-1.5 for the totems, and
+  //      9.5..6.3 for the Devil's, whose row is walked up to from -z. That
+  //      wedge is the whole of what the player looks THROUGH to read an offer.
+  //   2. NOTHING STANDING IN A MARK. No box may reach within 1.7m of a totem
+  //      or 1.15m of a console, which are the radii the marks are drawn at.
+  //
+  // BEHIND a row is deliberately still allowed, and the platforms at (-8, -8)
+  // and (9, -9) stay exactly where they are. A prop behind the row is a
+  // backdrop, not an obstruction: it never comes between the player and an
+  // offer, and it gives the marks something to stand against.
+  //
+  // ONE CONTACT IS ACCEPTED. The platform at (-8, -8) has its front face at
+  // z = -6 and the ammo console's mark reaches z = -6.15, so the outer 15cm of
+  // that ring meets the platform and is hidden by it. That is what light on a
+  // floor does when it runs into a step, it is behind the console rather than
+  // in front of it, and moving a corner platform to save 15cm of a ring would
+  // cost more than it buys.
+  //
+  // Same count, same size, same height, so enemy pathing and the cover density
+  // the fight was tuned around are unchanged - they moved, they did not go.
   const crates = [
-    { x: 3.5, z: -3 }, { x: -4, z: 2.5 }, { x: 2, z: 5.5 }, { x: -2, z: -5.5 }, { x: 12, z: -2 },
+    { x: -10.5, z: -2.5 }, { x: -4, z: 2.5 }, { x: 2, z: 5.5 }, { x: -2, z: -9.5 }, { x: 12, z: -2 },
   ];
   for (const c of crates) {
     const m = box(group, speakerMat, c.x, 0.475, c.z, 0.95, 0.95, 0.95);
