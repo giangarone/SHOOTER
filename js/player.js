@@ -200,6 +200,20 @@ export const NO_HIT_CAP = 0.4;
 export const MIN_MAX_HEALTH = 20;
 // Collision height, a little over the 1.7 eye height. Only overhead geometry
 // cares - see the resolveCircle call in update().
+// How fast the recoil offset bleeds back to zero, as the fraction left after
+// one second. RECOIL IS AN OFFSET, NOT A WRITE TO AIM - see applyCamera - and
+// this is what makes it one: without a decay the kick simply accumulated into
+// the player's pitch and stayed there, so a magazine held down walked the view
+// 13.7 degrees up the wall and left it there.
+//
+// The value is a trade, and it is the one knob worth turning if the climb
+// wants to be bigger or smaller. Sustained fire settles at roughly
+//   (shots per second * recoil per shot) / ln(1 / RECOIL_DECAY)
+// so at 0.33 the pulse rifle peaks around 3 degrees over a full magazine and
+// is back on target about a second after the trigger comes up. Lower it for a
+// snappier recovery and a smaller climb; raise it for the opposite.
+const RECOIL_DECAY = 0.33;
+
 const PLAYER_HEIGHT = 1.8;
 // Evasion's window after a successful dodge, and what it multiplies speed by.
 // Short on purpose: it is an escape from the hit you just avoided, not a
@@ -267,6 +281,12 @@ export class Player {
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
+    // Recoil, as a CAMERA OFFSET in radians, decaying to zero. It is added to
+    // the aim in applyCamera rather than written into `pitch`, which is what
+    // keeps a burst from permanently re-pointing the player: the shot ray
+    // comes off the camera, so a climbing offset still walks sustained fire
+    // off target - it just hands the gun back where it was found.
+    this.recoilPitch = 0;
     // The player's copy of the screenshake setting, written by main.js. The
     // weapon's recoil kick is the other half of "the camera jolts when I
     // shoot" - the first half is the shake main.js adds through effects - and
@@ -610,6 +630,7 @@ export class Player {
     this.moveVZ = 0;
     this.yaw = 0;
     this.pitch = 0;
+    this.recoilPitch = 0;
     this.health = this.maxHealth;
     this.reserveAmmo = 90;
     this.fireCd = 0;
@@ -842,6 +863,7 @@ export class Player {
       this.health = Math.max(this.maxHealth, this.health - 5 * dt);
     }
 
+    this.recoilPitch *= Math.pow(RECOIL_DECAY, dt);
     this.kick *= Math.pow(0.0001, dt);
     this.gun.position.z = this.gunBaseZ + this.kick;
     this._animateReload();
@@ -882,7 +904,11 @@ export class Player {
   }
 
   applyCamera() {
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    // Clamped on the SUM, not on pitch alone: the mouse handler already holds
+    // pitch inside +-1.5, and letting the recoil offset push past that would
+    // roll the view over the top at the exact moment the player is looking up.
+    const aim = Math.max(-1.5, Math.min(1.5, this.pitch + this.recoilPitch));
+    this.camera.rotation.set(aim, this.yaw, 0);
     this.camera.position.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
   }
 
@@ -924,8 +950,7 @@ export class Player {
       w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
     this.kick = w.kick;
-    const recoil = (w.recoil + Math.random() * w.recoil * 0.6) * this.shakeScale;
-    this.pitch = Math.min(1.5, this.pitch + recoil);
+    this.recoilPitch += (w.recoil + Math.random() * w.recoil * 0.6) * this.shakeScale;
     if (this.mag === 0) this.startReload();
     return 'shot';
   }
