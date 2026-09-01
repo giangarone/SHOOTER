@@ -65,6 +65,15 @@ import { resolveCircle, pointInObstacle, AGENT_HEIGHT, BOSS_HEIGHT } from './uti
 //               it is out of reach of a ground melee swing, and its model and
 //               hitbox ride up with it. `height` is the altitude it settles at;
 //               an ai() moves e.hoverY to climb or dive.
+// What the Bulwark's buckler leaves through: a fifth of the hit. Named because
+// the number is the whole design of the enemy - 80% off a small plate and 0%
+// off everything else - and it is quoted in the wave-brief copy as well.
+const BULWARK_SHIELD_ARMOR = 0.2;
+// Scratch vectors for that armour test. It runs once per pellet on a shotgun
+// and allocating there would litter the heap through a whole magazine.
+const _armorA = new THREE.Vector3();
+const _armorB = new THREE.Vector3();
+
 export const ENEMY_TYPES = {
   chaser: {
     hp: 42, speed: 3.4, damage: 12, score: 100, color: 0xff3b30, eye: 0xffe08a,
@@ -118,22 +127,47 @@ export const ENEMY_TYPES = {
     build: buildWraith, ai: aiWraith,
   },
 
-  // Punishes standing still. A shield across its front, so shooting it head on
-  // is a waste of a magazine and the answer is to move around it - or to burn
-  // it, since armorDefault is 1 and damage over time ignores the shield
-  // entirely. That is the intended counter, not an oversight: Venom and
-  // Incendiary should have an enemy they are obviously right for.
+  // Punishes lazy aim. It carries a SMALL buckler rather than a wall: the plate
+  // is a patch over its chest that eats 80% of anything that lands on it, and
+  // every other part of the thing - head, shoulders, legs, flanks - takes full
+  // damage. The old version armoured the entire front arc, which made the
+  // right answer "walk around it" and the wrong answer "keep shooting", and
+  // neither of those is aiming. Now the answer is to shoot somewhere else on a
+  // target you are already looking at, which is a question the player answers
+  // with the crosshair instead of with their feet.
+  //
+  // armorDefault stays 1, so damage over time and blasts - which have no point
+  // of impact to test - ignore the buckler entirely. That is deliberate and
+  // unchanged: Venom and Incendiary should still have an enemy they are
+  // obviously right for.
   bulwark: {
     hp: 110, speed: 1.6, damage: 18, score: 280, color: 0x8d9db6, eye: 0xffd54f,
     scale: 1.35, radius: 0.62, mass: 2,
     melee: { windup: 0.7, start: 2.6, hit: 3.2, cd: 2.2 },
-    // dx,dz is the direction the hit TRAVELLED; the enemy faces -sin/-cos of
-    // its own yaw. A hit moving against that facing came from the front.
-    armor: (e, dx, dz) => {
-      const d = Math.hypot(dx, dz) || 1;
-      const fx = -Math.sin(e.group.rotation.y);
-      const fz = -Math.cos(e.group.rotation.y);
-      return (dx / d) * fx + (dz / d) * fz < -0.34 ? 0.4 : 1;
+    // A SOLID-ANGLE TEST, not a box test, and the reason is what the raycast
+    // actually reports: shots land on the enemy's hitbox SPHERE, not on the
+    // visible plate, so the impact point is always out on that sphere and a
+    // test against the plate's own volume would never fire. Both the impact
+    // and the buckler are taken as directions FROM THE HITBOX CENTRE, and the
+    // hit counts as blocked when they point the same way - which is exactly
+    // the patch of the sphere the buckler covers as seen from inside.
+    //
+    // cos 0.9 is a ~26 degree cap, tuned against the model rather than picked:
+    // it is the widest cone that still lets a shot aimed a head's width above
+    // the plate through. A looser one blocked rounds the player could SEE land
+    // on bare chest, which is the one thing a placed shield must never do -
+    // the whole mechanic is only fair if the plate's edge is where it looks.
+    armor: (e, dx, dz, point) => {
+      // No impact point (melee, blasts, a chained bolt) means no way to tell
+      // where it landed, and the buckler is too small to assume it was hit.
+      if (!point || !e.shieldMesh) return 1;
+      const c = e.hitbox.getWorldPosition(_armorA);
+      const sh = e.shieldMesh.getWorldPosition(_armorB).sub(c);
+      const hx = point.x - c.x, hy = point.y - c.y, hz = point.z - c.z;
+      const hl = Math.hypot(hx, hy, hz) || 1;
+      const sl = sh.length() || 1;
+      const dot = (hx * sh.x + hy * sh.y + hz * sh.z) / (hl * sl);
+      return dot > 0.9 ? BULWARK_SHIELD_ARMOR : 1;
     },
     armorDefault: 1,
     build: buildBulwark, ai: aiMelee,
@@ -833,22 +867,44 @@ function buildWraith(e, g, s) {
   eyes(P, { y: 1.05, x: 0.09, z: -0.19, r: 0.85, mat: e.eyeMat });
 }
 
-// Squat and wide behind a hexagonal plate that is most of its footprint. Read:
-// the front is closed, so go around it.
+// Squat and wide, with a BUCKLER over the chest rather than a wall across the
+// whole front. The read the model has to deliver is the opposite of the old
+// one: not "the front is closed, go around", but "that plate is closed, shoot
+// literally anywhere else". So the plate is small, bright and unmistakably a
+// separate object - a different material, a raised boss, and a visible arm
+// holding it off the body - while the head, the shoulders and the legs are all
+// left standing clear of it in silhouette. Anything the buckler does not cover
+// takes full damage, and the player has to be able to see that at a glance.
 function buildBulwark(e, g, s) {
   const P = partsFor(e, g, s);
   P('bulwarkTorso', prism(0.4, 0.46, 0.58, 6), { y: 0.7 });
-  P('bulwarkHead', slab(0.24, 0.16, 0.22), { y: 1.06, z: -0.1 });
+  // The head sits proud of the torso now instead of hiding behind the plate -
+  // it is the most obvious full-damage target on the body and it should look
+  // like one.
+  P('bulwarkHead', slab(0.24, 0.18, 0.22), { y: 1.1, z: -0.12 });
+  // Shoulder pauldrons: mass either side of the buckler, so the plate reads as
+  // narrow by comparison and the flanks read as open.
+  P('bulwarkPauldron', prism(0.1, 0.19, 0.18, 6), { x: -0.4, y: 0.94, rz: 0.5 });
+  P('bulwarkPauldron', prism(0.1, 0.19, 0.18, 6), { x: 0.4, y: 0.94, rz: -0.5 });
   // Thick and short. A bulwark that looked like it could run would be lying.
   P('bulwarkLeg', slab(0.22, 0.34, 0.24), { x: -0.26, y: 0.17 });
   P('bulwarkLeg', slab(0.22, 0.34, 0.24), { x: 0.26, y: 0.17 });
-  // The shield is the whole read of this enemy, so it is wide, flat and in
-  // front - the player has to be able to tell at a glance which way it faces.
-  P('bulwarkShield', prism(0.62, 0.62, 0.1, 6), {
-    y: 0.8, z: -0.52, rx: Math.PI / 2, mat: SHARED_MATS.bulwarkShield,
+  // The arm, held out in front. Without it the buckler floats, and a plate
+  // that floats reads as part of the body rather than as something carried.
+  P('bulwarkArm', slab(0.12, 0.12, 0.34), { y: 0.72, z: -0.34 });
+  // THE BUCKLER. A third of the old plate's span and stood off the chest, so
+  // the silhouette around it is all exposed body. Kept as `e.shieldMesh`: the
+  // armour test above reads its world position every hit, which means the
+  // model and the hitbox can never disagree about where the shield is - move
+  // it here and the protected patch moves with it.
+  e.shieldMesh = P('bulwarkShield', prism(0.26, 0.26, 0.07, 6), {
+    y: 0.72, z: -0.5, rx: Math.PI / 2, mat: SHARED_MATS.bulwarkShield,
   });
-  P('bulwarkBoss', shard(0.14), { y: 0.8, z: -0.6, mat: SHARED_MATS.wardenCrown });
-  eyes(P, { y: 1.08, x: 0.08, z: -0.22, r: 0.75, mat: e.eyeMat });
+  // The boss, in the warden's gold. The one bright point on the enemy, and it
+  // is sitting on the one place that is not worth shooting - which is the
+  // whole joke, and the whole tell.
+  P('bulwarkBoss', shard(0.1), { y: 0.72, z: -0.56, mat: SHARED_MATS.wardenCrown });
+  eyes(P, { y: 1.12, x: 0.08, z: -0.24, r: 0.75, mat: e.eyeMat });
 }
 
 // A floating spindle with nothing that could hold a weapon, and no eyes at
@@ -2993,7 +3049,11 @@ export class Enemy {
   // `silent` skips the white hit flash. Damage over time calls this many times
   // a second, and a flash on every tick would bury the status tint that is the
   // whole visual tell for poison and fire.
-  takeDamage(d, silent = false, dirX = 0, dirZ = 0) {
+  // `point` is the world-space position the hit landed at, when the caller has
+  // one. Only a type whose armour is a PLACE on the body rather than a facing
+  // needs it - see the Bulwark, whose small shield is tested against the spot
+  // that was actually struck.
+  takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null) {
     if (this.dead) return false;
     // A warded enemy takes NOTHING - not bullets, not blasts, not the damage
     // over time already ticking on it. A partial reduction here would leave
@@ -3008,7 +3068,9 @@ export class Enemy {
     // shield does not stop poison (armorDefault 1) while a Colossus's plating
     // does (armorDefault 0.22).
     const def = ENEMY_TYPES[this.type];
-    if (def.armor) d *= (dirX || dirZ) ? def.armor(this, dirX, dirZ) : def.armorDefault;
+    if (def.armor) {
+      d *= (dirX || dirZ || point) ? def.armor(this, dirX, dirZ, point) : def.armorDefault;
+    }
     if (this.buffT > 0) d *= CONDUIT_RESIST;
     this.hp -= d;
     if (!silent) this.flash = 0.12;

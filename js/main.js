@@ -431,6 +431,9 @@ class Game {
     this.enemies = [];
     this.projectiles = [];
     this.powerups = [];
+    // Timed buffs swept up at a wave clear, waiting for the next wave to start
+    // their clocks - see _vacuumPickups.
+    this._pendingBuffs = [];
     this.queue = [];
     this._cfg = waveConfig(1);
     // The drop safety net's countdown.
@@ -1280,6 +1283,7 @@ class Game {
     this.devilArea.dismiss();
     this.wave = 0;
     this.queue.length = 0;
+    this._pendingBuffs.length = 0;
     this.waveState = 'idle';
     this.interT = 1.2;
     this.spawnTimer = 0;
@@ -1330,6 +1334,14 @@ class Game {
     // what makes the hit land - a bright room just getting brighter reads as
     // nothing at all.
     this.rig.cueWaveStart();
+
+    // Buffs the wave-end sweep collected but deliberately did not start - see
+    // _vacuumPickups. Their clocks begin HERE, with the wave, so a rage picked
+    // up off the floor of an empty arena is still ten seconds of rage.
+    if (this._pendingBuffs.length) {
+      for (const t of this._pendingBuffs) t.apply(this.player, this.time);
+      this._pendingBuffs.length = 0;
+    }
 
     this.waveDamageTaken = 0;
     this.player.armWard();
@@ -1929,7 +1941,10 @@ class Game {
       this.effects.burst(point, 0xc9d2dd, burst, 3, 1.2, 0.3);
       return;
     }
-    en.takeDamage(dealt, false, dir.x, dir.z);
+    // `point` is handed on so a placed shield - the Bulwark's buckler - can
+    // test where on the body the pellet actually landed, not just which way it
+    // was travelling.
+    en.takeDamage(dealt, false, dir.x, dir.z, point);
     this.effects.burst(point, 0xffe95e, burst, 4, 1.5, 0.35);
     // Damage is per-pellet; everything below is per-shot.
     if (this._shotHits.has(en)) return;
@@ -2597,8 +2612,10 @@ class Game {
         // up when I play well", not audited against a number on the HUD.
         if (this.lastPerfect) this.cleanWaves++;
         // Everything still on the floor comes in, so a wave's money can never
-        // be lost to the shopping trip that follows it.
+        // be lost to the shopping trip that follows it - and neither can a
+        // health crate the player never had a safe second to walk over.
         this.money.vacuum();
+        this._vacuumPickups();
         let msg = 'WAVE ' + this.wave + ' CLEARED';
         if (this.lastPerfect) {
           // WHAT FLAWLESS PAYS NOW. The clear bonus used to double for a wave
@@ -3179,6 +3196,49 @@ class Game {
       const k = Math.min(1, pull / d);
       q.moveTo(q.pos.x + dx * k, q.pos.z + dz * k);
     }
+  }
+
+  // WAVE CLEAR SWEEP. Every pickup still lying in the arena is taken, the same
+  // moment the money orbs come in.
+  //
+  // The reason is the same one the money vacuum has: a wave is over, the room
+  // is empty, and making the player jog a lap of the arena to pick up the
+  // crates they were too busy to reach is not a decision - it is a chore with
+  // only one right answer. The drop was earned by killing the thing that
+  // dropped it.
+  //
+  // TIMED BUFFS ARE COLLECTED BUT NOT STARTED. Rage, Fire Rate and Shield are
+  // windows, and a window spent walking around a shop is a window thrown away
+  // - handing them over here would have turned "you keep your drops" into "you
+  // lose your best drops", which is worse than leaving them on the floor. They
+  // are held in _pendingBuffs and applied by startWave(). Health and ammo have
+  // no clock and are applied immediately, which is also what makes them useful
+  // at the shop: the player can see what they are actually short of before
+  // they spend.
+  _vacuumPickups() {
+    if (!this.powerups.length) return;
+    let took = 0;
+    for (const p of this.powerups) {
+      if (p.dead) continue;
+      // The magnet's payload is the orb sweep, which the wave clear has just
+      // done anyway - so it costs nothing here and is simply consumed.
+      if (p.type.duration || p.typeKey === 'shield') {
+        this._pendingBuffs.push(p.type);
+      } else {
+        p.type.apply(this.player, this.time);
+      }
+      // Drawn as a streak from where it lay to the player, so the sweep is
+      // visibly the pickups coming in rather than the pickups vanishing.
+      this.effects.burst(p.pos, p.type.color, 10, 5, 2, 0.45);
+      p.destroy();
+      took++;
+    }
+    this.powerups.length = 0;
+    if (!took) return;
+    // One sound for the whole sweep. Five pickup chimes on the same frame is
+    // not five times the feedback, it is a click.
+    this.sfx.pickupHealth();
+    this.effects.shockwave(this.player.pos, 0x8affc1, 6, 0.45);
   }
 
   // Ticks pickups and collects any the player is standing on. Iterates
@@ -3948,7 +4008,12 @@ class Game {
         this.player.tryDash(this.input.dash, this.time);
         this.input.dash = null;
       }
-      const reloaded = this.player.update(dt, this.input, this.arena.obstacles, this.time);
+      // The last argument is the combat gate: regeneration and Ammo Fabricator
+      // only tick while a wave is actually running, so the wave break cannot be
+      // farmed for free health or free rounds. Same test _fillRigState uses.
+      const reloaded = this.player.update(
+        dt, this.input, this.arena.obstacles, this.time, this.waveState === 'active'
+      );
       if (reloaded) {
         this._reloadBurst();
         // HELLFIRE. The reload lights the player up for five seconds; the

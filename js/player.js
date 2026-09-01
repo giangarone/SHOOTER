@@ -33,7 +33,13 @@ const DEFAULT_MODS = {
   maxHpMult: 1,
   moveMult: 1,          // multiplier on move speed
   regenDelay: 10,        // seconds without damage before regen starts
-  regenRate: 1,         // health per second once regenerating
+  // NO NATURAL REGENERATION. Health only ever comes back from something the
+  // player picked: Nanoweave, Antidote's leech, Vampiric, a health crate. A
+  // free trickle meant every wave break healed the run back to full on its
+  // own, which is exactly the cost the health economy is supposed to charge.
+  // Zero here, and the regen branch in update() is skipped entirely until a
+  // mutation raises it.
+  regenRate: 0,         // health per second once regenerating (mutations only)
   killHealChance: 0,    // Vampiric Rounds: chance a kill heals 1 HP
   ammoRegen: 0,         // reserve rounds per second
   creditMult: 1,        // multiplier on credits earned
@@ -167,24 +173,42 @@ const AIR_JUMP_V = 11;
 // so the player accelerates INTO the dash and coasts OUT of it into their own
 // walking speed with no discontinuity anywhere.
 //
-// Mean of the shape is 0.5 by construction (both halves are smoothstep), so
-// the distance covered is DASH_SPEED * DASH_TIME * 0.5 = ~9.5m: twice the 4.7m
-// of the flat version, which is the other half of the ask.
-const DASH_TIME = 0.45;
+// Mean of the shape is 0.5 by construction (both halves integrate to half
+// their width), so the distance covered is DASH_SPEED * DASH_TIME * 0.5.
+//
+// LENGTHENED BY HALF, AND THE LENGTH IS WHERE THE SMOOTHNESS CAME FROM. The
+// extra distance is bought with TIME rather than with peak speed: the peak is
+// still 42 m/s, so the launch hits exactly as hard as it did, but the window
+// is 0.675s instead of 0.45s and 14.2m instead of 9.5m. Every millisecond of
+// that goes into the exit, which is the half the player was reading as abrupt
+// - the ramp back down is now 0.57s where it used to be 0.35s, so the hand-off
+// into a 10 m/s walk is spread over nearly twice as long a fall.
+const DASH_TIME = 0.675;
 const DASH_SPEED = 42;
-// Fraction of the window spent ramping UP. Short: the dash still has to answer
-// a slam the frame it is pressed, so most of the curve is the exit.
-const DASH_IN = 0.22;
+// Fraction of the window spent ramping UP. Held at ~0.1s in absolute terms
+// (0.15 of the longer window, where it was 0.22 of the shorter one): the dash
+// still has to answer a slam the frame it is pressed, so almost all of the
+// curve is the exit.
+const DASH_IN = 0.15;
 const DASH_RECHARGE = 2.5;
 
 // The dash's speed envelope at `u` (0..1 through the window), 0..1.
-// smoothstep on both halves - a cubic with zero slope at each end, which is
-// the same curve a cubic-bezier ease-in-out draws. Zero slope at u=1 is the
-// part that matters: it is what makes the dash END smoothly instead of being
-// switched off.
+//
+// The ramp up is smoothstep - a cubic, zero slope at both ends. The fall is
+// SMOOTHERSTEP, the quintic: zero first AND second derivative at each end, so
+// the deceleration itself eases in and out instead of being applied in a step.
+// That second derivative is the whole difference. A cubic fall still hands the
+// player a sudden change in how hard they are slowing down at the moment the
+// dash lets go, and a change in acceleration is what the eye reads as a bump
+// even when the velocity curve through it is perfectly continuous. The quintic
+// has nothing to read at either end.
 function dashShape(u) {
-  const t = u < DASH_IN ? u / DASH_IN : 1 - (u - DASH_IN) / (1 - DASH_IN);
-  return t * t * (3 - 2 * t);
+  if (u < DASH_IN) {
+    const t = u / DASH_IN;
+    return t * t * (3 - 2 * t);
+  }
+  const t = 1 - (u - DASH_IN) / (1 - DASH_IN);
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 // The ceiling on No-Hit Bonus, as a fraction. The mutation pays 8% a wave, so
 // this is reached after five clean waves and never moves again. Exported
@@ -670,7 +694,17 @@ export class Player {
 
   // `time` is game time (see main.js) - used for buff expiry and regen delay,
   // not for physics. All physics uses `dt`.
-  update(dt, input, obstacles, time) {
+  //
+  // `combat` is true only while a wave is actually running. EVERYTHING THAT
+  // REFILLS ON A CLOCK IS GATED ON IT - health regeneration and Ammo
+  // Fabricator both. The wave break has no timer on it, so anything that pays
+  // per second paid infinitely there: standing in the shop until the bar came
+  // back was strictly better than playing, and it was the most boring correct
+  // move in the game. Regeneration is a reason to break contact mid-fight, not
+  // a vending machine. Dash charges are deliberately NOT gated: they are a
+  // resource for the wave ahead, and starting one dashless because the last
+  // one ended mid-cooldown punishes nothing the player did.
+  update(dt, input, obstacles, time, combat = true) {
     // Published for getEffectiveDamage(), which has no clock of its own and is
     // called from several places that have none to give it.
     this.now = time;
@@ -710,7 +744,7 @@ export class Player {
       }
     }
 
-    if (this.mods.ammoRegen > 0 && this.reserveAmmo < this.maxReserve) {
+    if (combat && this.mods.ammoRegen > 0 && this.reserveAmmo < this.maxReserve) {
       this._ammoRegenAcc += this.mods.ammoRegen * dt;
       if (this._ammoRegenAcc >= 1) {
         const whole = Math.floor(this._ammoRegenAcc);
@@ -855,9 +889,13 @@ export class Player {
     this.pos.x = Math.max(-B, Math.min(B, this.pos.x));
     this.pos.z = Math.max(-B, Math.min(B, this.pos.z));
 
-    // Regen after 4s without damage. The second branch bleeds off overheal
-    // (health above max, from a health pickup) back down to max.
-    if (time - this.lastHurt > this.mods.regenDelay && this.health < this.maxHealth) {
+    // Regeneration, once a mutation has granted any (regenRate is 0 by
+    // default - see the mods block). Combat only: see the note on update().
+    // The second branch bleeds off overheal (health above max, from a health
+    // pickup) back down to max, and is NOT gated - overheal draining away is a
+    // cost, and a cost that pauses in the shop would let the player bank it.
+    if (combat && this.mods.regenRate > 0
+      && time - this.lastHurt > this.mods.regenDelay && this.health < this.maxHealth) {
       this.health = Math.min(this.maxHealth, this.health + this.mods.regenRate * dt);
     } else if (this.health > this.maxHealth) {
       this.health = Math.max(this.maxHealth, this.health - 5 * dt);
@@ -920,6 +958,19 @@ export class Player {
     return true;
   }
 
+  // WHAT ONE TRIGGER PULL COSTS, in rounds.
+  //
+  // Both multipliers, because both are literally more bullets leaving the gun:
+  // Triple Tap puts three rounds into one shot, and Twenty/Twenty fires the
+  // whole pellet pattern a second time. Twenty/Twenty used to bill one round
+  // for two volleys, which made it the only damage mutation in the pool that
+  // was free - +20% damage AND double the rounds on target for nothing. The
+  // drawback on the card was never meant to be "none": a shot that fires twice
+  // pays twice, and a build that wants both pays six.
+  get shotCost() {
+    return this.mods.ammoPerShot * this.mods.volley;
+  }
+
   // Returns 'shot' on a real shot, 'empty' when the trigger is pulled dry, or
   // null while on cooldown or reloading. Only 'shot' consumes a round.
   // Note 'empty' sets no cooldown, so main.js rate-limits the dry-fire sound.
@@ -937,14 +988,15 @@ export class Player {
     }
     // Belt Feed takes the round straight off the reserve now and then, which
     // is worth more than the round itself: it is a reload you never have to
-    // stand through. Triple Tap's cost comes out of whichever pool pays.
-    if (this.mods.beltFeed > 0 && this.reserveAmmo >= this.mods.ammoPerShot
+    // stand through. The trigger's full cost comes out of whichever pool pays.
+    const cost = this.shotCost;
+    if (this.mods.beltFeed > 0 && this.reserveAmmo >= cost
       && Math.random() < this.mods.beltFeed) {
-      this.reserveAmmo -= this.mods.ammoPerShot;
+      this.reserveAmmo -= cost;
     } else {
       // A shot that cannot afford its full cost still fires and empties the
       // magazine; refusing it would jam the gun on one leftover round.
-      this.mag = Math.max(0, this.mag - this.mods.ammoPerShot);
+      this.mag = Math.max(0, this.mag - cost);
     }
     const effectiveFireRate =
       w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();

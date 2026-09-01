@@ -231,13 +231,20 @@ export const UPGRADES = {
     rarity: 'common',
     max: 2,
     theme: THEME.vitality,
+    // THE ONLY SOURCE OF REGENERATION IN THE GAME besides Antidote's leech -
+    // there is no natural trickle underneath it any more (see Player's mods
+    // block), so this is a real pick rather than a bigger version of something
+    // every run already had. Priced accordingly: 2 HP/s is slow enough that it
+    // never wins a fight on its own, and the 3s window means it only pays a
+    // player who actually broke contact. It does not tick in the wave break.
     effects: (n) => [
-      ['REGEN ' + step(n, (k) => 5 * (1 + k) + ' HP/s'), GOOD],
-      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(0.8, 4 - 1.25 * k))), GOOD],
+      ['REGEN ' + step(n, (k) => 2 * k + ' HP/s'), GOOD],
+      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(2, 4 - k))), GOOD],
+      ['IN COMBAT ONLY', NOTE],
     ],
     apply: (mods, n) => {
-      mods.regenDelay = Math.max(0.8, 4 - 1.25 * n);
-      mods.regenRate = 5 * (1 + n);
+      mods.regenDelay = Math.max(2, 4 - n);
+      mods.regenRate = 2 * n;
     },
   },
   bulwark: {
@@ -356,7 +363,12 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 3,
     theme: THEME.fabricate,
-    effects: (n) => [['AMMO / SEC ' + step(n, (k) => '+' + 2.5 * k), GOOD]],
+    // Combat only, like Nanoweave: the wave break has no clock on it, and a
+    // trickle that ran there was an infinite ammo box you reached by waiting.
+    effects: (n) => [
+      ['AMMO / SEC ' + step(n, (k) => '+' + 2.5 * k), GOOD],
+      ['IN COMBAT ONLY', NOTE],
+    ],
     apply: (mods, n) => { mods.ammoRegen += 2.5 * n; },
   },
   steadyAim: {
@@ -505,7 +517,16 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.precision,
-    effects: [['EVERY SHOT FIRES 2x', GOOD], ['60% DAMAGE EACH', BAD]],
+    // The ammo line is the honest half of the deal and has to be on the card:
+    // firing the pattern twice spends two rounds (see Player.shotCost), which
+    // is what stops +20% net damage from being free. A 30-round magazine is a
+    // 15-shot magazine with this taken, and that is the cost the player is
+    // actually weighing.
+    effects: [
+      ['EVERY SHOT FIRES 2x', GOOD],
+      ['60% DAMAGE EACH', BAD],
+      ['2 AMMO PER SHOT', BAD],
+    ],
     apply: (mods, n) => {
       mods.volley = 1 + n;
       mods.volleyDamage = 0.6;
