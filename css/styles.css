@@ -583,12 +583,12 @@ html, body {
    the arena is mostly made of. Nothing to dim, nothing to wash out, and the
    line weight now scales with the brightness of what it crosses.
 
-   The two greys are the knob: their SPREAD from 128 is the line's strength,
-   and 128 itself is a no-op row. They are deliberately set either side of it
-   by the same 40, which averages back to exactly 128 - so this layer costs
-   the image no net brightness at all, it only modulates. Keep them balanced
-   when tuning and the arena cannot get darker no matter how strong the lines
-   are made. A 2px line on a 4px pitch was tried at 0.34
+   The three greys are the knob: their SPREAD from 128 is the line's strength,
+   and 128 itself is a no-op row. Balancing them around 128 would make the
+   layer cost the image no net brightness at all - worth knowing, though
+   these are not balanced: 58/128/168 sits a little under 128 and is very
+   slightly dark, which is what this game turned out to want. A 2px line on a
+   4px pitch has been tried three times, at every weight, and is not it. A 2px line on a 4px pitch was tried at 0.34
    and at 0.26 and is not what this game wants.
 
    Fixed in CSS pixels and never scaled, so the pitch cannot drift into the
@@ -610,8 +610,9 @@ html, body {
   mix-blend-mode: overlay;
   background: repeating-linear-gradient(
     180deg,
-    rgb(88, 88, 88)    0 2px,
-    rgb(168, 168, 168) 2px 4px
+    rgb(58, 58, 58)    0 1px,
+    rgb(128, 128, 128) 1px 2px,
+    rgb(168, 168, 168) 2px 3px
   );
 }
 #crt::after {
