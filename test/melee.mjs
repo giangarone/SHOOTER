@@ -58,8 +58,15 @@ try {
     // come through the projectile ctx with no source, and counting a schism's
     // burst volley would make it look like it was beating its melee cooldown
     // when it was simply also shooting.
+    // ONLY THE SUBJECT'S BLOWS. `source` alone was not specific enough: the
+    // wave spawner keeps running underneath these trials, so anything it put
+    // on the floor was landing its own hits and being counted against the one
+    // enemy under test - which read as that enemy beating its cooldown. The
+    // field is also kept clear below; this is the half that makes the count
+    // exact rather than merely likely.
     let hits = 0;
-    g._hurtPlayer = (d, pos, source) => { if (source) hits++; };
+    let subject = null;
+    g._hurtPlayer = (d, pos, source) => { if (source && source === subject) hits++; };
 
     // The autotest bot drives the player AND shoots, so it has to be switched
     // off or it kills the subject and fights every position write. The player
@@ -86,13 +93,28 @@ try {
       g.player.mods.dodgeChance = 0;
       g.spawnEnemy(type);
       const e = g.enemies[g.enemies.length - 1];
+      subject = e;
+      // Anything the spawner adds during the trial is removed on sight. Two
+      // enemies crowd each other, which moves the subject off the player and
+      // changes the very contact distance the trial is measuring.
+      const keepAlone = () => {
+        g.queue.length = 0;
+        for (let i = g.enemies.length - 1; i >= 0; i--) {
+          const o = g.enemies[i];
+          if (o === e) continue;
+          g.scene.remove(o.group);
+          if (o.dispose) o.dispose();
+          g.enemies.splice(i, 1);
+        }
+      };
+      keepAlone();
       e.status.freeze = 0;
       e.status.fear = 0;
 
       // Hold the player off while the enemy settles out of anything it spawned
       // inside, then approach along the line from the arena centre to it.
       px = 0; pz = 0;
-      for (let f = 0; f < 20; f++) await step();
+      for (let f = 0; f < 20; f++) { keepAlone(); await step(); }
       const cx = e.pos.x;
       const cz = e.pos.z;
       const len = Math.hypot(cx, cz) || 1;
@@ -115,6 +137,7 @@ try {
           pz = cz + uz * 0.9;
           if (performance.now() - t0 > STAND_SECONDS * 1000) break;
         }
+        keepAlone();
         await step();
       }
       return { hits, secs: (performance.now() - t0) / 1000 };

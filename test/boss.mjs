@@ -279,13 +279,19 @@ try {
     const b = seen.bar || {};
     const maxAdds = Math.max(0, ...seen.adds);
     const maxParts = Math.max(0, ...seen.parts);
-    const hpFell = seen.hp.length > 1 && seen.hp[0] > seen.hp[seen.hp.length - 1];
+    // Measured from the first sample where the boss actually HAS health. A
+    // bossFight exists for a moment before its parts carry their hp, so the
+    // poll above can catch it mid-construction and record a 0 - and a run
+    // that started at 0 then read anything at all looked like a boss whose
+    // health went UP. Zeroes are a construction artefact, not a measurement.
+    const hpSeen = seen.hp.filter((h) => h > 0);
+    const hpFell = hpSeen.length > 1 && hpSeen[0] > hpSeen[hpSeen.length - 1];
     const marksLeaked = seen.after ? seen.after.marks > 0 : true;
     const ok = seen.boss && cleared && hpFell && !marksLeaked && !errors.length;
     if (!ok) bad++;
     console.log(
       `${ok ? 'ok  ' : 'FAIL'} wave ${wave} boss=${seen.boss} cleared=${cleared} ` +
-      `hp ${seen.hp[0]}->${seen.hp[seen.hp.length - 1]} maxParts=${maxParts} ` +
+      `hp ${hpSeen[0]}->${hpSeen[hpSeen.length - 1]} maxParts=${maxParts} ` +
       `maxAdds=${maxAdds} bar=${b.barHidden === false ? 'shown' : 'HIDDEN'} ` +
       `note="${b.note || ''}" marksHeld=${seen.after ? seen.after.marks : '?'}`
     );

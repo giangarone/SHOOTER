@@ -1723,7 +1723,7 @@ class Game {
     this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
     this._postScore();
     // The heaviest the sound goes. This is the run ending, not a body.
-    this.sfx.kill(1.2);
+    this.sfx.death(1.2);
   }
 
   // Current credit/score multiplier from the live kill chain.
@@ -1851,7 +1851,6 @@ class Game {
     en.takeDamage(m.lightningDamage);
     this._blast(this._boltAt, m.lightningSplash, m.lightningRadius, en, false);
     this.effects.lightning(en.pos.x, en.pos.z, m.lightningRadius);
-    this.sfx.kill(en.radius);
   }
 
   // OVERLOAD. Every enemy in the arena loses a fifth of its MAXIMUM health the
@@ -1876,7 +1875,6 @@ class Game {
     }
     if (!struck) return;
     this.effects.addShake(0.3);
-    this.sfx.kill();
   }
 
   // Knockout Drops. Shoves an enemy along the shot, then resolves it out of

@@ -75,7 +75,10 @@ export class SFX {
   // cutoff that MOVES is the only way to get a noise burst to change
   // character as it plays, and a burst that changes character is the
   // difference between a texture and an event. See kill().
-  noise({ t = 0.1, v = 0.5, f = 1000, delay = 0, f2 = 0, mode = 'lowpass' }) {
+  // `q` is the filter's resonance. At the default 1 a bandpass is a gentle
+  // tilt; pushed up it rings, which is how a noise burst gets a CHARACTER -
+  // a knock, a thock, a clank - without ever becoming a note. See hit().
+  noise({ t = 0.1, v = 0.5, f = 1000, delay = 0, f2 = 0, mode = 'lowpass', q = 1 }) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime + delay;
     const len = Math.max(1, Math.floor(this.ctx.sampleRate * t));
@@ -86,6 +89,7 @@ export class SFX {
     src.buffer = buf;
     const flt = this.ctx.createBiquadFilter();
     flt.type = mode;
+    flt.Q.value = q;
     flt.frequency.setValueAtTime(f, now);
     if (f2) flt.frequency.exponentialRampToValueAtTime(Math.max(20, f2), now + t);
     const g = this.ctx.createGain();
@@ -108,29 +112,74 @@ export class SFX {
   // The pitch jitter is what stops a held trigger from becoming one flat
   // repeated tone. Real repeated shots are never identical, and at this depth
   // the variation is felt rather than noticed.
+  // Gains are ~1.8x what they were. The gun and the hitmarker are the two
+  // sounds the player is steering by, and they were sitting level with the
+  // track instead of on top of it. Lifted here rather than at the master,
+  // which would have dragged every pickup and console cue up with them and
+  // lost the balance those already have against the music.
   shoot() {
     const k = 0.94 + Math.random() * 0.12;
-    this.noise({ t: 0.02, v: 0.5, f: 7000 });
-    this.noise({ t: 0.07, v: 0.3, f: 1500 });
-    this.tone({ f: 150 * k, f2: 46, t: 0.09, type: 'triangle', v: 0.42 });
+    this.noise({ t: 0.02, v: 0.9, f: 7000 });
+    this.noise({ t: 0.07, v: 0.54, f: 1500 });
+    this.tone({ f: 150 * k, f2: 46, t: 0.09, type: 'triangle', v: 0.76 });
   }
-  // THE HITMARKER. Fires once per shot that connects (see _shoot), so its
-  // whole job is to separate a hit from a miss without becoming fatiguing at
-  // several a second.
+  // THE ENEMY KILL. A tonal impact rather than a noise burst: filtered noise
+  // reads as hiss however it is shaped, and what makes the SHOT feel like
+  // force is its low triangle sweep. This is built the same way, pitched
+  // above the gun and falling faster, so it lands as a related but distinct
+  // event - same instrument, different note.
   //
-  // Two things make it audible UNDER the gun rather than buried by it. It
-  // sits in a narrow band around 3kHz, which is above the shot's body and
-  // below its crack - the shot is loudest either side of this window. And it
-  // lands 30ms LATE, after the shot's transient has decayed, which is both
-  // what makes it survive the mix and what makes it read as caused by the
-  // shot rather than as part of the same noise.
+  //   attack  one very short LOWPASSED click. It gives the onset definition
+  //           with no top end; putting this energy up at 3-8kHz is what made
+  //           earlier versions sound thin and sharp
+  //   body    the triangle. The punch, and the loudest thing here
+  //   sub     a sine underneath for weight, decaying a little slower
   //
-  // Pitchless, like the kill: at this rate of fire a note would be the first
-  // thing to grate.
+  // VARIATION, because this now fires on every kill. Three flavours differing
+  // in where the body starts and how fast it falls, never the same one twice
+  // running, with the pitches randomised inside each. They stay close enough
+  // together to read as one sound the game owns rather than three sounds.
+  //
+  // `size` is the dead enemy's collision radius, normalised around the 0.5
+  // the standard roster shares: bigger things ring lower. The clamp is
+  // gentle - this colours the kill, it does not restage it.
+  kill(size = 0.5) {
+    const r = (a, b) => a + Math.random() * (b - a);
+    const w = Math.max(0.85, Math.min(1.6, size / 0.5));
+    const d = 0.02;
+
+    const last = this._killTex;
+    let tex = Math.floor(Math.random() * 3);
+    if (tex === last) tex = (tex + 1 + Math.floor(Math.random() * 2)) % 3;
+    this._killTex = tex;
+    const base = [268, 246, 292][tex];
+    const fall = [0.082, 0.095, 0.072][tex];
+
+    this.noise({ t: 0.012, v: 0.34, f: r(1000, 1500), delay: d });
+    this.tone({
+      f: r(base * 0.95, base * 1.05) / w, f2: 62, t: fall,
+      type: 'triangle', v: 0.92, delay: d,
+    });
+    this.tone({ f: r(104, 122) / w, f2: 46, t: 0.1, type: 'sine', v: 0.55, delay: d });
+  }
+
+  // THE HITMARKER - a bullet connecting, not killing. Fires once per shot
+  // that lands (see _shoot), which at a full auto rate is several a second,
+  // so it is deliberately THE MOST SUBTLE thing in this file.
+  //
+  // Same family as the kill so the two read as one game, but smaller in every
+  // dimension that matters: pitched higher, a third the length, roughly a
+  // third the level, and no sub layer at all. The kill keeps the low end to
+  // itself, which is what stops a stream of hits from muddying the moment a
+  // kill actually lands - and what makes the difference between them obvious
+  // without the hit ever demanding attention.
+  //
+  // 42ms late, so it arrives after the shot's transient rather than inside it.
   hit() {
     const r = (a, b) => a + Math.random() * (b - a);
-    this.noise({ t: r(0.012, 0.02), v: 0.34, f: r(2600, 3800), mode: 'bandpass', delay: 0.03 });
-    this.noise({ t: 0.012, v: 0.14, f: r(6000, 8200), mode: 'highpass', delay: 0.03 });
+    const d = 0.042;
+    this.noise({ t: 0.01, v: 0.16, f: r(1100, 1700), delay: d });
+    this.tone({ f: r(330, 384), f2: 120, t: 0.045, type: 'triangle', v: 0.34, delay: d });
   }
 
   // The old hit sound, kept for the two moments that are not hitmarkers: a
@@ -160,7 +209,11 @@ export class SFX {
   //
   // Inside a texture the parameters are still randomised, and the debris
   // chips vary in COUNT and SPACING, so the rhythm differs kill to kill too.
-  kill(size = 0.5) {
+  // THE RUN ENDING, and nothing else - see _gameOver. This is the noise-built
+  // collapse that used to play on every enemy death; it was too broad and too
+  // long to fire hundreds of times against the music, but it is exactly right
+  // once, for the player's own death, where length is the point.
+  death(size = 0.5) {
     const r = (a, b) => a + Math.random() * (b - a);
     // Clamped so a boss part cannot drag the sound somewhere the mix has
     // never heard, and a chip cannot turn into a whistle.
