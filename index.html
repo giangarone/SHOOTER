@@ -125,12 +125,13 @@
       <div class="ctl"><b class="key">F</b><span>FULLSCREEN</span></div>
     </div>
 
-    <div id="lb-start" class="lb"></div>
-
+    <!-- The board used to live here, under the controls, and it pushed PRESS
+         START off the bottom of a laptop screen the moment it had ten rows in
+         it. It is its own screen now. -->
     <div class="primary-row"><button id="btn-start">PRESS START</button></div>
     <div class="opt-row">
-      <button id="btn-mute-start" class="opt-btn mute-btn">MUSIC ON</button>
-      <button id="btn-flash-start" class="opt-btn">FLASH ON</button>
+      <button id="btn-settings-start" class="opt-btn">SETTINGS</button>
+      <button id="btn-scores-start" class="opt-btn">HIGH SCORES</button>
       <button id="btn-fs-start" class="opt-btn">FULLSCREEN</button>
     </div>
   </div>
@@ -163,10 +164,66 @@
     </div>
     <div class="primary-row"><button id="btn-resume">RESUME</button></div>
     <div class="opt-row">
-      <button id="btn-mute-pause" class="opt-btn mute-btn">MUSIC ON</button>
-      <button id="btn-flash-pause" class="opt-btn">FLASH ON</button>
+      <button id="btn-settings-pause" class="opt-btn">SETTINGS</button>
       <button id="btn-fs-pause" class="opt-btn">FULLSCREEN</button>
     </div>
+  </div>
+
+  <!-- SETTINGS. Its own screen, reached from the start and pause menus and
+       returning to whichever opened it. Every control in here is one ROW -
+       label on the left, the thing you change on the right - so the column of
+       values can be read down in one pass without hunting for which word is
+       the setting and which is its state. -->
+  <div id="overlay-settings" class="overlay hidden">
+    <div class="marquee plate">
+      <h1>SETTINGS</h1>
+      <div class="rule"></div>
+      <p class="sub">TUNE THE CABINET</p>
+    </div>
+
+    <div class="settings plate">
+      <div class="set-head">AUDIO</div>
+      <div class="set-row">
+        <span class="set-label">MUSIC</span>
+        <button id="btn-music" class="opt-btn">ON</button>
+      </div>
+
+      <div class="set-head">VISUAL</div>
+      <div class="set-row">
+        <span class="set-label">BEAT FLASHES</span>
+        <button id="btn-flash" class="opt-btn">ON</button>
+      </div>
+      <div class="set-row">
+        <span class="set-label">SCREENSHAKE</span>
+        <!-- A stepper, not a range input: a native slider is a rounded,
+             anti-aliased control from another operating system, and this
+             cabinet has no such shape in it. Eight lit cells and two keys. -->
+        <div class="stepper">
+          <button id="btn-shake-down" class="step-btn" type="button" aria-label="Less screenshake">-</button>
+          <div id="shake-pips" class="pips"></div>
+          <b id="shake-val">100%</b>
+          <button id="btn-shake-up" class="step-btn" type="button" aria-label="More screenshake">+</button>
+        </div>
+      </div>
+      <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
+    </div>
+
+    <div class="primary-row"><button id="btn-settings-back">BACK</button></div>
+  </div>
+
+  <!-- HIGH SCORES. Also its own screen, for the same reason: ten rows of data
+       is a page, not a footnote under a title. -->
+  <div id="overlay-scores" class="overlay hidden">
+    <div class="marquee plate">
+      <h1>HIGH SCORES</h1>
+      <div class="rule"></div>
+      <p class="sub">TEN BEST RUNS</p>
+    </div>
+
+    <div id="lb-menu" class="lb tall"></div>
+    <div id="lb-none" class="plate hidden">NO RUNS RECORDED YET</div>
+
+    <div class="primary-row"><button id="btn-scores-back">BACK</button></div>
   </div>
 
   <!-- The tube, in two layers, and they are separate elements for a reason

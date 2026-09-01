@@ -176,6 +176,16 @@ function viewportAspect() {
   return Math.max(1, innerWidth) / Math.max(1, innerHeight);
 }
 
+// --- settings ---
+// The screenshake scale, as the player sets it. One step per press of a key,
+// eight cells on the readout, and a ceiling of double so someone who wants
+// more kick than the game ships with can have it - the amplitude itself is
+// still capped in effects.addShake, so the top of this scale is loud, not
+// unreadable.
+const SHAKE_PIPS = 8;
+const SHAKE_MAX = 2;
+const SHAKE_STEP = SHAKE_MAX / SHAKE_PIPS;
+
 // --- economy ---
 // Seconds a kill chain survives without a new kill.
 const COMBO_WINDOW = 3;
@@ -184,8 +194,10 @@ const COMBO_WINDOW = 3;
 const COMBO_STEP = 0.15;
 const COMBO_MAX = 3;
 // Credits per enemy are derived from its score so the two curves cannot drift
-// apart. Splitter children score 0 and so are worth nothing, deliberately -
-// otherwise splitters would be the best credit source in the game.
+// apart. Splitter children score 0 and so fall outside this rate entirely;
+// they pay a small flat bounty instead - see SPLIT_CHILD_CREDITS - because
+// paying them at this rate off a real score would make splitters the best
+// credit source in the game.
 //
 // 0.18 rather than the 0.1 it was for most of the game's life, because KILLS
 // ARE NOW THE ONLY INCOME. The flat wave-clear bonus is gone (see _finishWave):
@@ -195,6 +207,15 @@ const COMBO_MAX = 3;
 // the floor, and this is the dial that keeps a run's total roughly where it
 // was - plus a margin for the orbs that time out uncollected.
 const CREDITS_PER_SCORE = 0.18;
+// What one splitter child pays. Flat, and set here rather than by giving the
+// child a score, because the two numbers answer different questions: the
+// children still score NOTHING - killing them must not run the scoreboard up
+// for work the parent was already paid for - but a splitter that bursts into
+// three bodies you have to stop and deal with should not leave the floor
+// empty. Small on purpose: three children come to 4.5 credits against the
+// parent's ~21, so clearing the whole family is worth about a fifth more than
+// the parent alone, and splitters still are not the way to fund a run.
+const SPLIT_CHILD_CREDITS = 1.5;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
 // Deals the Devil puts up, and how likely he is to be there at all.
@@ -369,6 +390,21 @@ class Game {
     // beat strobe is a photosensitivity setting, so someone who turned it off
     // must never see it fire once on the way back in.
     try { this.rig.beatFlash = localStorage.getItem('va-beat-flash') !== '0'; } catch {}
+    // Screenshake, read before the first frame for the same reason: it is a
+    // motion-comfort setting, and someone who turned it off must not be
+    // shaken once on the way back in. Anything stored that is not a finite
+    // number in range falls back to the default rather than poisoning every
+    // camera offset in the game with a NaN.
+    try {
+      // The null check is load-bearing: Number(null) is 0, and a finite zero
+      // is a perfectly valid setting - so testing the NUMBER alone would read
+      // "never set" as "turned off" and ship the game with no shake at all.
+      const raw = localStorage.getItem('va-shake');
+      const n = Number(raw);
+      if (raw !== null && raw !== '' && Number.isFinite(n)) {
+        this._setShakeScale(Math.max(0, Math.min(SHAKE_MAX, Math.round(n / SHAKE_STEP) * SHAKE_STEP)));
+      }
+    } catch {}
     // Prefilled into the name field so a returning player just presses Enter.
     this._lastName = '';
     try { this._lastName = localStorage.getItem('va-last-name') || ''; } catch {}
@@ -682,6 +718,11 @@ class Game {
         // listeners are on the window, and an un-prevented Tab walks browser
         // focus off the canvas and out of pointer lock.
         case 'Tab': this._openStats(); e.preventDefault(); break;
+        // BACK, from the keyboard. The browser also uses Escape to leave
+        // pointer lock and fullscreen, which is exactly why it is only ever
+        // read here as "close the screen on top" - it can never reach into a
+        // live run and change anything.
+        case 'Escape': if (this._subScreenOpen()) this._closeSubScreen(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -761,41 +802,97 @@ class Game {
       this._saveScore();
       this.beginGame();
     });
-    // Mute toggles live on the start and pause overlays. Both overlays are
-    // themselves click-to-continue, so these must stop the event or muting
-    // would also start or resume the run.
-    this._muteBtns = [document.getElementById('btn-mute-start'), document.getElementById('btn-mute-pause')];
-    for (const b of this._muteBtns) {
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.music.toggleMute();
-        this._saveMuted();
-        this._syncMuteBtns();
-      });
-    }
+    // ---- the settings screen ------------------------------------------------
+    //
+    // MUSIC and FLASHES used to be a pair of buttons duplicated across the
+    // start and pause overlays, which meant two nodes and a sync loop for
+    // every setting the game would ever grow. They live on one screen now, so
+    // each control is a single button with a single label to keep in step.
+    //
+    // The screen itself is opened from either menu and returns to whichever
+    // opened it - see _openSettings.
+    this._musicBtn = document.getElementById('btn-music');
+    this._musicBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.music.toggleMute();
+      this._saveMuted();
+      this._syncMuteBtns();
+    });
     this._syncMuteBtns();
 
-    // Beat-strobe toggle. Same overlays, same stopPropagation reasoning.
-    this._flashBtns = [document.getElementById('btn-flash-start'), document.getElementById('btn-flash-pause')];
-    for (const b of this._flashBtns) {
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.rig.beatFlash = !this.rig.beatFlash;
-        // The strobe holds whatever opacity the last frame left on it, and a
-        // paused game does not tick the rig - so clear it here or turning the
-        // setting off mid-pause leaves the screen washed until the resume.
-        if (!this.rig.beatFlash) {
-          this.rig.flash = 0;
-          this.ui.setStrobe(0);
-        }
-        this._saveBeatFlash();
-        this._syncFlashBtns();
-      });
-    }
+    this._flashBtn = document.getElementById('btn-flash');
+    this._flashBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.rig.beatFlash = !this.rig.beatFlash;
+      // The strobe holds whatever opacity the last frame left on it, and a
+      // paused game does not tick the rig - so clear it here or turning the
+      // setting off mid-pause leaves the screen washed until the resume.
+      if (!this.rig.beatFlash) {
+        this.rig.flash = 0;
+        this.ui.setStrobe(0);
+      }
+      this._saveBeatFlash();
+      this._syncFlashBtns();
+    });
     this._syncFlashBtns();
 
+    // Screenshake. The pips are built once, here, and only their class is
+    // rewritten afterwards - eight nodes torn down and rebuilt on every press
+    // of a key the player is going to hold is pure waste.
+    this._shakePips = [];
+    const pipRow = document.getElementById('shake-pips');
+    for (let i = 0; i < SHAKE_PIPS; i++) {
+      const pip = document.createElement('i');
+      pipRow.appendChild(pip);
+      this._shakePips.push(pip);
+    }
+    this._shakeVal = document.getElementById('shake-val');
+    this._shakeDown = document.getElementById('btn-shake-down');
+    this._shakeUp = document.getElementById('btn-shake-up');
+    this._shakeDown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepShake(-1);
+    });
+    this._shakeUp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepShake(1);
+    });
+    this._syncShake();
+
+    // Opening and closing the two sub-screens. The buttons that open them sit
+    // on overlays that are themselves click-to-continue, so every one of these
+    // has to stop the event or the click would also start or resume the run.
+    document.getElementById('btn-settings-start').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openSettings();
+    });
+    document.getElementById('btn-settings-pause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openSettings();
+    });
+    document.getElementById('btn-scores-start').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openScores();
+    });
+    document.getElementById('btn-settings-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._closeSubScreen();
+    });
+    document.getElementById('btn-scores-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._closeSubScreen();
+    });
+    // The sub-screens cover the menu underneath, but a click that lands on the
+    // padding around their panels would otherwise fall through to nothing and
+    // read as a dead screen. Swallowed rather than treated as BACK: these are
+    // the only overlays in the game that are NOT click-to-continue, and a
+    // stray click must not throw away a setting change.
+    for (const ov of [this.ui.settingsOv, this.ui.scoresOv]) {
+      ov.addEventListener('click', (e) => e.stopPropagation());
+    }
+
     // Fullscreen toggles, one per overlay, plus the F binding above. Same
-    // stopPropagation reasoning as the mute buttons: the overlays are
+    // stopPropagation reasoning as the settings buttons: the overlays are
     // click-to-continue and this must not also start or resume the run.
     this._fsBtns = [document.getElementById('btn-fs-start'), document.getElementById('btn-fs-pause')];
     for (const b of this._fsBtns) {
@@ -827,7 +924,6 @@ class Game {
     });
     // Clicking the field must not fall through to anything that restarts.
     this.ui.lbName.addEventListener('click', (e) => e.stopPropagation());
-    this.ui.renderBoard(this.ui.lbStart, leaderboard.load(), -1);
 
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
@@ -937,20 +1033,88 @@ class Game {
     }
   }
 
+  // The label is the STATE now, not the name of the setting: on the settings
+  // screen the row already says MUSIC, and repeating it in the button would
+  // print the word twice on one line.
   _syncMuteBtns() {
     const m = this.music.muted;
-    for (const b of this._muteBtns) {
-      b.textContent = m ? 'MUSIC OFF' : 'MUSIC ON';
-      b.classList.toggle('off', m);
-    }
+    this._musicBtn.textContent = m ? 'OFF' : 'ON';
+    this._musicBtn.classList.toggle('off', m);
   }
 
   _syncFlashBtns() {
     const on = this.rig.beatFlash;
-    for (const b of this._flashBtns) {
-      b.textContent = on ? 'FLASH ON' : 'FLASH OFF';
-      b.classList.toggle('off', !on);
+    this._flashBtn.textContent = on ? 'ON' : 'OFF';
+    this._flashBtn.classList.toggle('off', !on);
+  }
+
+  // Screenshake, one step of SHAKE_STEP per press and clamped to the ends of
+  // the scale. Applied immediately - the setting is reachable from the pause
+  // screen mid-run, and the next hit has to shake by what the player just
+  // chose, not by what was stored the last time they were in a menu.
+  _stepShake(dir) {
+    const next = Math.round((this.effects.shakeScale + dir * SHAKE_STEP) * 100) / 100;
+    const clamped = Math.max(0, Math.min(SHAKE_MAX, next));
+    if (clamped === this.effects.shakeScale) return;
+    this._setShakeScale(clamped);
+    this._saveShake();
+    this._syncShake();
+  }
+
+  // THE ONE WRITER for the setting. Two things kick the camera and they are
+  // felt as a single effect: the shake effects.js adds on every hit, blast and
+  // shot, and the recoil the weapon puts into the player's pitch. Split
+  // between two modules, so this is the seam that keeps them agreeing - a
+  // setting that quietened one and not the other would read as broken.
+  _setShakeScale(v) {
+    this.effects.shakeScale = v;
+    this.player.shakeScale = v;
+  }
+
+  _syncShake() {
+    const v = this.effects.shakeScale;
+    // Cells, not a percentage bar: the scale runs to double and the pips above
+    // 1.0 are amber, so "more than the game ships with" reads without the
+    // number being looked at.
+    const lit = Math.round(v / SHAKE_STEP);
+    for (let i = 0; i < this._shakePips.length; i++) {
+      const on = i < lit;
+      this._shakePips[i].className = on ? (i >= SHAKE_PIPS / 2 ? 'on hot' : 'on') : '';
     }
+    // OFF rather than 0%: a zero on a dial reads as a value, and this one is a
+    // state - the effect is not turned down, it is turned off.
+    this._shakeVal.textContent = v === 0 ? 'OFF' : Math.round(v * 100) + '%';
+    this._shakeVal.classList.toggle('off', v === 0);
+    this._shakeDown.disabled = v <= 0;
+    this._shakeUp.disabled = v >= SHAKE_MAX;
+  }
+
+  // The sub-screens are LAYERED over whichever menu opened them - the start
+  // screen or the pause screen - and never hide it. That is what makes BACK a
+  // single class change with nothing to remember: taking the top screen down
+  // reveals exactly the screen the player came from.
+  _openSettings() {
+    this._audioGesture();
+    this.ui.showSettings();
+  }
+
+  _openScores() {
+    this._audioGesture();
+    this.ui.showScores(leaderboard.load());
+  }
+
+  _closeSubScreen() {
+    // The menu underneath was never hidden, so BACK is only ever this. Both
+    // are taken down rather than the one that is up: it costs a class write
+    // and it cannot get out of step with which screen was opened.
+    this.ui.hideSubScreens();
+  }
+
+  // True while either sub-screen is up. The menus underneath are still there
+  // and still listening, so anything that acts on a menu click has to ask.
+  _subScreenOpen() {
+    return !this.ui.settingsOv.classList.contains('hidden')
+      || !this.ui.scoresOv.classList.contains('hidden');
   }
 
   // Storage throws in private-mode Safari and when cookies are blocked, and a
@@ -961,6 +1125,10 @@ class Game {
 
   _saveBeatFlash() {
     try { localStorage.setItem('va-beat-flash', this.rig.beatFlash ? '1' : '0'); } catch {}
+  }
+
+  _saveShake() {
+    try { localStorage.setItem('va-shake', String(this.effects.shakeScale)); } catch {}
   }
 
   // Fills the object the rig reads. Mutates in place and returns it, so the
@@ -1097,7 +1265,6 @@ class Game {
     // Any unnamed run is banked before the state that produced it is reset.
     this._saveScore();
     this.ui.hideNameEntry();
-    this.ui.renderBoard(this.ui.lbStart, leaderboard.load(), -1);
     this.player.reset();
     this._clearEntities();
     this.score = 0;
@@ -3064,9 +3231,9 @@ class Game {
     this.player.health = Math.min(this.player.maxHealth, this.player.health + whole);
   }
 
-  // Splitter death: three weaker, faster, smaller chasers worth no score.
-  // They go to _pendingSpawns, not straight into the enemy list - see
-  // _updateEnemies.
+  // Splitter death: three weaker, faster, smaller chasers worth no score, but
+  // carrying a small flat bounty - see SPLIT_CHILD_CREDITS. They go to
+  // _pendingSpawns, not straight into the enemy list - see _updateEnemies.
   _splitInto(e) {
     for (let i = 0; i < 3; i++) {
       const angle = ((Math.PI * 2) / 3) * i + Math.random() * 0.5;
@@ -3080,6 +3247,7 @@ class Game {
         this._cfg.hpScale * 0.5, this._cfg.speedScale * 1.1, this._cfg.dmgScale * 0.7
       );
       mini.score = 0;
+      mini.bounty = SPLIT_CHILD_CREDITS;
       mini.group.scale.setScalar(0.6);
       this.scene.add(mini.group);
       this._pendingSpawns.push(mini);
@@ -3118,8 +3286,9 @@ class Game {
         continue;
       }
       this.kills++;
-      // Splitter children score 0, so they extend the chain but pay nothing.
-      // That is intentional: they exist to threaten, not to fund the shop.
+      // Splitter children score 0, so they extend the chain without moving the
+      // scoreboard. They still drop a little money - see SPLIT_CHILD_CREDITS -
+      // because they are three bodies you have to stop and deal with.
       this._bumpCombo();
       const mult = this.comboMult();
       this.score += Math.round(e.score * mult);
@@ -3128,7 +3297,10 @@ class Game {
       // _collectOrb. The combo multiplier is still applied at the moment of
       // death, so a chain is worth what it was worth when it happened rather
       // than what it is worth when the money is collected.
-      this._dropMoney(e.pos, e.score * CREDITS_PER_SCORE * mult);
+      // A flat bounty wins over the score-derived figure where one is set -
+      // see Enemy.bounty. The combo multiplier rides on both.
+      const bounty = e.bounty !== null ? e.bounty : e.score * CREDITS_PER_SCORE;
+      this._dropMoney(e.pos, bounty * mult);
       this.player.onKill(this.time);
       if (this.player.mods.ammoOnKill > 0) {
         this.player.reserveAmmo = Math.min(
@@ -3827,9 +3999,15 @@ class Game {
       this._updateEnemies(dt);
       this._updateProjectiles(dt);
 
+      // The roll carries the same intensity setting as the offset - they are
+      // one effect, and scaling only the translation would leave the camera
+      // still rolling at full strength with the shake turned down. The player
+      // rewrites rotation.z from scratch every frame, so a scale of zero here
+      // simply never tilts it.
       if (this.effects.shakeAmp > 0) {
         this.camera.position.add(this.effects.shakeOffset(this._shakeV));
-        this.camera.rotation.z = (Math.random() - 0.5) * this.effects.shakeAmp * 0.04;
+        this.camera.rotation.z =
+          (Math.random() - 0.5) * this.effects.shakeAmp * this.effects.shakeScale * 0.04;
       }
 
       this._updateHud();

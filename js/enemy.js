@@ -294,17 +294,26 @@ export const ENEMY_TYPES = {
     cleanup: releaseMarks,
   },
 
-  // Artillery. Sits at the far end of the arena and makes the FLOOR the
-  // threat: circles fill on the ground a second and a half before anything
-  // lands, so every hit it scores is one the player was shown and stood in
-  // anyway. A close-range sweep stops it being solved by walking up to it.
+  // Artillery THAT WALKS. It makes the floor the threat - circles fill on the
+  // ground a second and a half before anything lands, so every shell that
+  // hits is one the player was shown and stood in anyway - but it does not
+  // stand off at the far wall to do it any more. It comes at you, it swings
+  // when it arrives, and every few seconds it picks a lane and rushes down it.
+  //
+  // It used to ORBIT at twenty metres, which made it the one fight in the
+  // rotation with no pressure in it: the barrage was the whole boss, and the
+  // barrage is a thing you walk out of. Chasing turns the shells into what
+  // they should always have been - the reason you cannot simply back away
+  // from the thing walking at you.
   siege: {
-    hp: 3200, speed: 2.4, damage: 22, score: 5000, color: 0x455a64, eye: 0xff5533,
+    hp: 3200, speed: 2.9, damage: 22, score: 5000, color: 0x455a64, eye: 0xff5533,
     scale: 2.6, radius: 1.6, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    orbit: { dist: 20, band: 2.5, out: 0.8, in: -0.9, strafe: 0.4, flip: 2, flipVar: 2 },
+    // Reach and windup scaled off a 1.6m body: it is more than three times the
+    // width of a chaser, so the same numbers would have it swinging at air.
+    melee: { windup: 0.5, start: 3.4, hit: 4.2, cd: 1.5 },
     build: buildSiege, ai: aiSiege,
     cleanup: releaseMarks,
   },
@@ -1929,55 +1938,149 @@ function aiColossus(e, a) {
 }
 
 // SIEGE. Everything it does is announced: the barrage draws its circles a full
-// 1.5s before it lands, and the sweep telegraphs for 0.7s. It is a fight about
-// never being where you were a second ago.
+// 1.5s before it lands, and the charge draws its lane for a second before the
+// boss leaves the blocks. It is a fight about never being where you were a
+// second ago - and now about not being able to simply walk away, either.
+//
+// THREE ATTACKS, ONE PER RANGE, so there is never a spot on the floor where
+// it has nothing to do and never two of them competing for the same moment:
+//   contact   a swing, through the shared melee cycle - it chases you down
+//   mid       the charge: a telegraphed lane, then a rush straight at you
+//   far       the barrage, unchanged
+// The charge is the one that can be BAITED: it commits to a heading at the
+// telegraph and slamming it into a pillar buys a long open window, the same
+// bargain Colossus offers.
 const SIEGE_MORTAR_CAP = 34;
-const SIEGE_SWEEP_CAP = 46;
+const SIEGE_CHARGE_CAP = 46;
+const SIEGE_CHARGE_SPEED = 15;
+// How far the charge reaches, and how long it is allowed to run. The timeout
+// is what ends a charge that finds nothing at all - open floor, a player who
+// stepped aside early - rather than letting it plough on to the wall.
+const SIEGE_LANE_LEN = 20;
+const SIEGE_DASH_TIME = 1.8;
+const SIEGE_TELE_TIME = 1.0;
 
 function aiSiege(e, a) {
   const bs = e.bs;
+  const ctx = a.ctx;
   if (bs.salvoCd === undefined) {
     bs.salvoCd = 2;
-    bs.sweepCd = 4;
-    bs.sweepT = 0;
+    bs.chargeCd = 4;
+    bs.state = 'walk';
+    bs.t = 0;
+    bs.dirX = 0;
+    bs.dirZ = 0;
     bs.mark = -1;
   }
-  bs.fx = a.ctx.effects;
-  orbit(e, a, ENEMY_TYPES.siege.orbit);
-  if (e.status.fear > 0) return;
+  // Held so cleanup() can release a telegraph the boss died on top of.
+  bs.fx = ctx.effects;
 
-  // Close-range sweep, so walking up to the artillery is not the answer.
-  if (bs.sweepT > 0) {
-    bs.sweepT -= a.dt;
-    a.vx = 0;
-    a.vz = 0;
+  // The lane, drawn at full length from the first frame so the AREA reads
+  // instantly, filling as it goes so the TIMING reads too. Same shape and the
+  // same clock as Colossus's, because it is the same promise to the player.
+  if (bs.state === 'tele') {
+    bs.t -= a.dt;
     e._setEyeAlert(true);
-    a.ctx.effects.markSet(bs.mark, e.pos.x, e.pos.z, 8, 0xff5533, 1 - bs.sweepT / 0.7);
-    if (bs.sweepT <= 0) {
-      e._setEyeAlert(false);
-      a.ctx.effects.markRelease(bs.mark);
+    ctx.effects.markSet(
+      bs.mark,
+      e.pos.x + bs.dirX * SIEGE_LANE_LEN * 0.5, e.pos.z + bs.dirZ * SIEGE_LANE_LEN * 0.5,
+      1.9, 0xff5533, 1 - bs.t / SIEGE_TELE_TIME,
+      SIEGE_LANE_LEN / 3.8, Math.atan2(-bs.dirX, -bs.dirZ)
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
       bs.mark = -1;
-      bs.sweepCd = 5 * e.rate;
-      // Frontal half-circle rather than a full ring: getting behind it still
-      // works, which is what keeps the sweep a positioning problem.
-      if (a.dist < 8 && _reachY(a) < BOSS_REACH_Y) {
-        const fx = -Math.sin(e.group.rotation.y);
-        const fz = -Math.cos(e.group.rotation.y);
-        if (a.nx * fx + a.nz * fz > 0) {
-          a.ctx.onHitPlayer(Math.min(SIEGE_SWEEP_CAP, e.damage * 1.36), e.pos, e);
-        }
-      }
-      _bossAt.set(e.pos.x, 0, e.pos.z);
-      a.ctx.effects.shockwave(_bossAt, 0xff5533, 8, 0.4);
-      a.ctx.effects.burst(_bossAt, 0xff7043, 28, 8, 2, 0.6);
-      a.ctx.effects.addShake(0.25);
+      e._setEyeAlert(false);
+      bs.state = 'dash';
+      bs.t = SIEGE_DASH_TIME;
+      ctx.bossEvent('charge', e);
     }
     return;
   }
-  bs.sweepCd -= a.dt;
-  if (a.dist < 7 && bs.sweepCd <= 0) {
-    bs.sweepT = 0.7;
-    bs.mark = a.ctx.effects.markAcquire();
+
+  if (bs.state === 'dash') {
+    bs.t -= a.dt;
+    a.vx = bs.dirX * SIEGE_CHARGE_SPEED;
+    a.vz = bs.dirZ * SIEGE_CHARGE_SPEED;
+    // Wider than the melee reach: this is a body the size of a truck arriving
+    // at fifteen metres a second, and clipping past its shoulder should not be
+    // a clean dodge.
+    if (a.dist < e.radius + 1.6 && _reachY(a) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(Math.min(SIEGE_CHARGE_CAP, e.damage * 1.5), e.pos, e);
+      _bossAt.set(e.pos.x, 1.2, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xff7043, 24, 7, 2, 0.6);
+      ctx.effects.addShake(0.3);
+      bs.state = 'recover';
+      bs.t = 0.9;
+      // Charged here as well as on the miss below, so a charge that CONNECTS
+      // is not immediately followed by another one.
+      bs.chargeCd = 7 * e.rate;
+      return;
+    }
+    // Ran into a pillar, a crate or the wall. The reward for baiting it: a
+    // long window on a boss that is otherwise walking at you the whole fight.
+    if (e.blockedBy > 0.05 || bs.t <= 0) {
+      const slammed = e.blockedBy > 0.05;
+      bs.state = 'recover';
+      bs.t = slammed ? 2.4 : 0.7;
+      bs.chargeCd = 7 * e.rate;
+      if (slammed) {
+        _bossAt.set(e.pos.x, 0, e.pos.z);
+        ctx.effects.shockwave(_bossAt, 0xff5533, 7, 0.5);
+        ctx.effects.burst(_bossAt, 0xff7043, 34, 8, 3, 0.8);
+        ctx.effects.addShake(0.35);
+        ctx.bossEvent('stagger', e);
+      }
+    }
+    return;
+  }
+
+  // Winded, or picking itself up off a pillar. It stands still and does
+  // nothing at all - no swing, no shells - which is the whole point of it.
+  if (bs.state === 'recover') {
+    bs.t -= a.dt;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      ctx.bossEvent('recover', e);
+    }
+    return;
+  }
+
+  // Terror does not send a boss running - it just stops it doing anything,
+  // which is what fearMode 'stagger' declares on the type. Tested AFTER the
+  // committed states above: a charge already out of the gate is not called
+  // back by it.
+  if (e.status.fear > 0) {
+    e._setEyeAlert(false);
+    return;
+  }
+
+  // walk. It closes, and it swings at whatever it reaches - the melee cycle
+  // returns true only when it is free to keep walking.
+  const m = ENEMY_TYPES.siege.melee;
+  const free = e._meleeCycle(a.dt, a.dist, ctx, m.windup, m.start, m.hit, m.cd);
+  if (free) {
+    a.vx = a.px * a.sp;
+    a.vz = a.pz * a.sp;
+  }
+
+  // Nothing below may interrupt a swing that is already wound up or live -
+  // `free` is exactly that test, and it is what keeps the boss from
+  // teleporting out of its own attack into a charge.
+  if (!free) return;
+
+  bs.chargeCd -= a.dt;
+  // Not from inside melee range, where it would simply be a second swing, and
+  // not from across the arena, where the player would have all day to walk
+  // out of the lane before it launched.
+  if (bs.chargeCd <= 0 && a.dist > 7 && a.dist < 28) {
+    bs.state = 'tele';
+    bs.t = SIEGE_TELE_TIME;
+    bs.mark = ctx.effects.markAcquire();
+    // The heading is locked at the telegraph, not tracked through it. That is
+    // the whole counter-play: what the rectangle showed is where it goes.
+    bs.dirX = a.nx;
+    bs.dirZ = a.nz;
     return;
   }
 
@@ -1987,11 +2090,11 @@ function aiSiege(e, a) {
   e.flash = 0.15;
   // One more shell per repeat of the rotation. e.cycle is set at spawn.
   const shots = 2 + Math.min(2, e.cycle);
-  const p = a.ctx.player;
+  const p = ctx.player;
   for (let i = 0; i < shots; i++) {
     // Led onto where the player is going, and scattered, so running in a
     // straight line is punished but the barrage is never a guaranteed hit.
-    a.ctx.addMortar(
+    ctx.addMortar(
       p.pos.x + p.vel.x * 0.45 + (Math.random() - 0.5) * 5,
       p.pos.z + p.vel.z * 0.45 + (Math.random() - 0.5) * 5,
       3.5, 1.5, Math.min(SIEGE_MORTAR_CAP, e.damage * 1.55)
@@ -2255,6 +2358,11 @@ export class Enemy {
     this.speed = def.speed * speedScale;
     this.damage = def.damage * dmgScale;
     this.score = def.score;
+    // What this body is WORTH IN CREDITS, when that cannot be derived from its
+    // score. Null for everything the waves spawn - main.js reads the score and
+    // one rate, so the two curves cannot drift apart. It exists for the things
+    // that score nothing and are still meant to pay: a splitter's children.
+    this.bounty = null;
     // Collision size, independent of the model's `scale`. Everything that
     // treats an enemy as a circle reads this: obstacle resolution, crowd
     // separation, the arena clamp, melee reach and the player's shards.

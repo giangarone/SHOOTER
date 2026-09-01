@@ -75,8 +75,9 @@ try {
 
     // ONE enemy, at a spot it has already settled into, with the player driven
     // through it in a straight line. A corridor of them down x=0 would measure
-    // the arena as much as the melee: that line crosses the centre platform,
-    // which shoves wide bodies off the path before the player ever arrives.
+    // the arena as much as the melee: that line runs the length of the totem
+    // and Devil rows, whose furniture shoves wide bodies off the path before
+    // the player ever arrives.
     const trial = async (type, mode) => {
       g._clearEntities();
       g.player.health = 1e6;

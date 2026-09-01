@@ -804,6 +804,139 @@ html, body {
 .overlay .opt-btn.off { color: var(--dim); box-shadow: inset 0 0 0 2px rgba(107, 120, 154, 0.4); }
 .overlay .opt-btn.off:hover { background: rgba(107, 120, 154, 0.14); box-shadow: inset 0 0 0 2px var(--dim); }
 
+/* ---- the sub-screens -----------------------------------------------------
+   SETTINGS and HIGH SCORES sit ON TOP of the menu that opened them, which is
+   what makes BACK a single class change with nothing to remember. That only
+   works if they are OPAQUE: the standard overlay wash is cut to let the arena
+   read as a texture behind it, and at that strength the start screen's own
+   marquee and buttons came through the settings panel as a second interface
+   printed over the first. These two are the one place the tube goes dark.
+
+   They are also the only overlays in the game that are not click-to-continue,
+   so the pointer says so. */
+#overlay-settings, #overlay-scores {
+  cursor: default;
+  /* The same two layers every other overlay has - the stepped radial over the
+     2px checker - laid on a SOLID base rather than straight onto the page, so
+     nothing behind them reads through. Painting the radial itself opaque would
+     also have stopped the light and would have thrown the dither away with it;
+     this keeps the texture. */
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at center, rgba(10, 12, 18, 0.55) 0 40%, rgba(5, 7, 11, 0.86) 100%),
+    var(--dither);
+  background-size: auto, 4px 4px;
+}
+
+/* ---- settings -----------------------------------------------------------
+   One column of rows on a single plate. The label sits hard left and the
+   control hard right, with the space between them dashed - the same rule the
+   CONTROLS head uses - so the eye can run from a name to its value across a
+   row without the two colliding in the middle on a narrow window. */
+.settings {
+  display: flex; flex-direction: column;
+  gap: calc(var(--u) * 3);
+  width: min(92vw, 560px);
+  padding: calc(var(--u) * 4) calc(var(--u) * 6) calc(var(--u) * 5);
+  --surface: rgba(6, 8, 13, 0.92);
+}
+/* Group headings. Identical machinery to .controls-head - a short label with a
+   dashed rule running off it to the right edge - because they are the same
+   thing: the name of a block of settings. */
+.set-head {
+  display: flex; align-items: center; gap: calc(var(--u) * 3);
+  font-size: 8px; letter-spacing: 0.24em; color: var(--dim);
+  margin-top: calc(var(--u) * 2);
+}
+.set-head:first-child { margin-top: 0; }
+.set-head::after {
+  content: ""; flex: 1; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);
+}
+.set-row {
+  display: flex; align-items: center; gap: calc(var(--u) * 3);
+  min-height: calc(var(--u) * 9);
+}
+.set-label {
+  font-size: 10px; letter-spacing: 0.14em; color: var(--text);
+  text-align: left; white-space: nowrap;
+}
+/* The leader between a label and its control. Dotted on the 4px grid, and it
+   is what turns two floating words into one row. */
+.set-row::after {
+  content: ""; order: 1; flex: 1; height: 2px; min-width: calc(var(--u) * 4);
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);
+}
+.set-row > :last-child { order: 2; flex: none; }
+.set-note {
+  font-size: 8px; letter-spacing: 0.1em; color: var(--dim);
+  text-align: left; line-height: 1.8;
+  margin-top: calc(var(--u) * 1);
+}
+
+/* ---- the stepper --------------------------------------------------------
+   NOT a range input. A native slider is a rounded, smoothly-tracking control
+   drawn by the operating system, and there is no such shape anywhere else in
+   this cabinet. This is eight lit cells between two keys: the value is read
+   off the cells at a glance and off the number when it matters. */
+.stepper { display: flex; align-items: center; gap: calc(var(--u) * 2); }
+.overlay .step-btn {
+  width: calc(var(--u) * 7); height: calc(var(--u) * 7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; font-size: 12px; line-height: 1;
+  color: var(--cyan); background: transparent;
+  clip-path: var(--cut-sm);
+  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
+}
+.overlay .step-btn:hover { background: rgba(78, 243, 255, 0.14); box-shadow: inset 0 0 0 2px var(--cyan); }
+.overlay .step-btn:active { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--cyan); }
+/* A step that would run off either end of the scale. Dimmed rather than
+   hidden: the control must not change width as the value moves. */
+.overlay .step-btn[disabled] {
+  color: var(--line-hi); cursor: default;
+  box-shadow: inset 0 0 0 2px rgba(43, 51, 72, 0.9);
+}
+.overlay .step-btn[disabled]:hover { background: transparent; box-shadow: inset 0 0 0 2px rgba(43, 51, 72, 0.9); }
+.pips { display: flex; gap: 2px; }
+.pips i {
+  width: calc(var(--u) * 2); height: calc(var(--u) * 5);
+  background: #10141f;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+.pips i.on {
+  background: var(--cyan);
+  box-shadow: inset 0 0 0 2px var(--cyan), 0 0 8px rgba(78, 243, 255, 0.45);
+}
+/* Past 100%. The scale runs to double, and the cells above normal are amber so
+   that "more than the game ships with" is visible without reading the number. */
+.pips i.hot {
+  background: var(--amber);
+  box-shadow: inset 0 0 0 2px var(--amber), 0 0 8px rgba(255, 179, 0, 0.45);
+}
+#shake-val {
+  font-weight: 400; font-size: 10px; color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  /* Fixed, so OFF, 25% and 200% do not shunt the + key sideways as the
+     value changes under the player's cursor. */
+  width: calc(var(--u) * 11); text-align: right;
+}
+#shake-val.off { color: var(--dim); }
+
+/* ---- the high-score screen ---------------------------------------------- */
+/* On a screen of its own the board is the content, not a footnote under a
+   title, so it is allowed most of the height rather than 34vh of it. */
+.lb.tall { max-height: 56vh; }
+/* The board carries its own BEST RUNS strap for the game-over screen, where it
+   arrives unannounced under a run summary. Here the marquee overhead already
+   says what this is, and printing it twice makes the second one read as a
+   column header for a table that has none. */
+#overlay-scores .lb-title { display: none; }
+#lb-none {
+  padding: calc(var(--u) * 5) calc(var(--u) * 8);
+  font-size: 10px; letter-spacing: 0.18em; color: var(--dim);
+  --surface: rgba(6, 8, 13, 0.9);
+}
+
 /* ---- run summary strip --------------------------------------------------
    The four numbers a finished run is judged on. A divided strip, not four
    cards: they are one reading with four columns, and boxing each of them
@@ -1024,6 +1157,16 @@ html, body {
    ========================================================================= */
 @media (max-width: 560px) {
   .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The settings rows STACK rather than compress. Squeezing them would have to
+     start with the screenshake stepper, which is the one control here whose
+     width is not negotiable - eight cells, a readout and two keys - and the
+     first thing to fall off the edge is the + key, leaving a control the
+     player can only turn down. The label takes its own line and the control
+     sits under it at its natural size. */
+  .set-row { flex-wrap: wrap; row-gap: calc(var(--u) * 2); }
+  .set-row::after { display: none; }
+  .set-label { flex: 1 0 100%; }
+  .set-row > :last-child { margin-right: auto; }
 }
 @media (max-width: 900px), (max-height: 700px) {
   .overlay h1 { font-size: 24px; }

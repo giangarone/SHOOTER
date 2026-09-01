@@ -354,6 +354,11 @@ export class Effects {
     scene.add(this.flashLight);
     this.flashT = 0;
     this.shakeAmp = 0;
+    // Player-set screen-shake intensity, 0 (off) upward. Applied where the
+    // shake is CONSUMED rather than where it is added, so the cap in
+    // addShake() keeps meaning what it says and a mid-run change to the
+    // setting takes effect on the very next frame instead of on the next hit.
+    this.shakeScale = 1;
   }
 
   // Parallel typed arrays, one entry per particle slot. `pos` and `col` are
@@ -703,7 +708,7 @@ export class Effects {
   // after the player has positioned the camera, so it must be applied every
   // frame or not at all - it is an offset, not a persistent state.
   shakeOffset(out) {
-    const s = this.shakeAmp;
+    const s = this.shakeAmp * this.shakeScale;
     out.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s * 0.8, (Math.random() - 0.5) * s * 0.4);
     return out;
   }

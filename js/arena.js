@@ -211,8 +211,13 @@ export function buildArena(scene) {
   // pushed back to the +Z corners so the whole band across z = 9.5 is open from
   // wall to wall. The middle of the floor, where the fight actually happens, is
   // untouched.
+  //
+  // THE CENTRE PLATFORM IS GONE. It stood at (0, 0), squarely between the
+  // totem row at z = -5 and the Devil's at z = 9.5 - which is to say, in the
+  // one corridor the player walks every single wave break, with a card to
+  // read at each end. It was cover nobody used and an obstacle everybody
+  // clipped. The middle of the floor is now open.
   const platforms = [
-    { x: 0, z: 0, w: 4, d: 4, h: 1.0 },
     { x: -8, z: -8, w: 5, d: 4, h: 1.2 },
     { x: 12, z: 13.5, w: 6, d: 5, h: 1.3 },
     { x: -12.5, z: 13.5, w: 4, d: 4, h: 1.6 },
@@ -367,8 +372,10 @@ export function buildArena(scene) {
   scene.background = new THREE.Color(0x07090f);
   scene.fog = new THREE.FogExp2(0x07090f, FOG_DENSITY);
 
-  // Spawn points: a 3x3 grid near the arena edges, minus the centre (which is
-  // on top of the middle platform and would drop spawns onto the player).
+  // Spawn points: a 3x3 grid near the arena edges, minus the centre. The
+  // platform that used to make the middle unusable is gone, but the exclusion
+  // stays: the centre is where the player fights, and a spawn there drops a
+  // wave straight on top of them.
   for (const sx of [-18, 0, 18]) {
     for (const sz of [-18, 0, 18]) {
       if (sx === 0 && sz === 0) continue;

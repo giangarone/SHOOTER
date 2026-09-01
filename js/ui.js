@@ -26,9 +26,10 @@ export class UI {
     this.vignette = $('vignette');
     this.strobe = $('strobe');
     this.lbOver = $('lb-over');
-    this.lbStart = $('lb-start');
     this.lbEntry = $('lb-entry');
     this.lbName = $('lb-name');
+    this.lbMenu = $('lb-menu');
+    this.lbNone = $('lb-none');
     this.bossBar = $('boss-bar');
     this.bossName = $('boss-name');
     this.bossHp = $('boss-hp');
@@ -38,6 +39,11 @@ export class UI {
     this.startOv = $('overlay-start');
     this.overOv = $('overlay-over');
     this.pauseOv = $('overlay-pause');
+    // The two sub-screens. They sit OVER whichever menu opened them rather
+    // than replacing it, so the one behind is left exactly as it was and BACK
+    // is a single class change.
+    this.settingsOv = $('overlay-settings');
+    this.scoresOv = $('overlay-scores');
     this.overStats = $('over-stats');
     this.buffsEl = $('buffs');
     this.creditNum = $('credit-num');
@@ -308,25 +314,51 @@ export class UI {
     clearTimeout(this._vt);
     this._vt = setTimeout(() => this.vignette.classList.remove('flash'), 130);
   }
+  // Every one of these closes the sub-screens as well. They are layered over
+  // the menus rather than swapped with them, so a state change underneath -
+  // a run starting, a player dying - has to take them down explicitly or the
+  // settings panel would be left floating over the fight.
   showStart() {
     this.startOv.classList.remove('hidden');
     this.overOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.hud.classList.add('hidden');
+    this.hideSubScreens();
   }
   showHud() {
     this.hud.classList.remove('hidden');
     this.startOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.overOv.classList.add('hidden');
+    this.hideSubScreens();
   }
   showPause() {
     this.pauseOv.classList.remove('hidden');
   }
   hidePause() {
     this.pauseOv.classList.add('hidden');
+    this.hideSubScreens();
+  }
+
+  // ---- sub-screens ---------------------------------------------------------
+  hideSubScreens() {
+    this.settingsOv.classList.add('hidden');
+    this.scoresOv.classList.add('hidden');
+  }
+  showSettings() {
+    this.settingsOv.classList.remove('hidden');
+  }
+  // The board, drawn fresh every time the screen opens - the player may have
+  // banked a run since the last look. An empty board renders to nothing at all
+  // (`.lb:empty` is display:none), so the placeholder stands in for it rather
+  // than leaving the screen with a hole between the title and BACK.
+  showScores(entries) {
+    this.renderBoard(this.lbMenu, entries, -1);
+    this.lbNone.classList.toggle('hidden', entries.length > 0);
+    this.scoresOv.classList.remove('hidden');
   }
   showOver(score, wave, kills, bestCombo = 0) {
+    this.hideSubScreens();
     // Four columns of one reading, not one sentence. At 8x8 a run-on line of
     // labels and numbers separated by middots is a wall the player has to read
     // left to right; a divided strip is scanned in a glance, and the number

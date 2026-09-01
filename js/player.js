@@ -267,6 +267,19 @@ export class Player {
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
+    // The player's copy of the screenshake setting, written by main.js. The
+    // weapon's recoil kick is the other half of "the camera jolts when I
+    // shoot" - the first half is the shake main.js adds through effects - and
+    // both have to answer to one dial, or turning shake off still leaves the
+    // view punching upward on every round. Held here rather than reached for
+    // through effects because the player has no business knowing about the
+    // particle system, and NOT cleared by reset(): it is a preference, not run
+    // state.
+    //
+    // It scales AIM, not only the picture: at zero the gun stops climbing
+    // altogether. That is what the player asked for when they turned the dial
+    // down, and it is the same trade every game offering this setting makes.
+    this.shakeScale = 1;
     this.meleeCd = 0;
     this.meleeActive = 0;
     this.damageMult = 1;
@@ -911,7 +924,8 @@ export class Player {
       w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
     this.kick = w.kick;
-    this.pitch = Math.min(1.5, this.pitch + w.recoil + Math.random() * w.recoil * 0.6);
+    const recoil = (w.recoil + Math.random() * w.recoil * 0.6) * this.shakeScale;
+    this.pitch = Math.min(1.5, this.pitch + recoil);
     if (this.mag === 0) this.startReload();
     return 'shot';
   }
