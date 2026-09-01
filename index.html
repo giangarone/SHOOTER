@@ -69,6 +69,12 @@
           <span id="hp-text">100 / 100</span>
         </div>
         <div id="hp-bar-bg" class="seg"><i id="hp-bar"></i></div>
+        <!-- STAMINA, under the health it belongs with. VITALS already means
+             "the state of your body" and this is the second half of it: same
+             cell mask, same chamfer, half the height, so it reads as the
+             quieter of two instruments on one plate rather than as a second
+             plate. -->
+        <div id="stam-bar-bg" class="seg"><i id="stam-bar"></i></div>
       </div>
       <div id="ammo-box">
         <div id="weapon-line">
@@ -114,15 +120,11 @@
 
     <div class="controls plate">
       <div class="controls-head">CONTROLS</div>
-      <div class="ctl"><b class="key">WASD</b><span>MOVE</span></div>
-      <div class="ctl"><b class="key">MOUSE</b><span>AIM</span></div>
-      <div class="ctl"><b class="key">LMB</b><span>SHOOT</span></div>
-      <div class="ctl"><b class="key">RMB</b><span>MELEE</span></div>
-      <div class="ctl"><b class="key">R</b><span>RELOAD</span></div>
-      <div class="ctl"><b class="key">SPACE</b><span>JUMP</span></div>
-      <div class="ctl"><b class="key">E</b><span>USE</span></div>
-      <div class="ctl"><b class="key">TAB</b><span>STATS</span></div>
-      <div class="ctl"><b class="key">F</b><span>FULLSCREEN</span></div>
+      <!-- The caps are built by padmenu.js and swapped when the player picks
+           up or puts down a controller. Kept out of the markup entirely rather
+           than duplicated here as a starting state: two lists of bindings is
+           two lists to keep in step, and the one in the HTML would be the one
+           nobody remembers to change. -->
     </div>
 
     <!-- The board used to live here, under the controls, and it pushed PRESS
@@ -232,6 +234,15 @@
         </div>
       </div>
       <div class="set-row pad-only">
+        <span class="set-label">AIM SENSITIVITY</span>
+        <div class="stepper">
+          <button id="btn-aimsens-down" class="step-btn" type="button" aria-label="Lower aim sensitivity">-</button>
+          <div id="aimsens-pips" class="pips"></div>
+          <b id="aimsens-val">3</b>
+          <button id="btn-aimsens-up" class="step-btn" type="button" aria-label="Higher aim sensitivity">+</button>
+        </div>
+      </div>
+      <div class="set-row pad-only">
         <span class="set-label">AIM ASSIST</span>
         <button id="btn-assist" class="opt-btn">ON</button>
       </div>
@@ -243,7 +254,7 @@
         <span class="set-label">INVERT LOOK</span>
         <button id="btn-invert" class="opt-btn">OFF</button>
       </div>
-      <p class="set-note pad-only">HOLD L2 TO FOCUS - THE VIEW SLOWS FOR A PRECISE SHOT</p>
+      <p class="set-note pad-only">HOLD L2 TO AIM - AIM SENSITIVITY IS THE RATE WITH THE GUN UP</p>
     </div>
 
     <div class="primary-row"><button id="btn-settings-back">BACK</button></div>

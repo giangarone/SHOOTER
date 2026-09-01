@@ -16,7 +16,8 @@
 //    3. CROSS on the start screen starts the run, and the same held press does
 //       not also read as a jump on the next frame.
 //    4. The left stick is ANALOGUE - half a push is half the distance.
-//    5. The right stick turns the view, and L2 slows it down.
+//    5. The right stick turns the view, and L2 raises the gun - which zooms,
+//       tightens the cone and turns the view at its own sensitivity.
 //    6. R2 fires, R3 melees, SQUARE reloads, TRIANGLE holds the build sheet.
 //    7. OPTIONS pauses and un-pauses; the D-pad walks the menu.
 //    8. Aim assist works inside its cone and not outside it, and its pull
@@ -116,7 +117,8 @@ try {
 
     // ---- 1. detection and the hand-over -----------------------------------
     t('starts on keyboard', g.inputMode === 'kbm', g.inputMode);
-    t('keyboard control sheet', document.querySelectorAll('.controls .ctl').length === 9);
+    t('keyboard control sheet', document.querySelectorAll('.controls .ctl').length === 12
+      && !document.querySelector('.controls').classList.contains('pad'));
     // The rows appear when a pad is PLUGGED IN. The interface only changes
     // when one is picked up, which is the next test down.
     t('settings unlocked by connection', document.body.classList.contains('pad-seen'));
@@ -164,20 +166,47 @@ try {
     t('movement is analogue', ratio > 0.2 && ratio < 0.75, 'ratio ' + ratio.toFixed(2));
 
     // ---- 3. the right stick, and L2 ---------------------------------------
-    const turn = async (focus) => {
+    const turn = async (aim) => {
       g.player.yaw = 0;
-      set(B.L2, focus);
+      set(B.L2, aim);
+      // Held long enough for the raise to finish before the rate is measured,
+      // then the measurement itself.
+      if (aim) await frames(20);
+      g.player.yaw = 0;
       stick(0, 0, 1, 0);
       await frames(20);
       stick(0, 0, 0, 0);
+      const turned = Math.abs(g.player.yaw);
       set(B.L2, false);
-      await frames(2);
-      return Math.abs(g.player.yaw);
+      await frames(20);
+      return turned;
     };
     const open = await turn(false);
-    const focused = await turn(true);
+    const aimed = await turn(true);
     t('right stick turns the view', open > 0.4, open.toFixed(2));
-    t('L2 focuses', focused < open * 0.6, focused.toFixed(2) + ' vs ' + open.toFixed(2));
+    t('aiming turns slower', aimed < open * 0.85, aimed.toFixed(2) + ' vs ' + open.toFixed(2));
+
+    // ---- 3b. the sights ----------------------------------------------------
+    const hipFov = g.camera.fov;
+    const hipSpread = g._shotSpread();
+    const hipGunX = g.player.gun.position.x;
+    set(B.L2, true);
+    await frames(20);
+    const aimFov = g.camera.fov;
+    const aimSpread = g._shotSpread();
+    const aimGunX = g.player.gun.position.x;
+    const aimT = g.player.aimT;
+    set(B.L2, false);
+    await frames(20);
+    t('L2 raises the gun', aimT > 0.99, aimT.toFixed(3));
+    t('aiming zooms in', aimFov < hipFov - 15, hipFov + ' -> ' + aimFov.toFixed(1));
+    t('aiming tightens the cone', aimSpread < hipSpread * 0.2,
+      hipSpread.toFixed(4) + ' -> ' + aimSpread.toFixed(4));
+    t('the gun centres', Math.abs(aimGunX) < 0.01 && hipGunX > 0.2,
+      hipGunX.toFixed(2) + ' -> ' + aimGunX.toFixed(2));
+    t('lowering restores the hip pose',
+      g.player.aimT === 0 && g.camera.fov === hipFov
+      && Math.abs(g.player.gun.position.x - hipGunX) < 0.001);
 
     // Inverted look flips the pitch and nothing else.
     g.player.pitch = 0;
@@ -320,8 +349,13 @@ try {
     g._openSettings();
     await frames(2);
     const sens = g._padSens;
-    g._stepSens(1);
+    g._stepSens(g._sensDial, 1);
     t('sensitivity steps', g._padSens === Math.min(8, sens + 1), String(g._padSens));
+    const aimSens = g._padAimSens;
+    g._stepSens(g._aimSensDial, -1);
+    t('aim sensitivity is its own dial',
+      g._padAimSens === Math.max(1, aimSens - 1) && g._padSens === Math.min(8, sens + 1),
+      g._padSens + ' / ' + g._padAimSens);
     t('sensitivity changes the turn rate', g._sensMult() > 0.4 && g._sensMult() <= 2,
       g._sensMult().toFixed(2));
     g._closeSubScreen();

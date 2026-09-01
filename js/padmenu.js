@@ -51,17 +51,28 @@ export function cap(name, cls = '') {
 // The two control sheets on the start screen. Both are laid out three across,
 // so both have a length that divides by three - a ragged last row on a panel
 // that is read once, before the run, would be the first thing the eye lands on.
+//
+// LOOK and AIM are two different things and the sheet has to say so: LOOK is
+// the mouse turning the view, AIM is the right button raising the gun. Naming
+// them both "aim" was the state of this list before the sights existed.
+//
+// FULLSCREEN and the pad's D-PAD line came off these lists when SPRINT went
+// on. Twelve is the shape, and of everything on them those two were the ones
+// the player finds without being told: fullscreen is a labelled button on the
+// screen they are reading this on, and a menu with a selection on it invites
+// the pad it is asking for.
 export const KBM_CONTROLS = [
-  ['WASD', 'MOVE'], ['MOUSE', 'AIM'], ['LMB', 'SHOOT'],
-  ['RMB', 'MELEE'], ['R', 'RELOAD'], ['SPACE', 'JUMP'],
-  ['E', 'USE'], ['TAB', 'STATS'], ['F', 'FULLSCREEN'],
+  ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
+  ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
+  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['W W', 'DASH'],
+  ['E', 'USE'], ['TAB', 'STATS'], ['ESC', 'PAUSE'],
 ];
 
 export const PAD_CONTROLS = [
-  ['L STICK', 'MOVE'], ['R STICK', 'AIM'], ['R2', 'SHOOT'],
-  ['L2', 'FOCUS'], ['R3', 'MELEE'], ['L1', 'DASH'],
-  ['cross', 'JUMP'], ['square', 'RELOAD'], ['circle', 'USE'],
-  ['triangle', 'STATS'], ['OPTIONS', 'PAUSE'], ['D-PAD', 'MENUS'],
+  ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
+  ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
+  ['L1', 'DASH'], ['cross', 'JUMP'], ['square', 'RELOAD'],
+  ['circle', 'USE'], ['triangle', 'STATS'], ['OPTIONS', 'PAUSE'],
 ];
 
 /**

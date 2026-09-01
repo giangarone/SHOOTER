@@ -18,7 +18,11 @@
 // FIELDS
 //   damage      per bullet, or per pellet on a multi-pellet weapon
 //   fireRate    shots per second
-//   spread      NDC cone half-width; pellets are scattered inside it
+//   spread      HIP-FIRE cone, in NDC; pellets are scattered inside it
+//   aimSpread   the same cone with the gun raised - see the ADS block in
+//               player.js. The gap between the two is what aiming BUYS, and it
+//               is meant to be wide enough to feel: a gun that shot the same
+//               either way would make the whole mechanic decoration
 //   pellets     raycasts per shot
 //   pierce      extra enemies a shot passes through after the first
 //   falloff     damage multiplier applied per enemy already pierced
@@ -158,7 +162,13 @@ export const WEAPONS = {
     fireRate: 8,
     magSize: 30,
     reloadTime: 1.4,
-    spread: 0.024,
+    // Loose from the hip and near-perfect down the sights. This is the cone
+    // STANDING STILL - moving opens it further and a sprint roughly doubles
+    // it, see _shotSpread in main.js - and it is wide enough that hip-firing
+    // past room range is a spray rather than a shot. That is the point: the
+    // gun is not meant to be good until it is raised.
+    spread: 0.085,
+    aimSpread: 0.004,
     pellets: 1,
     pierce: 0,
     falloff: 1,

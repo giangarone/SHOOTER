@@ -10,6 +10,8 @@
     "test:boss": "node test/boss.mjs",
     "test:drops": "node test/drops.mjs",
     "test:melee": "node test/melee.mjs",
+    "test:aim": "node test/aim.mjs",
+    "test:sprint": "node test/sprint.mjs",
     "test:pad": "node test/pad.mjs",
     "test:seeker": "node test/seeker.mjs",
     "test:devil": "node test/devil.mjs",

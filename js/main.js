@@ -57,7 +57,7 @@
 
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
-import { Player, NO_HIT_CAP } from './player.js';
+import { Player, NO_HIT_CAP, MAX_SPEED } from './player.js';
 import { PLAYER_STATUS } from './status.js';
 import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
@@ -170,6 +170,26 @@ const MIN_SPAWN_DISTANCE = 16;
 // Melee reach, in metres from the player's feet, and the half-angle of the
 // arc it sweeps. It is a swing, not a poke: everything in front of the player
 // inside the arc is hit, not just what the crosshair happens to be on.
+// The accuracy cost of moving AT FULL SPRINT, added to whichever cone the gun
+// is currently firing through and scaled down by however much slower than that
+// the player actually is. Aiming does not remove it - a player running with
+// the gun up is still running - but it cuts it hard, which is what makes
+// standing still and aiming the most accurate thing in the game rather than
+// merely one of two ways to be accurate.
+//
+// It used to be a flat penalty past a speed THRESHOLD, which read as a switch:
+// walking cost exactly as much as running, and the walk was already over the
+// line, so in practice the gun had two accuracies and one of them was
+// unreachable while playing. Scaling it continuously off live speed is what
+// makes the crosshair worth watching - the arms open as the player picks up
+// speed, so the reticle is a readout of what they are doing rather than of
+// what they are holding.
+const MOVE_SPREAD = 0.085;
+const MOVE_SPREAD_AIM = 0.25;
+// The crosshair's arms never close all the way onto the dot: a reticle with no
+// gap in it is a blob, and the aimed cone is small enough to be one.
+const CROSS_MIN_GAP = 4;
+
 const MELEE_RANGE = 3.6;
 const MELEE_ARC = Math.PI / 3;
 const MELEE_DAMAGE = 50;
@@ -270,13 +290,21 @@ const LOOK_RATE = 2.6;
 // stick is the single biggest reason a pad feels imprecise.
 const LOOK_EXP = 1.7;
 // Sensitivity steps shown in SETTINGS, and the multiplier the ends map to.
+// TWO settings share this scale - the hip and the aim - because a player who
+// has found a number they like at the hip should be able to read the aimed one
+// against it rather than against a second, differently-shaped dial.
 const SENS_STEPS = 8;
 const SENS_DEFAULT = 5;
+// Lower by default: the zoom already magnifies every movement of the stick, so
+// matching the hip rate down the sights would make the aim feel twitchier than
+// the hip it was supposed to steady.
+const AIM_SENS_DEFAULT = 3;
 const SENS_MIN = 0.5;
 const SENS_MAX = 2;
-// L2. Not an aim-down-sights - this gun has no sights - but a precision mode:
-// hold it and the view turns at a third of the rate for the length of a shot.
-const FOCUS_SCALE = 0.34;
+// The mouse has no sensitivity slider of its own, so aiming scales it by a
+// fixed ratio - the standard zoom-relative number, which keeps hand travel
+// across a target roughly constant through the zoom.
+const MOUSE_AIM_SENS = 0.6;
 
 // AIM ASSIST, in two halves that do different jobs.
 //
@@ -540,6 +568,7 @@ class Game {
     // selection is only chosen when the screen actually changes.
     this._padRoot = null;
     this._padSens = SENS_DEFAULT;
+    this._padAimSens = AIM_SENS_DEFAULT;
     this._aimAssist = true;
     this._invertLook = false;
     this._loadPadPrefs();
@@ -590,7 +619,7 @@ class Game {
     // `moveF`/`moveS` are the ANALOGUE pair, in [-1, 1], and they are null
     // whenever the keyboard is what is driving - see the movement block in
     // player.js, which falls back to the booleans when they are.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, dash: null, moveF: null, moveS: null };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, dash: null, moveF: null, moveS: null };
     // Double Dash: the game time each movement key was last pressed FRESH, so
     // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
     // e.code; a key held down never writes here (see _bind).
@@ -635,6 +664,9 @@ class Game {
     this._onOrb = (v) => this._collectOrb(v);
     // Set by _collectOrb, consumed once per frame by _updateMoney.
     this._creditsDirty = false;
+    // The field of view the orbs were last sized for. Aiming moves it every
+    // frame of a raise - see the sync in _loop.
+    this._fov = this.camera.fov;
     this._aimTarget = new THREE.Vector3();
     // The eye, for the aim-assist sweep. Its own vector rather than a shared
     // one because the sweep runs before the shot does and _killPos is in use
@@ -868,8 +900,16 @@ class Game {
         case 'KeyA': this._tapMove(e.code, this.input.left); this.input.left = true; break;
         case 'KeyD': this._tapMove(e.code, this.input.right); this.input.right = true; break;
         case 'Space': this.input.jump = true; e.preventDefault(); break;
+        // SPRINT, on either shift. Held; the player never has to let go of it -
+        // see _updateSprint, which refuses the button rather than asking the
+        // player to stop pressing it.
+        case 'ShiftLeft': case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUse(); break;
+        // MELEE. It used to be the right mouse button, which is now where the
+        // gun is raised from - see the mousedown handler. V is the key that
+        // button's owners reach for.
+        case 'KeyV': this.input.melee = true; break;
         // Fullscreen is bound on the window rather than to a button alone so
         // it is reachable mid-run without giving up pointer lock to click.
         case 'KeyF': this._toggleFullscreen(); break;
@@ -892,6 +932,8 @@ class Game {
         case 'KeyA': this.input.left = false; break;
         case 'KeyD': this.input.right = false; break;
         case 'Space': this.input.jump = false; break;
+        case 'ShiftLeft': case 'ShiftRight': this.input.sprint = false; break;
+        case 'KeyV': this.input.melee = false; break;
         case 'Tab': this._closeStats(); e.preventDefault(); break;
       }
     });
@@ -919,12 +961,14 @@ class Game {
         }
       } else if (e.button === 2) {
         e.preventDefault();
-        if (this.state === 'playing') this.input.melee = true;
+        // AIM, held. The mouse's second button is where every shooter puts
+        // this, which is why melee moved to V rather than the other way round.
+        if (this.state === 'playing') this.input.aim = true;
       }
     });
     addEventListener('mouseup', (e) => {
       if (e.button === 0) this.input.shoot = false;
-      if (e.button === 2) this.input.melee = false;
+      if (e.button === 2) this.input.aim = false;
     });
     document.addEventListener('mousemove', (e) => {
       // A real shove of the mouse, not the pixel of jitter a resting one
@@ -934,8 +978,14 @@ class Game {
       if (Math.abs(e.movementX) + Math.abs(e.movementY) > MOUSE_WAKE) this._setInputMode('kbm');
       if (this.state !== 'playing' || this.autoTest) return;
       if (document.pointerLockElement !== canvas) return;
-      this.player.yaw -= e.movementX * 0.0021;
-      this.player.pitch -= e.movementY * 0.0021;
+      // Zoom-relative sensitivity. The mouse has no slider of its own, so
+      // aiming scales it by a fixed ratio rather than by a setting: at 0.6 the
+      // hand travel that crossed a target at the hip still crosses it down the
+      // sights, which is the whole point of a fixed ratio - muscle memory
+      // survives the zoom.
+      const k = 0.0021 * (1 - (1 - MOUSE_AIM_SENS) * this.player.aimT);
+      this.player.yaw -= e.movementX * k;
+      this.player.pitch -= e.movementY * k;
       this.player.pitch = Math.max(-1.5, Math.min(1.5, this.player.pitch));
     });
     document.addEventListener('pointerlockchange', () => {
@@ -1033,24 +1083,40 @@ class Game {
     // Hidden until a DualSense has been seen (body.pad-seen, set in
     // _padUpdate), so a keyboard player never reads four rows about a device
     // that is not in the room.
-    this._sensPips = [];
-    const sensRow = document.getElementById('sens-pips');
-    for (let i = 0; i < SENS_STEPS; i++) {
-      const pip = document.createElement('i');
-      sensRow.appendChild(pip);
-      this._sensPips.push(pip);
-    }
-    this._sensVal = document.getElementById('sens-val');
-    this._sensDown = document.getElementById('btn-sens-down');
-    this._sensUp = document.getElementById('btn-sens-up');
-    this._sensDown.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepSens(-1);
-    });
-    this._sensUp.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepSens(1);
-    });
+    // TWO steppers on one scale - the rate with the gun down and the rate with
+    // it up. Built by the same three lines each, because they are the same
+    // control twice and the day a third sensitivity appears it should be one
+    // more call rather than one more copy of this block.
+    const buildSens = (idBase, get, set) => {
+      const pips = [];
+      const row = document.getElementById(idBase + '-pips');
+      for (let i = 0; i < SENS_STEPS; i++) {
+        const pip = document.createElement('i');
+        row.appendChild(pip);
+        pips.push(pip);
+      }
+      const dial = {
+        pips,
+        val: document.getElementById(idBase + '-val'),
+        down: document.getElementById('btn-' + idBase + '-down'),
+        up: document.getElementById('btn-' + idBase + '-up'),
+        get,
+        set,
+      };
+      dial.down.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._stepSens(dial, -1);
+      });
+      dial.up.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._stepSens(dial, 1);
+      });
+      return dial;
+    };
+    this._sensDial = buildSens('sens', () => this._padSens, (v) => { this._padSens = v; });
+    this._aimSensDial = buildSens(
+      'aimsens', () => this._padAimSens, (v) => { this._padAimSens = v; }
+    );
     this._assistBtn = document.getElementById('btn-assist');
     this._assistBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1090,7 +1156,11 @@ class Game {
       () => this._saveScore()
     );
     this._audioHint = document.getElementById('audio-hint');
+    // ONE SOURCE OF TRUTH for the bindings on screen. The panel starts empty
+    // in the markup and is filled here for the keyboard; _setInputMode swaps
+    // it for the pad sheet and back.
     this._controlsEl = document.querySelector('.controls');
+    renderControls(this._controlsEl, false);
 
     // Opening and closing the two sub-screens. The buttons that open them sit
     // on overlays that are themselves click-to-continue, so every one of these
@@ -1181,6 +1251,7 @@ class Game {
     const i = this.input;
     i.forward = i.back = i.left = i.right = false;
     i.jump = i.shoot = i.melee = false;
+    i.aim = i.sprint = false;
     i.shootFresh = false;
     i.dash = null;
     i.moveF = null;
@@ -1458,6 +1529,11 @@ class Game {
 
     i.jump = pad.down(BTN.CROSS);
     i.melee = pad.down(BTN.R3);
+    // L2 raises the gun, the way the left trigger does on every console
+    // shooter. Held, never toggled - see _updateAim in player.js.
+    i.aim = pad.down(BTN.L2);
+    // L3 runs. The stick you are already pushing is the one you click.
+    i.sprint = pad.down(BTN.L3);
     // R2 is the trigger and the trigger is the gun. `shootFresh` is the edge
     // the semi-automatic weapons read - the same one a mouse click raises.
     i.shoot = pad.down(BTN.R2);
@@ -1493,10 +1569,13 @@ class Game {
     const mag = pad.look.mag;
     const assist = this._aimAssist ? this._assistTarget() : null;
 
-    let rate = LOOK_RATE * this._sensMult();
-    // FOCUS. A held L2 slows the view down for a precise shot - the pad's
-    // answer to lifting a mouse and putting it down again.
-    if (pad.down(BTN.L2)) rate *= FOCUS_SCALE;
+    // The two sensitivities are BLENDED by the aim, not switched between: a
+    // hard swap on the frame the trigger crosses its threshold is felt as the
+    // view snagging, and the gun takes ADS_TIME to come up anyway.
+    const aimT = p.aimT;
+    const sens = this._sensMult(this._padSens)
+      + (this._sensMult(this._padAimSens) - this._sensMult(this._padSens)) * aimT;
+    let rate = LOOK_RATE * sens;
     // Slowdown assist: the closer the reticle already is, the finer the stick
     // gets. This moves nothing on its own - it only makes the player's own
     // correction smaller.
@@ -1535,12 +1614,12 @@ class Game {
     p.pitch = Math.max(-1.5, Math.min(1.5, p.pitch));
   }
 
-  // The sensitivity setting as a multiplier. Eight steps, a half rate at the
-  // bottom and double at the top, which is the range a pad needs to cover
-  // everyone from a first controller to someone who plays on the highest
-  // setting of everything.
-  _sensMult() {
-    return SENS_MIN + (this._padSens - 1) * ((SENS_MAX - SENS_MIN) / (SENS_STEPS - 1));
+  // A sensitivity step as a multiplier. Eight steps, a half rate at the bottom
+  // and double at the top, which is the range a pad needs to cover everyone
+  // from a first controller to someone who plays on the highest setting of
+  // everything. Both settings - hip and aim - read the same scale.
+  _sensMult(step = this._padSens) {
+    return SENS_MIN + (step - 1) * ((SENS_MAX - SENS_MIN) / (SENS_STEPS - 1));
   }
 
   /**
@@ -1726,10 +1805,10 @@ class Game {
 
   // ---- controller settings --------------------------------------------------
 
-  _stepSens(dir) {
-    const next = Math.max(1, Math.min(SENS_STEPS, this._padSens + dir));
-    if (next === this._padSens) return;
-    this._padSens = next;
+  _stepSens(dial, dir) {
+    const next = Math.max(1, Math.min(SENS_STEPS, dial.get() + dir));
+    if (next === dial.get()) return;
+    dial.set(next);
     this._savePadPrefs();
     this._syncSens();
     // Felt, not just read: the same nudge the pad gives when a setting lands.
@@ -1737,12 +1816,15 @@ class Game {
   }
 
   _syncSens() {
-    for (let i = 0; i < this._sensPips.length; i++) {
-      this._sensPips[i].className = i < this._padSens ? 'on' : '';
+    for (const dial of [this._sensDial, this._aimSensDial]) {
+      const v = dial.get();
+      for (let i = 0; i < dial.pips.length; i++) {
+        dial.pips[i].className = i < v ? 'on' : '';
+      }
+      dial.val.textContent = String(v);
+      dial.down.disabled = v <= 1;
+      dial.up.disabled = v >= SENS_STEPS;
     }
-    this._sensVal.textContent = String(this._padSens);
-    this._sensDown.disabled = this._padSens <= 1;
-    this._sensUp.disabled = this._padSens >= SENS_STEPS;
   }
 
   _syncPadBtns() {
@@ -1757,8 +1839,12 @@ class Game {
 
   _loadPadPrefs() {
     try {
-      const n = Number(localStorage.getItem('va-pad-sens'));
-      if (Number.isFinite(n) && n >= 1 && n <= SENS_STEPS) this._padSens = Math.round(n);
+      const step = (key, fallback) => {
+        const n = Number(localStorage.getItem(key));
+        return Number.isFinite(n) && n >= 1 && n <= SENS_STEPS ? Math.round(n) : fallback;
+      };
+      this._padSens = step('va-pad-sens', SENS_DEFAULT);
+      this._padAimSens = step('va-pad-aim-sens', AIM_SENS_DEFAULT);
       // Absent means default, which is why each of these tests for the string
       // that turns it off rather than for the one that turns it on.
       this._aimAssist = localStorage.getItem('va-pad-assist') !== '0';
@@ -1770,6 +1856,7 @@ class Game {
   _savePadPrefs() {
     try {
       localStorage.setItem('va-pad-sens', String(this._padSens));
+      localStorage.setItem('va-pad-aim-sens', String(this._padAimSens));
       localStorage.setItem('va-pad-assist', this._aimAssist ? '1' : '0');
       localStorage.setItem('va-pad-invert', this._invertLook ? '1' : '0');
       localStorage.setItem('va-pad-rumble', this.pad.rumbleOn ? '1' : '0');
@@ -2648,6 +2735,33 @@ class Game {
     }
   }
 
+  /**
+   * THE CONE THE GUN IS FIRING THROUGH RIGHT NOW, in NDC.
+   *
+   * One function, read by the raycast and by the crosshair, which is what
+   * makes the reticle a readout rather than a decoration: the gap between its
+   * arms is the spread, so a player watching it open as they start running is
+   * watching the actual number the next shot will be drawn from.
+   *
+   * Three things move it: which pose the gun is in (the whole point of
+   * aiming), whether the player is moving, and nothing else. Moving costs
+   * accuracy from either pose - a player running with the gun up is still
+   * running - but it costs a quarter as much down the sights.
+   */
+  _shotSpread() {
+    const w = this.player.weapon;
+    const a = this.player.aimT;
+    // Live speed as a fraction of a full sprint. Clamped, because a dash is
+    // four times sprint speed and the cone should be pinned wide open through
+    // one rather than scaled to something absurd.
+    const speed = Math.min(1, this.player.speedXZ / MAX_SPEED);
+    // A weapon with no aimed cone of its own is one that gains nothing from
+    // being raised, rather than one that throws on the first shot.
+    const aimed = w.aimSpread != null ? w.aimSpread : w.spread;
+    const cone = w.spread + (aimed - w.spread) * a;
+    return cone + MOVE_SPREAD * speed * (1 + (MOVE_SPREAD_AIM - 1) * a);
+  }
+
   // One pellet of a shot. Walks the sorted hit list so a piercing weapon can
   // pass through several enemies, stopping at the first thing that is not one.
   // Returns true if it damaged anything, so the caller can play a single hit
@@ -2816,10 +2930,7 @@ class Game {
     this.totemArea.addTargets(targets);
     this.devilArea.addTargets(targets);
 
-    // Moving costs accuracy. This used to be a sprint-key test; with the key
-    // gone it reads live speed instead, which also means it fades in and out
-    // with the player rather than snapping.
-    const spread = w.spread + (this.player.speedXZ > 6 ? 0.016 : 0);
+    const spread = this._shotSpread();
     let hitAny = false;
     this._shotHits.clear();
     this._blastHit = false;
@@ -4689,8 +4800,20 @@ class Game {
       this.comboKills, cm, (cm - 1) / (COMBO_MAX - 1), this.comboTimer / COMBO_WINDOW
     );
     this.ui.setHealth(this.player.health, this.player.maxHealth);
+    this.ui.setStamina(
+      this.player.staminaFrac, this.player.sprinting, this.player.staminaLocked
+    );
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);
+    // THE CROSSHAIR IS THE CONE. _shotSpread is an NDC half-extent, and NDC 1
+    // is half the viewport, so half of it across half the height is the radius
+    // in pixels the next pellet can land inside. The arms are pushed out to
+    // exactly that, plus a floor so a perfectly accurate gun still has a
+    // reticle rather than a dot.
+    this.ui.setCrosshair(
+      CROSS_MIN_GAP + this._shotSpread() * innerHeight * 0.25,
+      this.player.aimT > 0.5
+    );
     this.ui.setWeapon(this.player.weapon.name);
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
@@ -4839,6 +4962,16 @@ class Game {
         // A dash is the biggest thing the player does that nothing hits them
         // for, so it is the one movement that gets a shove rather than a tick.
         this.pad.rumble(0.55, 0.3, 150, 2);
+      }
+
+      // THE ZOOM HAS TO REACH THE ORBS. Money is drawn as points whose pixel
+      // size is computed from the field of view (see money.setViewport), so a
+      // camera that narrowed without telling them would leave the orbs as the
+      // only thing on screen that did not get closer when the gun came up.
+      // Compared rather than written every frame: it is a uniform upload.
+      if (this.camera.fov !== this._fov) {
+        this._fov = this.camera.fov;
+        this.money.setViewport(this.renderer.domElement.height, this._fov);
       }
 
       this._updateWave(dt);

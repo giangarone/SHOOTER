@@ -19,6 +19,7 @@ export class UI {
     this.hpBox = $('hp-box');
     this.hpBar = $('hp-bar');
     this.hpText = $('hp-text');
+    this.stamBar = $('stam-bar');
     this.ammoNum = $('ammo-num');
     this.ammoRes = $('ammo-res');
     this.ammoReload = $('ammo-reload');
@@ -54,6 +55,7 @@ export class UI {
     this.comboBar = $('combo-bar').firstElementChild;
     this.comboFill = $('combo-fill');
     this.promptEl = $('prompt');
+    this.crosshair = $('crosshair');
     this.statsPanel = $('stats-panel');
     this.statsMuts = $('stats-muts');
     this.statsRun = $('stats-run');
@@ -146,6 +148,32 @@ export class UI {
     this.hpBox.classList.toggle('low', p < 30);
     this.hpText.textContent = shown + ' / ' + max;
   }
+  /**
+   * The stamina bar. `frac` is 0..1, `sprinting` is whether it is being spent
+   * right now, and `locked` is the exhaustion state - see _updateSprint in
+   * player.js.
+   *
+   * Quantised to whole cells like the health bar above, and compared against
+   * the cell COUNT rather than the fraction: the bar has forty of them, so a
+   * value drifting continuously through a regen would otherwise write a
+   * transform on every frame to move the fill by nothing.
+   */
+  setStamina(frac, sprinting, locked) {
+    const cells = Math.ceil(Math.max(0, Math.min(1, frac)) * 40);
+    if (this._c.stam !== cells) {
+      this._c.stam = cells;
+      this.stamBar.style.transform = 'scaleX(' + (cells / 40) + ')';
+    }
+    if (this._c.stamRun !== sprinting) {
+      this._c.stamRun = sprinting;
+      this.hpBox.classList.toggle('sprinting', sprinting);
+    }
+    if (this._c.stamLock !== locked) {
+      this._c.stamLock = locked;
+      this.hpBox.classList.toggle('spent', locked);
+    }
+  }
+
   setAmmo(mag, reserve, reloading) {
     if (this._c.mag !== mag) {
       this._c.mag = mag;
@@ -330,6 +358,28 @@ export class UI {
     void h.offsetWidth;
     h.classList.add('show');
   }
+  /**
+   * The crosshair's gap and its aimed state.
+   *
+   * `gap` is the distance in pixels from the centre to the inner end of each
+   * arm - the radius of the cone the gun is currently firing through, computed
+   * in main.js so the reticle and the raycast can never disagree. Quantised to
+   * a half pixel before it is written: this is called every frame and the
+   * value drifts continuously as the player accelerates, so an unrounded float
+   * would dirty the compositor on every one of them.
+   */
+  setCrosshair(gap, aiming) {
+    const q = Math.round(gap * 2) / 2;
+    if (this._c.chGap !== q) {
+      this._c.chGap = q;
+      this.crosshair.style.setProperty('--gap', q + 'px');
+    }
+    if (this._c.chAim !== aiming) {
+      this._c.chAim = aiming;
+      this.crosshair.classList.toggle('aim', aiming);
+    }
+  }
+
   // The rig's flash level, 0..1. Quantised to 1/64 before writing: this is
   // called every frame and an unrounded float would dirty the compositor on
   // every one of them, including while the value is drifting invisibly.
@@ -581,9 +631,14 @@ export class UI {
   resetCache() {
     this._c = {};
     this.bossBar.className = 'plate hidden';
-    this.hpBox.classList.remove('low');
+    this.hpBox.classList.remove('low', 'sprinting', 'spent');
     this.enemies.classList.remove('clear');
     this.comboEl.classList.add('hidden');
+    this.crosshair.classList.remove('aim');
+    // The marker's `.show` is never taken off in play - the animation under it
+    // is what ends, not the class - so a new run is the one place it is worth
+    // clearing, and it costs one class write per game.
+    this.hitmarker.classList.remove('show');
     this.promptEl.classList.add('hidden');
     this.hideStats();
     for (const entry of Object.values(this._buffEls)) {

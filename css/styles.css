@@ -210,10 +210,25 @@ html, body {
     0 0 0 1px rgba(5, 7, 11, 0.9),
     0 0 6px rgba(78, 243, 255, 0.8);
 }
-#crosshair i:nth-child(1) { left: 50%; top: 0;    width: 3px; height: 8px; transform: translateX(-50%); }
-#crosshair i:nth-child(2) { left: 50%; bottom: 0; width: 3px; height: 8px; transform: translateX(-50%); }
-#crosshair i:nth-child(3) { top: 50%; left: 0;    height: 3px; width: 8px; transform: translateY(-50%); }
-#crosshair i:nth-child(4) { top: 50%; right: 0;   height: 3px; width: 8px; transform: translateY(-50%); }
+/* THE ARMS ARE PLACED BY --gap, WHICH IS THE GUN'S SPREAD.
+   ui.setCrosshair writes it every frame from the same cone the shot ray is
+   drawn from (see _shotSpread in main.js), so the reticle is not a decoration
+   sitting near the middle of the screen - it is a readout, and the distance
+   between two opposite arms is the width of the group the next magazine will
+   land in. Each arm is anchored at the centre and pushed out from it, so the
+   box the ring and the hitmarker measure themselves against never changes. */
+#crosshair i { left: 50%; top: 50%; }
+#crosshair i:nth-child(1) { width: 3px; height: 8px; transform: translate(-50%, calc(-100% - var(--gap, 10px))); }
+#crosshair i:nth-child(2) { width: 3px; height: 8px; transform: translate(-50%, var(--gap, 10px)); }
+#crosshair i:nth-child(3) { width: 8px; height: 3px; transform: translate(calc(-100% - var(--gap, 10px)), -50%); }
+#crosshair i:nth-child(4) { width: 8px; height: 3px; transform: translate(var(--gap, 10px), -50%); }
+/* AIMED. The arms are already almost shut by the time this lands - the gap is
+   the cone and the aimed cone is tiny - so the aimed state says so in the one
+   way a closing gap cannot: it goes gold, the colour this interface uses for
+   the thing that is currently true. The dot grows into a proper bead, because
+   at that gap the arms are furniture and the bead is what is being aimed. */
+#crosshair.aim i { background: var(--gold); box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 6px rgba(255, 233, 94, 0.8); }
+#crosshair.aim::after { width: 5px; height: 5px; box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 8px rgba(255, 233, 94, 0.9); }
 #crosshair::after {
   content: ""; position: absolute; left: 50%; top: 50%;
   width: 3px; height: 3px; transform: translate(-50%, -50%);
@@ -240,7 +255,15 @@ html, body {
   filter: drop-shadow(0 0 4px rgba(78, 243, 255, 0.6));
 }
 
-#hitmarker { position: absolute; inset: -10px; opacity: 0; transition: opacity 0.14s; }
+/* THE HIT MARKER IS AN ANIMATION, NOT A CLASS THAT IS TAKEN OFF AGAIN.
+   It used to be `opacity: 1` under a `.show` that nothing ever removed, so the
+   very first hit of a run pinned it over the crosshair for the rest of the
+   run. Nothing removed it because there was nowhere to: ui.hitMarker() is
+   called from the shot path and has no clock. So the class stays on forever
+   now BY DESIGN and the animation is what ends - it plays once, finishes at
+   zero and holds there, and the reflow in ui.hitMarker() restarts it for the
+   next hit. Same shape as the banner, for the same reason. */
+#hitmarker { position: absolute; inset: -10px; opacity: 0; }
 #hitmarker::before, #hitmarker::after {
   content: ""; position: absolute; left: 50%; top: 50%;
   width: 20px; height: 3px; background: #fff;
@@ -248,7 +271,11 @@ html, body {
 }
 #hitmarker::before { transform: translate(-50%, -50%) rotate(45deg); }
 #hitmarker::after  { transform: translate(-50%, -50%) rotate(-45deg); }
-#hitmarker.show { opacity: 1; transition: none; }
+#hitmarker.show { animation: hitmark 0.2s steps(2, end) forwards; }
+@keyframes hitmark {
+  0%   { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 0; transform: scale(1); }
+}
 
 /* ---- bottom row ---------------------------------------------------------- */
 #hud-bottom {
@@ -317,6 +344,34 @@ html, body {
 }
 #hp-box.low #hp-text { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
 #hp-box.low #hp-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
+
+/* ---- stamina -------------------------------------------------------------
+   The same instrument as the health bar at half the height and twice the cell
+   count, which is the whole design: it is obviously the same KIND of readout
+   and just as obviously the lesser of the two. Cyan rather than green, so a
+   glance at the corner never confuses the bar that means "alive" with the bar
+   that means "can still run" - and cyan is what this cabinet uses for a
+   resource that comes back on its own. */
+#stam-bar-bg { height: calc(var(--u) * 2); --cells: 40; --gap: 2px; }
+#stam-bar {
+  background: var(--cyan);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 10px rgba(78, 243, 255, 0.45);
+}
+/* RUNNING. Brighter and warmer while it is actually being spent, so the bar
+   answers "is this draining because of me" without being read. */
+#hp-box.sprinting #stam-bar {
+  background: var(--gold);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 233, 94, 0.6);
+}
+/* SPENT. The lockout is a state the player has to be told about - a key that
+   has stopped working and says nothing reads as a broken key - so the bar goes
+   red and beats until the third that unlocks it is back. */
+#hp-box.spent #stam-bar {
+  background: var(--red);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 59, 48, 0.6);
+  animation: blink 0.5s steps(1, end) infinite;
+}
+#hp-box.spent #stam-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
 
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
 
@@ -1252,10 +1307,15 @@ html, body {
   #ammo-res.out,
   #ammo-reload,
   #lb-entry label,
+  #hp-box.spent #stam-bar,
   .overlay h1.dead,
   .primary-row::before, .primary-row::after,
   #combo.combo-max #combo-fill,
   #boss-bar.enraged #boss-note { animation: none; }
+  /* NOT the hit marker: it carries information no other element repeats, and
+     switching its animation off would leave it stuck on the first hit - the
+     exact bug the animation exists to fix. It loses the scale punch instead. */
+  #hitmarker.show { animation: hitmark 0.2s steps(1, end) forwards; }
   #banner.show { opacity: 1; }
 }
 

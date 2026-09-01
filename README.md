@@ -16,14 +16,74 @@ Open http://localhost:8123
 | Key | Action |
 | --- | --- |
 | WASD | Move. Double-tap W to dash forward, with the Double Dash mutation |
-| Mouse | Aim (pointer lock) |
+| Shift | Sprint (hold). Costs stamina; you cannot aim or fire while running |
+| Mouse | Look (pointer lock) |
 | Left click | Shoot (hold for auto) |
+| Right click | Aim down the sights (hold) |
+| V | Melee |
 | R | Reload |
 | Space | Jump. Press again in midair, with the Double Jump mutation |
 | E | Buy ammo / reroll at a station |
 | Tab | Hold for the run summary: mutations owned, and the numbers behind the score |
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
+
+### Sprinting
+
+Holding sprint puts the player in a second gear at 1.5x speed and empties a
+stamina bar in about four seconds. It refills in six, after a beat's delay so
+that tapping the key cannot top it up for free, and **running it to zero locks
+the sprint out until a third of it is back** — without that, stuttering the key
+at zero is faster than pacing it, which is a habit rather than a decision. The
+bar goes red and beats while it is locked.
+
+**Sprinting and the gun are exclusive.** Running drops the weapon out of the
+sights, and firing drops the player out of the run — a fired round keeps them
+walking for a third of a second, so a semi-automatic trigger cannot be tapped
+at a sprint. That is the whole design: a run is time spent not shooting, which
+makes it a retreat rather than a strictly better way to walk.
+
+Four things refuse the button — an empty or locked bar, a held trigger, a shot
+just fired, and standing still — and all four are conditions on the player
+rather than on the key, so it can be held down through a whole fight without
+ever being wrong. Sprinting follows the movement input in whatever direction it
+points; forward-only is the conventional rule and the wrong one here, in a game
+about backing away from a crowd.
+
+The bar lives under the health bar in the VITALS box: the same segmented cell
+mask at half the height and twice the cell count, cyan while it is yours, gold
+while it is being spent, red while it is locked.
+
+### Aiming
+
+Holding the aim button raises the gun: the field of view eases from 75 to 55
+over 0.14s, the weapon slides to the centre of the screen and up onto the sight
+line, and the shot cone collapses from 0.085 to 0.004 — from a spray that
+scatters visibly past room range to effectively pinpoint. Letting go puts all
+three back. Reloading takes the gun out of the aim, because the reload
+animation drops it out of frame and two poses fighting over one model reads as
+a stutter; it comes straight back up as the last round seats, with nothing to
+re-press.
+
+One number drives all of it — `player.aimT`, 0 at the hip and 1 with the gun
+up. The camera, the viewmodel, the cone, the turn rate on both devices and the
+crosshair are all read off it, so there is no second piece of state to keep in
+step.
+
+**The crosshair is the cone.** The gap between its arms is the spread the next
+shot will actually be drawn from, in pixels, computed once in `_shotSpread()`
+and used by both the raycast and the reticle. It opens when the player starts
+running and shuts when the gun comes up, and it goes gold while aiming — at
+that gap the arms are furniture and the bead in the middle is what is being
+aimed. Movement costs accuracy from either pose, but a quarter as much down the
+sights, so standing still and aiming is the most accurate thing in the game.
+
+The movement penalty scales continuously off live speed rather than switching
+on past a threshold: standing, walking and sprinting are three different guns,
+and a full sprint roughly doubles the standing cone. It used to be a flat
+penalty past 6 m/s, which read as a switch — the walk was already over the
+line, so the gun had two accuracies and one of them was unreachable while
+playing.
 
 ### DualSense
 
@@ -35,9 +95,10 @@ screen is one the player is actually holding.
 | Button | Action |
 | --- | --- |
 | Left stick | Move. Analogue — a half push is a walk |
-| Right stick | Aim |
+| L3 | Sprint (hold) |
+| Right stick | Look |
 | R2 | Shoot |
-| L2 | Hold to focus: the view slows for a precise shot |
+| L2 | Aim down the sights (hold) |
 | L1 | Dash, with the Double Dash mutation |
 | R3 | Melee |
 | Cross | Jump. Press again in midair, with the Double Jump mutation |
@@ -53,9 +114,12 @@ and the menus grow a selection the D-pad walks. Touching the keyboard or moving
 the mouse switches it straight back. Nothing has to be enabled and nothing is
 remembered — the game follows the player's hands.
 
-SETTINGS grows a CONTROLLER block once a pad has been seen: look sensitivity
-(eight steps), aim assist, vibration and inverted look, all stored in
-localStorage.
+SETTINGS grows a CONTROLLER block once a pad has been seen: two sensitivities
+on one eight-step scale — LOOK for the hip and AIM for the gun up, blended by
+`aimT` rather than switched between — plus aim assist, vibration and inverted
+look, all stored in localStorage. The mouse has no slider; it keeps its own
+feel and is scaled by a fixed 0.6 while aiming, the standard zoom-relative
+ratio that carries muscle memory through the zoom.
 
 Aim assist is two things. **Slowdown** drops the stick's turn rate while the
 reticle is already over a target, so the player's own correction is finest
@@ -393,6 +457,8 @@ npm run test:boss
 npm run test:drops
 npm run test:money
 npm run test:pad
+npm run test:aim
+npm run test:sprint
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -413,7 +479,18 @@ the pad is recognised and a non-Sony one is not, that CROSS on the start screen
 starts the run without the same held press also reading as a jump, that the
 left stick is analogue, that L2 slows the view, that aim assist works inside
 its cone and not outside it, and that a controller unplugged mid-run pauses
-instead of leaving the player standing.
+instead of leaving the player standing. `test:aim` covers the sights: that the
+right button raises the gun over several frames rather than in one, that the
+zoom, the centred viewmodel and the tightened cone all land and all go back,
+that the crosshair's gap is exactly the cone in pixels on both sides of the
+blend, that movement opens it from either pose and costs less down the sights —
+and, as a regression test, that the hit marker clears itself. It used to be an
+`opacity: 1` class that nothing ever removed, so the first bullet that
+connected pinned it over the crosshair for the rest of the run. `test:sprint`
+covers the second gear: that it is faster, that the bar drains and holds and
+refills, that emptying it locks the sprint until a third is back and a held key
+cannot sprint on fumes, that a trigger and a standstill both refuse it, and
+that running takes the gun out of the sights and hands it back afterwards.
 
 ## Structure
 
@@ -447,6 +524,8 @@ test/smoke.mjs      headless smoke test
 test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer
 test/pad.mjs        controller support, driven by a synthetic DualSense
+test/aim.mjs        the sights, the crosshair that reads the cone, the marker
+test/sprint.mjs     the second gear and the stamina that pays for it
 pixel-icon-sheet.html    all 66 icons at once, at full size and at arena range
 pixel-icon-viewer.html   one icon at a time, in a mock column
 enemy-viewer.html        the enemy roster as flat silhouettes

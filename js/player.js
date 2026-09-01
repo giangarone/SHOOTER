@@ -249,6 +249,71 @@ const DODGE_SPEED = 1.4;
 // BASE_SPEED: the upgrade pays for standing your ground, not for strolling.
 const STILL_SPEED = 3;
 
+// ---- aiming down the sights ------------------------------------------------
+//
+// ONE NUMBER DRIVES THE WHOLE MECHANIC: `aimT`, 0 at the hip and 1 with the
+// gun up. The field of view, the viewmodel's pose, the shot cone in main.js,
+// the turn rate on both devices and the crosshair on screen are all read off
+// it, so there is no second piece of state to keep in step - a frame is either
+// somewhere between the two poses or it is at one of them.
+//
+// Seconds from one pose to the other. Short enough that raising the gun is not
+// a commitment the player has to plan, long enough to read as a movement
+// rather than as a cut.
+const ADS_TIME = 0.14;
+// The zoom, as a fraction of the hip field of view: 0.733 takes the game's 75
+// degrees to 55. A real magnification without the fishbowl reversal a deeper
+// zoom gives a room this size.
+const ADS_FOV_SCALE = 0.733;
+// Where the gun goes: centred under the crosshair, pushed slightly FORWARD of
+// the hip pose, and low enough that the receiver never climbs over the reticle
+// it is there to help the player read.
+//
+// Forward rather than back, which is the opposite of what "bringing the weapon
+// to the eye" sounds like it should mean. Pulling it in makes the model bigger
+// on screen, and a featureless block that fills the lower third of a zoomed
+// view is not a raised weapon - it is an obstruction. Pushing it out shrinks
+// it to a strip under the crosshair, which is what the pose is supposed to
+// read as.
+// ---- sprinting -------------------------------------------------------------
+//
+// A second gear, paid for out of a bar that empties in four seconds and takes
+// six to come back. The point of it is not the speed - the player already
+// moves fast - it is that the speed COSTS something, so crossing an arena to
+// break contact is a decision with a price rather than a held key.
+//
+// SPRINT AND THE GUN ARE EXCLUSIVE. Sprinting drops the weapon out of the
+// sights, and firing drops the player out of the sprint. That is the whole
+// design: the run is time spent not shooting, which is what makes it a
+// retreat rather than a strictly better way to walk.
+const SPRINT_SPEED_MULT = 1.5;
+export const MAX_SPEED = BASE_SPEED * SPRINT_SPEED_MULT;
+const STAMINA_MAX = 100;
+// Four seconds of running from full, six to refill, and a beat before the
+// refill starts so that tapping the key does not top the bar up for free.
+const STAMINA_DRAIN = 25;
+const STAMINA_REGEN = 17;
+const STAMINA_DELAY = 0.8;
+// EXHAUSTION. Emptying the bar locks the sprint out until a third of it is
+// back. Without the lock the optimal way to play is to stutter the key at zero
+// and sprint on every frame the regen delivers - which is faster than pacing
+// it, and is a habit rather than a decision. The lock is what makes running
+// the bar to empty a thing the player chose to do and now has to live with.
+const STAMINA_UNLOCK = 0.33;
+// How long a shot keeps the player out of a sprint. A tap of the trigger has
+// to cost more than the one frame it lasts, or a semi-automatic player sprints
+// between clicks and the exclusion above means nothing.
+const SPRINT_FIRE_LOCK = 0.35;
+// The lens widens a little when the player runs. Small - six degrees - because
+// it is doing the same job the bar does, from the other end: the bar is the
+// number and this is the feeling.
+const SPRINT_FOV = 6;
+const SPRINT_FOV_TIME = 0.2;
+
+const ADS_GUN_X = 0;
+const ADS_GUN_Y = -0.215;
+const ADS_GUN_Z = -0.55;
+
 export class Player {
   constructor(camera, scene) {
     this.camera = camera;
@@ -303,6 +368,31 @@ export class Player {
     this.moveVX = 0;
     this.moveVZ = 0;
     this.reloading = 0;
+    // AIMING. `_aimRaw` is the linear 0..1 timer and `aimT` the eased curve
+    // everything else reads - see the ADS block above. `aiming` is what the
+    // player is ASKING for, which is not the same thing: the gun is still on
+    // its way up on the frame the button goes down.
+    this.aiming = false;
+    this._aimRaw = 0;
+    this.aimT = 0;
+    // SPRINTING. `sprinting` is what the player is actually doing, which is
+    // not what they asked for: the button is refused while the bar is locked,
+    // while the trigger is down, and while they are standing still.
+    this.sprinting = false;
+    this.stamina = STAMINA_MAX;
+    // True from the moment the bar hits zero until it is a third full again.
+    this.staminaLocked = false;
+    // Counts down before the bar starts refilling, and is reset on every frame
+    // of a sprint.
+    this._staminaHold = 0;
+    // Game time up to which a shot keeps the player walking.
+    this.noSprintUntil = -99;
+    this._sprintFov = 0;
+    // The two ends of the zoom. Taken from the camera rather than written as a
+    // constant here, so the game keeps ownership of its own field of view and
+    // this owns only the fraction it is cut by.
+    this.fovHip = camera.fov;
+    this.fovAds = camera.fov * ADS_FOV_SCALE;
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
@@ -392,6 +482,8 @@ export class Player {
     const model = WEAPONS[this.weaponKey].build();
     model.userData.baseZ = model.position.z;
     model.userData.baseY = model.position.y;
+    // The hip pose's X too, now that there is a second pose to travel to.
+    model.userData.baseX = model.position.x;
     camera.add(model);
     this.gunModels[this.weaponKey] = model;
     this._equipModel();
@@ -415,6 +507,7 @@ export class Player {
     this.muzzle = model.getObjectByName('muzzle');
     this.gunBaseZ = model.userData.baseZ;
     this.gunBaseY = model.userData.baseY;
+    this.gunBaseX = model.userData.baseX;
   }
 
   // Lights one plate on the receiver per owned mutation that changes what a
@@ -785,6 +878,19 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.recoilPitch = 0;
+    // The gun comes down with the run. A new game inheriting a raised weapon
+    // would inherit the zoom with it, and nothing would be holding the button.
+    this.aiming = false;
+    this._aimRaw = 0;
+    this.aimT = 0;
+    this.sprinting = false;
+    this.stamina = STAMINA_MAX;
+    this.staminaLocked = false;
+    this._staminaHold = 0;
+    this.noSprintUntil = -99;
+    this._sprintFov = 0;
+    this.camera.fov = this.fovHip;
+    this.camera.updateProjectionMatrix();
     this.health = this.maxHealth;
     this.reserveAmmo = 90;
     this.fireCd = 0;
@@ -928,6 +1034,7 @@ export class Player {
     // would be fed back in as "the player's movement" on the next frame and
     // integrate into a coast three times as long as the dash. moveVX/moveVZ
     // are only ever what the KEYS asked for.
+    this._updateSprint(dt, input, f, s);
     if (f || s) {
       const len = Math.hypot(f, s);
       // The direction is normalised and the SPEED is the stick's deflection,
@@ -943,7 +1050,11 @@ export class Player {
       // player earned and neither should quietly swallow the other.
       const speed = BASE_SPEED * this.mods.moveMult * this.rageSpeedMult
         * this.statusSpeedMult()
-        * (time < this.dodgeEnd ? DODGE_SPEED : 1);
+        * (time < this.dodgeEnd ? DODGE_SPEED : 1)
+        // The second gear. A multiplier on the whole stack rather than an
+        // addition to BASE_SPEED, so a slowed player who sprints is still
+        // slowed and a Rage sprint is still faster than a Rage walk.
+        * (this.sprinting ? SPRINT_SPEED_MULT : 1);
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
       this.moveVX = (-sinY * fn + cosY * sn) * speed;
@@ -1051,10 +1162,110 @@ export class Player {
 
     this.recoilPitch *= Math.pow(RECOIL_DECAY, dt);
     this.kick *= Math.pow(0.0001, dt);
-    this.gun.position.z = this.gunBaseZ + this.kick;
-    this._animateReload();
+    // THE GUN'S POSE, as a straight blend between the two. The recoil kick is
+    // added on top of whichever pose the blend landed on rather than folded
+    // into it, so a shot fired halfway through a raise still kicks by exactly
+    // as much as one fired at either end.
+    this._updateAim(dt, input);
+    const a = this.aimT;
+    this.gun.position.x = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a;
+    const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a;
+    this.gun.position.z = this.gunBaseZ + (ADS_GUN_Z - this.gunBaseZ) * a + this.kick;
+    this._animateReload(restY);
     this.applyCamera();
     return reloadFinished;
+  }
+
+  /**
+   * Sprinting, and the bar that pays for it.
+   *
+   * FOUR THINGS REFUSE THE BUTTON, and they are all conditions on the player
+   * rather than on the key: an empty or locked bar, a trigger that is down or
+   * was down a moment ago, no movement input at all, and being frozen in
+   * place. Sprinting is therefore never something the player has to stop
+   * doing - it stops itself the instant any of those becomes true, which is
+   * what lets the button be held down through a whole fight without ever
+   * being wrong.
+   *
+   * `f` and `s` are the movement axes already resolved by update(), so a
+   * sprint follows the stick or the keys in whatever direction they point.
+   * Forward-only would be the conventional rule and it is the wrong one here:
+   * this is a game about backing away from a crowd, and a run that only works
+   * toward it would be a run nobody uses.
+   */
+  _updateSprint(dt, input, f, s) {
+    const moving = (f !== 0 || s !== 0);
+    const wants = !!input.sprint && moving;
+    this.sprinting = wants
+      && !this.staminaLocked
+      && this.stamina > 0
+      && !input.shoot
+      && this.now >= this.noSprintUntil;
+
+    if (this.sprinting) {
+      this.stamina -= STAMINA_DRAIN * dt;
+      this._staminaHold = STAMINA_DELAY;
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        // Run it dry and it is gone until a third of it is back - see the note
+        // on STAMINA_UNLOCK. Set here rather than tested at the top, so the
+        // lock survives the player letting go of the key.
+        this.staminaLocked = true;
+        this.sprinting = false;
+      }
+      return;
+    }
+    if (this._staminaHold > 0) {
+      this._staminaHold -= dt;
+      return;
+    }
+    this.stamina = Math.min(STAMINA_MAX, this.stamina + STAMINA_REGEN * dt);
+    if (this.staminaLocked && this.stamina >= STAMINA_MAX * STAMINA_UNLOCK) {
+      this.staminaLocked = false;
+    }
+  }
+
+  /** The bar, 0..1, for the HUD. */
+  get staminaFrac() {
+    return this.stamina / STAMINA_MAX;
+  }
+
+  /**
+   * The aim blend, and the zoom that rides on it.
+   *
+   * RELOADING TAKES THE GUN OUT OF THE AIM. The reload animation drops the
+   * weapon out of frame and rolls it over; a raise fighting that over the same
+   * model reads as a stutter, and a magazine changed at eye level would look
+   * like the gun was never lowered at all. The button is still being held, so
+   * it comes straight back up as the last round seats - nothing has to be
+   * re-pressed.
+   */
+  _updateAim(dt, input) {
+    // SPRINTING WINS OVER AIMING when both are asked for. The player who is
+    // holding both has decided to run, and a gun that stayed up through a
+    // sprint would make the exclusion above meaningless.
+    this.aiming = !!input.aim && this.reloading <= 0 && !this.sprinting;
+    const dir = this.aiming ? 1 : -1;
+    this._aimRaw = Math.max(0, Math.min(1, this._aimRaw + (dir * dt) / ADS_TIME));
+    // Smoothstep. A linear raise arrives at full speed and stops dead, which
+    // is the difference between a weapon being lifted and a value changing.
+    const t = this._aimRaw;
+    this.aimT = t * t * (3 - 2 * t);
+    // The run widens the lens and the sights narrow it, on one number, from
+    // the same pair of blends - they are exclusive, so the sprint's widening
+    // is always on its way out by the time the gun is up.
+    const rate = (SPRINT_FOV / SPRINT_FOV_TIME) * dt;
+    const want = this.sprinting ? SPRINT_FOV : 0;
+    this._sprintFov += Math.max(-rate, Math.min(rate, want - this._sprintFov));
+    const hip = this.fovHip + this._sprintFov;
+    const fov = hip + (this.fovAds - hip) * this.aimT;
+    // Compared before writing: updateProjectionMatrix is not free, and this
+    // runs on every frame of a game that spends most of them at one end of the
+    // blend or the other.
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   // Reload animation. The gun drops out of frame, rolls over as if a magazine
@@ -1063,11 +1274,15 @@ export class Player {
   // duration however much Speed Loader has cut it. Written every frame while
   // idle too, so the transforms are cleared the instant a reload is cancelled
   // by a weapon swap.
-  _animateReload() {
+  //
+  // `restY` is the height the gun rests at this frame - the hip pose, the aim
+  // pose, or anywhere between them. Passed in rather than read off gunBaseY,
+  // because there are two poses to come back to now.
+  _animateReload(restY) {
     const g = this.gun;
     const total = this.reloadTime;
     if (this.reloading <= 0 || total <= 0) {
-      g.position.y = this.gunBaseY;
+      g.position.y = restY;
       g.rotation.x = 0;
       g.rotation.z = 0;
       return;
@@ -1076,7 +1291,7 @@ export class Player {
     // One hump: nothing at the ends, everything in the middle, so the gun is
     // back in the firing pose exactly as the last round seats.
     const arc = Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
-    g.position.y = this.gunBaseY - 0.16 * arc;
+    g.position.y = restY - 0.16 * arc;
     g.rotation.x = 0.55 * arc;
     g.rotation.z = -0.35 * arc;
   }
@@ -1156,6 +1371,10 @@ export class Player {
       w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
     this.kick = w.kick;
+    // A round fired is a commitment to being somewhere: it walks the player
+    // out of a sprint and keeps them out of it long enough that tapping a
+    // semi-automatic trigger cannot be done at a run.
+    this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
     this.recoilPitch += (w.recoil + Math.random() * w.recoil * 0.6) * this.shakeScale;
     if (this.mag === 0) this.startReload();
     return 'shot';
