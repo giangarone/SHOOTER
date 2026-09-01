@@ -26,16 +26,41 @@
 // Role membership. Peers within a role must be comparable in threat - see the
 // note above.
 const ROLES = {
-  rusher: ['chaser', 'splitter', 'wraith', 'magma'],
+  rusher: ['chaser', 'splitter', 'wraith', 'magma', 'cinder', 'rime'],
   gunner: ['shooter', 'sniper'],
-  brute: ['tank', 'bulwark'],
-  artillery: ['bomber', 'blight'],
-  support: ['conduit', 'warden'],
+  brute: ['tank', 'bulwark', 'husk'],
+  artillery: ['bomber', 'blight', 'vitriol'],
+  support: ['conduit', 'warden', 'howler', 'hexer'],
   // The one role whose members are not near-equivalent by accident but by
   // construction: a harrier will not close and a shrike does nothing else, so
   // whichever fills a slot the wave still contains "something in the air".
-  flier: ['harrier', 'shrike'],
+  flier: ['harrier', 'shrike', 'shade'],
 };
+
+// THE AFFLICTORS AND THE ROLE RULE.
+//
+// Six of the seven types added with the status system join existing roles, and
+// every one of them was priced to sit inside its role rather than on top of
+// it: a cinder hits for five where a chaser hits for twelve, a husk has a
+// hundred and thirty health where a tank has a hundred and eighty, a vitriol
+// does no direct damage at all - exactly like the blight it stands beside.
+// What each one carries instead is a status, and the status is the payment for
+// what was taken off its stat block.
+//
+// That is the whole reason the balance holds. A wave asks for four rushers,
+// not for four chasers, and a run where three of them are cinders has to be
+// the same difficulty as a run where none are. The moment an afflictor is
+// simply a role-mate plus a debuff, the schedule stops being a fixed shape and
+// goes back to being luck - which is the one thing this file exists to
+// prevent.
+//
+// SUPPORT IS THE EXCEPTION WORTH NAMING. It now has four members and they are
+// the least alike of any role: conduit and warden change what the CROWD does,
+// howler and hexer change what the PLAYER does. They are still comparable in
+// threat - each is a high-value target that does no damage of its own and
+// makes everything around it worse - but a support slot is now a genuinely
+// wider question than it was, which is why the schedule never asks for more
+// than two of them.
 
 // The wave a type first becomes eligible. Everything does NOT show up at once:
 // a wave-1 player meets one enemy and learns it, and the roster opens a type
@@ -56,6 +81,33 @@ const UNLOCK = {
   blight: 12,
   magma: 13,
   warden: 14,
+  // ---- the afflictors ----------------------------------------------------
+  // One status at a time, and none of them before wave 10.
+  //
+  // Waves 1-12 are the hand-authored teaching schedule (see SLOTS), and what
+  // they teach is the FLOOR: lanes, pools, telegraph circles, which enemy to
+  // shoot first. A status is a second thing to read - a chip in the HUD, a
+  // number that is no longer what it was - and stacking that on top of the
+  // basics is how a player ends up learning neither.
+  //
+  // The order is by how much each one takes away. Fire and cold take a little
+  // and are obvious about where they came from; fear takes the trigger; curse
+  // takes nothing visible at all and multiplies everything else, which is why
+  // it is last and why it arrives after the player has met all five of the
+  // others.
+  // Eleven, not ten: wave 10 is a boss, and a type whose first appearance is
+  // as an add in a boss fight is a type the player meets while looking at
+  // something else. Every one of these opens on an ordinary wave.
+  cinder: 11,
+  rime: 13,
+  vitriol: 16,
+  husk: 18,
+  howler: 19,
+  hexer: 23,
+  // The air's afflictor waits until the player has had four waves of ordinary
+  // fliers. Being feared on the ground is two seconds of walking; being feared
+  // with something already diving is the dive.
+  shade: 26,
   // The air opens the wave after the fourth boss. Not earlier: everything
   // before wave 20 is a lesson in reading the FLOOR - lanes, pools, telegraph
   // circles - and dropping a threat above the player's sight line while they

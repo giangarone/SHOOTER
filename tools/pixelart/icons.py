@@ -995,19 +995,24 @@ def _(c):
 
 @icon('statusSlowness')     # you move at a fraction of your pace
 def _(c):
-    # Ball and chain. An hourglass would have been the obvious pick and is
-    # wrong twice over: every chip in the HUD already carries a timer bar, and
-    # this effect is about MOVEMENT rather than about time passing.
+    # A BOOT FROZEN INTO A BLOCK OF ICE. Two earlier passes were wrong in the
+    # same way: a ball and chain says "held" without saying by what, and an
+    # hourglass says "time" when every chip in the HUD already carries a timer
+    # bar. This one names the effect AND its cause, which is the thing the
+    # player has to connect - the frost on the floor is where it came from.
     #
-    # DRAWN CUFF FIRST, BALL LAST. The chain runs under the ball, and a link
-    # laid down after it punches its own hole straight through the silhouette.
-    c.ring(6.0, 5.6, 4.2, 2.4, S)              # the cuff
-    # The links are discs with a hole punched through rather than rings: a
-    # one-pixel ring wall is exactly the detail that dissolves on a chip, and
-    # a link that dissolves leaves the ball and the cuff floating apart.
-    for f in (0.34, 0.60):
-        lx, ly = 6.0 + 8.4 * f, 5.6 + 10.4 * f
-        c.disc(lx, ly, 2.4, S)
-        c.disc(lx, ly, 1.0, DEEP)
-    c.disc(15.4, 16.8, 6.6, S)                 # the ball, over the chain
-    c.disc(13.4, 14.8, 3.0, E)                 # the highlight, upper left
+    # CRYO already owns the snowflake. This is a chunk, not a crystal, so the
+    # two never read as the same idea at chip size.
+    c.poly([(11.0, 1.5), (19.5, 5.0), (22.0, 13.5), (18.0, 21.5),
+            (7.5, 22.0), (2.0, 15.0), (3.5, 6.0)], S)
+    # The boot, punched THROUGH the ice rather than drawn on it: a near-black
+    # hole inside a lit block survives at any size, and a mid-tone boot on a
+    # mid-tone chunk does not.
+    c.rect(8.5, 6.5, 11.8, 13.5, DEEP)         # the shin
+    c.rect(8.5, 13.5, 15.5, 16.6, DEEP)        # the foot, toe forward
+    c.rect(7.4, 16.6, 15.5, 18.0, DEEP)        # the sole, wider than the foot
+    # Facets. The lit edges of the block, and the only ENERGY in the icon, so
+    # the eye lands on the ice rather than on the boot inside it.
+    c.line(4.6, 8.0, 9.0, 3.6, E, 1.8)
+    c.line(19.6, 8.6, 21.0, 14.6, E, 1.8)
+    c.line(13.6, 3.4, 17.6, 5.2, E, 1.6)

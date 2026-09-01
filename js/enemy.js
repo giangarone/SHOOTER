@@ -223,6 +223,134 @@ export const ENEMY_TYPES = {
     build: buildWarden, ai: aiWarden,
   },
 
+  // ---- the afflictors ----------------------------------------------------
+  //
+  // Six types built around one idea: an attack that is still working after it
+  // has landed. Everything before this point resolves the moment it touches
+  // you - a hit takes health, a pool takes health while you stand in it, and
+  // the instant you are clear you are whole again. These leave something ON
+  // the player (see status.js), and the whole design of each one is the gap
+  // between when it lands and when it stops costing.
+  //
+  // THREE RULES HOLD ACROSS THE SIX, and they are what stop a status roster
+  // from being a pile of unavoidable taxes:
+  //
+  //   1. THE STATUS IS THE DAMAGE, not a bonus on top of it. Every one of
+  //      these hits for less than its role-mates - a cinder does five where a
+  //      chaser does twelve - because what it puts on you is where the cost
+  //      lives. A type that dealt full damage AND left a burn would simply be
+  //      a better chaser.
+  //   2. IT MUST BE REFUSABLE. Something the player can do - move, kill it
+  //      first, take an angle - has to prevent it. A status that arrives
+  //      whatever you do is a tax, and the correct play against a tax is to
+  //      stop reading the screen.
+  //   3. IT MUST BE OBVIOUS WHERE IT CAME FROM. Every one of these is loud at
+  //      the moment it applies: a cloud you can see from across the arena, a
+  //      ring on the floor, a beam drawn between the caster and you. The chip
+  //      in the HUD says WHAT is on you; the enemy has to say WHO did it, or
+  //      the player learns nothing from being hit.
+
+  // The player's introduction to burning. Fast, brittle, and it barely hits -
+  // five points, a third of a chaser's - because the fire it leaves is the
+  // attack. It closes, touches you once, and what it did keeps happening for
+  // four seconds while it comes back round for another.
+  //
+  // Refusable by not being touched, which is the most basic answer in the game
+  // and the right one to teach a status with.
+  cinder: {
+    hp: 30, speed: 3.9, damage: 5, score: 200, color: 0xff7a18, eye: 0xffd166,
+    scale: 0.95, radius: 0.46, mass: 1,
+    melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.2 },
+    // Four seconds at the table's seven a second: 28 points spread thin, in
+    // exchange for a hit that is worth almost nothing on its own.
+    hitStatus: { kind: 'fire', dur: 4 },
+    build: buildCinder, ai: aiMelee,
+  },
+
+  // The magma's mirror. It walks you down and freezes the floor behind it, and
+  // the frost does no damage at all - it takes your legs, and hands whatever
+  // else is in the wave a player who cannot leave.
+  //
+  // Slower and tougher than a magma because its trail is not a threat on its
+  // own: a player can stand in frost all day. What it costs is the ability to
+  // answer everything else, so the enemy laying it has to be the thing you are
+  // trying to walk away from.
+  rime: {
+    hp: 58, speed: 2.5, damage: 8, score: 220, color: 0x63b3ff, eye: 0xd8f0ff,
+    scale: 1.05, radius: 0.52, mass: 1,
+    melee: { windup: 0.55, start: 1.5, hit: 2.2, cd: 1.4 },
+    build: buildRime, ai: aiRime,
+  },
+
+  // Punishes killing it where you are standing. A slow, heavy sack that fights
+  // like a bad tank and BURSTS when it dies, leaving a cloud of gas over its
+  // own corpse - which, since it had to be killed at some point, is a cloud
+  // over wherever the player chose to fight it.
+  //
+  // The whole enemy is one decision the player did not know they were making:
+  // a brute invites you to stand and shoot, and this is the one that charges
+  // you for it. Killing it at range, or moving after it dies, costs nothing.
+  husk: {
+    hp: 130, speed: 1.5, damage: 14, score: 300, color: 0x8fbf4a, eye: 0xd6ff8a,
+    scale: 1.4, radius: 0.6, mass: 2,
+    melee: { windup: 0.8, start: 2.8, hit: 3.4, cd: 2.4 },
+    onDeath: (e, ctx) => {
+      ctx.addHazard(e.pos.x, e.pos.z, HUSK_CLOUD_RADIUS, HUSK_CLOUD_LIFE, GAS_DPS, 'gas');
+      if (ctx.effects) {
+        _blinkAt.set(e.pos.x, 0.9, e.pos.z);
+        ctx.effects.burst(_blinkAt, ENEMY_TYPES.husk.eye, 26, 4, 2.2, 0.8);
+      }
+    },
+    build: buildHusk, ai: aiMelee,
+  },
+
+  // The blight's other half. A blight makes the ground you are standing on
+  // cost health while you stand on it; a vitriol throws a cloud that keeps
+  // costing after you are out of it. Same lob, same lead, same tell - what is
+  // different is that running through this one is not free.
+  //
+  // It does no direct damage at all, exactly like the blight: what it throws
+  // is the entire enemy.
+  vitriol: {
+    hp: 46, speed: 1.9, damage: 0, score: 260, color: 0x4fe06a, eye: 0xd6ffb0,
+    scale: 1.12, radius: 0.55, mass: 1,
+    orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
+    build: buildVitriol, ai: aiVitriol,
+  },
+
+  // Takes the trigger away. No attack of its own: it winds up a scream on a
+  // fixed rhythm, draws the ring it will cover on the floor while it does, and
+  // anything inside that ring when it lands cannot shoot for two and a half
+  // seconds.
+  //
+  // THE RING IS THE WHOLE CONTRACT. A fear that arrived unannounced would be
+  // the worst thing in the game - the player's gun stops working and nothing
+  // on screen says why - so it is telegraphed longer than any other attack a
+  // normal enemy has, and the answer is to walk out of a circle that is
+  // already drawn for you. Standing in it and shooting the howler first is the
+  // other answer, and it is the better one.
+  howler: {
+    hp: 60, speed: 2.1, damage: 0, score: 340, color: 0xb06bff, eye: 0xffd6ff,
+    scale: 1.15, radius: 0.5, mass: 1,
+    orbit: { dist: 6, band: 1.5, out: 0.8, in: -0.7, strafe: 0.35, flip: 2, flipVar: 2 },
+    build: buildHowler, ai: aiHowler, cleanup: releaseHowl,
+  },
+
+  // Makes everything else hurt more. It stands further back than anything but
+  // a sniper and channels, holding a beam on the player for two full seconds;
+  // if it finishes, the player takes 25% more from every source for ten.
+  //
+  // The beam is not decoration - it is the target designation. This is the one
+  // enemy in the roster whose correct answer is always "that one, now", and
+  // the tether is what says so, drawn from it to you and impossible to lose in
+  // a crowd. Kill it, or break the range, and the channel is wasted.
+  hexer: {
+    hp: 58, speed: 2.2, damage: 0, score: 380, color: 0xff2d6f, eye: 0xffd6e4,
+    scale: 1.15, radius: 0.5, mass: 1,
+    orbit: { dist: 14, band: 2.5, out: 0.8, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
+    build: buildHexer, ai: aiHexer,
+  },
+
   // ---- the air roster ----------------------------------------------------
   // Unlocked after the fourth boss. Everything before this point is solved on
   // the floor: the player picks a lane, backs into a corner and holds an angle
@@ -288,6 +416,25 @@ export const ENEMY_TYPES = {
     fly: { height: 5.2 },
     orbit: { dist: 8, band: 2, out: 0.7, in: -0.7, strafe: 0.8, flip: 1.4, flipVar: 1.2 },
     build: buildShrike, ai: aiShrike,
+  },
+
+  // The third flier, and the only one that is not trying to kill you. It flies
+  // a shrike's loop - circle, wind up, dive, climb - and its dive hits for six
+  // points and takes your trigger for two and a half seconds.
+  //
+  // What makes it dangerous is what is in the sky WITH it. Feared under an
+  // empty ceiling is two seconds of walking; feared with a shrike already
+  // winding up is the shrike's hit. It is priced as the cheapest flier in the
+  // roster because on its own it barely does anything, which is exactly the
+  // enemy it is meant to be.
+  shade: {
+    hp: 46, speed: 4.6, damage: 6, score: 320, color: 0xb06bff, eye: 0xf0d6ff,
+    scale: 1.1, radius: 0.45, mass: 1,
+    hitbox: { r: 0.55, y: 1.0 },
+    fly: { height: 5.0 },
+    orbit: { dist: 8, band: 2, out: 0.7, in: -0.7, strafe: 0.8, flip: 1.4, flipVar: 1.2 },
+    hitStatus: { kind: 'fear', dur: 2.5 },
+    build: buildShade, ai: aiShrike,
   },
 
   // ---- bosses ------------------------------------------------------------
@@ -460,6 +607,41 @@ const SHARED_MATS = {
     color: 0x6f5bff, emissive: 0x6f5bff, emissiveIntensity: 0.7,
     roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.45,
   }),
+  // ---- the afflictors ------------------------------------------------------
+  // One lit part each, and in every case it is the part that DOES the thing:
+  // the ember in a cinder's chest, the ice on a rime's back, the sacs a husk
+  // is full of. These keep their own colour when the body is tinted by a
+  // status - the same rule the tank's furnace follows - so an enemy that has
+  // been frozen still says what it is.
+  cinderEmber: new THREE.MeshStandardMaterial({
+    color: 0xff7a18, emissive: 0xff5a00, emissiveIntensity: 1.7,
+    roughness: 0.4, metalness: 0.1,
+  }),
+  rimeIce: new THREE.MeshStandardMaterial({
+    color: 0xbfe6ff, emissive: 0x63b3ff, emissiveIntensity: 0.9,
+    roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.75,
+  }),
+  huskSac: new THREE.MeshStandardMaterial({
+    color: 0x8fbf4a, emissive: 0x4fe06a, emissiveIntensity: 1.0,
+    roughness: 0.35, metalness: 0.1, transparent: true, opacity: 0.8,
+  }),
+  vitriolSac: new THREE.MeshStandardMaterial({
+    color: 0x4fe06a, emissive: 0x4fe06a, emissiveIntensity: 1.2,
+    roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.82,
+  }),
+  // The inside of a howler's mouth. Near-black and NOT emissive: it is the one
+  // hole in the roster, and a hole that glows is a lamp.
+  howlerMaw: new THREE.MeshStandardMaterial({
+    color: 0x120a1c, roughness: 0.9, metalness: 0.0,
+  }),
+  hexerRing: new THREE.MeshStandardMaterial({
+    color: 0xff2d6f, emissive: 0xff2d6f, emissiveIntensity: 1.5,
+    roughness: 0.2, metalness: 0.7,
+  }),
+  shadeVeil: new THREE.MeshStandardMaterial({
+    color: 0xb06bff, emissive: 0xb06bff, emissiveIntensity: 0.8,
+    roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.5,
+  }),
   magmaVent: new THREE.MeshStandardMaterial({
     color: 0xff7a18, emissive: 0xff5a00, emissiveIntensity: 1.6,
     roughness: 0.4, metalness: 0.1,
@@ -554,6 +736,63 @@ const WARD_STONE = 0x8d9199;
 // Magma's trail: how often it drops a patch while it is moving, and how big,
 // how long and how hard each one burns. Five seconds is the brief - long
 // enough that a corridor it walked down stays closed behind it.
+// ---- what the afflictors leave behind ------------------------------------
+//
+// All of these are read by the type table above and by the ai functions at the
+// bottom, so the numbers a player has to learn are in one place rather than
+// spread over two thousand lines.
+
+// RIME'S TRAIL. Dropped less often and lasting longer than a magma's, and both
+// halves of that are deliberate: frost does no damage, so a thin line of it is
+// nothing at all - the patch has to be big enough and last long enough to be
+// worth walking around. The interval is also what keeps the two trails inside
+// the thirty shared creep slots when a magma and a rime are on the floor
+// together.
+const RIME_DROP_INTERVAL = 0.55;
+const RIME_PATCH_RADIUS = 1.7;
+const RIME_PATCH_LIFE = 4.0;
+
+// THE GAS. One rate for both things that make a cloud, because they are the
+// same gas: what a vitriol throws and what a husk is full of. The hazard table
+// in main.js carves the poison status's own damage out of this, so the number
+// here is what standing in a cloud costs per second IN TOTAL.
+const GAS_DPS = 6;
+// A husk's burst. Wider and shorter-lived than a thrown cloud: it is a body
+// coming apart rather than a lobbed canister, and it has to cover the ground
+// around the corpse - which is the ground the player was standing on when they
+// killed it - rather than deny a position for a long time.
+const HUSK_CLOUD_RADIUS = 3.4;
+const HUSK_CLOUD_LIFE = 5.5;
+// What a VITRIOL throws is sized in main.js beside the blight's lob (SPIT_GAS),
+// because the two share one throw and differ only in what grows out of it.
+
+// THE HOWL. Wind-up, radius, how long the player loses the trigger for, and
+// how long before it can do it again.
+//
+// The wind-up is the longest telegraph any non-boss enemy has, and it is long
+// on purpose: this is the only attack in the game that takes away the player's
+// ability to answer it, so the window to walk out has to be generous enough
+// that being caught is a mistake rather than a coin toss.
+const HOWL_WINDUP = 1.3;
+// Seven metres, and the howler orbits at six - so it has to be INSIDE its own
+// circle's worth of the player to use it, which is what makes "shoot that one"
+// a real option rather than advice about something standing across the arena.
+// The first pass had both at nine and the ring covered half the floor: a
+// telegraph nobody can be outside of is not a telegraph.
+const HOWL_RADIUS = 7;
+const HOWL_FEAR = 2.5;
+const HOWL_CD = 7;
+
+// THE HEX. Two seconds of channel for ten of curse, and a range the channel
+// breaks at. Breaking it by RANGE rather than by damage is what keeps the
+// enemy meaningful: a channel any stray pellet cancelled would never once
+// finish, and the player would never learn what a hexer is for.
+const HEX_CHANNEL = 2.0;
+const HEX_RANGE = 24;
+const HEX_BREAK = 28;
+const HEX_CURSE = 10;
+const HEX_CD = 9;
+
 const MAGMA_DROP_INTERVAL = 0.42;
 const MAGMA_PATCH_RADIUS = 1.5;
 const MAGMA_PATCH_LIFE = 5;
@@ -561,6 +800,11 @@ const MAGMA_PATCH_DPS = 12;
 // Scratch for the drip's spawn point. Module-level and reused: the drip runs
 // for every afflicted enemy several times a second.
 const _dripAt = new THREE.Vector3();
+// The hex beam's two ends. Module-level and consumed immediately: the beam is
+// redrawn every frame of a two-second channel and allocating there would
+// litter the heap through the whole fight.
+const _hexFrom = new THREE.Vector3();
+const _hexTo = new THREE.Vector3();
 // Scratch for the navigation heading. Module-level and consumed immediately:
 // every enemy asks for one every frame.
 const _steer = { x: 0, z: 0 };
@@ -1049,6 +1293,235 @@ function buildWarden(e, g, s) {
   g.add(crown);
 }
 
+// ---- the afflictors ------------------------------------------------------
+// Six models, held to the same test as the rest of the roster: as a flat black
+// shape, you can tell which one is coming. They also have to pass a second one
+// the older types never faced - the body is TINTED by whatever status is on it
+// (see _applyBodyLook), and these are the types the player is most likely to
+// meet frozen, burning or poisoned, so not one of them may rely on its colour.
+// What each is carrying is built into the silhouette instead: shards off a
+// rime's back, sacs on a husk's, a jaw that opens on a howler.
+
+// A chaser that has burnt through. Same forward lean and the same legs under
+// it - it is a rusher and has to read as one - but stripped down to a cage of
+// ribs with the fire showing between them. Read: there is not much left of it,
+// and what is left is on fire.
+function buildCinder(e, g, s) {
+  const P = partsFor(e, g, s);
+  // The ember first, so the ribs are drawn over it and it shows THROUGH the
+  // gaps rather than sitting on top of the chest.
+  P('cinderCore', lump(0.2), { y: 0.94, z: -0.04, mat: SHARED_MATS.cinderEmber, shadow: false });
+  // A cage, not a torso: four thin bars round the core, leaning with the body.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    P('cinderRib', slab(0.06, 0.52, 0.06), {
+      x: Math.cos(a) * 0.21, y: 0.94, z: Math.sin(a) * 0.17 - 0.04,
+      rx: -0.3, rz: -Math.cos(a) * 0.24,
+    });
+  }
+  P('cinderYoke', prism(0.22, 0.24, 0.12, 5), { y: 1.24, z: -0.12, rx: -0.3 });
+  P('cinderPelvis', prism(0.18, 0.14, 0.14, 5), { y: 0.62, z: 0.04 });
+  // Skull, small and thrust forward on a bare neck.
+  P('cinderNeck', prism(0.06, 0.07, 0.14, 4), { y: 1.34, z: -0.2, rx: -0.6 });
+  P('cinderSkull', shard(0.14), { y: 1.44, z: -0.32, sz: 1.3 });
+  // THE CREST. Three tongues swept back off the skull, thin and rising - the
+  // only part that is not straight, and what makes the outline read as flame
+  // rather than as one more spined rusher.
+  for (const [x, ln, tilt] of [[-0.12, 0.4, 1.0], [0, 0.54, 0.75], [0.12, 0.4, 1.0]]) {
+    P('cinderTongue', spike(0.045, ln, 4), { x, y: 1.5, z: 0.06, rx: tilt });
+  }
+  P('cinderThigh', slab(0.09, 0.42, 0.11), { x: -0.14, y: 0.5, z: 0.08, rx: 0.35 });
+  P('cinderThigh', slab(0.09, 0.42, 0.11), { x: 0.14, y: 0.5, z: 0.08, rx: 0.35 });
+  P('cinderShin', slab(0.07, 0.4, 0.09), { x: -0.14, y: 0.19, z: -0.02, rx: -0.22 });
+  P('cinderShin', slab(0.07, 0.4, 0.09), { x: 0.14, y: 0.19, z: -0.02, rx: -0.22 });
+  eyes(P, { y: 1.46, x: 0.08, z: -0.42, r: 0.8, mat: e.eyeMat });
+}
+
+// Hunched, heavy in the shoulders, dragging a back full of ice. It leans
+// forward like every rusher but its mass is up and BEHIND it, which is what
+// says it is slower than the others before it has taken a step.
+function buildRime(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('rimeTorso', prism(0.38, 0.26, 0.6, 5), { y: 0.86, z: 0.02, rx: -0.18 });
+  P('rimeShoulder', prism(0.34, 0.3, 0.2, 5), { y: 1.18, z: 0.08 });
+  P('rimeHead', shard(0.17), { y: 1.3, z: -0.28, sz: 1.15 });
+  // THE FLOE. Four slabs of ice growing up and back off the shoulders, at
+  // different lengths and angles - a fan, not a row, so it reads as growth
+  // rather than as armour plating.
+  const shardGeo = shard(0.2);
+  P('rimeShard', shardGeo, { x: -0.3, y: 1.34, z: 0.22, rz: 0.5, sy: 1.9, s: 0.9, mat: SHARED_MATS.rimeIce });
+  P('rimeShard', shardGeo, { x: 0.05, y: 1.5, z: 0.28, rz: -0.15, sy: 2.3, mat: SHARED_MATS.rimeIce });
+  P('rimeShard', shardGeo, { x: 0.32, y: 1.28, z: 0.18, rz: -0.6, sy: 1.7, s: 0.85, mat: SHARED_MATS.rimeIce });
+  P('rimeShard', shardGeo, { x: -0.1, y: 1.16, z: 0.34, rx: 0.5, sy: 1.4, s: 0.7, mat: SHARED_MATS.rimeIce });
+  // Forelimbs hanging long and forward, knuckling. Nothing else in the rusher
+  // family has arms in its outline.
+  P('rimeArm', slab(0.13, 0.5, 0.14), { x: -0.36, y: 0.82, z: -0.12, rx: 0.3 });
+  P('rimeArm', slab(0.13, 0.5, 0.14), { x: 0.36, y: 0.82, z: -0.12, rx: 0.3 });
+  P('rimeFist', lump(0.14), { x: -0.38, y: 0.5, z: -0.24 });
+  P('rimeFist', lump(0.14), { x: 0.38, y: 0.5, z: -0.24 });
+  P('rimeLeg', slab(0.13, 0.4, 0.15), { x: -0.17, y: 0.4, z: 0.06 });
+  P('rimeLeg', slab(0.13, 0.4, 0.15), { x: 0.17, y: 0.4, z: 0.06 });
+  P('rimeFoot', slab(0.15, 0.14, 0.24), { x: -0.17, y: 0.12, z: -0.02 });
+  P('rimeFoot', slab(0.15, 0.14, 0.24), { x: 0.17, y: 0.12, z: -0.02 });
+  eyes(P, { y: 1.32, x: 0.09, z: -0.4, r: 0.9, mat: e.eyeMat });
+}
+
+// A brute silhouette gone soft. Wide, planted and top-heavy like the tank and
+// the bulwark, but where those are plated this one is SWOLLEN - the mass is
+// three sacs it is carrying rather than armour it is wearing, and the whole
+// read is that there is something inside it that wants out.
+function buildHusk(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('huskGut', lump(0.46), { y: 0.82, sx: 1.25, sy: 1.15, sz: 1.05 });
+  P('huskChest', prism(0.42, 0.5, 0.34, 6), { y: 1.32 });
+  // THE SACS. Two on the shoulders and one slung under the gut, all three in
+  // the gas's own colour and all three out past the body's outline, so the
+  // thing is lumpy from every angle.
+  P('huskSac', lump(0.26), { x: -0.46, y: 1.34, z: 0.04, mat: SHARED_MATS.huskSac });
+  P('huskSac', lump(0.26), { x: 0.46, y: 1.34, z: 0.04, mat: SHARED_MATS.huskSac });
+  P('huskSac', lump(0.3), { y: 0.56, z: -0.34, sy: 0.8, mat: SHARED_MATS.huskSac });
+  // Split down the front, and the split is what it comes apart along.
+  P('huskSeam', slab(0.07, 0.62, 0.1), { y: 1.0, z: -0.42, mat: SHARED_MATS.huskSac, shadow: false });
+  // Head sunk between the shoulders - no neck at all, which is the read for
+  // something that does not turn quickly.
+  P('huskHead', prism(0.15, 0.2, 0.24, 5), { y: 1.58, z: -0.1 });
+  // Thick, short, splayed legs. A brute stands; it does not run.
+  P('huskThigh', slab(0.22, 0.34, 0.24), { x: -0.26, y: 0.42, rz: 0.16 });
+  P('huskThigh', slab(0.22, 0.34, 0.24), { x: 0.26, y: 0.42, rz: -0.16 });
+  P('huskFoot', slab(0.28, 0.2, 0.34), { x: -0.28, y: 0.12 });
+  P('huskFoot', slab(0.28, 0.2, 0.34), { x: 0.28, y: 0.12 });
+  eyes(P, { y: 1.6, x: 0.09, z: -0.22, r: 0.85, mat: e.eyeMat });
+}
+
+// The blight's build with the nozzle pointed at the SKY. Bottom-heavy,
+// hunched, four splayed legs - it belongs to the same family and is meant to,
+// because until the glob lands the two are the same problem. The mortar is
+// what tells them apart: a blight sprays forward, this one lobs.
+function buildVitriol(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('vitriolGut', lump(0.46), { y: 0.4, sx: 1.15, sy: 0.75, sz: 1.1 });
+  // THE MORTAR. A wide-mouthed tube standing up out of the back, flared at the
+  // top - the one part of the outline that breaks the skyline, and the reason
+  // this reads as artillery rather than as another crawler.
+  P('vitriolTube', prism(0.26, 0.14, 0.66, 6), {
+    y: 0.96, z: 0.12, rx: -0.22, mat: SHARED_MATS.gunmetal,
+  });
+  P('vitriolMouth', prism(0.3, 0.22, 0.12, 6), {
+    y: 1.3, z: 0.18, rx: -0.22, mat: SHARED_MATS.gunmetal,
+  });
+  // What it is loaded with, glowing in the throat of the tube.
+  P('vitriolCharge', lump(0.16), { y: 1.24, z: 0.16, mat: SHARED_MATS.vitriolSac, shadow: false });
+  P('vitriolSac', lump(0.22), { x: -0.42, y: 0.5, z: -0.1, mat: SHARED_MATS.vitriolSac });
+  P('vitriolSac', lump(0.22), { x: 0.42, y: 0.5, z: -0.1, mat: SHARED_MATS.vitriolSac });
+  // Head low and forward, under the tube, so the two never merge.
+  P('vitriolHead', prism(0.14, 0.2, 0.3, 5), { y: 0.44, z: -0.5, rx: -1.2 });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    P('vitriolLeg', slab(0.09, 0.36, 0.09), {
+      x: Math.cos(a) * 0.42, y: 0.18, z: Math.sin(a) * 0.36,
+      rz: -Math.cos(a) * 0.7, rx: Math.sin(a) * 0.45,
+    });
+  }
+  eyes(P, { y: 0.56, x: 0.08, z: -0.56, r: 0.75, mat: e.eyeMat });
+}
+
+// Support shape - floating, legless, symmetrical - built around a MOUTH that
+// faces the player. The first pass hung the jaw underneath the body, which is
+// exactly where a player standing at eye height cannot see it: the enemy read
+// as an abstract purple crystal and the one thing it needed to say - that it
+// is about to open - was pointed at the floor. The mouth is on the front now,
+// and the horns are there so the outline is not another cone.
+function buildHowler(e, g, s) {
+  const P = partsFor(e, g, s);
+  // Cranium: a wide, shallow dome over the mouth rather than a tall bell, so
+  // the top half of the silhouette is a brow and not a spire.
+  P('howlerSkull', prism(0.2, 0.42, 0.42, 6), { y: 1.5 });
+  P('howlerBrow', slab(0.6, 0.1, 0.34), { y: 1.32, z: -0.16 });
+  // THE HORNS. Two, long, swept back and out - the whole reason this is not a
+  // warden at a glance, and the part that survives at any distance.
+  for (const dir of [-1, 1]) {
+    P('howlerHorn', spike(0.07, 0.72, 4), {
+      x: dir * 0.26, y: 1.62, z: 0.12, rx: 0.85, rz: dir * -0.4,
+    });
+  }
+  // THE THROAT, drawn before the jaw so an open mouth opens onto a hole and
+  // not onto the sky behind it.
+  P('howlerThroat', prism(0.26, 0.3, 0.34, 6), {
+    y: 1.06, z: -0.06, mat: SHARED_MATS.howlerMaw, shadow: false,
+  });
+  // A keel under the throat, tapering to nothing well clear of the floor:
+  // legless is the support read, and this is what fills the space where a
+  // rusher would have had legs.
+  P('howlerKeel', spike(0.22, 0.62, 6), { y: 0.72, rx: Math.PI });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    P('howlerRib', slab(0.05, 0.44, 0.05), {
+      x: Math.cos(a) * 0.26, y: 1.16, z: Math.sin(a) * 0.26,
+    });
+  }
+  // The jaw hangs off a HINGE GROUP rather than being a part in its own right:
+  // aiHowler rotates it open over the wind-up, and a mesh placed by P turns
+  // about its own centre, which would swing the jaw through the throat instead
+  // of dropping it. The hinge sits at the FRONT of the head, so the jaw falls
+  // toward the player rather than straight down.
+  const hinge = new THREE.Group();
+  hinge.position.set(0, 1.16 * s, -0.24 * s);
+  const jaw = new THREE.Mesh(geo('howlerJaw', prism(0.34, 0.16, 0.4, 5)), e.bodyMat);
+  jaw.position.set(0, -0.2 * s, -0.04 * s);
+  jaw.scale.setScalar(s);
+  jaw.castShadow = true;
+  hinge.add(jaw);
+  // Two tusks on the jaw, so the mouth reads as a mouth even shut.
+  for (const dir of [-1, 1]) {
+    const tusk = new THREE.Mesh(geo('howlerTusk', spike(0.05, 0.26, 4)), e.bodyMat);
+    tusk.position.set(dir * 0.15 * s, -0.06 * s, -0.14 * s);
+    tusk.rotation.x = -0.2;
+    tusk.scale.setScalar(s);
+    hinge.add(tusk);
+  }
+  hinge.rotation.x = 0.2;
+  g.add(hinge);
+  e.jaw = hinge;
+  // Eyes high on the brow, wide apart, over the mouth.
+  eyes(P, { y: 1.44, x: 0.17, z: -0.32, r: 1.0, mat: e.eyeMat });
+}
+
+// The other support shape, and deliberately the thinnest thing in the roster:
+// a floating spine holding a ring up in front of itself. Where the conduit is
+// a machine and the warden a monolith, this is a FIGURE - it has shoulders and
+// a head, and it is pointing at you.
+function buildHexer(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('hexerSpine', prism(0.1, 0.16, 0.9, 5), { y: 1.15 });
+  P('hexerCowl', prism(0.26, 0.1, 0.3, 6), { y: 1.62, rx: 0.15 });
+  P('hexerHead', shard(0.13), { y: 1.5, z: -0.06 });
+  // The hem: a skirt of thin blades where legs would be, hanging clear of the
+  // floor. Legless is the support read, and this is what fills the gap the
+  // missing legs leave in the outline.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    P('hexerHem', spike(0.06, 0.44, 4), {
+      x: Math.cos(a) * 0.2, y: 0.5, z: Math.sin(a) * 0.2, rx: Math.PI + Math.sin(a) * 0.2,
+      rz: -Math.cos(a) * 0.2,
+    });
+  }
+  // Two arms held out and forward, cradling the ring. They are what make the
+  // thing read as aiming rather than as floating.
+  P('hexerArm', slab(0.07, 0.34, 0.07), { x: -0.26, y: 1.24, z: -0.2, rx: -0.9, rz: -0.4 });
+  P('hexerArm', slab(0.07, 0.34, 0.07), { x: 0.26, y: 1.24, z: -0.2, rx: -0.9, rz: 0.4 });
+  // THE SIGIL. A ring standing upright in front of the chest, spun while it
+  // channels - and the thing the beam appears to come out of.
+  const ring = new THREE.Mesh(
+    geo('hexerRing', () => new THREE.TorusGeometry(0.3, 0.045, 6, 12)),
+    SHARED_MATS.hexerRing
+  );
+  ring.position.set(0, 1.2 * s, -0.42 * s);
+  ring.scale.setScalar(s);
+  e.ring = ring;
+  g.add(ring);
+  eyes(P, { y: 1.52, x: 0.07, z: -0.16, r: 0.85, mat: e.eyeMat });
+}
+
 // ---- the air roster ------------------------------------------------------
 // One shape language, split down the middle. BOTH are legless with a lit
 // underside, which is the shared read for "this is not on the floor" and is
@@ -1219,7 +1692,7 @@ function aiShrike(e, a) {
   }
 
   if (e.sState === 'circle') {
-    orbit(e, a, ENEMY_TYPES.shrike.orbit);
+    orbit(e, a, ENEMY_TYPES[e.type].orbit);
     e.hoverY = SHRIKE_HIGH;
     e.flyRate = FLY_RATE_DEFAULT;
     e.stepMul = 1.4;
@@ -1250,7 +1723,7 @@ function aiShrike(e, a) {
       e.sState = 'dive';
       e.sT = SHRIKE_DIVE_TIME;
       _blinkAt.set(e.stx, 0.06, e.stz);
-      ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.shrike.eye, 2.4, 0.5);
+      ctx.effects.shockwave(_blinkAt, ENEMY_TYPES[e.type].eye, 2.4, 0.5);
     }
     return;
   }
@@ -1270,9 +1743,12 @@ function aiShrike(e, a) {
     // where it is AIMED, not the extent of it.
     const dy = Math.abs(ctx.player.pos.y - e.pos.y);
     if (a.dist < SHRIKE_HIT_RANGE && dy < Enemy.MELEE_REACH_Y) {
-      ctx.onHitPlayer(e.damage, e.pos, e);
+      // Through landHit, so a shade's dive leaves its fear where a shrike's
+      // leaves nothing. The two fly the same loop and differ only in the type
+      // block - see `shade`.
+      landHit(e, ctx);
       _blinkAt.set(e.pos.x, e.pos.y, e.pos.z);
-      ctx.effects.burst(_blinkAt, ENEMY_TYPES.shrike.eye, 14, 5, 2, 0.4);
+      ctx.effects.burst(_blinkAt, ENEMY_TYPES[e.type].eye, 14, 5, 2, 0.4);
       ctx.effects.addShake(0.12);
       _shrikeClimb(e);
       return;
@@ -1346,6 +1822,39 @@ const COLOSSUS_VENT_FAN = 0.13;
 
 // The widest thing in the game, on two thick legs, with a shuttered core in
 // its chest.
+// The third airframe, and the odd one out. Harrier and shrike are both hard -
+// a plate and a spear - so this one is CLOTH: a narrow body under a wide,
+// ragged veil, with no straight edge anywhere on it. Against the sky the other
+// two are machines and this is a rag, which is the whole tell.
+function buildShade(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('shadeBody', prism(0.1, 0.2, 0.56, 5), { y: 1.0, rx: -Math.PI / 2, sz: 0.8 });
+  P('shadeHead', shard(0.15), { y: 1.02, z: -0.3, sz: 1.2 });
+  // THE VEIL. Three panels a side, each a thin plate at its own angle, so the
+  // outline is torn rather than swept. Transparent, and the only thing in the
+  // air that is.
+  for (const dir of [-1, 1]) {
+    P('shadeVeil', slab(0.66, 0.03, 0.3), {
+      x: dir * 0.4, y: 1.06, z: 0.02, rz: dir * 0.22, ry: dir * 0.3,
+      mat: SHARED_MATS.shadeVeil, shadow: false,
+    });
+    P('shadeVeil', slab(0.44, 0.03, 0.22), {
+      x: dir * 0.62, y: 0.96, z: 0.26, rz: dir * -0.35, ry: dir * 0.6,
+      mat: SHARED_MATS.shadeVeil, shadow: false,
+    });
+    P('shadeTail', slab(0.1, 0.03, 0.5), {
+      x: dir * 0.16, y: 0.9, z: 0.46, rx: dir * 0.12, ry: dir * 0.18,
+      mat: SHARED_MATS.shadeVeil, shadow: false,
+    });
+  }
+  // The lit underside every flier wears, so it is read as airborne from the
+  // floor. A narrow strip, like the shrike's.
+  P('shadeGlow', slab(0.1, 0.05, 0.44), {
+    y: 0.86, mat: SHARED_MATS.harrierGlow, shadow: false,
+  });
+  eyes(P, { y: 1.04, x: 0.08, z: -0.36, r: 1.1, mat: e.eyeMat });
+}
+
 function buildColossus(e, g, s) {
   const P = partsFor(e, g, s);
   P('colossusTorso', prism(0.6, 0.4, 0.86, 6), { y: 0.88 });
@@ -1532,6 +2041,20 @@ function buildHerald(e, g, s) {
 //   a.px/pz unit walking heading from the nav grid - what to WALK along
 //   a.sp    this enemy's speed after freeze and slow
 
+// EVERY CONTACT HIT GOES THROUGH HERE. It deals the damage and then applies
+// whatever the type leaves on the player - `hitStatus` on the type block, or
+// nothing at all, which is what fourteen of the twenty-one types say.
+//
+// It exists so that "this enemy's touch burns you" is one line on the type
+// rather than a branch inside _meleeCycle, and so a new afflictor cannot be
+// written that forgets to apply its own status on one of the two paths a
+// melee blow can take (contact and swing).
+function landHit(e, ctx, dmg = e.damage) {
+  ctx.onHitPlayer(dmg, e.pos, e);
+  const st = ENEMY_TYPES[e.type].hitStatus;
+  if (st && ctx.applyPlayerStatus) ctx.applyPlayerStatus(st.kind, st.dur);
+}
+
 // The two melee types differ only in their windup numbers, which live on the
 // type as `melee`.
 function aiMelee(e, a) {
@@ -1697,6 +2220,197 @@ function aiMagma(e, a) {
   if (a.ctx.effects) {
     _blinkAt.set(e.pos.x, 0.25, e.pos.z);
     a.ctx.effects.burst(_blinkAt, 0xff7a18, 5, 1.6, 2, 0.5);
+  }
+}
+
+// Walks the player down and freezes the floor as it goes. Structurally the
+// magma's trail and deliberately so - same drop-behind-me rule, for the same
+// reason: ground the player can be STEERED onto is area denial, ground that
+// appears under their feet is an unavoidable hit.
+//
+// What is different is that this trail costs nothing to stand in. It is not
+// trying to hurt the player; it is trying to keep them where the rest of the
+// wave can.
+function aiRime(e, a) {
+  aiMelee(e, a);
+  e.rimeCd = (e.rimeCd || 0) - a.dt;
+  if (e.rimeCd > 0) return;
+  e.rimeCd = RIME_DROP_INTERVAL;
+  a.ctx.addHazard(
+    e.pos.x, e.pos.z, RIME_PATCH_RADIUS, RIME_PATCH_LIFE, 0, 'frost'
+  );
+  if (a.ctx.effects) {
+    _blinkAt.set(e.pos.x, 0.25, e.pos.z);
+    a.ctx.effects.burst(_blinkAt, 0x9fd8ff, 5, 1.6, 2, 0.5);
+  }
+}
+
+// The blight's lob with a cloud on the end of it. Everything about the throw
+// is the blight's - the same cooldown, the same lead baked into the glob's
+// aim, the same nozzle it leaves from - because the two are meant to be read
+// as the same threat until the moment it lands, and then to be answered
+// differently: you can wait a blight's pool out at the edge, and you cannot
+// wait out something that is still on you after you leave.
+function aiVitriol(e, a) {
+  orbit(e, a, ENEMY_TYPES.vitriol.orbit);
+  if (e.attackCd > 0 || a.dist > 20) return;
+  e.attackCd = 3.4 + Math.random() * 0.8;
+  e.flash = 0.15;
+  a.ctx.addSpit(e.pos.x + a.nx * 0.8, 1.0, e.pos.z + a.nz * 0.8, 'gas');
+  if (a.ctx.effects) {
+    _blinkAt.set(e.pos.x, 1.1, e.pos.z);
+    a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.vitriol.color, 10, 3, 2, 0.5);
+  }
+}
+
+// THE HOWL. Two states and one ring on the floor.
+//
+// While it is winding up it nearly stops - a telegraph the enemy can chase you
+// with is not a telegraph, it is a countdown you cannot outrun - and the ring
+// it draws is at the exact radius the scream will cover, filling as the clock
+// runs down. That ring is the entire fairness of this enemy: the player is
+// told where, told how big, and given the longest warning any ordinary enemy
+// gives, because the thing about to happen is the one thing they cannot shoot
+// their way out of afterwards.
+function aiHowler(e, a) {
+  const ctx = a.ctx;
+  orbit(e, a, ENEMY_TYPES.howler.orbit);
+  e.hT = (e.hT || 0) - a.dt;
+
+  if (e.hState !== 'wind') {
+    if (e.hT > 0) return;
+    // Nothing to scream at yet. It closes rather than howling into an empty
+    // arena, which also stops a howler across the map from spending its
+    // cooldown where the player will never see it.
+    if (a.dist > HOWL_RADIUS + 6) {
+      e.hT = 0.4;
+      return;
+    }
+    e.hState = 'wind';
+    e.hT = HOWL_WINDUP;
+    e._setEyeAlert(true);
+    if (ctx.effects) {
+      e.hMark = ctx.effects.markAcquire();
+      e.hFx = ctx.effects;
+    }
+    return;
+  }
+
+  // Winding up: barely moving, ring on the floor, jaw wide.
+  a.vx *= 0.15;
+  a.vz *= 0.15;
+  const fill = 1 - Math.max(0, e.hT) / HOWL_WINDUP;
+  if (e.hMark >= 0 && e.hFx) {
+    // Weight 0.2: at seven metres the fill is a wash at a mortar's opacity,
+    // and the RING is the part that has to be read anyway - it is the line the
+    // player has to be outside of.
+    e.hFx.markSet(
+      e.hMark, e.pos.x, e.pos.z, HOWL_RADIUS, ENEMY_TYPES.howler.color, fill,
+      1, 0, 0.2
+    );
+  }
+  // The jaw opens over the wind-up, so the model says the same thing the ring
+  // does for a player who is looking at the enemy rather than at the floor.
+  if (e.jaw) e.jaw.rotation.x = 0.2 + fill * 0.75;
+  if (e.hT > 0) return;
+
+  releaseHowl(e);
+  e.hState = 'idle';
+  e.hT = HOWL_CD;
+  e._setEyeAlert(false);
+  if (e.jaw) e.jaw.rotation.x = 0.2;
+  if (ctx.effects) {
+    _blinkAt.set(e.pos.x, 0.06, e.pos.z);
+    ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.howler.color, HOWL_RADIUS, 0.45);
+    _blinkAt.set(e.pos.x, 1.2, e.pos.z);
+    ctx.effects.burst(_blinkAt, ENEMY_TYPES.howler.eye, 22, 6, 1.5, 0.6);
+  }
+  // The radius is checked at the moment it LANDS, not when it started: the
+  // whole point of the wind-up is that leaving works.
+  if (a.dist < HOWL_RADIUS && ctx.applyPlayerStatus) {
+    ctx.applyPlayerStatus('fear', HOWL_FEAR);
+    if (ctx.effects) ctx.effects.addShake(0.2);
+  }
+}
+
+// Releases the floor ring a howler is holding. Named as the type's `cleanup`
+// as well, because a howler shot dead mid-scream is still holding a mark and
+// that pool is ten deep - see releaseMarks for the boss version of the same
+// hazard.
+function releaseHowl(e) {
+  if (e.hMark >= 0 && e.hFx) e.hFx.markRelease(e.hMark);
+  e.hMark = -1;
+}
+
+// THE HEX. It stands off and spends two seconds pointing at you.
+//
+// The beam is redrawn every frame from its head to the player's eye, which
+// makes it the only permanent line in a fight and therefore the easiest thing
+// on screen to trace back to its owner. That is the design: the player is not
+// supposed to work out what cursed them, they are supposed to see it happening
+// and get a decision - kill it, or break the range, or accept ten seconds of
+// taking a quarter more from everything.
+function aiHexer(e, a) {
+  const ctx = a.ctx;
+  orbit(e, a, ENEMY_TYPES.hexer.orbit);
+  e.xT = (e.xT || 0) - a.dt;
+
+  if (e.xState !== 'channel') {
+    if (e.xT > 0 || a.dist > HEX_RANGE) return;
+    e.xState = 'channel';
+    e.xT = HEX_CHANNEL;
+    e._setEyeAlert(true);
+    return;
+  }
+
+  // Channelling. It keeps its distance but stops strafing hard - a caster
+  // sliding sideways at full speed makes the beam impossible to follow back.
+  a.vx *= 0.35;
+  a.vz *= 0.35;
+  if (e.ring) e.ring.rotation.z += a.dt * 3.2;
+  if (ctx.effects) {
+    // BOTH ENDS ARE PASSED LOW ON PURPOSE. effects.beam adds 0.9 to whatever y
+    // it is given - it was written for conduit-to-enemy links between two
+    // things standing on the floor - so a beam handed the player's EYE is
+    // drawn at 2.6m, which from a first-person camera is behind and above the
+    // viewer and therefore invisible. The far end goes to the player's CHEST,
+    // half a metre under the eye: the beam then arrives just below the
+    // crosshair, where it can actually be seen coming.
+    // DRAWN TWICE, a hand's width apart. A GL line is one pixel wide however
+    // thick it is asked to be - the same problem the lightning bolts solve
+    // with three jittered forks - and one hairline across a dark arena is not
+    // a thing anyone notices while being shot at. Two is enough here because
+    // this line is two seconds long rather than a fifth of one, and the beam
+    // pool is only eight deep and shared with every conduit link on the floor.
+    const t = ctx.time * 2.2 + e.id;
+    for (const off of [-0.09, 0.09]) {
+      _hexFrom.set(e.pos.x + off, 0.35 + Math.sin(t) * 0.03, e.pos.z);
+      _hexTo.set(
+        ctx.player.pos.x + off * 0.5, ctx.player.pos.y + 0.2, ctx.player.pos.z
+      );
+      ctx.effects.beam(_hexFrom, _hexTo, ENEMY_TYPES.hexer.color);
+    }
+  }
+
+  // Broken by RANGE, and only by range. A channel any stray pellet cancelled
+  // would never finish once in a run, and an enemy whose whole mechanic never
+  // resolves teaches the player nothing except to ignore it.
+  if (a.dist > HEX_BREAK) {
+    e.xState = 'idle';
+    e.xT = HEX_CD * 0.5;
+    e._setEyeAlert(false);
+    return;
+  }
+  if (e.xT > 0) return;
+
+  e.xState = 'idle';
+  e.xT = HEX_CD;
+  e._setEyeAlert(false);
+  if (ctx.applyPlayerStatus) ctx.applyPlayerStatus('curse', HEX_CURSE);
+  if (ctx.effects) {
+    ctx.effects.shockwave(ctx.player.pos, ENEMY_TYPES.hexer.color, 3.2, 0.4);
+    _blinkAt.set(e.pos.x, 1.4, e.pos.z);
+    ctx.effects.burst(_blinkAt, ENEMY_TYPES.hexer.eye, 18, 5, 2, 0.6);
   }
 }
 
@@ -2806,7 +3520,7 @@ export class Enemy {
     //    than by a second one, which is why this consumes the windup instead
     //    of queueing behind it.
     if (inReach && this.attackCd <= 0 && dist < this.radius + Enemy.CONTACT_PAD) {
-      ctx.onHitPlayer(this.damage, this.pos, this);
+      landHit(this, ctx);
       this.attackCd = cooldown;
       this.windup = 0;
       this.swing = 0;
@@ -2820,7 +3534,7 @@ export class Enemy {
     if (this.swing > 0) {
       this.swing -= dt;
       if (inReach && dist < hitRange) {
-        ctx.onHitPlayer(this.damage, this.pos, this);
+        landHit(this, ctx);
         this.swing = 0;
       }
       if (this.swing <= 0) this._setEyeAlert(false);
@@ -3107,6 +3821,11 @@ const PROJ_COLORS = {
   // The blight's spit and the pool it leaves wear the same toxic green, so the
   // glob in the air and the patch it becomes are obviously one thing.
   blight: { core: 0xd6ff8a, glow: 0xaaff2a, scale: 1.3 },
+  // The vitriol's canister, in the gas's own green rather than the blight's
+  // acid yellow-green. The two lobs have to be told apart IN THE AIR - one is
+  // ground to step off and the other is a cloud to not be in - and the colour
+  // is the only thing available while it is still flying.
+  vitriol: { core: 0xd6ffb0, glow: 0x4fe06a, scale: 1.4 },
   // Colossus fires only through its open vent, so the round wears the core's
   // own heat rather than the generic shooter purple.
   colossus: { core: 0xffd08a, glow: 0xff5a00, scale: 1.1 },
@@ -3207,16 +3926,24 @@ export class Projectile {
 // been - it is a zoner, the pool is the entire threat, and giving the glob a
 // hit would quietly rewrite that enemy's role.
 export class Spit {
-  constructor(scene, glowTex, x, y, z, vx, vy, vz, radius, life, dps) {
+  /**
+   * @param {string} kind which HAZARD_KINDS row the pool it grows belongs to.
+   *   'pool' is the blight's - ground that costs health while you stand on it.
+   *   'gas' is the vitriol's - a cloud that keeps working after you leave. The
+   *   glob in the air wears the same colour as what it becomes, so the two are
+   *   read as one thing from the moment it is thrown.
+   */
+  constructor(scene, glowTex, x, y, z, vx, vy, vz, radius, life, dps, kind = 'pool') {
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3(vx, vy, vz);
     this.radius = radius;
     this.poolLife = life;
     this.dps = dps;
+    this.kind = kind;
     this.life = 5;
-    this.type = 'blight';
+    this.type = kind === 'gas' ? 'vitriol' : 'blight';
 
-    const mats = projectileMats('blight', glowTex);
+    const mats = projectileMats(this.type, glowTex);
     this.mesh = new THREE.Mesh(geo('spit', () => new THREE.SphereGeometry(0.22, 8, 8)), mats.core);
     const sp = new THREE.Sprite(mats.glow);
     sp.scale.setScalar(mats.scale);
@@ -3251,8 +3978,14 @@ export class Spit {
   }
 
   _land(ctx) {
-    if (ctx.addHazard) ctx.addHazard(this.pos.x, this.pos.z, this.radius, this.poolLife, this.dps);
-    if (ctx.effects) ctx.effects.burst(this.pos, 0xaaff2a, 14, 4, 2, 0.45);
+    if (ctx.addHazard) {
+      ctx.addHazard(this.pos.x, this.pos.z, this.radius, this.poolLife, this.dps, this.kind);
+    }
+    // The splash wears the glob's own colour, so the moment it lands says
+    // which of the two it was.
+    if (ctx.effects) {
+      ctx.effects.burst(this.pos, this.kind === 'gas' ? 0x4fe06a : 0xaaff2a, 14, 4, 2, 0.45);
+    }
   }
 }
 

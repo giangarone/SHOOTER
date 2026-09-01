@@ -140,16 +140,26 @@ try {
     res.dmg = { outClean, outWeak, tookClean, tookCursed };
 
     // Distance actually covered with the forward key held, clean and slowed.
+    // EVERY KEY IS CLEARED FIRST and forward is re-pressed on every frame.
+    // The autotest bot drives this same input object and leaves whatever it
+    // was holding behind when it is switched off - a stale `back` cancels the
+    // press exactly, and the measurement comes out as zero metres for both
+    // halves, which looks like a broken slow rather than a broken test.
     const walk = async (slowed) => {
       clean();
+      for (const k of ['forward', 'back', 'left', 'right', 'jump', 'shoot']) {
+        g.input[k] = false;
+      }
       if (slowed) p.applyStatus('slowness');
       p.pos.set(0, 0, 8);
       p.yaw = 0;
       p.moveVX = 0;
       p.moveVZ = 0;
-      g.input.forward = true;
       const from = p.pos.clone();
-      await steps(45);
+      for (let i = 0; i < 45; i++) {
+        g.input.forward = true;
+        await step();
+      }
       g.input.forward = false;
       const d = p.pos.distanceTo(from);
       await steps(5);

@@ -16,7 +16,7 @@
 // a wave is not a status, it is a death sentence with extra steps, and the
 // player cannot see it coming because the number is nowhere on screen.
 //
-// COLOURS ARE BORROWED, NOT INVENTED. Fire, poison, fear and slowness use the
+// COLOURS ARE BORROWED, NOT INVENTED. Fire, poison, fear and the cold use the
 // same four values enemies wear for the same four things (STATUS_TINT in
 // enemy.js), so orange means burning whoever is burning. Weakness and curse
 // are new because no enemy carries them: weakness is a drained steel with
@@ -53,8 +53,15 @@ export const PLAYER_STATUS = {
     label: 'CURSED', icon: 'statusCurse', color: 0xff2d6f,
     duration: 10, takenMult: 1.25,
   },
+  // SLOWNESS IS COLD. It is the same effect it always was - one multiplier on
+  // move speed - but everything the player can see of it says ice: the pale
+  // blue enemies already wear for `slow`, a boot frozen into a block for the
+  // chip, and frost on the floor where it comes from. That is not decoration.
+  // A slow with no cause reads as the game stuttering; a slow that arrives
+  // from a patch of ice you can SEE is a thing you chose to walk into, and the
+  // player can answer it by going round.
   slowness: {
-    label: 'SLOWED', icon: 'statusSlowness', color: 0x63b3ff,
+    label: 'CHILLED', icon: 'statusSlowness', color: 0x63b3ff,
     duration: 6, speedMult: 0.55,
   },
 };

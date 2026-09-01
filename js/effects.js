@@ -39,6 +39,32 @@ const BOLT_LIFE = 0.22;
 // look like a strike - the thickness is the spread between them.
 const BOLT_FORKS = 3;
 
+// CLOUDS. The first thing in this game that hangs in the AIR and stays there.
+//
+// Everything hostile the arena leaves behind until now has been flat on the
+// floor - pools, trails, telegraph rings - because the floor is where a player
+// in a shooter is already looking. A gas cloud cannot be a decal: the whole
+// point of it is that it fills the space you have to walk through, and a green
+// stain on the ground reads as one more pool to strafe past.
+//
+// So a cloud is a CLUSTER OF BILLBOARDS, not a mesh. Twelve of the same soft
+// dot the particles use, scattered through a squashed sphere, each bobbing on
+// its own phase - which is what makes the thing look like it is churning
+// rather than like a sprite someone parked. Additive, like every other
+// transparent surface in the game, so it glows in a dark arena instead of
+// turning to mud, and it needs no depth sorting against itself.
+//
+// SIX AT A TIME, which is more than the design ever puts on the floor at once:
+// a vitriol lobs one every few seconds and a husk leaves one where it died.
+const CLOUD_SLOTS = 6;
+// Puffs per cloud. Eight looked like eight circles; sixteen was a solid ball
+// with no structure left in it. Twelve is where the overlaps stop reading as
+// individual dots and start reading as volume.
+const CLOUD_PUFFS = 12;
+// A cloud is WIDER THAN IT IS TALL - roughly chest high on a 3m radius - so it
+// reads as something you walk into rather than as a sphere floating in a room.
+const CLOUD_SQUASH = 0.52;
+
 // Soft radial white dot, tinted per-use by material colour. Shared by the
 // particles, the projectile glows, the pickup glows and the pools the wave-end
 // light columns cast on the floor.
@@ -315,6 +341,51 @@ export class Effects {
     }
     this._creepT = 0;
 
+    // CLOUD POOL. One material per cloud - colour and opacity are written per
+    // cloud, and the twelve puffs of one cloud share it - and one group per
+    // cloud so the whole cluster is moved and scaled with a single write.
+    this.clouds = [];
+    for (let i = 0; i < CLOUD_SLOTS; i++) {
+      const grp = new THREE.Group();
+      const mat = new THREE.SpriteMaterial({
+        map: makeGlowTexture(), color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const puffs = [];
+      for (let j = 0; j < CLOUD_PUFFS; j++) {
+        const sp = new THREE.Sprite(mat);
+        // Scattered through a UNIT ball and then squashed, rather than placed
+        // on a shell: a shell is a bubble with a hole in the middle, and the
+        // middle is exactly where the player is standing when it matters.
+        const u = Math.random();
+        const r = 0.35 + 0.65 * Math.cbrt(u);
+        const th = Math.random() * Math.PI * 2;
+        const ph = Math.acos(2 * Math.random() - 1);
+        const sx = Math.sin(ph) * Math.cos(th) * r;
+        const sy = Math.cos(ph) * r * CLOUD_SQUASH;
+        const sz = Math.sin(ph) * Math.sin(th) * r;
+        sp.userData = {
+          x: sx, y: sy, z: sz,
+          size: 0.85 + Math.random() * 0.75,
+          phase: Math.random() * Math.PI * 2,
+          rate: 0.7 + Math.random() * 0.9,
+        };
+        grp.add(sp);
+        puffs.push(sp);
+      }
+      grp.visible = false;
+      // A cloud is never culled: it is 3m across and the camera is often
+      // INSIDE it, which is precisely the case a bounding-sphere test gets
+      // wrong on a sprite cluster.
+      grp.frustumCulled = false;
+      scene.add(grp);
+      this.clouds.push({
+        group: grp, mat, puffs, used: false, radius: 1,
+        spin: (Math.random() < 0.5 ? -1 : 1) * (0.15 + Math.random() * 0.2),
+      });
+    }
+    this._cloudT = 0;
+
     // LIGHTNING BOLTS. Same pooled-polyline shape as the arcs, at a size that
     // spans the whole arena vertically. Two strikes' worth: they live a fifth
     // of a second, and Lightning Wizard fires on 5% of hits.
@@ -516,8 +587,10 @@ export class Effects {
    * @param {number} fill 0..1 of the way to detonation. The outline is visible
    *   from the start so the AREA reads immediately; the disc fills behind it
    *   so the TIMING reads as it goes.
+   * @param {number} weight scales the FILL alone, for telegraphs much larger
+   *   than an impact circle. 1 for everything that detonates on a point.
    */
-  markSet(h, x, z, radius, color, fill, aspect = 1, rot = 0) {
+  markSet(h, x, z, radius, color, fill, aspect = 1, rot = 0, weight = 1) {
     if (h < 0) return;
     const mk = this.marks[h];
     mk.group.position.set(x, 0.06, z);
@@ -542,7 +615,13 @@ export class Effects {
     mk.group.rotation.z = rot;
     mk.disc.color.setHex(color);
     mk.ring.color.setHex(color);
-    mk.disc.opacity = 0.05 + fill * 0.3;
+    // `weight` scales the FILL only, never the outline. Every telegraph in the
+    // game until the howler was an impact circle two or three metres across,
+    // and a disc opacity tuned for that becomes a purple wash over half the
+    // arena at seven. The edge is the message - where the danger stops - so it
+    // stays at full strength however big the circle is, and only the shading
+    // inside it is pulled back.
+    mk.disc.opacity = (0.05 + fill * 0.3) * weight;
     mk.ring.opacity = 0.35 + fill * 0.45;
   }
 
@@ -612,6 +691,70 @@ export class Effects {
       c.fillMat.opacity = 0.34 * k;
       c.edgeMat.opacity = 0.42 * k;
     }
+  }
+
+  /**
+   * Claim a cloud slot, held for the whole life of the zone it decorates.
+   * Returns -1 when the pool is full, which the caller must survive the same
+   * way it survives a full creep pool: the zone still works, undecorated.
+   */
+  cloudAcquire() {
+    for (let i = 0; i < this.clouds.length; i++) {
+      const c = this.clouds[i];
+      if (c.used) continue;
+      c.used = true;
+      c.group.visible = true;
+      return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Position, size and tint one cloud. Call every frame it is alive.
+   *
+   * @param {number} radius the zone's own radius, in metres. The cluster is
+   *   built to fill exactly that, so what the player sees IS the area the
+   *   thing affects - a cloud drawn smaller than its trigger is a lie, and a
+   *   cloud drawn larger is worse.
+   * @param {number} intensity 0..1, faded down as the zone expires.
+   * @param {number} viewDist metres from the VIEWER to the cloud's centre. A
+   *   cloud thins out as it is walked into - see the note below. Leave it out
+   *   for anything the camera cannot be inside.
+   */
+  cloudSet(h, x, z, radius, color, intensity, viewDist = Infinity) {
+    if (h < 0) return;
+    const c = this.clouds[h];
+    c.group.position.set(x, 0.1, z);
+    c.radius = Math.max(0.001, radius);
+    c.mat.color.setHex(color);
+    // IT THINS OUT WHEN YOU WALK INTO IT, and this is not a nicety.
+    //
+    // Twelve additive sprites are convincing from outside and a blindfold from
+    // within: standing in one filled the entire screen with flat green, hid
+    // the arena, the crowd and half the HUD, and turned a poison cloud into a
+    // punishment far worse than the four damage a second it actually deals. A
+    // player who cannot see is not being poisoned, they are being removed from
+    // the game.
+    //
+    // So the cloud is drawn for the person OUTSIDE it - who has to see it from
+    // across the arena and decide not to walk in - and gets out of the way of
+    // the person inside, who already knows: the chip is lit in the HUD, the
+    // stain is under their feet, and their health is going down.
+    const t = Math.max(0, Math.min(1, (viewDist - radius * 0.3) / (radius * 1.1)));
+    const inside = 0.22 + 0.78 * t * t;
+    // The base is held well under 1 for a second reason: twelve additive
+    // sprites on top of each other reach white in the middle long before any
+    // one of them does, and a white core would stop the colour saying which
+    // gas it is.
+    c.mat.opacity = 0.28 * inside * Math.max(0, Math.min(1, intensity));
+  }
+
+  cloudRelease(h) {
+    if (h < 0) return;
+    const c = this.clouds[h];
+    c.used = false;
+    c.group.visible = false;
+    c.mat.opacity = 0;
   }
 
   creepRelease(h) {
@@ -726,7 +869,25 @@ export class Effects {
       c.fill.rotation.z += c.spin * dt;
       c.edge.rotation.z = c.fill.rotation.z;
     }
-    // Bolts are held bright and then dropped, for the same reason the homing
+    // Clouds churn. The whole cluster turns one way while every puff inside it
+    // breathes on its own phase, which is what stops twelve dots reading as
+    // twelve dots. Written per puff rather than per cloud because a uniform
+    // pulse is a heartbeat, and a heartbeat reads as UI.
+    this._cloudT += dt;
+    for (const c of this.clouds) {
+      if (!c.used) continue;
+      c.group.rotation.y += c.spin * dt;
+      const r = c.radius;
+      for (const sp of c.puffs) {
+        const u = sp.userData;
+        const b = Math.sin(this._cloudT * u.rate + u.phase);
+        sp.position.set(u.x * r, (u.y + b * 0.06) * r + r * 0.42, u.z * r);
+        // The size beat runs against the position beat, so a puff is at its
+        // biggest when it is not at its highest.
+        sp.scale.setScalar(u.size * r * (0.92 - b * 0.1));
+      }
+    }
+        // Bolts are held bright and then dropped, for the same reason the homing
     // arcs are: a GL line is one pixel wide whatever is asked for, so how long
     // it stays at full strength is the only lever on whether it is readable.
     for (const b of this.bolts) {

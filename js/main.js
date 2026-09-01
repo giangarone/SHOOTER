@@ -58,6 +58,7 @@
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player, NO_HIT_CAP } from './player.js';
+import { PLAYER_STATUS } from './status.js';
 import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
 import { Effects } from './effects.js';
 import { CrtPass } from './crt.js';
@@ -274,6 +275,15 @@ const CREEP_FIRE = 0xff5a00;
 // can never push a blight pool out from under the player's feet.
 const MAX_POOLS = 4;
 const MAX_LAVA = 24;
+// Gas clouds. Capped against the cloud pool in effects.js (six slots) with a
+// slot to spare: a cloud is the most expensive decoration in the game and the
+// only one the camera can be inside.
+const MAX_GAS = 4;
+// Frost patches. A rime lays these the way a magma lays lava, but they last
+// longer and are dropped less often, so the cap is well under MAX_LAVA - the
+// two trails share the same thirty creep slots and a magma is entitled to its
+// half of them.
+const MAX_FROST = 12;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see makeCreepShape in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -288,6 +298,64 @@ const MAX_LAVA = 24;
 const CREEP_ASH = 0xff8a3d;
 const CREEP_HAZARD = 0xaaff2a;
 const CREEP_LAVA = 0xff4a10;
+// The two new grounds. Both wear their STATUS's colour rather than a colour of
+// their own (see status.js), because the patch on the floor and the chip in
+// the HUD are one piece of information: this is why that icon lit up.
+const CREEP_GAS = 0x4fe06a;
+const CREEP_FROST = 0x63b3ff;
+// How long the player keeps burning after stepping OUT of lava. Short: the
+// tail is meant to be the last thing that catches someone who cut a corner,
+// not a second pool that follows them around the arena. It is refreshed every
+// frame they stand in one, so the clock starts when they leave however long
+// they were in there.
+const LAVA_BURN_SECONDS = 2.5;
+// How long the gas keeps working after you walk out of a cloud, and how long
+// the cold does. Both are longer than lava's tail and for the same reason in
+// reverse: fire is the one that hurts most while you are standing in it, so
+// its tail can afford to be short, while the whole threat of gas and frost IS
+// the tail - a cloud you can sprint through in half a second would be nothing
+// at all if it stopped working the moment you were clear.
+const GAS_POISON_SECONDS = 5;
+// What each lobbed glob grows into. A blight's pool is wide, shallow and short
+// - it is a position you are pushed off. A vitriol's cloud is tighter and
+// lasts longer, because it is thrown at where the player is GOING and has to
+// still be there when they arrive.
+const SPIT_POOL = { radius: 3.2, life: 6, dps: 9 };
+const SPIT_GAS = { radius: 3.0, life: 7, dps: 6 };
+const FROST_CHILL_SECONDS = 3;
+
+// WHAT EACH KIND OF BAD GROUND IS. One row per kind, read by _addHazard and
+// _updateHazard, so a new hazard is a row here rather than a branch in both.
+//
+//   color      the stain, and the cloud when it has one. Always the colour of
+//              the STATUS it applies, so the floor and the HUD chip agree.
+//   cap        how many of this kind may exist. Separate per kind: a magma
+//              trail must not be able to evict a blight's pool.
+//   status     what standing in it puts on the player, from status.js.
+//   secs       how long that status lasts from the last frame in the patch.
+//   carve      subtract the status's own damage-over-time from the patch's
+//              dps, so a patch that now burns you does not also cost double
+//              while you stand in it. Only for statuses that deal damage.
+//   cloud      hangs a cloud over the stain as well - see effects.js.
+//   poisonous  Antidote turns it off entirely.
+const HAZARD_KINDS = {
+  pool: { color: CREEP_HAZARD, cap: MAX_POOLS, poisonous: true },
+  lava: {
+    color: CREEP_LAVA, cap: MAX_LAVA,
+    status: 'fire', secs: LAVA_BURN_SECONDS, carve: true,
+  },
+  gas: {
+    color: CREEP_GAS, cap: MAX_GAS, cloud: true, poisonous: true,
+    status: 'poison', secs: GAS_POISON_SECONDS, carve: true,
+  },
+  // NO DAMAGE AT ALL. The cold is the whole payload: a frost patch that also
+  // bled the player would be a worse pool, and the enemy that lays it is there
+  // to hand the rest of the wave a target that cannot leave.
+  frost: {
+    color: CREEP_FROST, cap: MAX_FROST,
+    status: 'slowness', secs: FROST_CHILL_SECONDS,
+  },
+};
 // Impact-puff colours for an enemy round that broke against geometry, keyed by
 // the projectile's own type so the splash matches what was in the air. Mirrors
 // PROJ_COLORS in enemy.js; a type with no entry falls back to the shooter's.
@@ -582,7 +650,12 @@ class Game {
       addProjectile: (x, y, z, type, speedScale, spreadRad) =>
         this._spawnProjectile(x, y, z, type, speedScale, spreadRad),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
-      addSpit: (x, y, z) => this._spawnSpit(x, y, z),
+      addSpit: (x, y, z, kind) => this._spawnSpit(x, y, z, kind),
+      // What an enemy puts ON the player. Routed through the game rather than
+      // called on the player directly for the same reason onHitPlayer is: the
+      // enemy has no business knowing about Holy Mantle, Evasion or the
+      // difficulty of the wave, and this is where any of that would go.
+      applyPlayerStatus: (kind, secs) => this._afflictPlayer(kind, secs),
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
       addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
@@ -2401,7 +2474,7 @@ class Game {
   // Solved in two passes: the lead moves the aim point, which changes the range
   // and so the flight time the lead was derived from. One pass under-leads a
   // sprinting player by metres.
-  _spawnSpit(x, y, z) {
+  _spawnSpit(x, y, z, kind = 'pool') {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     const p = this.player;
     const SPEED = 14;
@@ -2421,10 +2494,14 @@ class Game {
     const t = dist / SPEED;
     // y + vy*t - 0.5*g*t^2 = 0.12, solved for vy.
     const vy = (0.12 - y + 0.5 * 22 * t * t) / t;
+    // A blight's pool and a vitriol's cloud are thrown identically and land
+    // differently, so the arc above is shared and only what grows out of it
+    // is not. See HAZARD_KINDS.
+    const g = kind === 'gas' ? SPIT_GAS : SPIT_POOL;
     this.projectiles.push(new Spit(
       this.scene, this.effects.glowTex, x, y, z,
       (dx / dist) * SPEED, vy, (dz / dist) * SPEED,
-      3.2, 6, 9
+      g.radius, g.life, g.dps, kind
     ));
   }
 
@@ -3395,6 +3472,11 @@ class Game {
       }
       this.scene.remove(e.group);
       if (e.type === 'splitter') this._splitInto(e);
+      // What a type leaves behind when it dies - a husk's cloud of gas. Called
+      // with the enemy ctx, which is live and current: _updateEnemies refreshed
+      // it at the top of this same frame.
+      const def = ENEMY_TYPES[e.type];
+      if (def && def.onDeath) def.onDeath(e, this._enemyCtx);
       // A dead boss part leaves `parts` here, inside the same sweep that would
       // push any children it split into. _updateWave reads parts.length on the
       // next frame, so it never catches the gap between the two.
@@ -3634,7 +3716,8 @@ class Game {
    *   and a splash per drop would be a strobe.
    */
   _addHazard(x, z, radius, life, dps, kind = 'pool') {
-    const cap = kind === 'lava' ? MAX_LAVA : MAX_POOLS;
+    const k = HAZARD_KINDS[kind] || HAZARD_KINDS.pool;
+    const cap = k.cap;
     let n = 0;
     for (const h of this._hazard) {
       if (h.kind === kind) n++;
@@ -3642,22 +3725,31 @@ class Game {
     if (n >= cap) {
       for (let i = 0; i < this._hazard.length; i++) {
         if (this._hazard[i].kind !== kind) continue;
-        this.effects.creepRelease(this._hazard[i].creep);
+        this._releaseHazard(this._hazard[i]);
         this._hazard.splice(i, 1);
         break;
       }
     }
     this._hazard.push({
       x, z, radius, life, maxLife: life, dps, kind, acc: 0, drip: 0, tick: 0,
-      // Hostile, always: everything in this list hurts the player, and the
-      // jagged shape family is what says so before any colour is read.
+      // Hostile, always: everything in this list is something the player has
+      // to get out of, and the jagged shape family is what says so before any
+      // colour is read.
       creep: this.effects.creepAcquire(true),
+      // A GAS CLOUD IS BOTH. The stain on the floor says where the edge is -
+      // the one question a player standing in it needs answered - and the
+      // cloud above it is what makes the thing visible from across the arena
+      // and impossible to mistake for one more pool. Neither half does the
+      // whole job: a cloud with no footprint has no edge you can trust, and a
+      // footprint with no cloud is invisible the moment you are inside it.
+      cloud: k.cloud ? this.effects.cloudAcquire() : -1,
     });
-    const color = kind === 'lava' ? CREEP_LAVA : CREEP_HAZARD;
+    const color = k.color;
     this._ashAt.set(x, 0.1, z);
-    if (kind === 'lava') {
-      // A few embers where it fell. No ring: a magma drops one of these twice
-      // a second and a shockwave per drop would spend the whole ring pool.
+    if (kind === 'lava' || kind === 'frost') {
+      // A few embers - or a few flakes - where it fell. No ring: a trail
+      // walker drops one of these twice a second and a shockwave per drop
+      // would spend the whole ring pool.
       this.effects.burst(this._ashAt, color, 6, 1.6, 1.4, 0.5);
       return;
     }
@@ -3665,6 +3757,30 @@ class Game {
     // if the player is looking somewhere else when it is thrown.
     this.effects.shockwave(this._ashAt, color, radius, 0.45);
     this.effects.burst(this._ashAt, color, 16, 3, 1.2, 0.6);
+  }
+
+  // An enemy puts a status on the player. The one door for it, so anything
+  // that should ever be able to refuse one - a mutation, a boss phase, a
+  // difficulty setting - has exactly one place to go.
+  //
+  // NOT gated on the dodge or the ward. Those two are about a BLOW landing,
+  // and every status in the game arrives with its own blow or its own visible
+  // area: a cinder's touch already went through _hurtPlayer and was already
+  // dodgeable there, and a howler's scream is answered by leaving the ring
+  // rather than by a roll of Evasion. Making the ward eat a fear as well would
+  // spend a once-per-wave charge on something the player could simply walk out
+  // of, and they would never know it had.
+  _afflictPlayer(kind, secs) {
+    if (this.state !== 'playing') return;
+    if (this.time < this.player.invulnEnd) return;
+    this.player.applyStatus(kind, secs);
+  }
+
+  // Frees whatever decoration a hazard was holding. Both pools hand out
+  // handles that must come back, and a hazard can hold one of each.
+  _releaseHazard(h) {
+    this.effects.creepRelease(h.creep);
+    if (h.cloud >= 0) this.effects.cloudRelease(h.cloud);
   }
 
   // Runs the pools down and bleeds the player for standing in one.
@@ -3675,22 +3791,48 @@ class Game {
       const h = this._hazard[i];
       h.life -= dt;
       if (h.life <= 0) {
-        this.effects.creepRelease(h.creep);
+        this._releaseHazard(h);
         this._hazard.splice(i, 1);
         continue;
       }
-      const color = h.kind === 'lava' ? CREEP_LAVA : CREEP_HAZARD;
-      this.effects.creepSet(h.creep, h.x, h.z, h.radius, color, Math.min(1, h.life));
+      const k = HAZARD_KINDS[h.kind] || HAZARD_KINDS.pool;
+      const fade = Math.min(1, h.life);
       const dx = this.player.pos.x - h.x;
       const dz = this.player.pos.z - h.z;
+      this.effects.creepSet(h.creep, h.x, h.z, h.radius, k.color, fade);
+      // The cloud rides the same fade as the stain under it, so the air
+      // clearing and the floor clearing are one event. The player's distance
+      // goes with it: a cloud thins out as it is walked into, or the inside of
+      // one is a green screen with the arena behind it - see cloudSet.
+      if (h.cloud >= 0) {
+        this.effects.cloudSet(
+          h.cloud, h.x, h.z, h.radius, k.color, fade, Math.hypot(dx, dz)
+        );
+      }
       // Only while the player is on the ground. A pool is something to jump
       // out of as much as to run out of.
-      // ANTIDOTE. A poison pool does nothing at all - the player walks through
-      // a blight's lob. Lava is not poison and still burns, which is what
-      // keeps the deal a specialist answer rather than hazard immunity.
-      const immune = h.kind !== 'lava' && this.player.mods.poisonImmune > 0;
+      // ANTIDOTE. Anything POISONOUS does nothing at all - the player walks
+      // through a blight's lob and a vitriol's cloud alike. Lava and frost are
+      // not poison and still work, which is what keeps the deal a specialist
+      // answer rather than blanket hazard immunity.
+      const immune = k.poisonous && this.player.mods.poisonImmune > 0;
       if (!immune && dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
-        h.acc += h.dps * dt;
+        // WHAT THE GROUND PUTS ON YOU. Lava sets you alight, gas poisons you,
+        // frost chills you - and all three keep working after you leave, which
+        // is the entire reason they are statuses and not just a damage tick.
+        //
+        // The rate INSIDE a patch is unchanged for the two that already had
+        // one: a status that deals damage is CARVED OUT of the patch's own dps
+        // rather than added on top, so standing in lava costs what it always
+        // cost. What is new is the tail. That tail is what makes leaving early
+        // worth something, and it is why walking straight through a pool is no
+        // longer free.
+        let dps = h.dps;
+        if (k.status) {
+          this.player.applyStatus(k.status, k.secs);
+          if (k.carve) dps = Math.max(0, dps - PLAYER_STATUS[k.status].dps);
+        }
+        h.acc += dps * dt;
         h.tick -= dt;
         if (h.acc >= 1 && h.tick <= 0) {
           const whole = Math.floor(h.acc);
@@ -3807,7 +3949,12 @@ class Game {
   // over, so a pool thrown a moment before the last enemy died does not keep
   // burning the player through the intermission.
   _clearHazards() {
-    for (const h of this._hazard) this.effects.creepRelease(h.creep);
+    // Through _releaseHazard, not creepRelease: a gas cloud holds a handle on
+    // the cloud pool as well, and a slot released here is a slot the next run
+    // gets back. Releasing only the stain left the cluster of sprites parked
+    // in the arena for the rest of the session, visible and unowned, and after
+    // six of those the pool was empty and no cloud ever appeared again.
+    for (const h of this._hazard) this._releaseHazard(h);
     this._hazard.length = 0;
     for (const m of this._mortars) this.effects.markRelease(m.mark);
     this._mortars.length = 0;
