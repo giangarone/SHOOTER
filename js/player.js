@@ -319,6 +319,21 @@ const STAMINA_UNLOCK = 0.33;
 // sprint is inaccurate for a moment, and the crosshair says so on the way
 // back down.
 const SPRINT_SPREAD_FADE = 0.35;
+// And how long it takes to arrive. It used to be instant - the penalty was
+// pinned to 1 on the frame the run began and only the way back down was a
+// ramp - which made the crosshair the one thing on screen that jumped: every
+// other term in the cone is continuous, so the reticle grew smoothly with
+// speed right up until the sprint snapped it open.
+//
+// The crosshair IS the cone (see _shotSpread in main.js), so this cannot be
+// fixed in the HUD without the reticle starting to lie about the number the
+// next shot is drawn from. The penalty itself ramps instead, which is also the
+// more honest version of it: a run costs accuracy as the player gets up to
+// speed, not the instant they press the key.
+//
+// Matched to SPRINT_FOV_TIME on purpose - the lens widening and the cone
+// opening are one event, and they should take the same moment to happen.
+const SPRINT_SPREAD_RISE = 0.2;
 // How long a shot keeps the player out of a sprint. A tap of the trigger has
 // to cost more than the one frame it lasts, or a semi-automatic player sprints
 // between clicks and the exclusion above means nothing.
@@ -1316,6 +1331,20 @@ export class Player {
     const poseK = Math.min(1, dt / SPRINT_POSE_TIME);
     this._sprintPose += ((this.sprinting ? 1 : 0) - this._sprintPose) * poseK;
     const pose = this._sprintPose * this._sprintPose * (3 - 2 * this._sprintPose);
+    // THE RAISE OVERRIDES THE CARRY. Both blends are running at once when the
+    // player sights something mid-run, and they have different clocks: the gun
+    // comes up in ADS_TIME and the run pose drains over the longer
+    // SPRINT_POSE_TIME. Left alone, that meant the weapon reached the aim pose
+    // while still carrying most of the sprint's offset and then crept in from
+    // the side afterwards - the gun arriving in two separate movements when
+    // the player asked for one.
+    //
+    // Scaling the carry by the raise makes the aim blend the only clock that
+    // matters once the button is down: the offset is fully gone by the time
+    // aimT reaches 1, so the walk-to-aim and run-to-aim transitions are the
+    // same movement and land in the same place. Coming OUT of the sights the
+    // carry is free to blend at its own pace again.
+    const carry = pose * (1 - this.aimT);
 
     // Metres travelled, turned into stride phase. Only accumulated while the
     // player is on the ground and actually moving, so a jump does not silently
@@ -1332,21 +1361,21 @@ export class Player {
     // motion the player pressed the button to get rid of.
     const amp = this._bobAmp
       * (1 - this.aimT)
-      * (1 + (SPRINT_BOB_MUL - 1) * pose);
+      * (1 + (SPRINT_BOB_MUL - 1) * carry);
     const sw = Math.sin(ph);
     // Twice the rate, because a body rises once per foot and sways once per
     // pair - and lifted so the dip only ever goes DOWN from the rest pose
     // rather than floating the gun above it.
     const dip = (Math.cos(ph * 2) - 1) * 0.5;
 
-    this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * pose;
-    this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * pose;
-    this._gunOffZ = SPRINT_GUN_Z * pose;
-    this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * pose;
-    this._gunOffRY = SPRINT_GUN_RY * pose;
+    this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * carry;
+    this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * carry;
+    this._gunOffZ = SPRINT_GUN_Z * carry;
+    this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * carry;
+    this._gunOffRY = SPRINT_GUN_RY * carry;
     // Rolls INTO the sway - the weapon leans the way it is travelling, which
     // is what turns two straight-line offsets into an arc.
-    this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * pose;
+    this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * carry;
   }
 
   /**
@@ -1389,11 +1418,12 @@ export class Player {
       && !input.aim
       && this.now >= this.noSprintUntil;
 
-    // The accuracy penalty's tail. Pinned at 1 while running and bled off
-    // afterwards, so the cone the gun fires through remembers the run for a
-    // moment - see the note on SPRINT_SPREAD_FADE.
+    // The accuracy penalty, and its tail. It ramps up over the run's first
+    // fifth of a second and bleeds off over a third of one afterwards, so the
+    // cone the gun fires through arrives with the run and then remembers it
+    // for a moment - see the notes on SPRINT_SPREAD_RISE and _FADE.
     this.sprintFade = this.sprinting
-      ? 1
+      ? Math.min(1, this.sprintFade + dt / SPRINT_SPREAD_RISE)
       : Math.max(0, this.sprintFade - dt / SPRINT_SPREAD_FADE);
 
     if (this.sprinting) {
