@@ -3529,6 +3529,10 @@ export class Enemy {
     // one rate, so the two curves cannot drift apart. It exists for the things
     // that score nothing and are still meant to pay: a splitter's children.
     this.bounty = null;
+    // Set by the player's melee when a swing is what killed this body, and
+    // read once by the death sweep in main.js - see MELEE_KILL_MULT. It lives
+    // here rather than in a set on the game so that it dies with the enemy.
+    this.meleeKill = false;
     // Collision size, independent of the model's `scale`. Everything that
     // treats an enemy as a circle reads this: obstacle resolution, crowd
     // separation, the arena clamp, melee reach and the player's shards.

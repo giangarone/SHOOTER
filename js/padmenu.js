@@ -38,7 +38,14 @@ const FACE = {
  * printed on it, and a word is what the player is looking for.
  */
 export function glyph(name) {
-  return FACE[name] || name.toUpperCase();
+  if (FACE[name]) return FACE[name];
+  // A COMBINATION, like the slide's "hold the run, press the button". Each
+  // token is looked up on its own so a face button inside one is still drawn
+  // rather than spelled - "L3 circle" is a word and a shape, not two words.
+  if (name.includes(' ')) {
+    return name.split(' ').map((t) => FACE[t] || t.toUpperCase()).join(' ');
+  }
+  return name.toUpperCase();
 }
 
 /**
@@ -76,23 +83,31 @@ export function cap(name, cls = '') {
 // the mouse turning the view, AIM is the right button raising the gun. Naming
 // them both "aim" was the state of this list before the sights existed.
 //
-// FULLSCREEN and the pad's D-PAD line came off these lists when SPRINT went
-// on. Twelve is the shape, and of everything on them those two were the ones
-// the player finds without being told: fullscreen is a labelled button on the
-// screen they are reading this on, and a menu with a selection on it invites
-// the pad it is asking for.
+// FIFTEEN NOW, not twelve, and crouching is what put the third row on. CROUCH
+// and SLIDE are listed SEPARATELY even though they are one button: which of
+// the two a press gives you depends on whether you are already running, and a
+// single row reading "CROUCH / SLIDE" would leave the player to guess at the
+// rule. Two rows state it - the slide's cap says SPRINT and then the button,
+// which is the input, in order.
+//
+// The fifteenth row on each is the one that was cut when the sheet was twelve
+// and now has its place back: FULLSCREEN, a real binding nothing else on the
+// screen mentions, and the pad's D-PAD, which is how a controller walks the
+// menus it is reading this sheet in.
 export const KBM_CONTROLS = [
   ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
   ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
   ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['W W', 'DASH'],
-  ['E', 'USE'], ['TAB', 'STATS'], ['ESC', 'PAUSE'],
+  ['C', 'CROUCH'], ['SHIFT C', 'SLIDE'], ['E', 'USE'],
+  ['TAB', 'STATS'], ['F', 'FULLSCREEN'], ['ESC', 'PAUSE'],
 ];
 
 export const PAD_CONTROLS = [
   ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
   ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
   ['L1', 'DASH'], ['cross', 'JUMP'], ['square', 'RELOAD'],
-  ['circle', 'USE'], ['triangle', 'STATS'], ['OPTIONS', 'PAUSE'],
+  ['circle', 'CROUCH'], ['L3 circle', 'SLIDE'], ['R1', 'USE'],
+  ['triangle', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
 ];
 
 /**

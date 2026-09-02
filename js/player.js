@@ -354,6 +354,70 @@ const SPRINT_FIRE_LOCK = 0.35;
 const SPRINT_FOV = 6;
 const SPRINT_FOV_TIME = 0.2;
 
+// ---- crouching and sliding -------------------------------------------------
+//
+// ONE BUTTON, TWO MOVES, AND THE RUN IS WHAT DECIDES WHICH. Standing still or
+// walking, the button is a TOGGLE - crouch is a state the player leaves by
+// pressing it again, not a key held through a firefight. At a sprint it is a
+// SLIDE, because the only thing the player can be asking for at that speed is
+// to keep it.
+//
+// The slide does NOT end when the button is released. It is a committed move
+// with a fixed length, the way a dash is: a slide that could be cancelled on
+// the frame after it started would be a crouch with extra steps, and the point
+// of it is that it costs the player the second they spend in it. It ends
+// STANDING rather than crouched - the run flows back out of it - so the player
+// never has to press the button again to get their height back.
+const STAND_EYE = 1.7;
+const CROUCH_EYE = 1.05;
+// Lower than the crouch, and deliberately: the slide is the one moment the
+// camera is near the floor, and that is most of what sells it.
+const SLIDE_EYE = 0.78;
+// What crouching costs. Half speed is the conventional number and it is the
+// right one here - the game is fast enough that anything gentler would make
+// crouch-walking a free way to be a smaller target.
+const CROUCH_SPEED_MULT = 0.5;
+// How long the height and the gun pose take to follow. Short: this is a
+// posture change, not a transition, and a crouch the player has to wait for is
+// one they stop using.
+const CROUCH_POSE_TIME = 0.16;
+// The slide's length, its opening speed, and how fast the heading can be
+// steered while it runs.
+//
+// THE SPEED DECAYS TO A WALK RATHER THAN TO A STOP. At the last frame the
+// slide is moving at exactly BASE_SPEED, which is what the movement block
+// below would have produced on its own - so handing control back is not an
+// event. Nothing snaps, and there is no frame where the player is slower than
+// they would have been had they never slid.
+const SLIDE_TIME = 0.75;
+const SLIDE_SPEED_MULT = SPRINT_SPEED_MULT * 1.15;
+// Radians a second the slide can be turned. Slight, on purpose: a slide that
+// steers like walking is just a faster walk, and the whole shape of the move
+// is that the player commits to a line.
+const SLIDE_STEER = 1.6;
+// Slides are paid for out of the sprint bar, and faster than running is - it
+// is a burst, not a pace.
+const SLIDE_DRAIN = 45;
+// And the floor to start one on, so a slide cannot be entered on the last drop
+// of the bar and end a tenth of a second later.
+const SLIDE_MIN_STAMINA = 15;
+// Momentum out of a slide, and what happens to it.
+//
+// JUMPING OUT OF A SLIDE KEEPS THE SLIDE'S SPEED. That is the whole reason the
+// two moves are worth having together: the slide is fast and low, the jump is
+// the way to spend it, and a jump that quietly dropped the player back to
+// walking speed at the apex would make the combination pointless.
+//
+// It is held as a velocity with a WEIGHT over the player's own movement -
+// exactly the arrangement the dash uses - so the hand-back is a blend rather
+// than a switch. Airborne the weight stays at 1 and the speed is kept whole;
+// on the ground it decays, and the player walks out of it.
+const MOM_GROUND_DECAY = 0.0005;
+// How fast the carried momentum can be turned in the air. Less than the
+// slide's own steering: this is air control, and air control that can turn a
+// launch around is what makes a movement system read as weightless.
+const MOM_AIR_STEER = 1.1;
+
 const ADS_GUN_X = 0;
 const ADS_GUN_Y = -0.215;
 const ADS_GUN_Z = -0.55;
@@ -413,6 +477,86 @@ const SPRINT_GUN_Z = 0.09;
 const SPRINT_GUN_RX = 0.2;
 const SPRINT_GUN_RY = 0.6;
 const SPRINT_GUN_RZ = -0.45;
+
+// THE CROUCH CARRY. Small - the camera has already dropped two thirds of a
+// metre, and a weapon that moved as far as the eye did would read as the
+// player ducking behind their own gun. It comes in and settles, which is the
+// posture, and nothing more.
+const CROUCH_GUN_X = 0.02;
+const CROUCH_GUN_Y = 0.045;
+const CROUCH_GUN_Z = 0.03;
+const CROUCH_GUN_RX = -0.06;
+// And the slide, which is the loud one: the gun is tucked in hard and rolled
+// over as the player goes down, on top of the crouch pose it already carries.
+const SLIDE_GUN_X = 0.06;
+const SLIDE_GUN_Y = -0.05;
+const SLIDE_GUN_Z = 0.1;
+const SLIDE_GUN_RX = 0.28;
+const SLIDE_GUN_RY = 0.35;
+const SLIDE_GUN_RZ = -0.6;
+
+// ---- the melee swing -------------------------------------------------------
+//
+// A BUTT-STROKE WITH THE WEAPON, in three parts: the gun is pulled back and
+// turned over, driven across and forward through the target, and then walked
+// back to wherever the rest of the animation stack had it. It is written as an
+// OFFSET on the finished pose for the same reason the bob is - a swing thrown
+// mid-reload, mid-sprint or mid-raise is the swing PLUS whatever else the gun
+// was doing, rather than a second animation fighting the first over one model.
+//
+// The two fractions are where the wind-up ends and where the strike lands.
+// main.js fires the damage on the second one (see MELEE_SWING in main.js): the
+// hit is dealt at the moment the gun is seen to arrive, not at the moment the
+// button went down.
+const MELEE_ANIM = 0.42;
+const MELEE_WIND = 0.28;
+const MELEE_STRIKE = 0.5;
+// The wound-up pose: back, right, muzzle lifted away from the target.
+const MELEE_WIND_X = 0.11;
+const MELEE_WIND_Y = -0.02;
+const MELEE_WIND_Z = 0.14;
+const MELEE_WIND_RX = -0.4;
+const MELEE_WIND_RY = -0.55;
+const MELEE_WIND_RZ = 0.55;
+// And the pose at the end of the strike: through the target, across the body.
+const MELEE_HIT_X = -0.16;
+const MELEE_HIT_Y = 0.06;
+const MELEE_HIT_Z = -0.34;
+const MELEE_HIT_RX = 0.3;
+const MELEE_HIT_RY = 0.95;
+const MELEE_HIT_RZ = -0.95;
+
+// Eases a 0..1 ramp into a 0..1 curve that leaves and arrives at rest. Used by
+// every pose blend in this file that is not already an exponential damp.
+function smooth(t) {
+  return t * t * (3 - 2 * t);
+}
+
+// Turns the flat vector (x, z) toward (tx, tz) by at most `maxRad` radians,
+// keeping its LENGTH. Written into `out` - this runs every frame of a slide
+// and a launch, and neither is a place to be allocating.
+function steerFlat(x, z, tx, tz, maxRad, out) {
+  const m = Math.hypot(x, z);
+  if (m < 1e-6) {
+    out.x = x;
+    out.z = z;
+    return out;
+  }
+  const cur = Math.atan2(z, x);
+  let d = Math.atan2(tz, tx) - cur;
+  // Shortest way round, or a slide steered a few degrees left would take the
+  // long way there.
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const a = cur + Math.max(-maxRad, Math.min(maxRad, d));
+  out.x = Math.cos(a) * m;
+  out.z = Math.sin(a) * m;
+  return out;
+}
+
+// Scratch for steerFlat. Module-level and reused; nothing holds onto it past
+// the line that reads it.
+const _steer = { x: 0, z: 0 };
 
 export class Player {
   constructor(camera, scene) {
@@ -497,6 +641,26 @@ export class Player {
     this._bobPhase = 0;
     this._bobAmp = 0;
     this._sprintPose = 0;
+    // CROUCHING AND SLIDING. `crouching` is a latched posture and `sliding` is
+    // a timed move; they are never both true. `eyeH` is the height the camera
+    // and every hit test read - see eyeInto - eased between the three poses so
+    // going down is a movement rather than a cut.
+    this.crouching = false;
+    this.sliding = false;
+    this.slideT = 0;
+    this.slideDX = 0;
+    this.slideDZ = 0;
+    this.eyeH = STAND_EYE;
+    // The two pose blends the gun rides on, and the crouch button's edge
+    // detector - the button is HELD by the time this sees it, and a toggle
+    // driven by a held button would flip once a frame.
+    this._crouchPose = 0;
+    this._slidePose = 0;
+    this._prevCrouch = false;
+    // Momentum carried out of a slide by a jump. See MOM_GROUND_DECAY.
+    this._momX = 0;
+    this._momZ = 0;
+    this._momW = 0;
     // What _updateGunMotion() hands the pose block: three positions and three
     // rotations, all offsets from the rest pose.
     this._gunOffX = 0;
@@ -534,6 +698,10 @@ export class Player {
     this.shakeScale = 1;
     this.meleeCd = 0;
     this.meleeActive = 0;
+    // The swing's own clock, separate from meleeActive: the animation outlives
+    // the hit by a wide margin, and folding the two into one number would tie
+    // how long the arm takes to come back to how long the strike lands for.
+    this.meleeAnim = 0;
     this.damageMult = 1;
     // RAGE. The red pickup's other half: it moves the player as well as their
     // damage, and it rides the SAME clock so the two can never disagree about
@@ -592,6 +760,10 @@ export class Player {
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
+    // One-shot, read and cleared by main.js on the frame a slide opens - the
+    // same split jumpFx and dashFx use, and for the same reason: player.js has
+    // no effects or audio to reach for.
+    this.slideFx = false;
     // VERSUS HANDOFF. 0 is the gun in hand, 1 is the gun swung fully out of
     // frame. Driven by main.js across a turn change and zero at every other
     // moment in the game's life - see setHolster.
@@ -1000,6 +1172,7 @@ export class Player {
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
+    this.slideFx = false;
     this.rebuildMods();
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
@@ -1043,6 +1216,18 @@ export class Player {
     this._bobPhase = 0;
     this._bobAmp = 0;
     this._sprintPose = 0;
+    this.crouching = false;
+    this.sliding = false;
+    this.slideT = 0;
+    this.slideDX = 0;
+    this.slideDZ = 0;
+    this.eyeH = STAND_EYE;
+    this._crouchPose = 0;
+    this._slidePose = 0;
+    this._prevCrouch = false;
+    this._momX = 0;
+    this._momZ = 0;
+    this._momW = 0;
     this.camera.fov = this.fovHip;
     this.camera.updateProjectionMatrix();
     this.health = this.maxHealth;
@@ -1054,6 +1239,7 @@ export class Player {
     this.kick = 0;
     this.meleeCd = 0;
     this.meleeActive = 0;
+    this.meleeAnim = 0;
     this.damageMult = 1;
     this.rageSpeedMult = 1;
     this.damageBoostEnd = 0;
@@ -1064,10 +1250,14 @@ export class Player {
     this.clearStatuses();
   }
 
-  // Eye position (feet + 1.7) written into `v`. Takes an out-param so the hot
-  // path can reuse a scratch vector instead of allocating.
+  // Eye position (feet + `eyeH`) written into `v`. Takes an out-param so the
+  // hot path can reuse a scratch vector instead of allocating.
+  //
+  // NOT A CONSTANT ANY MORE: crouching and sliding drop it, and every shot,
+  // pickup test and aim-assist ray in the game comes off this - so a crouched
+  // player really is shooting from where their head is.
   eyeInto(v) {
-    v.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
+    v.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z);
     return v;
   }
 
@@ -1103,6 +1293,7 @@ export class Player {
     this.fireCd -= dt;
     if (this.meleeCd > 0) this.meleeCd -= dt;
     if (this.meleeActive > 0) this.meleeActive -= dt;
+    if (this.meleeAnim > 0) this.meleeAnim = Math.max(0, this.meleeAnim - dt);
 
     if (this.damageBoostEnd > 0 && time >= this.damageBoostEnd) {
       this.damageMult = 1;
@@ -1188,6 +1379,11 @@ export class Player {
     // would be fed back in as "the player's movement" on the next frame and
     // integrate into a coast three times as long as the dash. moveVX/moveVZ
     // are only ever what the KEYS asked for.
+    // BEFORE the sprint, and it reads `sprinting` from the frame that just
+    // ended - which is what a player pressing the button mid-run is actually
+    // doing. _updateSprint then refuses the run outright while a slide is
+    // running, so the two can never both own the velocity.
+    this._updateCrouch(dt, input, f, s);
     this._updateSprint(dt, input, f, s);
     if (f || s) {
       const len = Math.hypot(f, s);
@@ -1208,7 +1404,10 @@ export class Player {
         // The second gear. A multiplier on the whole stack rather than an
         // addition to BASE_SPEED, so a slowed player who sprints is still
         // slowed and a Rage sprint is still faster than a Rage walk.
-        * (this.sprinting ? SPRINT_SPEED_MULT : 1);
+        * (this.sprinting ? SPRINT_SPEED_MULT : 1)
+        // And the gear below the walk. Never both: _updateSprint refuses the
+        // run while the player is crouched.
+        * (this.crouching ? CROUCH_SPEED_MULT : 1);
       const sinY = Math.sin(this.yaw);
       const cosY = Math.cos(this.yaw);
       this.moveVX = (-sinY * fn + cosY * sn) * speed;
@@ -1217,6 +1416,22 @@ export class Player {
       const damp = Math.pow(0.0001, dt);
       this.moveVX *= damp;
       this.moveVZ *= damp;
+    }
+    // THE SLIDE OWNS THE VELOCITY OUTRIGHT while it runs, which is why it is
+    // written over the block above rather than into it: the direction is the
+    // one the slide was entered on (steered a little, in _updateCrouch), and
+    // the speed comes off the envelope rather than off the keys. Letting go of
+    // the stick mid-slide does not stop it - see the note on SLIDE_TIME.
+    if (this.sliding) {
+      // 0 at the start, 1 at the end. Squared, so the slide holds its opening
+      // speed for most of its length and then gives it up quickly, instead of
+      // bleeding away evenly from the first frame.
+      const u = 1 - Math.max(0, this.slideT) / SLIDE_TIME;
+      const mult = SLIDE_SPEED_MULT + (1 - SLIDE_SPEED_MULT) * smooth(u);
+      const sp = BASE_SPEED * mult * this.mods.moveMult * this.rageSpeedMult
+        * this.statusSpeedMult();
+      this.moveVX = this.slideDX * sp;
+      this.moveVZ = this.slideDZ * sp;
     }
     this.vel.x = this.moveVX;
     this.vel.z = this.moveVZ;
@@ -1238,6 +1453,35 @@ export class Player {
       this.vel.z = this.moveVZ * (1 - k) + this.dashDZ * DASH_SPEED * k;
     }
 
+    // SLIDE MOMENTUM, laid over the result the same way the dash is. Set by
+    // the jump below on the frame a slide is launched out of, and from then on
+    // it is the velocity - the player keeps every metre a second the slide had
+    // built until they land.
+    //
+    // `onGround` here is last frame's, since this one is not resolved until
+    // after the integration below. That single frame of lag is invisible and
+    // it is the only ordering that lets the jump read the slide's velocity.
+    if (this._momW > 0) {
+      if (this.onGround) {
+        this._momW *= Math.pow(MOM_GROUND_DECAY, dt);
+        if (this._momW < 0.02) this._momW = 0;
+      } else if (f || s) {
+        // Air control, as a turn rather than a push: the launch keeps its
+        // speed and the player is allowed to point it somewhere.
+        const len = Math.hypot(f, s);
+        const sinY = Math.sin(this.yaw);
+        const cosY = Math.cos(this.yaw);
+        const wx = (-sinY * (f / len) + cosY * (s / len));
+        const wz = (-cosY * (f / len) - sinY * (s / len));
+        steerFlat(this._momX, this._momZ, wx, wz, MOM_AIR_STEER * dt, _steer);
+        this._momX = _steer.x;
+        this._momZ = _steer.z;
+      }
+      const w = this._momW;
+      this.vel.x = this.vel.x * (1 - w) + this._momX * w;
+      this.vel.z = this.vel.z * (1 - w) + this._momZ * w;
+    }
+
     this.vel.y -= 22 * dt;
     // Ground jump keeps its held-key behaviour - bunny-hopping down a corridor
     // is movement the game already had. The AIR jump is edge-triggered, or a
@@ -1247,6 +1491,19 @@ export class Player {
     if (input.jump && this.onGround) {
       this.vel.y = JUMP_V;
       this.onGround = false;
+      // A JUMP IS ALWAYS AVAILABLE OUT OF A SLIDE, and it takes the slide's
+      // speed with it. `vel` is the slide's velocity by this point in the
+      // frame, so there is nothing to reconstruct - the launch is simply what
+      // the player was already doing, kept.
+      if (this.sliding) {
+        this._momX = this.vel.x;
+        this._momZ = this.vel.z;
+        this._momW = 1;
+        this._endSlide();
+      }
+      // Standing up to jump. A player who jumps out of a crouch and lands
+      // still crouched would have pressed a button and got half of it.
+      this.crouching = false;
     } else if (jumpEdge && this.jumpsLeft > 0) {
       this.jumpsLeft--;
       this.vel.y = AIR_JUMP_V;
@@ -1341,6 +1598,10 @@ export class Player {
     this.gun.rotation.x += this._gunOffRX;
     this.gun.rotation.z += this._gunOffRZ;
     this.gun.rotation.y = this._gunOffRY;
+    // LAST, and as an add on the finished pose - see the note on MELEE_ANIM.
+    // Everything above has already had its say about where the gun is; the
+    // swing takes it from there and puts it back.
+    this._animateMelee();
     this.applyCamera();
     return reloadFinished;
   }
@@ -1410,14 +1671,26 @@ export class Player {
     // rather than floating the gun above it.
     const dip = (Math.cos(ph * 2) - 1) * 0.5;
 
-    this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * carry;
-    this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * carry;
-    this._gunOffZ = SPRINT_GUN_Z * carry;
-    this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * carry;
-    this._gunOffRY = SPRINT_GUN_RY * carry;
+    // The crouch and the slide carry, on the same terms as the run's: scaled
+    // by the raise, so the sights are still the sights. A slide is crouched by
+    // definition, so its pose is laid OVER the crouch's rather than instead of
+    // it - the gun tucks in as the player goes down and then rolls over as
+    // they hit the floor, which is one movement in two stages.
+    const duck = this._crouchPose * (1 - this.aimT);
+    const slide = this._slidePose * (1 - this.aimT);
+
+    this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * carry
+      + CROUCH_GUN_X * duck + SLIDE_GUN_X * slide;
+    this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * carry
+      + CROUCH_GUN_Y * duck + SLIDE_GUN_Y * slide;
+    this._gunOffZ = SPRINT_GUN_Z * carry + CROUCH_GUN_Z * duck + SLIDE_GUN_Z * slide;
+    this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * carry
+      + CROUCH_GUN_RX * duck + SLIDE_GUN_RX * slide;
+    this._gunOffRY = SPRINT_GUN_RY * carry + SLIDE_GUN_RY * slide;
     // Rolls INTO the sway - the weapon leans the way it is travelling, which
     // is what turns two straight-line offsets into an arc.
-    this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * carry;
+    this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * carry
+      + SLIDE_GUN_RZ * slide;
   }
 
   /**
@@ -1450,6 +1723,95 @@ export class Player {
    * this is a game about backing away from a crowd, and a run that only works
    * toward it would be a run nobody uses.
    */
+  /**
+   * CROUCH, SLIDE, AND THE ONE BUTTON THAT IS BOTH.
+   *
+   * The press is read as an EDGE and what it does depends entirely on what the
+   * player was already doing. At a sprint it opens a slide; anywhere else it
+   * flips the crouch. Nothing here is held: see the note on SLIDE_TIME for why
+   * a slide ignores the button being let go, and why it ends standing.
+   *
+   * `f` and `s` are the movement axes update() already resolved, so the stick
+   * and the keys steer a slide identically.
+   */
+  _updateCrouch(dt, input, f, s) {
+    const moving = (f !== 0 || s !== 0);
+    const want = !!input.crouch;
+    const edge = want && !this._prevCrouch;
+    this._prevCrouch = want;
+
+    if (this.sliding) {
+      this.slideT -= dt;
+      // Paid for out of the sprint bar, and it can empty it - a slide run onto
+      // an empty bar ends where the stamina does, with the same lockout a
+      // sprint run dry gets. The hold is refreshed every frame for the same
+      // reason the sprint refreshes it: the bar must not start climbing back
+      // during the move it is paying for.
+      this.stamina -= SLIDE_DRAIN * dt;
+      this._staminaHold = STAMINA_DELAY;
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        this.staminaLocked = true;
+        this.slideT = 0;
+      }
+      // A LITTLE steering, applied to the heading rather than to the velocity,
+      // so the slide keeps its speed through the turn.
+      if (moving) {
+        const len = Math.hypot(f, s);
+        const sinY = Math.sin(this.yaw);
+        const cosY = Math.cos(this.yaw);
+        const wx = (-sinY * (f / len) + cosY * (s / len));
+        const wz = (-cosY * (f / len) - sinY * (s / len));
+        steerFlat(this.slideDX, this.slideDZ, wx, wz, SLIDE_STEER * dt, _steer);
+        this.slideDX = _steer.x;
+        this.slideDZ = _steer.z;
+      }
+      // Off a ledge is off a slide. The jump out of one is handled in update()
+      // and has already ended it by the time this sees the frame, so this is
+      // only about falling.
+      if (this.slideT <= 0 || !this.onGround) this._endSlide();
+    } else if (edge) {
+      // THE RUN IS WHAT MAKES IT A SLIDE. Everything else is a toggle.
+      if (this.sprinting && this.onGround && moving
+        && !this.staminaLocked && this.stamina >= SLIDE_MIN_STAMINA) {
+        this._startSlide(f, s);
+      } else {
+        this.crouching = !this.crouching;
+      }
+    }
+
+    // The camera and the two gun blends, all on one ease. `crouching` and
+    // `sliding` are exclusive, so the target is a straight three-way pick.
+    const wantEye = this.sliding ? SLIDE_EYE : (this.crouching ? CROUCH_EYE : STAND_EYE);
+    const k = Math.min(1, dt / CROUCH_POSE_TIME);
+    this.eyeH += (wantEye - this.eyeH) * k;
+    this._crouchPose += (((this.crouching || this.sliding) ? 1 : 0) - this._crouchPose) * k;
+    this._slidePose += ((this.sliding ? 1 : 0) - this._slidePose) * k;
+  }
+
+  // Opens a slide along the direction the player is currently moving. The
+  // crouch latch is cleared rather than set: a slide is not a crouch that
+  // happens to be fast, and it has to be able to end standing.
+  _startSlide(f, s) {
+    const len = Math.hypot(f, s) || 1;
+    const sinY = Math.sin(this.yaw);
+    const cosY = Math.cos(this.yaw);
+    this.slideDX = (-sinY * (f / len) + cosY * (s / len));
+    this.slideDZ = (-cosY * (f / len) - sinY * (s / len));
+    this.sliding = true;
+    this.crouching = false;
+    this.slideT = SLIDE_TIME;
+    this.slideFx = true;
+  }
+
+  // ENDS STANDING. The envelope has already brought the speed down to the
+  // walk by the time this runs, so there is nothing to damp - the player is
+  // simply back on their own feet, upright, at the pace they would have had.
+  _endSlide() {
+    this.sliding = false;
+    this.slideT = 0;
+  }
+
   _updateSprint(dt, input, f, s) {
     const moving = (f !== 0 || s !== 0);
     const wants = !!input.sprint && moving;
@@ -1458,6 +1820,11 @@ export class Player {
       && this.stamina > 0
       && !input.shoot
       && !input.aim
+      // SEVEN THINGS NOW. A slide is not a run - it owns the velocity itself
+      // and pays its own stamina - and a crouch is the gear below a walk, so
+      // neither may report as sprinting or the bar would be billed twice.
+      && !this.sliding
+      && !this.crouching
       && this.now >= this.noSprintUntil;
 
     // The accuracy penalty, and its tail. It ramps up over the run's first
@@ -1580,6 +1947,68 @@ export class Player {
   // All four phases are FRACTIONS OF THE REAL RELOAD, so a Speed Loader build
   // plays the same animation faster rather than a different one - the same
   // reason this reads `reloadTime` rather than a constant of its own.
+  /**
+   * THE GUN, SWUNG AS A CLUB.
+   *
+   * Three legs on one clock: back and over (the wind-up), across and through
+   * (the strike), then home. The poses are constants at the top of the file
+   * and every leg is smoothed at both ends, so there is no frame where the
+   * weapon changes direction abruptly - the arm has weight, and a linear ramp
+   * is exactly what says it does not.
+   *
+   * Written as OFFSETS, added to whatever the aim blend, the bob and the
+   * reload left behind. That is what lets a swing be thrown mid-reload or
+   * mid-sprint without either animation having to know the other exists.
+   */
+  _animateMelee() {
+    if (this.meleeAnim <= 0) return;
+    const u = 1 - this.meleeAnim / MELEE_ANIM;
+    let k;
+    let ax;
+    let ay;
+    let az;
+    let arx;
+    let ary;
+    let arz;
+    if (u < MELEE_WIND) {
+      // Rest -> wound up. Fast, and the shortest of the three: the wind-up is
+      // the tell, not the move.
+      k = smooth(u / MELEE_WIND);
+      ax = MELEE_WIND_X * k;
+      ay = MELEE_WIND_Y * k;
+      az = MELEE_WIND_Z * k;
+      arx = MELEE_WIND_RX * k;
+      ary = MELEE_WIND_RY * k;
+      arz = MELEE_WIND_RZ * k;
+    } else if (u < MELEE_STRIKE) {
+      // Wound up -> through the target. This is the leg the damage lands on.
+      k = smooth((u - MELEE_WIND) / (MELEE_STRIKE - MELEE_WIND));
+      ax = MELEE_WIND_X + (MELEE_HIT_X - MELEE_WIND_X) * k;
+      ay = MELEE_WIND_Y + (MELEE_HIT_Y - MELEE_WIND_Y) * k;
+      az = MELEE_WIND_Z + (MELEE_HIT_Z - MELEE_WIND_Z) * k;
+      arx = MELEE_WIND_RX + (MELEE_HIT_RX - MELEE_WIND_RX) * k;
+      ary = MELEE_WIND_RY + (MELEE_HIT_RY - MELEE_WIND_RY) * k;
+      arz = MELEE_WIND_RZ + (MELEE_HIT_RZ - MELEE_WIND_RZ) * k;
+    } else {
+      // And back. The longest leg, because recovery is what the swing COSTS -
+      // the gun being out of position is the price of having thrown it.
+      k = 1 - smooth((u - MELEE_STRIKE) / (1 - MELEE_STRIKE));
+      ax = MELEE_HIT_X * k;
+      ay = MELEE_HIT_Y * k;
+      az = MELEE_HIT_Z * k;
+      arx = MELEE_HIT_RX * k;
+      ary = MELEE_HIT_RY * k;
+      arz = MELEE_HIT_RZ * k;
+    }
+    const g = this.gun;
+    g.position.x += ax;
+    g.position.y += ay;
+    g.position.z += az;
+    g.rotation.x += arx;
+    g.rotation.y += ary;
+    g.rotation.z += arz;
+  }
+
   _animateReload(restX, restY) {
     const g = this.gun;
     const mag = this.magPart;
@@ -1639,7 +2068,7 @@ export class Player {
     // roll the view over the top at the exact moment the player is looking up.
     const aim = Math.max(-1.5, Math.min(1.5, this.pitch + this.recoilPitch));
     this.camera.rotation.set(aim, this.yaw, 0);
-    this.camera.position.set(this.pos.x, this.pos.y + 1.7, this.pos.z);
+    this.camera.position.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z);
   }
 
   // Returns false when a reload is pointless (already reloading, mag full, or
@@ -1709,11 +2138,18 @@ export class Player {
     return 'shot';
   }
 
+  // Arms a swing. The COOLDOWN is here and the hit is main.js's - see
+  // tryMelee there - so the animation and the damage cannot disagree about
+  // whether a swing happened.
+  //
+  // No `kick`: the recoil offset used to stand in for an animation that did
+  // not exist, and _animateMelee moves the whole weapon now. Leaving both in
+  // would punch the gun backwards through its own wind-up.
   tryMelee() {
     if (this.meleeCd > 0) return false;
     this.meleeCd = 0.6;
     this.meleeActive = 0.15;
-    this.kick = 0.12;
+    this.meleeAnim = MELEE_ANIM;
     return true;
   }
 

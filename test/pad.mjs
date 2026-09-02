@@ -119,7 +119,7 @@ try {
 
     // ---- 1. detection and the hand-over -----------------------------------
     t('starts on keyboard', g.inputMode === 'kbm', g.inputMode);
-    t('keyboard control sheet', document.querySelectorAll('.controls .ctl').length === 12
+    t('keyboard control sheet', document.querySelectorAll('.controls .ctl').length === 15
       && !document.querySelector('.controls').classList.contains('pad'));
     // The rows appear when a pad is PLUGGED IN. The interface only changes
     // when one is picked up, which is the next test down.
@@ -133,7 +133,7 @@ try {
     t('pad takes over', g.inputMode === 'pad', g.inputMode);
     t('pad-mode class', document.body.classList.contains('pad-mode'));
     t('pad-seen class', document.body.classList.contains('pad-seen'));
-    t('controller sheet swapped', document.querySelectorAll('.controls.pad .ctl').length === 12);
+    t('controller sheet swapped', document.querySelectorAll('.controls.pad .ctl').length === 15);
     t('prompts name buttons', g._useLead().includes('pad-cap'), g._useLead());
     t('cross started the run', g.state === 'playing', g.state);
     // The press is still physically down. It must not also have been read as a

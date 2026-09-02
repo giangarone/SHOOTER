@@ -17,11 +17,11 @@ Open http://localhost:8123
 | --- | --- |
 | WASD | Move. Double-tap W to dash forward, with the Double Dash mutation |
 | Shift | Sprint (hold). Costs stamina; you cannot aim or fire while running |
-| V | Melee |
+| C / Left Ctrl | Crouch (toggle). At a sprint it SLIDES instead |
 | Mouse | Look (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | Right click | Aim down the sights (hold) |
-| V | Melee |
+| V | Melee — one swing of the gun, one enemy, double the reward |
 | R | Reload |
 | Space | Jump. Press again in midair, with the Double Jump mutation |
 | E | Buy ammo / reroll at a station |
@@ -72,6 +72,48 @@ which is the same line the lockout uses. It does not change with what the
 player is doing; the same amount of stamina in two colours is a bar that needs
 a second glance to read, which is the one thing a bar is for. The lockout is an
 animation instead: it beats until the third that unlocks it is back.
+
+### Crouching and sliding
+
+One button, and what it does depends on whether you are already running.
+
+Standing or walking it is a **toggle**: the camera drops to just over a metre,
+you move at half speed, and you stay there until you press it again. It is a
+posture, not a key to be held down through a firefight — and every shot, every
+pickup test and every melee swing is taken from where your head actually is, so
+a crouched player really is shooting from a crouch.
+
+At a sprint it is a **slide**. You go down at about fifteen per cent above
+sprint speed, the camera drops lower than a crouch, and the whole thing runs on
+its own clock for three quarters of a second. Letting go of the button does
+nothing: a slide is a committed move, the way a dash is, and it ends at exactly
+the speed an ordinary walk would have been travelling at — so there is no frame
+where handing control back is felt. It ends **standing**, not crouched. It is
+paid for out of the sprint bar, faster than running is.
+
+**You can jump at any point in a slide, and the jump keeps the slide's speed.**
+That is the reason the two moves are worth having together: the slide is the
+fast, low thing and the jump is how you spend it. The momentum is held as a
+velocity with a weight over your own movement — the same arrangement the dash
+uses — so it is kept whole while you are airborne, steers a little in the air,
+and blends back into ordinary walking once you land.
+
+### Melee
+
+A swing of the gun itself: wound back, driven across and forward through the
+target, then walked home. **One enemy per swing**, the nearest thing inside a
+forty-degree cone in front of you, and the damage lands on the frame the weapon
+is seen to arrive rather than on the frame the button went down.
+
+**A melee kill pays double** — twice the score and twice the credits, on top of
+whatever the combo chain is already worth. It is the shortest range in the game,
+it has a cooldown, it hits one body, and you have to walk into something to use
+it; the double is what pays for all four.
+
+It used to sweep a sixty-degree arc, hit everything inside it, and draw a ring
+on the floor to say where that arc had been. Both are gone. The ring was a
+diagram of a hitbox rather than a picture of a swing, and a melee that cleared a
+crowd made the gun the wrong answer to being surrounded.
 
 ### Aiming
 
@@ -134,13 +176,19 @@ screen is one the player is actually holding.
 | R2 | Shoot |
 | L2 | Aim down the sights (hold) |
 | L1 | Dash, with the Double Dash mutation |
-| R3 | Melee |
+| R3 | Melee — one swing of the gun, one enemy, double the reward |
 | Cross | Jump. Press again in midair, with the Double Jump mutation |
 | Square | Reload |
-| Circle | Take a mutation, buy, reroll — and BACK on any menu |
+| Circle | Crouch (toggle). At a sprint it SLIDES instead |
+| R1 | Take a mutation, buy, reroll |
 | Triangle | Hold for the run summary |
 | Options | Pause, resume, and start a run from the menu |
 | D-pad | Walk the menus; Cross confirms |
+
+Circle is still BACK on every menu. It only means crouch inside a live arena,
+where there is nothing to go back from — and USE moved to R1 rather than being
+made contextual, because a crouch that silently failed to happen while standing
+near a totem would be worse than a button one row further out.
 
 On menus, up and down move the selection and Cross confirms. **Inside a
 settings row, left and right change the value** rather than moving the
@@ -504,6 +552,7 @@ npm run test:money
 npm run test:pad
 npm run test:aim
 npm run test:sprint
+npm run test:crouch
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -540,6 +589,14 @@ the sprint's accuracy penalty outlives the run and then settles. `test:pad`
 covers the L3 latch and the settings rows: that one click starts a run and a
 standstill ends it, that it does not resume on its own, and that left and right
 on a sensitivity row move the value while the selection stays on the row.
+`test:crouch` covers the third movement gear and the swing: that the button
+latches a crouch and a second press releases it, that the same button at a
+sprint slides instead and that letting go does NOT end the slide, that a slide
+is faster than the run it came out of and ends standing rather than crouched,
+that a jump out of one keeps its speed to the frame — and, for the melee, that
+the swing lands on a delay rather than on the button, hits exactly one of three
+bodies standing in front of the player, draws no ring on the floor, and scores
+double what the same body is worth shot.
 
 ## Structure
 

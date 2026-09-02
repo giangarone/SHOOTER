@@ -202,8 +202,21 @@ const SPRINT_SPREAD = 0.085;
 const CROSS_MIN_GAP = 4;
 
 const MELEE_RANGE = 3.6;
-const MELEE_ARC = Math.PI / 3;
+// NARROWER THAN THE OLD SWEEP, because the swing hits exactly one thing now
+// and a wide cone that picks one target out of a crowd is a cone that picks
+// the wrong one. Forty degrees is about what the weapon covers on screen
+// during the strike, which is the only honest number for it.
+const MELEE_ARC = Math.PI / 4.5;
 const MELEE_DAMAGE = 50;
+// How long after the button the strike actually lands. Matched to the swing
+// animation's second leg (MELEE_WIND * MELEE_ANIM in player.js): the damage is
+// dealt on the frame the gun is seen to arrive, not on the frame the button
+// went down. Anything else reads as enemies dying before they are hit.
+const MELEE_SWING = 0.12;
+// WHAT A KILL WITH THE GUN ITSELF IS WORTH. Melee is the shortest range in the
+// game, it has a cooldown, it hits one body and it has to be walked into - so
+// it pays double, in score and in credits both.
+const MELEE_KILL_MULT = 2;
 
 // innerWidth and innerHeight are both 0 in some real situations - a minimised
 // window, a hidden tab, a canvas laid out at zero height. 0/0 is NaN, and a NaN
@@ -672,7 +685,7 @@ class Game {
     // `moveF`/`moveS` are the ANALOGUE pair, in [-1, 1], and they are null
     // whenever the keyboard is what is driving - see the movement block in
     // player.js, which falls back to the booleans when they are.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, dash: null, moveF: null, moveS: null };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, crouch: false, dash: null, moveF: null, moveS: null };
     // Double Dash: the game time each movement key was last pressed FRESH, so
     // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
     // e.code; a key held down never writes here (see _bind).
@@ -735,6 +748,8 @@ class Game {
     this._shotRay = new THREE.Raycaster();
     this._shotRay.far = 120;
     this._meleeDir = new THREE.Vector3();
+    // Counts down to the frame the swing connects; see MELEE_SWING.
+    this._meleeSwing = 0;
     // Enemies already touched by the shot in flight. A scattergun sends eight
     // pellets through _firePellet, and every mutation effect is per-shot, not
     // per-pellet: without this a point-blank shell would roll Petrify eight
@@ -966,6 +981,11 @@ class Game {
         // gun is raised from - see the mousedown handler. V is the key that
         // button's owners reach for.
         case 'KeyV': this.input.melee = true; break;
+        // CROUCH, and the slide out of a sprint. Held rather than latched
+        // here - player.js reads the EDGE and owns what a press means, so the
+        // keyboard and the pad cannot drift apart on the toggle. Both keys,
+        // because both are the one players reach for.
+        case 'KeyC': case 'ControlLeft': this.input.crouch = true; break;
         // Fullscreen is bound on the window rather than to a button alone so
         // it is reachable mid-run without giving up pointer lock to click.
         case 'KeyF': this._toggleFullscreen(); break;
@@ -990,6 +1010,7 @@ class Game {
         case 'Space': this.input.jump = false; break;
         case 'ShiftLeft': case 'ShiftRight': this.input.sprint = false; break;
         case 'KeyV': this.input.melee = false; break;
+        case 'KeyC': case 'ControlLeft': this.input.crouch = false; break;
         case 'Tab': this._closeStats(); e.preventDefault(); break;
       }
     });
@@ -1316,7 +1337,7 @@ class Game {
     const i = this.input;
     i.forward = i.back = i.left = i.right = false;
     i.jump = i.shoot = i.melee = false;
-    i.aim = i.sprint = false;
+    i.aim = i.sprint = i.crouch = false;
     // The pad's sprint latch is input state like any other, and a cleared
     // input that left it set would have the player running again the moment
     // the game came back.
@@ -1618,6 +1639,11 @@ class Game {
     }
     if (this._padSprint) {
       if (this.player.sprinting) this._sprintEngaged = true;
+      // A SLIDE IS NOT THE RUN ENDING. player.sprinting is false for the
+      // length of one - the slide owns the velocity and pays its own stamina -
+      // and without this the latch would read that as "something stopped
+      // them" and drop the player out of the run they slid out of.
+      else if (this.player.sliding) this._sprintEngaged = false;
       else if (this._sprintEngaged) this._padSprint = false;
     }
     i.sprint = this._padSprint;
@@ -1627,7 +1653,16 @@ class Game {
     if (pad.pressed(BTN.R2)) i.shootFresh = true;
 
     if (pad.pressed(BTN.SQUARE)) this.tryReload();
-    if (pad.pressed(BTN.CIRCLE)) this.tryUse();
+    // CIRCLE IS CROUCH, and USE moved to R1 to make room for it. Crouching is
+    // something the player does in the middle of a fight and USE is something
+    // they do standing in front of a totem between waves, so the face button
+    // under the thumb goes to the one that is pressed under fire.
+    //
+    // Passed through as a HELD boolean rather than as an edge: player.js turns
+    // it into a toggle or a slide depending on what the player is doing, and
+    // that decision has to live in one place for both input devices.
+    i.crouch = pad.down(BTN.CIRCLE);
+    if (pad.pressed(BTN.R1)) this.tryUse();
     // DASH on a button rather than on a double-tap of the stick. Same dash the
     // keyboard gets - forward, along the camera's bearing - so a mutation that
     // was balanced around one is not quietly better on the other.
@@ -3336,21 +3371,38 @@ class Game {
     targets.length = 0;
   }
 
-  // A melee swing. This is a radial arc test rather than a raycast: everything
-  // within MELEE_RANGE and inside MELEE_ARC of where the player is looking is
-  // hit, so a swing at a crowd connects with the crowd and not only with
-  // whatever the crosshair was on. Like the old raycast it ignores geometry,
-  // so it still reaches through thin cover. Cooldown lives in
-  // player.tryMelee(); the ring the player sees is drawn at the real range, so
-  // the indicator and the hit test can never disagree.
+  // Arms a swing. THE HIT IS NOT DEALT HERE: player.tryMelee() starts the
+  // animation and this only notes when the strike lands, so the two are one
+  // event. See _meleeStrike for the hit itself, and MELEE_SWING for the delay.
   tryMelee() {
     if (!this.player.tryMelee()) return;
     this.sfx.melee();
+    this._meleeSwing = MELEE_SWING;
+  }
 
+  /**
+   * THE SWING CONNECTING. One target, chosen the way a person swinging a rifle
+   * would: the nearest thing in front of them.
+   *
+   * IT USED TO HIT EVERYTHING in a sixty-degree arc and draw a ring on the
+   * floor to say where that arc was. Both are gone. The ring was a diagram of
+   * a hitbox - it told the player about the game's geometry rather than about
+   * the swing - and a melee that cleared a crowd made the gun the wrong answer
+   * to being surrounded. What is left is a single, committed strike, and what
+   * pays for it is the double it is worth (see MELEE_KILL_MULT).
+   *
+   * Like the old sweep it ignores geometry, so it still reaches through thin
+   * cover.
+   */
+  _meleeStrike() {
+    if (this.state !== 'playing') return;
     const forward = this.player.forwardInto(this._meleeDir);
     const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE);
     const cosArc = Math.cos(MELEE_ARC);
-    let hit = false;
+    let target = null;
+    let bestD = Infinity;
+    let bestDX = 0;
+    let bestDZ = 0;
 
     for (const e of this.enemies) {
       if (e.dead) continue;
@@ -3364,34 +3416,45 @@ class Game {
       // Anything the player is standing inside has no meaningful direction, so
       // it is always in the arc.
       if (d > 0.001 && (dx * forward.x + dz * forward.z) / d < cosArc) continue;
-      // A swing travels from the player toward the enemy, which is what tells
-      // a shield or a weak point whether it was struck.
-      e.takeDamage(dealt, false, dx / (d || 1), dz / (d || 1));
-      if (!e.immovable) {
-        e.pos.add(
-          this._knockback.subVectors(e.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
-        );
-      }
-      this.effects.burst(
-        this._killPos.set(e.pos.x, e.pos.y + 1.1, e.pos.z), 0xffd600, 12, 4, 1.5, 0.4
-      );
-      hit = true;
+      // NEAREST WINS, measured surface-first for the same reason the reach is:
+      // a boss whose centre is further away is still the thing the gun would
+      // actually strike.
+      const surface = d - e.radius;
+      if (surface >= bestD) continue;
+      bestD = surface;
+      bestDX = dx;
+      bestDZ = dz;
+      target = e;
     }
 
-    // The shockwave shows the area that was just swept whether or not it
-    // caught anything - a miss that reads as "nothing there" is what makes the
-    // range learnable.
-    this.effects.shockwave(this.player.pos, 0xff3b30, MELEE_RANGE);
-    if (hit) {
-      this.ui.hitMarker();
-      this.effects.addShake(0.08);
-      this.pad.rumble(0.7, 0.4, 130, 2);
-    } else {
-      this.effects.addShake(0.03);
+    if (!target) {
       // A swing that caught nothing still moved the arm. Much lighter, so the
       // difference between a hit and a miss is felt without being read.
+      this.effects.addShake(0.03);
       this.pad.rumble(0.2, 0.15, 70, 1);
+      return;
     }
+
+    const d = Math.hypot(bestDX, bestDZ) || 1;
+    // A swing travels from the player toward the enemy, which is what tells
+    // a shield or a weak point whether it was struck.
+    target.takeDamage(dealt, false, bestDX / d, bestDZ / d);
+    // TAGGED, NOT PAID. The reward is worked out in one place - the death
+    // sweep in _updateEnemies - and this only records how the body died, so
+    // the combo multiplier and the double still compose there.
+    if (target.dead) target.meleeKill = true;
+    if (!target.immovable) {
+      target.pos.add(
+        this._knockback.subVectors(target.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
+      );
+    }
+    this.effects.burst(
+      this._killPos.set(target.pos.x, target.pos.y + 1.1, target.pos.z),
+      0xffd600, 14, 4, 1.5, 0.4
+    );
+    this.ui.hitMarker();
+    this.effects.addShake(0.08);
+    this.pad.rumble(0.7, 0.4, 130, 2);
   }
 
   // Single entry point for all damage to the player, passed to enemies and
@@ -3644,7 +3707,7 @@ class Game {
     if (aimAt) {
       const dx = aimAt.pos.x - this.player.pos.x;
       // Totems are aimed at icon height, enemies at the chest.
-      const dy = (seekTotem ? 1.5 : 1.0) - (this.player.pos.y + 1.7);
+      const dy = (seekTotem ? 1.5 : 1.0) - (this.player.pos.y + this.player.eyeH);
       const dz = aimAt.pos.z - this.player.pos.z;
       const ty = Math.atan2(-dx, -dz);
       const tp = Math.atan2(dy, Math.hypot(dx, dz));
@@ -4613,7 +4676,12 @@ class Game {
       // because they are three bodies you have to stop and deal with.
       this._bumpCombo();
       const mult = this.comboMult();
-      this.score += Math.round(e.score * mult);
+      // KILLED WITH THE GUN ITSELF, tagged by _meleeStrike. It rides on top of
+      // the combo rather than replacing it: a melee kill inside a chain is
+      // worth the chain AND the double, which is the whole reason to walk into
+      // something rather than shoot it.
+      const meleeMult = e.meleeKill ? MELEE_KILL_MULT : 1;
+      this.score += Math.round(e.score * mult * meleeMult);
       // MONEY IS NOT AWARDED HERE ANY MORE. The kill drops orbs where it died
       // and the balance moves when the player picks them up - see
       // _collectOrb. The combo multiplier is still applied at the moment of
@@ -4622,7 +4690,7 @@ class Game {
       // A flat bounty wins over the score-derived figure where one is set -
       // see Enemy.bounty. The combo multiplier rides on both.
       const bounty = e.bounty !== null ? e.bounty : e.score * CREDITS_PER_SCORE;
-      this._dropMoney(e.pos, bounty * mult);
+      this._dropMoney(e.pos, bounty * mult * meleeMult);
       this.player.onKill(this.time);
       if (this.player.mods.ammoOnKill > 0) {
         this.player.reserveAmmo = Math.min(
@@ -5397,6 +5465,15 @@ class Game {
         this.sfx.melee();
         this.pad.rumble(0.3, 0.2, 80, 1);
       }
+      // A slide opening. Dust at the player's feet and a short shove of the
+      // pad - the one movement in the game that puts them on the floor should
+      // be felt through it.
+      if (this.player.slideFx) {
+        this.player.slideFx = false;
+        this.effects.burst(this.player.pos, 0xbfd4e6, 12, 3, 1.2, 0.45);
+        this.sfx.melee();
+        this.pad.rumble(0.45, 0.25, 200, 1);
+      }
       if (this.player.dashFx) {
         this.player.dashFx = false;
         this.effects.shockwave(this.player.pos, 0x1de9b6, 2.2, 0.22);
@@ -5422,6 +5499,13 @@ class Game {
       // fire cooldown is dropped, not queued.
       this.input.shootFresh = false;
       if (this.input.melee) this.tryMelee();
+      // The swing in flight. Ticked AFTER the button so a press made this
+      // frame lands on a later one - the strike is never simultaneous with the
+      // input that asked for it.
+      if (this._meleeSwing > 0) {
+        this._meleeSwing -= dt;
+        if (this._meleeSwing <= 0) this._meleeStrike();
+      }
       // Money before the pickups: both read the player position this frame,
       // and the orbs are what the magnet radius is really about.
       this._updateMoney(dt);
