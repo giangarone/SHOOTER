@@ -292,10 +292,12 @@ const ADS_FOV_SCALE = 0.733;
 // moves fast - it is that the speed COSTS something, so crossing an arena to
 // break contact is a decision with a price rather than a held key.
 //
-// SPRINT AND THE GUN ARE EXCLUSIVE. Sprinting drops the weapon out of the
-// sights, and firing drops the player out of the sprint. That is the whole
-// design: the run is time spent not shooting, which is what makes it a
-// retreat rather than a strictly better way to walk.
+// SPRINT AND THE GUN ARE EXCLUSIVE, and the GUN is the half that wins: asking
+// for the sights ends the run on the same frame, and firing drops the player
+// out of it for a moment afterwards. That is the whole design - the run is
+// time spent not shooting, which is what makes it a retreat rather than a
+// strictly better way to walk - and it costs the player nothing to leave.
+// See _updateSprint for why aim takes priority rather than being refused.
 const SPRINT_SPEED_MULT = 1.5;
 export const MAX_SPEED = BASE_SPEED * SPRINT_SPEED_MULT;
 const STAMINA_MAX = 100;
@@ -330,6 +332,62 @@ const SPRINT_FOV_TIME = 0.2;
 const ADS_GUN_X = 0;
 const ADS_GUN_Y = -0.215;
 const ADS_GUN_Z = -0.55;
+
+// ---- the gun in motion -----------------------------------------------------
+//
+// TWO ANIMATIONS, ONE LAYER. Walking bobs the weapon; sprinting swings it down
+// across the body and bobs it harder and longer. Both are written as OFFSETS
+// on top of whatever pose the aim blend and the reload animation have already
+// produced, which is the only arrangement that composes: a reload played while
+// walking is the reload plus the walk, and a gun raised mid-stride settles as
+// it comes up rather than snapping to centre.
+//
+// THE PHASE IS DRIVEN BY DISTANCE, NOT BY TIME. `_bobPhase` advances by metres
+// travelled, so the stride matches the speed the player is actually moving at
+// - through a dash, a slow, a Rage boost or a sprint - instead of running at a
+// fixed frequency the legs then disagree with. One STRIDE is one full cycle of
+// the horizontal sway and TWO of the vertical dip, which is what makes it read
+// as left-right-left rather than as a bounce: a body rises once per FOOT and
+// swings once per PAIR of them.
+//
+// A LONG STRIDE, AND THAT IS THE TUNING KNOB FOR SPEED. The player moves at
+// ten metres a second, which is not a human pace, so a stride measured off a
+// human one gave a gun cycling nearly five times a second - a vibration, not a
+// walk. Seven and a half metres puts a walk at about 1.3 cycles a second and a
+// run at 2, which is a stride the eye can follow. If the animation ever wants
+// to be faster or slower, this is the one number to move: it is the only thing
+// setting the rate, and the amplitudes below do not depend on it.
+const BOB_STRIDE = 7.5;
+// Amplitudes at a full walk, in camera-space metres and radians. Big enough to
+// be an animation rather than a shimmer - the weapon travels about five
+// centimetres either side of centre and rolls four degrees into the swing,
+// which is what makes the gun read as being CARRIED by someone who is walking.
+const BOB_X = 0.05;
+const BOB_Y = 0.042;
+const BOB_ROLL = 0.07;
+const BOB_PITCH = 0.04;
+// What the run multiplies all four by. The sprint is a longer, heavier stride
+// - the bob is most of what says so, since the speed itself is only half again
+// as fast and that is hard to see in an arena this size.
+const SPRINT_BOB_MUL = 2;
+// How fast the bob's amplitude follows the player's speed, and how long the
+// run pose takes to blend in and out. Both are eases rather than switches: the
+// gun has to be seen travelling into the sprint carry and back out of it, and
+// that travel is as much the animation as the pose at either end.
+const BOB_EASE = 5;
+const SPRINT_POSE_TIME = 0.28;
+// THE SPRINT CARRY, as an offset from the hip pose. The weapon comes in toward
+// the chest, drops, and swings across the body with the muzzle turned down and
+// away - the pose that says "not ready to fire", which is exactly the state
+// the sprint puts the player in. `ry` is positive, which turns the muzzle to
+// the LEFT across the torso (camera space looks down -z), and the roll turns
+// the receiver's deck outward so the model is not a flat slab edge-on.
+const SPRINT_GUN_X = 0.055;
+const SPRINT_GUN_Y = -0.075;
+const SPRINT_GUN_Z = 0.09;
+const SPRINT_GUN_RX = 0.2;
+const SPRINT_GUN_RY = 0.6;
+const SPRINT_GUN_RZ = -0.45;
 
 export class Player {
   constructor(camera, scene) {
@@ -408,6 +466,20 @@ export class Player {
     // 1 while running and bleeding to 0 over SPRINT_SPREAD_FADE afterwards.
     // main.js multiplies the sprint's cone penalty by it.
     this.sprintFade = 0;
+    // The walk/sprint bob. `_bobPhase` is in radians and advances with metres
+    // travelled; `_bobAmp` is the eased 0..1 weight the whole animation is
+    // scaled by; `_sprintPose` is the eased 0..1 blend into the run carry.
+    this._bobPhase = 0;
+    this._bobAmp = 0;
+    this._sprintPose = 0;
+    // What _updateGunMotion() hands the pose block: three positions and three
+    // rotations, all offsets from the rest pose.
+    this._gunOffX = 0;
+    this._gunOffY = 0;
+    this._gunOffZ = 0;
+    this._gunOffRX = 0;
+    this._gunOffRY = 0;
+    this._gunOffRZ = 0;
     // The two ends of the zoom. Taken from the camera rather than written as a
     // constant here, so the game keeps ownership of its own field of view and
     // this owns only the fraction it is cut by.
@@ -914,6 +986,9 @@ export class Player {
     this.noSprintUntil = -99;
     this._sprintFov = 0;
     this.sprintFade = 0;
+    this._bobPhase = 0;
+    this._bobAmp = 0;
+    this._sprintPose = 0;
     this.camera.fov = this.fovHip;
     this.camera.updateProjectionMatrix();
     this.health = this.maxHealth;
@@ -1193,24 +1268,110 @@ export class Player {
     // as much as one fired at either end.
     this._updateAim(dt, input);
     const a = this.aimT;
-    const restX = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a;
-    const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a;
-    this.gun.position.z = this.gunBaseZ + (ADS_GUN_Z - this.gunBaseZ) * a + this.kick;
+    // The walk and the run, as offsets on the rest pose. Computed BEFORE the
+    // reload animation and folded into the positions it is handed, so the two
+    // are one movement rather than two things fighting over the same model.
+    this._updateGunMotion(dt);
+    const restX = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a + this._gunOffX;
+    const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a + this._gunOffY;
+    this.gun.position.z =
+      this.gunBaseZ + (ADS_GUN_Z - this.gunBaseZ) * a + this.kick + this._gunOffZ;
     this._animateReload(restX, restY);
+    // Rotations go on AFTER, and as an add: _animateReload writes x and z
+    // absolutely (it has to - it clears them on the idle frame), so the bob
+    // has to be laid over the result. y is untouched by the reload and is the
+    // one axis written outright here.
+    this.gun.rotation.x += this._gunOffRX;
+    this.gun.rotation.z += this._gunOffRZ;
+    this.gun.rotation.y = this._gunOffRY;
     this.applyCamera();
     return reloadFinished;
   }
 
   /**
+   * THE WALK BOB AND THE SPRINT CARRY. Writes six offsets - three positions,
+   * three rotations - and nothing else; the caller decides where they land.
+   *
+   * WHY IT IS SPEED-DRIVEN AND NOT INPUT-DRIVEN: the amplitude comes off the
+   * velocity the player actually has, so it covers every way the game moves
+   * them. A dash, a slow, Rage's boost and a knockback all bob the gun; being
+   * held still by a hex does not, however hard the keys are being held. There
+   * is exactly one rule - the gun moves when the player moves - and no list of
+   * states to keep in step with the movement code.
+   *
+   * IN THE AIR IT STOPS. Feet off the ground is the one case where speed is
+   * not a stride, and a weapon that kept walking through a jump is the tell
+   * that the whole thing was a sine wave all along.
+   */
+  _updateGunMotion(dt) {
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    // 0..1 against the ordinary top walking speed, so a sprint sits above 1 -
+    // deliberately, since a run should bob harder than a walk before the
+    // multiplier below is even applied.
+    const want = this.onGround ? Math.min(1.35, speed / BASE_SPEED) : 0;
+    const k = Math.min(1, dt * BOB_EASE);
+    this._bobAmp += (want - this._bobAmp) * k;
+    // The sprint carry rides its own blend rather than `sprinting` directly,
+    // so the gun is seen swinging down into it and back up out of it.
+    const poseK = Math.min(1, dt / SPRINT_POSE_TIME);
+    this._sprintPose += ((this.sprinting ? 1 : 0) - this._sprintPose) * poseK;
+    const pose = this._sprintPose * this._sprintPose * (3 - 2 * this._sprintPose);
+
+    // Metres travelled, turned into stride phase. Only accumulated while the
+    // player is on the ground and actually moving, so a jump does not silently
+    // advance the cycle and the gun picks the stride back up where it left it.
+    if (this.onGround) this._bobPhase += (speed / BOB_STRIDE) * Math.PI * 2 * dt;
+    if (this._bobPhase > Math.PI * 2) this._bobPhase -= Math.PI * 2;
+    const ph = this._bobPhase;
+
+    // THE SIGHTS STOP IT DEAD, and the same number that raises the gun is what
+    // takes the bob away - so the animation fades out over the raise rather
+    // than being switched off at one end of it. Aiming is the one thing in the
+    // game that asks for a still picture: the crosshair is a promise about
+    // where the round goes, and a viewmodel swinging under it is exactly the
+    // motion the player pressed the button to get rid of.
+    const amp = this._bobAmp
+      * (1 - this.aimT)
+      * (1 + (SPRINT_BOB_MUL - 1) * pose);
+    const sw = Math.sin(ph);
+    // Twice the rate, because a body rises once per foot and sways once per
+    // pair - and lifted so the dip only ever goes DOWN from the rest pose
+    // rather than floating the gun above it.
+    const dip = (Math.cos(ph * 2) - 1) * 0.5;
+
+    this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * pose;
+    this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * pose;
+    this._gunOffZ = SPRINT_GUN_Z * pose;
+    this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * pose;
+    this._gunOffRY = SPRINT_GUN_RY * pose;
+    // Rolls INTO the sway - the weapon leans the way it is travelling, which
+    // is what turns two straight-line offsets into an arc.
+    this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * pose;
+  }
+
+  /**
    * Sprinting, and the bar that pays for it.
    *
-   * FOUR THINGS REFUSE THE BUTTON, and they are all conditions on the player
+   * FIVE THINGS REFUSE THE BUTTON, and they are all conditions on the player
    * rather than on the key: an empty or locked bar, a trigger that is down or
-   * was down a moment ago, no movement input at all, and being frozen in
-   * place. Sprinting is therefore never something the player has to stop
-   * doing - it stops itself the instant any of those becomes true, which is
-   * what lets the button be held down through a whole fight without ever
-   * being wrong.
+   * was down a moment ago, THE SIGHTS BEING ASKED FOR, no movement input at
+   * all, and being frozen in place. Sprinting is therefore never something the
+   * player has to stop doing - it stops itself the instant any of those
+   * becomes true, which is what lets the button be held down through a whole
+   * fight without ever being wrong.
+   *
+   * AIM BEATS SPRINT. It used to be the other way round: a player holding both
+   * ran, and the gun stayed down. The reason that was wrong is what the two
+   * buttons MEAN - sprint is a key held for seconds at a time while crossing a
+   * room, aim is pressed at the moment something needs shooting. Making the
+   * held key win meant the deliberate press did nothing, and the player had to
+   * let go of a key they were not thinking about before the game would answer
+   * the one they were. So the run yields, on the frame the button goes down.
+   *
+   * There is deliberately NO lockout on this one, unlike the trigger's: let go
+   * of aim and, if the sprint key is still held, the run resumes immediately.
+   * Sighting something and deciding against it should cost the player the time
+   * they spent looking at it and nothing more.
    *
    * `f` and `s` are the movement axes already resolved by update(), so a
    * sprint follows the stick or the keys in whatever direction they point.
@@ -1225,6 +1386,7 @@ export class Player {
       && !this.staminaLocked
       && this.stamina > 0
       && !input.shoot
+      && !input.aim
       && this.now >= this.noSprintUntil;
 
     // The accuracy penalty's tail. Pinned at 1 while running and bled off
@@ -1285,9 +1447,12 @@ export class Player {
    * re-pressed.
    */
   _updateAim(dt, input) {
-    // SPRINTING WINS OVER AIMING when both are asked for. The player who is
-    // holding both has decided to run, and a gun that stayed up through a
-    // sprint would make the exclusion above meaningless.
+    // `!this.sprinting` is belt and braces rather than the rule: _updateSprint
+    // already refuses the run outright while aim is held, and it runs earlier
+    // in the same frame - so a player who presses aim mid-sprint is out of the
+    // sprint and raising the weapon on that frame, with nothing to wait for.
+    // The test survives because the run can still end for its own reasons
+    // (an empty bar) on a frame the button is not down.
     this.aiming = !!input.aim && this.reloading <= 0 && !this.sprinting;
     const dir = this.aiming ? 1 : -1;
     this._aimRaw = Math.max(0, Math.min(1, this._aimRaw + (dir * dt) / ADS_TIME));

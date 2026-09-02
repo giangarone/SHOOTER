@@ -222,7 +222,11 @@ try {
     await frames(30);
     t('then it runs again', p.sprinting === true);
 
-    // ---- 5. the gun goes down ----------------------------------------------
+    // ---- 5. the sights beat the run ----------------------------------------
+    // Aim is a press; sprint is a key held for seconds at a time. The press
+    // wins - see _updateSprint - so a player who sights something mid-run is
+    // out of the run and raising the weapon on the same frame, and gets the
+    // run back the moment they let go.
     rest();
     p.stamina = 100;
     p.staminaLocked = false;
@@ -232,15 +236,68 @@ try {
     set({ sprint: true });
     await frames(20);
     const aimedRunning = p.aimT;
-    const stillAsking = g.input.aim;
-    set({ sprint: false });
+    const ranWhileAiming = p.sprinting;
+    const stillAsking = g.input.sprint;
+    set({ aim: false });
     await frames(20);
-    const aimedAgain = p.aimT;
+    const ranAfterAimOff = p.sprinting;
+    const sightsDown = p.aimT;
     rest();
     t('walking still aims', aimedWalking > 0.99, aimedWalking.toFixed(3));
-    t('sprinting drops the sights', aimedRunning === 0 && stillAsking === true,
-      aimedRunning.toFixed(3));
-    t('and it comes back when the run stops', aimedAgain > 0.99, aimedAgain.toFixed(3));
+    t('aiming refuses the sprint outright',
+      ranWhileAiming === false && stillAsking === true);
+    t('and the sights stay up through it', aimedRunning > 0.99, aimedRunning.toFixed(3));
+    t('letting go of aim hands the run straight back',
+      ranAfterAimOff === true && sightsDown === 0, sightsDown.toFixed(3));
+
+    // ---- 5b. the gun bobs with the player -----------------------------------
+    // The walk animation and the sprint carry are offsets on the rest pose, so
+    // what is asserted is that they MOVE and that they come back to nothing -
+    // a viewmodel that drifts and never returns is the failure mode worth
+    // pinning, not any particular amplitude.
+    rest();
+    p.stamina = 100;
+    p.staminaLocked = false;
+    // The RANGE of the sway over a stretch of running, not its absolute
+    // value: the sprint carry is a large static offset on the same channels,
+    // and peak-to-peak is what cancels it out and leaves the animation.
+    const swing = async (n) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let i = 0; i < n; i++) {
+        await frames(1);
+        lo = Math.min(lo, p._gunOffX);
+        hi = Math.max(hi, p._gunOffX);
+      }
+      return hi - lo;
+    };
+    set({ forward: true, left: true });
+    await frames(30);
+    const walkSwing = await swing(60);
+    set({ sprint: true });
+    await frames(30);
+    const runPose = {
+      y: p._gunOffY, ry: p._gunOffRY, rz: p._gunOffRZ, blend: p._sprintPose,
+    };
+    const runSwing = await swing(60);
+    // Aiming is the one thing that stops it outright - see _updateGunMotion.
+    set({ forward: true, aim: true });
+    await frames(30);
+    const aimedSwing = await swing(60);
+    set({ aim: false });
+    rest();
+    await frames(90);
+    const atRest = Math.abs(p._gunOffX) + Math.abs(p._gunOffY)
+      + Math.abs(p._gunOffRX) + Math.abs(p._gunOffRY) + Math.abs(p._gunOffRZ);
+    t('walking bobs the gun', walkSwing > 0.004, walkSwing.toFixed(4));
+    t('the sprint carries it across the body',
+      runPose.blend > 0.95 && runPose.ry > 0.4 && runPose.y < -0.03,
+      `ry=${runPose.ry.toFixed(2)} y=${runPose.y.toFixed(3)}`);
+    t('and swings it wider than a walk', runSwing > walkSwing * 1.5,
+      `${walkSwing.toFixed(4)} -> ${runSwing.toFixed(4)}`);
+    t('aiming stops the bob dead', aimedSwing < 0.0005, aimedSwing.toFixed(5));
+    t('standing still returns it to the rest pose', atRest < 0.002,
+      atRest.toFixed(5));
 
     return out;
   });
