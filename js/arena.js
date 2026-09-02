@@ -91,27 +91,17 @@ const TILE_TEXEL = 0.25;    // metres per texel
 const TILE_N = TILE_M / TILE_TEXEL;   // 32
 const TILE_PANEL = 8;       // texels per floor panel - 2m, the old grid spacing
 
-// A deterministic hash, so the floor is the same floor every run. Math.random
-// here would give a different room each time the page loaded, which is the
-// kind of thing nobody notices until they are trying to compare screenshots.
-function tileHash(x, y, k) {
-  let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0;
-  h = (h ^ (h >>> 13)) * 1274126177;
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-// NOT NOISE. Noise at a quarter-metre reads as dirt and fights a rig that is
-// supposed to own the eye, and the arena has always been explicit that the
-// floor is a dancefloor rather than a diagram. Three things only:
+// THE GRID, AND NOTHING ELSE. One texel of recess every eight, which is the 2m
+// rhythm the GridHelper used to draw as thin anti-aliased lines floating above
+// the floor. Folded into the surface, it is the same rhythm made of actual
+// art-pixels, at the right size at every distance.
 //
-//   the SEAM   one texel of recess every eight, which is the 2m rhythm the
-//              GridHelper used to draw as thin anti-aliased lines floating
-//              above the floor. Folded into the surface, it is the same
-//              rhythm made of actual art-pixels.
-//   the PANEL  each 2m plate a hair lighter or darker than its neighbours, so
-//              the floor is made of pieces rather than being one sheet.
-//   the SPECK  a scattering of single altered texels. These are the part that
-//              actually sells the grid: one pixel, visibly one pixel wide.
+// It carried two more things for a while - a per-plate value variation and a
+// scatter of single altered texels - on the theory that the specks were what
+// told the eye how big a pixel is. What they actually did was give a room that
+// is supposed to be a dancefloor a coat of grime. The arena has always been
+// explicit that the rig is what draws the eye; the floor's job is to be a
+// surface with a grid on it, and a grid is what it is.
 //
 // Greyscale, and multiplied by each material's own colour, so the floor stays
 // the blue-grey it has always been and one texture dresses every surface.
@@ -122,23 +112,12 @@ function makeTileTexture() {
   const img = ctx.createImageData(TILE_N, TILE_N);
   for (let y = 0; y < TILE_N; y++) {
     for (let x = 0; x < TILE_N; x++) {
-      const px = Math.floor(x / TILE_PANEL), py = Math.floor(y / TILE_PANEL);
-      let v = 0.97 + tileHash(px, py, 1) * 0.07;
       // The seam is SOFT, and the reason is arithmetic rather than taste: a
       // texel is a quarter of a metre, so the thinnest line this grid can draw
       // is a 25cm joint. At the value it was first given it read as a trench
       // cut into the floor every two metres. It has to carry the rhythm on
       // tone alone, because it cannot get any narrower.
-      if (x % TILE_PANEL === 0 || y % TILE_PANEL === 0) v *= 0.82;
-      else {
-        // The specks do the work the seams cannot: single altered texels,
-        // unmistakably one texel wide, which is what tells the eye how big a
-        // pixel is on this floor. Sparse enough to read as wear rather than
-        // as noise.
-        const r = tileHash(x, y, 2);
-        if (r < 0.05) v *= 0.84;
-        else if (r < 0.095) v *= 1.13;
-      }
+      const v = (x % TILE_PANEL === 0 || y % TILE_PANEL === 0) ? 0.82 : 1;
       const c = Math.max(0, Math.min(255, Math.round(v * 255)));
       const o = (y * TILE_N + x) * 4;
       img.data[o] = img.data[o + 1] = img.data[o + 2] = c;

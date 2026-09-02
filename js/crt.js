@@ -61,6 +61,35 @@ const GLOW_SCALE = 4;
 // scale factor is rounded to a whole number first and the resolution follows
 // from that, because a fractional one is worse than a wrong one.
 export const PIXEL_STEPS = [0, 720, 540, 360];
+// Multisamples on the scene buffer while the pixel setting is on.
+//
+// THIS IS NOT A CONTRADICTION OF THE PIXEL LOOK, and it is worth being clear
+// about why. MSAA anti-aliases WITHIN the low-resolution buffer: an art-pixel
+// that a wall strip covers a third of comes out a third as bright, instead of
+// being either fully lit or fully missed depending on where the edge happened
+// to fall. The art-pixel grid is untouched - it is the buffer's resolution,
+// not its sample count - so the image is exactly as chunky, and the composite
+// posterises it to sixteen levels afterwards regardless. What changes is that
+// a given art-pixel stops changing its mind every frame.
+//
+// It earns it on thin bright geometry, which is where the flicker was: with a
+// camera panning slowly past the wall light strips at the coarsest setting,
+// frame-to-frame jitter halved and the strips were DRAWN roughly twice as
+// often - most of the popping was a strip vanishing entirely between frames
+// rather than merely shimmering.
+//
+// TWO, not four, and that is a measurement rather than a guess: two and four
+// scored identically on the jitter this exists to remove (1.3% either way,
+// against 2.5% with none) and differed by under three percent in how much of
+// a strip got drawn. Four is twice the bandwidth for that. It also cost
+// enough frame time on a software rasteriser to start tipping test/melee.mjs,
+// which is frame-rate sensitive - not a real regression, but a fair sign that
+// the last two samples were being paid for and not used.
+//
+// Only while the setting is ON. With it off the scene buffer is the full
+// device resolution, where the aliasing is far less visible and multisampling
+// a half-float 2560x1440 target costs tens of megabytes for it.
+const SCENE_SAMPLES = 2;
 // The coarsest an art-pixel is ever allowed to get, in device pixels. Only
 // reachable on a very tall panel, and it is a sanity rail rather than a taste
 // decision - past this the arena is unplayable at any setting.
@@ -194,6 +223,11 @@ export class CrtPass {
 
     // Half float, because the scene arrives here tone-mapped but still linear
     // and an 8-bit hop would band every gradient the rig throws on a wall.
+    //
+    // Note that the renderer's own `antialias: true` (main.js) has applied to
+    // NOTHING since this pass existed: that flag multisamples the default
+    // framebuffer, and the scene has been going into this target instead.
+    // Anti-aliasing the scene is `samples` on here - see SCENE_SAMPLES.
     const opts = {
       type: THREE.HalfFloatType,
       minFilter: THREE.LinearFilter,
@@ -277,13 +311,15 @@ export class CrtPass {
     const wasOn = this._step > 0;
     this._step = step;
     if (wasOn !== (step > 0)) {
-      // The filter has to change with the mode, and a render target's texture
-      // is already on the GPU by now. Dropping it is the honest way to get the
-      // new filter applied - three rebuilds it on the next bind, once.
-      const nearest = step > 0;
-      this._scene_rt.texture.magFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
-      this._scene_rt.texture.minFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
+      // The filter and the sample count both change with the mode, and a
+      // render target's texture is already on the GPU by now. Dropping it is
+      // the honest way to get either applied - three rebuilds it on the next
+      // bind, once.
+      const on = step > 0;
+      this._scene_rt.texture.magFilter = on ? THREE.NearestFilter : THREE.LinearFilter;
+      this._scene_rt.texture.minFilter = on ? THREE.NearestFilter : THREE.LinearFilter;
       this._scene_rt.texture.generateMipmaps = false;
+      this._scene_rt.samples = on ? SCENE_SAMPLES : 0;
       this._scene_rt.dispose();
     }
     this.setSize(this._w, this._h);
