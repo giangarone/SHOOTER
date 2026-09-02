@@ -456,6 +456,31 @@ export const ENEMY_TYPES = {
   // Its charge is telegraphed a full second ahead and, if the player puts a
   // pillar or a wall behind themselves, it knocks itself down and hands over a
   // free window.
+  // COLOSSUS'S TURRETS. Not a wave spawn - nothing rolls one, and pickAddType
+  // will never return it. The boss throws them (see aiColossus), they arc in,
+  // they bolt themselves to the floor where they land and then they shoot.
+  //
+  // WHAT IT IS FOR. Colossus is a fight about one lane and one rhythm: dodge
+  // the charge, shoot the vent while it is open. Both of those are answered by
+  // standing still in a good spot, and a good spot stayed good for the whole
+  // fight. A turret takes a piece of the floor away for as long as the player
+  // lets it stand, so the question stops being "where is the safe place" and
+  // becomes "which of these do I spend the vent window on".
+  //
+  // It is DELIBERATELY soft. It is a thing to be shot down, not a second boss:
+  // a few rounds kill one, and killing it is meant to feel like the obvious
+  // right answer that costs the player the damage they would rather have put
+  // into the vent.
+  turret: {
+    hp: 130, speed: 0, damage: 0, score: 120, color: 0x6d4c2f, eye: 0xff5a00,
+    scale: 1.15, radius: 0.5, mass: 6,
+    hitbox: { r: 0.55, y: 0.6 },
+    // It is a machine bolted to the floor: nothing lands on it, nothing scares
+    // it, and freezing or slowing something that never moves means nothing.
+    statusMul: 0.5, fearMode: 'stagger', entropyExempt: true,
+    build: buildTurret, ai: aiTurret, cleanup: releaseTurret,
+  },
+
   colossus: {
     hp: 3600, speed: 2.0, damage: 34, score: 4000, color: 0x8c5a2b, eye: 0xffb300,
     scale: 3.2, radius: 2.0, mass: 8, boss: true,
@@ -1855,6 +1880,27 @@ function buildShade(e, g, s) {
   eyes(P, { y: 1.04, x: 0.08, z: -0.36, r: 1.1, mat: e.eyeMat });
 }
 
+// A squat bolted-down box with one barrel. It must not read as anything else
+// in the roster: nothing else in the game is a machine sitting on the floor,
+// and the silhouette is low and wide on purpose so a live one is obvious from
+// across the arena and a dead one leaves nothing to trip over.
+function buildTurret(e, g, s) {
+  const P = partsFor(e, g, s);
+  P('turretBase', prism(0.46, 0.58, 0.22, 6), { y: 0.11 });
+  P('turretBody', prism(0.34, 0.42, 0.42, 6), { y: 0.44 });
+  // The barrel is the tell. It is held on the enemy so aiTurret can pitch it
+  // and kick it back on every shot - a turret that fires without moving reads
+  // as scenery that happens to be shooting.
+  e.barrel = P('turretBarrel', prism(0.09, 0.11, 0.72, 6), { y: 0.62, z: -0.34, rx: Math.PI / 2 });
+  // Where the barrel sits at rest. Kept because partsFor() has already
+  // multiplied the offset by the model scale, and the recoil in aiTurret has
+  // to return it to that number rather than to the one written above.
+  e.barrelRest = e.barrel.position.z;
+  e.barrelKick = 0.2 * s;
+  // One eye, dead centre, so which way it is pointing is never in doubt.
+  P('turretEye', shard(0.11), { y: 0.66, z: -0.2, mat: e.eyeMat, shadow: false });
+}
+
 function buildColossus(e, g, s) {
   const P = partsFor(e, g, s);
   P('colossusTorso', prism(0.6, 0.4, 0.86, 6), { y: 0.88 });
@@ -2116,16 +2162,112 @@ function aiBomber(e, a) {
 // Blink flanker. It closes the way anything else does, but every few seconds
 // it jumps to the space BEHIND the player, which is the whole point of the
 // type - a player watching the crowd in front never sees it arrive.
+// THE BLINK IS AN ANIMATION NOW, not a cut.
+//
+// It used to be one frame: a burst where the wraith was, a burst where it
+// landed, and the model already standing there. Both halves were over inside
+// a sixth of a second and neither of them read - the enemy was simply
+// somewhere else, and a player who lost track of it learned nothing about why.
+// Three things fix that, and all three are needed:
+//
+//   IT LEAVES. A wind-up it can be seen to start (WRAITH_WARP): the body
+//   squashes down into its own footprint, spinning up as it goes, over a ring
+//   on the floor. That is the frame the player has to notice.
+//   IT TRAVELS. A beam is drawn from where it left to where it lands for the
+//   whole arrival, so the two ends are one move rather than two events.
+//   IT ARRIVES. It unfolds back to full size (WRAITH_FORM) instead of popping
+//   in - a body growing out of the floor behind you is visible in peripheral
+//   vision in a way an instant appearance is not.
+//
+// It is HELPLESS for the whole of both: no swing, no contact damage, and the
+// arrival is deliberately the longer half, because that is the moment the
+// player is meant to get a shot off if they read it.
+const WRAITH_WARP = 0.3;
+const WRAITH_FORM = 0.34;
+// How flat it is squashed at the end of the wind-up, and how small it starts
+// on arrival. Not zero: a model scaled to nothing is a model that vanished,
+// which is the thing being fixed.
+const WRAITH_MIN_SCALE = 0.12;
+
+// Squash and spin, shared by both halves. `k` runs 1 (whole) to 0 (gone).
+function _wraithForm(e, k) {
+  const base = e.blinkScale;
+  const w = WRAITH_MIN_SCALE + (1 - WRAITH_MIN_SCALE) * k;
+  // Widening as it flattens: a body collapsing into a disc, rather than one
+  // shrinking evenly, which just reads as walking away from the camera.
+  e.group.scale.set(base * (2 - w) * 0.85, base * w, base * (2 - w) * 0.85);
+  // Tipped over as it collapses, so the squash has a direction to it. It goes
+  // on rotation.x DELIBERATELY: update() overwrites rotation.y with the facing
+  // yaw every frame and writes rotation.z for the dance, and x is the one axis
+  // nothing else in this file touches - see the note on rotation.order.
+  e.group.rotation.x = (1 - k) * 1.3 * e.blinkSpin;
+}
+
+function _wraithEnd(e) {
+  e.blinkState = '';
+  e.blinkT = 0;
+  e.group.scale.setScalar(e.blinkScale);
+  e.group.rotation.x = 0;
+  e._setEyeAlert(false);
+}
+
 function aiWraith(e, a) {
+  const ctx = a.ctx;
+  // The base scale is read the first time it is needed rather than at
+  // construction: a wraith is never resized today, but _splitInto is proof
+  // that group.scale is not always 1 and this must not fight whoever set it.
+  if (e.blinkScale === undefined) e.blinkScale = e.group.scale.x || 1;
+
+  // ---- leaving. Rooted, and not attacking: the melee cycle is skipped
+  // entirely, so a wraith cannot swing out of a blink it has committed to.
+  if (e.blinkState === 'warp') {
+    e.blinkT -= a.dt;
+    e._setEyeAlert(true);
+    _wraithForm(e, Math.max(0, e.blinkT / WRAITH_WARP));
+    if (e.blinkT > 0) return;
+    _blinkAt.set(e.pos.x, 0.9, e.pos.z);
+    ctx.effects.burst(_blinkAt, ENEMY_TYPES.wraith.eye, 18, 6, 2.5, 0.45);
+    _blinkAt.set(e.pos.x, 0.05, e.pos.z);
+    ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.wraith.color, 2.2, 0.35);
+    // Where it left from, kept for the beam that draws the move.
+    e.blinkFromX = e.pos.x;
+    e.blinkFromZ = e.pos.z;
+    e.pos.x = e.blinkToX;
+    e.pos.z = e.blinkToZ;
+    resolveCircle(e.pos, e.radius, ctx.obstacles, e.collideH);
+    e.blinkState = 'form';
+    e.blinkT = WRAITH_FORM;
+    _blinkAt.set(e.pos.x, 0.9, e.pos.z);
+    ctx.effects.burst(_blinkAt, ENEMY_TYPES.wraith.eye, 22, 6, 2.5, 0.5);
+    _blinkAt.set(e.pos.x, 0.05, e.pos.z);
+    ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.wraith.color, 2.6, 0.4);
+    return;
+  }
+
+  // ---- arriving. Unfolds, still helpless, with the line of the move drawn
+  // behind it - redrawn every frame, because beams last exactly one.
+  if (e.blinkState === 'form') {
+    e.blinkT -= a.dt;
+    const k = 1 - Math.max(0, e.blinkT / WRAITH_FORM);
+    _wraithForm(e, k);
+    _blinkFrom.set(e.blinkFromX, 0, e.blinkFromZ);
+    _blinkAt.set(e.pos.x, 0, e.pos.z);
+    ctx.effects.beam(_blinkFrom, _blinkAt, ENEMY_TYPES.wraith.eye);
+    if (e.blinkT <= 0) _wraithEnd(e);
+    return;
+  }
+
   aiMelee(e, a);
   e.blinkCd -= a.dt;
   // Only from the middle distance. Blinking while already in melee would just
   // teleport it out of its own swing, and from across the arena it reads as
   // the enemy cheating rather than flanking.
   if (e.blinkCd > 0 || a.dist < 6 || a.dist > 20) return;
+  // Nor out of a swing it has already started - the same rule the bosses hold.
+  if (e.windup > 0 || e.swing > 0) return;
   e.blinkCd = 2.6 + Math.random() * 1.4;
 
-  const p = a.ctx.player;
+  const p = ctx.player;
   const f = p.forwardInto(_blinkFwd);
   // Behind the player first; if that lands in a wall or a crate, in front of
   // them instead, which still puts it somewhere they were not looking at.
@@ -2133,26 +2275,26 @@ function aiWraith(e, a) {
   let tz = p.pos.z - f.z * 2.5;
   _blinkAt.set(tx, 0.5, tz);
   const B = 21.6 - (e.radius - 0.5);
-  if (Math.abs(tx) > B || Math.abs(tz) > B || pointInObstacle(_blinkAt, a.ctx.obstacles)) {
+  if (Math.abs(tx) > B || Math.abs(tz) > B || pointInObstacle(_blinkAt, ctx.obstacles)) {
     tx = p.pos.x + f.x * 3;
     tz = p.pos.z + f.z * 3;
     _blinkAt.set(tx, 0.5, tz);
-    if (Math.abs(tx) > B || Math.abs(tz) > B || pointInObstacle(_blinkAt, a.ctx.obstacles)) return;
+    if (Math.abs(tx) > B || Math.abs(tz) > B || pointInObstacle(_blinkAt, ctx.obstacles)) return;
   }
 
-  // Both ends burst, so the move is legible as one thing that went from here
-  // to there rather than as two unrelated enemies.
-  if (a.ctx.effects) {
-    _blinkAt.set(e.pos.x, 0.9, e.pos.z);
-    a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.wraith.color, 12, 5, 2, 0.4);
-  }
-  e.pos.x = tx;
-  e.pos.z = tz;
-  resolveCircle(e.pos, e.radius, a.ctx.obstacles, e.collideH);
-  if (a.ctx.effects) {
-    _blinkAt.set(e.pos.x, 0.9, e.pos.z);
-    a.ctx.effects.burst(_blinkAt, ENEMY_TYPES.wraith.color, 14, 5, 2, 0.45);
-  }
+  // The destination is fixed HERE, at the start of the wind-up, and not
+  // recomputed when the warp ends: the player gets the length of the wind-up
+  // to move away from where it is going, which is the counter-play the instant
+  // version never had.
+  e.blinkToX = tx;
+  e.blinkToZ = tz;
+  e.blinkSpin = Math.random() < 0.5 ? -1 : 1;
+  e.blinkState = 'warp';
+  e.blinkT = WRAITH_WARP;
+  e.windup = 0;
+  e.swing = 0;
+  _blinkAt.set(e.pos.x, 0.05, e.pos.z);
+  ctx.effects.shockwave(_blinkAt, ENEMY_TYPES.wraith.eye, 1.8, 0.3);
 }
 
 // No attack of its own - it keeps its distance and makes everything near it
@@ -2464,6 +2606,141 @@ const BOSS_REACH_Y = 3.6;
 function _reachY(a) {
   return Math.abs(a.ctx.player.pos.y);
 }
+// BODY CONTACT, AND EVERY BOSS HAS IT.
+//
+// A boss the size of a truck that a player can stand inside is not a boss, it
+// is scenery with a health bar - and standing inside one is the safest place
+// in the arena for exactly the fights that have no melee of their own. Siege
+// and Schism already charge for it through the shared melee cycle; Maw has its
+// own hug tax. This is the same rule for the two that had nothing - Colossus,
+// which only ever hit through its charge and its slam, and Herald, which could
+// be walked into all fight for free.
+//
+// It is deliberately NOT a swing: no windup, no telegraph, no animation. The
+// boss is not attacking, the player is standing on it, and the only thing that
+// bounds it is the cooldown. That is also why the cap is well under what any
+// real attack does - it is a reason not to stand there, not a way to die.
+// ---- Colossus's turrets --------------------------------------------------
+//
+// Three states and no more: it flies, it bolts itself down, it shoots.
+//
+// THE ARC IS PARAMETRIC, not integrated. The position is rebuilt from the two
+// endpoints and one clock every frame, so the obstacle resolution at the end
+// of update() - which will happily shove a body sideways off a crate it is
+// currently ten feet above - cannot bend the flight path: whatever it does is
+// overwritten on the next frame. It also means the thing lands exactly where
+// the ring on the floor said it would, which is the whole promise of the ring.
+const TURRET_ARC_TIME = 1.0;
+const TURRET_ARC_HEIGHT = 8;
+// The pause between landing and the first shot. This is the window the player
+// is given to kill it before it costs them anything.
+const TURRET_DEPLOY = 0.9;
+const TURRET_FIRE_CD = 1.6;
+const TURRET_RANGE = 30;
+
+function aiTurret(e, a) {
+  const ctx = a.ctx;
+  // A turret that was somehow spawned without a flight (nothing does this
+  // today) is simply a live one standing where it was put.
+  if (e.tState === undefined) {
+    e.tState = 'live';
+    e.tT = 0;
+    e.tFireCd = TURRET_FIRE_CD;
+    e.tMark = -1;
+  }
+  // The barrel easing home after a shot. At the top, so it keeps running
+  // through the deploy pause and through terror.
+  if (e.barrel && e.barrel.position.z > e.barrelRest) {
+    e.barrel.position.z = Math.max(e.barrelRest, e.barrel.position.z - a.dt * 0.9);
+  }
+
+  if (e.tState === 'arc') {
+    e.tT += a.dt;
+    const u = Math.min(1, e.tT / TURRET_ARC_TIME);
+    e.pos.x = e.tFromX + (e.tToX - e.tFromX) * u;
+    e.pos.z = e.tFromZ + (e.tToZ - e.tFromZ) * u;
+    // One parabola from the boss's shoulder to the floor: the linear term
+    // carries the launch height away as the arc term brings it back down.
+    e.pos.y = e.tFromY * (1 - u) + TURRET_ARC_HEIGHT * 4 * u * (1 - u);
+    // The landing circle fills as it falls, exactly like a mortar's - the
+    // player has already been taught to read that shape.
+    e.tFx = ctx.effects;
+    ctx.effects.markSet(e.tMark, e.tToX, e.tToZ, 1.3, 0xff5a00, u);
+    if (u < 1) return;
+    e.pos.y = 0;
+    ctx.effects.markRelease(e.tMark);
+    e.tMark = -1;
+    e.tState = 'deploy';
+    e.tT = TURRET_DEPLOY;
+    _bossAt.set(e.pos.x, 0.2, e.pos.z);
+    ctx.effects.burst(_bossAt, 0xff7043, 20, 5, 2, 0.5);
+    _bossAt.set(e.pos.x, 0.05, e.pos.z);
+    ctx.effects.shockwave(_bossAt, 0xff5a00, 3, 0.4);
+    ctx.effects.addShake(0.12);
+    return;
+  }
+
+  if (e.tState === 'deploy') {
+    e.tT -= a.dt;
+    e._setEyeAlert(true);
+    if (e.tT <= 0) {
+      e.tState = 'live';
+      e.tFireCd = 0;
+      e._setEyeAlert(false);
+    }
+    return;
+  }
+
+  // Bolted down: it never moves, so a.vx and a.vz are left at zero. Terror
+  // stops it firing rather than sending it anywhere - it has no legs, which is
+  // why the type declares fearMode 'stagger'.
+  if (e.status.fear > 0 || e.status.freeze > 0) return;
+  e.tFireCd -= a.dt;
+  if (e.tFireCd > 0 || a.dist > TURRET_RANGE) return;
+  e.tFireCd = TURRET_FIRE_CD * e.rate;
+  e.flash = 0.12;
+  // Kicks the barrel back and lets it ease home, so a shot is visible on the
+  // model and not only in the round that left it.
+  if (e.barrel) e.barrel.position.z = e.barrelRest + e.barrelKick;
+  _bossAt.set(e.pos.x, 0.66, e.pos.z);
+  ctx.effects.burst(_bossAt, 0xff7043, 6, 4, 1, 0.2);
+  ctx.addProjectile(e.pos.x, 0.66, e.pos.z, 'turret', e._projScale(), (Math.random() - 0.5) * 0.09);
+}
+
+// Releases the landing ring of a turret shot out of the air mid-flight.
+function releaseTurret(e) {
+  if (e.tMark >= 0 && e.tFx) e.tFx.markRelease(e.tMark);
+  e.tMark = -1;
+}
+
+const BOSS_TOUCH_CAP = 30;
+const BOSS_TOUCH_CD = 1.2;
+// How far past the body's own radius counts as touching. Matched to
+// Enemy.CONTACT_PAD's intent on the ordinary roster: a shade wider, because a
+// boss's collision radius is the barrel of its chest and its shoulders reach
+// well past it.
+const BOSS_TOUCH_PAD = 0.9;
+
+/**
+ * Charges the player for standing on a boss. Uses bs.touchCd, so a boss with
+ * its own touch clock (Maw) must not also call this.
+ *
+ * @param {number} mul  damage as a fraction of the boss's own hit
+ * @returns {boolean} true if it connected this frame
+ */
+function bossTouch(e, a, mul = 0.9) {
+  const bs = e.bs;
+  bs.touchCd = (bs.touchCd || 0) - a.dt;
+  if (bs.touchCd > 0) return false;
+  if (a.dist > e.radius + BOSS_TOUCH_PAD || _reachY(a) >= BOSS_REACH_Y) return false;
+  bs.touchCd = BOSS_TOUCH_CD * e.rate;
+  a.ctx.onHitPlayer(Math.min(BOSS_TOUCH_CAP, e.damage * mul), e.pos, e);
+  _bossAt.set(e.pos.x, 1.2, e.pos.z);
+  a.ctx.effects.burst(_bossAt, ENEMY_TYPES[e.type].eye, 12, 4, 1.6, 0.35);
+  a.ctx.effects.addShake(0.12);
+  return true;
+}
+
 const COLOSSUS_CHARGE_CAP = 52;
 const COLOSSUS_SLAM_CAP = 44;
 const COLOSSUS_CHARGE_SPEED = 14;
@@ -2496,6 +2773,59 @@ const COLOSSUS_CREEP_DPS = 14;
 // its length through solid geometry, and a patch out there would burn a pool
 // slot on ground no one can stand on.
 const COLOSSUS_CREEP_BOUND = 21.6;
+
+// THE TURRETS COLOSSUS THROWS. See the `turret` type for what one does once it
+// lands; these are the numbers for putting it there.
+//
+// THREE AT ONCE, AND NO MORE. The cap is what keeps this an addition to the
+// fight rather than a replacement for it: at three the player can always clear
+// the floor inside one vent window if they decide to, and the boss can always
+// put one back afterwards. Counted live off the arena rather than tracked on
+// the boss, so a turret the player destroys frees its slot the same frame.
+const COLOSSUS_MAX_TURRETS = 3;
+const COLOSSUS_LOB_CD = 9;
+const COLOSSUS_LOB_WINDUP = 0.7;
+// How far from the player one is allowed to land, near end and far. It is
+// thrown at where they ARE - it is not a mortar and it does not lead - but it
+// must never come down on top of them, and the further away they are the
+// looser the throw gets: the offset grows with range, so a turret lobbed
+// across the arena lands in the player's neighbourhood rather than at their
+// feet.
+const TURRET_DROP_MIN = 4;
+const TURRET_DROP_MAX = 10;
+
+function _turretCount(ctx) {
+  let n = 0;
+  for (const o of ctx.enemies) if (!o.dead && o.type === 'turret') n++;
+  return n;
+}
+
+// Where the next turret comes down, into _turretSpot. Returns false when ten
+// tries found nothing on open floor, in which case the boss simply does not
+// throw this time.
+const _turretSpot = { x: 0, z: 0 };
+function _pickTurretSpot(e, a) {
+  const p = a.ctx.player;
+  const off = Math.max(TURRET_DROP_MIN, Math.min(TURRET_DROP_MAX, 3 + a.dist * 0.25));
+  const B = COLOSSUS_CREEP_BOUND - 1;
+  for (let i = 0; i < 10; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = off * (0.85 + Math.random() * 0.45);
+    const x = p.pos.x + Math.cos(ang) * r;
+    const z = p.pos.z + Math.sin(ang) * r;
+    if (Math.abs(x) > B || Math.abs(z) > B) continue;
+    // Not under the boss's own feet either - it would be shoved out by crowd
+    // separation the moment it landed, and a turret that slides is a bug the
+    // player cannot read.
+    if (Math.hypot(x - e.pos.x, z - e.pos.z) < e.radius + 2.5) continue;
+    _bossAt.set(x, 0.5, z);
+    if (pointInObstacle(_bossAt, a.ctx.obstacles)) continue;
+    _turretSpot.x = x;
+    _turretSpot.z = z;
+    return true;
+  }
+  return false;
+}
 
 // Burns the whole telegraphed rectangle, once, at the moment the charge is
 // released. `dirX/dirZ` is the lane's direction and the boss's position is its
@@ -2542,10 +2872,17 @@ function aiColossus(e, a) {
     bs.dirZ = 1;
     bs.mark = -1;
     bs.shotCd = COLOSSUS_VENT_SHOT_CD;
+    // Not zero: the fight opens on the charge and the slam, and the first
+    // turret arrives once the player has had a chance to learn those.
+    bs.lobCd = COLOSSUS_LOB_CD * 0.7;
   }
   const ctx = a.ctx;
   bs.fx = ctx.effects;
   const feared = e.status.fear > 0;
+
+  // Standing on it costs, in every state but the charge - which lands its own,
+  // much larger, hit and must not also bill for the body it arrived in.
+  if (bs.state !== 'dash') bossTouch(e, a);
 
   // THE CORE'S RHYTHM. It runs on its own clock, unbroken by whatever the
   // fight is doing, because the whole point of moving the weak point off the
@@ -2573,6 +2910,9 @@ function aiColossus(e, a) {
   }
 
   if (bs.state === 'stagger') {
+    // Handed straight back after a charge, so the crowd shove that is added
+    // after ai() is clamped at walking pace again the moment the rush is over.
+    e.stepMul = 1.4;
     bs.t -= a.dt;
     if (bs.t <= 0) {
       bs.state = 'walk';
@@ -2610,8 +2950,34 @@ function aiColossus(e, a) {
     return;
   }
 
+  // Winding up to throw. It stands still for it - a turret is a commitment,
+  // and a boss that could walk while throwing would be doing two things at
+  // once for the first time in the fight.
+  if (bs.state === 'lob') {
+    bs.t -= a.dt;
+    e._setEyeAlert(true);
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'walk';
+      // Off the shoulder, not out of the floor: the arc has to start where the
+      // boss's arms are or the throw does not read as a throw.
+      ctx.addTurret(e.pos.x, 2.6 * bs.mScale, e.pos.z, bs.lobX, bs.lobZ);
+      _bossAt.set(e.pos.x, 2.2 * bs.mScale, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xff7043, 16, 5, 2, 0.4);
+      ctx.effects.addShake(0.14);
+    }
+    return;
+  }
+
   if (bs.state === 'dash') {
     bs.t -= a.dt;
+    // THE STEP CLAMP HAS TO BE LIFTED FOR THE CHARGE. update() caps the frame's
+    // movement at `sp * stepMul`, and a boss walks at 2 m/s - so a 14 m/s charge
+    // written into a.vx alone came out at 2.8 and the rush read as the boss
+    // continuing to walk after a telegraph promising otherwise. Set here rather
+    // than once at the state change so a charge is still fast after a freeze or
+    // a slow has moved `sp` underneath it; put back in `walk` below.
+    e.stepMul = COLOSSUS_CHARGE_SPEED / Math.max(0.5, a.sp);
     a.vx = bs.dirX * COLOSSUS_CHARGE_SPEED;
     a.vz = bs.dirZ * COLOSSUS_CHARGE_SPEED;
     if (a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
@@ -2641,6 +3007,7 @@ function aiColossus(e, a) {
   }
 
   // walk
+  e.stepMul = 1.4;
   bs.cd -= a.dt;
   bs.slamCd -= a.dt;
   // Terror does not send a boss running - it just stops it doing anything,
@@ -2700,6 +3067,24 @@ function aiColossus(e, a) {
     bs.t = 1.1;
     bs.dirX = a.nx;
     bs.dirZ = a.nz;
+    return;
+  }
+
+  // THE TURRET THROW. Last of the walk-state options, so it never takes a
+  // moment the charge or the slam wanted - those two are the fight, and this
+  // is what fills the space between them. Only from range: a turret lobbed
+  // from arm's length would land in the player's lap, which is the one thing
+  // it must never do.
+  bs.lobCd -= a.dt;
+  if (bs.lobCd <= 0 && a.dist > 9 && _turretCount(ctx) < COLOSSUS_MAX_TURRETS
+    && _pickTurretSpot(e, a)) {
+    bs.state = 'lob';
+    bs.t = COLOSSUS_LOB_WINDUP;
+    bs.lobX = _turretSpot.x;
+    bs.lobZ = _turretSpot.z;
+    // Charged on the THROW and not on the attempt: a boss that failed to find
+    // a spot should try again shortly, not stand down for nine seconds.
+    bs.lobCd = COLOSSUS_LOB_CD * e.rate;
     return;
   }
 
@@ -2770,6 +3155,9 @@ function aiSiege(e, a) {
 
   if (bs.state === 'dash') {
     bs.t -= a.dt;
+    // See the same line in aiColossus: without this the charge is clamped to
+    // walking pace by update()'s step cap and never actually arrives.
+    e.stepMul = SIEGE_CHARGE_SPEED / Math.max(0.5, a.sp);
     a.vx = bs.dirX * SIEGE_CHARGE_SPEED;
     a.vz = bs.dirZ * SIEGE_CHARGE_SPEED;
     // Wider than the melee reach: this is a body the size of a truck arriving
@@ -2808,6 +3196,7 @@ function aiSiege(e, a) {
   // Winded, or picking itself up off a pillar. It stands still and does
   // nothing at all - no swing, no shells - which is the whole point of it.
   if (bs.state === 'recover') {
+    e.stepMul = 1.4;
     bs.t -= a.dt;
     if (bs.t <= 0) {
       bs.state = 'walk';
@@ -2827,6 +3216,7 @@ function aiSiege(e, a) {
 
   // walk. It closes, and it swings at whatever it reaches - the melee cycle
   // returns true only when it is free to keep walking.
+  e.stepMul = 1.4;
   const m = ENEMY_TYPES.siege.melee;
   const free = e._meleeCycle(a.dt, a.dist, ctx, m.windup, m.start, m.hit, m.cd);
   if (free) {
@@ -3024,6 +3414,9 @@ function aiHerald(e, a) {
   }
   orbit(e, a, ENEMY_TYPES.herald.orbit);
   e.ringA.rotation.z += a.dt * (bs.enraged ? 4 : 1.8);
+  // It has no melee of its own - it keeps its distance and shoots - so this is
+  // the whole answer to a player who simply walks into it and stands there.
+  bossTouch(e, a);
   if (e.status.fear > 0) return;
 
   // One way, once. The fight should get harder as it ends, not easier.
@@ -3096,6 +3489,9 @@ const _bossAt = new THREE.Vector3();
 // and consumed immediately, like _dripAt and _steer above.
 const _blinkFwd = new THREE.Vector3();
 const _blinkAt = new THREE.Vector3();
+// The far end of the beam a wraith draws behind an arrival. Held separately
+// from _blinkAt because both ends of the line are needed at once.
+const _blinkFrom = new THREE.Vector3();
 
 // The one AI frame object, filled and handed to an ai() per enemy per frame.
 // Reused rather than allocated: thirty enemies at 60fps is 1800 objects a
@@ -3189,6 +3585,11 @@ export class Enemy {
     // Wraith's teleport timer. Staggered at birth so a group that spawned
     // together does not blink in unison.
     this.blinkCd = 1.5 + Math.random() * 2.5;
+    // '', 'warp' (leaving) or 'form' (arriving) - see aiWraith. Declared here
+    // rather than sprung on the type so a frozen or feared wraith caught
+    // mid-blink still has a state the rest of update() can read.
+    this.blinkState = '';
+    this.blinkT = 0;
     // Attack-cooldown multiplier. 1 for everything except a boss, where
     // waves.js turns it down with the wave number so late fights come at the
     // player faster rather than merely lasting longer.
@@ -3598,6 +3999,14 @@ export class Enemy {
     let vx = 0;
     let vz = 0;
 
+    // A half-finished blink is state on the MODEL - a squashed scale and a
+    // tipped body - and neither branch below calls the type's ai() again, so a
+    // wraith petrified or panicked mid-teleport would be left as a disc on the
+    // floor for the rest of its life. Put back whole before either takes over.
+    if (this.blinkState && (this.status.freeze > 0 || this.status.fear > 0)) {
+      _wraithEnd(this);
+    }
+
     if (this.status.freeze > 0) {
       // Petrified: no movement, no attack, and any half-wound swing is lost -
       // including one already in the air.
@@ -3829,6 +4238,9 @@ const PROJ_COLORS = {
   // Colossus fires only through its open vent, so the round wears the core's
   // own heat rather than the generic shooter purple.
   colossus: { core: 0xffd08a, glow: 0xff5a00, scale: 1.1 },
+  // Colossus's colour, a size down: a turret's round has to read as coming
+  // from the boss's own machinery and not as a shooter that wandered in.
+  turret: { core: 0xffc27a, glow: 0xff5a00, scale: 0.8 },
   // The harrier's burst. Small and cold - it arrives from above, so it is read
   // against the floor rather than against the skyline, and the pale core is
   // what makes it visible down there.

@@ -211,8 +211,11 @@ context. The start screen says so, and one click anywhere fixes it.
   rather than ending in a hard edge.
 - **A boss every five waves**, in a fixed rotation of five that repeats: the
   **Colossus** (armoured but for a red core in its chest that opens on a rhythm,
-  and a telegraphed charge that knocks it out cold against a wall), **Siege**
-  (telegraphed mortar barrages), **Schism** (fires eight rounds at once in every direction after a wind-up,
+  a telegraphed charge that knocks it out cold against a wall, and turrets it
+  throws at the ground near you - they arc in under a landing ring, bolt
+  themselves down and start shooting, three on the floor at most, and each one
+  is a few rounds to destroy), **Siege**
+  (telegraphed mortar barrages and a charge of its own), **Schism** (fires eight rounds at once in every direction after a wind-up,
   and splits three times over - two halves, then four, then eight, so it gets
   more dangerous as it comes apart),
   **Maw** (drags you in and rolls rings you have to jump) and the **Herald**

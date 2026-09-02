@@ -238,6 +238,8 @@ export class MoneyOrbs {
     scene.add(this.points);
 
     this.time = 0;
+    // Seconds left on an armed-but-not-yet-fired vacuum(). See vacuum().
+    this._sweepT = 0;
     // Set to true by anything that writes a position; the upload is skipped
     // entirely on a frame where every orb is asleep.
     this._dirty = false;
@@ -338,12 +340,26 @@ export class MoneyOrbs {
    * Pulls every orb on the floor toward the player, whatever the distance.
    * Called at a wave clear so nothing is left behind to time out during the
    * shopping trip. The per-orb delay is what makes it arrive as a stream.
+   *
+   * @param {number} delay  seconds to hold every orb before it starts coming.
+   *   The boss shower passes one so its forty orbs are seen to LAND first -
+   *   the payout is the floor covered in money, and sweeping it up before it
+   *   touches the ground throws that away.
    */
-  vacuum() {
+  vacuum(delay = 0) {
+    // ARMED, NOT PERFORMED. An orb whose HOME delay has not run out is frozen
+    // where it is - the delay skips its integration entirely - so delaying the
+    // orbs themselves would hang the shower in mid-air. The sweep is held
+    // whole instead and fired from update() once the arc has landed.
+    if (delay > 0) {
+      this._sweepT = delay;
+      return;
+    }
+    this._sweepT = 0;
     for (let i = 0; i < this.count; i++) {
       if (this.state[i] === HOME) continue;
       this.state[i] = HOME;
-      this.delay[i] = Math.random() * 0.7;
+      this.delay[i] = delay + Math.random() * 0.7;
     }
   }
 
@@ -357,6 +373,10 @@ export class MoneyOrbs {
   update(dt, playerPos, magnetR, onCollect) {
     this.time += dt;
     this.mat.uniforms.uTime.value = this.time;
+    if (this._sweepT > 0) {
+      this._sweepT -= dt;
+      if (this._sweepT <= 0) this.vacuum();
+    }
     if (this.count === 0) return 0;
 
     const px = playerPos.x;
@@ -443,10 +463,18 @@ export class MoneyOrbs {
       }
       const dx = this.pos[i3] - px;
       const dz = this.pos[i3 + 2] - pz;
-      if (dx * dx + dz * dz < collect2) {
+      const fd2 = dx * dx + dz * dz;
+      if (fd2 < collect2) {
         onCollect(this.value[i]);
         collected++;
         this._remove(i--);
+      } else if (fd2 < magnet2) {
+        // The magnet reaches orbs still in the air, not only settled ones. A
+        // shower thrown at the player's feet spends most of its first second
+        // mid-arc, and an orb bouncing THROUGH the collection radius while the
+        // pull ignores it reads as the magnet being broken.
+        this.state[i] = HOME;
+        this.delay[i] = 0;
       }
     }
 
@@ -489,6 +517,7 @@ export class MoneyOrbs {
   /** Drops everything on the floor, uncollected. Run resets only. */
   clear() {
     this.count = 0;
+    this._sweepT = 0;
     this.points.geometry.setDrawRange(0, 0);
   }
 }

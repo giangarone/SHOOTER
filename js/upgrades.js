@@ -1176,11 +1176,31 @@ export function dealRerollCost(n) {
   return 2 * Math.pow(2, n);
 }
 
+// PRICES CLIMB WITH THE RUN. Both consoles beside the totems charge off a
+// base that steps up every five waves, so a wallet that grows with the wave
+// count is still spending a real fraction of it at wave 40. The step is per
+// BLOCK of five and not per wave: the price a player learned at the start of a
+// block is the price for the whole block, and it moves at the same boundary
+// the boss waves fall on.
+//
+// @param {number} wave  the wave being shopped at (1-based)
+// @param {number} base  the wave 1-5 price
+// @param {number} step  what each further block of five adds
+function blockPrice(wave, base, step) {
+  const block = Math.floor(Math.max(0, (wave || 1) - 1) / 5);
+  return base + step * block;
+}
+
+// $2,000 at waves 1-5, $2,500 at 6-10, and $500 a block after that.
+export const REROLL_BASE = 2000;
+export const REROLL_STEP = 500;
+
 // Reroll price for the nth reroll of a single totem set (n starts at 0).
 // Doubling is what stops credits from simply buying the best upgrade in the
-// pool; the counter resets when a fresh set rises.
-export function rerollCost(n) {
-  return 150 * Math.pow(2, n);
+// pool; the counter resets when a fresh set rises. The base it doubles from is
+// the wave's, so the doubling and the block step compound.
+export function rerollCost(n, wave = 1) {
+  return blockPrice(wave, REROLL_BASE, REROLL_STEP) * Math.pow(2, n);
 }
 
 // The one thing credits buy outright, sold from a station beside the totems.
@@ -1213,12 +1233,18 @@ export const MAXHP_PURCHASE = {
   },
 };
 
+// $500 at waves 1-5, $600 at 6-10, and $100 a block after that. See
+// blockPrice(): `cost` is a function of the wave, not a number, so every
+// caller has to say which wave it is pricing for.
+export const AMMO_BASE = 500;
+export const AMMO_STEP = 100;
+
 export const AMMO_PURCHASE = {
   name: 'AMMO',
   detail: '+90 ROUNDS',
   // A refill has to compete with a reroll for the same wallet, so it is
   // priced like one: several waves' earnings, not pocket change.
-  cost: 300,
+  cost: (wave = 1) => blockPrice(wave, AMMO_BASE, AMMO_STEP),
   enabled: (player) => player.reserveAmmo < player.maxReserve,
   apply: (player) => {
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);

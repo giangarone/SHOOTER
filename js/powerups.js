@@ -167,6 +167,12 @@ function needScale(frac) {
 /**
  * Rolls one kill's drop.
  *
+ * HEALTH IS WITHHELD AT A FULL BAR. The need curve already makes it rare up
+ * there, but "rare" is not "never" and a health plate landing in front of a
+ * player on full HP is a drop that cannot be used - it either times out or is
+ * walked over for nothing. The need term reads the same fraction, so the two
+ * agree: at hpFrac 1 the roll is skipped outright.
+ *
  * @param {number} hpFrac    health / maxHealth
  * @param {number} ammoFrac  (reserve + mag) / maxReserve
  * @param {boolean} allowAmmo false when the arena already holds as much loose
@@ -179,6 +185,7 @@ function needScale(frac) {
 export function rollDrop(hpFrac, ammoFrac, allowAmmo = true) {
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
+    if (key === 'health' && hpFrac >= 1) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;
     if (def.needy) {
@@ -198,6 +205,7 @@ export function dropChance(hpFrac, ammoFrac, allowAmmo = true) {
   let miss = 1;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
+    if (key === 'health' && hpFrac >= 1) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;
     if (def.needy) {

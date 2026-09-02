@@ -465,6 +465,10 @@ const BOSS_BONUS_PER_WAVE = 60;
 // drop: the point of the boss shower is the FLOOR being covered, so the
 // denomination stays small and the count does the work.
 const BOSS_ORBS = 40;
+// How long the boss shower is left on the floor before it is swept up. Long
+// enough for the arc to land and read as a pile of money, short enough that
+// nothing is anywhere near ORB_LIFETIME.
+const BOSS_ORB_SWEEP_DELAY = 1.1;
 // What a wave cleared without taking a single point of damage pays, and the
 // orbs it arrives in. This is the flat clear bonus's only surviving half - it
 // is paid ONLY for a flawless wave, which is what it is for.
@@ -782,6 +786,9 @@ class Game {
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
       addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
+      // Colossus throwing one of its turrets. It is a real enemy, spawned
+      // mid-air with its flight already set - see _spawnTurret.
+      addTurret: (fx, fy, fz, tx, tz) => this._spawnTurret(fx, fy, fz, tx, tz),
       pullPlayer: (dx, dz, strength) => this._pullPlayer(dx, dz, strength),
       bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
       // `mods` is deliberately absent here: rebuildMods() swaps the object on
@@ -2320,7 +2327,12 @@ class Game {
     bf.addTimer -= dt;
     if (bf.addTimer > 0) return;
     bf.addTimer = bf.addInterval;
-    if (this.enemies.length - bf.parts.length >= bf.maxAdds) return;
+    // Turrets are the boss's own attack, not adds, and must not eat the trickle
+    // budget: three of them standing would otherwise stop the wave sending
+    // anything else at all.
+    let adds = this.enemies.length - bf.parts.length;
+    for (const e of this.enemies) if (e.type === 'turret') adds--;
+    if (adds >= bf.maxAdds) return;
     this.spawnEnemy(pickAddType(this.wave));
   }
 
@@ -2365,8 +2377,40 @@ class Game {
     // that follows sweeps up anything the player does not walk over.
     const at = this._bossDeathPos;
     this.money.spawn(at, bonus * this.player.mods.creditMult, BOSS_ORBS, 7.5);
+    // AND THEN THEY COME TO YOU. The wave-clear vacuum has already run by the
+    // time this is called, so without a second sweep the boss's own payout was
+    // the one drop in the game left lying on the floor - forty orbs thrown
+    // wide across the arena, most of them outside the magnet, timing out at
+    // ORB_LIFETIME while the player shops. Delayed by the length of the arc so
+    // the shower is still SEEN to land before it streams back in.
+    this.money.vacuum(BOSS_ORB_SWEEP_DELAY);
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
     this.ui.banner('BOSS DOWN  +$' + Math.round(bonus * this.player.mods.creditMult));
+  }
+
+  // A turret, in the air, on its way to (tx, tz). Everything that makes it a
+  // turret rather than an ordinary spawn is the flight state written here; the
+  // type's ai() takes over from the next frame.
+  //
+  // It is spawned as a NORMAL ENEMY on purpose. That is what makes it
+  // shootable, killable, worth money and cleaned up by _finishBossWave for
+  // free - a bespoke prop would have needed all four written again.
+  _spawnTurret(fx, fy, fz, tx, tz) {
+    const at = new THREE.Vector3(fx, fy, fz);
+    const e = new Enemy('turret', at, this._cfg.hpScale, 1, this._cfg.dmgScale);
+    e.tState = 'arc';
+    e.tT = 0;
+    e.tFromX = fx;
+    e.tFromY = fy;
+    e.tFromZ = fz;
+    e.tToX = tx;
+    e.tToZ = tz;
+    e.tFireCd = 0;
+    // -1 is a legal handle everywhere in effects.js: with every telegraph slot
+    // busy the turret still flies and still lands, just without its ring.
+    e.tMark = this.effects.markAcquire();
+    this.scene.add(e.group);
+    this.enemies.push(e);
   }
 
   spawnEnemy(type) {
@@ -3197,6 +3241,13 @@ class Game {
       // round clips you on the way past.
       speed = Math.min(19, 13 + this.wave * 0.22);
       dmg = Math.min(14, 7 + this.wave * 0.3);
+    } else if (type === 'turret') {
+      // Slow and clearly readable in the air. Three turrets firing at once is
+      // a lot of rounds on the floor, so each one has to be something the
+      // player can see coming and step around while they deal with the boss -
+      // the cost of leaving one standing is the pressure, not the burst.
+      speed = Math.min(16, 11 + this.wave * 0.15);
+      dmg = Math.min(15, 7 + this.wave * 0.3);
     } else if (type === 'colossus') {
       // Slower and heavier than an ordinary shooter round. The vent is the
       // window the player closes in to use, so what comes out of it has to be
@@ -3625,16 +3676,32 @@ class Game {
     );
   }
 
+  // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
+  // five waves (see blockPrice in upgrades.js), so every place that shows or
+  // charges one has to ask for the current wave rather than read a constant -
+  // these two are that ask, and nothing else in main.js may price a station.
+  //
+  // The wave shopped at is the one just CLEARED: the stations rise during the
+  // intermission after it, before startWave() has counted the next one.
+  _ammoCost() {
+    return AMMO_PURCHASE.cost(this.wave);
+  }
+
+  _rerollCost() {
+    return rerollCost(this.totemArea.rerolls, this.wave);
+  }
+
   // Redraws both station labels. Only called when something they display
   // actually changes - a purchase, a reroll, or a new set - never per frame.
   _refreshStations() {
     const area = this.totemArea;
+    const ammo = this._ammoCost();
     area.ammoStation.setLabel(
       AMMO_PURCHASE.name,
-      '$' + AMMO_PURCHASE.cost,
-      this.credits >= AMMO_PURCHASE.cost && AMMO_PURCHASE.enabled(this.player)
+      '$' + ammo,
+      this.credits >= ammo && AMMO_PURCHASE.enabled(this.player)
     );
-    const cost = rerollCost(area.rerolls);
+    const cost = this._rerollCost();
     area.rerollStation.setLabel('REROLL', '$' + cost, this.credits >= cost && area.active);
   }
 
@@ -3794,7 +3861,7 @@ class Game {
     if (t.kind === 'ammo') {
       return [
         lead + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + AMMO_PURCHASE.cost + '</span>',
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + this._ammoCost() + '</span>',
         false,
       ];
     }
@@ -3817,7 +3884,7 @@ class Game {
     }
     return [
       lead + 'REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
-      + '<span class="prompt-cost">$' + rerollCost(this.totemArea.rerolls) + '</span>',
+      + '<span class="prompt-cost">$' + this._rerollCost() + '</span>',
       false,
     ];
   }
@@ -3833,7 +3900,7 @@ class Game {
   _stationBlocked(st) {
     if (st.kind === 'ammo') {
       if (!AMMO_PURCHASE.enabled(this.player)) return 'AMMO FULL';
-      if (this.credits < AMMO_PURCHASE.cost) return 'NEED $' + AMMO_PURCHASE.cost;
+      if (this.credits < this._ammoCost()) return 'NEED $' + this._ammoCost();
       return null;
     }
     if (st.kind === 'maxhp') {
@@ -3849,7 +3916,7 @@ class Game {
       if (!this.player.canPay(dealRerollCost(area.rerolls))) return 'NOT ENOUGH MAX HP';
       return null;
     }
-    const cost = rerollCost(this.totemArea.rerolls);
+    const cost = this._rerollCost();
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
     if (this.credits < cost) return 'NEED $' + cost;
     return null;
@@ -3889,7 +3956,7 @@ class Game {
       return;
     }
     if (st.kind === 'ammo') {
-      this.credits -= AMMO_PURCHASE.cost;
+      this.credits -= this._ammoCost();
       AMMO_PURCHASE.apply(this.player, this.time);
       this.sfx.buy();
     } else if (st.kind === 'maxhp') {
@@ -3907,7 +3974,7 @@ class Game {
       // that purchase needs - this console is only the way in.
       this._rerollDeals();
     } else {
-      this.credits -= rerollCost(this.totemArea.rerolls);
+      this.credits -= this._rerollCost();
       this.totemArea.rerolls++;
       this._presentTotems(true);
       this.sfx.reroll();
@@ -4015,7 +4082,13 @@ class Game {
       // reserve goes.
       const hpFrac = this.player.health / this.player.maxHealth;
       const ammoFrac = (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve;
-      const wantAmmo = ammoFrac <= hpFrac && this._ammoActive() < MAX_ACTIVE_AMMO;
+      const wantAmmo = (ammoFrac <= hpFrac || hpFrac >= 1)
+        && this._ammoActive() < MAX_ACTIVE_AMMO;
+      // A full bar takes no health plate - the same rule rollDrop() holds for
+      // kills. With the ammo boxes already capped as well there is nothing the
+      // player needs, so the threshold is spent on nothing rather than on a
+      // pickup that cannot be used.
+      if (!wantAmmo && hpFrac >= 1) continue;
       this._placeDrop(wantAmmo ? 'ammo' : 'health', part.pos);
     }
   }

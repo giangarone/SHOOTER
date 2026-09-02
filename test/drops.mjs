@@ -65,6 +65,10 @@ try {
     };
     return {
       full: sample(1, 1),
+      // Just under a full bar. `full` is now the case where health is
+      // withheld entirely, so the base rate has to be sampled from a player
+      // who is missing something - anything.
+      nicked: sample(0.99, 1),
       hurt: sample(0.1, 1),
       dry: sample(1, 0.05),
       noAmmo: sample(1, 0.05, false),
@@ -112,11 +116,18 @@ try {
   // nudge. The samples here sit at 0.81 and 0.90 of the squared need curve,
   // so they land just under the 2x ceiling rather than on it.
   const ratio = (a, b) => (b > 0 ? a / b : 0);
-  const healthRatio = ratio(rates.hurt.health || 0, rates.full.health || 0);
+  const healthRatio = ratio(rates.hurt.health || 0, rates.nicked.health || 0);
   const ammoRatio = ratio(rates.dry.ammo || 0, rates.full.ammo || 0);
   check('low health raises the health rate, capped at 2x',
     healthRatio > 1.5 && healthRatio <= 2.05,
-    `full=${(rates.full.health || 0).toFixed(3)} hurt=${(rates.hurt.health || 0).toFixed(3)} x${healthRatio.toFixed(2)}`);
+    `nicked=${(rates.nicked.health || 0).toFixed(3)} hurt=${(rates.hurt.health || 0).toFixed(3)} x${healthRatio.toFixed(2)}`);
+  // A health plate on a full bar is a drop that cannot be spent: it is either
+  // walked over for nothing or left to time out. Withheld outright rather
+  // than merely made rare - see rollDrop().
+  check('a full bar drops no health at all', !rates.full.health,
+    `health=${rates.full.health}`);
+  check('a bar one point down does', (rates.nicked.health || 0) > 0.03,
+    `health=${(rates.nicked.health || 0).toFixed(3)}`);
   check('low ammo raises the ammo rate, capped at 2x',
     ammoRatio > 1.5 && ammoRatio <= 2.05,
     `full=${(rates.full.ammo || 0).toFixed(3)} dry=${(rates.dry.ammo || 0).toFixed(3)} x${ammoRatio.toFixed(2)}`);
