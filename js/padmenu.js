@@ -117,16 +117,26 @@ export class MenuDriver {
     if (root) this.focus(this._default());
   }
 
-  /** Every focusable control the player can currently see, in DOM order. */
+  /**
+   * Every focusable control the player can currently see, in DOM order.
+   *
+   * A STEPPER IS ONE TARGET, NOT TWO BUTTONS. Its `-` and `+` are a single
+   * control with a value between them, and treating them as two stops meant
+   * pressing right on a settings row walked the selection from one key to the
+   * other without ever changing anything - which is exactly what a stepper
+   * looks like when it is broken. The row owns its horizontal axis instead:
+   * see adjust().
+   */
   items() {
     if (!this.root) return [];
-    const sel = 'button:not([disabled]), input:not([disabled]), [data-pad-focus]';
+    const sel = 'button:not([disabled]), input:not([disabled]), .stepper, [data-pad-focus]';
     return [...this.root.querySelectorAll(sel)].filter(
       // offsetParent is null for anything inside a `.hidden` block, which is
       // how every optional panel in the game is hidden - the name-entry row,
       // the empty-board notice. A control the player cannot see must never be
       // a thing the selection can land on.
       (e) => e.offsetParent !== null && !e.closest('.hidden')
+        && !(e.tagName === 'BUTTON' && e.closest('.stepper'))
     );
   }
 
@@ -213,10 +223,51 @@ export class MenuDriver {
     this.focus(aligned || loose || wrap || this.el);
   }
 
+  /**
+   * LEFT AND RIGHT INSIDE A SETTINGS ROW change the value rather than moving
+   * the selection. `dir` is -1 or 1.
+   *
+   * Scoped to `.set-row` on purpose. Everywhere else in the game a horizontal
+   * press means "move to the control beside this one" - the three buttons
+   * under PRESS START are a row the player walks along - and a rule that
+   * swallowed left and right globally would strand the selection on the first
+   * of them. A settings row is the one place where the thing beside the label
+   * IS the value.
+   *
+   * @returns {boolean} true if it was handled, false to fall through to move()
+   */
+  adjust(dir) {
+    const el = this.el;
+    if (!el || !el.closest('.set-row')) return false;
+    if (el.classList.contains('stepper')) {
+      // Clicking a disabled end key does nothing, which is the correct answer
+      // at the end of the scale - and it is still HANDLED, so the selection
+      // does not go wandering off the row instead.
+      const key = el.querySelector(dir < 0 ? '.step-btn:first-child' : '.step-btn:last-child');
+      if (key && !key.disabled) key.click();
+      return true;
+    }
+    // A two-state control has nowhere to go but over, so either direction
+    // flips it. That is what the player means by pressing either one.
+    if (el.tagName === 'BUTTON') {
+      el.click();
+      return true;
+    }
+    return false;
+  }
+
   /** Presses the focused control. Returns what was pressed, or null. */
   activate() {
     const el = this.el;
     if (!el || el.disabled) return null;
+    // CROSS on a stepper steps it up. It is the only control on these screens
+    // with no single obvious action, and doing nothing at all would read as a
+    // control the button does not work on.
+    if (el.classList.contains('stepper')) {
+      const key = el.querySelector('.step-btn:last-child');
+      if (key && !key.disabled) key.click();
+      return el;
+    }
     el.click();
     // Buttons come and go as they are used - BACK closes the screen its
     // neighbours live on, a stepper key disables itself at the end of its

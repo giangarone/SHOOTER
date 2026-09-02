@@ -239,6 +239,16 @@ export const MIN_MAX_HEALTH = 20;
 // snappier recovery and a smaller climb; raise it for the opposite.
 const RECOIL_DECAY = 0.33;
 
+// Two curve helpers the reload animation is built out of. `span` is where `t`
+// sits inside a window as a 0..1 fraction, clamped at both ends; `ease` is the
+// smoothstep every phase is shaped by.
+function span(t, a, b) {
+  return Math.min(1, Math.max(0, (t - a) / (b - a)));
+}
+function ease(x) {
+  return x * x * (3 - 2 * x);
+}
+
 const PLAYER_HEIGHT = 1.8;
 // Evasion's window after a successful dodge, and what it multiplies speed by.
 // Short on purpose: it is an escape from the hit you just avoided, not a
@@ -300,6 +310,13 @@ const STAMINA_DELAY = 0.8;
 // it, and is a habit rather than a decision. The lock is what makes running
 // the bar to empty a thing the player chose to do and now has to live with.
 const STAMINA_UNLOCK = 0.33;
+// How long the sprint's accuracy penalty takes to bleed off after the run
+// ends. THE SAME WINDOW a shot locks the sprint out for, and deliberately so:
+// firing cancels sprinting, so a penalty that vanished with the run would
+// never be the cone a bullet was actually fired through. Shooting out of a
+// sprint is inaccurate for a moment, and the crosshair says so on the way
+// back down.
+const SPRINT_SPREAD_FADE = 0.35;
 // How long a shot keeps the player out of a sprint. A tap of the trigger has
 // to cost more than the one frame it lasts, or a semi-automatic player sprints
 // between clicks and the exclusion above means nothing.
@@ -388,6 +405,9 @@ export class Player {
     // Game time up to which a shot keeps the player walking.
     this.noSprintUntil = -99;
     this._sprintFov = 0;
+    // 1 while running and bleeding to 0 over SPRINT_SPREAD_FADE afterwards.
+    // main.js multiplies the sprint's cone penalty by it.
+    this.sprintFade = 0;
     // The two ends of the zoom. Taken from the camera rather than written as a
     // constant here, so the game keeps ownership of its own field of view and
     // this owns only the fraction it is cut by.
@@ -508,6 +528,10 @@ export class Player {
     this.gunBaseZ = model.userData.baseZ;
     this.gunBaseY = model.userData.baseY;
     this.gunBaseX = model.userData.baseX;
+    // The magazine, and where it rests. A weapon without one simply does not
+    // animate that half of the reload - see _animateReload.
+    this.magPart = model.getObjectByName('mag') || null;
+    this.magBaseY = this.magPart ? this.magPart.position.y : 0;
   }
 
   // Lights one plate on the receiver per owned mutation that changes what a
@@ -889,6 +913,7 @@ export class Player {
     this._staminaHold = 0;
     this.noSprintUntil = -99;
     this._sprintFov = 0;
+    this.sprintFade = 0;
     this.camera.fov = this.fovHip;
     this.camera.updateProjectionMatrix();
     this.health = this.maxHealth;
@@ -1168,10 +1193,10 @@ export class Player {
     // as much as one fired at either end.
     this._updateAim(dt, input);
     const a = this.aimT;
-    this.gun.position.x = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a;
+    const restX = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a;
     const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a;
     this.gun.position.z = this.gunBaseZ + (ADS_GUN_Z - this.gunBaseZ) * a + this.kick;
-    this._animateReload(restY);
+    this._animateReload(restX, restY);
     this.applyCamera();
     return reloadFinished;
   }
@@ -1202,6 +1227,13 @@ export class Player {
       && !input.shoot
       && this.now >= this.noSprintUntil;
 
+    // The accuracy penalty's tail. Pinned at 1 while running and bled off
+    // afterwards, so the cone the gun fires through remembers the run for a
+    // moment - see the note on SPRINT_SPREAD_FADE.
+    this.sprintFade = this.sprinting
+      ? 1
+      : Math.max(0, this.sprintFade - dt / SPRINT_SPREAD_FADE);
+
     if (this.sprinting) {
       this.stamina -= STAMINA_DRAIN * dt;
       this._staminaHold = STAMINA_DELAY;
@@ -1228,6 +1260,18 @@ export class Player {
   /** The bar, 0..1, for the HUD. */
   get staminaFrac() {
     return this.stamina / STAMINA_MAX;
+  }
+
+  /**
+   * True below the amount that would let the player start running again.
+   *
+   * THE SAME LINE THE LOCKOUT USES, which is what makes the bar's red mean
+   * something exact - "there is not enough here to run on" - rather than being
+   * a rough warning at a round number. A locked bar is always below it, so the
+   * lockout is always red as well as beating.
+   */
+  get staminaLow() {
+    return this.stamina < STAMINA_MAX * STAMINA_UNLOCK;
   }
 
   /**
@@ -1278,22 +1322,70 @@ export class Player {
   // `restY` is the height the gun rests at this frame - the hip pose, the aim
   // pose, or anywhere between them. Passed in rather than read off gunBaseY,
   // because there are two poses to come back to now.
-  _animateReload(restY) {
+  //
+  // FOUR PHASES ON ONE CLOCK. It used to be a single sine hump - the gun
+  // dipped, rolled and came back - and the thing wrong with that was not its
+  // size but its content: nothing was ever removed and nothing replaced it, so
+  // it read as a weapon swaying rather than as a magazine being changed. The
+  // phases are:
+  //
+  //   0.00-0.22  the gun comes UP and rolls the magazine well into view
+  //   0.20-0.42  the spent magazine drops away out of frame
+  //   0.50-0.75  a fresh one rises into the well
+  //   0.75-1.00  it seats with a knock and the weapon settles back
+  //
+  // UP, not down, and that is the whole reason the old animation could never
+  // have shown a magazine: the gun rides low and to the right, so a reload
+  // that dipped it took the well straight off the bottom of the screen. The
+  // part being swapped has to be ON SCREEN while it is swapped, which is also
+  // what a person actually does with a rifle - it comes to you.
+  //
+  // All four phases are FRACTIONS OF THE REAL RELOAD, so a Speed Loader build
+  // plays the same animation faster rather than a different one - the same
+  // reason this reads `reloadTime` rather than a constant of its own.
+  _animateReload(restX, restY) {
     const g = this.gun;
+    const mag = this.magPart;
     const total = this.reloadTime;
     if (this.reloading <= 0 || total <= 0) {
+      g.position.x = restX;
       g.position.y = restY;
       g.rotation.x = 0;
       g.rotation.z = 0;
+      if (mag) {
+        mag.position.y = this.magBaseY;
+        mag.rotation.x = 0;
+      }
       return;
     }
-    const t = 1 - this.reloading / total;
-    // One hump: nothing at the ends, everything in the middle, so the gun is
-    // back in the firing pose exactly as the last round seats.
-    const arc = Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
-    g.position.y = restY - 0.16 * arc;
-    g.rotation.x = 0.55 * arc;
-    g.rotation.z = -0.35 * arc;
+    const t = Math.min(1, Math.max(0, 1 - this.reloading / total));
+    // The carriage: up over the first fifth, held through the swap, back over
+    // the last quarter. Smoothstepped at both ends so the weapon is never seen
+    // starting or stopping at speed.
+    const carry = ease(span(t, 0, 0.22)) - ease(span(t, 0.72, 1));
+    // The knock as the fresh magazine bottoms out. A short spike rather than a
+    // curve - it is an impact, and the one moment in the reload the player can
+    // feel through the screen.
+    const seat = Math.max(0, 1 - Math.abs(t - 0.78) / 0.09);
+    // Inward as well as up: the weapon is brought in front of the face to be
+    // worked on, and the roll turns the magazine well toward the camera so the
+    // part that is about to leave is the part being looked at.
+    g.position.x = restX - 0.1 * carry;
+    g.position.y = restY + 0.1 * carry - 0.035 * seat;
+    g.rotation.x = 0.3 * carry + 0.06 * seat;
+    g.rotation.z = -0.5 * carry;
+    if (!mag) return;
+    // The magazine's own travel, as ONE number: how far out of the well it is,
+    // 0 seated and 1 gone. It falls away on the first half and the new one
+    // rises on the second, which is why the same mesh can play both - there is
+    // never a frame where two of them would have to be visible at once.
+    const out = t < 0.5
+      ? ease(span(t, 0.2, 0.42))
+      : 1 - ease(span(t, 0.5, 0.75));
+    mag.position.y = this.magBaseY - 0.34 * out;
+    // The spent one tumbles as it goes; the fresh one comes up square, because
+    // it is being pushed by a hand rather than dropped by gravity.
+    mag.rotation.x = t < 0.5 ? 1.1 * out : 0;
   }
 
   // 0 while idle, otherwise how far through the current reload we are. Drives

@@ -186,6 +186,16 @@ const MIN_SPAWN_DISTANCE = 16;
 // what they are holding.
 const MOVE_SPREAD = 0.085;
 const MOVE_SPREAD_AIM = 0.25;
+// AND THE SPRINT'S OWN PENALTY, on top of the speed it is already being
+// charged for. A run is not simply fast movement as far as the gun is
+// concerned - the weapon is not being carried in a firing grip at all - so it
+// gets a cone of its own that takes the standing spread to roughly triple.
+//
+// It bleeds off rather than ending with the run (see sprintFade in player.js),
+// which is what makes it a mechanic rather than a light show: firing cancels
+// sprinting, so a penalty that stopped when the sprint did could never be the
+// cone a bullet was actually fired through.
+const SPRINT_SPREAD = 0.085;
 // The crosshair's arms never close all the way onto the dot: a reticle with no
 // gap in it is a blob, and the aimed cone is small enough to be one.
 const CROSS_MIN_GAP = 4;
@@ -567,6 +577,9 @@ class Game {
     // The overlay the menu driver was last pointed at, so the pad's default
     // selection is only chosen when the screen actually changes.
     this._padRoot = null;
+    // The L3 latch, and whether the run it asked for has actually started.
+    this._padSprint = false;
+    this._sprintEngaged = false;
     this._padSens = SENS_DEFAULT;
     this._padAimSens = AIM_SENS_DEFAULT;
     this._aimAssist = true;
@@ -1252,6 +1265,11 @@ class Game {
     i.forward = i.back = i.left = i.right = false;
     i.jump = i.shoot = i.melee = false;
     i.aim = i.sprint = false;
+    // The pad's sprint latch is input state like any other, and a cleared
+    // input that left it set would have the player running again the moment
+    // the game came back.
+    this._padSprint = false;
+    this._sprintEngaged = false;
     i.shootFresh = false;
     i.dash = null;
     i.moveF = null;
@@ -1532,8 +1550,25 @@ class Game {
     // L2 raises the gun, the way the left trigger does on every console
     // shooter. Held, never toggled - see _updateAim in player.js.
     i.aim = pad.down(BTN.L2);
-    // L3 runs. The stick you are already pushing is the one you click.
-    i.sprint = pad.down(BTN.L3);
+    // L3 RUNS, AND IT LATCHES. Clicking a stick is not something to be held
+    // down for the length of a retreat, so the press flips a latch and the
+    // player keeps running until something stops them - they stand still, they
+    // fire, the bar empties, or they click it again.
+    //
+    // `_sprintEngaged` is what makes "until something stops them" work without
+    // the latch cancelling itself on the frame it was set: it only counts as
+    // ended once the run has actually STARTED. A click while standing still
+    // therefore arms the run for the moment the player moves, rather than
+    // being swallowed.
+    if (pad.pressed(BTN.L3)) {
+      this._padSprint = !this._padSprint;
+      this._sprintEngaged = false;
+    }
+    if (this._padSprint) {
+      if (this.player.sprinting) this._sprintEngaged = true;
+      else if (this._sprintEngaged) this._padSprint = false;
+    }
+    i.sprint = this._padSprint;
     // R2 is the trigger and the trigger is the gun. `shootFresh` is the edge
     // the semi-automatic weapons read - the same one a mouse click raises.
     i.shoot = pad.down(BTN.R2);
@@ -1727,7 +1762,14 @@ class Game {
     // The stick and the D-pad both steer. navY is +1 for up, and the driver
     // works in screen space where down is positive, so it is flipped here
     // rather than inside pad.js - the pad has no opinion about screens.
-    if (pad.navX || pad.navY) this.menu.move(pad.navX, -pad.navY);
+    //
+    // The two axes are handled SEPARATELY because they no longer mean the same
+    // kind of thing: up and down always move the selection, while left and
+    // right are first offered to the focused control - a settings row spends
+    // them on its own value and everything else lets them move - see
+    // MenuDriver.adjust.
+    if (pad.navY) this.menu.move(0, -pad.navY);
+    if (pad.navX && !this.menu.adjust(pad.navX)) this.menu.move(pad.navX, 0);
 
     if (pad.pressed(BTN.CROSS)) {
       pad.consume(BTN.CROSS);
@@ -2759,7 +2801,11 @@ class Game {
     // being raised, rather than one that throws on the first shot.
     const aimed = w.aimSpread != null ? w.aimSpread : w.spread;
     const cone = w.spread + (aimed - w.spread) * a;
-    return cone + MOVE_SPREAD * speed * (1 + (MOVE_SPREAD_AIM - 1) * a);
+    // Both penalties are cut by the same factor when the gun is up, so a
+    // player who raises it during the sprint's tail gets the steadier weapon
+    // they asked for rather than one still carrying the run.
+    const moving = MOVE_SPREAD * speed + SPRINT_SPREAD * this.player.sprintFade;
+    return cone + moving * (1 + (MOVE_SPREAD_AIM - 1) * a);
   }
 
   // One pellet of a shot. Walks the sorted hit list so a piercing weapon can
@@ -4801,7 +4847,7 @@ class Game {
     );
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setStamina(
-      this.player.staminaFrac, this.player.sprinting, this.player.staminaLocked
+      this.player.staminaFrac, this.player.staminaLow, this.player.staminaLocked
     );
     this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
     this.ui.setReloadProgress(this.player.reloadProgress);

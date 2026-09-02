@@ -103,9 +103,29 @@ try {
       standingCone.toFixed(3) + ' -> ' + walk.cone.toFixed(3));
     t('sprinting opens it further', sprint.cone > walk.cone,
       walk.cone.toFixed(3) + ' -> ' + sprint.cone.toFixed(3));
-    t('a sprint roughly doubles the standing cone',
-      sprint.cone > standingCone * 1.8 && sprint.cone < standingCone * 2.2,
+    t('a sprint roughly triples the standing cone',
+      sprint.cone > standingCone * 2.7 && sprint.cone < standingCone * 3.3,
       (sprint.cone / standingCone).toFixed(2) + 'x');
+
+    // THE TAIL. Firing cancels the sprint, so a penalty that ended with the
+    // run would never be the cone a bullet was fired through. Measured one
+    // frame after the run stops and again once the fade has run out.
+    rest();
+    p.stamina = 100;
+    p.staminaLocked = false;
+    set({ forward: true, sprint: true });
+    await frames(20);
+    set({ sprint: false });
+    await frames(1);
+    const justAfterRun = g._shotSpread();
+    await frames(40);
+    const settled = g._shotSpread();
+    rest();
+    await frames(4);
+    t('the sprint cone outlives the sprint', justAfterRun > walk.cone * 1.3,
+      walk.cone.toFixed(3) + ' walking, ' + justAfterRun.toFixed(3) + ' just after');
+    t('and then it settles back', Math.abs(settled - walk.cone) < 0.01,
+      settled.toFixed(3) + ' vs ' + walk.cone.toFixed(3));
 
     // ---- 2. the bar --------------------------------------------------------
     rest();
@@ -123,7 +143,10 @@ try {
     t('running drains the bar', drained < 95 && drained > 2, drained.toFixed(1));
     t('the readout follows it', barDrained < barFull && Math.abs(barDrained - drained / 100) < 0.05,
       barFull + ' -> ' + barDrained);
-    t('the bar says it is being spent', runClass === true);
+    // THE COLOUR IS THE LEVEL AND NOTHING ELSE. Running must not change it -
+    // the same amount of stamina in two colours is a bar that needs a second
+    // glance to read, which is the one thing a bar is for.
+    t('running does not colour the bar', runClass === false);
 
     // It holds before it refills, so tapping the key cannot top it up free.
     rest();
@@ -136,6 +159,16 @@ try {
 
     // ---- 3. exhaustion -----------------------------------------------------
     rest();
+    p.stamina = 90;
+    p.staminaLocked = false;
+    await frames(4);
+    const highColour = box().contains('stam-low');
+    p.stamina = 20;
+    await frames(4);
+    const lowColour = box().contains('stam-low');
+    t('a full bar is not red', highColour === false);
+    t('a low bar is red', lowColour === true);
+
     p.stamina = 6;
     p.staminaLocked = false;
     await frames(4);

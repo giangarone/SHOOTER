@@ -210,7 +210,7 @@
         <!-- A stepper, not a range input: a native slider is a rounded,
              anti-aliased control from another operating system, and this
              cabinet has no such shape in it. Eight lit cells and two keys. -->
-        <div class="stepper">
+        <div class="stepper" tabindex="-1">
           <button id="btn-shake-down" class="step-btn" type="button" aria-label="Less screenshake">-</button>
           <div id="shake-pips" class="pips"></div>
           <b id="shake-val">100%</b>
@@ -226,7 +226,7 @@
       <div class="set-head pad-only">CONTROLLER</div>
       <div class="set-row pad-only">
         <span class="set-label">LOOK SENSITIVITY</span>
-        <div class="stepper">
+        <div class="stepper" tabindex="-1">
           <button id="btn-sens-down" class="step-btn" type="button" aria-label="Lower look sensitivity">-</button>
           <div id="sens-pips" class="pips"></div>
           <b id="sens-val">5</b>
@@ -235,7 +235,7 @@
       </div>
       <div class="set-row pad-only">
         <span class="set-label">AIM SENSITIVITY</span>
-        <div class="stepper">
+        <div class="stepper" tabindex="-1">
           <button id="btn-aimsens-down" class="step-btn" type="button" aria-label="Lower aim sensitivity">-</button>
           <div id="aimsens-pips" class="pips"></div>
           <b id="aimsens-val">3</b>
@@ -254,7 +254,7 @@
         <span class="set-label">INVERT LOOK</span>
         <button id="btn-invert" class="opt-btn">OFF</button>
       </div>
-      <p class="set-note pad-only">HOLD L2 TO AIM - AIM SENSITIVITY IS THE RATE WITH THE GUN UP</p>
+      <p class="set-note pad-only">AIM SENSITIVITY IS THE TURN RATE WITH THE GUN UP</p>
     </div>
 
     <div class="primary-row"><button id="btn-settings-back">BACK</button></div>

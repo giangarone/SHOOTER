@@ -17,6 +17,7 @@ Open http://localhost:8123
 | --- | --- |
 | WASD | Move. Double-tap W to dash forward, with the Double Dash mutation |
 | Shift | Sprint (hold). Costs stamina; you cannot aim or fire while running |
+| V | Melee |
 | Mouse | Look (pointer lock) |
 | Left click | Shoot (hold for auto) |
 | Right click | Aim down the sights (hold) |
@@ -50,15 +51,33 @@ ever being wrong. Sprinting follows the movement input in whatever direction it
 points; forward-only is the conventional rule and the wrong one here, in a game
 about backing away from a crowd.
 
+On the pad, L3 **toggles**: one click starts the run and the player keeps
+running until something stops them — they stand still, they fire, the bar
+empties, or they click again. Clicking a stick is not something to hold down
+for the length of a retreat. The keyboard's Shift stays a hold, because holding
+a key is.
+
+Sprinting also costs accuracy beyond the speed it is already charged for — the
+weapon is not being carried in a firing grip at all — taking the cone to
+roughly triple the standing spread. That penalty **bleeds off over 0.35s rather
+than ending with the run**, which is what makes it a mechanic instead of a
+light show: firing cancels sprinting, so a penalty that stopped when the sprint
+did could never be the cone a bullet was actually fired through. Shooting out
+of a run is inaccurate for a moment, and the crosshair says so on the way down.
+
 The bar lives under the health bar in the VITALS box: the same segmented cell
-mask at half the height and twice the cell count, cyan while it is yours, gold
-while it is being spent, red while it is locked.
+mask at half the height and twice the cell count. **Its colour is the level and
+nothing else** — cyan, and red below the amount that would let a run start,
+which is the same line the lockout uses. It does not change with what the
+player is doing; the same amount of stamina in two colours is a bar that needs
+a second glance to read, which is the one thing a bar is for. The lockout is an
+animation instead: it beats until the third that unlocks it is back.
 
 ### Aiming
 
 Holding the aim button raises the gun: the field of view eases from 75 to 55
 over 0.14s, the weapon slides to the centre of the screen and up onto the sight
-line, and the shot cone collapses from 0.085 to 0.004 — from a spray that
+line, and the shot cone collapses from 0.085 standing to 0.004 — from a spray that
 scatters visibly past room range to effectively pinpoint. Letting go puts all
 three back. Reloading takes the gun out of the aim, because the reload
 animation drops it out of frame and two poses fighting over one model reads as
@@ -85,6 +104,21 @@ penalty past 6 m/s, which read as a switch — the walk was already over the
 line, so the gun had two accuracies and one of them was unreachable while
 playing.
 
+### Reloading
+
+The gun comes **up** and inward, rolls the magazine well toward the camera, the
+spent magazine drops away and tumbles out of frame, a fresh one rises and seats
+with a knock, and the weapon settles back as the last round lands. Four phases
+on one clock, all of them fractions of the real reload — so a Speed Loader
+build plays the same animation faster rather than a different one.
+
+Up rather than down, and that is the whole reason the animation this replaced
+could never have shown a magazine: the gun rides low and to the right, so a
+reload that dipped it took the well straight off the bottom of the screen.
+There was a dip-and-roll before, but nothing was ever removed and nothing
+replaced it, so it read as a weapon swaying rather than as a magazine being
+changed.
+
 ### DualSense
 
 A PlayStation 5 controller is supported end to end — the arena, the shop, the
@@ -95,7 +129,7 @@ screen is one the player is actually holding.
 | Button | Action |
 | --- | --- |
 | Left stick | Move. Analogue — a half push is a walk |
-| L3 | Sprint (hold) |
+| L3 | Sprint (toggle) — press once, keep running until something stops you |
 | Right stick | Look |
 | R2 | Shoot |
 | L2 | Aim down the sights (hold) |
@@ -107,6 +141,14 @@ screen is one the player is actually holding.
 | Triangle | Hold for the run summary |
 | Options | Pause, resume, and start a run from the menu |
 | D-pad | Walk the menus; Cross confirms |
+
+On menus, up and down move the selection and Cross confirms. **Inside a
+settings row, left and right change the value** rather than moving the
+selection — a stepper is one stop with a value between its two keys, not two
+separate buttons. Scoped to settings rows on purpose: everywhere else a
+horizontal press means "move to the control beside this one", and a rule that
+swallowed left and right globally would strand the selection on the first of
+three buttons in a row.
 
 Picking the pad up switches the interface with it: the prompts name buttons
 instead of keys, the control sheet on the start screen becomes the one above,
@@ -489,8 +531,12 @@ and, as a regression test, that the hit marker clears itself. It used to be an
 connected pinned it over the crosshair for the rest of the run. `test:sprint`
 covers the second gear: that it is faster, that the bar drains and holds and
 refills, that emptying it locks the sprint until a third is back and a held key
-cannot sprint on fumes, that a trigger and a standstill both refuse it, and
-that running takes the gun out of the sights and hands it back afterwards.
+cannot sprint on fumes, that a trigger and a standstill both refuse it, that
+running takes the gun out of the sights and hands it back afterwards, and that
+the sprint's accuracy penalty outlives the run and then settles. `test:pad`
+covers the L3 latch and the settings rows: that one click starts a run and a
+standstill ends it, that it does not resume on its own, and that left and right
+on a sensitivity row move the value while the selection stays on the row.
 
 ## Structure
 

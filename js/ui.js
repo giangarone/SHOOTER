@@ -149,27 +149,33 @@ export class UI {
     this.hpText.textContent = shown + ' / ' + max;
   }
   /**
-   * The stamina bar. `frac` is 0..1, `sprinting` is whether it is being spent
-   * right now, and `locked` is the exhaustion state - see _updateSprint in
-   * player.js.
+   * The stamina bar. `frac` is 0..1, `low` is whether there is too little left
+   * to start a run on, and `locked` is the exhaustion state - see
+   * _updateSprint in player.js.
+   *
+   * THE COLOUR IS THE QUANTITY AND NOTHING ELSE. It used to go gold while the
+   * bar was being spent, which meant the same amount of stamina was two
+   * different colours depending on what the player was doing with it - so the
+   * one thing a bar is for, reading a level at a glance, needed a second
+   * glance to interpret. Running is legible from the speed of the drain.
    *
    * Quantised to whole cells like the health bar above, and compared against
    * the cell COUNT rather than the fraction: the bar has forty of them, so a
    * value drifting continuously through a regen would otherwise write a
    * transform on every frame to move the fill by nothing.
    */
-  setStamina(frac, sprinting, locked) {
+  setStamina(frac, low, locked) {
     const cells = Math.ceil(Math.max(0, Math.min(1, frac)) * 40);
     if (this._c.stam !== cells) {
       this._c.stam = cells;
       this.stamBar.style.transform = 'scaleX(' + (cells / 40) + ')';
     }
-    if (this._c.stamRun !== sprinting) {
-      this._c.stamRun = sprinting;
-      this.hpBox.classList.toggle('sprinting', sprinting);
+    if (this._c.stamLow !== low) {
+      this._c.stamLow = low;
+      this.hpBox.classList.toggle('stam-low', low);
     }
-    if (this._c.stamLock !== locked) {
-      this._c.stamLock = locked;
+    if (this._c.stamLocked !== locked) {
+      this._c.stamLocked = locked;
       this.hpBox.classList.toggle('spent', locked);
     }
   }
@@ -631,7 +637,7 @@ export class UI {
   resetCache() {
     this._c = {};
     this.bossBar.className = 'plate hidden';
-    this.hpBox.classList.remove('low', 'sprinting', 'spent');
+    this.hpBox.classList.remove('low', 'stam-low', 'spent');
     this.enemies.classList.remove('clear');
     this.comboEl.classList.add('hidden');
     this.crosshair.classList.remove('aim');

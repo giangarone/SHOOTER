@@ -32,6 +32,9 @@
 import * as THREE from 'three';
 
 const DARK = { color: 0x1c212c, roughness: 0.35, metalness: 0.7 };
+// The magazine reads a step lighter than the receiver it sits in - see the
+// note where it is built.
+const MAG = { color: 0x39445f, roughness: 0.5, metalness: 0.55 };
 
 function mat(spec) {
   return new THREE.MeshStandardMaterial(spec);
@@ -57,7 +60,20 @@ function buildPulseRifle() {
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.09), dark);
   grip.position.set(0, -0.14, 0.12);
   grip.rotation.x = 0.3;
-  g.add(body, barrel, grip, buildMarks(), muzzleAt(0, 0.02, -0.65));
+  // THE MAGAZINE, and it is a named part because the reload ANIMATES it - it
+  // drops out of the gun, falls away, and a fresh one rises and seats. See
+  // _animateReload in player.js. A reload with nothing to remove and replace
+  // is a gun swaying, which is what this one was before the part existed.
+  //
+  // Lighter than the receiver and cut across its front face, so the thing
+  // leaving the weapon is legible as a separate object in the half-second it
+  // is on screen rather than as a corner of the gun coming loose.
+  const magazine = new THREE.Mesh(
+    new THREE.BoxGeometry(0.055, 0.18, 0.08), mat(MAG)
+  );
+  magazine.name = 'mag';
+  magazine.position.set(0, -0.11, -0.04);
+  g.add(body, barrel, grip, magazine, buildMarks(), muzzleAt(0, 0.02, -0.65));
   return g;
 }
 

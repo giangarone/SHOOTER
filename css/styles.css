@@ -357,20 +357,21 @@ html, body {
   background: var(--cyan);
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 10px rgba(78, 243, 255, 0.45);
 }
-/* RUNNING. Brighter and warmer while it is actually being spent, so the bar
-   answers "is this draining because of me" without being read. */
-#hp-box.sprinting #stam-bar {
-  background: var(--gold);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 233, 94, 0.6);
-}
-/* SPENT. The lockout is a state the player has to be told about - a key that
-   has stopped working and says nothing reads as a broken key - so the bar goes
-   red and beats until the third that unlocks it is back. */
+/* LOW: below the amount that would let a run start. THE COLOUR IS THE LEVEL
+   AND NOTHING ELSE - it does not change with what the player is doing, so the
+   bar can be read at a glance the way the health bar above it can. Red at
+   exactly the line the lockout uses, so it means "there is not enough here to
+   run on" rather than being a warning at a round number. */
+#hp-box.stam-low #stam-bar,
 #hp-box.spent #stam-bar {
   background: var(--red);
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 59, 48, 0.6);
-  animation: blink 0.5s steps(1, end) infinite;
 }
+/* SPENT. The lockout is a state the player has to be told about - a key that
+   has stopped working and says nothing reads as a broken key - so the bar
+   BEATS until the third that unlocks it is back. An animation, not a colour:
+   the colour is already saying how much is left. */
+#hp-box.spent #stam-bar { animation: blink 0.5s steps(1, end) infinite; }
 #hp-box.spent #stam-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
 
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
@@ -919,6 +920,25 @@ html, body {
    so the pointer says so. */
 #overlay-settings, #overlay-scores {
   cursor: default;
+  /* SCROLLABLE, because settings only ever grow. The controller block took
+     this screen past the bottom of a 720p window and cut BACK off, and the
+     next setting would have done it again on a taller one. `justify-content`
+     goes with it: a centred flex column with overflow cannot be scrolled back
+     up to its first row - the overflow lands above the scroll origin and is
+     unreachable - so the content starts at the top and the padding does the
+     centring while it still fits.
+     
+     The pad's selection scrolls itself into view: MenuDriver.focus() calls
+     the real focus() on whatever it selects, which is why the steppers carry
+     a tabindex.
+
+     `safe` is the whole trick: it centres while the content fits and falls
+     back to top-aligned the moment it does not. A plain centred flex column
+     that overflows puts its first rows ABOVE the scroll origin, where nothing
+     can reach them. */
+  justify-content: safe center;
+  overflow-y: auto;
+  padding: calc(var(--u) * 6) 0;
   /* The same two layers every other overlay has - the stepped radial over the
      2px checker - laid on a SOLID base rather than straight onto the page, so
      nothing behind them reads through. Painting the radial itself opaque would
@@ -938,7 +958,10 @@ html, body {
    row without the two colliding in the middle on a narrow window. */
 .settings {
   display: flex; flex-direction: column;
-  gap: calc(var(--u) * 3);
+  /* Tight, because this panel has three blocks in it now and a laptop screen
+     is 720 tall. The overflow rule on the screen itself is the safety net for
+     the next block; this is what keeps BACK on screen without one. */
+  gap: calc(var(--u) * 2);
   width: min(92vw, 560px);
   padding: calc(var(--u) * 4) calc(var(--u) * 6) calc(var(--u) * 5);
   --surface: rgba(6, 8, 13, 0.92);
@@ -976,6 +999,11 @@ html, body {
   text-align: left; line-height: 1.8;
   margin-top: calc(var(--u) * 1);
 }
+
+/* The controller block is the longest one on the screen, and every row in it
+   is a label and a control. Tightened so the whole panel still fits a laptop
+   without the screen having to be scrolled to reach BACK. */
+.settings .set-row { min-height: calc(var(--u) * 7); }
 
 /* ---- the stepper --------------------------------------------------------
    NOT a range input. A native slider is a rounded, smoothly-tracking control
@@ -1383,8 +1411,8 @@ body.pad-mode #game canvas { cursor: none; }
 /* Both selectors, every time, because the death screen paints its buttons
    through `#overlay-over button` and an id beats any number of classes. The
    pad selection has to win on EVERY screen or it is not a selection. */
-.overlay .pad-focus,
-#overlay-over .pad-focus {
+.overlay button.pad-focus,
+#overlay-over button.pad-focus {
   color: var(--ink);
   background: var(--gold);
   box-shadow:
@@ -1397,13 +1425,30 @@ body.pad-mode #game canvas { cursor: none; }
    neighbour is a hollow one would read as a different KIND of control rather
    than as the selected one. */
 .overlay .opt-btn.pad-focus,
-.overlay .step-btn.pad-focus,
 .overlay .kb-key.pad-focus,
 #overlay-over .kb-key.pad-focus {
   color: var(--gold);
   background: rgba(255, 233, 94, 0.16);
   box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 233, 94, 0.35);
 }
+/* A STEPPER IS SELECTED AS A WHOLE - the two keys and the value between them
+   are one control, and left/right on the pad moves the value rather than the
+   selection (see MenuDriver.adjust). It is the one focusable thing on these
+   screens with no clip-path on it, so a real outline paints, and an outline is
+   the right mark anyway: nothing inside it is being pressed. */
+.overlay .stepper.pad-focus {
+  outline: 3px solid var(--gold);
+  outline-offset: 6px;
+}
+.overlay .stepper.pad-focus .step-btn {
+  color: var(--gold);
+  box-shadow: inset 0 0 0 2px rgba(255, 233, 94, 0.55);
+}
+.overlay .stepper.pad-focus .step-btn[disabled] {
+  color: var(--line-hi);
+  box-shadow: inset 0 0 0 2px rgba(43, 51, 72, 0.9);
+}
+
 /* The name field is a text box. Filling it gold would read as a button that
    has been pressed, so it takes the ring alone. */
 #lb-name.pad-focus {

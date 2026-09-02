@@ -19,7 +19,9 @@
 //    5. The right stick turns the view, and L2 raises the gun - which zooms,
 //       tightens the cone and turns the view at its own sensitivity.
 //    6. R2 fires, R3 melees, SQUARE reloads, TRIANGLE holds the build sheet.
-//    7. OPTIONS pauses and un-pauses; the D-pad walks the menu.
+//    7. OPTIONS pauses and un-pauses; the D-pad walks the menu, and a
+//       settings row spends left/right on its own value rather than on moving
+//       the selection.
 //    8. Aim assist works inside its cone and not outside it, and its pull
 //       closes an error rather than opening one.
 //    9. Vibration reaches the actuator, and stops when it is turned off.
@@ -253,6 +255,39 @@ try {
     await frames(3);
     t('triangle holds the build sheet', statsUp === true && g._statsHeld === false);
 
+    // L3 LATCHES. One click starts the run and the player keeps running until
+    // something stops them - here, letting go of the stick.
+    clearField();
+    g.player.stamina = 100;
+    g.player.staminaLocked = false;
+    stick(0, 1, 0, 0);
+    await frames(4);
+    await tap(B.L3);
+    await frames(4);
+    const latched = g.player.sprinting;
+    // The click is long released; the run has to still be going.
+    const stillRunning = g.player.sprinting;
+    stick(0, 0, 0, 0);
+    await frames(6);
+    const stoppedWithTheStick = g.player.sprinting;
+    // And it must not resume on its own when the player moves again.
+    stick(0, 1, 0, 0);
+    await frames(6);
+    const notResumed = g.player.sprinting;
+    // A second click while running puts it away.
+    await tap(B.L3);
+    await frames(4);
+    const runningAgain = g.player.sprinting;
+    await tap(B.L3);
+    await frames(4);
+    const clickedOff = g.player.sprinting;
+    stick(0, 0, 0, 0);
+    await frames(4);
+    t('L3 latches the sprint on', latched === true && stillRunning === true);
+    t('standing still ends the run', stoppedWithTheStick === false);
+    t('and it does not resume on its own', notResumed === false);
+    t('a second click stops it', runningAgain === true && clickedOff === false);
+
     // L1 dashes, but only for a build that has a dash to spend - the button
     // must not invent charges the keyboard would not have had.
     g.player.mods.dashCharges = 2;
@@ -348,6 +383,35 @@ try {
     await tap(B.OPTIONS);
     g._openSettings();
     await frames(2);
+    // THE ROWS, WALKED WITH THE PAD. A stepper is one stop, not two keys, and
+    // left/right on it moves the VALUE - the bug this replaced was a selection
+    // that walked from the minus key to the plus key and changed nothing.
+    g.menu.focus(document.getElementById('sens-pips').closest('.stepper'));
+    const startSens = g._padSens;
+    set(B.RIGHT, true);
+    await frames(2);
+    set(B.RIGHT, false);
+    await frames(2);
+    const afterRight = g._padSens;
+    const stayedOnRow = g.menu.el === document.getElementById('sens-pips').closest('.stepper');
+    set(B.LEFT, true);
+    await frames(2);
+    set(B.LEFT, false);
+    await frames(2);
+    t('right steps a settings row up', afterRight === startSens + 1,
+      startSens + ' -> ' + afterRight);
+    t('the selection stays on the row', stayedOnRow === true,
+      g.menu.el && g.menu.el.className);
+    t('left steps it back down', g._padSens === startSens, String(g._padSens));
+    // Down from a stepper must land on the next ROW, not on the other key of
+    // the one it is leaving.
+    set(B.DOWN, true);
+    await frames(2);
+    set(B.DOWN, false);
+    await frames(2);
+    t('down leaves the row', g.menu.el !== document.getElementById('sens-pips').closest('.stepper')
+      && !!g.menu.el, g.menu.el && (g.menu.el.id || g.menu.el.className));
+
     const sens = g._padSens;
     g._stepSens(g._sensDial, 1);
     t('sensitivity steps', g._padSens === Math.min(8, sens + 1), String(g._padSens));
