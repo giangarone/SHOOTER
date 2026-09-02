@@ -571,7 +571,7 @@ export class Rig {
 
   // `s` is a scratch object owned by main.js and refilled each frame, so this
   // allocates nothing. Fields: mode, beat, level, healthFrac, comboMult,
-  // bossColor, bossPos.
+  // bossColor, bossPos, fogMult.
   update(dt, s) {
     this.t += dt;
 
@@ -979,9 +979,13 @@ export class Rig {
     // as visible as the smoke it is crossing.
     //
     // `breath` is computed up with the furniture, which reads it too.
+    // BLACKOUT scales the whole target rather than replacing it, so the haze a
+    // player bought still breathes with the bass and still thickens for a boss
+    // - it is the room they chose to fight in, not a second fog laid over it.
     const fogTarget = (boss ? FOG_DENSITY_BOSS : FOG_DENSITY)
       * (1 + level * 0.3 + breath * FOG_BREATH)
-      * (1 + this._house * (HOUSE_FOG - 1));
+      * (1 + this._house * (HOUSE_FOG - 1))
+      * (s.fogMult || 1);
     this.scene.fog.density += (fogTarget - this.scene.fog.density) * Math.min(1, dt * 1.5);
     this._c.copy(this._fogBase).lerp(this._colour, 0.12 + level * 0.1);
     // The far wall and the sky go to black with the room. Fog colour is also

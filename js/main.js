@@ -25,7 +25,9 @@
 //   'idle'         short beat, then the next wave starts
 //
 // TIME: `this.time` is GAME time - it only advances while playing, and dt is
-// clamped so a stalled tab can't teleport everything. Every gameplay deadline
+// clamped at both ends: a stalled tab cannot teleport everything, and a
+// backwards frame timestamp cannot run the clock down past zero and arm every
+// deadline that uses 0 to mean "not armed". See _loop(). Every gameplay deadline
 // (buff expiry, pickup despawn, regen delay) is measured against it. Use
 // performance.now() only for things outside the simulation, like the menu
 // camera. Mixing the two is a real bug that has happened here before.
@@ -701,6 +703,9 @@ class Game {
     this._rigState = {
       mode: 'idle', beat: 0, level: 0, bar: 0, downbeat: false,
       healthFrac: 1, comboMult: 1, bossColor: 0xffffff, bossPos: null,
+      // BLACKOUT's multiplier on the fog the rig drives. One writer for the
+      // density: rig.js breathes it with the music and this scales its target.
+      fogMult: 1,
       // The camera's world position, so the laser bank can billboard its
       // ribbons. A reference, not a copy: the camera object outlives the run.
       camPos: null,
@@ -2069,6 +2074,7 @@ class Game {
     // low-health maths backwards.
     r.healthFrac = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
     r.comboMult = this.comboMult();
+    r.fogMult = this.player.mods.fogMult;
     if (this.bossFight && this.bossFight.parts.length) {
       const boss = this.bossFight.parts[0];
       r.bossColor = ENEMY_TYPES[this.bossFight.key].color;
@@ -2442,6 +2448,8 @@ class Game {
 
     this.waveDamageTaken = 0;
     this.player.armWard();
+    // OPENING SALVO opens here, on the same signal the ward is armed on.
+    this.player.armSalvo(this.time);
     this._reliefT = RELIEF_INTERVAL;
     if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
   }
@@ -3104,7 +3112,7 @@ class Game {
     // Malady scales the two statuses that HAVE a strength. Cryo, Terror
     // and Petrify are left alone: shortening them buys nothing back.
     if (m.poisonTime) {
-      en.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
+      en.applyStatus('poison', m.poisonTime * m.dotTime, this.player.venomDps);
     }
     if (m.burnTime) en.applyStatus('burn', m.burnTime * m.dotTime, m.burnDps * m.dotPower);
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
@@ -3367,6 +3375,19 @@ class Game {
       this.sfx.hit();
       this.ui.hitMarker();
       this.effects.addShake(0.03);
+      // BRASS ECHO. Rolled per SHOT and only on one that connected, off the
+      // same boolean the hitmarker is drawn from - the round the player gets
+      // back is always one they can see having earned. A puff of brass at the
+      // muzzle is the whole tell; the ammo counter climbing is the rest.
+      if (this.player.tryAmmoRefund()) {
+        this.effects.burst(
+          this.player.muzzleInto(this._killPos), 0xffab00, 6, 3, 1.6, 0.3
+        );
+        // The puff at the muzzle is lost in a firefight; the number in the
+        // corner is where the player actually reads their ammunition, so that
+        // is what flares. Without it a 5% refund is a stat nobody can see.
+        this.ui.flashReserve();
+      }
     }
     targets.length = 0;
   }
@@ -3879,6 +3900,15 @@ class Game {
         // folded into the clear banner rather than raised as its own, because
         // a banner replaces whatever is on screen: a second one here would
         // wipe the wave-clear line before it could be read.
+        // UNTOUCHED and SCAR TISSUE, banked before the No-Hit line so the two
+        // rewards for the same wave are appended in the order they are earned.
+        // Folded into the clear banner for the same reason No-Hit is: a second
+        // banner would wipe the first before it could be read.
+        const banked = this.player.bankWaveHealth(this.lastPerfect);
+        if (banked > 0) {
+          this.effects.shockwave(this.player.pos, 0xb2ff59, 6, 0.6);
+          msg += '  +' + banked + ' MAX HP';
+        }
         if (this.lastPerfect && this.player.mods.noHitBonus > 0) {
           const n = this.player.addNoHitStack();
           const pct = Math.round(Math.min(NO_HIT_CAP, this.player.mods.noHitBonus * n) * 100);
@@ -5229,7 +5259,7 @@ class Game {
         const dst = list[j];
         if (dst === src || dst.dead || dst.status.poison > 0) continue;
         if (dst.pos.distanceTo(src.pos) > m.poisonSpread) continue;
-        dst.applyStatus('poison', m.poisonTime * m.dotTime, m.poisonDps * m.dotPower);
+        dst.applyStatus('poison', m.poisonTime * m.dotTime, this.player.venomDps);
         this.effects.burst(
           this._ashAt.set(dst.pos.x, 1.0, dst.pos.z), 0x39d353, 6, 3, 1.5, 0.35
         );
@@ -5325,7 +5355,9 @@ class Game {
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
       this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
-      this.player.shield
+      this.player.shield,
+      this.player.salvoEnd > this.time && this.player.mods.salvoTime > 0
+        ? (this.player.salvoEnd - this.time) / this.player.mods.salvoTime : 0
     );
     this.ui.setStatuses(this.player);
     if (this._statsHeld) this.ui.updateStats(this._statRows());
@@ -5391,6 +5423,9 @@ class Game {
       const pct = Math.round(p.streak * 100);
       rows.push(['HOT STREAK', (pct > 0 ? '+' : '') + pct + '%', pct > 0]);
     }
+    if (p.mods.hpBankCap > 0) {
+      rows.push(['BANKED MAX HP', '+' + p.hpBanked + ' / ' + p.mods.hpBankCap, p.hpBanked > 0]);
+    }
     if (p.mods.dashCharges > 0) {
       rows.push(['DASHES', p.dashLeft + ' / ' + p.mods.dashCharges, p.dashLeft > 0]);
     }
@@ -5402,7 +5437,21 @@ class Game {
 
   // The frame. See the FRAME ORDER note at the top before reordering anything.
   _loop(now) {
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    // CLAMPED AT BOTH ENDS. The ceiling is the stalled-tab guard it always
+    // was; the floor is the one that cost an afternoon. A frame served a
+    // timestamp behind the last one - a tab coming back, a clock stepping, a
+    // renderer handing rAF an older `now` - makes dt negative, and a negative
+    // dt does not merely stall the game: it RUNS IT BACKWARDS. `this.time`
+    // walks below zero, and every deadline in the run is a game-time number
+    // compared with `> this.time`, initialised to 0 and meaning "not armed" -
+    // invulnEnd, rageEnd, dodgeEnd, frozenUntil, Opening Salvo's window. Below
+    // zero, all of them read as ARMED, so a run reads as invulnerable, raging,
+    // and firing free ammunition, with nothing on screen to say why.
+    //
+    // Fixed here rather than at each of those deadlines, because the list only
+    // grows and one of them will always be missed. Time not going backwards is
+    // an invariant of the clock, not a thing every reader has to defend.
+    const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
 
     // THE PAD, FIRST AND IN EVERY STATE. It drives the menus as well as the

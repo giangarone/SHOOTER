@@ -243,6 +243,17 @@ export class UI {
     }
   }
 
+  // BRASS ECHO. One flare on the reserve number when a round comes back - the
+  // only thing on the HUD that says the mutation paid. The class is removed
+  // and forced to reflow before it goes back on, so two refunds in quick
+  // succession play twice instead of the second one being swallowed by the
+  // animation the first is still running.
+  flashReserve() {
+    this.ammoRes.classList.remove('refund');
+    void this.ammoRes.offsetWidth;
+    this.ammoRes.classList.add('refund');
+  }
+
   // Sweep of the ring around the crosshair, 0..1. Quantised to a hundredth
   // before it is written: this is called every frame, and a custom-property
   // write the browser has to restyle for is not worth spending on a change
@@ -306,13 +317,19 @@ export class UI {
   // the room behind a blue wash for fifteen seconds at a time. The chip does
   // the same job: it carries a points label as well as a timer, because the
   // shield is far more often spent by damage than by its clock.
-  setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0) {
+  //
+  // OPENING SALVO rides here rather than in the status strip: a status wears
+  // the hostile frame, and free ammunition is not something being done to the
+  // player. It draws the MUTATION'S OWN icon - one shape per mutation holds
+  // whether the shape is standing on a totem or counting down on the HUD.
+  setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0, salvo = 0) {
     this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost, '', false, 0);
     this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost, '', false, 1);
     this._setBuff(
       'shield', 'pickShield', 0x4ef3ff, shield,
       shield > 0 ? String(Math.ceil(shieldPoints)) : '', false, 2
     );
+    this._setBuff('salvo', 'openingSalvo', 0xffd180, salvo, '', false, 3);
   }
 
   // STATUS EFFECTS, in the same strip as the buffs and to the right of them.

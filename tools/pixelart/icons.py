@@ -216,6 +216,58 @@ def _(c):
     bullet(c, 13, 1, 3.4, 5.4, E, E)
 
 
+@icon('hairTrigger')        # +25% fire rate per stack, and the kick with it
+def _(c):
+    # THE TRIGGER ITSELF, inside its guard, with the kick coming off it.
+    # OVERCLOCK owns the dial - a second gauge would say "rate of fire" twice
+    # and never say "recoil" - so this is the part of the gun the upgrade
+    # actually touches, and the two arrows are what it costs.
+    c.rect(1.0, 2.0, 15.0, 4.8, S)                   # the receiver above it
+    c.arc(8.0, 12.0, 7.2, 2.6, 190, 350, S)          # the guard, hung off it
+    c.rect(0.8, 4.8, 3.4, 12.4, S)
+    c.rect(12.6, 4.8, 15.2, 12.4, S)
+    c.poly([(6.4, 4.8), (10.0, 4.8), (9.4, 10.6), (5.8, 13.4)], E)   # the blade
+    arrow(c, 19.6, 22.0, 19.6, 4.0, E, 2.6, 5.4)     # and what it kicks back
+
+
+@icon('brassEcho')          # a share of the shots that HIT are paid back
+def _(c):
+    # One round, and the arc it comes back along. The cartridge is the
+    # structure and the return is the energy, so the lit half of the icon is
+    # the half that names the upgrade - the round coming BACK, not the round.
+    bullet(c, 13.6, 5.0, 6.4, 17.0, S, S, 0.42)
+    c.arc(11.0, 14.0, 8.6, 2.6, 70, 250, E)          # up the left and over
+    c.poly([(9.2, 3.6), (16.4, 5.2), (10.2, 9.6)], E)  # arriving at the case
+
+
+@icon('openingSalvo')       # the first ten seconds of a wave cost no ammo
+def _(c):
+    # THREE ROUNDS ALREADY IN THE AIR, fanned and trailing. Not a clock: the
+    # window is measured on the HUD chip this same drawing sits in, and a dial
+    # would put a second timer inside a timer. The set has no other icon whose
+    # silhouette is a diagonal fan.
+    # Abreast rather than in file: three rounds strung along one flight line
+    # fuse into a single streak, and the fan is the whole silhouette.
+    ang = math.radians(42)
+    ux, uy = math.cos(ang), -math.sin(ang)
+    px, py = -uy, ux
+    for t in (-7.4, 0.0, 7.4):
+        x, y = 12 + px * t, 12 + py * t
+        L, W = 7.6, 2.2
+        nose = 3.0
+        # The case: a quad along the flight line, with a nose cone on the end.
+        c.poly([(x - ux * L / 2 + px * W, y - uy * L / 2 + py * W),
+                (x + ux * (L / 2 - nose) + px * W, y + uy * (L / 2 - nose) + py * W),
+                (x + ux * (L / 2 - nose) - px * W, y + uy * (L / 2 - nose) - py * W),
+                (x - ux * L / 2 - px * W, y - uy * L / 2 - py * W)], S)
+        c.poly([(x + ux * L / 2, y + uy * L / 2),
+                (x + ux * (L / 2 - nose) + px * W, y + uy * (L / 2 - nose) + py * W),
+                (x + ux * (L / 2 - nose) - px * W, y + uy * (L / 2 - nose) - py * W)], E)
+        # The trail, behind the case and thinner than it.
+        c.line(x - ux * (L / 2 + 3.4), y - uy * (L / 2 + 3.4),
+               x - ux * L / 2, y - uy * L / 2, E, 1.6)
+
+
 # ---- damage ---------------------------------------------------------------
 
 
@@ -461,6 +513,53 @@ def _(c):
     c.rect(7, 11.5, 17, 14.5, E)
 
 
+@icon('untouched')          # +3 max HP for every wave cleared unhurt, kept
+def _(c):
+    # A STAIR that keeps climbing, with the health it banks lit on top of it.
+    # Nothing else in the set is a staircase, and the shape says the two things
+    # the mutation is: it goes up, and every step it took is still there.
+    for i, h in enumerate((9.0, 13.5, 18.0)):
+        x0 = 2.0 + i * 6.8
+        c.rect(x0, 23.0 - h, x0 + 6.2, 22.5, S)
+    c.rect(14.8, 1.6, 22.2, 4.4, E)                  # the plus, on the top step
+    c.rect(17.1, 0.0, 19.9, 6.0, E)
+
+
+@icon('scarTissue')         # +2 max HP every wave, and everything hurts more
+def _(c):
+    # A SEAM, stitched shut. The wound is the structure and the stitches are
+    # what closed it, so the lit part is the healing - which is exactly the
+    # deal: you are made of the damage you took.
+    c.rect(8.6, 0.0, 15.4, 23.0, S)
+    c.rect(11.2, 0.0, 12.8, 23.0, DEEP)              # the wound itself, still open
+    for y in (3.0, 8.6, 14.2, 19.8):
+        c.line(5.6, y - 1.8, 18.4, y + 1.8, E, 2.2)
+
+
+@icon('blackout')           # the haze closes in, and you are tougher for it
+def _(c):
+    # AN EYE, most of it swallowed. The bands are the room and the eye is what
+    # is left of the room you can read; drawn in that order so the haze passes
+    # in FRONT, which is the whole point of the mutation.
+    ellipse(c, 12, 12, 10.6, 7.0, E)
+    c.disc(12, 12, 3.6, DEEP)
+    for y in (2.5, 9.0, 15.5):
+        c.rect(0.0, y, 23.0, y + 2.4, S)
+
+
+@icon('digIn')              # stand still and the health comes back
+def _(c):
+    # AN ANCHOR. Planted is the whole mutation, and the crossbar through the
+    # shank gives it the cross the health family is read by without borrowing
+    # NANOWEAVE's weave or the station's heart.
+    c.rect(10.6, 3.0, 13.4, 20.0, E)                 # shank
+    c.rect(4.0, 7.0, 20.0, 9.6, E)                   # crossbar
+    c.ring(12, 3.4, 3.2, 1.6, S)                     # the ring at the head
+    c.arc(12, 13.0, 9.0, 2.6, 200, 340, S)           # the flukes, swept round
+    c.poly([(1.6, 12.6), (6.4, 15.4), (1.0, 18.0)], S)
+    c.poly([(22.4, 12.6), (17.6, 15.4), (23.0, 18.0)], S)
+
+
 # ---- movement -------------------------------------------------------------
 
 
@@ -627,6 +726,16 @@ def _(c):
         c.poly([(8 + math.cos(r) * 17, 17 - math.sin(r) * 17),
                 (8 + math.cos(r + 0.16) * 8, 17 - math.sin(r + 0.16) * 8),
                 (8 + math.cos(r - 0.16) * 8, 17 - math.sin(r - 0.16) * 8)], E)
+
+
+@icon('secondWind')         # sprint twice as long, and get it back twice as fast
+def _(c):
+    # THREE GUSTS, each curling back on itself. The movement family is built
+    # from chevrons and after-images, and both are spoken for - this is the AIR
+    # instead, which is the one thing stamina actually is.
+    for y, x1, r in ((5.5, 15.0, 3.2), (12.0, 18.0, 3.6), (18.5, 13.0, 2.8)):
+        c.line(1.5, y, x1, y, S, 2.6)
+        c.arc(x1, y + r, r, 2.6, 270, 150, E)
 
 
 # ---- poison, fire, ice and the things that prolong them -------------------

@@ -409,6 +409,17 @@ html, body {
 #ammo-res { font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink); }
 #ammo-res.warn { color: var(--amber); }
 #ammo-res.out  { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
+/* BRASS ECHO paying out. The reserve is a 12px number in the corner of the
+   screen and a refund moves it by one, which is invisible while the magazine
+   beside it is counting down - so the number itself flares gold for a moment.
+   Restarted from JS by removing and re-adding the class (see UI.flashReserve),
+   because a second refund inside the animation must play again rather than
+   ride the first one out. */
+#ammo-res.refund { animation: ammo-refund 0.42s ease-out 1; }
+@keyframes ammo-refund {
+  0%   { color: var(--amber); transform: translateY(-3px) scale(1.35); }
+  100% { color: var(--dim); transform: none; }
+}
 /* RELOADING is a full-width bar under the count rather than a word beside it:
    the plate itself changing is visible in peripheral vision, and the word is
    not. */

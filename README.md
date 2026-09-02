@@ -412,8 +412,8 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 48 upgrades: 10 commons, 32 rares and 6 cursed. A specific rare
-mutation turns up in roughly 5-6% of totem sets, so a run sees a slice of the
+The pool is 57 upgrades: 14 commons, 35 rares and 8 cursed. A specific rare
+mutation turns up in roughly 4-5% of totem sets, so a run sees a slice of the
 pool rather than all of it - that is the point, but it means a new upgrade only
 matters if it is worth taking on sight, without a partner card.
 
@@ -427,6 +427,9 @@ Where a new upgrade's hook goes, by what it reacts to:
 | damage to the player | `_hurtPlayer()` |
 | the gun's own state | `Player.tryShoot()` / `Player.update()` |
 | an enemy's own timers | `Enemy._tickStatus()`, reading `ctx.mods` |
+| a wave starting | `startWave()` - `Player.armWard()` and `armSalvo()` |
+| a wave being cleared | the `done` branch in `_updateWave()` - `Player.bankWaveHealth()`, No-Hit Bonus |
+| the room itself | `_fillRigState()`, read by `Rig.update()` - Blackout's fog |
 
 Deaths are recorded and played AFTER the sweep, never inline: a corpse effect
 that ran mid-sweep would read the enemy list while it is half-compacted.

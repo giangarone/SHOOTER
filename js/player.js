@@ -43,6 +43,21 @@ const DEFAULT_MODS = {
   regenRate: 0,         // health per second once regenerating (mutations only)
   killHealChance: 0,    // Vampiric Rounds: chance a kill heals 1 HP
   ammoRegen: 0,         // reserve rounds per second
+  ammoRefund: 0,        // Brass Echo: chance a shot that HIT is paid back
+  recoilMult: 1,        // Hair Trigger: multiplier on the weapon's pitch kick
+  staminaDrain: 1,      // Second Wind: multiplier on sprint and slide drain
+  staminaRegen: 1,      // Second Wind: multiplier on the refill rate
+  // The two per-wave max-HP mutations. Both bank into `hpBanked` on the player
+  // rather than into a mod, for the same reason noHitStacks does: mods are
+  // replayed from scratch on every draft pick, so anything an EVENT writes
+  // there is refunded by the next totem the player walks into.
+  hpPerWave: 0,         // Scar Tissue: max HP banked at every wave clear
+  hpPerCleanWave: 0,    // Untouched: max HP banked at a wave cleared unhurt
+  hpBankCap: 0,         // and the ceiling the bank stops at
+  plantRegen: 0,        // Dig In: health per second once planted
+  plantDelay: 0,        // after this long still and untouched
+  salvoTime: 0,         // Opening Salvo: free-ammo seconds at each wave start
+  fogMult: 1,           // Blackout: multiplier on the fog density rig.js drives
   creditMult: 1,        // multiplier on credits earned
   ammoOnKill: 0,        // reserve rounds granted per kill
   magnetMult: 1,        // Lodestone: multiplier on the money-orb collection
@@ -57,7 +72,8 @@ const DEFAULT_MODS = {
   // one upgrade with max: 1, so they are flags and rates rather than
   // multipliers that stack. Zero means the mutation is not owned, which is
   // what every hook in main.js tests.
-  poisonDps: 0,         // Venom: damage per second, for poisonTime seconds
+  poisonDps: 0,         // Venom: poison damage per second as a MULTIPLE of the
+                        // weapon's base bullet damage - see Player.venomDps
   poisonTime: 0,
   burnDps: 0,           // Incendiary: damage per second, for burnTime seconds
   burnTime: 0,
@@ -581,6 +597,11 @@ export class Player {
     this.fireCd = 0;
     // Breach Round: set by a finished reload, spent by the next shot.
     this.breachReady = false;
+    // WHAT THE LAST TRIGGER PULL ACTUALLY COST, in rounds. Brass Echo pays
+    // this back rather than shotCost, so a shot that spent nothing - one
+    // inside Opening Salvo's window - can never refund something it never
+    // used. Written by every path through tryShoot().
+    this.lastShotCost = 0;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
     // MAX HP SOLD TO THE DEVIL, for the rest of the run. Deliberately NOT a
@@ -743,6 +764,23 @@ export class Player {
     // because mods are rebuilt from the upgrade list on every draft pick, and
     // anything written into them by an event would be wiped by the next one.
     this.noHitStacks = 0;
+    // UNTOUCHED and SCAR TISSUE. Max HP earned at wave ends and kept for the
+    // rest of the run, on the player for the reason noHitStacks is - see the
+    // note in DEFAULT_MODS. Read by the maxHealth getter.
+    this.hpBanked = 0;
+    // OPENING SALVO. Game time the free-ammo window at the top of the wave
+    // closes at. A deadline, so it is rebased across a versus handoff - see
+    // PLAYER_CLOCKS in versus.js.
+    //
+    // A NEGATIVE SENTINEL, not 0, and the window is tested against the
+    // mutation as well as the clock. Game time is a float that starts at 0 and
+    // a frame served a backwards timestamp can push it below that, at which
+    // point a closed window written as 0 compares as OPEN and every shot in
+    // the run is free. "Not armed" must not be a number the clock can walk
+    // past.
+    this.salvoEnd = -99;
+    // DIG IN. Seconds spent planted and untouched, counted in update().
+    this._planted = 0;
     // Hot Streak's live bonus, a signed damage FRACTION clamped between
     // -streakFloor and +streakCap. On the player for the same reason
     // noHitStacks is: a rebuildMods() would wipe it mid-magazine.
@@ -852,7 +890,11 @@ export class Player {
   // - the price is a flat subtraction, not a share of the pool.
   get maxHealth() {
     const built = Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult);
-    return Math.max(MIN_MAX_HEALTH, built - this.maxHpDebt);
+    // The bank is added AFTER the multipliers rather than into maxHpBonus,
+    // because it is health the player earned wave by wave and not part of the
+    // build: Glass Cannon halving the frame it was earned on would quietly
+    // take half of every clean wave back with it.
+    return Math.max(MIN_MAX_HEALTH, built + this.hpBanked - this.maxHpDebt);
   }
   get magSize() {
     return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
@@ -1145,6 +1187,55 @@ export class Player {
     this.wardReady = this.mods.wardPerWave > 0;
   }
 
+  // OPENING SALVO. Opened at every wave start, beside the ward, so the two
+  // things a wave hands the player are armed in one place.
+  armSalvo(time) {
+    this.salvoEnd = this.mods.salvoTime > 0 ? time + this.mods.salvoTime : -99;
+    // The planted clock does not survive a wave boundary either: the player
+    // standing in the shop has not been holding a position under fire.
+    this._planted = 0;
+  }
+
+  // VENOM ROUNDS, in damage per second. A multiple of the weapon's own base
+  // bullet damage rather than a flat rate, so the poison is worth what the gun
+  // is - and Malady still multiplies it, which is what keeps that trade honest
+  // on both statuses. Zero unless the mutation is owned.
+  get venomDps() {
+    return this.weapon.damage * this.mods.poisonDps * this.mods.dotPower;
+  }
+
+  // BRASS ECHO. Called once per shot that connected; a shot that hit nothing
+  // is never offered the roll. Returns whether the round came back, so the
+  // caller can say so on screen.
+  tryAmmoRefund() {
+    if (this.mods.ammoRefund <= 0) return false;
+    // What the shot SPENT, not what a shot costs. A round fired inside Opening
+    // Salvo's free window cost nothing, and refunding it would be making
+    // ammunition rather than getting it back.
+    if (this.lastShotCost <= 0) return false;
+    if (this.reserveAmmo >= this.maxReserve) return false;
+    if (Math.random() >= this.mods.ammoRefund) return false;
+    this.reserveAmmo = Math.min(this.maxReserve, this.reserveAmmo + this.lastShotCost);
+    return true;
+  }
+
+  // UNTOUCHED and SCAR TISSUE, paid at a wave clear. `clean` is the same
+  // flawless flag the clear bonus and No-Hit Bonus read, so the three can
+  // never disagree about what an untouched wave is. Returns the HP actually
+  // banked - 0 when neither mutation is owned or the bank is full - and grants
+  // the CURRENT health with it, or the bar grows behind a number that did not
+  // move and the reward reads as nothing having happened.
+  bankWaveHealth(clean) {
+    const m = this.mods;
+    let gain = m.hpPerWave + (clean ? m.hpPerCleanWave : 0);
+    if (gain <= 0) return 0;
+    gain = Math.min(gain, m.hpBankCap - this.hpBanked);
+    if (gain <= 0) return 0;
+    this.hpBanked += gain;
+    this.health = Math.min(this.maxHealth, this.health + gain);
+    return gain;
+  }
+
   // Current fire-rate multiplier from Bloodlust's kill chain. It is paid ON
   // TOP of the flat penalty the upgrade applies to mods.fireRate, so a cold
   // gun with Bloodlust is worse than no Bloodlust at all - that is the deal.
@@ -1163,6 +1254,11 @@ export class Player {
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.
     this.noHitStacks = 0;
+    // Before rebuildMods for the same reason: maxHealth reads the bank, and a
+    // new run must be born at the base cap and not the last one's.
+    this.hpBanked = 0;
+    this.salvoEnd = -99;
+    this._planted = 0;
     this.streak = 0;
     this.jumpsLeft = 0;
     this.dashLeft = 0;
@@ -1183,6 +1279,7 @@ export class Player {
     this.wardReady = false;
     this.livesUsed = 0;
     this.breachReady = false;
+    this.lastShotCost = 0;
     this.dodgeEnd = 0;
     // Everything the Devil left behind. maxHpDebt goes before the health
     // assignment further down, or the new run would be born at the old one's
@@ -1559,6 +1656,20 @@ export class Player {
     this.pos.x = Math.max(-B, Math.min(B, this.pos.x));
     this.pos.z = Math.max(-B, Math.min(B, this.pos.z));
 
+    // DIG IN. The planted clock: it only runs while the player is genuinely
+    // stopped and has not been hit since it started, and any of movement, a
+    // hit or the end of the wave puts it back to zero. `stillness` is the same
+    // ramp Steady Aim reads, so the two mutations agree about what standing
+    // still is - and the near-1 test means a player being shoved by a Maw's
+    // well is not standing still, whatever the keys say.
+    if (this.mods.plantRegen > 0) {
+      const planted = combat && this.stillness > 0.98 && time - this.lastHurt > 0.2;
+      this._planted = planted ? this._planted + dt : 0;
+      if (this._planted > this.mods.plantDelay && this.health < this.maxHealth) {
+        this.health = Math.min(this.maxHealth, this.health + this.mods.plantRegen * dt);
+      }
+    }
+
     // Regeneration, once a mutation has granted any (regenRate is 0 by
     // default - see the mods block). Combat only: see the note on update().
     // The second branch bleeds off overheal (health above max, from a health
@@ -1747,7 +1858,7 @@ export class Player {
       // sprint run dry gets. The hold is refreshed every frame for the same
       // reason the sprint refreshes it: the bar must not start climbing back
       // during the move it is paying for.
-      this.stamina -= SLIDE_DRAIN * dt;
+      this.stamina -= SLIDE_DRAIN * this.mods.staminaDrain * dt;
       this._staminaHold = STAMINA_DELAY;
       if (this.stamina <= 0) {
         this.stamina = 0;
@@ -1836,7 +1947,7 @@ export class Player {
       : Math.max(0, this.sprintFade - dt / SPRINT_SPREAD_FADE);
 
     if (this.sprinting) {
-      this.stamina -= STAMINA_DRAIN * dt;
+      this.stamina -= STAMINA_DRAIN * this.mods.staminaDrain * dt;
       this._staminaHold = STAMINA_DELAY;
       if (this.stamina <= 0) {
         this.stamina = 0;
@@ -1852,7 +1963,9 @@ export class Player {
       this._staminaHold -= dt;
       return;
     }
-    this.stamina = Math.min(STAMINA_MAX, this.stamina + STAMINA_REGEN * dt);
+    this.stamina = Math.min(
+      STAMINA_MAX, this.stamina + STAMINA_REGEN * this.mods.staminaRegen * dt
+    );
     if (this.staminaLocked && this.stamina >= STAMINA_MAX * STAMINA_UNLOCK) {
       this.staminaLocked = false;
     }
@@ -2109,6 +2222,23 @@ export class Player {
     // reads as a broken gun.
     if (this.status.fear > 0) return 'feared';
     if (!w.auto && !triggerFresh) return null;
+    // OPENING SALVO. Inside the window at the top of a wave the trigger simply
+    // does not bill: the magazine is never touched, so nothing empties and no
+    // reload interrupts the ten seconds. Tested before the empty-magazine
+    // branch as well as before Belt Feed: a wave that starts on an empty gun
+    // must not spend its window standing through a reload, and a free shot
+    // must not quietly take its round off the reserve instead.
+    if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
+      this.lastShotCost = 0;
+      const effRate =
+        w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
+      this.fireCd = 1 / effRate;
+      this.kick = w.kick;
+      this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
+      this.recoilPitch +=
+        (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
+      return 'shot';
+    }
     if (this.mag <= 0) {
       this.startReload();
       return 'empty';
@@ -2117,6 +2247,7 @@ export class Player {
     // is worth more than the round itself: it is a reload you never have to
     // stand through. The trigger's full cost comes out of whichever pool pays.
     const cost = this.shotCost;
+    this.lastShotCost = cost;
     if (this.mods.beltFeed > 0 && this.reserveAmmo >= cost
       && Math.random() < this.mods.beltFeed) {
       this.reserveAmmo -= cost;
@@ -2133,7 +2264,8 @@ export class Player {
     // out of a sprint and keeps them out of it long enough that tapping a
     // semi-automatic trigger cannot be done at a run.
     this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
-    this.recoilPitch += (w.recoil + Math.random() * w.recoil * 0.6) * this.shakeScale;
+    this.recoilPitch +=
+      (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
     if (this.mag === 0) this.startReload();
     return 'shot';
   }

@@ -61,9 +61,12 @@ export const THEME = {
   // rate of fire
   rate: 0xff9500,
   frenzy: 0xd50000,
+  hair: 0xff6d00,
   // ammo and economy
   ammo: 0xffd600,
   brass: 0xffb300,
+  echo: 0xffab00,
+  salvo: 0xffd180,
   fabricate: 0xffe57f,
   salvage: 0xc6ff00,
   gold: 0xf9a825,
@@ -86,10 +89,15 @@ export const THEME = {
   holy: 0xfff2b0,
   ninelives: 0xea80fc,
   blood: 0xff2d6f,
+  temper: 0xb2ff59,
+  scar: 0xbf5f5f,
+  entrench: 0x8d6e63,
+  murk: 0x546e7a,
   // movement, and the one upgrade that pays for the absence of it
   mobility: 0x2979ff,
   poise: 0x7c4dff,
   leap: 0x82b1ff,
+  wind: 0x26c6da,
   impact: 0x00e5c0,
   surge: 0x1de9b6,
   // the shot itself: how it travels and what it costs to fire
@@ -382,6 +390,57 @@ export const UPGRADES = {
     ],
     apply: (mods, n) => { mods.steady += 0.4 * n; },
   },
+  // A REFUND, NOT INCOME. Scavenger and Ammo Fabricator both make rounds out
+  // of nothing; this one only ever gives back what a shot that CONNECTED cost,
+  // so it pays accuracy rather than time spent holding the trigger. Rolled
+  // once per shot and refunding the whole shotCost, so a Triple Tap build gets
+  // three rounds back on the shots it wins - the refund is worth exactly what
+  // the trigger pull was.
+  brassEcho: {
+    name: 'BRASS ECHO',
+    rarity: 'common',
+    max: 3,
+    theme: THEME.echo,
+    effects: (n) => [
+      ['HITS ' + step(n, pctUp(5)) + ' TO REFUND', GOOD],
+      ['THE ROUND TO RESERVE', NOTE],
+    ],
+    apply: (mods, n) => { mods.ammoRefund = 0.05 * n; },
+  },
+  // The recoil is the whole cost, and it is a REAL one: the kick is pitch the
+  // player has to pull back down between shots, so a doubled rate that walks
+  // the muzzle off the target is not free rate. Two tiers only, because at
+  // three the gun climbs faster than a person can answer.
+  hairTrigger: {
+    name: 'HAIR TRIGGER',
+    rarity: 'common',
+    max: 2,
+    theme: THEME.hair,
+    effects: (n) => [
+      ['FIRE RATE ' + step(n, pctUp(25)), GOOD],
+      ['RECOIL ' + step(n, pctUp(70)), BAD],
+    ],
+    apply: (mods, n) => {
+      mods.fireRate *= 1 + 0.25 * n;
+      mods.recoilMult *= 1 + 0.7 * n;
+    },
+  },
+  // THE BAR DOES NOT GET LONGER. Stamina is a rhythm - sprint, break, sprint -
+  // and a longer bar changes how long one sprint is rather than how often the
+  // rhythm comes round. Halving the drain and doubling the regen is the same
+  // budget spent on the part the player actually feels: it is the WAIT that a
+  // sprint build is paying, not the run.
+  secondWind: {
+    name: 'SECOND WIND',
+    rarity: 'common',
+    max: 1,
+    theme: THEME.wind,
+    effects: [['SPRINT TWICE AS LONG', GOOD], ['STAMINA BACK 2x FAST', GOOD]],
+    apply: (mods, n) => {
+      mods.staminaDrain *= Math.pow(0.5, n);
+      mods.staminaRegen *= 1 + n;
+    },
+  },
   // ---- MUTATIONS ---------------------------------------------------------
   // Single-tier picks: max 1, no levels, one distinct behaviour each. Where
   // every upgrade above answers "how much", these answer "what happens" - the
@@ -405,9 +464,15 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.poison,
-    effects: [['HITS POISON', GOOD], ['12 DMG / SEC, 4s', NOTE]],
+    // THE POISON IS AS STRONG AS THE GUN. It used to be a flat 12 a second,
+    // which was a real number on wave 3 and a rounding error on wave 30 - the
+    // one status in the pool that got weaker the longer a run went on. It is
+    // charged as a MULTIPLE of the weapon's base bullet damage now (see
+    // Player.venomDps), so a rifle that hits for 34 poisons for 34 a second
+    // and the mutation is worth the same slot at either end of a run.
+    effects: [['HITS POISON', GOOD], ['YOUR BULLET DAMAGE', NOTE], ['PER SECOND, FOR 4s', NOTE]],
     apply: (mods, n) => {
-      mods.poisonDps = 12 * n;
+      mods.poisonDps = 1 * n;
       mods.poisonTime = 4 * n;
     },
   },
@@ -872,6 +937,95 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.dashCharges = 2 * n; },
   },
 
+  // PERMANENT MAX HP, on the same flawless flag No-Hit Bonus reads. The two
+  // are deliberately different rewards for one piece of play: that one makes
+  // the gun better and can be lost by a single hit, this one banks something
+  // no later wave can take back. Capped so a long clean run cannot simply
+  // outgrow the arena - twenty flawless waves is the target.
+  untouched: {
+    name: 'UNTOUCHED',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.temper,
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+3 MAX HP, KEPT', GOOD], ['UP TO +60', NOTE]],
+    apply: (mods, n) => {
+      mods.hpPerCleanWave = 3 * n;
+      mods.hpBankCap = Math.max(mods.hpBankCap, 60 * n);
+    },
+  },
+  // The unconditional twin of UNTOUCHED, and the trade is the whole point: it
+  // asks nothing of how you play and charges a quarter more damage from every
+  // source for the rest of the run. It grows fastest exactly when it is worst
+  // to own - a long run - which is what keeps it a cursed pick rather than a
+  // slow common.
+  scarTissue: {
+    name: 'SCAR TISSUE',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.scar,
+    effects: [['+2 MAX HP EVERY WAVE', GOOD], ['UP TO +80', NOTE], ['TAKE +25% DAMAGE', BAD]],
+    apply: (mods, n) => {
+      mods.hpPerWave = 2 * n;
+      mods.hpBankCap = Math.max(mods.hpBankCap, 80 * n);
+      mods.damageTakenMult *= 1 + 0.25 * n;
+    },
+  },
+  // HEALTH BOUGHT WITH SIGHT. Bulwark sells max HP for speed; this sells it
+  // for the range at which the room can be read at all, which is a much
+  // stranger thing to own - the haze sits thicker than a boss wave's, so
+  // enemy colour arrives late and a shot across the arena is taken on a shape.
+  // Driven through rig.js, which owns the fog and breathes it with the music,
+  // so this is one multiplier on the target rather than a second writer.
+  blackout: {
+    name: 'BLACKOUT',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.murk,
+    effects: [['+55 MAX HEALTH', GOOD], ['THE HAZE CLOSES IN', BAD], ['YOU SEE MUCH LESS', BAD]],
+    apply: (mods, n) => {
+      mods.maxHpBonus += 55 * n;
+      mods.fogMult *= 1 + 0.9 * n;
+    },
+  },
+  // TEN SECONDS OFF THE TOP OF EVERY WAVE with no magazine to think about -
+  // no rounds spent, no reload, nothing to count. It pays the opening, which
+  // is the part of a wave the player has the most control over, and the -5%
+  // is charged for the whole rest of it.
+  //
+  // It says so on the HUD. A window that is silently open and silently shut
+  // is a stat the player can only infer from an ammo counter that stopped
+  // moving, so it wears a chip with a timer like every other window in the
+  // game - see setBuffs in ui.js.
+  openingSalvo: {
+    name: 'OPENING SALVO',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.salvo,
+    effects: [['FIRST 10s OF A WAVE:', NOTE], ['SHOTS COST NO AMMO', GOOD], ['-5% DAMAGE', BAD]],
+    apply: (mods, n) => {
+      mods.salvoTime = 10 * n;
+      mods.damage *= Math.pow(0.95, n);
+    },
+  },
+  // Nanoweave's opposite number: that one asks you to break contact and this
+  // one asks you to plant. They are not the same pick - a player who owns both
+  // still has to choose which one they are playing for in a given fight, and
+  // standing still in a room full of enemies is the harder half of that.
+  //
+  // COMBAT ONLY, for the reason every regeneration in the pool is: the wave
+  // break has no clock on it, and a heal that ticked there would be a full
+  // health bar you reached by standing in the shop.
+  digIn: {
+    name: 'DIG IN',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.entrench,
+    effects: [['STAND STILL 3s:', NOTE], ['REGEN 3 HP/s', GOOD], ['ANY HIT RESETS IT', BAD]],
+    apply: (mods, n) => {
+      mods.plantRegen = 3 * n;
+      mods.plantDelay = 3;
+    },
+  },
   // ---- DEVIL DEALS -------------------------------------------------------
   //
   // Everything below is flagged `devil: true` and carries a `cost` in MAX HP.
@@ -949,10 +1103,10 @@ export const UPGRADES = {
     theme: DEVIL_THEME.hellfire,
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
-    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 5s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
+    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 3s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
     apply: (mods, n) => {
       mods.hellfireDps = 60 * n;
-      mods.hellfireTime = 5;
+      mods.hellfireTime = 3;
       mods.hellfireRadius = 1.8;
     },
   },

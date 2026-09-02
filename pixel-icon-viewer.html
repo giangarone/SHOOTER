@@ -54,13 +54,38 @@ import * as THREE from 'three';
 import { buildPixelIcon, resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
 import { UPGRADES } from './js/upgrades.js';
 
+import { POWERUP_TYPES, AMMO_PICKUP } from './js/powerups.js';
+import { PLAYER_STATUS } from './js/status.js';
+
+// EVERYTHING IN THE TABLE THAT IS NOT AN UPGRADE. The four stations are typed
+// out because nothing else in the game names them; the pickups and the
+// player's status effects are read off the modules that own them instead.
+//
+// That is not tidiness - it is the bug this file had. Both viewers were
+// written when the only non-upgrade drawings were the stations, and the day
+// the pickups and the six player statuses arrived, `UPGRADES[key] || EXTRA[key]`
+// started returning undefined halfway down the list and the whole sheet threw
+// before it painted a single cell. Derived entries cannot go stale that way: a
+// seventh pickup or status shows up here the moment it exists.
 const EXTRA = {
   ammoBox: { name: 'AMMO STATION', theme: 0xffd600 },
   gear: { name: 'REROLL STATION', theme: 0x4ef3ff },
   heart: { name: 'MAX HEALTH STATION', theme: 0xff1744 },
   gun: { name: 'WEAPON OFFER', theme: 0x9fb4d8 },
 };
-const meta = (k) => UPGRADES[k] || EXTRA[k];
+for (const [key, def] of Object.entries(POWERUP_TYPES)) {
+  EXTRA[def.icon] = {
+    name: key.replace(/([A-Z])/g, ' $1').toUpperCase() + ' PICKUP', theme: def.color,
+  };
+}
+EXTRA[AMMO_PICKUP.icon] = { name: 'AMMO PICKUP', theme: AMMO_PICKUP.color };
+for (const def of Object.values(PLAYER_STATUS)) {
+  EXTRA[def.icon] = { name: def.label, theme: def.color };
+}
+// A drawing nothing claims still gets a cell, named after its key. `npm run
+// test:icons` is what fails on an orphan; a contact sheet that refused to draw
+// would only hide the thing it exists to show.
+const meta = (k) => UPGRADES[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
 
 const pick = document.getElementById('pick');
 for (const k of PIXEL_ICON_KEYS) {
