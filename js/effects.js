@@ -2,8 +2,9 @@
 //
 // Everything here is pre-allocated and recycled. No effect ever creates a
 // scene object at runtime, because effects fire dozens of times per second.
-//   - particles: one THREE.Points with MAX slots, written through a ring
-//     buffer. An overflowing burst overwrites the oldest particles.
+//   - particles: two THREE.Points pools - big sparks and small bullet
+//     impacts - each written through a ring buffer. An overflowing burst
+//     overwrites the oldest particles in its own pool.
 //   - tracers: a small fixed pool of lines, reusing the first free one.
 //   - shockwave rings: the same pool trick with flat discs, scaled and faded.
 //   - flash: a single PointLight, moved and re-lit per shot. It counts toward
@@ -16,9 +17,30 @@ import * as THREE from 'three';
 import { addOutline, rasterize, shadeGrid, erodeDepth, gridPlate, gridMaterial, gridTint, PALETTE_RAMP_GLSL } from './pixelicons.js';
 import { BOUND } from './arena.js';
 
-// Particle slots. Bursts beyond this recycle the oldest particles rather than
-// growing the buffer.
-const MAX = 1024;
+// Particle slots, split across the two pools below. Bursts beyond a pool's
+// share recycle its oldest particles rather than growing the buffer.
+//
+// TWO POOLS, AND THE ONLY THING THAT DIFFERS IS THE SPRITE SIZE.
+//   THREE.PointsMaterial carries ONE size for the whole draw - there is no
+//   per-particle size without writing a shader - so a fleck that has to be
+//   smaller than the rest has to be its own Points. Which is cheap: it is one
+//   extra draw call, and both pools run the same simulation.
+//
+//   `sparks` is the showpiece: kills, explosions, mutation flourishes. It is
+//   unchanged, and it is what burst() still writes to.
+//
+//   `impacts` is every bullet landing - on an enemy, a wall, the floor or a
+//   prop - which is by far the most FREQUENT particle in the game and the one
+//   that least wants to be seen as particles. It is a third the size, because
+//   at 0.15m a rifle firing into a crate two metres away buries the crate in
+//   confetti. Small enough to read as grit thrown off the surface, still there
+//   because a miss has no other feedback at all: the hitmarker and the enemy
+//   flash cover a hit, and nothing covers a shot that went wide.
+const SPARK_MAX = 768;
+const IMPACT_MAX = 256;
+// Sprite size in metres, per pool. Both attenuate with distance.
+const SPARK_SIZE = 0.15;
+const IMPACT_SIZE = 0.05;
 
 
 // Points along a homing tracer. Enough that the bend reads as a curve rather
@@ -568,22 +590,35 @@ export class Effects {
     this.shakeScale = 1;
   }
 
-  // Parallel typed arrays, one entry per particle slot. `pos` and `col` are
-  // uploaded to the GPU each frame; the rest is CPU-side simulation state.
-  // A slot is free when life[i] <= 0.
+  // The two pools. See the note on SPARK_MAX at the top of the file for why
+  // there are two of them and not one.
   _initParticles() {
+    this.sparks = this._makePool(SPARK_MAX, SPARK_SIZE);
+    this.impacts = this._makePool(IMPACT_MAX, IMPACT_SIZE);
+  }
+
+  // One pool: parallel typed arrays, one entry per particle slot. `pos` and
+  // `col` are uploaded to the GPU each frame; the rest is CPU-side simulation
+  // state. A slot is free when life[i] <= 0.
+  _makePool(max, size) {
     const g = new THREE.BufferGeometry();
-    this.pos = new Float32Array(MAX * 3);
-    this.col = new Float32Array(MAX * 3);
-    this.vel = new Float32Array(MAX * 3);
-    this.life = new Float32Array(MAX);
-    this.maxLife = new Float32Array(MAX);
-    this.c0 = new Float32Array(MAX * 3);
-    for (let i = 0; i < MAX; i++) this.pos[i * 3 + 1] = -100;
-    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
+    const pool = {
+      max,
+      pos: new Float32Array(max * 3),
+      col: new Float32Array(max * 3),
+      vel: new Float32Array(max * 3),
+      life: new Float32Array(max),
+      maxLife: new Float32Array(max),
+      c0: new Float32Array(max * 3),
+      cursor: 0,
+      alive: 0,
+      points: null,
+    };
+    for (let i = 0; i < max; i++) pool.pos[i * 3 + 1] = -100;
+    g.setAttribute('position', new THREE.BufferAttribute(pool.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('color', new THREE.BufferAttribute(pool.col, 3).setUsage(THREE.DynamicDrawUsage));
     const m = new THREE.PointsMaterial({
-      size: 0.15,
+      size,
       vertexColors: true,
       transparent: true,
       opacity: 1,
@@ -591,37 +626,48 @@ export class Effects {
       depthWrite: false,
       map: this.sparkTex,
     });
-    this.points = new THREE.Points(g, m);
-    this.points.frustumCulled = false;
-    this.scene.add(this.points);
-    this.cursor = 0;
-    this.alive = 0;
+    pool.points = new THREE.Points(g, m);
+    pool.points.frustumCulled = false;
+    this.scene.add(pool.points);
+    return pool;
   }
 
   // Spray `count` particles from point `p`. `up` biases them upward, `life` is
   // seconds (randomised per particle). Particles fade to black as they die.
   burst(p, color, count = 16, speed = 5, up = 2, life = 0.5) {
+    this._emit(this.sparks, p, color, count, speed, up, life);
+  }
+
+  // The same spray, out of the small pool - for a bullet landing on anything.
+  // Callers pass smaller counts as well as getting a smaller sprite: the size
+  // is what made one impact loud, the count is what made a shotgun shell into
+  // a firework.
+  impact(p, color, count = 4, speed = 3, up = 1.2, life = 0.28) {
+    this._emit(this.impacts, p, color, count, speed, up, life);
+  }
+
+  _emit(pool, p, color, count, speed, up, life) {
     const c = new THREE.Color(color);
     for (let i = 0; i < count; i++) {
-      const idx = this.cursor;
-      this.cursor = (this.cursor + 1) % MAX;
+      const idx = pool.cursor;
+      pool.cursor = (pool.cursor + 1) % pool.max;
       const i3 = idx * 3;
-      if (this.life[idx] <= 0) this.alive++;
-      this.pos[i3] = p.x;
-      this.pos[i3 + 1] = p.y;
-      this.pos[i3 + 2] = p.z;
+      if (pool.life[idx] <= 0) pool.alive++;
+      pool.pos[i3] = p.x;
+      pool.pos[i3 + 1] = p.y;
+      pool.pos[i3 + 2] = p.z;
       let vx = Math.random() - 0.5;
       let vy = Math.random() - 0.5 + up * 0.4;
       let vz = Math.random() - 0.5;
       const len = Math.hypot(vx, vy, vz) || 1;
       const s = (speed * (0.4 + Math.random() * 0.9)) / len;
-      this.vel[i3] = vx * s;
-      this.vel[i3 + 1] = vy * s;
-      this.vel[i3 + 2] = vz * s;
-      this.life[idx] = this.maxLife[idx] = life * (0.6 + Math.random() * 0.6);
-      this.c0[i3] = c.r;
-      this.c0[i3 + 1] = c.g;
-      this.c0[i3 + 2] = c.b;
+      pool.vel[i3] = vx * s;
+      pool.vel[i3 + 1] = vy * s;
+      pool.vel[i3 + 2] = vz * s;
+      pool.life[idx] = pool.maxLife[idx] = life * (0.6 + Math.random() * 0.6);
+      pool.c0[i3] = c.r;
+      pool.c0[i3 + 1] = c.g;
+      pool.c0[i3 + 2] = c.b;
     }
   }
 
@@ -1310,18 +1356,24 @@ export class Effects {
         if (t.life <= 0) t.line.visible = false;
       }
     }
-    // Nothing alive means nothing moved, so skip the sweep and the two
-    // full-buffer uploads entirely.
-    if (this.alive === 0) return;
-    const { pos: p, vel: v, life: l, maxLife: ml, col: c, c0 } = this;
-    for (let i = 0; i < MAX; i++) {
+    this._stepPool(this.sparks, dt);
+    this._stepPool(this.impacts, dt);
+  }
+
+  // One pool's simulation. Nothing alive means nothing moved, so the sweep and
+  // the two full-buffer uploads are skipped entirely - which is most frames
+  // for the impact pool between shots.
+  _stepPool(pool, dt) {
+    if (pool.alive === 0) return;
+    const { pos: p, vel: v, life: l, maxLife: ml, col: c, c0, max } = pool;
+    for (let i = 0; i < max; i++) {
       if (l[i] <= 0) continue;
       l[i] -= dt;
       const i3 = i * 3;
       if (l[i] <= 0) {
         p[i3 + 1] = -100;
         c[i3] = c[i3 + 1] = c[i3 + 2] = 0;
-        this.alive--;
+        pool.alive--;
         continue;
       }
       v[i3 + 1] -= 9.8 * dt * 0.6;
@@ -1333,8 +1385,8 @@ export class Effects {
       c[i3 + 1] = c0[i3 + 1] * f;
       c[i3 + 2] = c0[i3 + 2] * f;
     }
-    this.points.geometry.attributes.position.needsUpdate = true;
-    this.points.geometry.attributes.color.needsUpdate = true;
+    pool.points.geometry.attributes.position.needsUpdate = true;
+    pool.points.geometry.attributes.color.needsUpdate = true;
   }
 
 }

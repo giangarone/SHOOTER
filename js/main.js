@@ -693,6 +693,11 @@ class Game {
     this.enemies = [];
     this.projectiles = [];
     this.powerups = [];
+    // Pickups that have been swept up at a wave clear and are flying into the
+    // player. Off the live list on purpose: their effect is already banked, so
+    // nothing must be able to collect, blink or despawn them again - all they
+    // have left is the animation. See _vacuumPickups.
+    this._absorbing = [];
     // Timed buffs swept up at a wave clear, waiting for the next wave to start
     // their clocks - see _vacuumPickups.
     this._pendingBuffs = [];
@@ -769,6 +774,13 @@ class Game {
     // one because the sweep runs before the shot does and _killPos is in use
     // by then.
     this._assistEye = new THREE.Vector3();
+    // Where the candidate enemy's hit sphere actually is, in world space. The
+    // assist used to reconstruct that from e.pos plus the hitbox's LOCAL y,
+    // which quietly ignored the group transform the hitbox is parented to -
+    // the crowd bob, the sway and a flier's altitude ease all live there.
+    this._assistAt = new THREE.Vector3();
+    // Where a swept-up pickup lands on the player - see _updateAbsorbing.
+    this._absorbAt = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
     this._rayEnd = new THREE.Vector3();
     this._screen = new THREE.Vector2();
@@ -1442,6 +1454,8 @@ class Game {
     this.projectiles.length = 0;
     for (const p of this.powerups) p.destroy();
     this.powerups.length = 0;
+    for (const p of this._absorbing) p.destroy();
+    this._absorbing.length = 0;
     this.money.clear();
     this._pendingSpawns.length = 0;
     this._bigAlive = 0;
@@ -1837,34 +1851,50 @@ class Game {
    * the correction is applied in, and converting twice would only introduce a
    * disagreement between the test and the pull.
    *
+   * MEASURED AGAINST THE AIM, NOT AGAINST `pitch`.
+   *
+   * The camera - and therefore the shot, which is a raycast through it - looks
+   * along `pitch + recoilPitch` (see Player.applyCamera). The assist writes to
+   * `pitch` alone. Comparing the error against the bare `pitch` therefore
+   * lined the UNRECOILED aim up on the enemy and left the recoil sitting on
+   * top of it, which is why assisted fire drifted over the target's head and
+   * got worse the faster the gun fired. The error is taken against the real
+   * aim instead, so the pull is a servo on where the bullets are actually
+   * going: it closes the gap the recoil opens, every frame, on its own.
+   *
    * @returns {?{t: number, dYaw: number, dPitch: number}} `t` is how far out
    *   the reticle is as a fraction of the cone - 0 dead on, 1 at the edge.
    */
   _assistTarget() {
     const p = this.player;
     const eye = p.eyeInto(this._assistEye);
+    // The clamp applyCamera uses, so the error agrees with the view even when
+    // the player is looking straight up or down.
+    const aimPitch = Math.max(-1.5, Math.min(1.5, p.pitch + p.recoilPitch));
     let best = null;
     let bestErr = ASSIST_CONE;
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const dx = e.pos.x - eye.x;
-      const dz = e.pos.z - eye.z;
+      // The CENTRE of the hit sphere, in world space - the same transform the
+      // shot raycasts against. e.pos is on the floor, and an assist that
+      // pulled there would drag every shot into the ground.
+      const at = e.hitbox.getWorldPosition(this._assistAt);
+      const dx = at.x - eye.x;
+      const dz = at.z - eye.z;
       const flat = Math.hypot(dx, dz);
       if (flat > ASSIST_RANGE || flat < 0.001) continue;
-      // Aimed at the hit sphere, not at the feet: e.pos is on the floor, and
-      // an assist that pulled there would drag every shot into the ground.
-      const dy = e.pos.y + e.hitbox.position.y - eye.y;
+      const dy = at.y - eye.y;
       // Forward is (-sin yaw, -cos yaw) - see player.forwardInto - so this is
       // the yaw that would point straight at the target.
       let dYaw = Math.atan2(-dx, -dz) - p.yaw;
       dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
-      const dPitch = Math.atan2(dy, flat) - p.pitch;
+      const dPitch = Math.atan2(dy, flat) - aimPitch;
       const err = Math.hypot(dYaw, dPitch);
       if (err >= bestErr) continue;
       // Only the leader pays for a line-of-sight test. Assist through a wall
       // would drag the player's aim onto something they cannot shoot, which is
       // worse than no assist at all.
-      if (!this._losClear(eye, e.pos.x, eye.y + dy, e.pos.z)) continue;
+      if (!this._losClear(eye, at.x, at.y, at.z)) continue;
       bestErr = err;
       best = best || { t: 0, dYaw: 0, dPitch: 0 };
       best.t = err / ASSIST_CONE;
@@ -3177,14 +3207,14 @@ class Game {
     // emptying a magazine into a group under a warden's dome is told why
     // nothing is dying by the hits themselves, not just by the health bar.
     if (en.wardT > 0) {
-      this.effects.burst(point, 0xc9d2dd, burst, 3, 1.2, 0.3);
+      this.effects.impact(point, 0xc9d2dd, burst, 2.5, 1.2, 0.26);
       return;
     }
     // `point` is handed on so a placed shield - the Bulwark's buckler - can
     // test where on the body the pellet actually landed, not just which way it
     // was travelling.
     en.takeDamage(dealt, false, dir.x, dir.z, point);
-    this.effects.burst(point, 0xffe95e, burst, 4, 1.5, 0.35);
+    this.effects.impact(point, 0xffe95e, burst, 3, 1.2, 0.3);
     // Damage is per-pellet; everything below is per-shot.
     if (this._shotHits.has(en)) return;
     this._shotHits.add(en);
@@ -3205,7 +3235,7 @@ class Game {
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
     if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en);
-    if (m.midas) this.effects.burst(point, 0xffd600, 6, 3, 1.5, 0.35);
+    if (m.midas) this.effects.impact(point, 0xffd600, 4, 2.5, 1.2, 0.3);
     // Detonator goes off once per trigger pull, at the first enemy the
     // shot touched. Per-pellet it would fire eight blasts from one shell
     // and exhaust the four-ring pool on its own.
@@ -3262,8 +3292,10 @@ class Game {
 
     // Multi-pellet weapons fire eight of these per shot, so their per-impact
     // particle bursts have to be much smaller or a single shell drains the
-    // whole pool.
-    const burst = w.pellets > 1 ? 4 : 10;
+    // whole pool. Both numbers are half what they were: the flecks are grit
+    // thrown off the thing that was hit, and the hitmarker and the enemy's own
+    // flash are what actually confirm the hit.
+    const burst = w.pellets > 1 ? 2 : 5;
     // Piercing Shot adds to whatever the weapon pierces on its own, and its
     // steeper falloff replaces the weapon's - a shot that keeps full damage
     // through four enemies is worth more than any other pick in the pool.
@@ -3284,8 +3316,8 @@ class Game {
         this._claimTotem(totem);
         hitProp = true;
         end = h.point;
-        this.effects.burst(end, totem.offer ? totem.offer.theme : 0x9fb4d8,
-          w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        this.effects.impact(end, totem.offer ? totem.offer.theme : 0x9fb4d8,
+          w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
       const deal = h.object.userData.deal;
@@ -3295,8 +3327,8 @@ class Game {
         this._claimDeal(deal);
         hitProp = true;
         end = h.point;
-        this.effects.burst(end, deal.offer ? deal.offer.theme : 0xff1744,
-          w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        this.effects.impact(end, deal.offer ? deal.offer.theme : 0xff1744,
+          w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
       const station = h.object.userData.station;
@@ -3306,14 +3338,14 @@ class Game {
         this._shootStation(station);
         hitProp = true;
         end = h.point;
-        this.effects.burst(end, station.color, w.pellets > 1 ? 3 : 8, 3, 1.5, 0.3);
+        this.effects.impact(end, station.color, w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
       const en = h.object.userData.enemy;
       if (!en) {
         // Wall, floor or crate - the pellet stops here.
         end = h.point;
-        this.effects.burst(end, 0x9fb4d8, w.pellets > 1 ? 3 : 6, 3, 1, 0.3);
+        this.effects.impact(end, 0x9fb4d8, w.pellets > 1 ? 2 : 4, 2.5, 1, 0.26);
         break;
       }
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
@@ -4641,6 +4673,14 @@ class Game {
   // only one right answer. The drop was earned by killing the thing that
   // dropped it.
   //
+  // THE PICKUPS ARE SEEN TO COME IN. The effect is banked immediately - the
+  // shop reads the health and ammo the player now has, so it cannot wait on an
+  // animation - but the plate itself flies into the player on the same
+  // accelerating pull the money orbs use, staggered so a room full of drops
+  // arrives as a stream. It used to be a one-frame particle streak standing in
+  // for exactly this, which read as the pickups vanishing rather than as the
+  // player taking them.
+  //
   // TIMED BUFFS ARE COLLECTED BUT NOT STARTED. Rage, Fire Rate and Shield are
   // windows, and a window spent walking around a shop is a window thrown away
   // - handing them over here would have turned "you keep your drops" into "you
@@ -4661,10 +4701,9 @@ class Game {
       } else {
         p.type.apply(this.player, this.time);
       }
-      // Drawn as a streak from where it lay to the player, so the sweep is
-      // visibly the pickups coming in rather than the pickups vanishing.
-      this.effects.burst(p.pos, p.type.color, 10, 5, 2, 0.45);
-      p.destroy();
+      // Held for the flight instead of destroyed - see the note above.
+      p.absorb(Math.random() * 0.55);
+      this._absorbing.push(p);
       took++;
     }
     this.powerups.length = 0;
@@ -4673,6 +4712,23 @@ class Game {
     // not five times the feedback, it is a click.
     this.sfx.pickupHealth();
     this.effects.shockwave(this.player.pos, 0x8affc1, 6, 0.45);
+  }
+
+  // Flies the swept-up pickups into the player and drops each one as it
+  // lands. Runs whether or not a wave is in progress: the sweep fires at a
+  // wave CLEAR, so every one of these frames is a shop frame.
+  _updateAbsorbing(dt) {
+    for (let i = this._absorbing.length - 1; i >= 0; i--) {
+      const p = this._absorbing[i];
+      if (!p.updateAbsorb(dt, this.player.pos)) continue;
+      // A small flare where it went in - at chest height, where the pickup was
+      // actually flying to, not at the feet. The old burst at the pickup's
+      // former position said "something happened over there"; this one says
+      // the player has it.
+      this._absorbAt.set(this.player.pos.x, this.player.pos.y + 0.9, this.player.pos.z);
+      this.effects.impact(this._absorbAt, p.type.color, 6, 3, 2, 0.3);
+      this._absorbing.splice(i, 1);
+    }
   }
 
   // Ticks pickups and collects any the player is standing on. Iterates
@@ -5639,6 +5695,10 @@ class Game {
       this._updateMoney(dt);
       this._magnetPickups(dt);
       this._updatePickups(dt);
+      // The wave-clear sweep's flight. Ticked alongside the live pickups
+      // rather than inside them: these are already collected and only the
+      // animation is left.
+      this._updateAbsorbing(dt);
       this._updateTotems(dt);
       // Ash and the poison spread run BEFORE the enemy sweep so anything they
       // kill is collected by the sweep this frame rather than lingering a

@@ -126,6 +126,34 @@ export const PICKUP_BLINK_TIME = 5;
 // across the arena without strobing.
 const BLINK_RATE = 5;
 
+// WAVE-CLEAR ABSORPTION - see Powerup.absorb() below.
+//
+// The numbers are money.js's, deliberately. The sweep that pulls in the orbs
+// pulls in the pickups on the same frame, and two different accelerations
+// arriving side by side reads as one of them being broken. Accelerating the
+// whole way in is what makes it snap into the player rather than drift after
+// them, and steering from the direction every frame (rather than adding a
+// force and letting momentum carry it) is what stops it overshooting and
+// orbiting - the same note MoneyOrbs.update() carries at length.
+const ABSORB_ACCEL = 90;
+const ABSORB_MAX_SPEED = 42;
+const ABSORB_ARRIVE = 0.7;
+// Where on the player it lands: chest height, as the orbs do. Aiming at the
+// feet would make the last metre of every pickup a dive into the floor.
+const ABSORB_EYE = 0.9;
+// Metres over which the plate closes down to its smallest.
+//
+// IT SHRINKS RATHER THAN FADING. The core and glow materials are shared by
+// every pickup of a type (rule 2 at the top of this file), so opacity is not
+// one instance's to touch - dimming this pickup would dim the rest. Scale is
+// per-object, and reads as the thing being swallowed rather than as it
+// politely disappearing, which is the better animation anyway.
+const ABSORB_SHRINK = 3.5;
+// What is left of the plate and the halo when they arrive. Not zero: a pickup
+// that vanishes to nothing a frame before it lands looks like it timed out.
+const ABSORB_MIN_CORE = 0.28;
+const ABSORB_MIN_GLOW = 0.45;
+
 // WHAT A KILL DROPS.
 //
 // There is no budget any more. A wave used to carry a fixed number of pickups
@@ -273,6 +301,16 @@ export class Powerup {
     this.despawnTime = PICKUP_LIFETIME;
     this.dead = false;
     this.bobOffset = Math.random() * Math.PI * 2;
+    // Absorption state. `absorbing` takes the pickup out of main.js's live
+    // list entirely, so nothing here has to guard the bob, the blink or the
+    // proximity test against it.
+    this.absorbing = false;
+    this.homeDelay = 0;
+    this.homeSpeed = 0;
+    // The flight's own height. `pos` stays flat (y is 0 and every collection
+    // test in the game compares against the player's feet), so the vertical
+    // half of the arc is tracked here.
+    this.flyY = 0.62;
 
     this.core = pickupIcon(typeKey, this.type);
     this.core.position.set(this.pos.x, 0.62, this.pos.z);
@@ -341,6 +379,68 @@ export class Powerup {
     this.core.position.z = z;
     this.glow.position.x = x;
     this.glow.position.z = z;
+  }
+
+  /**
+   * Starts the wave-clear flight into the player. From here on the pickup is
+   * no longer a pickup: main.js has already banked its effect, has taken it
+   * out of the live list, and only ticks updateAbsorb() until it arrives.
+   *
+   * @param {number} delay seconds to hold before it starts moving, so a room
+   *   full of drops arrives as a stream rather than as one lump - exactly what
+   *   MoneyOrbs.vacuum() spreads its orbs over, and for the same reason.
+   */
+  absorb(delay = 0) {
+    this.absorbing = true;
+    this.homeDelay = delay;
+    this.homeSpeed = 0;
+    this.flyY = this.core.position.y;
+    // A pickup swept up during its despawn blink could be caught on an
+    // invisible frame, and would then fly in as nothing at all.
+    this.core.visible = true;
+    this.glow.visible = true;
+  }
+
+  /**
+   * One frame of that flight.
+   *
+   * @param {THREE.Vector3} target the player's FEET; ABSORB_EYE lifts it.
+   * @returns {boolean} true once it has arrived and destroyed itself, at which
+   *   point the caller drops it.
+   */
+  updateAbsorb(dt, target) {
+    if (this.dead) return true;
+    if (this.homeDelay > 0) {
+      this.homeDelay -= dt;
+      return false;
+    }
+    const dx = target.x - this.pos.x;
+    const dy = (target.y + ABSORB_EYE) - this.flyY;
+    const dz = target.z - this.pos.z;
+    const dist = Math.hypot(dx, dy, dz);
+    this.homeSpeed = Math.min(ABSORB_MAX_SPEED, this.homeSpeed + ABSORB_ACCEL * dt);
+    const step = this.homeSpeed * dt;
+    // Swept, not tested on position alone: at this speed a machine running at
+    // thirty frames moves a pickup well over a metre a step, which would
+    // tunnel straight through the arrival radius and leave it circling.
+    if (dist <= ABSORB_ARRIVE || step >= dist) {
+      this.destroy();
+      return true;
+    }
+    const k = step / dist;
+    this.pos.x += dx * k;
+    this.pos.z += dz * k;
+    this.flyY += dy * k;
+    const t = Math.min(1, dist / ABSORB_SHRINK);
+    this.core.position.set(this.pos.x, this.flyY, this.pos.z);
+    this.core.scale.setScalar(ICON_SCALE * (ABSORB_MIN_CORE + (1 - ABSORB_MIN_CORE) * t));
+    // Kept turned to the player on the way in. A plate tumbling end over end
+    // is edge-on half the time, which is the same reason it never spins while
+    // it is lying on the floor.
+    this.core.rotation.y = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
+    this.glow.position.set(this.pos.x, this.flyY, this.pos.z);
+    this.glow.scale.setScalar(1.15 * (ABSORB_MIN_GLOW + (1 - ABSORB_MIN_GLOW) * t));
+    return false;
   }
 
   // Removes from the scene only - see rule 2 at the top of this file.

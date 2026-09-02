@@ -678,6 +678,10 @@ export class Player {
     this._crouchPose = 0;
     this._slidePose = 0;
     this._prevCrouch = false;
+    // The sprint button's own edge. Sprint is otherwise a HELD input and
+    // nothing needed its rising edge until the crouch had to be cancelled by
+    // it - see _updateCrouch.
+    this._prevSprint = false;
     // Momentum carried out of a slide by a jump. See MOM_GROUND_DECAY.
     this._momX = 0;
     this._momZ = 0;
@@ -1322,6 +1326,7 @@ export class Player {
     this._crouchPose = 0;
     this._slidePose = 0;
     this._prevCrouch = false;
+    this._prevSprint = false;
     this._momX = 0;
     this._momZ = 0;
     this._momW = 0;
@@ -1850,6 +1855,22 @@ export class Player {
     const want = !!input.crouch;
     const edge = want && !this._prevCrouch;
     this._prevCrouch = want;
+
+    // SPRINT CANCELS THE CROUCH. A crouch is a latch, and the only way out of
+    // it used to be the same button that got in - so a player who dropped into
+    // cover and then wanted to leave had to remember to un-press something
+    // before the run would start. Reaching for the sprint button IS that
+    // decision, so it stands the player up on the spot and _updateSprint,
+    // which runs immediately after this and refuses a run while `crouching` is
+    // set, lets the run start on this very frame rather than the next one.
+    //
+    // ON THE EDGE, not on the hold, and for the same reason the crouch itself
+    // is: a player already holding sprint could otherwise never crouch at all.
+    // A slide is left alone - it owns its own velocity and ends standing.
+    const sprintWant = !!input.sprint;
+    const sprintEdge = sprintWant && !this._prevSprint;
+    this._prevSprint = sprintWant;
+    if (sprintEdge && this.crouching) this.crouching = false;
 
     if (this.sliding) {
       this.slideT -= dt;
