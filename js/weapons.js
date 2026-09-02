@@ -73,7 +73,7 @@ function buildPulseRifle() {
   );
   magazine.name = 'mag';
   magazine.position.set(0, -0.11, -0.04);
-  g.add(body, barrel, grip, magazine, buildMarks(), muzzleAt(0, 0.02, -0.65));
+  g.add(body, barrel, grip, magazine, buildMarks(), buildPlayerTag(), muzzleAt(0, 0.02, -0.65));
   return g;
 }
 
@@ -153,6 +153,65 @@ function buildMarks() {
     g.add(socket);
   }
   return g;
+}
+
+// THE PLAYER TAG. A lit strip down the INBOARD flank of the receiver, in the
+// colour of whoever is holding the gun. Versus only; hidden in solo, where the
+// question it answers cannot come up.
+//
+// WHY THE GUN AND NOT ONLY THE HUD. Whose turn it is has to be answerable
+// without looking away from the crosshair, and it has to stay answerable for a
+// whole wave rather than for the three seconds a title card is up. The gun is
+// the one object that is on screen every frame of every fight, so a band of
+// colour on it is a fact the player stops having to check.
+//
+// THE INBOARD FACE, at -x: the model sits at x = +0.3, so the flank turned
+// towards the centre of the screen is the one the camera actually sees. A
+// strip on the outboard side would be lit for nobody.
+//
+// Deliberately a BAR and not a "P1" glyph. At this size, in a first-person
+// view, two characters are a smear; a solid band of one colour is legible in
+// peripheral vision, which is where it will actually be read. The HUD's own
+// P1/P2 readout is what names it - see UI.setVersus - and the two are the same
+// two colours, so the band is a colour the player has already been taught.
+const TAG_W = 0.006;
+const TAG_H = 0.05;
+const TAG_L = 0.17;
+
+function buildPlayerTag() {
+  const g = new THREE.Group();
+  g.name = 'ptag';
+  // Two materials for the same reason a mutation mark carries two: the narrow
+  // edges falling darker than the face is what stops a lit rectangle reading
+  // as a decal printed on the side of the gun.
+  const face = new THREE.MeshStandardMaterial({
+    color: 0x0b0e14, emissive: 0xffffff, emissiveIntensity: 1.6,
+    roughness: 0.25, metalness: 0.5,
+  });
+  const edge = new THREE.MeshStandardMaterial({
+    color: 0x0b0e14, emissive: 0xffffff, emissiveIntensity: 0.3,
+    roughness: 0.4, metalness: 0.6,
+  });
+  // BoxGeometry face order is +x, -x, +y, -y, +z, -z: -x is the one turned to
+  // the camera, so it carries the bright material and the rest are walls.
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(TAG_W, TAG_H, TAG_L),
+    [edge, face, edge, edge, edge, edge]
+  );
+  bar.userData.faces = [face, edge];
+  g.add(bar);
+  g.position.set(-0.046, 0.005, 0.06);
+  g.visible = false;
+  return g;
+}
+
+/** Lights the flank strip in `color`, or hides it entirely when null. */
+export function setGunTag(model, color) {
+  const tag = model.getObjectByName('ptag');
+  if (!tag) return;
+  tag.visible = color != null;
+  if (color == null) return;
+  for (const m of tag.children[0].userData.faces) m.emissive.setHex(color);
 }
 
 // Fills the first `colors.length` sockets on a model and empties the rest.

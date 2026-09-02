@@ -80,6 +80,7 @@ import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
+import { VersusMatch, captureRun, restoreRun, devilChanceScaled } from './versus.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -280,6 +281,21 @@ const TOTEM_COUNT = 3;
 // Indexed by clean waves in the block, capped at 4.
 const DEVIL_COUNT = 3;
 const DEVIL_CHANCE = [0.10, 0.25, 0.50, 0.75, 1];
+
+// ---- the hot seat ---------------------------------------------------------
+//
+// How long the pass-the-controller screen holds before the next wave starts
+// itself. Long enough to read a name, a stake and hand a pad across a sofa;
+// short enough that it never becomes a lobby. It is not skippable, on purpose:
+// a skip button is a button one player can press while the other is still
+// reaching for the controller.
+const HANDOFF_TIME = 3;
+// How long the gun and the instruments take to leave, and to come back. The
+// caption holds between the two, so the pass reads as out - read - in rather
+// than as one continuous slide.
+const HANDOFF_SWAP = 0.55;
+// The two players, in the world. See PLAYER_INK in ui.js for the DOM's copy.
+const PLAYER_COLOR = [0x4ef3ff, 0xff3b30];
 // Double Dash: how close together two presses of the SAME movement key have to
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
@@ -610,8 +626,28 @@ class Game {
     // flawless orb shower, the No-Hit stack and the banner.
     this.lastPerfect = false;
     // Waves cleared without damage since the last boss. Not consecutive - see
-    // DEVIL_CHANCE - and zeroed by _presentDevil() at every boss.
+    // DEVIL_CHANCE - and zeroed by _rollDevil() at every boss.
     this.cleanWaves = 0;
+    // The denominator the line above is scored against. In solo it is always
+    // the five waves of the block and nothing reads it; in versus each player
+    // only sees two or three of them, and the Devil's odds are a RATE over
+    // this rather than a raw count - see devilChanceScaled in versus.js.
+    this.wavesCleared = 0;
+    // The Devil is ROLLED at a boss and PRESENTED at a shop, which in solo is
+    // the same moment and in versus is not: the player who was not on the
+    // controller for the boss still gets their own roll, and it waits here
+    // until their next break.
+    this.devilPending = false;
+    // 'solo' | 'versus'. Everything the second mode changes is gated on this,
+    // and nothing reads it while it is 'solo'.
+    this.mode = 'solo';
+    // The versus rules and the two saved runs, or null in solo. See versus.js.
+    this.match = null;
+    // Whether a controller pass is in progress, and whether it has already
+    // handed the run over. NOT a state: the game keeps running right through
+    // a pass - see _updatePass.
+    this._pass = false;
+    this._swapped = false;
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -1033,13 +1069,18 @@ class Game {
       e.stopPropagation();
       onStart();
     });
+    // The second mode. stopPropagation for the same reason every other button
+    // on this overlay has it: #overlay-start is click-to-continue, and without
+    // it this would start a solo run underneath the versus one.
+    document.getElementById('btn-versus').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._audioGesture();
+      if (this.state === 'menu') this.beginGame('versus');
+    });
     document.getElementById('btn-restart').addEventListener('click', (e) => {
       e.stopPropagation();
       this._audioGesture();
-      // Restarting without pressing SAVE still banks the run - losing a top-ten
-      // score because you hit the obvious button first would be indefensible.
-      this._saveScore();
-      this.beginGame();
+      this._restartFromOver();
     });
     // ---- the settings screen ------------------------------------------------
     //
@@ -1210,6 +1251,10 @@ class Game {
     // read as a dead screen. Swallowed rather than treated as BACK: these are
     // the only overlays in the game that are NOT click-to-continue, and a
     // stray click must not throw away a setting change.
+    // The pass caption is deliberately NOT in this list: it has
+    // pointer-events: none, so a click during a handoff falls through to the
+    // canvas, where every handler already refuses a state that is not
+    // 'playing'. Swallowing it here would be a listener that can never fire.
     for (const ov of [this.ui.settingsOv, this.ui.scoresOv]) {
       ov.addEventListener('click', (e) => e.stopPropagation());
     }
@@ -1808,8 +1853,33 @@ class Game {
       if (this._subScreenOpen()) this._closeSubScreen();
       else if (this.state === 'paused') this.resume();
       else if (this.state === 'menu') this.beginGame();
-      else if (this.state === 'gameover') { this._saveScore(); this.beginGame(); }
+      else if (this.state === 'gameover') this._restartFromOver();
     }
+  }
+
+  /**
+   * RESTART, from the button or from OPTIONS. One implementation because the
+   * two must not disagree about what a finished VERSUS match restarts into.
+   *
+   * A solo death goes straight back into a run - that is the arcade's own
+   * rhythm. A finished match goes back to the MENU instead: the next one needs
+   * two people ready with a controller between them, and dropping Player 1
+   * into wave 1 the instant someone reaches for the obvious button is not
+   * that.
+   */
+  _restartFromOver() {
+    // Restarting without pressing SAVE still banks the run - losing a top-ten
+    // score because you hit the obvious button first would be indefensible.
+    this._saveScore();
+    if (this.match) {
+      this.mode = 'solo';
+      this.match = null;
+      this.ui.setVersus(null);
+      this.ui.showStart();
+      this.state = 'menu';
+      return;
+    }
+    this.beginGame();
   }
 
   // The overlay the pad is currently pointed at, or null if the arena is what
@@ -1936,9 +2006,13 @@ class Game {
   _fillRigState() {
     const r = this._rigState;
     const combat = this.state === 'playing' && this.waveState === 'active';
-    r.mode = combat ? (this.bossFight ? 'boss' : 'combat')
-      : this.waveState === 'intermission' && this.state === 'playing' ? 'house'
-        : 'idle';
+    // A pass is a wave BREAK, so the room is lit like one. Without the extra
+    // test it fell to 'idle' - the between-runs mood - and the three seconds
+    // of a handoff read as the game having stopped, which is the one thing the
+    // pass is built not to do.
+    const house = this.state === 'playing'
+      && (this.waveState === 'intermission' || this._pass);
+    r.mode = combat ? (this.bossFight ? 'boss' : 'combat') : house ? 'house' : 'idle';
     r.beat = this.music.beat;
     r.level = this.music.level;
     // Position in the bar and whether this beat is the ONE. music.js keeps
@@ -2055,10 +2129,15 @@ class Game {
   // Starts a fresh run from the menu or the game-over screen. Anything that
   // changes during play must be reset here, including the spawn timers -
   // leftover state used to carry into the next run.
-  beginGame() {
+  beginGame(mode = 'solo') {
     this._audioGesture();
     // Any unnamed run is banked before the state that produced it is reset.
     this._saveScore();
+    this.mode = mode;
+    // VERSUS IS A MATCH, NOT A RUN. The wave counter below is still the one
+    // the arena reads; the match owns whose wave it is and what is riding on
+    // it, and both players' saved runs hang off it.
+    this.match = mode === 'versus' ? new VersusMatch() : null;
     this.ui.hideNameEntry();
     this.player.reset();
     this._clearEntities();
@@ -2071,6 +2150,10 @@ class Game {
     this.waveDamageTaken = 0;
     this.lastPerfect = false;
     this.cleanWaves = 0;
+    this.wavesCleared = 0;
+    this.devilPending = false;
+    this._pass = false;
+    this._swapped = false;
     this.totemArea.dismiss();
     this.devilArea.dismiss();
     this.wave = 0;
@@ -2089,6 +2172,19 @@ class Game {
     this._clearInput();
     this.ui.resetCache();
     this.ui.showHud();
+    if (this.match) {
+      // Both slots seeded off the same freshly reset player, so the first
+      // handoff restores a snapshot exactly like every later one does rather
+      // than being a special case that nothing else exercises.
+      this.match.slots[0] = captureRun(this);
+      this.match.slots[1] = captureRun(this);
+      this.ui.setVersus(this.match.active + 1);
+      this.player.setPlayerTag(PLAYER_COLOR[this.match.active]);
+    } else {
+      this.ui.setVersus(null);
+      this.player.setPlayerTag(null);
+    }
+    this.player.setHolster(0);
     if (!this.autoTest) this._lock();
   }
 
@@ -2114,6 +2210,150 @@ class Game {
     if (!this.autoTest) this._lock();
   }
 
+  // ---- versus: the hot seat ------------------------------------------------
+  //
+  // A TURN IS ONE WAVE. It ends the moment the player claims their mutation -
+  // the last thing they do with the controller - or the moment they die, and
+  // either way the pad goes across the room. Everything that makes the swap
+  // safe is in these four methods; the rules themselves are in versus.js.
+
+  /** The active player has died. Not an ending - see gameOver. */
+  _playerFell() {
+    if (this.state !== 'playing' || this._pass) return;
+    const m = this.match;
+    // The same weight the solo death carries. It is still a death; it is just
+    // not the last one, so it takes the fx and the sound and not the screen.
+    this.effects.burst(this.player.eyeInto(this._killPos), 0x4ef3ff, 40, 6, 3, 0.9);
+    this.sfx.death(1.2);
+    this.pad.rumble(1, 0.8, 700, 4);
+    this.ui.banner(m.label() + ' FELL ON WAVE ' + m.wave);
+    this.comboKills = 0;
+    this.comboTimer = 0;
+    this.player.setBloodlustStacks(0);
+    this._endTurn(false);
+  }
+
+  /**
+   * Books the turn and starts the pass.
+   *
+   * NOTHING STOPS HERE. The pass is not a state and not a screen: it is an
+   * ordinary wave break, three seconds long instead of the usual four tenths,
+   * with a caption over it. The arena stays live, the room keeps its house
+   * lighting, and once the weapon has changed hands the incoming player can
+   * walk, look and shoot for the rest of the countdown. The wave then starts
+   * off the same `interT` every other wave in the game starts off.
+   *
+   * WHAT IS AND IS NOT COMMITTED. A cleared wave writes a fresh snapshot: the
+   * build, the money and the shopping trip that just happened are all kept. A
+   * FAILED one writes nothing at all, so the snapshot left in the slot is
+   * still the state the player began the attempt with - which is the only
+   * thing "another attempt at wave ten" can honestly mean. It also makes a
+   * failed attempt free of side effects: nothing picked up during it survives.
+   */
+  _endTurn(cleared) {
+    const m = this.match;
+    if (cleared) m.slots[m.active] = captureRun(this);
+    m.advance(cleared);
+    if (m.winner >= 0) { this._matchOver(); return; }
+    this._clearEntities();
+    this.totemArea.dismiss();
+    this.devilArea.dismiss();
+    // The room keeps the last fight's mood otherwise, and the incoming player
+    // would walk into a boss's red on an ordinary wave.
+    this.rig.setEnraged(false);
+    this.ui.setPrompt(null, false);
+    // NOTHING IS CLEARED, CONSUMED OR CLOSED HERE, and that is deliberate.
+    // Every one of those is a control taken out of the player's hands for a
+    // frame or for a keypress, and a wave break in solo takes none of them -
+    // so neither does this one. A key still held keeps moving the player
+    // straight through the pass, which is exactly what "no pause" means.
+    //
+    // It is safe because THERE IS ONLY ONE BODY. The transform is not part of
+    // a snapshot (see PLAYER_SKIP in versus.js), so the thing still walking on
+    // a held key is the same thing the incoming player is about to be, not the
+    // outgoing player's corpse wandering off with their momentum.
+    // ONE SHORT OF THE MATCH'S WAVE, because startWave() does the ++. Setting
+    // the counter rather than starting the wave is what buys versus the whole
+    // ordinary path for free: the banner, the rig cue, the boss spawn and the
+    // pending-buff clocks all run exactly as they do in solo.
+    this.wave = m.wave - 1;
+    this.queue.length = 0;
+    this._pass = true;
+    this._swapped = false;
+    // THE PASS IS THE INTERMISSION CLOCK. One timer, so the countdown on
+    // screen and the wave it is counting down to can never disagree.
+    this.waveState = 'idle';
+    this.interT = HANDOFF_TIME;
+    this.ui.showHandoff(m.active + 1, m.label(), m.stake(), Math.ceil(HANDOFF_TIME));
+  }
+
+  /**
+   * One frame of the pass, on a game that is still running.
+   *
+   * THE SWING IS A TRIANGLE, not a plateau: the gun swings out over
+   * HANDOFF_SWAP, the run changes hands at the top, and it swings straight
+   * back in. That is about a second of the three, and it is deliberately front
+   * loaded - the rest of the countdown is the incoming player standing in the
+   * arena with their own weapon already in their hands, free to move, which is
+   * the whole difference between a pass and a pause.
+   */
+  _updatePass(dt) {
+    const e = HANDOFF_TIME - this.interT;          // seconds since it began
+    // A triangle in one line: up to 1 at HANDOFF_SWAP, back to 0 at twice it.
+    const swing = Math.max(0, 1 - Math.abs(e - HANDOFF_SWAP) / HANDOFF_SWAP);
+    // The FIELD, not setHolster: player.update() runs every frame of a pass
+    // and folds the drop into the pose itself, so the walk bob and the swing
+    // compose instead of fighting over the gun's transform.
+    this.player.holster = swing;
+    // THE HANDOVER, at the top of the swing: the weapon is out of frame and
+    // the instruments are off the edges, so every number on the HUD changes
+    // behind the one moment in the pass when none of them is on screen.
+    if (!this._swapped && e >= HANDOFF_SWAP) {
+      this._swapped = true;
+      this._swapRun();
+    }
+    // The instruments come back holding the INCOMING player's numbers, which
+    // is why the handover has to lead the slide rather than follow it.
+    if (this._swapped) this.ui.swapHudIn();
+    this.ui.setHandoffCount(Math.max(0, Math.ceil(this.interT)));
+  }
+
+  /** The other player's run comes back, while nothing is looking at it. */
+  _swapRun() {
+    const m = this.match;
+    restoreRun(this, m.slots[m.active]);
+    this.player.setPlayerTag(PLAYER_COLOR[m.active]);
+    // resetCache first: it wipes the per-field cache, and setVersus writes
+    // straight into the DOM. The other order leaves the readout stale.
+    this.ui.resetCache();
+    this.ui.setVersus(m.active + 1);
+    this._updateHud();
+  }
+
+  /** One player has cleared a wave the other could not. The only ending. */
+  _matchOver() {
+    const m = this.match;
+    this.state = 'gameover';
+    // A match can only end from _endTurn, which is before the pass starts -
+    // but the flags are cleared anyway so the screen can never be reached with
+    // a half-swung weapon or a slid-out HUD still owed an animation.
+    this._pass = false;
+    this._swapped = false;
+    this.player.setHolster(0);
+    this._clearInput();
+    this._closeStats();
+    this._clearEntities();
+    this.totemArea.dismiss();
+    this.devilArea.dismiss();
+    this.rig.setEnraged(false);
+    this.ui.setPrompt(null, false);
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    this.sfx.upgrade();
+    // NOT _postScore. A versus match is not a run, its score was never shown,
+    // and banking one would put a two-player result on a solo board.
+    this.ui.showMatchOver(m.label(m.winner), m.wave);
+  }
+
   tryReload() {
     if (this.state !== 'playing') return;
     if (this.player.startReload()) this.sfx.reload();
@@ -2128,6 +2368,16 @@ class Game {
     // costs health to touch by accident, in a room the player is running
     // around at speed. He goes whether or not anything was bought.
     this.devilArea.dismiss();
+    // The pass ends where every wave break ends: with the wave. A pass cut
+    // short before the handover still owes it - a match cannot start a wave
+    // with the previous player's run loaded.
+    if (this._pass) {
+      if (!this._swapped) this._swapRun();
+      this._pass = false;
+      this._swapped = false;
+      this.player.holster = 0;
+      this.ui.hideHandoff();
+    }
     this.wave++;
     this._cfg = waveConfig(this.wave);
     this.queue = this._cfg.queue;
@@ -2135,7 +2385,13 @@ class Game {
     this.waveState = 'active';
     this.bossFight = null;
     this.ui.setWave(this.wave);
-    this.ui.banner('WAVE ' + this.wave);
+    // WHOSE WAVE THIS IS, said at the top of it. The pass caption is three
+    // seconds long and then gone; the wave after it can run for minutes, and a
+    // player picking a controller back up needs the answer at the moment the
+    // fight starts rather than only before it.
+    this.ui.banner(this.match
+      ? this.match.label() + '  \u00b7  WAVE ' + this.wave
+      : 'WAVE ' + this.wave);
     // Blackout, then the whole rig hits at once. The dark beat before it is
     // what makes the hit land - a bright room just getting brighter reads as
     // nothing at all.
@@ -2384,6 +2640,17 @@ class Game {
     // ORB_LIFETIME while the player shops. Delayed by the length of the arc so
     // the shower is still SEEN to land before it streams back in.
     this.money.vacuum(BOSS_ORB_SWEEP_DELAY);
+    // MIRRORED, AND SILENTLY. Only one of the two players is holding the
+    // controller for a boss, and letting the bounty follow the controller
+    // would make the run's largest single payout a matter of whose turn wave
+    // ten happened to be. The other player's balance is simply larger when
+    // they next look at it - announcing it would be telling them about a fight
+    // they did not have. Scaled by THEIR Midas, not this player's, which is
+    // why the snapshot caches the multiplier.
+    if (this.match) {
+      const s = this.match.slots[this.match.other];
+      s.game.credits += bonus * s.creditMult;
+    }
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
     this.ui.banner('BOSS DOWN  +$' + Math.round(bonus * this.player.mods.creditMult));
   }
@@ -2468,6 +2735,11 @@ class Game {
 
   gameOver() {
     if (this.state === 'gameover') return;
+    // VERSUS HAS NO GAME OVER, only a lost wave. Branched here rather than at
+    // the three places that reach it - the health test in the loop, the last
+    // point of a hit, the last tick of a pool - so there is exactly one door
+    // between "the player is dead" and "the run is over".
+    if (this.match) { this._playerFell(); return; }
     this.state = 'gameover';
     this._clearInput();
     // A panel held open across the death would sit over the game-over screen
@@ -3513,6 +3785,10 @@ class Game {
         // deliberately never shown: the odds are meant to be felt as "he turns
         // up when I play well", not audited against a number on the HUD.
         if (this.lastPerfect) this.cleanWaves++;
+        // What that tally is scored against. Solo never reads it - a block is
+        // always five waves there - but versus splits the block between two
+        // players and the odds have to be a rate. See _rollDevil.
+        this.wavesCleared++;
         // Everything still on the floor comes in, so a wave's money can never
         // be lost to the shopping trip that follows it - and neither can a
         // health crate the player never had a safe second to walk over.
@@ -3550,6 +3826,11 @@ class Game {
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
         if (this._cfg.boss) this._payBossBonus();
+        // ROLLED AT THE BOSS, PRESENTED AT A SHOP. In solo those are the same
+        // break and this reads exactly as it always did; in versus they are
+        // not, and the split is what lets the benched player have their own
+        // odds on a boss they never saw.
+        if (this._cfg.boss) this._rollDevil();
         this._presentTotems();
         this._presentDevil();
       }
@@ -3561,6 +3842,10 @@ class Game {
       // set that never rose - an empty roll, or one dismissed on a reset - so
       // an exhausted pool can never wedge the run.
       if (!this.totemArea.active || this.totemArea.claimed) {
+        // VERSUS ENDS THE TURN ON THE PICK, not on the wave that follows it.
+        // The mutation is the last decision the player makes, so the handoff
+        // lands on a choice rather than halfway through the walk back.
+        if (this.match) { this._endTurn(true); return; }
         this.waveState = 'idle';
         this.interT = 0.4;
       }
@@ -3584,29 +3869,63 @@ class Game {
   }
 
   /**
-   * Raises the Devil, if he is coming at all.
+   * Decides whether the Devil is coming, on odds bought by the block of five
+   * that just ended - see DEVIL_CHANCE.
    *
-   * BOSS WAVES ONLY, on odds bought by the block of five that just ended - see
-   * DEVIL_CHANCE. Demonic Presence makes him certain, but does NOT move him off
-   * the boss: it upgrades the player's odds, not his schedule, because a mod
-   * that put him back at every wave break would hand back the exact glut the
-   * boss gating exists to remove.
+   * BOSS WAVES ONLY. Demonic Presence makes him certain, but does NOT move him
+   * off the boss: it upgrades the player's odds, not his schedule, because a
+   * mod that put him back at every wave break would hand back the exact glut
+   * the boss gating exists to remove.
    *
-   * The block counter is cleared here whether or not he actually came, so the
-   * next five waves are always scored from zero and a roll that missed cannot
-   * be re-rolled by anything later.
+   * The block counter is cleared here whether or not he came, so the next five
+   * waves are always scored from zero and a roll that missed cannot be
+   * re-rolled by anything later.
    *
-   * Skipped outright when the totem set is empty. The wave boundary is gated
-   * on a totem claim, so a Devil standing in front of no totems would be a
-   * shop the player could never leave.
+   * SPLIT FROM THE PRESENTATION so versus can have two ledgers - the deciding
+   * and the raising are the same break in solo and are not in a hot seat.
    */
-  _presentDevil() {
-    if (!this._cfg.boss) return;
-    const clean = Math.min(this.cleanWaves, DEVIL_CHANCE.length - 1);
+  _rollDevil() {
+    if (!this.match) {
+      // SOLO, UNCHANGED. The raw integer index into the table, because a solo
+      // player really did see all five waves of the block.
+      const clean = Math.min(this.cleanWaves, DEVIL_CHANCE.length - 1);
+      this.cleanWaves = 0;
+      this.wavesCleared = 0;
+      this.devilPending = this.player.mods.devilAlways > 0
+        || Math.random() < DEVIL_CHANCE[clean];
+      return;
+    }
+    // VERSUS ROLLS BOTH RUNS, on every boss, whoever fought it. The ledger is
+    // about how a player played their share of the block, not about which
+    // five-wave slot their turns happened to land in - and a player who never
+    // gets a roll because the bosses kept falling on the other player's turn
+    // would be locked out of the largest power spikes in the game for reasons
+    // that have nothing to do with them.
+    const m = this.match;
+    const other = m.slots[m.other];
+    this.devilPending = this.devilPending
+      || this.player.mods.devilAlways > 0
+      || Math.random() < devilChanceScaled(DEVIL_CHANCE, this.cleanWaves, this.wavesCleared);
     this.cleanWaves = 0;
+    this.wavesCleared = 0;
+    // DEMONIC PRESENCE is read off the snapshot for the same reason Midas is:
+    // the benched player has no live mods to ask.
+    other.game.devilPending = other.game.devilPending
+      || other.devilAlways > 0
+      || Math.random() < devilChanceScaled(
+        DEVIL_CHANCE, other.game.cleanWaves, other.game.wavesCleared
+      );
+    other.game.cleanWaves = 0;
+    other.game.wavesCleared = 0;
+  }
+
+  // Raises the deal row, if this player is owed one. In solo that is always
+  // the boss break it was rolled on; in versus it is whichever of that
+  // player's breaks comes next, which may be an ordinary wave.
+  _presentDevil() {
+    if (!this.devilPending) return;
+    this.devilPending = false;
     if (!this.totemArea.active) return;
-    const certain = this.player.mods.devilAlways > 0;
-    if (!certain && Math.random() >= DEVIL_CHANCE[clean]) return;
     const offers = this._buildDeals();
     if (!offers.length) return;
     this.devilArea.present(offers);
@@ -5038,6 +5357,10 @@ class Game {
           this.player.setBloodlustStacks(0);
         }
       }
+      // THE CONTROLLER PASS, on a live game. It only moves the weapon and the
+      // instruments; the wave break it rides on is the ordinary one, and the
+      // player below is updated exactly as on any other frame.
+      if (this._pass) this._updatePass(dt);
       if (this.autoTest) this._autoInput();
       if (this.input.dash) {
         this.player.tryDash(this.input.dash, this.time);
@@ -5135,7 +5458,10 @@ class Game {
       }
 
       this._updateHud();
-      if (this.player.health <= 0) this.gameOver();
+      // NOT DURING A PASS. A versus turn that ended in a death leaves the
+      // body at zero for the half second before the other run is written in,
+      // and without this the same death would be booked on every frame of it.
+      if (!this._pass && this.player.health <= 0) this.gameOver();
     } else if (this.state === 'menu') {
       const a = now * 0.00015;
       this.camera.position.set(Math.sin(a) * 13, 5.5, Math.cos(a) * 13);

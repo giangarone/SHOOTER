@@ -7,6 +7,13 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
+import { controllerGlyph } from './padmenu.js';
+
+// The two player colours, as CSS. The world-space pair lives in main.js beside
+// the code that lights the gun; these are the same two hues written the way
+// the document needs them, and #handoff.p1 / .p2 in the stylesheet is the
+// third copy. Three because they are three different rendering systems.
+const PLAYER_INK = ['#4ef3ff', '#ff3b30'];
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 export class UI {
@@ -46,6 +53,15 @@ export class UI {
     // is a single class change.
     this.settingsOv = $('overlay-settings');
     this.scoresOv = $('overlay-scores');
+    // The pass-the-controller screen. Not a sub-screen: it is layered over a
+    // live match rather than over a menu, and nothing takes it down but its
+    // own countdown.
+    this.handoffOv = $('handoff');
+    this.handoffWho = $('handoff-who');
+    this.handoffStake = $('handoff-stake');
+    this.handoffCount = $('handoff-count');
+    this.handoffIcon = $('handoff-icon');
+    this.scoreLabel = $('score-label');
     this.overStats = $('over-stats');
     this.buffsEl = $('buffs');
     this.creditNum = $('credit-num');
@@ -66,6 +82,9 @@ export class UI {
     // rows every frame the key is held would thrash layout for no reason.
     this._statRows = {};
     this._statsOpen = false;
+    // Whose turn it is in versus, 1 or 2, or null in solo. It takes over the
+    // score readout - see setVersus.
+    this._versus = null;
   }
 
   setWave(n) {
@@ -120,7 +139,32 @@ export class UI {
     }
   }
 
+  /**
+   * Hands the score box over to versus, or takes it back.
+   *
+   * SCORE DOES NOT EXIST IN VERSUS - it is a survival duel, and a number
+   * nobody is playing for would be the largest thing on the HUD. The cells are
+   * reused rather than a fifth box added to a crowded frame: whose turn it is
+   * is exactly the kind of thing the top-right readout is for.
+   *
+   * @param {?number} n 1 or 2, or null for solo.
+   */
+  setVersus(n) {
+    this._versus = n;
+    this.scoreLabel.textContent = n ? 'VERSUS' : 'SCORE';
+    // The same two colours the gun's flank strip carries, so the readout that
+    // NAMES the player and the band that marks their weapon teach each other.
+    this.scoreNum.style.color = n ? PLAYER_INK[n - 1] : '';
+    // Written straight out both ways rather than left to the next frame's
+    // setScore: leaving solo puts the menu up, and the menu does not tick the
+    // HUD, so a deferred repaint left 'P1' sitting in the score cells.
+    this.scoreNum.textContent = n ? 'P' + n : '000000';
+    this._c.score = undefined;
+  }
   setScore(n) {
+    // Nothing writes over the turn readout, whatever the run is still scoring
+    // internally.
+    if (this._versus) return;
     if (this._c.score !== n) {
       this._c.score = n;
       // Six fixed cells, no separators: the arcade high-score readout. In a
@@ -411,7 +455,9 @@ export class UI {
     this.startOv.classList.remove('hidden');
     this.overOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
+    this.handoffOv.classList.add('hidden');
     this.hud.classList.add('hidden');
+    this.hud.classList.remove('swap');
     this.hideSubScreens();
   }
   showHud() {
@@ -419,6 +465,10 @@ export class UI {
     this.startOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.overOv.classList.add('hidden');
+    this.handoffOv.classList.add('hidden');
+    // A match that ended mid-pass would otherwise bring its half-slid
+    // instruments into the next run.
+    this.hud.classList.remove('swap');
     this.hideSubScreens();
   }
   showPause() {
@@ -446,7 +496,81 @@ export class UI {
     this.lbNone.classList.toggle('hidden', entries.length > 0);
     this.scoresOv.classList.remove('hidden');
   }
+  // ---- the hot seat --------------------------------------------------------
+
+  /**
+   * Puts the pass caption up and starts the HUD sliding out.
+   *
+   * @param {number} p    the INCOMING player, 1 or 2 - colours the caption
+   * @param {string} who  their name
+   * @param {string} stake the one line about the wave
+   * @param {number} n    the first number on the countdown
+   */
+  showHandoff(p, who, stake, n) {
+    // Built once, on the first handoff of the session - the markup is ours and
+    // constant, so there is nothing here to rebuild per pass.
+    if (!this.handoffIcon.firstChild) this.handoffIcon.innerHTML = controllerGlyph();
+    this.handoffWho.textContent = who;
+    this.handoffStake.textContent = stake;
+    this.handoffCount.textContent = String(n);
+    this._c.handoffCount = n;
+    this.handoffOv.classList.remove('hidden', 'p1', 'p2');
+    this.handoffOv.classList.add('p' + p);
+    // The instruments leave with the player who was reading them. NOT hidden:
+    // they slide, and the slide is the half of this that says the readouts
+    // belong to a person rather than to the room.
+    this.hud.classList.add('swap');
+  }
+  /** The incoming player's instruments slide back in. */
+  swapHudIn() {
+    this.hud.classList.remove('swap');
+  }
+  setHandoffCount(n) {
+    if (this._c.handoffCount === n) return;
+    this._c.handoffCount = n;
+    this.handoffCount.textContent = String(n);
+    // Restarted per tick, the same forced-reflow trick the banner uses.
+    this.handoffCount.classList.remove('tick');
+    void this.handoffCount.offsetWidth;
+    this.handoffCount.classList.add('tick');
+  }
+  hideHandoff() {
+    this.handoffOv.classList.add('hidden');
+    this.hud.classList.remove('swap');
+  }
+
+  /**
+   * The end of a versus match. Reuses the death screen's furniture - the
+   * marquee, the stat strip, RESTART - because it is the same moment in the
+   * cabinet's shape, and hides the leaderboard half of it: a two-player result
+   * has no business on a solo board.
+   */
+  showMatchOver(who, wave) {
+    this.hideSubScreens();
+    this.hideNameEntry();
+    this.hideHandoff();
+    this.lbOver.textContent = '';
+    const h1 = this.overOv.querySelector('h1');
+    h1.textContent = who + ' WINS';
+    h1.classList.remove('dead');
+    this.overStats.textContent = '';
+    const cell = document.createElement('div');
+    cell.className = 'rs';
+    const l = document.createElement('u');
+    l.textContent = 'CLEARED WAVE';
+    const v = document.createElement('b');
+    v.textContent = String(wave);
+    cell.append(l, v);
+    this.overStats.appendChild(cell);
+    this.overOv.classList.remove('hidden');
+    this.hud.classList.add('hidden');
+  }
+
   showOver(score, wave, kills, bestCombo = 0) {
+    // Taken back off in case the last thing on this screen was a versus win.
+    const h1 = this.overOv.querySelector('h1');
+    h1.textContent = 'YOU DIED';
+    h1.classList.add('dead');
     this.hideSubScreens();
     // Four columns of one reading, not one sentence. At 8x8 a run-on line of
     // labels and numbers separated by middots is a wall the player has to read

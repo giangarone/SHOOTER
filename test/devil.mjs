@@ -38,6 +38,16 @@ try {
     const boss = (clean = 4) => {
       g._cfg.boss = true;
       g.cleanWaves = clean;
+      g.wavesCleared = 5;
+    };
+    // The wave-clear shop, in the order _updateWave runs it. The Devil's ROLL
+    // and his ARRIVAL are two calls now - solo is the case where they are the
+    // same break, versus is the case where they are not - so the boss gate
+    // that used to live inside _presentDevil is the caller's, here as there.
+    const shop = () => {
+      if (g._cfg.boss) g._rollDevil();
+      g._presentTotems();
+      g._presentDevil();
     };
 
     // --- a full clean block at a boss: the Devil is certain ---
@@ -45,8 +55,7 @@ try {
     g.waveDamageTaken = 0;
     g.totemArea.dismiss();
     g.devilArea.dismiss();
-    g._presentTotems();
-    g._presentDevil();
+    shop();
     out.devilAfterClean = g.devilArea.active;
     out.dealCount = g.devilArea.deals.filter((d) => d.state !== 'hidden').length;
     out.allPriced = g.devilArea.deals.every((d) => d.state === 'hidden' || d.offer.cost > 0);
@@ -116,8 +125,7 @@ try {
         hide();
         boss(clean);
         g.waveDamageTaken = 10;
-        g._presentTotems();
-        g._presentDevil();
+        shop();
         if (g.devilArea.active) seen++;
       }
       return seen / n;
@@ -129,8 +137,7 @@ try {
     // --- and the ledger is spent whether or not he came ---
     hide();
     boss(3);
-    g._presentTotems();
-    g._presentDevil();
+    shop();
     out.ledgerCleared = g.cleanWaves === 0;
 
     // --- a NON-boss wave never summons him, however clean the block ---
@@ -140,8 +147,7 @@ try {
       boss(4);
       g._cfg.boss = false;
       g.waveDamageTaken = 0;
-      g._presentTotems();
-      g._presentDevil();
+      shop();
       if (g.devilArea.active) offBoss++;
     }
     out.offBossRate = offBoss / 60;
@@ -153,8 +159,7 @@ try {
       hide();
       boss(0);
       g.waveDamageTaken = 10;
-      g._presentTotems();
-      g._presentDevil();
+      shop();
       if (g.devilArea.active) always++;
     }
     out.presenceRate = always / 30;
@@ -163,8 +168,7 @@ try {
       hide();
       boss(4);
       g._cfg.boss = false;
-      g._presentTotems();
-      g._presentDevil();
+      shop();
       if (g.devilArea.active) presenceOffBoss++;
     }
     out.presenceOffBossRate = presenceOffBoss / 30;
@@ -193,8 +197,7 @@ try {
       for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
       boss(4);
       g.waveDamageTaken = 0;
-      g._presentTotems();
-      g._presentDevil();
+      shop();
       // Long enough to cover the rise plus the longest arm delay (1s with a
       // Devil standing), or nothing is claimable yet.
       for (let i = 0; i < 260; i++) {

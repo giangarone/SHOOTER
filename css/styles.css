@@ -918,6 +918,85 @@ html, body {
 
    They are also the only overlays in the game that are not click-to-continue,
    so the pointer says so. */
+/* ---- the hot seat -------------------------------------------------------
+
+   THE PASS CAPTION. Not an `.overlay`: there is no scrim, no plate and no
+   pause behind it. The arena stays lit and the two viewmodels swap underneath,
+   and this is the caption over that - so it sits ABOVE the banner (7) and
+   below the real menus (10), and never takes the cursor.
+
+   --pc is the player's colour, set by a class from UI.setVersus. Everything
+   tinted on this caption reads it, so the two players are told apart by one
+   custom property rather than by four rules that could drift apart. */
+#handoff {
+  position: fixed; inset: 0; z-index: 8;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--u) * 2);
+  text-align: center; pointer-events: none;
+  --pc: var(--cyan);
+}
+#handoff.p1 { --pc: var(--cyan); }
+/* Player two's red is the CSS red the cabinet already uses for the death
+   marquee and the low-health bar, not a new hue - the palette is four colours
+   and a fifth would be the one thing on screen that came from somewhere
+   else. */
+#handoff.p2 { --pc: #ff3b30; }
+
+#handoff-lead {
+  font-size: 10px; letter-spacing: 0.28em; color: var(--dim);
+  text-shadow: 2px 2px 0 var(--ink);
+}
+#handoff-icon { line-height: 0; color: var(--pc); }
+#handoff-who {
+  font-size: 32px; letter-spacing: 0.06em; color: var(--pc);
+  text-shadow: 4px 4px 0 var(--ink), 0 0 30px var(--pc);
+}
+/* THE STAKE. Gold rather than the player's colour: it is a fact about the
+   WAVE, not about who is holding the pad, and colouring it with the name would
+   fold the two readings into one. */
+#handoff-stake {
+  font-size: 12px; letter-spacing: 0.22em; color: var(--gold);
+  text-shadow: 2px 2px 0 var(--ink);
+}
+#handoff-count {
+  font-size: 56px; line-height: 1; margin-top: calc(var(--u) * 2);
+  color: #fff;
+  text-shadow: 4px 4px 0 var(--ink), 0 0 24px var(--pc);
+}
+/* One step per second, no easing - a cell changing on the tube, not a
+   countdown animating. Restarted from script on every tick. */
+#handoff-count.tick { animation: handoff-tick 0.9s steps(1, end) 1; }
+@keyframes handoff-tick {
+  0%   { transform: scale(1.2); }
+  10%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+.gl-pad {
+  width: 92px; height: 61px; display: block; margin: 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.1;
+  shape-rendering: crispEdges;
+}
+
+/* THE HUD LEAVING WITH ITS PLAYER. The two instrument clusters slide off the
+   edge they already live against - the readouts do not belong to the arena,
+   they belong to the person holding the controller, and they go with them.
+
+   A TRANSITION AND NOT A `steps()`: everything static in this game is drawn on
+   a hard pixel grid, but a physical object being taken away is the one thing
+   here that is a MOVEMENT, and stepping it would read as a dropped frame
+   rather than as a deliberate exit. */
+#hud-top, #hud-bottom, #combo, #buffs {
+  transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.28s linear;
+}
+#hud.swap #hud-top { transform: translateY(-160%); opacity: 0; }
+#hud.swap #hud-bottom { transform: translateY(160%); opacity: 0; }
+#hud.swap #combo, #hud.swap #buffs { opacity: 0; }
+/* The crosshair goes too, and instantly: it is the one HUD element that reads
+   as part of the gun rather than as a panel, and sliding it would look like
+   the reticle coming loose. */
+#hud.swap #crosshair { opacity: 0; transition: opacity 0.18s linear; }
+
 #overlay-settings, #overlay-scores {
   cursor: default;
   /* SCROLLABLE, because settings only ever grow. The controller block took
@@ -1300,6 +1379,9 @@ html, body {
   .set-row > :last-child { margin-right: auto; }
 }
 @media (max-width: 900px), (max-height: 700px) {
+  #handoff-count { font-size: 40px; }
+  #handoff-who { font-size: 22px; }
+  .gl-pad { width: 72px; height: 48px; }
   .overlay h1 { font-size: 24px; }
   .marquee { padding: calc(var(--u) * 4) calc(var(--u) * 5) calc(var(--u) * 4); }
   .overlay { gap: calc(var(--u) * 3); padding: calc(var(--u) * 4); }

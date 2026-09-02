@@ -131,6 +131,11 @@
          START off the bottom of a laptop screen the moment it had ten rows in
          it. It is its own screen now. -->
     <div class="primary-row"><button id="btn-start">PRESS START</button></div>
+    <!-- The second mode. Its own row under the marquee's button rather than
+         beside it: PRESS START is the cabinet's one big control and a pair of
+         equal buttons would make the player choose before they know there is
+         anything to choose between. -->
+    <div class="opt-row"><button id="btn-versus" class="opt-btn">2 PLAYER VERSUS</button></div>
     <!-- Shown only when the sound is still locked and the pad is what is being
          played on: a controller press is not a "user gesture" as far as the
          browser is concerned, so no amount of pressing X will start the audio
@@ -166,6 +171,22 @@
 
     <div id="lb-over" class="lb"></div>
     <div class="primary-row"><button id="btn-restart">RESTART</button></div>
+  </div>
+
+  <!-- PASS THE CONTROLLER. Text on the arena and nothing else - no scrim, no
+       plate, no pause. The game keeps running underneath it: the room is still
+       lit and breathing, the outgoing player's gun swings out of frame and the
+       incoming player's swings in, and this is the caption over that, not a
+       screen the match stops behind.
+
+       pointer-events are off in CSS, so a click during the pass reaches the
+       canvas and does nothing rather than landing on an invisible sheet. -->
+  <div id="handoff" class="hidden">
+    <p id="handoff-lead">PASS CONTROLLER TO</p>
+    <div id="handoff-icon"></div>
+    <div id="handoff-who">PLAYER 2</div>
+    <p id="handoff-stake">WAVE 2</p>
+    <div id="handoff-count">3</div>
   </div>
 
   <div id="overlay-pause" class="overlay hidden">

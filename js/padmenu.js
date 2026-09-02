@@ -41,6 +41,26 @@ export function glyph(name) {
   return FACE[name] || name.toUpperCase();
 }
 
+/**
+ * The controller itself, for the pass-the-controller screen.
+ *
+ * A WIDER GRID than the face glyphs above: a pad is a shape rather than a
+ * symbol, and it does not survive being drawn in twelve pixels. Same hard
+ * edges and the same currentColor, so it still reads as part of the cabinet
+ * and not as an icon borrowed from somewhere else.
+ */
+export function controllerGlyph() {
+  return '<svg class="gl-pad" viewBox="0 0 24 16" aria-hidden="true">'
+    // Body, with a grip dropping from each end and a waist between them.
+    + '<path d="M3 4 H21 V12 H17 V10 H7 V12 H3 Z"/>'
+    // D-pad, left. Two strokes, because at this size a cross is two strokes.
+    + '<path d="M6.4 6.2 V8.8 M5.1 7.5 H7.7"/>'
+    // Two face buttons, right.
+    + '<circle cx="16.4" cy="7" r="0.9"/>'
+    + '<circle cx="18.7" cy="8.9" r="0.9"/>'
+    + '</svg>';
+}
+
 /** A whole keycap. `cls` is the caller's cap class - `.key` on the start
  *  screen, nothing in the prompt, which styles its own `b`. */
 export function cap(name, cls = '') {

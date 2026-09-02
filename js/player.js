@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { resolveCircle } from './utils.js';
 import { UPGRADES } from './upgrades.js';
-import { WEAPONS, STARTING_WEAPON, setGunMarks } from './weapons.js';
+import { WEAPONS, STARTING_WEAPON, setGunMarks, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 // Every stat an upgrade is allowed to touch, at its un-upgraded value.
@@ -222,7 +222,17 @@ export const NO_HIT_CAP = 0.4;
 // simply inert. Twenty is a fifth of the starting pool - low enough that
 // Executioner's fifty is reachable from full, high enough that a player who
 // has sold everything they can is still standing.
-export const MIN_MAX_HEALTH = 20;
+export // THE HANDOFF SWING. Far enough down that the muzzle clears the bottom of the
+// frame at every field of view the game offers, with the roll and the push
+// outboard doing the rest - a weapon that only translated straight down read
+// as a lift going out of shot.
+const HOLSTER_DROP = 0.62;
+const HOLSTER_BACK = 0.18;
+const HOLSTER_OUT = 0.1;
+const HOLSTER_PITCH = -0.55;
+const HOLSTER_ROLL = 0.7;
+
+const MIN_MAX_HEALTH = 20;
 // Collision height, a little over the 1.7 eye height. Only overhead geometry
 // cares - see the resolveCircle call in update().
 // How fast the recoil offset bleeds back to zero, as the fraction left after
@@ -582,6 +592,10 @@ export class Player {
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
+    // VERSUS HANDOFF. 0 is the gun in hand, 1 is the gun swung fully out of
+    // frame. Driven by main.js across a turn change and zero at every other
+    // moment in the game's life - see setHolster.
+    this.holster = 0;
 
     // The viewmodel is built once here and parented to the camera. Building
     // one per equip would allocate geometry for the rest of the session.
@@ -605,6 +619,31 @@ export class Player {
   }
   get gun() {
     return this.gunModels[this.weaponKey];
+  }
+
+  /**
+   * THE TURN CHANGE, as the gun sees it. `t` runs 0 (in hand) to 1 (gone).
+   *
+   * A DROP AND A ROLL, not a fade: the weapon leaves the frame the way a real
+   * one would be handed over, swung down and away past the bottom edge, and
+   * comes back up the same path in the other player's hands. It writes the
+   * pose outright rather than setting a flag for update(), because update()
+   * does not run during a handoff - nothing about the player is simulated
+   * while the controller is between two people.
+   */
+  setHolster(t) {
+    this.holster = t;
+    this.gun.position.set(
+      this.gunBaseX + HOLSTER_OUT * t,
+      this.gunBaseY - HOLSTER_DROP * t,
+      this.gunBaseZ + HOLSTER_BACK * t
+    );
+    this.gun.rotation.set(HOLSTER_PITCH * t, 0, HOLSTER_ROLL * t);
+  }
+
+  /** Lights the flank strip in this player's colour, or clears it in solo. */
+  setPlayerTag(color) {
+    setGunTag(this.gun, color);
   }
 
   // Shows the weapon's model and re-caches its muzzle marker.
@@ -1288,7 +1327,10 @@ export class Player {
     // are one movement rather than two things fighting over the same model.
     this._updateGunMotion(dt);
     const restX = this.gunBaseX + (ADS_GUN_X - this.gunBaseX) * a + this._gunOffX;
-    const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a + this._gunOffY;
+    // The holster drop is folded in HERE as well as in setHolster, so a frame
+    // of ordinary play that lands mid-handoff cannot snap the gun back up.
+    const restY = this.gunBaseY + (ADS_GUN_Y - this.gunBaseY) * a + this._gunOffY
+      - HOLSTER_DROP * this.holster;
     this.gun.position.z =
       this.gunBaseZ + (ADS_GUN_Z - this.gunBaseZ) * a + this.kick + this._gunOffZ;
     this._animateReload(restX, restY);
