@@ -1465,6 +1465,9 @@ class Game {
     // Lingering zones have to go with the entities that made them. A hazard
     // pool left behind would start the next run already burning the player,
     // standing on a patch of floor nothing on screen explains.
+    // Corpses outlive the enemies that own them, so the roster being torn down
+    // is not enough to take them with it.
+    this.effects.clearCorpses();
     this._clearHazards();
     for (const a of this._ash) this.effects.creepRelease(a.creep);
     this._ash.length = 0;
@@ -3214,7 +3217,12 @@ class Game {
     // test where on the body the pellet actually landed, not just which way it
     // was travelling.
     en.takeDamage(dealt, false, dir.x, dir.z, point);
-    this.effects.impact(point, 0xffe95e, burst, 3, 1.2, 0.3);
+    // NO PARTICLES ON A HIT. A shot landing on an enemy is already the most
+    // confirmed event in the game - the hitmarker, the body's flash and the
+    // health bar all say so - and a spray on top of that was three signals for
+    // one hit, firing per PELLET, which is what made a shotgun at close range
+    // a wall of sparks. The floor and the walls keep theirs, because a miss
+    // has no other feedback at all.
     // Damage is per-pellet; everything below is per-shot.
     if (this._shotHits.has(en)) return;
     this._shotHits.add(en);
@@ -3235,7 +3243,6 @@ class Game {
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
     if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en);
-    if (m.midas) this.effects.impact(point, 0xffd600, 4, 2.5, 1.2, 0.3);
     // Detonator goes off once per trigger pull, at the first enemy the
     // shot touched. Per-pellet it would fire eight blasts from one shell
     // and exhaust the four-ring pool on its own.
@@ -3593,6 +3600,18 @@ class Game {
   // projectiles through their ctx. `pos` is only used to place the hit spray.
   _hurtPlayer(d, pos, source = null) {
     if (this.state !== 'playing') return;
+    // NOBODY IS HURT DURING A HANDOFF, and this is a rule about who is holding
+    // the controller rather than about damage.
+    //
+    // For the first half of a pass the body still carries the OUTGOING
+    // player's zeroed health; for the second it carries the incoming player's
+    // run, and they have not been handed the pad yet. A hit in either half
+    // belongs to nobody. Both _playerFell and the loop's health test already
+    // refuse to BOOK a death while `_pass` is set, so damage taken here could
+    // not end a turn - it was simply banked against whoever the body became,
+    // and the incoming player started their wave already dying. Refused at the
+    // source instead, so the three tests agree.
+    if (this._pass) return;
     // Demonic Dodge's invulnerability window, before anything else - it is a
     // second in which nothing lands at all, so there is nothing here for the
     // ward or Evasion to spend themselves on.
@@ -3944,6 +3963,26 @@ class Game {
   // Drives the wave state machine and the enemy trickle. A wave ends only when
   // the queue is empty AND no enemies are left alive.
   _updateWave(dt) {
+    // A PASS OWNS THE CLOCK, whatever `waveState` says.
+    //
+    // The handoff runs on the ordinary intermission timer (see _endTurn), and
+    // it used to reach that timer through the `idle` branch at the bottom -
+    // which made finishing the pass conditional on a second variable agreeing
+    // with `_pass`. If they ever disagreed the mode hung, and hung in the
+    // worst possible way: with `intermission` set, the branch below re-books
+    // the turn through _endTurn, which re-arms interT to HANDOFF_TIME. Every
+    // frame. The countdown sits at three, the caption never comes down, and
+    // the match is stuck on a "pass the controller" screen that will never
+    // advance - no error, no crash, just a game that has stopped.
+    //
+    // So the pass is read FIRST and answers for itself. One flag decides
+    // whether a handoff is running and the same flag runs it out, so there is
+    // no second opinion left to disagree with.
+    if (this._pass) {
+      this.interT -= dt;
+      if (this.interT <= 0) this.startWave();
+      return;
+    }
     if (this.waveState === 'active') {
       this.spawnTimer -= dt;
       if (this.queue.length && this.spawnTimer <= 0) {
@@ -4035,6 +4074,20 @@ class Game {
         // not, and the split is what lets the benched player have their own
         // odds on a boss they never saw.
         if (this._cfg.boss) this._rollDevil();
+        // THE CHALLENGE CLEAR ENDS THE MATCH HERE, not after a mutation pick.
+        //
+        // Clearing a wave the other player died on IS the win (see
+        // VersusMatch.advance), so the shop that normally follows a clear is a
+        // pick for a run that will never be played again - the totems rise,
+        // the match is already decided, and the player has to spend a choice
+        // to be told they won. The ordinary path below books the turn on the
+        // PICK because the pick is the last thing a player does with the
+        // controller; when there is no next turn there is nothing to hand
+        // over, so the turn is booked on the wave instead.
+        if (this.match && this.match.turn === 'challenge') {
+          this._endTurn(true);
+          return;
+        }
         this._presentTotems();
         this._presentDevil();
       }
@@ -4863,9 +4916,15 @@ class Game {
           this.player.reserveAmmo + this.player.mods.ammoOnKill
         );
       }
-      // e.pos.y is zero for everything on the floor, so this is unchanged for
-      // the ground roster and puts a flier's death where the flier was.
-      this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.8, e.pos.z), e.colorHex, 24, 6, 2.5, 0.7);
+      // THE BODY COMES APART. There is no particle burst on a kill any more.
+      //
+      // The old one was twenty-four generic sparks - the same burst() sixteen
+      // other things in the game fire, at its loudest setting - so a death
+      // read as "the generic effect happened" rather than as that enemy dying,
+      // and it was doing all the work of covering a body that left the scene
+      // on the very frame it died. The body is thrown apart instead: same
+      // shape, same colour, same silhouette, and no new geometry at all.
+      this._corpse(e);
       this.sfx.kill(e.radius);
       // A tick per body, sized by the body. Same priority as the shot that
       // caused it, so the two blend into one event rather than fighting.
@@ -4886,7 +4945,6 @@ class Game {
         || (m.shatterDamage > 0 && wasFrozen)) {
         this._recordDeath(e.pos, wasBurning, wasFrozen);
       }
-      this.scene.remove(e.group);
       if (e.type === 'splitter') this._splitInto(e);
       // What a type leaves behind when it dies - a husk's cloud of gas. Called
       // with the enemy ctx, which is live and current: _updateEnemies refreshed
@@ -4905,7 +4963,6 @@ class Game {
           this.bossFight.note = '';
         }
       }
-      e.dispose();
     }
     list.length = write;
     this._bigAlive = big;
@@ -4917,6 +4974,37 @@ class Game {
     }
     this._pendingSpawns.length = 0;
     if (this._deathCount > 0) this._playDeaths();
+  }
+
+  /**
+   * Hands a dead enemy's body to the corpse pool.
+   *
+   * Ownership of the group and of the per-instance materials passes with it -
+   * the pool removes the one from the scene and disposes the other when the
+   * corpse retires - so nothing here may call e.dispose() afterwards. What
+   * CANNOT wait is released now: pooled telegraph marks go back, and the hit
+   * sphere stops pointing at an enemy that is no longer in the roster.
+   *
+   * The hit sphere is taken off the group as well. Nothing raycasts a corpse
+   * (the shot builds its target list from the live roster), but a sphere
+   * tumbling through the wreckage with a stale back-reference on it is a trap
+   * laid for the next person to add a scene-wide raycast.
+   *
+   * `force` is the enemy's own scale, so a tank comes apart harder than a
+   * chaser and a boss part harder still.
+   */
+  _corpse(e) {
+    e.release();
+    e.group.remove(e.hitbox);
+    // Sized to the body doing it - the type's model scale, which is not kept
+    // on the instance. SUB-LINEAR AND CAPPED, though: a colossus is 3.2 times
+    // a chaser, and throwing its parts 3.2 times as hard would leave them
+    // still airborne when the corpse's life ran out, shrinking away in mid-air
+    // instead of landing. The root curve keeps a tank heavier than a chaser
+    // while holding the biggest bodies to something that settles in time.
+    const def = ENEMY_TYPES[e.type];
+    const force = Math.min(1.8, Math.sqrt((def && def.scale) || 1));
+    this.effects.corpse(e.group, e.corpseMats(), force);
   }
 
   // Notes a death that owes an after-effect. Vectors are reused across frames;
@@ -5286,6 +5374,11 @@ class Game {
   // flawless bonus and still ends the run.
   _hurtPlayerDot(d) {
     if (this.state !== 'playing') return;
+    // Same rule as _hurtPlayer: a handoff belongs to neither player, and a
+    // burn carried into one must not tick against the body while it is
+    // changing hands. The statuses themselves are part of the snapshot, so the
+    // incoming player still gets their own back.
+    if (this._pass) return;
     // Eternal Affliction's drawback and Blood Pact's, in that order. Neither
     // touches the ward or Evasion, for the reason in the comment above.
     d *= this.player.mods.hazardMult * this.player.mods.damageTakenMult;

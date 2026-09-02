@@ -43,6 +43,54 @@ const SPARK_SIZE = 0.15;
 const IMPACT_SIZE = 0.05;
 
 
+// CORPSES - the come-apart death.
+//
+// An enemy is never one mesh. partsFor() in enemy.js builds every type out of
+// separate rigid pieces hung on one group - torso, neck, skull, jaw, spines,
+// thighs, shins - so a death does not need a new effect invented for it. It
+// needs the body the enemy already has, taken apart.
+//
+// That is the whole idea, and it is why this is cheap: no new geometry, no new
+// material, no new texture. A corpse is the enemy's OWN group, kept in the
+// scene for another three quarters of a second after it has left the roster,
+// with an impulse and a spin on each piece.
+//
+// WHY THE PIECES SHRINK RATHER THAN FADE. Most of them wear a SHARED material
+// - forty-eight parts across the roster are built on SHARED_MATS - so opacity
+// is not one corpse's to touch: fading a dying tank would fade every tank on
+// the floor with it. Scale is per-mesh and owned by nobody else, so the pieces
+// close down to nothing where they land instead. The pickups' absorption is
+// held to the same rule, for the same reason.
+//
+// BOUNDED, HARD. A wave clear is forty deaths inside a second and each body is
+// up to two dozen meshes. Slots are a fixed ring: when they are all busy the
+// OLDEST corpse is retired early to make room, so the number of extra objects
+// in the scene has a ceiling that does not depend on how the wave ended.
+const CORPSE_SLOTS = 12;
+// Pieces one body may throw. The largest model in the roster (the tank) is
+// sixteen parts plus eyes, so this clears it with room to spare; anything
+// past it is left on the group and simply goes when the corpse does.
+const CORPSE_PIECES = 28;
+// Seconds a corpse lasts, and the last fraction of that spent shrinking away.
+// Short: this is the punctuation on a kill, not a body on the floor, and in a
+// crowd it has to be gone before the player stops reading it as feedback.
+const CORPSE_LIFE = 0.75;
+const CORPSE_SHRINK = 0.38;
+// Gravity on a piece. Heavier than the world's, deliberately - the parts
+// should hit the floor inside the corpse's life rather than hang in the air
+// looking like a slow-motion replay.
+const CORPSE_GRAVITY = 26;
+// Peak spin, radians a second, and what a piece keeps when it lands. The
+// bounce is low because a body coming apart should scatter and settle, not
+// skitter around the floor like dropped cutlery.
+const CORPSE_SPIN = 11;
+const CORPSE_BOUNCE = 0.22;
+// Sideways and upward speed of the throw, before the caller's own force
+// multiplier. Up beats out: a body that bursts outward reads as an explosion,
+// and one that comes apart upward and falls reads as a body coming apart.
+const CORPSE_OUT = 2.6;
+const CORPSE_UP = 3.4;
+
 // Points along a homing tracer. Enough that the bend reads as a curve rather
 // than as two straight lines meeting at an angle.
 const ARC_SEGMENTS = 12;
@@ -445,6 +493,25 @@ export class Effects {
       this.rings.push({ mesh, life: 0, maxLife: 0.28, radius: 1 });
     }
 
+    // CORPSE SLOTS. Every array is preallocated to the piece ceiling and
+    // reused, so a wave clear does not allocate once per body per kill. The
+    // group and the material list are the only per-corpse references, and both
+    // are dropped the moment the corpse retires so nothing is held alive.
+    this.corpses = [];
+    for (let i = 0; i < CORPSE_SLOTS; i++) {
+      this.corpses.push({
+        group: null,
+        mats: null,
+        meshes: new Array(CORPSE_PIECES).fill(null),
+        n: 0,
+        vel: new Float32Array(CORPSE_PIECES * 3),
+        spin: new Float32Array(CORPSE_PIECES * 3),
+        base: new Float32Array(CORPSE_PIECES * 3),
+        floorY: 0,
+        life: 0,
+      });
+    }
+
     // TELEGRAPH MARKS. Ground markers for attacks that announce themselves
     // before they land - a mortar's impact circle, a boss's charge lane.
     //
@@ -747,6 +814,139 @@ export class Effects {
     r.radius = radius;
     r.maxLife = life;
     r.life = life;
+  }
+
+  /**
+   * Takes a dead enemy's body and throws it apart.
+   *
+   * The group is ALREADY in the scene and stays there - ownership passes to
+   * this pool, which removes it and disposes `mats` when the corpse retires.
+   * The caller must have released everything else the enemy held (see
+   * Enemy.release) and must not touch the group again.
+   *
+   * A child marked `userData.noCorpse` is left where it is and goes with the
+   * group at the end: the warden's dome is six and a half metres across and a
+   * dome cartwheeling off a body is not a death, it is a bug.
+   *
+   * @param {THREE.Group} group   the body, in world position
+   * @param {THREE.Material[]} mats per-instance materials to dispose at the end
+   * @param {number} force        scales the throw; enemy scale is a good value
+   */
+  corpse(group, mats, force = 1) {
+    let slot = null;
+    for (const c of this.corpses) {
+      if (c.life <= 0) { slot = c; break; }
+    }
+    if (!slot) {
+      // All twelve busy. The oldest is the one with the least life left, and
+      // it is retired NOW rather than this death being dropped: a kill that
+      // silently leaves the body standing is worse than one that clears an
+      // older corpse a fraction of a second early.
+      slot = this.corpses[0];
+      for (const c of this.corpses) if (c.life < slot.life) slot = c;
+      this._retireCorpse(slot);
+    }
+    slot.group = group;
+    slot.mats = mats;
+    // The floor, in the group's own space. A flier dies five metres up and its
+    // group sits at that altitude, so its pieces have five metres to fall -
+    // which is the best this effect ever looks and comes out for free.
+    slot.floorY = -group.position.y + 0.06;
+    slot.life = CORPSE_LIFE;
+
+    let n = 0;
+    for (const m of group.children) {
+      if (n >= CORPSE_PIECES) break;
+      if (m.userData && m.userData.noCorpse) continue;
+      const i3 = n * 3;
+      slot.meshes[n] = m;
+      slot.base[i3] = m.scale.x;
+      slot.base[i3 + 1] = m.scale.y;
+      slot.base[i3 + 2] = m.scale.z;
+      // Thrown outward from the body's own axis, so a piece leaves in the
+      // direction it was already sitting: a shoulder spine goes over the
+      // shoulder and a shin goes out from under. A part on the centre line has
+      // no direction of its own and gets a random one rather than a zero.
+      let ox = m.position.x;
+      let oz = m.position.z;
+      const len = Math.hypot(ox, oz);
+      if (len < 0.05) {
+        const a = Math.random() * Math.PI * 2;
+        ox = Math.cos(a);
+        oz = Math.sin(a);
+      } else {
+        ox /= len;
+        oz /= len;
+      }
+      const out = CORPSE_OUT * force * (0.5 + Math.random() * 0.9);
+      slot.vel[i3] = ox * out;
+      slot.vel[i3 + 1] = CORPSE_UP * force * (0.45 + Math.random() * 0.9);
+      slot.vel[i3 + 2] = oz * out;
+      slot.spin[i3] = (Math.random() - 0.5) * CORPSE_SPIN;
+      slot.spin[i3 + 1] = (Math.random() - 0.5) * CORPSE_SPIN;
+      slot.spin[i3 + 2] = (Math.random() - 0.5) * CORPSE_SPIN;
+      n++;
+    }
+    slot.n = n;
+  }
+
+  // One frame of every corpse in flight.
+  _stepCorpses(dt) {
+    for (const c of this.corpses) {
+      if (c.life <= 0) continue;
+      c.life -= dt;
+      if (c.life <= 0) { this._retireCorpse(c); continue; }
+      // The last third of the life closes the pieces down to nothing, on a
+      // curve rather than a ramp so they are still full size for most of the
+      // fall and then go quickly.
+      const t = c.life / CORPSE_LIFE;
+      const k = t >= CORPSE_SHRINK ? 1 : (t / CORPSE_SHRINK) ** 0.7;
+      for (let i = 0; i < c.n; i++) {
+        const m = c.meshes[i];
+        const i3 = i * 3;
+        c.vel[i3 + 1] -= CORPSE_GRAVITY * dt;
+        m.position.x += c.vel[i3] * dt;
+        m.position.y += c.vel[i3 + 1] * dt;
+        m.position.z += c.vel[i3 + 2] * dt;
+        if (m.position.y <= c.floorY && c.vel[i3 + 1] < 0) {
+          m.position.y = c.floorY;
+          c.vel[i3 + 1] = -c.vel[i3 + 1] * CORPSE_BOUNCE;
+          // Ground drag, on the slide and on the tumble together: a piece that
+          // landed should come to rest, not keep rolling for the whole life.
+          c.vel[i3] *= 0.55;
+          c.vel[i3 + 2] *= 0.55;
+          c.spin[i3] *= 0.4;
+          c.spin[i3 + 1] *= 0.4;
+          c.spin[i3 + 2] *= 0.4;
+        }
+        m.rotation.x += c.spin[i3] * dt;
+        m.rotation.y += c.spin[i3 + 1] * dt;
+        m.rotation.z += c.spin[i3 + 2] * dt;
+        m.scale.set(c.base[i3] * k, c.base[i3 + 1] * k, c.base[i3 + 2] * k);
+      }
+    }
+  }
+
+  // Ends one corpse: the body leaves the scene and its per-instance materials
+  // are freed. This is the ONLY place either happens, so an early retirement
+  // at the cap and an expiry at the end of the life cannot diverge.
+  _retireCorpse(c) {
+    if (c.group) this.scene.remove(c.group);
+    if (c.mats) for (const m of c.mats) m.dispose();
+    for (let i = 0; i < c.n; i++) c.meshes[i] = null;
+    c.group = null;
+    c.mats = null;
+    c.n = 0;
+    c.life = 0;
+  }
+
+  /**
+   * Retires every corpse at once. A run reset tears down the enemies that own
+   * these bodies, and a corpse left behind is a group in the scene that
+   * nothing has a reference to any more.
+   */
+  clearCorpses() {
+    for (const c of this.corpses) if (c.life > 0) this._retireCorpse(c);
   }
 
   // Claim a telegraph slot. Returns a handle to pass to markSet/markRelease,
@@ -1356,6 +1556,7 @@ export class Effects {
         if (t.life <= 0) t.line.visible = false;
       }
     }
+    this._stepCorpses(dt);
     this._stepPool(this.sparks, dt);
     this._stepPool(this.impacts, dt);
   }

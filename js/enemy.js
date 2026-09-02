@@ -1305,6 +1305,11 @@ function buildWarden(e, g, s) {
   // already baked into every other part.
   e.wardDome = domeMat;
   e.wardRing = ringMat;
+  // NOT thrown by the come-apart death. These two are built at WARD_RANGE -
+  // thirteen metres across - and a dome that size cartwheeling off a body does
+  // not read as a death. See Effects.corpse.
+  dome.userData.noCorpse = true;
+  ring.userData.noCorpse = true;
   g.add(dome, ring);
 
   const crown = new THREE.Mesh(
@@ -4211,17 +4216,47 @@ export class Enemy {
 
   // Frees the two per-instance materials. Geometries and the remaining
   // materials are shared and intentionally kept for the next enemy.
-  dispose() {
+  /**
+   * THE HALF THAT CANNOT WAIT. Everything the enemy is holding that something
+   * else needs back, or that must stop being live the instant it dies.
+   *
+   * Split out of dispose() because the BODY now outlives the enemy by three
+   * quarters of a second - it is handed to the corpse pool and thrown apart
+   * (see Effects.corpse) - and none of this may be delayed with it.
+   */
+  release() {
     // A boss killed mid-telegraph is still holding a mark from the effects
     // pool, and that pool is only ten deep - leaking one every fight would
     // eventually leave later bosses unable to warn the player at all.
     const def = ENEMY_TYPES[this.type];
     if (def.cleanup) def.cleanup(this);
+    this.hitbox.userData.enemy = null;
+  }
+
+  /**
+   * The per-instance materials, for whoever ends up freeing them. Everything
+   * else on the body is cached and shared by every enemy of the type, and
+   * disposing any of THAT would take the rest of the roster with it.
+   */
+  corpseMats() {
+    const mats = [this.bodyMat, this.eyeMat, ...this._extraMats];
+    // Emptied so a later dispose() cannot free them a second time - the corpse
+    // pool owns them from here.
+    this._extraMats.length = 0;
+    return mats;
+  }
+
+  /**
+   * Frees the body outright. Still the whole teardown for anything that is NOT
+   * becoming a corpse - a run reset, a wave wiped between frames - where there
+   * is no body left to look at.
+   */
+  dispose() {
+    this.release();
     this.bodyMat.dispose();
     this.eyeMat.dispose();
     for (const m of this._extraMats) m.dispose();
     this._extraMats.length = 0;
-    this.hitbox.userData.enemy = null;
   }
 }
 
