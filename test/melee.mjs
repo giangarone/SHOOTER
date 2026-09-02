@@ -13,6 +13,11 @@
 //   2. It costs exactly ONE hit - contact is not a damage-per-frame aura.
 //   3. Standing next to one still cannot beat that type's own cooldown, so the
 //      fix cannot have raised any enemy's damage per second.
+//
+// ONE CLOCK. Every measurement below runs on `game.time` - never on a frame
+// count and never on wall time. The trials are a race between a player crossing
+// a distance and an enemy completing a windup, and a race is only meaningful if
+// both are timed by the same watch. See the note in trial().
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
@@ -36,6 +41,10 @@ const MELEE = {
   bulwark: 2.2, magma: 1.3, schism: 1.6,
 };
 const STAND_SECONDS = 6;
+// The player's BASE_SPEED (player.js), in metres a SECOND. The body is driven
+// straight here rather than through the movement code, so this is the speed the
+// run is measured at and it has to be stated per second - see trial().
+const RUN_SPEED = 10;
 
 try {
   browser = await puppeteer.launch({
@@ -50,7 +59,7 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
   await page.waitForFunction('window.__game && window.__game.enemies', { timeout: 30000 });
 
-  const out = await page.evaluate(async (MELEE, STAND_SECONDS) => {
+  const out = await page.evaluate(async (MELEE, STAND_SECONDS, RUN_SPEED) => {
     const g = window.__game;
     const step = () => new Promise((r) => requestAnimationFrame(r));
 
@@ -77,8 +86,16 @@ try {
     g.input.shootFresh = false;
     let px = 0;
     let pz = 0;
+    // Set per trial, and called from INSIDE player.update() so the position it
+    // writes belongs to this frame rather than to the one before it. Left null
+    // between trials, which parks the player at whatever px/pz already hold.
+    let drive = null;
     const origUpdate = g.player.update.bind(g.player);
-    g.player.update = (...args) => { origUpdate(...args); g.player.pos.set(px, 0, pz); };
+    g.player.update = (...args) => {
+      origUpdate(...args);
+      if (drive) drive();
+      g.player.pos.set(px, 0, pz);
+    };
 
     // ONE enemy, at a spot it has already settled into, with the player driven
     // through it in a straight line. A corridor of them down x=0 would measure
@@ -123,24 +140,49 @@ try {
 
       e.attackCd = 0;
       hits = 0;
-      const t0 = performance.now();
-      for (let f = 0; f < 600; f++) {
-        if (mode === 'run') {
-          // Straight through at BASE_SPEED, from 8m short to 8m past, never
-          // slowing and never stopping.
-          const t = -8 + f * (10 / 60);
-          if (t > 8) break;
+      // GAME TIME, NOT FRAMES AND NOT WALL TIME.
+      //
+      // The run used to advance the player a fixed distance PER FRAME - ten
+      // metres a second divided by sixty - which silently assumed the browser
+      // was holding sixty frames. The enemy is not: its windup, its swing and
+      // its cooldown all tick on the game's dt, and that dt is CLAMPED to 0.05s
+      // (see the loop in main.js). So on a slow frame the enemy could be handed
+      // three times the simulated time the player's step had accounted for,
+      // while the player still moved one sixtieth of a second's worth. Under
+      // load - a headless browser on software rendering, straight after the
+      // sixty-second smoke soak - that was enough to fit in an extra swing, or
+      // to shift the approach far enough that the pass was missed entirely.
+      // The trial was measuring the frame rate as much as the melee, and it
+      // failed perhaps a third of the time, on a different assertion each run.
+      //
+      // Wall time would not have fixed it either, because of that same clamp: a
+      // hitch makes the game experience LESS time than the wall does. It is the
+      // clock the enemy is on or it is nothing.
+      const t0 = g.time;
+      const travelled = () => -8 + (g.time - t0) * RUN_SPEED;
+      drive = mode === 'run'
+        ? () => {
+          // Straight through, from 8m short to 8m past, never slowing and
+          // never stopping.
+          const t = travelled();
           px = cx + ux * t;
           pz = cz + uz * t;
-        } else {
+        }
+        : () => {
           px = cx + ux * 0.9;
           pz = cz + uz * 0.9;
-          if (performance.now() - t0 > STAND_SECONDS * 1000) break;
-        }
+        };
+      // The frame ceiling is a backstop against a stalled clock, nothing more -
+      // both modes end on the clock above.
+      for (let f = 0; f < 4000; f++) {
+        if (mode === 'run' ? travelled() > 8 : g.time - t0 > STAND_SECONDS) break;
         keepAlone();
         await step();
       }
-      return { hits, secs: (performance.now() - t0) / 1000 };
+      drive = null;
+      // In GAME seconds, so the cooldown ceiling the caller derives from this
+      // is counted in the same units the enemy's cooldown is spent in.
+      return { hits, secs: g.time - t0 };
     };
 
     const res = {};
@@ -155,7 +197,7 @@ try {
       };
     }
     return res;
-  }, MELEE, STAND_SECONDS);
+  }, MELEE, STAND_SECONDS, RUN_SPEED);
 
   for (const type of Object.keys(MELEE)) {
     const r = out[type];
