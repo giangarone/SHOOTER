@@ -212,6 +212,10 @@ try {
   // zone that expired without releasing would go unnoticed until, several
   // waves later, zones silently stopped being drawn at all - the exact failure
   // the decals were added to fix.
+  //
+  // A slot is a STAMP into the shared creep field now rather than a mesh of
+  // its own, so "is it still being drawn" is its alpha rather than a mesh's
+  // visible flag. Same question, asked of the thing that answers it.
   const creep = await page.evaluate(async () => {
     const g = window.__game;
     g._ash.forEach((a) => g.effects.creepRelease(a.creep));
@@ -231,7 +235,7 @@ try {
     return {
       peak,
       held: g.effects.creep.filter((c) => c.used).length,
-      visible: g.effects.creep.filter((c) => c.group.visible).length,
+      visible: g.effects.creep.filter((c) => c.alpha > 0).length,
       zones: g._ash.length + g._hazard.length,
     };
   });

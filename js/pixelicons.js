@@ -2410,25 +2410,260 @@ export function resolveIcon(key) {
   const src = PIXEL_ICONS[key];
   if (!src) throw new Error('no pixel icon: ' + key);
   const cells = src.map(row => row.padEnd(GRID, '.').slice(0, GRID).split(''));
-  // Eight-neighbour, so a diagonal step gets its corner pixel and the outline
-  // never breaks. A four-neighbour ring leaves a gap on every 45deg edge.
-  const out = cells.map(r => r.slice());
-  for (let y = 0; y < GRID; y++) {
-    for (let x = 0; x < GRID; x++) {
-      if (cells[y][x] !== '.') continue;
+  return addOutline(cells);
+}
+
+/**
+ * Adds the generated one-cell outline to a tone grid.
+ *
+ * Eight-neighbour, so a diagonal step gets its corner pixel and the outline
+ * never breaks. A four-neighbour ring leaves a gap on every 45deg edge.
+ *
+ * SHARED, NOT COPIED. This is the same dilation the 86 icons get, and the
+ * floor shapes in effects.js call it too. That is the whole reason it is a
+ * function: "the creep belongs to the same set as the icons" should be a fact
+ * about the code, not a claim about the art.
+ *
+ * @param {string[][]} cells  square grid of tone characters, '.' for empty
+ * @param {boolean} pad  grow the result by one cell on every side, so a shape
+ *   that touches the edge still gets a complete border. Icons never need this
+ *   - they are authored with a margin - but a rasterised patch fills its grid.
+ * @returns {string[][]} a new grid; the input is not modified
+ */
+export function addOutline(cells, pad = false) {
+  const n = cells.length;
+  const m = pad ? n + 2 : n;
+  const o = pad ? 1 : 0;
+  const src = (y, x) => {
+    const sy = y - o, sx = x - o;
+    return sy < 0 || sy >= n || sx < 0 || sx >= n ? '.' : cells[sy][sx];
+  };
+  const out = [];
+  for (let y = 0; y < m; y++) {
+    const row = new Array(m);
+    for (let x = 0; x < m; x++) {
+      const here = src(y, x);
+      if (here !== '.') { row[x] = here; continue; }
       let touches = false;
       for (let dy = -1; dy <= 1 && !touches; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          const ny = y + dy;
-          const nx = x + dx;
-          if (ny < 0 || ny >= GRID || nx < 0 || nx >= GRID) continue;
-          if (cells[ny][nx] !== '.') { touches = true; break; }
+          if (src(y + dy, x + dx) !== '.') { touches = true; break; }
         }
       }
-      if (touches) out[y][x] = '0';
+      row[x] = touches ? '0' : '.';
     }
+    out.push(row);
   }
   return out;
+}
+
+// ---- rasterising a shape onto the grid -----------------------------------
+//
+// The icons are DRAWN by hand in tools/pixelart. The floor shapes cannot be:
+// there are eight creep variants, and their outlines have to keep agreeing
+// with the damage circle the gameplay uses. So they are rasterised from the
+// same maths that used to emit a polygon - the drawing is generated, but it
+// lands on the same grid, gets the same light and the same outline, and comes
+// out looking like it was drawn by whoever drew the icons.
+
+/**
+ * Fills a grid from a shape predicate.
+ * @param {(u:number,v:number)=>boolean} inside  tested at each cell centre in
+ *   -1..1 space, y DOWN to match the icon rows
+ * @param {number} n  grid size
+ * @param {string} tone  what a filled cell starts as
+ */
+export function rasterize(inside, n, tone = '2') {
+  const out = [];
+  for (let y = 0; y < n; y++) {
+    const row = new Array(n);
+    for (let x = 0; x < n; x++) {
+      const u = ((x + 0.5) / n) * 2 - 1;
+      const v = ((y + 0.5) / n) * 2 - 1;
+      row[x] = inside(u, v) ? tone : '.';
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * The shared lighting pass, in JS. The twin of shade() in
+ * tools/pixelart/canvas.py, and it has to stay the twin: light from the upper
+ * left, on every icon and every floor shape, without exception. A `base` cell
+ * on the silhouette's lower-right edge becomes shadow; one on its upper-left
+ * edge becomes the pale accent. Edges are measured against the WHOLE
+ * silhouette, so a part tucked behind another part is not lit as though it
+ * were out in the open.
+ *
+ * Mutates and returns `cells`.
+ */
+export function shadeGrid(cells, base = '2', shadow = '1', light = '4') {
+  const n = cells.length;
+  const src = cells.map(r => r.slice());
+  const out = (x, y) => x < 0 || x >= n || y < 0 || y >= n || src[y][x] === '.';
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (src[y][x] !== base) continue;
+      if (out(x + 1, y) || out(x, y + 1) || out(x + 1, y + 1)) cells[y][x] = shadow;
+      else if (light && (out(x - 1, y) || out(x, y - 1) || out(x - 1, y - 1))) cells[y][x] = light;
+    }
+  }
+  return cells;
+}
+
+/**
+ * Chebyshev distance from every filled cell to the nearest empty one, by
+ * repeated erosion. Used to find a shape's core: a patch is structure at the
+ * rim and energy in the middle, which is how the icons read, without anyone
+ * having to author where the middle is.
+ */
+export function erodeDepth(cells) {
+  const n = cells.length;
+  const d = cells.map(r => r.map(c => (c === '.' ? 0 : Infinity)));
+  const at = (y, x) => (y < 0 || y >= n || x < 0 || x >= n ? 0 : d[y][x]);
+  // Two sweeps of the chamfer transform - forward then backward - is exact for
+  // the 8-neighbour metric and costs two passes instead of one per ring.
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (d[y][x] === 0) continue;
+    d[y][x] = Math.min(d[y][x], 1 + Math.min(at(y - 1, x - 1), at(y - 1, x), at(y - 1, x + 1), at(y, x - 1)));
+  }
+  for (let y = n - 1; y >= 0; y--) for (let x = n - 1; x >= 0; x--) {
+    if (d[y][x] === 0) continue;
+    d[y][x] = Math.min(d[y][x], 1 + Math.min(at(y + 1, x + 1), at(y + 1, x), at(y + 1, x - 1), at(y, x + 1)));
+  }
+  return d;
+}
+
+// ---- flat grid plates ----------------------------------------------------
+//
+// The 2D half of buildPixelIcon: one merged quad per filled cell, no
+// extrusion, no side walls, meant to lie on the floor.
+//
+// THE TONE IS AN ATTRIBUTE AND THE COLOUR IS A UNIFORM, which is the opposite
+// of the icons and is the only reason this is a separate builder. An icon is
+// built once per (key, colour) and cached; a creep patch is recoloured every
+// frame by whatever zone borrowed it out of the pool. Baking tones into vertex
+// colours would force a geometry copy per pool slot - thirty of them - and the
+// smoke test holds the whole game to under 120 geometries.
+
+/**
+ * @param {string[][]} cells  tone grid, row 0 at the TOP
+ * @param {number} cell  edge length of one art-pixel, in local units
+ * @returns {THREE.BufferGeometry} centred on the origin, in the XY plane
+ */
+export function gridPlate(cells, cell) {
+  const n = cells.length;
+  const half = (n * cell) / 2;
+  const pos = [];
+  const tone = [];
+  const TONES = { '0': 0, '1': 1, '2': 2, '3': 3, '4': 4 };
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const t = TONES[cells[y][x]];
+      if (t === undefined) continue;
+      const x0 = x * cell - half, x1 = x0 + cell;
+      // Row 0 is the top row, so y counts DOWN from +half.
+      const y1 = half - y * cell, y0 = y1 - cell;
+      pos.push(x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y0, 0, x1, y1, 0, x0, y1, 0);
+      for (let i = 0; i < 6; i++) tone.push(t);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aTone', new THREE.Float32BufferAttribute(tone, 1));
+  return g;
+}
+
+// The GLSL twin of pixelPalette(). It has to be a twin rather than a lookup
+// table handed in as uniforms because that is five vec3s per pool slot to keep
+// in sync by hand; here the ramp exists once, in one place, in two languages
+// that can be read side by side.
+// The ramp itself, as GLSL, with no uniforms and no main(). Split out from the
+// plate material below because the creep FIELD needs the same five tones from
+// a hue it reads per-texel rather than from a uniform, and two copies of a
+// colour ramp is exactly the drift this whole module exists to prevent.
+export const PALETTE_RAMP_GLSL = /* glsl */ `
+  float hue2rgb(float p, float q, float t) {
+    if (t < 0.0) t += 1.0;
+    if (t > 1.0) t -= 1.0;
+    if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+    if (t < 1.0 / 2.0) return q;
+    if (t < 2.0 / 3.0) return p + (q - p) * 6.0 * (2.0 / 3.0 - t);
+    return p;
+  }
+
+  vec3 hsl(float h, float s, float l) {
+    if (s <= 0.0) return vec3(l);
+    float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+    float p = 2.0 * l - q;
+    return vec3(hue2rgb(p, q, h + 1.0 / 3.0), hue2rgb(p, q, h), hue2rgb(p, q, h - 1.0 / 3.0));
+  }
+
+  // tone 0..4, and the same five steps pixelPalette() returns in JS.
+  vec3 paletteTone(float tone, float h, float s) {
+    float sat, lum;
+    if (tone < 0.5)      { sat = s * 0.5;              lum = 0.045; }
+    else if (tone < 1.5) { sat = s * 0.95;             lum = 0.18;  }
+    else if (tone < 2.5) { sat = s;                    lum = 0.34;  }
+    else if (tone < 3.5) { sat = min(1.0, s * 1.15);   lum = 0.62;  }
+    else                 { sat = s * 0.32;             lum = 0.87;  }
+    return hsl(h, sat, lum);
+  }
+`;
+
+const PALETTE_GLSL = PALETTE_RAMP_GLSL + /* glsl */ `
+  uniform vec3 uHSL;
+  uniform float uOpacity;
+  varying float vTone;
+
+  void main() {
+    gl_FragColor = vec4(paletteTone(vTone, uHSL.x, uHSL.y), uOpacity);
+    #include <tonemapping_fragment>
+  }
+`;
+
+const PLATE_VERT = /* glsl */ `
+  attribute float aTone;
+  varying float vTone;
+  void main() {
+    vTone = aTone;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+/**
+ * A material for gridPlate() geometry. One per pool slot - they differ only in
+ * their uniforms, so three.js compiles the program once and reuses it.
+ *
+ * NORMAL BLENDING, NOT ADDITIVE, and that is the visible half of this whole
+ * change. Additive was what made the old creep look like a vector VFX blob: it
+ * cannot draw anything darker than the floor, so the generated outline - the
+ * single feature that ties the shape to the icons - would add zero and vanish.
+ * A patch is a piece of floor that has been PAINTED, so it paints.
+ */
+export function gridMaterial(color = 0xffffff, opacity = 1) {
+  const hsl = { h: 0, s: 0, l: 0 };
+  new THREE.Color(color).getHSL(hsl);
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uHSL: { value: new THREE.Vector3(hsl.h, hsl.s, hsl.l) },
+      uOpacity: { value: opacity },
+    },
+    vertexShader: PLATE_VERT,
+    fragmentShader: PALETTE_GLSL,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+}
+
+/** Writes a hex colour into a gridMaterial's uniforms. */
+const _hsl = { h: 0, s: 0, l: 0 };
+const _col = new THREE.Color();
+export function gridTint(mat, color) {
+  _col.setHex(color).getHSL(_hsl);
+  mat.uniforms.uHSL.value.set(_hsl.h, _hsl.s, _hsl.l);
 }
 
 // ---- geometry ------------------------------------------------------------

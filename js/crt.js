@@ -10,7 +10,10 @@
 // barrel used here nothing gives the seam away.
 //
 // Four passes per frame, in order:
-//   1. the scene, into a half-float target
+//   1. the scene, into a half-float target - AT A LOWER RESOLUTION than the
+//      canvas when the pixel setting asks for it, which is what makes the
+//      arena itself pixel art rather than a smooth 3D game with pixel art
+//      hanging in it
 //   2. a bright-pass extract into a quarter-res target
 //   3. two separable blurs of that, ping-ponged
 //   4. the composite: barrel warp, radial aberration, glow, dither, edge mask
@@ -49,6 +52,20 @@ const LEVELS = 16;
 // to be a halo, and running it at full res costs sixteen times the fill for a
 // result nobody can tell apart.
 const GLOW_SCALE = 4;
+// The vertical resolutions the pixel setting steps through. 0 is off - the
+// scene renders at the panel's own resolution, the way it always did.
+//
+// TARGETS, NOT EXACT SIZES. A fraction of the panel would give a 4K monitor
+// art-pixels four times the size of a laptop's, so these are stated as line
+// counts - but the buffer is NOT sized to them directly. See setSize: the
+// scale factor is rounded to a whole number first and the resolution follows
+// from that, because a fractional one is worse than a wrong one.
+export const PIXEL_STEPS = [0, 720, 540, 360];
+// The coarsest an art-pixel is ever allowed to get, in device pixels. Only
+// reachable on a very tall panel, and it is a sanity rail rather than a taste
+// decision - past this the arena is unplayable at any setting.
+const MAX_PIXEL = 8;
+export const PIXEL_LABELS = ['OFF', 'SUBTLE', 'MEDIUM', 'FULL'];
 
 const QUAD_VERT = /* glsl */ `
   varying vec2 vUv;
@@ -225,18 +242,108 @@ export class CrtPass {
       depthWrite: false,
     });
 
+    // Which PIXEL_STEPS index is in force, and the CSS size last handed in.
+    // Both are kept because the setting can change without a resize and a
+    // resize can happen without the setting changing, and either one has to be
+    // able to rebuild the targets on its own.
+    this._step = 0;
+    this._w = 1;
+    this._h = 1;
+
     const size = renderer.getSize(new THREE.Vector2());
     this.setSize(size.x, size.y);
   }
 
-  // CSS pixels in; the targets are sized in device pixels so the pass runs at
-  // the same resolution the renderer is already drawing at.
+  /**
+   * The height, in real pixels, of the buffer the SCENE is drawn into - which
+   * since the pixel setting existed is no longer the canvas height.
+   *
+   * Anything sizing itself in pixels rather than in metres has to ask this
+   * rather than the canvas, because gl_PointSize and friends are measured in
+   * pixels of the CURRENT render target. See money.setViewport: sized off the
+   * canvas, an orb came out as many times too big as the buffer was small.
+   */
+  get sceneHeight() {
+    return this._scene_rt.height;
+  }
+
+  /**
+   * Pick a step by INDEX into PIXEL_STEPS - not by line count, because the
+   * index is also the floor on the scale factor (see setSize). Safe to call at
+   * any time, including mid-run from the settings screen.
+   */
+  setPixelScale(step) {
+    if (step === this._step) return;
+    const wasOn = this._step > 0;
+    this._step = step;
+    if (wasOn !== (step > 0)) {
+      // The filter has to change with the mode, and a render target's texture
+      // is already on the GPU by now. Dropping it is the honest way to get the
+      // new filter applied - three rebuilds it on the next bind, once.
+      const nearest = step > 0;
+      this._scene_rt.texture.magFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
+      this._scene_rt.texture.minFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
+      this._scene_rt.texture.generateMipmaps = false;
+      this._scene_rt.dispose();
+    }
+    this.setSize(this._w, this._h);
+  }
+
+  // CSS pixels in; the targets are sized in device pixels, then divided down
+  // again by whatever the pixel setting asks for.
   setSize(width, height) {
+    this._w = width;
+    this._h = height;
     const dpr = this.renderer.getPixelRatio();
-    this._composite.uniforms.uPixel.value = dpr;
-    const w = Math.max(1, Math.floor(width * dpr));
-    const h = Math.max(1, Math.floor(height * dpr));
+    const dw = Math.max(1, Math.floor(width * dpr));
+    const dh = Math.max(1, Math.floor(height * dpr));
+
+    // AN ART-PIXEL IS A WHOLE NUMBER OF DEVICE PIXELS, and this line is the
+    // whole reason the pass looks the way it does.
+    //
+    // Sizing the buffer to the step's line count directly is the obvious thing
+    // and it is wrong. 720 lines inside an 840-pixel-tall panel is a 1.167x
+    // magnification, so a nearest-neighbour blow-up gives art-pixels that are
+    // one device pixel wide six times and two device pixels wide once, in a
+    // pattern that drifts across the screen. On a wall or a floor - anything
+    // large and evenly lit - the seams between those runs line up into long
+    // faint DIAGONAL beat lines. It is the classic pixel-art-in-3D artifact and
+    // there is exactly one cure: round the SCALE and derive the resolution from
+    // it, rather than rounding the resolution and living with the scale.
+    //
+    // The index is the floor, so the four steps stay four steps. Without it a
+    // small window rounds two different line counts to the same factor and the
+    // player presses + to no effect.
+    let scale = 1;
+    if (this._step > 0) {
+      const want = Math.round(dh / PIXEL_STEPS[this._step]);
+      scale = Math.max(this._step, Math.min(MAX_PIXEL, want));
+    }
+    const h = Math.max(1, Math.round(dh / scale));
+    const w = Math.max(1, Math.round(dw / scale));
     this._scene_rt.setSize(w, h);
+
+    // THE DITHER HAS TO LAND ON THE ART-PIXEL GRID, not on the device pixel
+    // grid. uPixel is the size of one art-pixel in device pixels; the Bayer
+    // matrix in the composite divides gl_FragCoord by it. Get this wrong and
+    // the 4x4 ordered dither runs several times inside a single art-pixel,
+    // speckling the one thing this whole setting exists to make solid.
+    //
+    // It has to be the WHOLE number above, not a measured ratio, and for the
+    // sharper half of the same reason: bayer2 is mod(2x + 3y, 4), a diagonal
+    // ramp, so a dither cell that does not divide the pixel grid evenly lays a
+    // second diagonal moire over the first one. With the setting off there is
+    // no art-pixel and this is the device pixel ratio it has always been.
+    // scale === 1 means the step asked for less than this panel already is, so
+    // there is no art-pixel to land on and the dither goes back to the device
+    // ratio - otherwise a SUBTLE that happens to be doing nothing would still
+    // dither differently from OFF.
+    this._composite.uniforms.uPixel.value = scale > 1 ? scale : dpr;
+
+    // Glow off the SCENE target rather than the canvas: the bloom is a halo
+    // around what was actually drawn, and at 360 lines a quarter-res blur of
+    // the panel would be four times the fill for a blur of an image that no
+    // longer has that much in it.
     const gw = Math.max(1, Math.floor(w / GLOW_SCALE));
     const gh = Math.max(1, Math.floor(h / GLOW_SCALE));
     this._glowA.setSize(gw, gh);

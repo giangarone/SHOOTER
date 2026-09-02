@@ -1142,6 +1142,15 @@ html, body {
   width: calc(var(--u) * 11); text-align: right;
 }
 #shake-val.off { color: var(--dim); }
+/* The pixel readout carries WORDS rather than a number, and the longest of
+   them is six characters, so it needs its own width and a size that fits six
+   glyphs of a font drawn at 8px into it. Same fixed-width reasoning as the
+   shake above: the + key must not move as the value changes under the cursor. */
+#pixel-val {
+  font-weight: 400; font-size: 8px; color: var(--gold);
+  width: calc(var(--u) * 17); text-align: right;
+}
+#pixel-val.off { color: var(--dim); }
 
 /* ---- the high-score screen ---------------------------------------------- */
 /* On a screen of its own the board is the content, not a footnote under a

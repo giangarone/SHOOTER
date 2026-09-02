@@ -13,6 +13,8 @@
 // keep settling.
 
 import * as THREE from 'three';
+import { addOutline, rasterize, shadeGrid, erodeDepth, gridPlate, gridMaterial, gridTint, PALETTE_RAMP_GLSL } from './pixelicons.js';
+import { BOUND } from './arena.js';
 
 // Particle slots. Bursts beyond this recycle the oldest particles rather than
 // growing the buffer.
@@ -66,11 +68,32 @@ const CLOUD_PUFFS = 12;
 const CLOUD_SQUASH = 0.52;
 
 // Soft radial white dot, tinted per-use by material colour. Shared by the
-// particles, the projectile glows, the pickup glows and the pools the wave-end
+// projectile glows, the pickup halos, the gas puffs and the pools the wave-end
 // light columns cast on the floor.
 //
+// SOFT, AND DELIBERATELY SO, on a game whose every other surface is on a grid.
+// This was quantised into hard steps once, on the theory that a pixel-art game
+// should not contain a gradient, and it was wrong twice over.
+//
+// It was wrong about the LOOK: quantising alpha snaps the faint outer skirt of
+// the falloff - which used to fade to nothing and end - UP onto the nearest
+// step, so a halo stops being a halo and becomes a flat sticker with a hard
+// edge, noticeably wider than the one it replaced. A pickup ended up sitting
+// inside a disc rather than glowing.
+//
+// And it was wrong about the PRINCIPLE, which this codebase had already
+// settled: money.js quantises the orb's BODY into an 11x11 grid and then
+// measures its halo off the raw coordinate specifically so the glow does not
+// get a square edge. Pixel art quantises FORM. Light is not form. And the
+// light in this game is already quantised, globally, by the 16-level posterise
+// and ordered dither in crt.js - which is what pixel art has always actually
+// done with a glow. Banding it here as well applies that treatment twice.
+//
+// The sparks are the exception and they are a separate texture: see
+// makeSparkTexture. A spark is a piece of matter, not a light.
+//
 // ONE OF THESE EXISTS. It is memoised rather than built per caller because the
-// smoke test holds the whole game to twelve textures, and a second identical
+// smoke test holds the whole game to thirteen textures, and a second identical
 // 64x64 gradient is a whole texture spent on a copy: nothing here reads the
 // image differently, every user tints it through its own material colour.
 let GLOW_TEX = null;
@@ -89,18 +112,73 @@ export function makeGlowTexture() {
   return GLOW_TEX;
 }
 
-// Ground shapes for CREEP - the persistent patch a lingering zone leaves on
-// the floor.
+// The dot the PARTICLES are made of, and the one place the hard version was
+// right. A spark is a fleck of the thing that just got hit - matter, thrown
+// off and cooling - so it has a shape, and a shape on a pixel grid has steps.
+// A halo is light and has none. That is the whole line between this texture
+// and the one above, and it is the same line money.js draws down the middle of
+// a single orb.
+//
+// The falloff is computed once per CELL of a 16x16 grid and the alpha is
+// quantised to four steps, which is few enough that the steps read as steps.
+// The silhouette is measured off the RAW radius rather than the cell centre,
+// again as money.js does it: rounding the distance first would give the sprite
+// a square outline, and a square is not what a spark looks like at any size.
+const SPARK_CELLS = 16;
+const SPARK_STEPS = 4;
+let SPARK_TEX = null;
+export function makeSparkTexture() {
+  if (SPARK_TEX) return SPARK_TEX;
+  const px = 4; // device pixels per cell; the texture is 64 either way
+  const size = SPARK_CELLS * px;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const mid = (SPARK_CELLS - 1) / 2;
+  for (let y = 0; y < SPARK_CELLS; y++) {
+    for (let x = 0; x < SPARK_CELLS; x++) {
+      const d = Math.hypot(x - mid, y - mid) / (SPARK_CELLS / 2);
+      if (d > 1) continue;
+      const a = d < 0.4 ? 1 - d * 0.45 : (1 - d) * 0.92;
+      const q = Math.round(a * SPARK_STEPS) / SPARK_STEPS;
+      if (q <= 0) continue;
+      ctx.fillStyle = 'rgba(255,255,255,' + q + ')';
+      ctx.fillRect(x * px, y * px, px, px);
+    }
+  }
+  SPARK_TEX = new THREE.CanvasTexture(cv);
+  // Nearest on both filters and no mipmaps: a linear magnify would put the
+  // blur straight back, and mipmaps would dissolve a distant spark into the
+  // average of its own steps.
+  SPARK_TEX.magFilter = THREE.NearestFilter;
+  SPARK_TEX.minFilter = THREE.NearestFilter;
+  SPARK_TEX.generateMipmaps = false;
+  return SPARK_TEX;
+}
+
+// CREEP - the persistent patch of wrong ground under a lingering zone.
+//
+// ONE FIELD, NOT A PILE OF PATCHES. Every zone in the game used to own its own
+// blob mesh, which meant a magma trail or a Colossus walk was a row of
+// separate stamps, each with its own black border cutting a seam across the
+// middle of what is supposed to be one burning path. Zones now stamp into a
+// SHARED occupancy grid over the whole arena floor, and the border is derived
+// from the union at the end - so two overlapping zones are one shape with one
+// outline round the outside of both, and a trail comes out as a single
+// continuous path however many stamps laid it.
+//
+// The grid is the same idea as the icons' 24x24, moved from per-object to
+// per-arena: one cell is one art-pixel, everywhere, at a fixed size in METRES,
+// so a patch by your feet and a patch across the room are drawn at the same
+// scale in the world.
 //
 // NOT A CIRCLE. A disc with a rim around it reads as a UI marker - a selection
 // ring, a spell indicator - and the one thing this has to say is that a piece
-// of the FLOOR is different. So a patch is an irregular polygon: a closed loop
-// of vertices whose radius wanders, with no two the same. It is generated as
-// geometry rather than painted into a texture because the outline is the part
-// that has to be exact, and a soft-edged decal has no outline at all.
+// of the FLOOR is different. So each stamp is an irregular blob whose radius
+// wanders, rasterised into the grid.
 //
-// The average radius is exactly 1, so a caller's radius in metres is the mesh
-// scale and the damage circle and the patch agree at the edges.
+// The average radius of a stamp is exactly 1, so a caller's radius in metres
+// still lands where the damage circle does.
 //
 // TWO FAMILIES, and the difference is the whole point of them. A SMOOTH patch
 // is the player's - ash, the ground they made dangerous for the enemy. A
@@ -108,18 +186,38 @@ export function makeGlowTexture() {
 // by the PULSE second and by colour third, so it survives colourblindness, a
 // busy screen and a player who has never read a tooltip.
 //
-// Pulse was promoted over colour deliberately. Both families now live in warm
-// hues - ash belongs to a FIRE mutation and used to be cyan, which read as ice
-// - so hue alone no longer separates them and cannot be the second signal. A
-// hostile patch breathes hard, across its whole area; the player's own sits
-// perfectly still. See creepSet().
+// The families never merge, even where they overlap. A cell whose neighbour
+// belongs to the other family is drawn as border, so a hostile pool that laps
+// over the player's own ash still ends in a hard black line - which it has to,
+// because that line is where the damage starts.
 const CREEP_POINTS = 64;
 
-function makeCreepShape(jagged, seed) {
-  const shape = new THREE.Shape();
-  // A few low-frequency lobes give the overall blobby outline; the jagged
-  // family adds a high-frequency term on top, which is what turns a puddle
-  // into something that looks burnt into the floor.
+// Metres per art-pixel on the floor. 0.25 is what the old per-patch grid
+// worked out to - a 3m-radius blob over 24 cells - so the creep is the size it
+// has always been, now measured once for the whole arena instead of once per
+// object.
+const CREEP_CELL = 0.25;
+// Cells across the field. The floor is BOUND * 2 + 2 metres square (arena.js).
+const CREEP_SPAN = BOUND * 2 + 2;
+const CREEP_N = Math.ceil(CREEP_SPAN / CREEP_CELL);
+const CREEP_MIN = -CREEP_SPAN / 2;
+// How wide the HOT RIM is, in cells. Everything deeper than this is the dull
+// structure tone; everything shallower is energy.
+//
+// THIS WAY ROUND, and it was tried the other way first. Filling the middle
+// with energy and leaving a structural rim made a patch that was almost
+// entirely the brightest tone in the ramp, which the tube's bloom then smeared
+// into one flat glowing puddle - the pixels were there and could not be seen.
+// A dull body with a hot edge is both the way a stain actually looks and the
+// way this game's telegraphs already talk: the EDGE is the message, because
+// the edge is where the danger stops.
+const CREEP_RIM = 2;
+
+// The radial wander that gives a stamp its outline. Unchanged from when this
+// emitted a polygon - it is still the same eight shapes - but it is now a
+// PREDICATE sampled per cell. The mean radius is still exactly 1, so a
+// caller's radius in metres and the damage circle still agree at the edges.
+function creepRadius(jagged, seed) {
   const a1 = seed * 1.7, a2 = seed * 3.1, a3 = seed * 5.3;
   const lobes = jagged ? 7 : 3;
   let sum = 0;
@@ -141,26 +239,135 @@ function makeCreepShape(jagged, seed) {
   // cover noticeably more ground than a smooth one at the same scale, and the
   // patch would stop matching the radius the damage check uses.
   const k = CREEP_POINTS / sum;
-  for (let i = 0; i < CREEP_POINTS; i++) {
-    const t = (i / CREEP_POINTS) * Math.PI * 2;
-    const rad = r[i] * k;
-    const x = Math.cos(t) * rad;
-    const y = Math.sin(t) * rad;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
-  shape.closePath();
-  return new THREE.ShapeGeometry(shape);
+  for (let i = 0; i < CREEP_POINTS; i++) r[i] *= k;
+  return r;
 }
 
-// Four variants per family, built once and shared. Enough that two patches
-// side by side are never the same outline, few enough that they cost nothing.
+// Four variants per family, built once and shared. Enough that two stamps side
+// by side are never the same outline, few enough that they cost nothing.
 const CREEP_VARIANTS = 4;
+const CREEP_COL = new THREE.Color();
+const CREEP_HSL = { h: 0, s: 0, l: 0 };
+const CREEP_SHAPES = { smooth: [], jagged: [] };
+for (let i = 0; i < CREEP_VARIANTS; i++) {
+  CREEP_SHAPES.smooth.push(creepRadius(false, i * 2.3 + 0.7));
+  CREEP_SHAPES.jagged.push(creepRadius(true, i * 3.7 + 1.9));
+}
+
+// The other things drawn on this floor, on the same grid and through the same
+// three functions. A telegraph used to be a CircleGeometry inside a
+// RingGeometry - two mathematically perfect curves lying next to a creep patch
+// that had just been redrawn as pixels, which would have made the creep look
+// like the odd one out instead of the new standard.
+//
+// EVERY FLOOR DRAWING IS 24 PIXELS ACROSS, whatever it is and however big it
+// is in metres. It is the same rule the icons live by, and it means a seven
+// metre boss telegraph has bigger art-pixels than a two metre mortar circle -
+// which is right: the bigger the thing coming, the coarser and louder it reads.
+const FLOOR_CELLS = 24;
+const FLOOR_CELL = 2 / FLOOR_CELLS;
+
+// The tone pass a filled floor shape gets, and the reason a telegraph circle
+// and a creep patch look like they came from the same hand. The creep field
+// does this per cell in _creepBuild, against the union of every stamp; here it
+// runs over one small grid that is baked once at startup. Same three steps,
+// same order, and the order is the part that matters.
+//
+// The light goes on FIRST, against the raw silhouette, exactly as it does for
+// an icon - so the lower-right edge is shadow. Only then does what is left of
+// the rim go hot. The other way round leaves the shading pass nothing to bite
+// on, because it measures against the silhouette and an already-recoloured rim
+// is no longer the tone it is looking for.
+//
+// No pale accent. shadeGrid's highlight is a few pixels on a 24x24 icon and a
+// quarter of the perimeter on a shape this size, and at lightness 0.87 that is
+// a lot of near-white lying on the floor under a bloom pass.
+function paintFloorTones(cells, n) {
+  const depth = erodeDepth(cells);
+  shadeGrid(cells, '2', '1', null);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (cells[y][x] === '2' && depth[y][x] <= CREEP_RIM) cells[y][x] = '3';
+    }
+  }
+  return cells;
+}
+
+// A filled circle, lit and cored exactly like a creep patch. The same recipe,
+// applied to a shape with no wander in it.
+function makeDiscGeometry() {
+  const cells = rasterize((u, v) => Math.hypot(u, v) < 1, FLOOR_CELLS);
+  paintFloorTones(cells, FLOOR_CELLS);
+  return gridPlate(addOutline(cells, true), FLOOR_CELL);
+}
+
+// The warning line itself. All energy, no shading: this is the tone the icons
+// spend on the active, lit part of a thing, and the edge of a telegraph is the
+// most active line in the game. The generated outline gives it a black rim on
+// BOTH sides, which is what keeps it legible over a floor the rig is washing
+// in colour.
+function makeAnnulusGeometry(inner = 0.84) {
+  const cells = rasterize((u, v) => {
+    const d = Math.hypot(u, v);
+    return d < 1 && d > inner;
+  }, FLOOR_CELLS, '3');
+  return gridPlate(addOutline(cells, true), FLOOR_CELL);
+}
+
+// A corridor: two rails and open ground between them. Stretched hard along its
+// length by the caller, so its pixels end up rectangular - which is fine, and
+// arguably right, because the stretch runs the way the charge is coming.
+function makeLaneGeometry(inner = 0.8) {
+  const cells = rasterize((u, v) => Math.max(Math.abs(u), Math.abs(v)) > inner, FLOOR_CELLS, '3');
+  return gridPlate(addOutline(cells, true), FLOOR_CELL);
+}
+
+// The field's fragment shader. ONE TEXTURE READ, because the tone is worked
+// out on the CPU where the whole grid is in hand: sampling a neighbourhood in
+// here to find the border would be sixteen reads on every floor pixel on
+// screen, and the neighbourhood is only interesting when the grid changes -
+// which is far less often than once per fragment.
+//
+//   R  the tone, 0..4, as a whole number
+//   G  hue        B  saturation        A  how strongly the cell is painted
+//
+// The five tones come from the same paletteTone() the icons and the telegraph
+// marks are drawn with, imported rather than copied.
+const CREEP_FRAG = PALETTE_RAMP_GLSL + /* glsl */ `
+  uniform sampler2D uField;
+  uniform vec2 uMin;
+  uniform float uInvSpan;
+  varying vec3 vWorld;
+
+  void main() {
+    // World position into field UV, rather than the plane's own UVs: the plane
+    // is turned flat by a -90 degree rotation about X and its v axis ends up
+    // running toward -z, which is a fact about PlaneGeometry rather than about
+    // this grid. Deriving the lookup from world space means the CPU and the
+    // GPU agree about which cell is which by construction.
+    vec2 uv = (vWorld.xz - uMin) * uInvSpan;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+    vec4 c = texture2D(uField, uv);
+    if (c.a <= 0.0) discard;
+    float tone = floor(c.r * 255.0 + 0.5);
+    gl_FragColor = vec4(paletteTone(tone, c.g, c.b), c.a);
+    #include <tonemapping_fragment>
+  }
+`;
+
+const CREEP_VERT = /* glsl */ `
+  varying vec3 vWorld;
+  void main() {
+    vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
 export class Effects {
   constructor(scene) {
     this.scene = scene;
     this.glowTex = makeGlowTexture();
+    this.sparkTex = makeSparkTexture();
     this._initParticles();
 
     // Tracer pool. Each is a two-vertex line whose endpoints are rewritten on
@@ -199,21 +406,14 @@ export class Effects {
       this.arcs.push({ line, life: 0 });
     }
 
-    // Shockwave rings: a small fixed pool of flat discs, scaled outward and
-    // faded on use. Same reasoning as the tracers - melee fires often enough
+    // Shockwave rings: a small fixed pool of flat pixel annuli, scaled outward
+    // and faded on use. Same reasoning as the tracers - melee fires often enough
     // that building a ring per swing would churn geometry every second.
     // Unit-radius so a caller's range in metres is just the target scale.
     this.rings = [];
-    const ringGeom = new THREE.RingGeometry(0.82, 1, 40);
+    const ringGeom = makeAnnulusGeometry(0.82);
     for (let i = 0; i < 4; i++) {
-      const m = new THREE.MeshBasicMaterial({
-        color: 0xff3b30,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
+      const m = gridMaterial(0xff3b30, 0);
       const mesh = new THREE.Mesh(ringGeom, m);
       // Flat on the floor, lifted just clear of it so it does not z-fight.
       mesh.rotation.x = -Math.PI / 2;
@@ -233,25 +433,20 @@ export class Effects {
     // fire-and-forget while a mark lives for as long as its owner says: these
     // are ACQUIRED and RELEASED, and update() leaves them alone in between.
     //
-    // The materials copy the ring material's parameters exactly so three.js
-    // reuses that shader program rather than compiling a new one.
+    // Every material in here is a gridMaterial, so all thirty-odd floor meshes
+    // in the game - creep, rings, marks - share one shader program. They differ
+    // only in their uniforms, which is not something three.js recompiles for.
     this.marks = [];
-    const markDisc = new THREE.CircleGeometry(1, 32);
-    const markRing = new THREE.RingGeometry(0.9, 1, 40);
-    // Unit square, scaled to the corridor's width and length. It uses the
-    // ring's material rather than the disc's so a lane is as bright as an
-    // impact circle's outline - a faint corridor is not a warning.
-    const markLane = new THREE.PlaneGeometry(1, 1);
+    const markDisc = makeDiscGeometry();
+    const markRing = makeAnnulusGeometry(0.88);
+    // Unit square rails, scaled to the corridor's width and length. Drawn in
+    // the same energy tone as the ring so a lane is as bright as an impact
+    // circle's outline - a faint corridor is not a warning.
+    const markLane = makeLaneGeometry(0.8);
     for (let i = 0; i < 10; i++) {
       const mk = new THREE.Group();
-      const dm = new THREE.MeshBasicMaterial({
-        color: 0xff3b30, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      });
-      const rm = new THREE.MeshBasicMaterial({
-        color: 0xff3b30, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      });
+      const dm = gridMaterial(0xff3b30, 0);
+      const rm = gridMaterial(0xff3b30, 0);
       const discMesh = new THREE.Mesh(markDisc, dm);
       const ringMesh = new THREE.Mesh(markRing, rm);
       // A LANE needs its own mesh. Stretching the disc and ring along one axis
@@ -277,68 +472,9 @@ export class Effects {
       });
     }
 
-    // CREEP. The persistent patch of wrong ground under a lingering zone - an
-    // ash cloud, a pool of blight, a magma trail. A separate pool from the
-    // telegraph marks for two reasons: marks are ten deep and transient, while
-    // creep is held for the whole life of a zone and a magma walker alone can
-    // hold a dozen, so sharing would starve the telegraphs. And creep is meant
-    // to look like terrain rather than like an instruction.
-    //
-    // Each patch is an irregular polygon plus a slightly larger copy of the
-    // SAME polygon behind it, which reads as a border that follows every kink
-    // in the outline. The old version was a soft disc inside a hard ring, and
-    // a ring is the one shape a player already reads as UI.
-    //
-    // Whose patch it is comes from the shape family (see makeCreepShape) and
-    // is set when the slot is claimed, because that is the only moment the
-    // geometry needs to change.
-    this.creepGeo = { smooth: [], jagged: [] };
-    for (let i = 0; i < CREEP_VARIANTS; i++) {
-      this.creepGeo.smooth.push(makeCreepShape(false, i * 2.3 + 0.7));
-      this.creepGeo.jagged.push(makeCreepShape(true, i * 3.7 + 1.9));
-    }
-    this.creep = [];
-    for (let i = 0; i < 30; i++) {
-      const grp = new THREE.Group();
-      const fillMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const edgeMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const variant = (Math.random() * CREEP_VARIANTS) | 0;
-      // The border is drawn first and slightly wider, so the fill sits on top
-      // of it and only the overhang shows. One geometry, two scales - the
-      // border cannot drift out of register with the shape it is bordering.
-      const edge = new THREE.Mesh(this.creepGeo.smooth[variant], edgeMat);
-      const fill = new THREE.Mesh(this.creepGeo.smooth[variant], fillMat);
-      fill.scale.setScalar(0.86);
-      // Fractionally above the border so the two do not z-fight where they
-      // overlap; both are still under the telegraph marks at 0.06.
-      fill.position.z = 0.004;
-      grp.add(edge, fill);
-      grp.rotation.x = -Math.PI / 2;
-      grp.position.y = 0.035;
-      grp.visible = false;
-      grp.frustumCulled = false;
-      scene.add(grp);
-      this.creep.push({
-        group: grp, fill, edge, fillMat, edgeMat, variant, hostile: false,
-        spin: (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.12),
-        phase: Math.random() * Math.PI * 2,
-        used: false,
-      });
-    }
+    // CREEP. See the header block above makeCreepField for what this is and
+    // why it is one object rather than thirty.
+    this._creepInit(scene);
     this._creepT = 0;
 
     // CLOUD POOL. One material per cloud - colour and opacity are written per
@@ -453,7 +589,7 @@ export class Effects {
       opacity: 1,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      map: this.glowTex,
+      map: this.sparkTex,
     });
     this.points = new THREE.Points(g, m);
     this.points.frustumCulled = false;
@@ -559,7 +695,7 @@ export class Effects {
       }
     }
     r.mesh.position.set(p.x, p.y + 0.08, p.z);
-    r.mesh.material.color.setHex(color);
+    gridTint(r.mesh.material, color);
     r.mesh.scale.setScalar(0.001);
     r.mesh.visible = true;
     r.radius = radius;
@@ -613,16 +749,19 @@ export class Effects {
       1
     );
     mk.group.rotation.z = rot;
-    mk.disc.color.setHex(color);
-    mk.ring.color.setHex(color);
+    gridTint(mk.disc, color);
+    gridTint(mk.ring, color);
     // `weight` scales the FILL only, never the outline. Every telegraph in the
     // game until the howler was an impact circle two or three metres across,
     // and a disc opacity tuned for that becomes a purple wash over half the
     // arena at seven. The edge is the message - where the danger stops - so it
     // stays at full strength however big the circle is, and only the shading
     // inside it is pulled back.
-    mk.disc.opacity = (0.05 + fill * 0.3) * weight;
-    mk.ring.opacity = 0.35 + fill * 0.45;
+    // Higher than the additive numbers these replace, for the same reason the
+    // creep's are: additive light adds to a floor that is already lit, painted
+    // colour has to cover it.
+    mk.disc.uniforms.uOpacity.value = (0.10 + fill * 0.48) * weight;
+    mk.ring.uniforms.uOpacity.value = 0.55 + fill * 0.45;
   }
 
   markRelease(h) {
@@ -632,6 +771,229 @@ export class Effects {
     this.marks[h].group.visible = false;
   }
 
+  // ---- the creep field --------------------------------------------------
+
+  _creepInit(scene) {
+    const N = CREEP_N;
+    // fam: 0 empty, 1 friendly, 2 hostile. The family is kept per cell rather
+    // than per stamp because the border pass needs to know, at the cell, that
+    // it is standing on a seam between the two.
+    this._cFam = new Uint8Array(N * N);
+    this._cHue = new Uint8Array(N * N);
+    this._cSat = new Uint8Array(N * N);
+    this._cAlpha = new Uint8Array(N * N);
+    // Chebyshev distance from each filled cell to the nearest cell that is not
+    // its own family. Scratch for the tone pass; kept as a field so it is
+    // allocated once rather than every frame.
+    this._cDepth = new Uint8Array(N * N);
+    this._cData = new Uint8Array(N * N * 4);
+
+    this._cTex = new THREE.DataTexture(this._cData, N, N, THREE.RGBAFormat);
+    // Nearest and no mipmaps, for the reason everything else in this game is:
+    // a cell is an art-pixel and an art-pixel has an edge.
+    this._cTex.magFilter = THREE.NearestFilter;
+    this._cTex.minFilter = THREE.NearestFilter;
+    this._cTex.generateMipmaps = false;
+    this._cTex.needsUpdate = true;
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uField: { value: this._cTex },
+        uMin: { value: new THREE.Vector2(CREEP_MIN, CREEP_MIN) },
+        uInvSpan: { value: 1 / CREEP_SPAN },
+      },
+      vertexShader: CREEP_VERT,
+      fragmentShader: CREEP_FRAG,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CREEP_SPAN, CREEP_SPAN), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    // The same height the patches used to sit at: above the arena grid at 0.02
+    // and below the telegraph marks at 0.06.
+    mesh.position.y = 0.035;
+    // One plane covering the whole floor, so it is either wholly in view or
+    // wholly out and the culling test is not worth the write it saves.
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    this._cMesh = mesh;
+
+    // The stamps. Thirty is the old pool depth and the caps upstream are built
+    // around it - a magma walker alone can hold a dozen.
+    this.creep = [];
+    for (let i = 0; i < 30; i++) {
+      this.creep.push({
+        used: false, hostile: false, x: 0, z: 0, radius: 0,
+        hue: 0, sat: 0, alpha: 0,
+        variant: (Math.random() * CREEP_VARIANTS) | 0,
+        // A fixed turn, chosen when the slot is claimed. This is ORIENTATION,
+        // not motion: the stamps used to spin slowly and a stain that rotates
+        // is a decal advertising itself as a decal. Ground does not turn.
+        rot: 0,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    // The rectangle of cells touched last frame. Union it with this frame's
+    // before rebuilding, or the cells a moving trail just left behind keep the
+    // last thing that was written into them.
+    this._cRect = null;
+  }
+
+  /**
+   * Rebuild the field from whatever stamps are live. Called once per frame
+   * from update(), after every zone has had its say through creepSet.
+   */
+  _creepBuild() {
+    const N = CREEP_N;
+    const fam = this._cFam, hue = this._cHue, sat = this._cSat, al = this._cAlpha;
+
+    // The cells this frame wants, and the cells last frame had. Everything in
+    // either has to be rewritten; everything outside is already correct and is
+    // the whole reason this is not a full 184x184 sweep every frame.
+    let x0 = N, x1 = -1, z0 = N, z1 = -1;
+    for (const c of this.creep) {
+      if (!c.used || c.alpha <= 0 || c.radius <= 0) continue;
+      // 1.25 rather than 1: the wander can push a lobe out past the mean.
+      const r = c.radius * 1.25;
+      x0 = Math.min(x0, Math.floor((c.x - r - CREEP_MIN) / CREEP_CELL));
+      x1 = Math.max(x1, Math.ceil((c.x + r - CREEP_MIN) / CREEP_CELL));
+      z0 = Math.min(z0, Math.floor((c.z - r - CREEP_MIN) / CREEP_CELL));
+      z1 = Math.max(z1, Math.ceil((c.z + r - CREEP_MIN) / CREEP_CELL));
+    }
+    const live = x1 >= x0;
+    const prev = this._cRect;
+    if (!live && !prev) return;
+    let rx0 = live ? x0 : prev[0], rx1 = live ? x1 : prev[1];
+    let rz0 = live ? z0 : prev[2], rz1 = live ? z1 : prev[3];
+    if (live && prev) {
+      rx0 = Math.min(rx0, prev[0]); rx1 = Math.max(rx1, prev[1]);
+      rz0 = Math.min(rz0, prev[2]); rz1 = Math.max(rz1, prev[3]);
+    }
+    // One cell of margin, because the border lives OUTSIDE the shape.
+    rx0 = Math.max(0, rx0 - 1); rz0 = Math.max(0, rz0 - 1);
+    rx1 = Math.min(N - 1, rx1 + 1); rz1 = Math.min(N - 1, rz1 + 1);
+    this._cRect = live ? [x0, x1, z0, z1] : null;
+
+    for (let z = rz0; z <= rz1; z++) fam.fill(0, z * N + rx0, z * N + rx1 + 1);
+
+    // ---- stamp ----
+    for (const c of this.creep) {
+      if (!c.used || c.alpha <= 0 || c.radius <= 0) continue;
+      const shape = (c.hostile ? CREEP_SHAPES.jagged : CREEP_SHAPES.smooth)[c.variant];
+      const f = c.hostile ? 2 : 1;
+      const r = c.radius * 1.25;
+      const cx0 = Math.max(0, Math.floor((c.x - r - CREEP_MIN) / CREEP_CELL));
+      const cx1 = Math.min(N - 1, Math.ceil((c.x + r - CREEP_MIN) / CREEP_CELL));
+      const cz0 = Math.max(0, Math.floor((c.z - r - CREEP_MIN) / CREEP_CELL));
+      const cz1 = Math.min(N - 1, Math.ceil((c.z + r - CREEP_MIN) / CREEP_CELL));
+      const inv = 1 / c.radius;
+      for (let z = cz0; z <= cz1; z++) {
+        const wz = CREEP_MIN + (z + 0.5) * CREEP_CELL - c.z;
+        const row = z * N;
+        for (let x = cx0; x <= cx1; x++) {
+          const wx = CREEP_MIN + (x + 0.5) * CREEP_CELL - c.x;
+          const d = Math.sqrt(wx * wx + wz * wz) * inv;
+          if (d > 1.25) continue;
+          let ang = Math.atan2(wz, wx) + c.rot;
+          // The shape table is sampled, not interpolated: rounding to the
+          // nearest of the 64 control angles is itself a quantisation, and it
+          // keeps the jagged family's spikes from being averaged away before
+          // they ever reach the grid.
+          let i = Math.round((ang / (Math.PI * 2)) * CREEP_POINTS) % CREEP_POINTS;
+          if (i < 0) i += CREEP_POINTS;
+          if (d >= shape[i]) continue;
+          const k = row + x;
+          // Last writer wins where two zones overlap. The alternative is
+          // blending two hues, which on a green pool lapping over an orange
+          // one gives a third colour that belongs to neither of them.
+          fam[k] = f; hue[k] = c.hue; sat[k] = c.sat; al[k] = c.alpha;
+        }
+      }
+    }
+
+    // ---- distance to the nearest cell that is not ours ----
+    // Two chamfer sweeps, forward then backward, which is exact for the
+    // 8-neighbour metric. Same algorithm as erodeDepth in pixelicons.js, run
+    // over a window of the field rather than over a whole icon.
+    const dep = this._cDepth;
+    const MAXD = 255;
+    const nb = (x, z, f) => (x < rx0 || x > rx1 || z < rz0 || z > rz1
+      ? 0 : (fam[z * N + x] === f ? dep[z * N + x] : 0));
+    for (let z = rz0; z <= rz1; z++) {
+      for (let x = rx0; x <= rx1; x++) {
+        const k = z * N + x;
+        const f = fam[k];
+        if (!f) { dep[k] = 0; continue; }
+        dep[k] = Math.min(MAXD, 1 + Math.min(
+          nb(x - 1, z - 1, f), nb(x, z - 1, f), nb(x + 1, z - 1, f), nb(x - 1, z, f)));
+      }
+    }
+    for (let z = rz1; z >= rz0; z--) {
+      for (let x = rx1; x >= rx0; x--) {
+        const k = z * N + x;
+        const f = fam[k];
+        if (!f) continue;
+        dep[k] = Math.min(dep[k], 1 + Math.min(
+          nb(x + 1, z + 1, f), nb(x, z + 1, f), nb(x - 1, z + 1, f), nb(x + 1, z, f)));
+      }
+    }
+
+    // ---- tone, and the border ----
+    const out = this._cData;
+    for (let z = rz0; z <= rz1; z++) {
+      for (let x = rx0; x <= rx1; x++) {
+        const k = z * N + x;
+        const o = k * 4;
+        const f = fam[k];
+        if (!f) {
+          // OUTSIDE. A cell touching the shape is its border - the same
+          // eight-neighbour dilation addOutline() puts round an icon, done
+          // against the union so a trail gets one line round the whole of it
+          // instead of one round every stamp that laid it.
+          let bh = 0, bs = 0, ba = 0;
+          for (let dz = -1; dz <= 1 && !ba; dz++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx, nz = z + dz;
+              if (nx < 0 || nx >= N || nz < 0 || nz >= N) continue;
+              const j = nz * N + nx;
+              if (!fam[j]) continue;
+              bh = hue[j]; bs = sat[j]; ba = al[j];
+              break;
+            }
+          }
+          out[o] = 0; out[o + 1] = bh; out[o + 2] = bs; out[o + 3] = ba;
+          continue;
+        }
+        // INSIDE. A seam against the OTHER family is border too, and that is
+        // load-bearing: where a hostile pool laps over the player's own ash
+        // the black line is where the damage starts, and merging the two into
+        // one shape would delete the only thing saying so.
+        let seam = false;
+        for (let dz = -1; dz <= 1 && !seam; dz++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, nz = z + dz;
+            if (nx < 0 || nx >= N || nz < 0 || nz >= N) continue;
+            const g = fam[nz * N + nx];
+            if (g && g !== f) { seam = true; break; }
+          }
+        }
+        let tone;
+        if (seam) tone = 0;
+        else {
+          // The light, first and against the raw silhouette, exactly as an
+          // icon gets it: the lower-right edge of the shape is shadow. Then
+          // whatever is left of the rim goes hot.
+          const empty = (nx, nz) => nx < 0 || nx >= N || nz < 0 || nz >= N || fam[nz * N + nx] !== f;
+          if (empty(x + 1, z) || empty(x, z + 1) || empty(x + 1, z + 1)) tone = 1;
+          else tone = dep[k] <= CREEP_RIM ? 3 : 2;
+        }
+        out[o] = tone; out[o + 1] = hue[k]; out[o + 2] = sat[k]; out[o + 3] = al[k];
+      }
+    }
+    this._cTex.needsUpdate = true;
+  }
+
   /**
    * Claim a creep slot for a zone, held until the zone expires. Returns -1
    * when the pool is full, which a caller must survive - the zone still deals
@@ -639,7 +1001,7 @@ export class Effects {
    *
    * @param {boolean} hostile true when this patch hurts the PLAYER. It picks
    *   the jagged shape family instead of the smooth one, which is the primary
-   *   way the two are told apart - see makeCreepShape.
+   *   way the two are told apart - see creepRadius.
    */
   creepAcquire(hostile = false) {
     for (let i = 0; i < this.creep.length; i++) {
@@ -647,15 +1009,13 @@ export class Effects {
       if (c.used) continue;
       c.used = true;
       c.hostile = hostile;
-      const geo = (hostile ? this.creepGeo.jagged : this.creepGeo.smooth)[c.variant];
-      c.edge.geometry = geo;
-      c.fill.geometry = geo;
-      // A fresh outline every time a slot is reused, so a magma trail is a
+      c.alpha = 0;
+      c.variant = (Math.random() * CREEP_VARIANTS) | 0;
+      // A fresh orientation every time a slot is reused, so a magma trail is a
       // line of different-looking scorches rather than one shape stamped
-      // twelve times.
-      c.fill.rotation.z = Math.random() * Math.PI * 2;
-      c.edge.rotation.z = c.fill.rotation.z;
-      c.group.visible = true;
+      // twelve times. Set ONCE, here, and never touched again: this is which
+      // way the stamp faces, not a spin. Ground does not turn.
+      c.rot = Math.random() * Math.PI * 2;
       return i;
     }
     return -1;
@@ -670,10 +1030,15 @@ export class Effects {
   creepSet(h, x, z, radius, color, intensity) {
     if (h < 0) return;
     const c = this.creep[h];
-    c.group.position.set(x, 0.035, z);
-    c.group.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
-    c.fillMat.color.setHex(color);
-    c.edgeMat.color.setHex(color);
+    c.x = x;
+    c.z = z;
+    c.radius = Math.max(0.001, radius);
+    // Hue and saturation rather than a colour, because the field carries one
+    // byte of each per cell and the shader rebuilds the whole five-tone ramp
+    // from them - exactly the way pixelPalette() does in JS for the icons.
+    CREEP_COL.setHex(color).getHSL(CREEP_HSL);
+    c.hue = Math.round(CREEP_HSL.h * 255);
+    c.sat = Math.round(CREEP_HSL.s * 255);
     const k = Math.max(0, Math.min(1, intensity));
     // A HOSTILE patch breathes and a friendly one does not. Movement is what
     // the eye is drawn to in a crowded frame, so it is spent on the only
@@ -682,14 +1047,25 @@ export class Effects {
     if (c.hostile) {
       // The whole patch beats, not just the rim: a rim-only pulse on a 3m pool
       // is a thin line moving at the edge of vision, and the thing the player
-      // has to notice is the AREA. The fill's swing is the smaller of the two
-      // so the outline still leads.
+      // has to notice is the AREA. One opacity now does it, border included -
+      // the drawing breathes as a drawing.
+      //
+      // The numbers are higher than the additive pair they replace. Additive
+      // light adds to whatever the floor already had; painted colour has to
+      // cover it, and at the old 0.5 a patch was a suggestion.
+      //
+      // But not much higher, and the ceiling is set by the BLOOM rather than by
+      // taste. The tube pass starts blooming at 0.62 luminance (GLOW_THRESHOLD
+      // in crt.js), and a structure tone painted over that line comes back
+      // blurred - which on a shape whose whole point is its hard edges is the
+      // one thing that must not happen. So the body sits deliberately under it
+      // and only the hot rim is allowed to glow. Cyan is what found this: at
+      // the same HSL lightness it is far brighter than red, and a cyan patch
+      // any denser than this washes into a single flat puddle.
       const beat = Math.sin(this._creepT * 4.6 + c.phase);
-      c.fillMat.opacity = 0.5 * k * (0.74 + beat * 0.26);
-      c.edgeMat.opacity = 1.0 * k * (0.6 + beat * 0.4);
+      c.alpha = Math.round(255 * 0.72 * k * (0.72 + beat * 0.28));
     } else {
-      c.fillMat.opacity = 0.34 * k;
-      c.edgeMat.opacity = 0.42 * k;
+      c.alpha = Math.round(255 * 0.55 * k);
     }
   }
 
@@ -760,9 +1136,7 @@ export class Effects {
   creepRelease(h) {
     if (h < 0) return;
     this.creep[h].used = false;
-    this.creep[h].group.visible = false;
-    this.creep[h].fillMat.opacity = 0;
-    this.creep[h].edgeMat.opacity = 0;
+    this.creep[h].alpha = 0;
   }
 
   /**
@@ -862,13 +1236,15 @@ export class Effects {
     for (let i = this._beamCount; i < this.beams.length; i++) this.beams[i].visible = false;
     this._beamCount = 0;
     this._creepT += dt;
-    // The stains turn, slowly and each at its own rate, so a zone looks like
-    // it is spreading rather than like a decal someone pasted down.
-    for (const c of this.creep) {
-      if (!c.used) continue;
-      c.fill.rotation.z += c.spin * dt;
-      c.edge.rotation.z = c.fill.rotation.z;
-    }
+    // The field is rebuilt once, here, from whatever every zone wrote into its
+    // stamp this frame - which is why the zones can be written independently
+    // and still come out as one continuous shape.
+    //
+    // Nothing turns. The stains used to rotate slowly, each at its own rate,
+    // on the theory that it made a zone look like it was spreading; what it
+    // actually looked like was a decal advertising that it was a decal, since
+    // scorched ground does not revolve.
+    this._creepBuild();
     // Clouds churn. The whole cluster turns one way while every puff inside it
     // breathes on its own phase, which is what stops twelve dots reading as
     // twelve dots. Written per puff rather than per cloud because a uniform
@@ -914,7 +1290,7 @@ export class Effects {
       const t = 1 - r.life / r.maxLife;
       const e = 1 - Math.pow(1 - t, 3);
       r.mesh.scale.setScalar(Math.max(0.001, r.radius * e));
-      r.mesh.material.opacity = 0.5 * (1 - t);
+      r.mesh.material.uniforms.uOpacity.value = 0.85 * (1 - t);
     }
     for (const a of this.arcs) {
       if (a.life > 0) {

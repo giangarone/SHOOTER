@@ -239,6 +239,19 @@
         </div>
       </div>
       <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
+      <div class="set-row">
+        <span class="set-label">PIXEL SIZE</span>
+        <!-- Four named steps, not a resolution in numbers: the player is
+             picking how big an art-pixel is, and "540P" is a fact about the
+             framebuffer rather than an answer to that question. -->
+        <div class="stepper" tabindex="-1">
+          <button id="btn-pixel-down" class="step-btn" type="button" aria-label="Smaller pixels">-</button>
+          <div id="pixel-pips" class="pips"></div>
+          <b id="pixel-val">SUBTLE</b>
+          <button id="btn-pixel-up" class="step-btn" type="button" aria-label="Bigger pixels">+</button>
+        </div>
+      </div>
+      <p class="set-note">HOW COARSE THE ARENA IS DRAWN. THE HUD IS NEVER AFFECTED</p>
 
       <!-- CONTROLLER. Hidden until a DualSense has actually been seen this
            session (body.pad-seen): four rows about a device that is not
