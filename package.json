@@ -14,6 +14,7 @@
     "test:sprint": "node test/sprint.mjs",
     "test:crouch": "node test/crouch.mjs",
     "test:pad": "node test/pad.mjs",
+    "test:versus": "node test/versus.mjs",
     "test:seeker": "node test/seeker.mjs",
     "test:devil": "node test/devil.mjs",
     "test:money": "node test/money.mjs",
