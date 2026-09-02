@@ -73,6 +73,147 @@ export const FOG_DENSITY_BOSS = 0.024;
 // geometries on the budget for no benefit; the smoke test caps it under 120
 // for the whole game.
 const BOX = new THREE.BoxGeometry(1, 1, 1);
+
+// ---- the surface tile ----------------------------------------------------
+//
+// The floor and the walls used to be flat colours with a smooth light gradient
+// over them, and that is what kept the room reading as a smooth 3D space with
+// pixel art lying on top of it. Nothing on the biggest surface in the game
+// said HOW BIG AN ART-PIXEL IS, so the creep, the telegraphs and the pickup
+// icons had no grid to belong to.
+//
+// One texel is 0.25 METRES - the same cell the creep field is built on, and
+// the same size the mutation icons work out to at arm's length. That is the
+// entire point of the number: a texel of floor and a cell of creep are the
+// same square, so a patch of ash sits ON the grid rather than over it.
+const TILE_M = 8;           // metres covered by one repeat
+const TILE_TEXEL = 0.25;    // metres per texel
+const TILE_N = TILE_M / TILE_TEXEL;   // 32
+const TILE_PANEL = 8;       // texels per floor panel - 2m, the old grid spacing
+
+// A deterministic hash, so the floor is the same floor every run. Math.random
+// here would give a different room each time the page loaded, which is the
+// kind of thing nobody notices until they are trying to compare screenshots.
+function tileHash(x, y, k) {
+  let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// NOT NOISE. Noise at a quarter-metre reads as dirt and fights a rig that is
+// supposed to own the eye, and the arena has always been explicit that the
+// floor is a dancefloor rather than a diagram. Three things only:
+//
+//   the SEAM   one texel of recess every eight, which is the 2m rhythm the
+//              GridHelper used to draw as thin anti-aliased lines floating
+//              above the floor. Folded into the surface, it is the same
+//              rhythm made of actual art-pixels.
+//   the PANEL  each 2m plate a hair lighter or darker than its neighbours, so
+//              the floor is made of pieces rather than being one sheet.
+//   the SPECK  a scattering of single altered texels. These are the part that
+//              actually sells the grid: one pixel, visibly one pixel wide.
+//
+// Greyscale, and multiplied by each material's own colour, so the floor stays
+// the blue-grey it has always been and one texture dresses every surface.
+function makeTileTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = TILE_N;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(TILE_N, TILE_N);
+  for (let y = 0; y < TILE_N; y++) {
+    for (let x = 0; x < TILE_N; x++) {
+      const px = Math.floor(x / TILE_PANEL), py = Math.floor(y / TILE_PANEL);
+      let v = 0.97 + tileHash(px, py, 1) * 0.07;
+      // The seam is SOFT, and the reason is arithmetic rather than taste: a
+      // texel is a quarter of a metre, so the thinnest line this grid can draw
+      // is a 25cm joint. At the value it was first given it read as a trench
+      // cut into the floor every two metres. It has to carry the rhythm on
+      // tone alone, because it cannot get any narrower.
+      if (x % TILE_PANEL === 0 || y % TILE_PANEL === 0) v *= 0.82;
+      else {
+        // The specks do the work the seams cannot: single altered texels,
+        // unmistakably one texel wide, which is what tells the eye how big a
+        // pixel is on this floor. Sparse enough to read as wear rather than
+        // as noise.
+        const r = tileHash(x, y, 2);
+        if (r < 0.05) v *= 0.84;
+        else if (r < 0.095) v *= 1.13;
+      }
+      const c = Math.max(0, Math.min(255, Math.round(v * 255)));
+      const o = (y * TILE_N + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = c;
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // NEAREST TO MAGNIFY, MIPMAPS TO MINIFY, and both halves matter.
+  //
+  // Nearest is the whole point up close: a texel has an edge. But a 46m floor
+  // seen at a grazing angle puts hundreds of texels into one screen pixel, and
+  // nearest-sampling that crawls and sparkles as the camera moves - badly
+  // enough to be the first thing you notice. The low-resolution buffer the
+  // pixel setting turns on makes it worse, not better. Mipmaps average the
+  // distance down to something stable, and anisotropy keeps the ground ahead
+  // from smearing to mush while it does.
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// The tile is applied in WORLD SPACE, not through each mesh's own UVs, and
+// that is what makes a wall and the floor agree about how big a pixel is.
+//
+// A BoxGeometry's UVs run 0..1 across a face whatever the face measures, so a
+// shared repeat would draw a 46m wall and a 2m crate at wildly different texel
+// sizes - and a room whose surfaces disagree about their own scale is exactly
+// the thing this is meant to fix. Projecting from world position instead means
+// the size is a property of the ROOM, and every surface that opts in gets it
+// for free.
+//
+// Three planes, picked by whichever way the surface faces. The arena is a box
+// with axis-aligned walls, so the choice is exact rather than a blend, and it
+// costs one texture read instead of three.
+const TILE_CACHE_KEY = 'pixel-tile';
+function applyTile(mat, tex) {
+  mat.map = tex;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTileScale = { value: 1 / TILE_M };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTileW;\nvarying vec3 vTileN;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\n\tvTileW = (modelMatrix * vec4(transformed, 1.0)).xyz;\n\tvTileN = normalize(mat3(modelMatrix) * objectNormal);'
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vTileW;\nvarying vec3 vTileN;\nuniform float uTileScale;'
+      )
+      .replace(
+        '#include <map_fragment>',
+        [
+          'vec3 tileN = abs(vTileN);',
+          'vec2 tileUv = tileN.y > max(tileN.x, tileN.z)',
+          '  ? vTileW.xz',
+          '  : (tileN.x > tileN.z ? vTileW.zy : vTileW.xy);',
+          'diffuseColor *= texture2D(map, tileUv * uTileScale);',
+        ].join('\n')
+      );
+  };
+  // Every material patched this way compiles to the same program, so the floor,
+  // the four walls and anything added later share one. Without this three
+  // treats each patched material as its own program and the smoke test's cap
+  // on program count starts counting them.
+  mat.customProgramCacheKey = () => TILE_CACHE_KEY;
+  return mat;
+}
+
+
 // Likewise one unit cylinder, scaled in Y for the truss towers.
 const CYL = new THREE.CylinderGeometry(0.7, 0.7, 1, 10);
 
@@ -96,7 +237,11 @@ export function buildArena(scene) {
   // environment map in this scene, so a metallic surface has nothing to
   // reflect and renders very nearly black - a shiny "club floor" made the
   // whole room read as an unlit void.
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2b3040, roughness: 0.55, metalness: 0.18 });
+  const tileTex = makeTileTexture();
+  const floorMat = applyTile(
+    new THREE.MeshStandardMaterial({ color: 0x2b3040, roughness: 0.55, metalness: 0.18 }),
+    tileTex
+  );
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(BOUND * 2 + 2, BOUND * 2 + 2), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -105,16 +250,20 @@ export function buildArena(scene) {
   // pass straight through and never spawn an impact.
   meshList.push(floor);
 
-  // Purely decorative, floats just above the floor to avoid z-fighting. Dimmer
-  // and cooler than it used to be: the floor is a dancefloor now and the rig
-  // is what is supposed to draw the eye, not a bright grid.
-  const grid = new THREE.GridHelper(BOUND * 2 + 2, 23, 0x2b6a80, 0x1d3a4a);
-  grid.position.y = 0.02;
-  grid.material.transparent = true;
-  grid.material.opacity = 0.35;
-  group.add(grid);
+  // The GridHelper that used to float here at y = 0.02 is GONE. It drew the
+  // room's 2m rhythm as 23 thin anti-aliased lines hovering above the floor -
+  // the most vector-looking thing left in the arena, and lines that got
+  // thinner and shimmerier the further away they were. The same rhythm is now
+  // a one-texel recess in the surface itself (see makeTileTexture), which is
+  // made of art-pixels, sits at the right size at every distance, and costs a
+  // draw call and a material less.
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2432, roughness: 0.78, metalness: 0.12 });
+  // The same tile as the floor, at the same size in metres, which is most of
+  // what makes a room read as one space rather than as a floor and some walls.
+  const wallMat = applyTile(
+    new THREE.MeshStandardMaterial({ color: 0x1f2432, roughness: 0.78, metalness: 0.12 }),
+    tileTex
+  );
   // The trim material shared by the fixtures that are NOT part of the wall
   // chase - the lamp heads on the truss towers. rig.js writes its colour and
   // intensity as one object, so those all pulse together.

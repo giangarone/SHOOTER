@@ -134,17 +134,21 @@ try {
     // blow straight through.
     ['texture count non-decreasing',
       samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
-    // FIFTEEN, and here is every one of them: ten canvas panels (three totem
+    // SIXTEEN, and here is every one of them: ten canvas panels (three totem
     // cards, three Devil deal cards, four console labels), the soft glow dot
     // every halo and puff tints, the hard-edged spark dot the particles use,
-    // the creep field, the rig's beam gradient and the laser bank's.
+    // the creep field, the surface tile the floor and walls share, the rig's
+    // beam gradient and the laser bank's.
     //
     // The cap moved from twelve when the Devil's heart stopped being his
     // console and two consoles took its place - one panel out, two in. It
     // moved from thirteen for the pixel-art pass: glow split into a soft
     // texture for LIGHT and a stepped one for the sparks, which are matter,
     // and the creep stopped being thirty meshes and became one field on one
-    // texture. Note that a run in which the bot never reaches a totem set
+    // texture. It moved from fifteen for the surface tile - ONE texture for
+    // every surface in the room, projected in world space rather than through
+    // each mesh's UVs, which is what stops a 46m wall and a 2m crate drawing
+    // it at different sizes. Note that a run in which the bot never reaches a totem set
     // peaks below this whatever the ceiling is - the panels upload late - so
     // this number is the budget on paper, not the number the last run saw.
     //
@@ -152,7 +156,7 @@ try {
     // what catches a texture being allocated per wave. This one catches the
     // budget being spent without anyone noticing, which is why raising it is a
     // deliberate edit with a list attached rather than a nudge.
-    ['texture count bounded', peak.textures <= 15],
+    ['texture count bounded', peak.textures <= 16],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);
