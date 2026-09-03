@@ -38,7 +38,7 @@
 
 import * as THREE from 'three';
 import {
-  makeMark, tintMark, driveMark, makePanel, pxText, hex, roundRect,
+  makeMark, driveMark, makePanel, pxText, hex, roundRect,
   HIT_GEOM, HIT_MAT, SUNK_Y, RISE_SECONDS, USE_RADIUS, ICON_Y, PANEL_R,
   SIGN_COLOR, ROW_Z,
 } from './totems.js';
@@ -125,24 +125,41 @@ const HUE_RATE = 0.08;
 // has fallen back over its own hinge and the mouth is open to the room.
 const LID_ANGLE = 2.6; // ~150 degrees
 
-// BLACK. Not dark blue, not charcoal - black, and lit so faintly that the
-// faces are barely above the floor they stand on. Everything that makes the
-// crate legible is light ON it: the two strips, the four marks and the ring it
-// stands in. That is the whole look, and a body with any colour of its own
-// competes with all three.
-const BODY_COLOR = 0x000000;
-const LID_COLOR = 0x000000;
-
-// THE LIGHT STRIPS. One around the top of the body, one around the lid.
+// THE SPEAKER CABINETS' OWN BLACK, to the number - see speakerMat in arena.js.
+// Matching the value rather than picking a new one is the whole point: those
+// cabinets are the darkest object in the room and they are lit by the same
+// rig, so a crate built to their spec is black in exactly the way they are, at
+// every light level, without anyone having to tune it twice.
 //
-// The body's is the important one. It rings the OUTSIDE of the top edge and
-// stands a hair proud of the top face, so it draws the mouth of the box from
-// above - which is the angle the box is actually looked into once the lid is
-// open and the reel is running - as well as drawing a bright line across all
-// four faces from ground level.
-const STRIP_H = 0.055;   // how tall the band is
-const STRIP_T = 0.045;   // how far it stands off the face
-const STRIP_UP = 0.012;  // how far it pokes above the top face
+// AND NO EMISSIVE AT ALL. There was one - a dim neutral lift - from back when
+// the box had nothing else on it and rendered as a hole in the shape of a
+// crate. It is what was keeping it grey. It is not needed any more: the two
+// strips, the four marks and the ring on the floor draw the whole object, and
+// the black between them is supposed to be black.
+const BODY_COLOR = 0x191d26;
+const BODY_ROUGH = 0.85;
+const BODY_METAL = 0.1;
+
+// How thick the walls are. The box is HOLLOW - four walls and a floor, no top -
+// so that an open lid shows an inside rather than a slab, and so the item can
+// descend INTO something at the end of its ten seconds.
+const WALL_T = 0.07;
+
+// THE LIGHT STRIPS. One around the INSIDE of the body's top edge, one around
+// the lid's rim.
+//
+// FLUSH, NOT PROUD. They were raised bars standing off the surface, and that
+// was wrong twice over: a light with a relief on it is a fitting bolted to a
+// crate, where this is meant to be light coming OUT of one, and the raised
+// version cast a visible lip that made the black box look grey along its whole
+// top edge. Each strip is now a skin on the surface it belongs to, sitting a
+// few thousandths clear only so it does not z-fight the wall behind it.
+//
+// The body's runs round the inside of the opening, which is why the box has to
+// be hollow for it to exist at all: it is the mouth of the box that glows, seen
+// from above and from anywhere the open lid is not in the way.
+const STRIP_H = 0.075;      // how tall the band is
+const STRIP_EPS = 0.004;    // clearance off the surface it is painted on
 
 // THE QUESTION MARK, ON ALL FOUR SIDES.
 //
@@ -180,17 +197,179 @@ const QM_ROWS = QM_BITS.length;
 const QM_SCALE = 0.058; // metres per cell
 const QM_GEOM = new THREE.PlaneGeometry(QM_COLS * QM_SCALE, QM_ROWS * QM_SCALE);
 
+// ---------------------------------------------------------------------------
+// THE RAINBOW
+// ---------------------------------------------------------------------------
+//
+// Every light on the box - both strips, the four marks and the ring on the
+// floor - runs ONE moving rainbow rather than one colour at a time.
+//
+// IN A SHADER, because the alternative is not viable. Doing it on the CPU means
+// a colour per vertex and a buffer re-upload every frame for the ring alone
+// (128 segments, three rows), and it still could not put more than one hue on a
+// single flat strip. Here the hue is a function of WHERE THE FRAGMENT IS, so a
+// bar of two triangles carries the whole spectrum and the animation is one
+// float going up.
+//
+// THE HUE COMES FROM THE ANGLE AROUND THE BOX, which is what makes the whole
+// installation read as one object: the strip on the lid, the strip inside the
+// rim and the ring on the floor are all sampling the same wheel at the same
+// bearing, so a colour that is green at the box's left is green on every one of
+// them at once, and the sweep travels round all three together.
+const RAINBOW_GLSL = `
+  uniform float uTime;
+  uniform float uRate;
+  uniform vec3  uSolid;
+  uniform float uMix;
+  // Hue to RGB, no branches: three phase-shifted triangle waves clipped to the
+  // top of their range. Standard, and cheaper than any sextant version.
+  vec3 hue2rgb(float h) {
+    vec3 p = abs(fract(vec3(h) + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return clamp(p - 1.0, 0.0, 1.0);
+  }
+  vec3 rainbowAt(float h) {
+    // Lifted off full saturation. A fully saturated sweep has a hard magenta
+    // and a hard green in it that read as two separate lights rather than as
+    // one band moving; pulling it toward white keeps it a single ribbon.
+    vec3 c = mix(vec3(1.0), hue2rgb(fract(h + uTime * uRate)), 0.82);
+    // While an item is revealed the whole installation HOLDS at that item's own
+    // colour - the far side of the arena says what is being held from anywhere
+    // in it. uMix rides in and out so the change is a sweep, not a cut.
+    return mix(c, uSolid, uMix);
+  }
+`;
+
+// How far round the wheel the sweep travels per second, and how many full
+// turns of hue are laid around one lap of the box. TURNS > 1 is what puts
+// several colours on the box at once instead of one; at 1.5 the front face and
+// the back face are never the same colour and the seam where the wheel wraps is
+// always round a corner.
+const RAINBOW_RATE = 0.13;
+const RAINBOW_TURNS = 1.5;
+
+/**
+ * The shared animation state, handed to every material that wears the rainbow.
+ *
+ * ONE OBJECT, SHARED BY REFERENCE. three.js reads uniforms by identity, so
+ * passing these same objects into each material means the per-frame update is
+ * three assignments total rather than three per material - and, more to the
+ * point, they cannot drift out of step with each other.
+ */
+function rainbowUniforms() {
+  return {
+    uTime: { value: 0 },
+    uRate: { value: RAINBOW_RATE },
+    uSolid: { value: new THREE.Color(0xffffff) },
+    uMix: { value: 0 },
+    uCenter: { value: new THREE.Vector3() },
+    uTurns: { value: RAINBOW_TURNS },
+  };
+}
+
+/**
+ * A material for one of the box's own lights.
+ *
+ * @param {object} u        from rainbowUniforms(), shared
+ * @param {?THREE.Texture} map  the question mark's bitmap, or null for a strip
+ * @param {boolean} angular true to take the hue from the bearing around the
+ *   box (the strips), false to take it from the height up the quad (the marks,
+ *   which are a hand's width across and would be one flat colour otherwise).
+ */
+function rainbowMaterial(u, map, angular) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...u, uMap: { value: map }, uOpacity: { value: 1 } },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      uniform vec3 uCenter;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vPos = wp.xyz - uCenter;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: RAINBOW_GLSL + `
+      uniform sampler2D uMap;
+      uniform float uOpacity;
+      uniform float uTurns;
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        ${angular
+          ? 'float h = atan(vPos.z, vPos.x) / 6.2831853 * uTurns;'
+          : 'float h = (1.0 - vUv.y) * 0.55;'}
+        vec3 c = rainbowAt(h);
+        float a = uOpacity;
+        ${map ? 'a *= texture2D(uMap, vUv).a;' : ''}
+        gl_FragColor = vec4(c * a, a);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+}
+
+/**
+ * Puts the same rainbow on a material this file did not build - the four parts
+ * of the floor ring, which come from makeMark() in totems.js and have to stay
+ * MeshBasicMaterials so that driveMark() can go on driving their opacity,
+ * rotation and visibility exactly as it does for every totem in the game.
+ *
+ * onBeforeCompile rather than a replacement material, so the ring keeps the
+ * dash mask baked into its vertex colours and the soft falloff baked into its
+ * texture: this only swaps out where the HUE comes from, and multiplies into
+ * whatever mask was already there.
+ */
+function patchRainbow(mat, u) {
+  mat.color.setHex(0xffffff);
+  mat.onBeforeCompile = (shader) => {
+    for (const k of Object.keys(u)) shader.uniforms[k] = u[k];
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRPos;\nuniform vec3 uCenter;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvRPos = (modelMatrix * vec4(transformed, 1.0)).xyz - uCenter;'
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRPos;\nuniform float uTurns;\n' + RAINBOW_GLSL)
+      .replace(
+        '#include <color_fragment>',
+        '#include <color_fragment>\n'
+        + 'diffuseColor.rgb *= rainbowAt(atan(vRPos.z, vRPos.x) / 6.2831853 * uTurns);'
+      );
+  };
+  // Two materials with the same program cache key share a compiled program, and
+  // these now differ from an unpatched MeshBasicMaterial. Without this they can
+  // be handed the stock program and silently render without the rainbow.
+  mat.customProgramCacheKey = () => 'mysteryBoxRainbow';
+  mat.needsUpdate = true;
+}
+
 // The crate's own shared geometry. Built once at module load, not per box -
 // there is one box in the game, but the rule is the rule and a second one
 // would cost nothing.
-const BOX_GEOM = new THREE.BoxGeometry(BOX_W, BOX_H, BOX_D);
 const LID_GEOM = new THREE.BoxGeometry(BOX_W, LID_T, BOX_D);
 // The four bars of a strip frame. Boxes rather than planes so a strip reads
 // from below, from the side and from directly above without a second copy
 // facing the other way. The long pair overshoot by STRIP_T at each end so the
 // corners close.
-const STRIP_X_GEOM = new THREE.BoxGeometry(BOX_W + STRIP_T * 2, STRIP_H, STRIP_T);
-const STRIP_Z_GEOM = new THREE.BoxGeometry(STRIP_T, STRIP_H, BOX_D + STRIP_T * 2);
+// The strips, as flat skins. A plane's width runs along its local X, so the
+// pair that live on the left and right walls are built at the DEPTH and then
+// yawed a quarter turn into place.
+const IN_W = BOX_W - WALL_T * 2;
+const IN_D = BOX_D - WALL_T * 2;
+const RIM_X_GEOM = new THREE.PlaneGeometry(IN_W, STRIP_H);
+const RIM_Z_GEOM = new THREE.PlaneGeometry(IN_D, STRIP_H);
+const LID_X_GEOM = new THREE.PlaneGeometry(BOX_W, LID_T * 0.62);
+const LID_Z_GEOM = new THREE.PlaneGeometry(BOX_D, LID_T * 0.62);
+// The four walls and the floor of the hollow crate.
+const WALL_X_GEOM = new THREE.BoxGeometry(BOX_W, BOX_H, WALL_T);
+const WALL_Z_GEOM = new THREE.BoxGeometry(WALL_T, BOX_H, IN_D);
+const FLOOR_GEOM = new THREE.BoxGeometry(BOX_W, WALL_T, BOX_D);
 
 // ---------------------------------------------------------------------------
 
@@ -270,23 +449,40 @@ export class MysteryBox {
     // rainbow rather than an offer's theme, so this is tinted every frame
     // instead of once at present().
     this.mark = makeMark(this.group);
+    // THE RING ON THE FLOOR RUNS THE SAME WHEEL AS THE BOX. Patched rather than
+    // replaced so driveMark() goes on driving it exactly as it drives every
+    // totem's - see patchRainbow.
+    for (const m of [this.mark.poolMat, this.mark.rimMat, this.mark.rippleMat, this.mark.hazeMat]) {
+      patchRainbow(m, this.rain);
+    }
     this._hsl = new THREE.Color();
   }
 
   // ---- construction ------------------------------------------------------
 
   _buildBody() {
-    // EMISSIVE, AND ALMOST NOTHING. An honestly lit material renders as a hole
-    // in the shape of a crate in an arena this dark; this is the least light
-    // that still separates a black box from a black floor, and no more, because
-    // the crate is meant to be the dark thing the light is attached to.
+    // ONE MATERIAL FOR THE WHOLE CRATE, walls, floor and lid. It is a piece of
+    // black furniture and it should light as one.
     this.bodyMat = new THREE.MeshStandardMaterial({
-      color: BODY_COLOR, roughness: 0.6, metalness: 0.3,
-      emissive: 0x000000,
+      color: BODY_COLOR, roughness: BODY_ROUGH, metalness: BODY_METAL,
     });
-    const body = new THREE.Mesh(BOX_GEOM, this.bodyMat);
-    body.position.y = BOX_H / 2;
-    this.group.add(body);
+
+    // FOUR WALLS AND A FLOOR, NO TOP. Outer surfaces sit exactly where the
+    // solid box's did, so the silhouette and the marks on it are unchanged;
+    // what is new is that there is now an inside.
+    for (const dz of [1, -1]) {
+      const w = new THREE.Mesh(WALL_X_GEOM, this.bodyMat);
+      w.position.set(0, BOX_H / 2, dz * (BOX_D - WALL_T) / 2);
+      this.group.add(w);
+    }
+    for (const dx of [1, -1]) {
+      const w = new THREE.Mesh(WALL_Z_GEOM, this.bodyMat);
+      w.position.set(dx * (BOX_W - WALL_T) / 2, BOX_H / 2, 0);
+      this.group.add(w);
+    }
+    const floor = new THREE.Mesh(FLOOR_GEOM, this.bodyMat);
+    floor.position.y = WALL_T / 2;
+    this.group.add(floor);
 
     // THE LID IS HINGED ON THE WALL SIDE AND FALLS AWAY FROM THE ROOM, so the
     // mouth of the box opens toward the CENTRE of the arena - which is the only
@@ -300,47 +496,53 @@ export class MysteryBox {
     this.hinge = new THREE.Group();
     this.hinge.position.set(0, BOX_H, BOX_D / 2);
     this.group.add(this.hinge);
-    this.lidMat = new THREE.MeshStandardMaterial({
-      color: LID_COLOR, roughness: 0.55, metalness: 0.35, emissive: 0x000000,
-    });
-    const lid = new THREE.Mesh(LID_GEOM, this.lidMat);
+    const lid = new THREE.Mesh(LID_GEOM, this.bodyMat);
     lid.position.set(0, LID_T / 2, -BOX_D / 2);
     this.hinge.add(lid);
 
-    // ONE MATERIAL FOR BOTH STRIPS, so the two are the same light at every
-    // instant. Additive and unlit, like everything else out here that is meant
-    // to burn rather than to be painted.
-    this.stripMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 1,
-      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-      toneMapped: false,
-    });
+    // ---- the light ------------------------------------------------------
+    //
+    // Both strips share ONE material, so they are the same light at the same
+    // bearing at every instant - see the note by RAINBOW_GLSL.
+    this.rain = rainbowUniforms();
+    this.rain.uCenter.value.set(this.pos.x, 0, this.pos.z);
+    this.stripMat = rainbowMaterial(this.rain, null, true);
 
-    // The body's, riding the top edge. STRIP_UP is what lifts it clear of the
-    // top face: level with it, the frame is invisible from directly above,
-    // which is exactly the angle it exists for.
-    this._strips(this.group, BOX_H - STRIP_H / 2 + STRIP_UP);
-    // The lid's, around its rim at mid-thickness. When the lid is shut the two
-    // frames stack into a double line at the top of the crate; when it is open
-    // this one is what draws the raised panel.
-    this._strips(this.hinge, LID_T / 2, -BOX_D / 2);
-  }
-
-  // One frame of four bars, at height `y` in `parent`'s space and centred on
-  // `cz`. Used twice - once on the body, once on the lid - which is the whole
-  // reason it is a method and not two blocks of four lines.
-  _strips(parent, y, cz = 0) {
-    const halfW = BOX_W / 2 + STRIP_T / 2;
-    const halfD = BOX_D / 2 + STRIP_T / 2;
-    for (const dz of [halfD, -halfD]) {
-      const bar = new THREE.Mesh(STRIP_X_GEOM, this.stripMat);
-      bar.position.set(0, y, cz + dz);
-      parent.add(bar);
+    // THE BODY'S, ROUND THE INSIDE OF THE OPENING. Each panel faces INWARD -
+    // it is painted on the inner surface of its wall - so what the player sees
+    // is the mouth of the box lit from within.
+    const rimY = BOX_H - STRIP_H / 2 - 0.01;
+    const inZ = IN_D / 2 - STRIP_EPS;
+    const inX = IN_W / 2 - STRIP_EPS;
+    for (const dz of [1, -1]) {
+      const m = new THREE.Mesh(RIM_X_GEOM, this.stripMat);
+      m.position.set(0, rimY, dz * inZ);
+      // Facing in: the +z wall's skin looks back down -z, and vice versa.
+      m.rotation.y = dz > 0 ? Math.PI : 0;
+      this.group.add(m);
     }
-    for (const dx of [halfW, -halfW]) {
-      const bar = new THREE.Mesh(STRIP_Z_GEOM, this.stripMat);
-      bar.position.set(dx, y, cz);
-      parent.add(bar);
+    for (const dx of [1, -1]) {
+      const m = new THREE.Mesh(RIM_Z_GEOM, this.stripMat);
+      m.position.set(dx * inX, rimY, 0);
+      m.rotation.y = dx > 0 ? -Math.PI / 2 : Math.PI / 2;
+      this.group.add(m);
+    }
+
+    // THE LID'S, ROUND ITS RIM, facing outward on all four edges - the one
+    // strip that is visible from ground level with the box shut, and the thing
+    // that draws the raised panel once it is open.
+    const lidY = LID_T / 2;
+    for (const dz of [1, -1]) {
+      const m = new THREE.Mesh(LID_X_GEOM, this.stripMat);
+      m.position.set(0, lidY, -BOX_D / 2 + dz * (BOX_D / 2 + STRIP_EPS));
+      m.rotation.y = dz > 0 ? 0 : Math.PI;
+      this.hinge.add(m);
+    }
+    for (const dx of [1, -1]) {
+      const m = new THREE.Mesh(LID_Z_GEOM, this.stripMat);
+      m.position.set(dx * (BOX_W / 2 + STRIP_EPS), lidY, -BOX_D / 2);
+      m.rotation.y = dx > 0 ? Math.PI / 2 : -Math.PI / 2;
+      this.hinge.add(m);
     }
   }
 
@@ -366,14 +568,12 @@ export class MysteryBox {
     tex.minFilter = THREE.LinearFilter;
     tex.generateMipmaps = false;
 
-    // Additive and unlit, like the strips, so the mark burns rather than being
-    // painted on. Its colour is driven every frame in _driveLook, in step with
-    // the strips and the circle on the floor.
-    this.markMat = new THREE.MeshBasicMaterial({
-      map: tex, color: 0xffffff, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-      toneMapped: false,
-    });
+    // The same rainbow the strips wear, but taken from the HEIGHT up the glyph
+    // rather than from the bearing round the box: a mark is a hand's width
+    // across, so an angular hue would paint each one a single flat colour and
+    // the four of them would be four different flat colours. Down the glyph
+    // instead, it is a ribbon - which is also how the reference reads.
+    this.markMat = rainbowMaterial(this.rain, tex, false);
 
     // Half a face, plus a whisker, so the mark sits ON the panel rather than
     // inside it - the crate is a solid mesh and a coplanar decal would z-fight
@@ -390,9 +590,9 @@ export class MysteryBox {
     ];
     for (const [x, z, yaw] of faces) {
       const m = new THREE.Mesh(QM_GEOM, this.markMat);
-      // Sat low of the face's centre: the strip takes the top of the crate, and
-      // a mark centred between floor and lid crowds it.
-      m.position.set(x, BOX_H * 0.44, z);
+      // Sat just above the middle of the face. Lower than this and the glyph
+      // sits in the bottom half of a tall crate and reads as having slipped.
+      m.position.set(x, BOX_H * 0.54, z);
       m.rotation.y = yaw;
       this.group.add(m);
     }
@@ -576,7 +776,7 @@ export class MysteryBox {
 
     this._driveState(dt);
     this._driveLid(dt);
-    this._driveLook(time, playerPos);
+    this._driveLook(dt, time, playerPos);
     this._redraw();
   }
 
@@ -693,49 +893,41 @@ export class MysteryBox {
   }
 
   // Everything that is only a look: colour, glow, where the icon hangs.
-  _driveLook(time, playerPos) {
+  _driveLook(dt, time, playerPos) {
     const e = this._eased;
     const floorY = -this.group.position.y;
 
-    // THE COLOUR, and there is exactly one of it. Cycling while the box is shut
-    // or spinning, HELD at the item's own theme while one is revealed - so the
-    // far side of the arena says what is being held from anywhere in it, and
-    // the moment the reel lands is a colour change as well as a flash.
-    //
-    // Written into _hsl once and read from there by everything that wears it,
-    // which is the whole of what keeps the four marks and the ring on the floor
-    // in step: they are not two things being kept in sync, they are one value
-    // being used twice.
-    if (this.state === 'revealed' && this.showing) {
-      this._hsl.setHex(ACTIVE_ITEMS[this.showing].theme);
-    } else {
-      this._hsl.setHSL((time * HUE_RATE) % 1, 0.85, 0.6);
-    }
+    // THE RAINBOW IS DRIVEN FROM ONE PLACE, three floats a frame, and every
+    // light on the installation reads them: both strips, the four marks and the
+    // four parts of the ring on the floor. They cannot drift apart because
+    // there is nothing to drift - they are the same uniforms.
+    this.rain.uTime.value = time;
 
-    // THE CRATE ITSELF IS BLACK AND STAYS BLACK. It wore the hue as a dim
-    // emissive for a while and read as a lump of whatever colour the cycle was
-    // passing through - three things in the frame all saying the colour and
-    // nothing saying "crate". What it has instead is the least neutral light
-    // that keeps a black box off a black floor, and every coloured thing on it
-    // is a light fixed TO it: two strips and four marks.
-    const dim = 0.028 * e;
-    this.bodyMat.emissive.setRGB(dim, dim, dim * 1.25);
-    this.lidMat.emissive.setRGB(dim, dim, dim * 1.25);
+    // WHILE AN ITEM IS REVEALED THE WHEEL HOLDS at that item's own colour, so
+    // the far side of the arena says what is being held from anywhere in it.
+    // Eased in and out over a fifth of a second rather than switched, so the
+    // reel landing is a sweep to one colour and the item sinking away is the
+    // rainbow coming back.
+    const hold = this.state === 'revealed' && this.showing;
+    if (hold) this._hsl.setHex(ACTIVE_ITEMS[this.showing].theme);
+    this.rain.uSolid.value.copy(this._hsl);
+    const target = hold ? 1 : 0;
+    const step = Math.min(1, dt * 5);
+    this.rain.uMix.value += (target - this.rain.uMix.value) * step;
 
-    // THE STRIPS, THE MARKS AND THE RING ARE ONE COLOUR. Same value, three
-    // places, so they cannot drift apart.
-    this.stripMat.color.copy(this._hsl);
+    // THE CRATE ITSELF IS NOT LIT AT ALL. No emissive, and the speaker
+    // cabinets' own black - it is the darkest thing in the room on purpose, and
+    // everything that makes it legible is a light attached to it.
+
     // A slow breath, and never off: the strips are what draws the crate, so
     // dimming them the way the marks dim would take the box's outline with it.
-    this.stripMat.opacity = e * (0.88 + 0.12 * Math.sin(time * 1.9));
-
-    this.markMat.color.copy(this._hsl);
+    this.stripMat.uniforms.uOpacity.value = e * (0.88 + 0.12 * Math.sin(time * 1.9));
     // The marks breathe with the strips and step back a little once the lid is
     // up: at that point the reel is what the player is looking at, and four
     // glowing signs around it compete with the thing they were advertising.
-    this.markMat.opacity = e * (0.70 + 0.20 * Math.sin(time * 1.9)) * (1 - this.lid * 0.35);
+    this.markMat.uniforms.uOpacity.value =
+      e * (0.70 + 0.20 * Math.sin(time * 1.9)) * (1 - this.lid * 0.35);
 
-    tintMark(this.mark, this._hsl.getHex());
     driveMark(this.mark, e, floorY, time, this.pos.x);
 
     // The icon rides to the player's side and turns to face them, exactly as a
