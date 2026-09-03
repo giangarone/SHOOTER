@@ -73,16 +73,15 @@ import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
-  UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rollDeals, rerollCost,
-  dealRerollCost, effectLines,
+  UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rerollCost, effectLines,
 } from './upgrades.js';
-import { TotemArea, ARM_TIME_DEVIL } from './totems.js';
-import { DevilArea } from './devil.js';
+import { TotemArea, ARM_TIME_ITEM } from './totems.js';
+import { ACTIVE_ITEMS, ItemArea, rollItem } from './items.js';
 import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
-import { VersusMatch, captureRun, restoreRun, devilChanceScaled } from './versus.js';
+import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
 // window.__report() for test/smoke.mjs. It also skips pointer lock, which
@@ -155,9 +154,9 @@ const STATION_SHOOT_COOLDOWN = 0.25;
 
 // What a console is called when the prompt has to say why it cannot be used.
 // Four consoles now stand at a wave break - two beside the totems, two beside
-// the Devil's deals - and a blocked line has to name the one being looked at.
+// the active item row - and a blocked line has to name the one being looked at.
 const STATION_TITLE = {
-  ammo: 'AMMO', reroll: 'REROLL', maxhp: 'MAX HEALTH', dealReroll: 'REROLL',
+  ammo: 'AMMO', reroll: 'REROLL', maxhp: 'MAX HEALTH', itemReroll: 'REROLL',
 };
 
 // NO-SPAWN BUBBLE. No enemy is ever placed closer than this to the player.
@@ -299,30 +298,19 @@ const CREDITS_PER_SCORE = 0.18;
 const SPLIT_CHILD_CREDITS = 1.5;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
-// Deals the Devil puts up, and how likely he is to be there at all.
+// HOW OFTEN THE ACTIVE ITEM ROW COMES UP, counted in shops.
 //
-// HE KEEPS BOSS HOURS. He used to come at the end of any wave - certain after a
-// clean one, one-in-seven otherwise - which on a run going well meant a second
-// shop to read at nearly every break. Two sets of offers, back to back, every
-// ninety seconds: the deals stopped being a decision and became paperwork, and
-// nothing that arrives every time can feel like a visitation. So he is now tied
-// to the BOSS wave and nothing else, which puts him on the run's existing
-// five-wave rhythm and makes his row something the player travels towards.
+// Every third, and it is a COUNT rather than a roll. The Devil that used to
+// stand there appeared on odds scored off clean waves, which made his row a
+// reward for playing well - and the trouble with that is the run which most
+// needs an answer is the one least likely to be offered one. An item is a tool,
+// not a prize: the schedule is fixed, the player can see it coming, and
+// planning a swap two shops ahead is a thing they are allowed to do.
 //
-// WHAT HE IS PAID IN, still, is not being hit. The block of five waves ending
-// at the boss is scored on how many of them cost the player no health - NOT
-// consecutively, because one unlucky bomber should not wipe out four waves of
-// clean play, and a streak rule turns a mechanic that rewards skill into one
-// that punishes variance. Four of the five summons him outright, which is
-// reachable while still eating a hit from the boss itself - the wave most
-// likely to land one. Below that the odds fall away a quarter at a time, down
-// to a floor that is small but not zero: a run going badly is exactly the run
-// that should not be selling max HP, and meeting him anyway once in ten blocks
-// keeps him a presence rather than a reward tier.
-//
-// Indexed by clean waves in the block, capped at 4.
-const DEVIL_COUNT = 3;
-const DEVIL_CHANCE = [0.10, 0.25, 0.50, 0.75, 1];
+// Three is the number that makes the walk worth making. Every shop and the far
+// row becomes a second errand at every break - which is exactly what killed the
+// Devil's three-deal version. Every fifth and a run barely meets two items.
+const ITEM_SHOP_EVERY = 3;
 
 // ---- the hot seat ---------------------------------------------------------
 //
@@ -589,9 +577,9 @@ class Game {
     // middle of the arena mid-run and solid pillars there would be five new
     // things to get caught on while a wave is chasing you.
     this.totemArea = new TotemArea(this.scene);
-    // The Devil's installation, on the far side of the arena. Built once and
+    // The active item row, on the far side of the arena. Built once and
     // reused like the totems, and hidden for most of a run.
-    this.devilArea = new DevilArea(this.scene);
+    this.itemArea = new ItemArea(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     // Every credit in the game, lying on the floor. One Points object for the
@@ -683,19 +671,11 @@ class Game {
     // Whether the last wave was cleared without taking damage. Drives the
     // flawless orb shower, the No-Hit stack and the banner.
     this.lastPerfect = false;
-    // Waves cleared without damage since the last boss. Not consecutive - see
-    // DEVIL_CHANCE - and zeroed by _rollDevil() at every boss.
-    this.cleanWaves = 0;
-    // The denominator the line above is scored against. In solo it is always
-    // the five waves of the block and nothing reads it; in versus each player
-    // only sees two or three of them, and the Devil's odds are a RATE over
-    // this rather than a raw count - see devilChanceScaled in versus.js.
-    this.wavesCleared = 0;
-    // The Devil is ROLLED at a boss and PRESENTED at a shop, which in solo is
-    // the same moment and in versus is not: the player who was not on the
-    // controller for the boss still gets their own roll, and it waits here
-    // until their next break.
-    this.devilPending = false;
+    // Shops opened this run, counted as the totems rise. The active item row
+    // comes up on every ITEM_SHOP_EVERY-th one - a count and not a roll, so
+    // both players in a versus match share one schedule and neither can be
+    // unlucky with it.
+    this.shopCount = 0;
     // 'solo' | 'versus'. Everything the second mode changes is gated on this,
     // and nothing reads it while it is 'solo'.
     this.mode = 'solo';
@@ -735,7 +715,7 @@ class Game {
     // `moveF`/`moveS` are the ANALOGUE pair, in [-1, 1], and they are null
     // whenever the keyboard is what is driving - see the movement block in
     // player.js, which falls back to the booleans when they are.
-    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, crouch: false, dash: null, moveF: null, moveS: null };
+    this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, crouch: false, moveF: null, moveS: null };
     // Double Dash: the game time each movement key was last pressed FRESH, so
     // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
     // e.code; a key held down never writes here (see _bind).
@@ -945,9 +925,10 @@ class Game {
       this._dir = 0;
       this.beginGame();
       window.__game = this;
-      // The upgrade table, for tests that need to tell a free mutation from a
-      // Devil Deal. Autotest only, like everything else in this block.
+      // The upgrade table and the item pool, for tests that read either as
+      // data. Autotest only, like everything else in this block.
       this.__upgradesForTest = UPGRADES;
+      this.__itemsForTest = ACTIVE_ITEMS;
       // The Enemy class, so a test can stand one up without a wave.
       this.__EnemyForTest = Enemy;
       window.__report = () => ({
@@ -1037,6 +1018,9 @@ class Game {
         case 'ShiftLeft': case 'ShiftRight': this.input.sprint = true; break;
         case 'KeyR': this.tryReload(); break;
         case 'KeyE': this.tryUse(); break;
+        // THE ACTIVE ITEM. Under the movement hand and one key off W, which is
+        // where a button pressed in the middle of a retreat has to be.
+        case 'KeyQ': this.tryItem(); break;
         // MELEE. It used to be the right mouse button, which is now where the
         // gun is raised from - see the mousedown handler. V is the key that
         // button's owners reach for.
@@ -1443,21 +1427,26 @@ class Game {
     this._padSprint = false;
     this._sprintEngaged = false;
     i.shootFresh = false;
-    i.dash = null;
     i.moveF = null;
     i.moveS = null;
     for (const k in this._tapT) this._tapT[k] = -99;
   }
 
-  // Double Dash's tap clock. `held` is whether that direction was ALREADY down
-  // when the key event arrived: a held key repeats keydown at the OS repeat
-  // rate, which would otherwise read as a double-tap the moment a player ran
-  // in a straight line. Only a fresh press is timed.
+  // The double-tap clock, kept for BLINK DRIVE. `held` is whether that
+  // direction was ALREADY down when the key event arrived: a held key repeats
+  // keydown at the OS repeat rate, which would otherwise read as a double-tap
+  // the moment a player ran in a straight line. Only a fresh press is timed.
+  //
+  // A SECOND WAY TO FIRE ONE ITEM, not a second binding. Double-tapping W is
+  // how the dash was reached for the whole time it was a mutation, and a player
+  // who learned it should not have to unlearn it - so it routes through
+  // tryItem() like Q does, and therefore does nothing at all unless BLINK DRIVE
+  // is what is in the slot.
   _tapMove(code, held) {
     if (held) return;
     const last = this._tapT[code];
     if (this.time - last < DOUBLE_TAP_WINDOW) {
-      this.input.dash = code;
+      if (code === 'KeyW' && this.player.item === 'itemDash') this.tryItem();
       // Cleared so a third tap has to start a new pair rather than firing
       // again off the same timestamp.
       this._tapT[code] = -99;
@@ -1798,10 +1787,9 @@ class Game {
     // that decision has to live in one place for both input devices.
     i.crouch = pad.down(BTN.CIRCLE);
     if (pad.pressed(BTN.R1)) this.tryUse();
-    // DASH on a button rather than on a double-tap of the stick. Same dash the
-    // keyboard gets - forward, along the camera's bearing - so a mutation that
-    // was balanced around one is not quietly better on the other.
-    if (pad.pressed(BTN.L1)) i.dash = 'KeyW';
+    // THE ACTIVE ITEM, on L1. It used to be the dash, which is now one of the
+    // items this button fires - so the binding did not so much move as widen.
+    if (pad.pressed(BTN.L1)) this.tryItem();
     // TRIANGLE is HELD, exactly as TAB is: the build sheet costs the player
     // the seconds they spend reading it and the arena keeps running under it.
     if (pad.down(BTN.TRIANGLE)) this._openStats();
@@ -2210,9 +2198,9 @@ class Game {
     r.camPos = this.camera.position;
     // What is standing at the wave break, for the two accent lights to park
     // over and take their colour from - see HOUSE_ACCENT in rig.js. The
-    // TOTEMS when they are up, the Devil's deals when his row is the only one
-    // left; an empty list in the fight, which is when the accents are doing
-    // their own thing anyway.
+    // TOTEMS when they are up, the active item pedestal when that row is the
+    // only one left; an empty list in the fight, which is when the accents are
+    // doing their own thing anyway.
     //
     // Refilled in place into a preallocated array of preallocated entries, so
     // the loop still allocates nothing.
@@ -2239,7 +2227,7 @@ class Game {
     const out = r.offers;
     out.length = 0;
     const row = this.totemArea.active ? this.totemArea.totems
-      : this.devilArea.active ? this.devilArea.deals : null;
+      : this.itemArea.active ? [this.itemArea.pedestal] : null;
     if (!row) return;
     for (const t of row) {
       if (t.state === 'hidden' || t.claimed || !t.offer) continue;
@@ -2339,11 +2327,10 @@ class Game {
     this.lastPerfect = false;
     this.cleanWaves = 0;
     this.wavesCleared = 0;
-    this.devilPending = false;
     this._pass = false;
     this._swapped = false;
     this.totemArea.dismiss();
-    this.devilArea.dismiss();
+    this.itemArea.dismiss();
     this.wave = 0;
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
@@ -2436,8 +2423,7 @@ class Game {
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
     this.totemArea.dismiss();
-    this.devilArea.dismiss();
-    this.devilPending = false;
+    this.itemArea.dismiss();
     this.ui.setPrompt(null, false);
     this.ui.showStart();
   }
@@ -2489,7 +2475,7 @@ class Game {
     if (m.winner >= 0) { this._matchOver(); return; }
     this._clearEntities();
     this.totemArea.dismiss();
-    this.devilArea.dismiss();
+    this.itemArea.dismiss();
     // The room keeps the last fight's mood otherwise, and the incoming player
     // would walk into a boss's red on an ordinary wave.
     this.rig.setEnraged(false);
@@ -2576,7 +2562,7 @@ class Game {
     this._closeStats();
     this._clearEntities();
     this.totemArea.dismiss();
-    this.devilArea.dismiss();
+    this.itemArea.dismiss();
     this.rig.setEnraged(false);
     this.ui.setPrompt(null, false);
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
@@ -2591,15 +2577,43 @@ class Game {
     if (this.player.startReload()) this.sfx.reload();
   }
 
+  // FIRES THE ACTIVE ITEM. Q and L1 both land here, and so does a double-tapped
+  // W when BLINK DRIVE is what is carried - the same one-place-per-action shape
+  // tryReload() and tryUse() have, so the two devices cannot drift apart on
+  // what the button means.
+  //
+  // USABLE IN THE SHOP, unlike the charge that pays for it (see the note in
+  // Player.update). Nothing is gained by firing a heal at a wave break, but
+  // refusing the button there would be a rule the player only ever meets as an
+  // unexplained silence.
+  //
+  // An empty slot is silent. A slot that is simply not full is not: a player
+  // pressing the button in a fight has decided to spend it, and a press that
+  // does nothing at all reads as a dropped input rather than as a cooldown.
+  tryItem() {
+    if (this.state !== 'playing') return;
+    const id = this.player.item;
+    if (!id) return;
+    if (!this.player.itemReady) {
+      this.sfx.denied();
+      this.pad.rumble(0.15, 0.5, 60, 1);
+      return;
+    }
+    this.player.spendItem();
+    ACTIVE_ITEMS[id].use(this);
+    this.sfx.itemUse();
+    this.pad.rumble(0.6, 0.5, 200, 2);
+  }
+
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
   // budget for it. Enemies then trickle out of the queue on spawnTimer.
   startWave() {
-    // The Devil keeps wave-break hours. An unclaimed TOTEM set is deliberately
-    // left standing into the next wave - that pick is still there to be taken -
-    // but a deal pillar standing through a fight would be a shootable box that
-    // costs health to touch by accident, in a room the player is running
-    // around at speed. He goes whether or not anything was bought.
-    this.devilArea.dismiss();
+    // The item row keeps wave-break hours. An unclaimed TOTEM set is
+    // deliberately left standing into the next wave - that pick is still there
+    // to be taken - but a pedestal standing through a fight would be a
+    // shootable box that swaps your item by accident, in a room the player is
+    // running around at speed. It goes whether or not anything was taken.
+    this.itemArea.dismiss();
     // The pass ends where every wave break ends: with the wave. A pass cut
     // short before the handover still owes it - a match cannot start a wave
     // with the previous player's run loaded.
@@ -3417,14 +3431,14 @@ class Game {
           w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
-      const deal = h.object.userData.deal;
-      if (deal) {
-        // Same contract as a totem: the pellet stops on the pillar whether or
-        // not the deal was taken. A deal the player cannot afford is a wall.
-        this._claimDeal(deal);
+      const item = h.object.userData.item;
+      if (item) {
+        // Same contract as a totem: the pellet stops on the pedestal whether or
+        // not the item was taken.
+        this._claimItem(item);
         hitProp = true;
         end = h.point;
-        this.effects.impact(end, deal.offer ? deal.offer.theme : 0xff1744,
+        this.effects.impact(end, item.offer ? item.offer.theme : 0xb388ff,
           w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
@@ -3541,7 +3555,7 @@ class Game {
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
     this.totemArea.addTargets(targets);
-    this.devilArea.addTargets(targets);
+    this.itemArea.addTargets(targets);
 
     const spread = this._shotSpread();
     let hitAny = false;
@@ -3717,14 +3731,10 @@ class Game {
     // a hit that silently fails to land reads as nothing happening at all.
     if (this.player.mods.dodgeChance > 0 && Math.random() < this.player.mods.dodgeChance) {
       this.player.startDodge(this.time);
-      // Demonic Dodge's half: a second of invulnerability to leave in and
-      // three of doubled damage to answer with. A no-op for a player who owns
-      // only Evasion, which is why the roll above is shared.
-      this.player.startDodgeReward(this.time);
       this.effects.shockwave(this.player.pos, 0x18ffff, 3, 0.35);
       this.effects.burst(pos, 0x18ffff, 14, 5, 2.5, 0.4);
       this.sfx.melee();
-      this.ui.banner(this.player.mods.dodgeRage > 0 ? 'DODGE  \u00b7  RAGE' : 'DODGE');
+      this.ui.banner('DODGE');
       return;
     }
     // Holy Mantle. The ward eats the hit whole, however big it was, and is
@@ -3925,7 +3935,7 @@ class Game {
     // It SHOOTS the totem it wants. Shooting picks exactly the one it aimed at
     // and needs no proximity, and it walks toward the target at the same time
     // so a blocked line of sight resolves itself. The E path is the human one
-    // and is covered by test/devil.mjs instead - a bot pressing a key at
+    // and is covered by test/active.mjs instead - a bot pressing a key at
     // whatever it happened to be standing next to would test nothing.
     let seekTotem = null;
     if (this.totemArea.active && !this.totemArea.claimed) {
@@ -4116,16 +4126,6 @@ class Game {
         this.waveState = 'intermission';
         this.score += 100 * this.wave;
         this.lastPerfect = this.waveDamageTaken <= 0;
-        // The Devil's ledger for this block of five. Counted here rather than
-        // read at the boss, because a wave the player never has to think about
-        // again is exactly where a running tally belongs - and it is
-        // deliberately never shown: the odds are meant to be felt as "he turns
-        // up when I play well", not audited against a number on the HUD.
-        if (this.lastPerfect) this.cleanWaves++;
-        // What that tally is scored against. Solo never reads it - a block is
-        // always five waves there - but versus splits the block between two
-        // players and the odds have to be a rate. See _rollDevil.
-        this.wavesCleared++;
         // Everything still on the floor comes in, so a wave's money can never
         // be lost to the shopping trip that follows it - and neither can a
         // health crate the player never had a safe second to walk over.
@@ -4172,11 +4172,6 @@ class Game {
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
         if (this._cfg.boss) this._payBossBonus();
-        // ROLLED AT THE BOSS, PRESENTED AT A SHOP. In solo those are the same
-        // break and this reads exactly as it always did; in versus they are
-        // not, and the split is what lets the benched player have their own
-        // odds on a boss they never saw.
-        if (this._cfg.boss) this._rollDevil();
         // THE CHALLENGE CLEAR ENDS THE MATCH HERE, not after a mutation pick.
         //
         // Clearing a wave the other player died on IS the win (see
@@ -4192,7 +4187,7 @@ class Game {
           return;
         }
         this._presentTotems();
-        this._presentDevil();
+        this._presentItem();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
@@ -4218,84 +4213,38 @@ class Game {
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
-    // A totem claim is what starts the next wave, so with a Devil standing the
-    // arm delay is longer: ending the shopping trip with a pellet that was
+    // A REROLL IS NOT A NEW SHOP. The count is what decides whether the far row
+    // comes up, and a player who rerolls three times has not visited three
+    // shops - they have paid three times for one.
+    if (!isReroll) this.shopCount++;
+    // A totem claim is what starts the next wave, so with the item row standing
+    // the arm delay is longer: ending the shopping trip with a pellet that was
     // already in the air when the wave ended is a mistake the player cannot
-    // undo. Read at present() time, which is why _presentDevil() runs after
-    // this on a wave clear and re-arms them itself.
-    const arm = this.devilArea.active ? ARM_TIME_DEVIL : undefined;
+    // undo. Read at present() time, which is why _presentItem() runs after this
+    // on a wave clear and re-arms them itself.
+    const arm = this.itemArea.active ? ARM_TIME_ITEM : undefined;
     this.totemArea.present(this._buildOffers(), !isReroll, arm);
     this._refreshStations();
   }
 
   /**
-   * Decides whether the Devil is coming, on odds bought by the block of five
-   * that just ended - see DEVIL_CHANCE.
+   * Raises the active item row, on every ITEM_SHOP_EVERY-th shop.
    *
-   * BOSS WAVES ONLY. Demonic Presence makes him certain, but does NOT move him
-   * off the boss: it upgrades the player's odds, not his schedule, because a
-   * mod that put him back at every wave break would hand back the exact glut
-   * the boss gating exists to remove.
-   *
-   * The block counter is cleared here whether or not he came, so the next five
-   * waves are always scored from zero and a roll that missed cannot be
-   * re-rolled by anything later.
-   *
-   * SPLIT FROM THE PRESENTATION so versus can have two ledgers - the deciding
-   * and the raising are the same break in solo and are not in a hot seat.
+   * A COUNT, NOT A ROLL, and nothing about the player's performance moves it -
+   * see the note on ITEM_SHOP_EVERY. It runs after _presentTotems() on a wave
+   * clear, which is what lets it re-arm the totems it just made slower.
    */
-  _rollDevil() {
-    if (!this.match) {
-      // SOLO, UNCHANGED. The raw integer index into the table, because a solo
-      // player really did see all five waves of the block.
-      const clean = Math.min(this.cleanWaves, DEVIL_CHANCE.length - 1);
-      this.cleanWaves = 0;
-      this.wavesCleared = 0;
-      this.devilPending = this.player.mods.devilAlways > 0
-        || Math.random() < DEVIL_CHANCE[clean];
-      return;
-    }
-    // VERSUS ROLLS BOTH RUNS, on every boss, whoever fought it. The ledger is
-    // about how a player played their share of the block, not about which
-    // five-wave slot their turns happened to land in - and a player who never
-    // gets a roll because the bosses kept falling on the other player's turn
-    // would be locked out of the largest power spikes in the game for reasons
-    // that have nothing to do with them.
-    const m = this.match;
-    const other = m.slots[m.other];
-    this.devilPending = this.devilPending
-      || this.player.mods.devilAlways > 0
-      || Math.random() < devilChanceScaled(DEVIL_CHANCE, this.cleanWaves, this.wavesCleared);
-    this.cleanWaves = 0;
-    this.wavesCleared = 0;
-    // DEMONIC PRESENCE is read off the snapshot for the same reason Midas is:
-    // the benched player has no live mods to ask.
-    other.game.devilPending = other.game.devilPending
-      || other.devilAlways > 0
-      || Math.random() < devilChanceScaled(
-        DEVIL_CHANCE, other.game.cleanWaves, other.game.wavesCleared
-      );
-    other.game.cleanWaves = 0;
-    other.game.wavesCleared = 0;
-  }
-
-  // Raises the deal row, if this player is owed one. In solo that is always
-  // the boss break it was rolled on; in versus it is whichever of that
-  // player's breaks comes next, which may be an ordinary wave.
-  _presentDevil() {
-    if (!this.devilPending) return;
-    this.devilPending = false;
+  _presentItem() {
+    if (this.shopCount % ITEM_SHOP_EVERY !== 0) return;
     if (!this.totemArea.active) return;
-    const offers = this._buildDeals();
-    if (!offers.length) return;
-    this.devilArea.present(offers);
-    this._refreshDevil();
-    // The totems went up first and armed for ARM_TIME. Now that he is here they
-    // need the longer delay, so they are re-presented with the same offers.
+    this.itemArea.present(this._buildItem());
+    this._refreshItem();
+    // The totems went up first and armed for ARM_TIME. Now that a second row is
+    // standing they need the longer delay, so their timers are pushed out.
     for (const t of this.totemArea.totems) {
-      if (t.state !== 'hidden' && !t.claimed) t.armT = Math.max(t.armT, ARM_TIME_DEVIL);
+      if (t.state !== 'hidden' && !t.claimed) t.armT = Math.max(t.armT, ARM_TIME_ITEM);
     }
-    this.sfx.devil();
+    this.sfx.itemRow();
   }
 
   // Puts each rolled upgrade into the shape a totem can draw.
@@ -4318,33 +4267,37 @@ class Game {
   }
 
   // The same shape _buildOffers() produces, plus the two fields that make a
-  // totem a DEAL: what it costs in max HP, and whether the player can pay it.
-  // `enabled` is what greys the pillar out and makes it refuse to be claimed -
-  // see Totem.canClaim() and Player.canPay().
-  _buildDeals() {
-    const ids = rollDeals(this.player.upgrades, DEVIL_COUNT);
-    return ids.map((id) => {
-      const def = UPGRADES[id];
-      return {
-        id,
-        name: def.name,
-        theme: def.theme,
-        effects: effectLines(def, 0),
-        cost: def.cost,
-        enabled: this.player.canPay(def.cost),
-      };
-    });
+  // pedestal an ACTIVE ITEM: `kind`, which draws the header line and the second
+  // floor ring, and a `note` saying how long it takes to charge - the one
+  // number that decides whether the item is worth the slot.
+  _buildItem() {
+    const id = rollItem(this.player.item);
+    const def = ACTIVE_ITEMS[id];
+    return {
+      id,
+      kind: 'item',
+      name: def.name,
+      theme: def.theme,
+      effects: def.effects,
+      // What it REPLACES, when it replaces something. The swap is the whole
+      // cost of taking it and it is the one thing the player cannot read off
+      // the pillar otherwise - the HUD slot is behind them while they read it.
+      note: this.player.item && this.player.item !== id
+        ? 'REPLACES ' + ACTIVE_ITEMS[this.player.item].name
+        : def.cooldown + 's TO CHARGE',
+    };
   }
 
-  // Redraws the Devil's reroll label and re-tests every standing deal against
-  // the health the player has left. Called after anything that spends max HP,
-  // because a deal that was affordable before a purchase may not be after it.
-  _refreshDevil() {
-    const area = this.devilArea;
+  // Redraws the item row's two console labels. Called after anything that
+  // spends against them - a reroll, a max-health purchase - and when the row
+  // rises.
+  _refreshItem() {
+    const area = this.itemArea;
     if (!area.active) return;
-    area.refresh((cost) => this.player.canPay(cost));
-    const cost = dealRerollCost(area.rerolls);
-    area.rerollStation.setLabel('REROLL', cost + ' MAX HP', !this._stationBlocked(area.rerollStation));
+    const cost = this._itemRerollCost();
+    area.rerollStation.setLabel(
+      'REROLL', '$' + cost, !this._stationBlocked(area.rerollStation)
+    );
     // The only console that names its gain as well as its price. MAX HEALTH is
     // the one purchase whose title does not say what it does - see the note on
     // Station.setLabel - and it is also the most expensive thing in the game.
@@ -4368,6 +4321,15 @@ class Game {
 
   _rerollCost() {
     return rerollCost(this.totemArea.rerolls, this.wave);
+  }
+
+  // THE ITEM REROLL IS PRICED AS A MUTATION REROLL, off its own counter. Same
+  // base, same doubling, same block step - rerolling an item is the same act as
+  // rerolling a totem set and should not need a second price to be learned. The
+  // counter is separate so that spending three rerolls on the totems does not
+  // silently make the item unaffordable.
+  _itemRerollCost() {
+    return rerollCost(this.itemArea.rerolls, this.wave);
   }
 
   // Redraws both station labels. Only called when something they display
@@ -4407,59 +4369,64 @@ class Game {
     this.pad.rumble(0.5, 0.6, 220, 2);
     this.totemArea.dismiss();
     // The totem claim is the definitive one: it is what starts the next wave,
-    // so the Devil packs up with it whether or not anything was bought. That
-    // is the single rule at the boundary, and the Devil's own panel says so.
-    this.devilArea.dismiss();
+    // so the far row packs up with it whether or not anything was taken. That
+    // is the single rule at the boundary, and the item's own panel says so.
+    this.itemArea.dismiss();
   }
 
-  // Buys the deal a pillar is offering. Every path in - touch and shot -
-  // funnels through here, so the price is charged in exactly one place.
+  // Takes the active item the pedestal is offering. Every path in - touch and
+  // shot - funnels through here, so the swap happens in exactly one place.
+  //
+  // IT IS FREE, and it is the SLOT that it costs. There is no price to refuse
+  // and no affordability to check: the only thing taking an item can cost the
+  // player is the item they were already carrying, which is why the banner has
+  // to name the swap. A player who walks away from a pedestal has lost nothing
+  // but the walk.
   //
   // The TOTEMS are left standing: the wave is still waiting on them, and a
-  // player who takes a deal still has their free mutation to choose. What does
-  // go is everything of the Devil's - the pillar just claimed along with the
-  // two beside it, his consoles and the Devil himself. He used to stay up
-  // behind a spent shop with the taken pillar still glowing, which read as an
-  // offer that was still open.
-  _claimDeal(deal, byKey = false) {
-    if (!(byKey ? deal.canUse() : deal.canClaim())) return;
-    const offer = deal.offer;
-    // canClaim() already refused an unaffordable deal via `enabled`, and
-    // payMaxHp refuses again on its own. Two guards on the one thing in the
-    // game that could otherwise kill a player who only pressed a button.
-    if (!this.player.payMaxHp(offer.cost)) {
-      this.sfx.denied();
-      return;
-    }
-    if (!this.player.takeUpgrade(offer.id)) return;
-    deal.claimed = true;
+  // player who takes an item still has their free mutation to choose. What goes
+  // is this row - the pedestal and both its consoles - because a spent pedestal
+  // still glowing behind a closed shop reads as an offer that is still open.
+  _claimItem(pedestal, byKey = false) {
+    if (!(byKey ? pedestal.canUse() : pedestal.canClaim())) return;
+    const offer = pedestal.offer;
+    const replaced = this.player.giveItem(offer.id);
+    pedestal.claimed = true;
 
     this.effects.burst(
-      this._killPos.set(deal.pos.x, 1.4, deal.pos.z), offer.theme, 34, 7, 2.5, 0.8
+      this._killPos.set(pedestal.pos.x, 1.4, pedestal.pos.z), offer.theme, 34, 7, 2.5, 0.8
     );
-    this.effects.shockwave(this._killPos, 0xff1744, 5, 0.5);
+    this.effects.shockwave(this._killPos, offer.theme, 5, 0.5);
     this.effects.addShake(0.16);
-    this.sfx.deal();
-    // The Devil's is longer and lower than a totem's. It cost health.
-    this.pad.rumble(0.8, 0.35, 420, 3);
-    this.ui.banner(offer.name + '  \u2013' + offer.cost + ' MAX HP');
-    this.devilArea.dismiss();
+    this.sfx.itemTake();
+    this.pad.rumble(0.7, 0.4, 300, 3);
+    // NAMING THE SWAP IS THE POINT OF THIS BANNER. Losing an item you were
+    // relying on, silently, at a wave break, is the one mistake this system can
+    // make that the player would not notice until the fight that needed it.
+    this.ui.banner(
+      replaced
+        ? offer.name + '  REPLACES  ' + ACTIVE_ITEMS[replaced].name
+        : offer.name + '  READY'
+    );
+    this.itemArea.dismiss();
   }
 
-  // A Devil reroll. Priced in max HP rather than credits and doubling the same
-  // way the credit reroll does, so shopping the whole catalogue at one wave
-  // break costs more health than any build can spare.
-  _rerollDeals() {
-    const area = this.devilArea;
-    const cost = dealRerollCost(area.rerolls);
-    if (!area.active || area.claimed || !this.player.payMaxHp(cost)) {
+  // An item reroll. Priced in CREDITS at the mutation reroll's own rate and
+  // doubling the same way, so a player who wants a particular item can chase it
+  // and pay a shop's worth of ammo for the privilege.
+  _rerollItem() {
+    const area = this.itemArea;
+    const cost = this._itemRerollCost();
+    if (!area.active || area.claimed || this.credits < cost) {
       this.sfx.denied();
       return;
     }
+    this.credits -= cost;
     area.rerolls++;
-    area.present(this._buildDeals(), false);
-    this._refreshDevil();
-    this.effects.burst(area.devil.pos, 0xff1744, 20, 5, 2, 0.5);
+    area.present(this._buildItem(), false);
+    this._refreshItem();
+    this._refreshStations();
+    this.effects.burst(area.pedestal.pos, area.pedestal.offer.theme, 20, 5, 2, 0.5);
     this.sfx.reroll();
   }
 
@@ -4468,7 +4435,7 @@ class Game {
   // it any more - see the note at the top of totems.js.
   _updateTotems(dt) {
     this.totemArea.update(dt, this.time, this.player.pos);
-    this.devilArea.update(dt, this.time, this.player.pos);
+    this.itemArea.update(dt, this.time, this.player.pos);
 
     const use = this._useTarget();
     if (!use) {
@@ -4488,7 +4455,7 @@ class Game {
    * radii overlap, so the NEAREST wins rather than whichever happened to be
    * checked first.
    *
-   * @returns {?{kind: string, target: object}} kind is 'totem' | 'deal' |
+   * @returns {?{kind: string, target: object}} kind is 'totem' | 'item' |
    *   'station'.
    */
   _useTarget() {
@@ -4501,9 +4468,9 @@ class Game {
     };
     consider(this.totemArea.usable(this.player.pos), 'totem');
     consider(this.totemArea.stationInRange(this.player.pos), 'station');
-    consider(this.devilArea.usable(this.player.pos), 'deal');
-    // His two consoles rank with the other two: same kind, same resolver.
-    consider(this.devilArea.stationInRange(this.player.pos), 'station');
+    consider(this.itemArea.usable(this.player.pos), 'item');
+    // Its two consoles rank with the other two: same kind, same resolver.
+    consider(this.itemArea.stationInRange(this.player.pos), 'station');
     return best;
   }
 
@@ -4528,10 +4495,14 @@ class Game {
     if (use.kind === 'totem') {
       return [lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
     }
-    if (use.kind === 'deal') {
+    if (use.kind === 'item') {
+      // The prompt says what the pillar's bottom line says, because a player
+      // standing close enough to read the prompt is looking at the prompt: it
+      // is either the swap they are about to make or what the item costs in
+      // wave time, and both are the reason to hesitate.
       return [
         lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">\u2212' + t.offer.cost + ' MAX HP</span>',
+        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.offer.note + '</span>',
         false,
       ];
     }
@@ -4551,13 +4522,12 @@ class Game {
         false,
       ];
     }
-    // The two rerolls read the same except for what they redraw and what they
-    // cost - his is the one priced in flesh.
-    if (t.kind === 'dealReroll') {
+    // The two rerolls read the same except for what they redraw. They are
+    // priced identically and off separate counters - see _itemRerollCost.
+    if (t.kind === 'itemReroll') {
       return [
-        lead + 'REROLL &nbsp;·&nbsp; NEW DEALS &nbsp;·&nbsp; '
-        + '<span class="prompt-cost">\u2212' + dealRerollCost(this.devilArea.rerolls)
-        + ' MAX HP</span>',
+        lead + 'REROLL &nbsp;·&nbsp; NEW ITEM &nbsp;·&nbsp; '
+        + '<span class="prompt-cost">$' + this._itemRerollCost() + '</span>',
         false,
       ];
     }
@@ -4583,16 +4553,15 @@ class Game {
       return null;
     }
     if (st.kind === 'maxhp') {
-      if (!this.devilArea.healthAvailable) return 'ALREADY BOUGHT';
+      if (!this.itemArea.healthAvailable) return 'ALREADY BOUGHT';
       if (this.credits < MAXHP_PURCHASE.cost) return 'NEED $' + MAXHP_PURCHASE.cost;
       return null;
     }
-    if (st.kind === 'dealReroll') {
-      const area = this.devilArea;
+    if (st.kind === 'itemReroll') {
+      const area = this.itemArea;
       if (!area.active || area.claimed) return 'NOTHING TO REROLL';
-      // Priced in max HP, so the wallet is not what is asked - canPay() is,
-      // and it refuses any price that would take the player to the floor.
-      if (!this.player.canPay(dealRerollCost(area.rerolls))) return 'NOT ENOUGH MAX HP';
+      const cost = this._itemRerollCost();
+      if (this.credits < cost) return 'NEED $' + cost;
       return null;
     }
     const cost = this._rerollCost();
@@ -4601,16 +4570,15 @@ class Game {
     return null;
   }
 
-  // E at a station, from anywhere in its radius.
-  // E. Takes whatever _useTarget() says is nearest - a mutation, a deal, a
-  // reroll or an ammo refill - so the key always does the thing the prompt on
-  // screen just said it would.
+  // E. Takes whatever _useTarget() says is nearest - a mutation, an active
+  // item, a reroll or an ammo refill - so the key always does the thing the
+  // prompt on screen just said it would.
   tryUse() {
     if (this.state !== 'playing') return;
     const use = this._useTarget();
     if (!use) return;
     if (use.kind === 'totem') this._claimTotem(use.target, true);
-    else if (use.kind === 'deal') this._claimDeal(use.target, true);
+    else if (use.kind === 'item') this._claimItem(use.target, true);
     else this._useStation(use.target);
   }
 
@@ -4643,15 +4611,14 @@ class Game {
       MAXHP_PURCHASE.apply(this.player);
       // Counts against the visit's allowance. The console stays up until that
       // is spent and then goes down on the spot rather than standing there
-      // greyed out, because unlike an unaffordable deal there is nothing left
-      // for it to say.
-      this.devilArea.spendHealth();
+      // greyed out, because there is nothing left for it to say.
+      this.itemArea.spendHealth();
       this.ui.banner(MAXHP_PURCHASE.name + '  ' + MAXHP_PURCHASE.detail);
       this.sfx.buy();
-    } else if (st.kind === 'dealReroll') {
-      // Charged inside _rerollDeals(), in max HP, along with every other guard
-      // that purchase needs - this console is only the way in.
-      this._rerollDeals();
+    } else if (st.kind === 'itemReroll') {
+      // Charged inside _rerollItem(), along with every other guard that
+      // purchase needs - this console is only the way in.
+      this._rerollItem();
     } else {
       this.credits -= this._rerollCost();
       this.totemArea.rerolls++;
@@ -4660,7 +4627,7 @@ class Game {
     }
     this.effects.burst(st.pos, st.color, 16, 5, 2, 0.45);
     this._refreshStations();
-    this._refreshDevil();
+    this._refreshItem();
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
@@ -5693,6 +5660,30 @@ class Game {
         ? (this.player.salvoEnd - this.time) / this.player.mods.salvoTime : 0
     );
     this.ui.setStatuses(this.player);
+    // THE ACTIVE ITEM SLOT. Hidden entirely while nothing is carried - an empty
+    // frame in the corner is a permanent question about a system the player has
+    // not met yet.
+    const item = this.player.item ? ACTIVE_ITEMS[this.player.item] : null;
+    this.ui.setItem(
+      this.player.item, item,
+      item ? Math.min(1, this.player.itemCharge / item.cooldown) : 0,
+      // The bar is FROZEN, not merely full, at the wave break. Said explicitly
+      // so the plate can show it: a bar that simply stopped moving looks like a
+      // bug, and this is a rule the player has to be able to see.
+      this.waveState !== 'active'
+    );
+    // The button that fires it, in the language of whatever is in the player's
+    // hands. Called from here rather than from _setInputMode because that only
+    // runs on a CHANGE - a run played entirely on the keyboard never changes
+    // mode, and the label would never be written at all. Cached like every
+    // other setter in ui.js, so the per-frame call costs a comparison.
+    this.ui.setItemKey(this.inputMode === 'pad');
+    // AEGIS holds a vignette for the length of its window. Both damage sinks
+    // return in silence while invulnEnd is ahead, so without this the strongest
+    // item in the pool is indistinguishable from a quiet few seconds.
+    this.ui.setInvuln(
+      this.player.invulnEnd > this.time ? (this.player.invulnEnd - this.time) : 0
+    );
     if (this._statsHeld) this.ui.updateStats(this._statRows());
   }
 
@@ -5759,8 +5750,13 @@ class Game {
     if (p.mods.hpBankCap > 0) {
       rows.push(['BANKED MAX HP', '+' + p.hpBanked + ' / ' + p.mods.hpBankCap, p.hpBanked > 0]);
     }
-    if (p.mods.dashCharges > 0) {
-      rows.push(['DASHES', p.dashLeft + ' / ' + p.mods.dashCharges, p.dashLeft > 0]);
+    if (p.item) {
+      const def = ACTIVE_ITEMS[p.item];
+      rows.push([
+        def.name,
+        p.itemReady ? 'READY' : Math.round(p.itemCharge) + ' / ' + def.cooldown + 's',
+        p.itemReady,
+      ]);
     }
     if (p.mods.extraJumps > 0) {
       rows.push(['AIR JUMPS', p.jumpsLeft + ' / ' + p.mods.extraJumps, p.jumpsLeft > 0]);
@@ -5777,7 +5773,7 @@ class Game {
     // dt does not merely stall the game: it RUNS IT BACKWARDS. `this.time`
     // walks below zero, and every deadline in the run is a game-time number
     // compared with `> this.time`, initialised to 0 and meaning "not armed" -
-    // invulnEnd, rageEnd, dodgeEnd, frozenUntil, Opening Salvo's window. Below
+    // invulnEnd, dodgeEnd, frozenUntil, Opening Salvo's window. Below
     // zero, all of them read as ARMED, so a run reads as invulnerable, raging,
     // and firing free ammunition, with nothing on screen to say why.
     //
@@ -5812,10 +5808,6 @@ class Game {
       // player below is updated exactly as on any other frame.
       if (this._pass) this._updatePass(dt);
       if (this.autoTest) this._autoInput();
-      if (this.input.dash) {
-        this.player.tryDash(this.input.dash, this.time);
-        this.input.dash = null;
-      }
       // The last argument is the combat gate: regeneration and Ammo Fabricator
       // only tick while a wave is actually running, so the wave break cannot be
       // farmed for free health or free rounds. Same test _fillRigState uses.
@@ -5863,6 +5855,20 @@ class Game {
         // A dash is the biggest thing the player does that nothing hits them
         // for, so it is the one movement that gets a shove rather than a tick.
         this.pad.rumble(0.55, 0.3, 150, 2);
+      }
+      // THE ACTIVE ITEM CAME BACK. One shot on the frame the bar fills, never
+      // per frame while it is full - the flag is set once inside Player.update
+      // and cleared here, the same split dashFx and jumpFx use.
+      //
+      // It is a SOUND and not a banner because it lands mid-fight: the player
+      // is looking at the crosshair, the bar is in the corner, and the only
+      // channel that reaches them without taking their eyes off the room is
+      // their ears. The HUD plate flashes with it for anyone who does look.
+      if (this.player.itemReadyFx) {
+        this.player.itemReadyFx = false;
+        this.sfx.itemReady();
+        this.pad.rumble(0.2, 0.45, 90, 1);
+        this.ui.flashItemReady();
       }
 
       // THE ZOOM HAS TO REACH THE ORBS. Money is drawn as points whose pixel

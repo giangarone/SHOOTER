@@ -125,7 +125,7 @@ scene.add(shaft);
 let icon = null;
 function select(key) {
   const d = meta(key);
-  document.getElementById('title').textContent = (d.devil ? '◆ ' : '') + d.name;
+  document.getElementById('title').textContent = d.name;
   document.getElementById('title').style.color = '#' + d.theme.toString(16).padStart(6, '0');
   shaftMat.color.setHex(d.theme);
 

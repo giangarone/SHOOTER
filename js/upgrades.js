@@ -37,12 +37,6 @@ export const RARITY = {
   common: { label: 'COMMON', color: '#9fb4d8', weight: 1 },
   rare: { label: 'RARE', color: '#4ef3ff', weight: 0.42 },
   cursed: { label: 'CURSED', color: '#ff3d00', weight: 0.3 },
-  // Devil Deals. Weight 0 so a deal can never leak into a normal totem roll
-  // even if the `devil` guard in rollTotems() is ever lost - the rarity gate
-  // would drop it on its own. The label and colour are what the offer CARDS
-  // used to print; they no longer do (see Totem._draw), so this entry exists
-  // purely as a weight now.
-  devil: { label: 'DEVIL DEAL', color: '#ff1744', weight: 0 },
 };
 
 // THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
@@ -116,34 +110,22 @@ export const THEME = {
   ice: 0x7fe3ff,
   fear: 0x9d4edd,
   stone: 0x9aa5b1,
-};
-
-// DEVIL DEAL COLOURS.
-//
-// These follow THEME's rule and not a devil-red one: colour says what the
-// upgrade DOES. Antidote is green because it is about poison and Absolute Zero
-// is pale blue because it is about ice, and a run of thirteen identical
-// crimsons would have thrown away the one thing that makes a pillar readable
-// from across the arena. Most of them ARE blood and ember, because most of
-// these deals are about damage and dying - that is the subject matter doing
-// the work, not a palette rule.
-//
-// What says "this one costs you" is the PANEL: a red DEVIL DEAL header and a
-// red price line, on every one of them, which is a far stronger and more
-// specific signal than a hue could be. Kept in their own map only so the
-// deals can be shaded apart from the free pool without colliding with it.
-export const DEVIL_THEME = {
+  // The eleven that came in from the old Devil row. They kept the colours they
+  // were drawn in, because those already followed the rule above - Antidote is
+  // green because it is about poison, Absolute Zero pale blue because it is
+  // about ice - and they are folded into the families here rather than left in
+  // a map of their own now that there is no second row to shade them apart
+  // from. Two of them DID move: hellfire and gamble were drawn in the exact
+  // values `damage` and `shrapnel` already hold, which the rule above forbids.
   carnage: 0xff1744,
   pact: 0xb71c1c,
-  dodge: 0xff4081,
-  hellfire: 0xff3d00,
+  hellfire: 0xdd2c00,
   affliction: 0x7b1fa2,
   zero: 0x4fc3f7,
   overload: 0xffca28,
   executioner: 0x880e4f,
   antidote: 0x66bb6a,
-  gamble: 0xff7043,
-  presence: 0x6d1b3d,
+  gamble: 0xff5252,
   thorns: 0xd84315,
   power: 0xe53935,
 };
@@ -941,21 +923,6 @@ export const UPGRADES = {
     effects: [['JUMP AGAIN IN MIDAIR', GOOD], ['CLEARS ~4.5m TOTAL', NOTE]],
     apply: (mods, n) => { mods.extraJumps = n; },
   },
-  doubleDash: {
-    name: 'DOUBLE DASH',
-    rarity: 'rare',
-    max: 1,
-    theme: THEME.surge,
-    // Bound to a double-tap rather than to a key of its own because the game
-    // has no spare finger: the player is already holding a movement key, the
-    // mouse and the trigger. Tapping the direction you are ALREADY running is
-    // the one input that costs nothing to reach.
-    //
-    // W ONLY - see Player.tryDash. A dash that could go backwards was a free
-    // disengage rather than a commitment, and the commitment is the cost.
-    effects: [['DOUBLE-TAP W', NOTE], ['TO DASH FORWARD', GOOD], ['2 CHARGES, 2.5s EACH', NOTE]],
-    apply: (mods, n) => { mods.dashCharges = 2 * n; },
-  },
 
   // PERMANENT MAX HP, on the same flawless flag No-Hit Bonus reads. The two
   // are deliberately different rewards for one piece of play: that one makes
@@ -1046,36 +1013,34 @@ export const UPGRADES = {
       mods.plantDelay = 3;
     },
   },
-  // ---- DEVIL DEALS -------------------------------------------------------
+  // ---- THE OLD DEVIL DEALS ------------------------------------------------
   //
-  // Everything below is flagged `devil: true` and carries a `cost` in MAX HP.
-  // They live in this same map on purpose: a deal IS a mutation - it lights a
-  // receiver plate, shows in the build sheet and rebuilds through
-  // Player.rebuildMods() exactly like the free half of the pool does. The flag
-  // is only about where it can be OFFERED, and rollTotems() is the one place
-  // that reads it.
+  // These eleven were sold, not given: a second row at the wave break charged
+  // MAX HEALTH for them, permanently. That row is gone (it sells active items
+  // now - see js/items.js), and they are ordinary mutations, rolled onto free
+  // totems like everything above.
   //
-  // `cost` is permanent. It is the only resource in the game that never comes
-  // back, which is the whole reason the Devil is worth walking to - and why
-  // main.js refuses a deal outright rather than letting one kill you. See
-  // Player.canPay() and MIN_MAX_HEALTH.
+  // WHAT CHANGED WHEN THE PRICE DID. A deal did not need a drawback, because
+  // the price WAS the drawback and it was the same price for every build. Free,
+  // each one has to weigh itself, so the rarity is assigned by whether it
+  // already carried a real cost - `cursed` where it does, `rare` where the
+  // effect stands on its own. Only EXECUTIONER still charges health, and it
+  // charges it as a mod rather than as a payment: see mods.maxHpFlat.
 
   carnage: {
     name: 'CARNAGE',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
+    rarity: 'rare',
     max: 1,
     mark: true,
-    theme: DEVIL_THEME.carnage,
+    theme: THEME.carnage,
     // Named CARNAGE and not Bloodlust because BLOODLUST is already in this map
     // above, paying fire rate for a combo. Two mutations with one name would be
     // unreadable on the build sheet.
     // A CAP, and a smaller step under it. Uncapped at 5% a kill it was the
-    // best damage in the game after twenty kills and absurd after fifty - a
-    // deal whose price stopped mattering. At 1% to a ceiling of +100% the
-    // hundred-kill chain is the target rather than the accident, and the
-    // thing it costs you is still that any hit at all takes it all back.
+    // best damage in the game after twenty kills and absurd after fifty. At 1%
+    // to a ceiling of +100% the hundred-kill chain is the target rather than
+    // the accident, and what it costs you is that any hit at all takes it all
+    // back - which is the whole drawback now that no health is charged for it.
     effects: [['KILLS: +1% DAMAGE', GOOD], ['UP TO +100%', NOTE], ['RESET WHEN HURT', BAD]],
     apply: (mods, n) => {
       mods.carnageStep = 0.01 * n;
@@ -1084,43 +1049,21 @@ export const UPGRADES = {
   },
   bloodPact: {
     name: 'BLOOD PACT',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
+    rarity: 'cursed',
     max: 1,
-    theme: DEVIL_THEME.pact,
+    theme: THEME.pact,
     effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE +25% DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.killHeal = 3 * n;
       mods.damageTakenMult *= 1 + 0.25 * n;
     },
   },
-  demonicDodge: {
-    name: 'DEMONIC DODGE',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
-    max: 1,
-    theme: DEVIL_THEME.dodge,
-    // dodgeChance is the same field Evasion sets, so the two ADD - a player who
-    // owns both dodges more often, and both mutations still read as doing the
-    // thing they say. The reward on top is what makes this the devil's version.
-    effects: [['10% DODGE CHANCE', GOOD], ['DODGE: 1s INVULNERABLE', GOOD], ['AND +100% DMG FOR 3s', GOOD]],
-    apply: (mods, n) => {
-      mods.dodgeChance += 0.1 * n;
-      mods.dodgeInvuln = 1;
-      mods.dodgeRage = 1.0;
-      mods.dodgeRageTime = 3;
-    },
-  },
   hellfire: {
     name: 'HELLFIRE',
-    rarity: 'devil',
-    devil: true,
-    cost: 10,
+    rarity: 'rare',
     max: 1,
     mark: true,
-    theme: DEVIL_THEME.hellfire,
+    theme: THEME.hellfire,
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
     effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 3s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
@@ -1132,12 +1075,10 @@ export const UPGRADES = {
   },
   eternalAffliction: {
     name: 'ETERNAL AFFLICTION',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
+    rarity: 'cursed',
     max: 1,
     mark: true,
-    theme: DEVIL_THEME.affliction,
+    theme: THEME.affliction,
     // The drafted drawback was "status effects on you last twice as long", and
     // the player has no status effects - only hazard zones to stand out of. So
     // the cost lands on those instead, which is the same idea in the vocabulary
@@ -1150,51 +1091,62 @@ export const UPGRADES = {
   },
   absoluteZero: {
     name: 'ABSOLUTE ZERO',
-    rarity: 'devil',
-    devil: true,
-    cost: 10,
+    rarity: 'cursed',
     max: 1,
-    theme: DEVIL_THEME.zero,
-    effects: [['ENEMIES & SHOTS', NOTE], ['MOVE 20% SLOWER', GOOD], ['HITS FREEZE YOU 1s', BAD]],
+    theme: THEME.zero,
+    // 30% off everything hostile - bodies and their shots alike - against half
+    // a second rooted every time one connects. The freeze is short on purpose:
+    // it is the one drawback in the pool that takes the controls away, and a
+    // full second of that at close range was a death sentence rather than a
+    // price.
+    effects: [['ENEMIES & SHOTS', NOTE], ['MOVE 30% SLOWER', GOOD], ['HITS FREEZE YOU 0.5s', BAD]],
     apply: (mods, n) => {
-      mods.worldSlow = Math.pow(0.8, n);
-      mods.hitFreeze = 1;
+      mods.worldSlow = Math.pow(0.7, n);
+      mods.hitFreeze = 0.5;
     },
   },
   overload: {
     name: 'OVERLOAD',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
+    rarity: 'rare',
     max: 1,
     mark: true,
-    theme: DEVIL_THEME.overload,
+    theme: THEME.overload,
     // A fraction of MAX HP rather than a flat number, so it stays worth firing
     // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
-    // the pool that scales with the enemy instead of with the build.
+    // the pool that scales with the enemy instead of with the build - and the
+    // health it charges per use is why it needs no drawback beyond itself.
     effects: [['EMPTY THE MAGAZINE:', NOTE], ['LIGHTNING HITS ALL', GOOD], ['FOR 20% OF MAX HP', NOTE]],
     apply: (mods, n) => { mods.overloadFrac = 0.2 * n; },
   },
   executioner: {
     name: 'EXECUTIONER',
-    rarity: 'devil',
-    devil: true,
-    cost: 50,
+    rarity: 'cursed',
     max: 1,
-    theme: DEVIL_THEME.executioner,
-    // The most expensive thing the Devil sells, and the only one that is worth
-    // nothing for four waves out of five. Applies to bosses spawned AFTER it is
-    // taken - a boss already standing keeps the health bar it arrived with.
-    effects: [['BOSSES HAVE 50%', NOTE], ['LESS HEALTH', GOOD]],
-    apply: (mods, n) => { mods.bossHpMult *= Math.pow(0.5, n); },
+    theme: THEME.executioner,
+    // THE ONE MUTATION THAT STILL COSTS MAX HEALTH. It was the most expensive
+    // thing the Devil sold at 50, and it keeps that price now that nothing else
+    // does - halving a boss is worth a permanent third of the bar, and without
+    // the price it would be a free answer to the only fight in the game that is
+    // meant to be a wall.
+    //
+    // Charged through mods.maxHpFlat rather than as a payment, because
+    // rebuildMods() replays the owned list from fresh defaults after every pick:
+    // a price paid once could not survive that, but a mod can.
+    //
+    // Worth nothing for four waves out of five, and it applies to bosses
+    // spawned AFTER it is taken - one already standing keeps the health bar it
+    // arrived with.
+    effects: [['BOSSES HAVE 50%', NOTE], ['LESS HEALTH', GOOD], ['-50 MAX HEALTH', BAD]],
+    apply: (mods, n) => {
+      mods.bossHpMult *= Math.pow(0.5, n);
+      mods.maxHpFlat += 50 * n;
+    },
   },
   antidote: {
     name: 'ANTIDOTE',
-    rarity: 'devil',
-    devil: true,
-    cost: 10,
+    rarity: 'rare',
     max: 1,
-    theme: DEVIL_THEME.antidote,
+    theme: THEME.antidote,
     effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY', NOTE]],
     apply: (mods, n) => {
       mods.poisonImmune = n;
@@ -1203,48 +1155,37 @@ export const UPGRADES = {
   },
   devilsGamble: {
     name: "DEVIL'S GAMBLE",
-    rarity: 'devil',
-    devil: true,
-    cost: 5,
+    rarity: 'cursed',
     max: 1,
     mark: true,
-    theme: DEVIL_THEME.gamble,
+    theme: THEME.gamble,
     // Rolled once per SHOT, not per pellet: a shotgun whose nine pellets each
     // rolled their own coin would average out to nothing, and the whole point
     // is that a shot is either a windfall or a waste.
+    //
+    // The name outlived the Devil. It is a coin toss with the odds barely in
+    // your favour, which is what the phrase means - and renaming a mutation
+    // players already know would cost more than the reference does.
     effects: [['51% OF SHOTS: 2x DMG', GOOD], ['49% OF SHOTS: HALF', BAD]],
     apply: (mods, n) => { mods.gamble = n; },
   },
-  demonicPresence: {
-    name: 'DEMONIC PRESENCE',
-    rarity: 'devil',
-    devil: true,
-    cost: 20,
-    max: 1,
-    theme: DEVIL_THEME.presence,
-    effects: [['THE DEVIL ALWAYS', NOTE], ['APPEARS AFTER A BOSS', GOOD]],
-    apply: (mods, n) => { mods.devilAlways = n; },
-  },
   thorns: {
     name: 'THORNS',
-    rarity: 'devil',
-    devil: true,
-    cost: 5,
+    rarity: 'rare',
     max: 1,
-    theme: DEVIL_THEME.thorns,
+    theme: THEME.thorns,
     effects: [['ATTACKERS TAKE BACK', NOTE], ['50% OF THEIR DAMAGE', GOOD]],
     apply: (mods, n) => { mods.thorns = 0.5 * n; },
   },
   darkPower: {
     name: 'DARK POWER',
-    rarity: 'devil',
-    devil: true,
-    cost: 5,
+    rarity: 'rare',
     max: 1,
-    theme: DEVIL_THEME.power,
-    // The cheapest deal in the pool and the only one with no drawback at all.
-    // It is what the Devil is FOR: five max HP is a real price and +20% damage
-    // is a real answer, with nothing else to weigh.
+    theme: THEME.power,
+    // The plainest entry in the pool: damage, no drawback, no condition. It was
+    // five max HP when the Devil sold it, and free it is still UNDER Hollow
+    // Point - a common, at +30% a stack for a smaller magazine - so it needs no
+    // rebalance to sit here. Not everything has to be a decision.
     effects: [['+20% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; },
   },
@@ -1285,10 +1226,6 @@ function rarityWeight(rarity, wave) {
 export function rollTotems(owned, wave, count = 3) {
   const pool = [];
   for (const key of UPGRADE_KEYS) {
-    // Devil Deals are sold, never given. They share this map so they behave
-    // like every other mutation once owned, but the free totems must never
-    // offer one - a deal handed over for nothing is not a deal.
-    if (UPGRADES[key].devil) continue;
     if ((owned[key] || 0) >= UPGRADES[key].max) continue;
     const w = rarityWeight(UPGRADES[key].rarity, wave);
     if (w > 0) pool.push([key, w]);
@@ -1308,46 +1245,6 @@ export function rollTotems(owned, wave, count = 3) {
     pool.splice(idx, 1);
   }
   return picked;
-}
-
-/**
- * Rolls the Devil's offer. The deal counterpart to rollTotems(), and drawn the
- * same way - without replacement, skipping anything already owned - with one
- * difference: the pool is FLAT. There are only thirteen deals and they are all
- * meant to be reachable, so weighting them against each other would just make
- * a third of the Devil's stock rare on top of already being expensive.
- *
- * Unlike the free pool this is NOT gated on the wave number. A wave-1 player
- * who cleared it untouched has earned the whole catalogue; what stops them
- * buying it is the price, which is the point of the Devil.
- *
- * @param {Object<string, number>} owned  stack count per upgrade id
- * @param {number} count how many pillars to fill
- * @returns {string[]} deal ids, shorter than `count` once the pool runs dry.
- */
-export function rollDeals(owned, count = 3) {
-  const pool = [];
-  for (const key of UPGRADE_KEYS) {
-    if (!UPGRADES[key].devil) continue;
-    if ((owned[key] || 0) >= UPGRADES[key].max) continue;
-    pool.push(key);
-  }
-  const picked = [];
-  while (picked.length < count && pool.length) {
-    const idx = (Math.random() * pool.length) | 0;
-    picked.push(pool[idx]);
-    pool.splice(idx, 1);
-  }
-  return picked;
-}
-
-// What the nth reroll of a single Devil set costs, in MAX HP (n starts at 0):
-// 2, 4, 8, 16. Doubling for the same reason rerollCost() doubles - it stops a
-// player shopping the whole catalogue at one wave break - except the wallet
-// here is a health bar, so the ceiling arrives a great deal faster. Reset when
-// a fresh set rises.
-export function dealRerollCost(n) {
-  return 2 * Math.pow(2, n);
 }
 
 // PRICES CLIMB WITH THE RUN. Both consoles beside the totems charge off a
@@ -1380,16 +1277,17 @@ export function rerollCost(n, wave = 1) {
 // The one thing credits buy outright, sold from a station beside the totems.
 // Healing and shields deliberately are not for sale: health is what upgrades
 // and regeneration are for, and being able to buy safety flattened the wave.
-// The Devil's other console: the only thing in the game that gives max health
-// BACK. His deals are the one price that cannot be earned back, and that was
-// true to the point of being a trap - a run that took two deals early had no
-// answer to it for the next thirty waves.
+// The one thing in the game that gives max health BACK, sold from the console
+// on the left of the ACTIVE ITEM row (js/items.js). Executioner is the only
+// mutation left that charges max health, and without a counter it was a trap:
+// a run that took it on wave 6 had no answer for the next thirty waves.
 //
 // PRICED SO IT IS A DECISION. $5,000 is several waves of shooting, and it is
-// competing with the ammo and the rerolls for the same wallet. It is bought
-// once per Devil visit (devil.js sinks the console after) rather than as many
-// times as the bank allows, so a late run cannot simply stand at the break and
-// convert its whole balance into health.
+// competing with the ammo and both rerolls for the same wallet. It is bought a
+// fixed number of times per VISIT (items.js sinks the console after) rather
+// than as many times as the bank allows, so a late run cannot simply stand at
+// the break and convert its whole balance into health - and because the row
+// only comes up every third shop, the chances to do it at all are rationed.
 //
 // It grants the CURRENT health too. The debt it pays off would otherwise leave
 // the player at the same number they were on with a bigger bar behind it,
@@ -1399,9 +1297,10 @@ export const MAXHP_PURCHASE = {
   detail: '+5 MAX HP',
   cost: 5000,
   apply: (player) => {
-    // Straight against the Devil's ledger, which is where every max-HP price
-    // in the game is charged. It can go NEGATIVE, and that is the point: the
-    // fifth purchase on a run that never took a deal is +25 over base.
+    // Against the run's own max-HP ledger, kept separate from mods.maxHpFlat
+    // so that a purchase is not undone by the next rebuildMods(). It can go
+    // NEGATIVE, and that is the point: the fifth purchase on a run that never
+    // took Executioner is +25 over base.
     player.maxHpDebt -= 5;
     player.health = Math.min(player.maxHealth, player.health + 5);
   },

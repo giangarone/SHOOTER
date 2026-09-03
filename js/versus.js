@@ -3,7 +3,7 @@
 //
 // The mode is a hot seat: one pad, one keyboard, two players, taking one wave
 // each. The WAVE COUNTER IS SHARED and everything else is not - each player
-// carries their own build, health, ammo, credits and Devil odds through the
+// carries their own build, health, ammo, credits and active item through the
 // whole match, and hands the controller over at their wave's end.
 //
 // WHY A SNAPSHOT AND NOT TWO GAMES. Every mutable thing in a run lives on two
@@ -105,38 +105,6 @@ export class VersusMatch {
   }
 }
 
-// ---- the Devil's odds, rescaled -------------------------------------------
-
-/**
- * DEVIL_CHANCE is indexed by clean waves in a block of five, and it assumes
- * the player SAW ALL FIVE. In versus they do not: alternating turns give each
- * player two or three waves of the block, so a raw index would cap a player
- * who was never touched at the 50-75% row and make certainty unreachable - the
- * mode would quietly halve how often the Devil turns up for anyone.
- *
- * So the index becomes a RATE. A player's flawless waves as a fraction of the
- * waves they actually cleared, put back on the table's five-wave scale, and
- * read off it by interpolation rather than rounding: one clean wave out of two
- * and two out of three are genuinely different play, and a rounded index would
- * price them the same.
- *
- * Against solo, for a table of [0.10, 0.25, 0.50, 0.75, 1]:
- *   2 cleared, 2 clean -> 1.000  (a flawless block, same as solo's four-plus)
- *   2 cleared, 1 clean -> 0.625  (between solo's two-clean and three-clean)
- *   3 cleared, 0 clean -> 0.100  (the floor, identical to solo)
- */
-export function devilChanceScaled(table, cleanWaves, wavesCleared) {
-  const last = table.length - 1;
-  // A player with no cleared waves behind them reads as the floor rather than
-  // as a division by zero. It is the first block of the match, and the floor
-  // is what solo pays a player who has been hit every wave.
-  const rate = cleanWaves / Math.max(1, wavesCleared);
-  const t = Math.min(last, rate * table.length);
-  const i = Math.floor(t);
-  if (i >= last) return table[last];
-  return table[i] + (table[i + 1] - table[i]) * (t - i);
-}
-
 // ---- what a snapshot is ---------------------------------------------------
 
 // PLAYER FIELDS THAT ARE NOT RUN STATE. Everything else on the instance is
@@ -184,8 +152,8 @@ const PLAYER_SKIP = new Set([
   '_bobPhase', '_bobAmp', '_sprintPose',
   '_gunOffX', '_gunOffY', '_gunOffZ', '_gunOffRX', '_gunOffRY', '_gunOffRZ',
   // A dash IN FLIGHT. Restoring one would resume a lunge the incoming player
-  // never started, which is a repositioning by another name. The CHARGES that
-  // pay for it (dashLeft, _dashAcc, jumpsLeft) are captured normally.
+  // never started, which is a repositioning by another name. The ITEM that pays
+  // for it (item, itemCharge) and jumpsLeft are captured normally.
   'dashDX', 'dashDZ', 'dashStart', 'dashEnd', '_prevJump', 'jumpFx', 'dashFx',
   // Owned by the pass animation, not by either player - see Player.setHolster.
   'holster',
@@ -214,7 +182,7 @@ const PLAYER_SKIP = new Set([
 // only way this stays correct is if adding a timed field means adding one line
 // in one place.
 const PLAYER_CLOCKS = [
-  'dodgeEnd', 'invulnEnd', 'rageEnd', 'frozenUntil', 'damageBoostEnd',
+  'dodgeEnd', 'invulnEnd', 'frozenUntil', 'damageBoostEnd',
   'fireRateBoostEnd', 'shieldEnd', 'noSprintUntil', 'lastHurt', 'now',
   // Opening Salvo's window. A benched player must not come back to a window
   // that expired while someone else was shooting.
@@ -244,8 +212,10 @@ const GAME_FIELDS = [
   'score', 'kills', 'credits',
   'comboKills', 'comboTimer', 'bestCombo',
   'waveDamageTaken', 'lastPerfect',
-  // The Devil's ledger, and its denominator - see devilChanceScaled.
-  'cleanWaves', 'wavesCleared', 'devilPending',
+  // The shop counter the active item row comes up on. SHARED, in the sense
+  // that both players' runs count their own shops - a schedule is not a reward
+  // and neither player can be unlucky with it.
+  'shopCount',
   'emptyClickCd', '_spreadCd', '_deathCount', '_reliefT',
   '_fireLastX', '_fireLastZ',
   ...GAME_CLOCKS,
@@ -291,9 +261,6 @@ export function captureRun(game) {
     // Midas needs their mods - which do not exist while their build is sitting
     // in a snapshot. One scalar, read at the only moment it is available.
     creditMult: p.mods.creditMult,
-    // Same reasoning, for the Devil's roll: Demonic Presence has to be
-    // readable while its owner is on the bench.
-    devilAlways: p.mods.devilAlways,
   };
 }
 

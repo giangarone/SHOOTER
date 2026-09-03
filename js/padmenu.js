@@ -97,7 +97,7 @@ export function cap(name, cls = '') {
 export const KBM_CONTROLS = [
   ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
   ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
-  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['W W', 'DASH'],
+  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['Q', 'ITEM'],
   ['C', 'CROUCH'], ['SHIFT C', 'SLIDE'], ['E', 'USE'],
   ['TAB', 'STATS'], ['F', 'FULLSCREEN'], ['ESC', 'PAUSE'],
 ];
@@ -105,7 +105,7 @@ export const KBM_CONTROLS = [
 export const PAD_CONTROLS = [
   ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
   ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
-  ['L1', 'DASH'], ['cross', 'JUMP'], ['square', 'RELOAD'],
+  ['L1', 'ITEM'], ['cross', 'JUMP'], ['square', 'RELOAD'],
   ['circle', 'CROUCH'], ['L3 circle', 'SLIDE'], ['R1', 'USE'],
   ['triangle', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
 ];

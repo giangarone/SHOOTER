@@ -15,7 +15,7 @@ Open http://localhost:8123
 
 | Key | Action |
 | --- | --- |
-| WASD | Move. Double-tap W to dash forward, with the Double Dash mutation |
+| WASD | Move. Double-tap W dashes, while BLINK DRIVE is the carried item |
 | Shift | Sprint (hold). Costs stamina; you cannot aim or fire while running |
 | C / Left Ctrl | Crouch (toggle). At a sprint it SLIDES instead |
 | Mouse | Look (pointer lock) |
@@ -24,6 +24,7 @@ Open http://localhost:8123
 | V | Melee — one swing of the gun, one enemy, double the reward |
 | R | Reload |
 | Space | Jump. Press again in midair, with the Double Jump mutation |
+| Q | Use the active item |
 | E | Buy ammo / reroll at a station |
 | Tab | Hold for the run summary: mutations owned, and the numbers behind the score |
 | F | Toggle fullscreen (also on the start and pause screens) |
@@ -200,7 +201,7 @@ screen is one the player is actually holding.
 | Right stick | Look |
 | R2 | Shoot |
 | L2 | Aim down the sights (hold) |
-| L1 | Dash, with the Double Dash mutation |
+| L1 | Use the active item |
 | R3 | Melee — one swing of the gun, one enemy, double the reward |
 | Cross | Jump. Press again in midair, with the Double Jump mutation |
 | Square | Reload |
@@ -441,10 +442,86 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 57 upgrades: 14 commons, 35 rares and 8 cursed. A specific rare
+The pool is 67 upgrades: 14 commons, 40 rares and 13 cursed. A specific rare
 mutation turns up in roughly 4-5% of totem sets, so a run sees a slice of the
 pool rather than all of it - that is the point, but it means a new upgrade only
 matters if it is worth taking on sight, without a partner card.
+
+Eleven of those came in from a feature that no longer exists. A second row used
+to stand on the far side of the arena selling mutations for MAX HEALTH - a price
+that could never be earned back - and it is now the active item row. Its stock
+was folded into this pool and re-rated by whether each one already carried a
+drawback: `cursed` where it does, `rare` where the effect stands on its own.
+Only EXECUTIONER still charges health, and it charges it as `mods.maxHpFlat`
+rather than as a payment, because `rebuildMods()` replays the owned list from
+fresh defaults after every pick and a price paid once could not survive that.
+
+### Active items
+
+**One slot, one button, no menu.** Everything else a run collects is a number
+folded into the stat block that then applies itself forever without being asked.
+An active item does nothing until it is fired, and firing it is a decision made
+at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
+pad.
+
+| Item | Effect | Charge |
+| --- | --- | --- |
+| TRAUMA KIT | Heal 25 HP, no overheal | 20s |
+| CRYO PULSE | Freeze every enemy for 2s | 10s |
+| OVERDRIVE | 2x damage for 5s | 20s |
+| AEGIS | Invincible for 5s | 20s |
+| BLINK DRIVE | The dash | 3s |
+
+**The slot is one deep, and that is the feature.** Taking a second item throws
+the first away, so a run carries an answer to ONE problem - the health bar, the
+crowd, the boss, the corner you got caught in - and swapping is a real loss
+rather than an inventory chore. There is no drop, no swap-back and no stash, for
+the same reason there is no upgrade menu: nothing in this game opens. The banner
+names the swap when there is one, because losing an item you were relying on
+silently at a wave break is the one mistake this system can make that the player
+would not notice until the fight that needed it.
+
+**The charge is paid in wave time.** `Player.update` fills the bar only while a
+wave is running, gated on the same `combat` flag that stops ammo regeneration
+being farmed at the break. It can still be FIRED in the shop - gating the use as
+well would be a rule the player only ever meets as an unexplained silence - and
+the HUD bar goes grey there rather than merely stopping, because a bar that has
+stopped moving looks like a fault.
+
+**The dash used to be a mutation.** DOUBLE DASH held two charges on a 2.5s timer
+and was reached by double-tapping W, a binding that existed because the game had
+no spare finger - and an active item slot IS a spare finger. So it moved here
+whole: the envelope, the distance and the forward-only commitment are untouched
+(see `DASH_TIME` in `player.js`). What changed is that it now competes with a
+heal and a panic button for the same slot. Double-tapping W still works, and
+does nothing unless BLINK DRIVE is what is carried.
+
+**None of the five is a new system.** The heal is the health pickup's sum, the
+freeze is the status every cryo round applies (so bosses downgrade it to a slow
+through the resistance they already carry), the damage window rides
+`damageBoostEnd`, and the invulnerability is `invulnEnd`, which both damage sinks
+already read as their first line. That last one needed the only new drawing in
+the set: both sinks return in silence, so without `#invuln-frame` five seconds of
+AEGIS look exactly like five seconds of not being shot at.
+
+**The pedestal comes up every third shop**, on the far side of the arena where
+the old row stood, with MAX HEALTH on its left and REROLL on its right. It is a
+COUNT and not a roll: the feature it replaced appeared on odds bought by clean
+waves, and the trouble with that is the run which most needs an answer is the one
+least likely to be offered one. An item is a tool, not a prize - the schedule is
+fixed, the player can see it coming, and planning a swap two shops ahead is a
+thing they are allowed to do. A reroll is not a new shop, so paying three times
+at one break does not walk the counter forward three places.
+
+**One offer, not three.** With a single slot to put it in, a row of three would
+ask the player to compare three things they can only have one of, at a wave
+break, having already picked a mutation - and the second and third would exist
+only to be walked past. The pedestal is a `Totem` with `kind: 'item'`, which
+changes exactly two things: an ACTIVE ITEM line above the name, and a second
+counter-spinning ring on the floor mark. Everything else about picking it up -
+the rise, the arm delay, the orbiting icon, the single invisible claim box - is
+the totem's, because the two are picked up identically and the pillar should not
+have to be relearned.
 
 Where a new upgrade's hook goes, by what it reacts to:
 
@@ -585,6 +662,7 @@ npm run test:pad
 npm run test:aim
 npm run test:sprint
 npm run test:crouch
+npm run test:active
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -626,7 +704,16 @@ opens it round by round and opens the crosshair with it, that it saturates
 rather than climbing forever, that it settles all the way back the moment the
 trigger comes up, that the same fire also kicks the pitch without either
 penalty moving where the player is aiming, and that Hair Trigger charges for
-its rate in both currencies. `test:crouch` covers the third movement gear and
+its rate in both currencies. `test:active` covers the whole active item system and the pool merge that came
+with it: that the row rises on the third shop and no other, that a reroll is not
+a new shop, that an item arrives fully charged and that a second one replaces the
+first, that the pedestal never offers what is already carried, that the bar fills
+during a wave and not in the shop while the button still works in both, that each
+of the five effects actually lands, that both consoles charge what they say, and
+that all eleven converted mutations are reachable on a free totem - which is the
+one thing a leftover `devil: true` would break in silence, leaving a mutation
+that is in the map, has a drawing, passes every other check and can never be
+offered. `test:crouch` covers the third movement gear and
 the swing: that the button
 latches a crouch and a second press releases it, that the same button at a
 sprint slides instead and that letting go does NOT end the slide, that a slide
@@ -670,6 +757,8 @@ test/smoke.mjs      headless smoke test
 test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer
 test/pad.mjs        controller support, driven by a synthetic DualSense
+test/active.mjs     the active item slot, its row, and the eleven that came in
+                    with it
 test/aim.mjs        the sights, the crosshair that reads the cone, the marker
 test/accuracy.mjs   the held trigger blooms, caps, recovers - and is not recoil
 test/crouch.mjs     the crouch, the slide, the dive out of a jump, the swing

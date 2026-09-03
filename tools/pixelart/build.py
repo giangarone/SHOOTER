@@ -51,8 +51,6 @@ NOTE = {
     'heart': 'MAX HEALTH STATION.',
     'evasion': 'EVASION - some hits simply find nobody there.',
     'doubleJump': 'DOUBLE JUMP - a second jump with no ground under it.',
-    'doubleDash': 'DOUBLE DASH - two charges, spent sideways.',
-    'demonicDodge': 'DEMONIC DODGE - dodge, then a second of being untouchable.',
     'venom': 'VENOM ROUNDS - the ammunition is poisoned, not the enemy.',
     'incendiary': 'INCENDIARY - hits set fire and it spreads off the dead.',
     'cryo': 'CRYO ROUNDS - hits halve their speed, and their shots too.',
@@ -80,7 +78,6 @@ NOTE = {
     'overload': 'OVERLOAD - an empty magazine discharges into everything.',
     'lightningWizard': 'LIGHTNING WIZARD - hits call it down from above.',
     'carnage': 'CARNAGE - damage stacked on kills, lost the moment you are hurt.',
-    'demonicPresence': 'DEMONIC PRESENCE - he is the mutation, so he is the icon.',
     'statusFire': 'BURNING - a status on the PLAYER. Damage over time.',
     'statusPoison': 'POISONED - a status on the player. Damage over time.',
     'statusFear': 'AFRAID - a status on the player. The trigger does nothing.',
@@ -97,6 +94,11 @@ NOTE = {
     'secondWind': 'SECOND WIND - stamina spent slower and returned faster.',
     'gear': 'REROLL STATIONS.',
     'gun': 'WEAPON OFFER.',
+    'itemHeal': 'TRAUMA KIT - heal 25 HP. A case, so it is not pickHealth.',
+    'itemFreeze': 'CRYO PULSE - freeze the room. A flake inside a shockwave.',
+    'itemRage': 'OVERDRIVE - 2x damage. A governor pushed past its stop.',
+    'itemGuard': 'AEGIS - invincible. A dome, not a shield in a hand.',
+    'itemDash': 'BLINK DRIVE - the dash, now a device in a slot.',
 }
 
 

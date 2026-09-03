@@ -79,7 +79,7 @@ for (const key of PIXEL_ICON_KEYS) {
   cell.appendChild(cv);
   const n = document.createElement('div');
   n.className = 'n';
-  n.textContent = (d.devil ? '◆ ' : '') + d.name;
+  n.textContent = d.name;
   n.style.color = '#' + d.theme.toString(16).padStart(6, '0');
   cell.appendChild(n);
   const k = document.createElement('div');

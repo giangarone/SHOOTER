@@ -311,21 +311,46 @@ export class SFX {
     this.noise({ t: 0.14, v: 0.22, f: 3200 });
     this.tone({ f: 520, f2: 880, t: 0.12, type: 'triangle', v: 0.22 });
   }
-  // The Devil arriving. A low descending pair under a dull thud - deliberately
-  // not a sting: he is announced by being there, and a fanfare would make the
-  // wave break feel like a cutscene.
-  devil() {
-    this.tone({ f: 110, f2: 42, t: 0.9, type: 'sawtooth', v: 0.16 });
-    this.tone({ f: 74, f2: 30, t: 1.1, type: 'sine', v: 0.2, delay: 0.05 });
-    this.noise({ t: 0.5, v: 0.1, f: 220, delay: 0.02 });
+  // The active item row rising, on the far side of the arena. A low pair
+  // opening UPWARD under a soft swell - deliberately not a sting: the row is
+  // announced by being there, and a fanfare would make the wave break feel like
+  // a cutscene. It is what used to say the Devil had come, turned the other way
+  // up, because what stands there now is a tool and not a bargain.
+  itemRow() {
+    this.tone({ f: 92, f2: 184, t: 0.9, type: 'sawtooth', v: 0.14 });
+    this.tone({ f: 138, f2: 276, t: 1.1, type: 'sine', v: 0.18, delay: 0.05 });
+    this.noise({ t: 0.5, v: 0.09, f: 900, delay: 0.02 });
   }
 
-  // A deal struck. The upgrade chime with the bottom knocked out of it, so it
-  // reads as the same KIND of event as taking a totem and never as a good one.
-  deal() {
-    this.tone({ f: 220, f2: 110, t: 0.32, type: 'square', v: 0.2 });
-    this.tone({ f: 55, f2: 44, t: 0.55, type: 'sawtooth', v: 0.22, delay: 0.02 });
-    this.noise({ t: 0.25, v: 0.14, f: 500 });
+  // An item taken. The upgrade chime with a mechanical seat under it, so it
+  // reads as the same KIND of event as taking a totem while still saying that
+  // something has been LOADED rather than learned.
+  itemTake() {
+    this.tone({ f: 330, f2: 660, t: 0.22, type: 'triangle', v: 0.24 });
+    this.tone({ f: 495, f2: 990, t: 0.26, type: 'sine', v: 0.2, delay: 0.08 });
+    this.noise({ t: 0.12, v: 0.16, f: 1800 });
+  }
+
+  // THE ITEM IS CHARGED. Two clean partials a fifth apart, short and quiet.
+  //
+  // It lands MID-FIGHT, which is the whole design brief: it has to cut through
+  // a firefight without being mistaken for a pickup, and it has to be small
+  // enough to hear forty times a run without becoming a nuisance. So it is
+  // pitched above everything the guns and the enemies occupy, it carries no
+  // noise layer at all - noise is what every violent sound in this game is made
+  // of - and it is over in a fifth of a second.
+  itemReady() {
+    this.tone({ f: 1320, t: 0.07, type: 'sine', v: 0.16 });
+    this.tone({ f: 1980, t: 0.11, type: 'sine', v: 0.13, delay: 0.06 });
+  }
+
+  // The item spent. A short downward thump with a click on the front - the
+  // sound of a charge leaving, deliberately unlike the rising one that said it
+  // had arrived.
+  itemUse() {
+    this.noise({ t: 0.06, v: 0.24, f: 2600 });
+    this.tone({ f: 660, f2: 220, t: 0.18, type: 'triangle', v: 0.26 });
+    this.tone({ f: 165, f2: 110, t: 0.24, type: 'sine', v: 0.2, delay: 0.03 });
   }
 
   denied() {

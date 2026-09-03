@@ -329,7 +329,7 @@ export function buildArena(scene) {
   //
   // TWO OF THEM MOVED, AND ONLY TWO. The note above is still the rule - these
   // footprints are what enemy pathing is baked from and what the combat
-  // spacing was tuned around - but the Devil's row grew two consoles at
+  // spacing was tuned around - but the far row grew two consoles at
   // x = +-6.9, z = 9.5, and the platforms at (8, 8) and (-9, 9) stood exactly
   // where a player has to be able to walk up to one. A console you cannot
   // reach is not a console.
@@ -341,7 +341,7 @@ export function buildArena(scene) {
   // untouched.
   //
   // THE CENTRE PLATFORM IS GONE. It stood at (0, 0), squarely between the
-  // totem row at z = -5 and the Devil's at z = 9.5 - which is to say, in the
+  // totem row at z = -5 and the active item row at z = 9.5 - which is to say, in the
   // one corridor the player walks every single wave break, with a card to
   // read at each end. It was cover nobody used and an obstacle everybody
   // clipped. The middle of the floor is now open.
@@ -386,7 +386,7 @@ export function buildArena(scene) {
   //
   //   1. NOTHING IN FRONT OF A ROW. |x| <= 9.5 and z from the row line to a
   //      metre and a half in front of it - z -5..-1.5 for the totems, and
-  //      9.5..6.3 for the Devil's, whose row is walked up to from -z. That
+  //      9.5..6.3 for the item row, which is walked up to from -z. That
   //      wedge is the whole of what the player looks THROUGH to read an offer.
   //   2. NOTHING STANDING IN A MARK. No box may reach within 1.7m of a totem
   //      or 1.15m of a console, which are the radii the marks are drawn at.

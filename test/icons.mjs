@@ -19,7 +19,8 @@
 //
 // Pure data - no browser, no renderer - so it runs in milliseconds and can be
 // the thing that fails first.
-import { UPGRADES } from '../js/upgrades.js';
+import { UPGRADES, RARITY } from '../js/upgrades.js';
+import { ACTIVE_ITEMS } from '../js/items.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PLAYER_STATUS } from '../js/status.js';
@@ -28,8 +29,8 @@ import { PIXEL_ICON_KEYS, resolveIcon, GRID } from '../js/pixelicons.js';
 // Icons used by things that are not upgrades. Stations and weapons name their
 // icon explicitly - they have no upgrade id to key off - so they are the only
 // entries that can drift.
-// The two REROLL consoles - one beside the totems, one beside the Devil's
-// deals - deliberately share the arrows and are listed once. One shape means
+// The two REROLL consoles - one beside the totems, one beside the active item
+// pedestal - deliberately share the arrows and are listed once. One shape means
 // one thing is the rule; these two do the same thing in two rows, and teaching
 // a second symbol for it would break the rule rather than keep it.
 const STATION_ICONS = {
@@ -60,6 +61,10 @@ users[AMMO_PICKUP.icon] = 'PICKUP ammo';
 // throws - waits at the other end of it.
 for (const [key, def] of Object.entries(PLAYER_STATUS)) users[def.icon] = 'STATUS ' + key;
 for (const w of Object.values(WEAPONS)) if (w.icon) users[w.icon] = 'WEAPON ' + w.name;
+// The active items. Keyed by id exactly the way the upgrades are, so the same
+// two failures apply: an item with no drawing crashes the first pedestal that
+// offers it, and a drawing nothing uses is art left behind by a rename.
+for (const key of Object.keys(ACTIVE_ITEMS)) users[key] = 'ITEM ' + ACTIVE_ITEMS[key].name;
 
 const missing = Object.entries(users).filter(([k]) => !drawn.has(k));
 ok(
@@ -91,12 +96,31 @@ const empty = [...drawn].filter(
 );
 ok('no drawing is blank', empty.length === 0, empty.join(', '));
 
+// THE POOL AFTER THE MERGE. Eleven mutations came in from the Devil's row when
+// it was retired, and the two fields that made them his - `devil` and `cost` -
+// had to come off every one of them or rollTotems() would go on skipping them:
+// a mutation that is in the map, has a drawing, passes every check above and
+// can never actually be offered is the one failure nothing else here would see.
+const stray = Object.keys(UPGRADES).filter((k) => UPGRADES[k].devil || UPGRADES[k].cost);
+ok('no upgrade is still a Devil Deal', stray.length === 0, stray.join(', '));
+
+const badRarity = Object.keys(UPGRADES).filter((k) => !RARITY[UPGRADES[k].rarity]);
+ok('every upgrade has a real rarity', badRarity.length === 0, badRarity.join(', '));
+
+// An item with no `use` is a button that does nothing, which the game has no
+// way to notice: tryItem() would spend the charge and call undefined.
+const badItems = Object.keys(ACTIVE_ITEMS).filter(
+  (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].cooldown > 0)
+);
+ok('every active item has a use and a cooldown', badItems.length === 0, badItems.join(', '));
+
 console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +
   `${Object.keys(STATION_ICONS).length} stations + ` +
   `${Object.keys(POWERUP_TYPES).length + 1} pickups + ` +
   `${Object.keys(PLAYER_STATUS).length} statuses + ` +
-  `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons) ` +
+  `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons + ` +
+  `${Object.keys(ACTIVE_ITEMS).length} items) ` +
   `over ${PIXEL_ICON_KEYS.length} drawings`
 );
 console.log(fails ? 'ICON TEST FAIL' : 'ICON TEST PASS');

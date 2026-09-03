@@ -95,19 +95,20 @@ export const USE_RADIUS = 2.0;
 // unresponsive far more often than it saves a build - the burst that killed
 // the last enemy is spent well inside the rise on its own.
 export const ARM_TIME = 0.45;
-// The arm delay used INSTEAD when a Devil is standing at the same wave break.
-// Taking a totem is what starts the next wave, so with a Devil up a stray
+// The arm delay used INSTEAD when the active item row is standing at the same
+// wave break. Taking a totem is what starts the next wave, so with a second row
+// up a stray
 // pellet does not merely pick a build - it ends the shopping trip. Long enough
 // that the player has to mean it - but held to the same proportion of the old
 // pair, not left at a figure that now feels like a lockout beside it.
-export const ARM_TIME_DEVIL = 1.0;
+export const ARM_TIME_ITEM = 1.0;
 // Press E this close to a station.
 export const STATION_RADIUS = 2.6;
 
 // Fixed positions near the arena centre, in a row the player is already facing
 // when they spawn. Checked against the platforms, crates and pillars in
 // arena.js - keep them clear if you move anything.
-// Exported so devil.js can place its own row relative to this one rather than
+// Exported so items.js can place its own row relative to this one rather than
 // hardcoding a second magic number that has to be kept in step.
 export const ROW_Z = -5;
 const TOTEM_X = [-3.6, 0, 3.6];
@@ -131,9 +132,6 @@ export const RISE_SECONDS = RISE_TIME;
 // The neutral is deliberately still quiet. It is for lines that are neither,
 // and a third loud colour would cost the other two their meaning.
 const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
-// The price line on a Devil Deal. Not one of the SIGN_COLOR entries: a cost is
-// neither a benefit nor a drawback, it is the thing you are agreeing to.
-const COST_COLOR = '#ff1744';
 
 // ---------------------------------------------------------------------------
 // PIXEL TEXT ON A CANVAS TEXTURE
@@ -577,11 +575,11 @@ export class Totem {
     // a deliberate press and never needs protecting from itself.
     this.armT = ARM_TIME;
 
-    // False only for a Devil Deal the player cannot afford. An unaffordable
-    // offer stays standing and stays readable - it is greyed out and inert
-    // rather than hidden, because "you cannot pay for this" is information and
-    // a pillar that simply never rose is not.
-    this.enabled = true;
+    // WHAT KIND OF OFFER IS STANDING HERE: 'upgrade' or 'item'. It changes two
+    // things and nothing else - the header line on the panel and the second rim
+    // on the floor mark - because an active item and a mutation are picked up
+    // the same way and the pillar should not have to be relearned. See _draw().
+    this.kind = 'upgrade';
 
     this.group = new THREE.Group();
     this.group.position.set(x, SUNK_Y, z);
@@ -589,6 +587,14 @@ export class Totem {
 
     // Per-instance because each mark wears its own upgrade's theme.
     this.mark = makeMark(this.group);
+    // The active item's second ring, built with the totem and hidden unless an
+    // item is standing on it - one more mark at 1.5x the radius. Built up front
+    // rather than on demand for the reason everything in this file is: a set
+    // rises at a wave boundary and must not allocate geometry while it does.
+    this.ring2 = makeMark(this.group, RIM_R * 1.5, POOL_R * 1.5);
+    this.ring2.pool.visible = false;
+    this.ring2.haze.visible = false;
+    this.ring2.ripple.visible = false;
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
@@ -627,16 +633,18 @@ export class Totem {
   /**
    * Assigns an offer and starts the rise.
    *
-   * @param {object} offer  { id, name, theme, effects, note } for a free
-   *   totem, plus { cost, enabled } for a Devil Deal - see _buildOffers() and
-   *   _buildDeals() in main.js. `id` doubles as the icon key.
+   * @param {object} offer  { id, name, theme, effects, note } - see
+   *   _buildOffers() and _buildItem() in main.js. `id` doubles as the icon key.
+   *   An ACTIVE ITEM additionally sets `kind: 'item'` and `charge` (its
+   *   cooldown in seconds), which is what the pedestal reads differently.
    */
   present(offer, armTime = ARM_TIME) {
     this.offer = offer;
     this.upgradeId = offer.id;
     this.claimed = false;
-    this.enabled = offer.enabled !== false;
+    this.kind = offer.kind === 'item' ? 'item' : 'upgrade';
     tintMark(this.mark, offer.theme);
+    tintMark(this.ring2, offer.theme);
     this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
@@ -667,12 +675,6 @@ export class Totem {
     const c = this.panel.canvas.getContext('2d');
     const theme = hex(offer.theme);
     c.clearRect(0, 0, 512, 320);
-
-    // An unaffordable Devil Deal is drawn at the same reduced alpha a station
-    // uses for a purchase the wallet cannot cover (see Station.setLabel), so
-    // "you cannot have this" looks the same wherever the player meets it.
-    const dim = offer.enabled === false;
-    c.globalAlpha = dim ? 0.45 : 1;
 
     // NO CARD BEHIND THE TEXT. The dark rounded rectangle with a coloured
     // border was the same complaint as the pillar in a smaller shape: a piece
@@ -712,6 +714,17 @@ export class Totem {
     // to be read through it.
     //
     // Long weapon names need to shrink to stay on one line.
+    // AN ACTIVE ITEM SAYS SO, ABOVE ITS NAME. This is the one line the pillar
+    // has that a mutation totem does not, and it is here rather than in a
+    // different pillar shape because the two are picked up identically - what
+    // has to be instant is knowing WHICH of the two you are walking to, and a
+    // word in the offer's own colour does that from further out than a
+    // silhouette would. The doubled rim on the floor mark is the other half.
+    if (this.kind === 'item') {
+      c.fillStyle = theme;
+      pxText(c, 'ACTIVE ITEM', 256, 52, 16, 300);
+    }
+
     c.fillStyle = '#ffffff';
     pxText(c, offer.name, 256, 92, 32, 488);
 
@@ -722,38 +735,17 @@ export class Totem {
       y += 38;
     }
 
-    // The price, on a Devil Deal only. It sits where a free totem's OWNED note
-    // sits, because the two never appear together: a deal is max: 1, so a
-    // player who owns one is never offered it again.
-    //
-    // Written as a SUBTRACTION rather than as "costs N max HP". The player is
-    // reading three of these at a glance with a wave about to start; a minus
-    // sign and a number is the shortest form the price can take, and it reads
-    // the same way the red drawback lines above it do.
-    if (offer.cost) {
-      c.fillStyle = dim ? '#8792ad' : COST_COLOR;
-      pxText(
-        c, dim ? 'CANNOT AFFORD' : '-' + offer.cost + ' MAX HP', 256, 292, 24, 460
-      );
-    } else if (offer.note) {
+    // The bottom line. A mutation's is its OWNED count; an item's is how long
+    // it takes to charge, which is the one number that decides whether it is
+    // worth carrying and is nowhere else on the pillar.
+    if (offer.note) {
       // Lifted off the near-black it used to be. With no panel under it, a
       // note at #5b6785 is a line nobody can find in a dark room.
       c.fillStyle = '#9fb0d0';
       pxText(c, offer.note, 256, 292, 16, 460);
     }
-    c.globalAlpha = 1;
     c.shadowBlur = 0;
     this.panel.tex.needsUpdate = true;
-  }
-
-  // Turns a standing offer's affordability on or off and redraws the panel.
-  // Only a Devil Deal ever uses it: what a deal costs does not change, but
-  // what the player can pay does, every time they buy one.
-  setEnabled(ok) {
-    if (!this.offer || this.enabled === ok) return;
-    this.enabled = ok;
-    this.offer.enabled = ok;
-    this._draw(this.offer);
   }
 
   sink() {
@@ -761,12 +753,11 @@ export class Totem {
     this.state = 'sinking';
   }
 
-  // Whether this offer can be taken at all: risen, unclaimed, and affordable.
-  // Both ways in end up here, so an offer cannot be taken twice or taken
-  // before it has finished coming out of the floor.
+  // Whether this offer can be taken at all: risen and unclaimed. Both ways in
+  // end up here, so an offer cannot be taken twice or taken before it has
+  // finished coming out of the floor.
   canUse() {
-    return this.state === 'up' && !this.claimed
-      && this.enabled && this.upgradeId !== null;
+    return this.state === 'up' && !this.claimed && this.upgradeId !== null;
   }
 
   // A SHOT additionally has to wait out the arm delay, because a burst fired
@@ -813,11 +804,24 @@ export class Totem {
     this.group.position.y = SUNK_Y + (0 - SUNK_Y) * e;
 
     // The mark stays on the floor and comes UP IN BRIGHTNESS instead, which
-    // is the one thing that separates a light from a prop. An offer that
-    // cannot be afforded burns low, the same way its card is drawn faded: it
-    // is still there to be read, and it is visibly not on.
-    driveMark(this.mark, e * (this.enabled ? 1 : 0.4),
-      -this.group.position.y, time, this.pos.x);
+    // is the one thing that separates a light from a prop.
+    driveMark(this.mark, e, -this.group.position.y, time, this.pos.x);
+    // AN ACTIVE ITEM STANDS IN A DOUBLE RING. One extra rim at 1.5x the pool,
+    // counter-spinning, and it is the only piece of geometry that separates the
+    // two kinds of pillar - enough to be unmistakable across the arena, cheap
+    // enough to be one more additive mesh that is simply hidden the rest of the
+    // time. It is driven a beat out of phase with the inner one so the two read
+    // as a mechanism rather than as a single thicker ring.
+    if (this.ring2) {
+      this.ring2.visible = this.kind === 'item';
+      if (this.ring2.visible) {
+        driveMark(this.ring2, e, -this.group.position.y, time, this.pos.x + 2.1);
+        // Counter-spun. driveMark just set this from `time`; negating it here
+        // is what turns two concentric rings into a mechanism instead of one
+        // thick ring that happens to be drawn twice.
+        this.ring2.rim.rotation.y = -this.ring2.rim.rotation.y;
+      }
+    }
 
     // The icon rides around to the player's side of the pillar and turns to
     // face them. Two problems, one fix: an icon parked on the front face is
@@ -849,21 +853,23 @@ export class Totem {
 // decide what a purchase actually does - so adding a console is a row here and
 // a case there, and nothing in this file has to learn what it sells.
 //
-// The two Devil-row consoles are in the same table as the two totem-row ones
+// The two item-row consoles are in the same table as the two totem-row ones
 // because they ARE the same object: same mark, same icon, same two ways in.
 // Only the prices differ, and prices do not live here.
 const STATION_LOOK = {
   ammo: { color: 0xffd600, icon: 'ammoBox' },
   reroll: { color: 0x4ef3ff, icon: 'gear' },
-  // The Devil's pair. Red, both of them - his row wears one colour the way the
-  // offers each wear their own, so a console standing in it reads as HIS
-  // before it reads as a shop.
-  maxhp: { color: 0xff1744, icon: 'heart' },
-  dealReroll: { color: 0xff1744, icon: 'gear' },
+  // The ACTIVE ITEM row's pair. Violet, both of them - that row wears one
+  // colour the way the offers each wear their own, so a console standing in it
+  // reads as belonging to the far row before it reads as a shop. The colour is
+  // the one thing that tells the two REROLL consoles apart at a glance; they
+  // deliberately share the shape, because they do the same job.
+  maxhp: { color: 0xb388ff, icon: 'heart' },
+  itemReroll: { color: 0xb388ff, icon: 'gear' },
 };
 
 // A small console beside a row of offers. Four exist: ammo and reroll beside
-// the totems, max health and reroll beside the Devil's deals. All are bought
+// the totems, max health and reroll beside the active item. All are bought
 // by shooting them or by pressing E in range, and none disturbs the row it
 // stands in.
 export class Station {
@@ -924,7 +930,7 @@ export class Station {
     //
     // The two rerolls SHARE the arrows deliberately. One shape means one thing
     // is the rule the icon catalogue is built on, and these two do the same
-    // thing in two different rows; giving the Devil's a shape of its own would
+    // thing in two different rows; giving the far row's a shape of its own would
     // be teaching a second symbol for something the player already knows.
     this.icon = buildPixelIcon(look.icon, this.color);
     this.iconAnchor.add(this.icon);

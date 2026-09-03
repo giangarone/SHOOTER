@@ -134,15 +134,15 @@ try {
     // blow straight through.
     ['texture count non-decreasing',
       samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
-    // SIXTEEN, and here is every one of them: ten canvas panels (three totem
-    // cards, three Devil deal cards, four console labels), the soft glow dot
-    // every halo and puff tints, the hard-edged spark dot the particles use,
-    // the creep field, the surface tile the floor and walls share, the rig's
-    // beam gradient and the laser bank's.
+    // FOURTEEN, and here is every one of them: eight canvas panels (three totem
+    // cards, one active item card, four console labels - every Station carries
+    // its own), the soft glow dot every halo and puff tints, the hard-edged
+    // spark dot the particles use, the creep field, the surface tile the floor
+    // and walls share, the rig's beam gradient and the laser bank's.
     //
-    // The cap moved from twelve when the Devil's heart stopped being his
-    // console and two consoles took its place - one panel out, two in. It
-    // moved from thirteen for the pixel-art pass: glow split into a soft
+    // The cap CAME DOWN from sixteen when the Devil's row was retired: his
+    // three deal cards became one item pedestal, which is two panels out. It
+    // had gone from twelve to thirteen for the pixel-art pass: glow split into a soft
     // texture for LIGHT and a stepped one for the sparks, which are matter,
     // and the creep stopped being thirty meshes and became one field on one
     // texture. It moved from fifteen for the surface tile - ONE texture for
@@ -156,7 +156,7 @@ try {
     // what catches a texture being allocated per wave. This one catches the
     // budget being spent without anyone noticing, which is why raising it is a
     // deliberate edit with a list attached rather than a nudge.
-    ['texture count bounded', peak.textures <= 16],
+    ['texture count bounded', peak.textures <= 14],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

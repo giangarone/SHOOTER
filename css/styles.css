@@ -385,6 +385,106 @@ html, body {
   gap: var(--u);
   min-width: calc(var(--u) * 50);
 }
+
+/* ---- THE ACTIVE ITEM SLOT ------------------------------------------------
+   One plate above the gun readout: the icon, the name, the button that fires
+   it, and the charge bar. Everything here is measured in --u like the rest of
+   the sheet, and the frame is the shared .plate, so the slot is the same
+   machine the VITALS box is rather than a second design.
+
+   --item is the carried item's own theme colour, written from JS. It is the
+   only colour in the block that changes, and it drives the bar, the ring and
+   the ready state together - one variable so the three can never disagree
+   about which item is in the slot. */
+#item-box {
+  display: flex; align-items: center; gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2);
+  margin-bottom: var(--u);
+  --item: var(--cyan);
+  --surface: var(--fill-lo);
+  --edge: var(--line);
+}
+#item-art {
+  /* Fixed at the canvas's own 72px so the 24x24 art lands on whole device
+     pixels. image-rendering is what keeps it pixel art at all - the browser's
+     default smoothing would turn a hand-placed 24-pixel drawing into a blur at
+     any scale that is not exactly 1. */
+  width: 36px; height: 36px;
+  image-rendering: pixelated;
+  flex: none;
+}
+#item-info {
+  display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
+  min-width: calc(var(--u) * 34);
+}
+#item-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: calc(var(--u) * 2);
+}
+#item-name {
+  font-size: 8px; letter-spacing: 0.1em; color: var(--item);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+/* The button that fires it, in the language of whatever the player is holding.
+   Dim on purpose: it is a label the player reads once and then never again,
+   and it must not compete with the bar beside it. */
+#item-key {
+  font-size: 8px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink);
+  flex: none;
+}
+#item-bar-bg { --cells: 12; height: 8px; }
+#item-bar { background: var(--item); }
+
+/* CHARGED. The ring takes the item's colour and the name comes up to white, so
+   "you can use this" is legible in peripheral vision without reading a word -
+   which is the whole point, because it becomes true in the middle of a
+   firefight. */
+#item-box.ready { --edge: var(--item); }
+#item-box.ready #item-name { color: #fff; }
+#item-box.ready #item-bar {
+  box-shadow: 0 0 8px var(--item);
+}
+/* The moment it fills, once. Restarted from JS by removing and re-adding the
+   class - the same trick #ammo-res.refund uses, and for the same reason: a
+   second charge inside the animation has to play again rather than ride the
+   first one out. */
+#item-box.charged { animation: item-charged 0.5s steps(4, end) 1; }
+@keyframes item-charged {
+  0%   { transform: translateY(-3px); --edge: #fff; }
+  100% { transform: none; }
+}
+/* HELD AT THE WAVE BREAK. The bar does not fill in the shop (see the note in
+   Player.update), and a bar that has simply stopped moving looks like a fault -
+   so it says so, by going to the dim ink the rest of the HUD uses for "this is
+   switched off". */
+#item-box.held #item-bar { background: var(--dim); }
+
+/* AEGIS. Both damage sinks return in silence while the window is open, so
+   without a frame around the screen five seconds of invulnerability look
+   exactly like five seconds of not being shot at. Gold rather than the
+   damage vignette's red, stepped the same way, and it does NOT pulse: a
+   flashing frame in a firefight is the thing that makes players look at the
+   edge of the screen instead of the middle of it. */
+#invuln-frame {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0;
+  background: radial-gradient(
+    ellipse 82% 82% at center,
+    transparent 0 60%, rgba(255, 242, 176, 0.10) 60% 78%,
+    rgba(255, 242, 176, 0.22) 78% 100%
+  );
+  transition: opacity 0.25s steps(4, end);
+}
+/* IT SNAPS ON AND FADES OFF, the same asymmetry #vignette uses for a hit, and
+   for the same two reasons. A transition started inside a subtree the browser
+   is not painting is left running with a frozen clock and never arrives - the
+   note on `.seg > i` is the long version - and, feel aside, a window that opens
+   the instant the button is pressed is the honest drawing of a window that
+   protects you from the instant the button is pressed. Coming back down it can
+   afford the quarter-second, because the protection is already gone. */
+#invuln-frame.on { opacity: 1; transition: none; }
+/* The last second, so the player is told it is ending rather than discovering
+   it by being hit. */
+#invuln-frame.ending { animation: blink 0.25s steps(1, end) infinite; }
 #weapon-line {
   display: flex; align-items: center; gap: calc(var(--u) * 2);
   width: 100%; justify-content: flex-end;

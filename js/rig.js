@@ -745,7 +745,7 @@ export class Rig {
     // ...and at a break they walk off the orbit and stand over the row.
     //
     // `s.offers` is up to three {x, z, color} entries, refilled by main.js from
-    // whatever is actually standing - the totems, or the Devil's deals when
+    // whatever is actually standing - the totems, or the item pedestal when
     // his row is the one up. The OUTER two are taken so the pair straddles the
     // row rather than doubling up on one end of it; with a single offer left
     // standing they both take it.

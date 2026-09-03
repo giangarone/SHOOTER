@@ -577,25 +577,6 @@ def _(c):
     arrow(c, 12, 11, 12, 2, E, 3.0, 5.8)
 
 
-@icon('doubleDash')         # two dash charges, one back every 2.5s
-def _(c):
-    for y in (3, 8, 13):
-        c.rect(1, y, 7, y + 1.6, D)
-    chevron(c, 11.5, 12, 6.5, S, dirx=1, w=2.8)
-    chevron(c, 19.5, 12, 6.5, E, dirx=1, w=2.8)
-
-
-@icon('demonicDodge')       # dodge, then a second of invulnerability
-def _(c):
-    # The same after-image language as EVASION, wearing horns.
-    for cx, r, t in ((6.5, 4.2, D), (15.5, 6.0, E)):
-        c.poly([(cx, 12 - r * 1.4), (cx + r, 12), (cx, 12 + r * 1.5), (cx - r, 12)], t)
-        c.poly([(cx - r * 0.8, 12 - r * 0.8), (cx - r * 1.9, 12 - r * 2.6),
-                (cx - r * 0.1, 12 - r * 1.7)], t)
-        c.poly([(cx + r * 0.8, 12 - r * 0.8), (cx + r * 1.9, 12 - r * 2.6),
-                (cx + r * 0.1, 12 - r * 1.7)], t)
-
-
 @icon('incendiary')         # hits set fire, and it spreads on death
 def _(c):
     flame(c, 12, 21.5, 8.6, 20.5, S)
@@ -909,17 +890,6 @@ def _(c):
     drop(c, 14.2, 21.4, 1.1, E)
 
 
-@icon('demonicPresence')    # the Devil turns up after every wave
-def _(c):
-    # He is the mutation, so he is the icon. The horns are polygons rather than
-    # arc segments - an arc this thick breaks into loose chunks at 24 pixels.
-    c.poly([(6.5, 8), (17.5, 8), (16, 16), (12, 22), (8, 16)], S)
-    c.poly([(7.4, 8.6), (1.5, 1.5), (6.2, 3.0), (10.4, 8.6)], S)
-    c.poly([(16.6, 8.6), (22.5, 1.5), (17.8, 3.0), (13.6, 8.6)], S)
-    c.poly([(8.0, 11.0), (11.4, 12.4), (8.0, 13.8)], E)
-    c.poly([(16.0, 11.0), (12.6, 12.4), (16.0, 13.8)], E)
-
-
 @icon('gear')               # the REROLL stations
 def _(c):
     # The two-arrow "again", with each head laid on its own tangent - a head
@@ -1125,3 +1095,86 @@ def _(c):
     c.line(4.6, 8.0, 9.0, 3.6, E, 1.8)
     c.line(19.6, 8.6, 21.0, 14.6, E, 1.8)
     c.line(13.6, 3.4, 17.6, 5.2, E, 1.6)
+
+
+# ---- ACTIVE ITEMS ---------------------------------------------------------
+#
+# The five things that go in the slot. They are drawn as OBJECTS - a case, a
+# projector, a governor, a dome, a drive - where a mutation is drawn as an
+# effect, because an item is a thing the player is carrying and a mutation is
+# something that has happened to them. That distinction has to survive being
+# seen at 24 pixels in the corner of the screen, so each one leans on a hard
+# outer silhouette that no mutation in the catalogue has.
+#
+# Each also has to clear the pickup it is nearest to: TRAUMA KIT is a case and
+# pickHealth is a bare cross, AEGIS is a dome and pickShield is a carried
+# shield, OVERDRIVE is a governor and overclock is a dial.
+
+
+@icon('itemHeal')           # TRAUMA KIT - heal 25 HP
+def _(c):
+    # A CASE, not a cross. pickHealth is already the bare cross and the two are
+    # a metre apart on screen when a health drop lands during a wave break; what
+    # separates them is the box around this one and the handle over it.
+    c.rect(9.5, 3, 14.5, 5.5, S)            # the handle
+    c.rect(10.8, 4, 13.2, 5.5, DEEP)        # and the grip hole through it
+    c.rect(2.5, 5.5, 21.5, 21, S)           # the case
+    c.rect(2.5, 11.5, 21.5, 13, D)          # the seam it opens on
+    c.rect(10.5, 8, 13.5, 18.5, E)          # the cross
+    c.rect(6, 11.75, 18, 14.75, E)
+
+
+@icon('itemFreeze')         # CRYO PULSE - freeze every enemy for 2s
+def _(c):
+    # A flake INSIDE a shockwave, because the item is not ice - it is ice going
+    # off. ABSOLUTE ZERO owns the plain hexagon-and-icicles reading; the ring is
+    # what makes this one an event rather than a state.
+    #
+    # SIX FAT ARMS AND NOTHING ELSE. The first pass hung a pair of barbs off
+    # each arm, which is what a snowflake actually looks like and what twelve
+    # extra strokes inside a 24-pixel circle actually looks like, which is mush.
+    c.ring(12, 12, 11, 2.0, S)
+    spikes(c, 12, 12, 0, 7.6, 6, 3.0, E, phase=90)
+    c.disc(12, 12, 3.0, E)
+    c.disc(12, 12, 1.2, S)
+
+@icon('itemRage')           # OVERDRIVE - 2x damage for 5s
+def _(c):
+    # A GOVERNOR PUSHED PAST ITS STOP: a housing with two chevrons climbing out
+    # of it. OVERCLOCK is a dial and reads as a rate; this has to read as an
+    # amount, so the movement in it is vertical rather than rotary - and the
+    # doubling is said by there being two of them, which is the one thing about
+    # this item worth saying at 24 pixels.
+    c.rect(2.5, 17.5, 21.5, 22, S)
+    c.rect(5.5, 19, 18.5, 20.5, DEEP)
+    chevron(c, 12, 13.5, 8.0, S, diry=1, w=3.4)
+    chevron(c, 12, 7.0, 8.0, E, diry=1, w=3.4)
+
+@icon('itemGuard')          # AEGIS - invincible for 5s
+def _(c):
+    # A DOME OVER A FLOOR, not a shield in a hand. pickShield already owns the
+    # carried hexagon, and the difference is the whole point: that one is a pool
+    # of damage you spend, this one is a volume nothing gets into.
+    #
+    # TWO ARCS AND A SLAB. Anything inside the dome competes with the dome for
+    # the same fifteen pixels, so what stands under it is one small core and no
+    # more - enough to say the volume has something in it.
+    c.ring(12, 17, 10.5, 2.2, S)
+    c.ring(12, 17, 6.6, 1.8, E)
+    c.erase(lambda px, py: py > 17)
+    c.rect(0.5, 17, 23.5, 20, S)
+    c.rect(3.5, 20, 20.5, 21.5, D)
+    c.disc(12, 14.6, 1.9, E)
+
+@icon('itemDash')           # BLINK DRIVE - dash forward
+def _(c):
+    # THE DASH KEPT ITS DRAWING LANGUAGE from when it was a mutation: chevrons
+    # travelling right out of their own after-image.
+    #
+    # The after-image is THREE SHORT DASHES, not three long bars. Full-width
+    # rules behind the arrows read as a barcode and take the eye left, which is
+    # the opposite of what an icon about going forward should do.
+    for y in (5.5, 11.2, 16.9):
+        c.rect(0.5, y, 5, y + 2.2, D)
+    chevron(c, 15, 12, 6.4, S, dirx=1, w=3.2)
+    chevron(c, 22, 12, 6.4, E, dirx=1, w=3.2)

@@ -17,6 +17,7 @@ import { resolveCircle } from './utils.js';
 import { UPGRADES } from './upgrades.js';
 import { WEAPONS, STARTING_WEAPON, setGunMarks, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
+import { ACTIVE_ITEMS } from './items.js';
 
 // Every stat an upgrade is allowed to touch, at its un-upgraded value.
 //
@@ -136,24 +137,20 @@ const DEFAULT_MODS = {
   streakCap: 0,         // and the ceiling and floor it is clamped between
   streakFloor: 0,
   extraJumps: 0,        // Double Jump: midair jumps granted per landing
-  dashCharges: 0,       // Double Dash: dashes held at once, one back per
-                        // DASH_RECHARGE seconds
   noHitBonus: 0,        // No-Hit Bonus: damage and fire rate gained per wave
                         // cleared without taking damage. Unlike everything
                         // else here it accumulates across the run - see
                         // noHitStacks, NO_HIT_CAP and rebuildMods().
 
-  // DEVIL DEALS. Bought from the Devil with max HP rather than rolled for
-  // free, but otherwise ordinary mods: they are set by an apply() in
-  // upgrades.js and replayed by rebuildMods() like everything above. The PRICE
-  // is not here - it is paid once into maxHpDebt and never revisited.
+  // THE OLD DEVIL DEALS. These were sold for max health at a second row that
+  // no longer exists; they are ordinary mutations now (see the note above
+  // their block in upgrades.js) and always were ordinary mods - set by an
+  // apply() and replayed by rebuildMods() like everything above. Only
+  // Executioner still charges health, through maxHpFlat below.
   carnageStep: 0,       // Carnage: damage gained per kill, lost on any hit
   carnageMax: 0,        // and the ceiling it climbs to
   killHeal: 0,          // Blood Pact: HP healed per kill
   damageTakenMult: 1,   // Blood Pact: multiplier on all damage the player takes
-  dodgeInvuln: 0,       // Demonic Dodge: seconds of invulnerability after a dodge
-  dodgeRage: 0,         // and the damage bonus it grants,
-  dodgeRageTime: 0,     // for this many seconds
   hellfireDps: 0,       // Hellfire: burning trail dropped behind a reload
   hellfireTime: 0,
   hellfireRadius: 0,
@@ -164,10 +161,13 @@ const DEFAULT_MODS = {
   overloadFrac: 0,      // Overload: fraction of max HP lightning removes when
                         // the magazine runs dry
   bossHpMult: 1,        // Executioner: multiplier on boss health at spawn
+  maxHpFlat: 0,         // and the max health it takes off the top for it. Flat,
+                        // and a MOD rather than a payment: rebuildMods() replays
+                        // the owned list from fresh defaults after every pick,
+                        // so a price paid once could not survive that.
   poisonImmune: 0,      // Antidote: poison pools do nothing
   poisonLeech: 0,       // and each poisoned enemy heals this much per second
   gamble: 0,            // Devil's Gamble: 51% double damage, 49% half, per shot
-  devilAlways: 0,       // Demonic Presence: the Devil appears after every boss
   thorns: 0,            // Thorns: fraction of a hit reflected onto the attacker
 };
 
@@ -185,8 +185,8 @@ const BASE_RESERVE = 300;
 // in the pool.
 const JUMP_V = 9;
 const AIR_JUMP_V = 11;
-// Double Dash: how long a dash lasts, its PEAK speed, and how long one spent
-// charge takes to come back.
+// BLINK DRIVE: how long a dash lasts and its PEAK speed. The cooldown is the
+// item's, not the dash's - see js/items.js.
 //
 // THE ENVELOPE IS THE WHOLE FEATURE. The first version held a flat 26 m/s for
 // 0.18s and then dropped the player back to a walk on a single frame, which is
@@ -214,7 +214,6 @@ const DASH_SPEED = 42;
 // still has to answer a slam the frame it is pressed, so almost all of the
 // curve is the exit.
 const DASH_IN = 0.15;
-const DASH_RECHARGE = 2.5;
 
 // The dash's speed envelope at `u` (0..1 through the window), 0..1.
 //
@@ -239,12 +238,11 @@ function dashShape(u) {
 // because main.js says the current total on the clear banner and has to agree
 // with rebuildMods about where it stops.
 export const NO_HIT_CAP = 0.4;
-// The floor a Devil Deal may never take the player below. Every price the
-// Devil charges is checked against this BEFORE it is taken (canPay), which is
-// the whole guarantee that a deal can never kill you: an unaffordable one is
-// simply inert. Twenty is a fifth of the starting pool - low enough that
-// Executioner's fifty is reachable from full, high enough that a player who
-// has sold everything they can is still standing.
+// The floor no max-health cost may take the player below, enforced inside the
+// maxHealth getter itself rather than at any one charging site - which is the
+// whole guarantee that a build can never reduce itself to nothing. Twenty is a
+// fifth of the starting pool: low enough that Executioner's fifty is a real
+// price out of a full bar, high enough that a run carrying it is still standing.
 export // THE HANDOFF SWING. Far enough down that the muzzle clears the bottom of the
 // frame at every field of view the game offers, with the roll and the push
 // outboard doing the rest - a weapon that only translated straight down read
@@ -664,16 +662,30 @@ export class Player {
     this.lastShotCost = 0;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
-    // MAX HP SOLD TO THE DEVIL, for the rest of the run. Deliberately NOT a
-    // mod: rebuildMods() replays the whole stat block from DEFAULT_MODS on
-    // every draft pick, so a debt stored there would be refunded by the next
-    // free totem the player walked into. Same reasoning as noHitStacks.
+    // MAX HP BOUGHT BACK, for the rest of the run - negative debt, granted by
+    // the MAX HEALTH console. Deliberately NOT a mod: rebuildMods() replays
+    // the whole stat block from DEFAULT_MODS on every draft pick, so a
+    // purchase stored there would be taken back by the next free totem the
+    // player walked into. Same reasoning as noHitStacks. Executioner's price
+    // goes the other way and IS a mod (mods.maxHpFlat), because it is part of
+    // the build and has to be replayed with it.
     this.maxHpDebt = 0;
-    // Carnage's kill chain, and the two windows Demonic Dodge opens. All on
-    // the player rather than in mods, for the reason above.
+    // Carnage's kill chain, and the invulnerability window AEGIS opens. Both
+    // on the player rather than in mods, for the reason above.
     this.carnageStacks = 0;
     this.invulnEnd = 0;
-    this.rageEnd = 0;
+
+    // THE ACTIVE ITEM SLOT. One at a time, by id into ACTIVE_ITEMS
+    // (js/items.js), or null - a run starts carrying nothing. `itemCharge` is
+    // seconds banked toward the item's cooldown; it is filled to the top the
+    // moment an item is taken, so a pedestal never hands over something the
+    // player has to wait to use.
+    this.item = null;
+    this.itemCharge = 0;
+    // One-shot, read and cleared by main.js on the frame the bar fills - the
+    // same split jumpFx and dashFx use, and for the same reason: player.js has
+    // no audio to reach for.
+    this.itemReadyFx = false;
     // Absolute Zero's drawback: the player cannot move until this time.
     this.frozenUntil = 0;
     // Game time, written once per frame by update(). getEffectiveDamage() has
@@ -863,12 +875,11 @@ export class Player {
     // -streakFloor and +streakCap. On the player for the same reason
     // noHitStacks is: a rebuildMods() would wipe it mid-magazine.
     this.streak = 0;
-    // Double Jump / Double Dash state. `jumpsLeft` refills on landing;
-    // `dashLeft` refills on a timer. Both are one-shot FX flags read and
-    // cleared by main.js, which owns the effects system.
+    // Double Jump state; `jumpsLeft` refills on landing. The DASH kept its
+    // motion but lost its bookkeeping: it is an active item now (BLINK DRIVE,
+    // js/items.js) and the item's charge bar IS its cooldown, so nothing here
+    // counts charges any more.
     this.jumpsLeft = 0;
-    this.dashLeft = 0;
-    this._dashAcc = 0;
     this.dashStart = 0;
     this.dashEnd = 0;
     this.dashDX = 0;
@@ -963,16 +974,19 @@ export class Player {
   // Derived stats. These are getters, not fields, because a draft pick can
   // change the underlying mods at any wave boundary - anything that cached
   // them would silently keep the pre-upgrade value for the rest of the run.
-  // The Devil's debt comes off AFTER the build's own bonuses, so a deal costs
-  // the same twenty points whether or not the player later picks up Overhealth
-  // - the price is a flat subtraction, not a share of the pool.
+  // Executioner's fifty and the console's purchases both come off AFTER the
+  // build's own bonuses, so the price is the same fifty points whether or not
+  // the player later picks up Overhealth - a flat subtraction, not a share of
+  // the pool. Glass Cannon, which IS a share, multiplies inside `built`.
   get maxHealth() {
     const built = Math.round((this.baseMaxHealth + this.mods.maxHpBonus) * this.mods.maxHpMult);
     // The bank is added AFTER the multipliers rather than into maxHpBonus,
     // because it is health the player earned wave by wave and not part of the
     // build: Glass Cannon halving the frame it was earned on would quietly
     // take half of every clean wave back with it.
-    return Math.max(MIN_MAX_HEALTH, built + this.hpBanked - this.maxHpDebt);
+    return Math.max(
+      MIN_MAX_HEALTH, built + this.hpBanked - this.maxHpDebt - this.mods.maxHpFlat
+    );
   }
   get magSize() {
     return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
@@ -1007,10 +1021,6 @@ export class Player {
       this.mods.damage *= k;
       this.mods.fireRate *= k;
     }
-    // A fresh Double Dash arrives loaded. rebuildMods only runs on a draft
-    // pick, so this cannot top the charges up mid-fight - but a mutation that
-    // did nothing for the five seconds after it was taken would read as broken.
-    if (this.dashLeft < this.mods.dashCharges) this.dashLeft = this.mods.dashCharges;
   }
 
   // Hot Streak. Called once per SHOT with whether that shot connected - the
@@ -1024,23 +1034,20 @@ export class Player {
     this.streak = Math.max(-m.streakFloor, Math.min(m.streakCap, next));
   }
 
-  // Double Dash. `code` is the raw key that was double-tapped.
+  // BLINK DRIVE's motion. Fired by the item (js/items.js) rather than by a
+  // mutation, so there is no charge to check here any more - the caller has
+  // already spent the item's charge by the time this runs.
   //
   // FORWARD ONLY. It used to dash whichever way the tapped key walked, which
   // made a back-tap the safest button in the game: the dash's whole cost is
   // that it commits you to a direction, and committing to AWAY costs nothing.
-  // W is the only key that spends a charge now, so the dash is a way into a
-  // fight rather than a free disengage. Returns whether a charge was spent.
-  tryDash(code, time) {
-    if (this.mods.dashCharges <= 0 || this.dashLeft <= 0) return false;
-    if (code !== 'KeyW') return false;
-    // Straight down the camera's own bearing, which is what W means at the
-    // moment it is pressed.
+  // It goes straight down the camera's bearing now whatever the feet are
+  // doing, so the dash is a way into a fight rather than a free disengage.
+  dash(time) {
     this.dashDX = -Math.sin(this.yaw);
     this.dashDZ = -Math.cos(this.yaw);
     this.dashStart = time;
     this.dashEnd = time + DASH_TIME;
-    this.dashLeft--;
     this.dashFx = true;
     return true;
   }
@@ -1075,40 +1082,37 @@ export class Player {
     return true;
   }
 
-  // Whether a Devil Deal costing `cost` max HP can be bought at all.
+  // Hands the player an active item, replacing whatever they were carrying.
+  // It arrives FULLY CHARGED: the pedestal is at a wave break, and an item
+  // that had to be earned again after being taken would be a pickup the player
+  // could not use in the fight it was handed to them for.
   //
-  // THIS IS THE ONLY GUARD THERE IS, and everything that spends max HP - a
-  // deal, a Devil reroll - asks it first. A deal the player cannot afford is
-  // not a deal that kills them: it is greyed out on its pillar and inert to
-  // both touch and shot. There is deliberately no path that takes the payment
-  // and then checks.
-  canPay(cost) {
-    return this.maxHealth - cost >= MIN_MAX_HEALTH;
+  // Returns the id of the item that was displaced, or null - the caller says
+  // so on the banner, because a silent swap is a run-ending mistake nobody saw.
+  giveItem(id) {
+    const had = this.item;
+    this.item = id;
+    this.itemCharge = ACTIVE_ITEMS[id].cooldown;
+    this.itemReadyFx = false;
+    return had === id ? null : had;
   }
 
-  // Sells `cost` max HP to the Devil, permanently. Returns false and changes
-  // nothing when it cannot be afforded.
-  payMaxHp(cost) {
-    if (!this.canPay(cost)) return false;
-    this.maxHpDebt += cost;
-    // The same clamp takeUpgrade() does, and for the same reason: the HUD must
-    // never show 78/60 after the pool shrinks under the player's current
-    // health. Note that this can LOWER current health - selling health you are
-    // standing on costs you that health now, not later.
-    this.health = Math.min(this.health, this.maxHealth);
-    return true;
+  // Whether the carried item can be fired right now. Nothing carried is not
+  // ready, so every caller can ask this one question.
+  get itemReady() {
+    return !!this.item && this.itemCharge >= ACTIVE_ITEMS[this.item].cooldown;
   }
 
-  // Demonic Dodge. Called by main.js on a successful dodge, alongside
-  // startDodge(): a second of invulnerability so the follow-up shot misses
-  // too, and three seconds of doubled damage to answer with.
-  startDodgeReward(time) {
-    if (this.mods.dodgeInvuln > 0) this.invulnEnd = time + this.mods.dodgeInvuln;
-    if (this.mods.dodgeRage > 0) this.rageEnd = time + this.mods.dodgeRageTime;
+  // Spends the charge. The EFFECT is not here - it lives on the item's own
+  // entry in items.js, which needs the game and not the player.
+  spendItem() {
+    this.itemCharge = 0;
+    this.itemReadyFx = false;
   }
 
-  // Absolute Zero's drawback. The world moves a fifth slower and you stop
-  // dead for a second every time something lands.
+
+  // Absolute Zero's drawback. The world moves 30% slower and you stop dead for
+  // half a second every time something lands.
   freeze(time) {
     if (this.mods.hitFreeze > 0) this.frozenUntil = time + this.mods.hitFreeze;
   }
@@ -1339,8 +1343,6 @@ export class Player {
     this._planted = 0;
     this.streak = 0;
     this.jumpsLeft = 0;
-    this.dashLeft = 0;
-    this._dashAcc = 0;
     this.dashStart = 0;
     this.dashEnd = 0;
     this._prevJump = false;
@@ -1359,14 +1361,15 @@ export class Player {
     this.breachReady = false;
     this.lastShotCost = 0;
     this.dodgeEnd = 0;
-    // Everything the Devil left behind. maxHpDebt goes before the health
-    // assignment further down, or the new run would be born at the old one's
-    // sold-down cap.
+    // maxHpDebt goes before the health assignment further down, or the new run
+    // would be born at the old one's bought-up cap.
     this.maxHpDebt = 0;
     this.carnageStacks = 0;
     this.invulnEnd = 0;
-    this.rageEnd = 0;
     this.frozenUntil = 0;
+    this.item = null;
+    this.itemCharge = 0;
+    this.itemReadyFx = false;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);
@@ -1462,9 +1465,8 @@ export class Player {
   // per second paid infinitely there: standing in the shop until the bar came
   // back was strictly better than playing, and it was the most boring correct
   // move in the game. Regeneration is a reason to break contact mid-fight, not
-  // a vending machine. Dash charges are deliberately NOT gated: they are a
-  // resource for the wave ahead, and starting one dashless because the last
-  // one ended mid-cooldown punishes nothing the player did.
+  // a vending machine. The active item's charge is gated on it too - see the
+  // note at that branch.
   update(dt, input, obstacles, time, combat = true) {
     // Published for getEffectiveDamage(), which has no clock of its own and is
     // called from several places that have none to give it.
@@ -1489,24 +1491,22 @@ export class Player {
       this.shieldEnd = 0;
     }
 
+    // THE ACTIVE ITEM CHARGES ON THE WAVE'S CLOCK AND NOTHING ELSE. Gated on
+    // `combat` for exactly the reason ammo regeneration below is: the wave
+    // break has no timer on it, so an item that filled there would be free to
+    // anyone willing to stand still, and standing still would be the correct
+    // play. Note that this gates the CHARGE and not the USE - a full item can
+    // be fired in the shop, it simply does not come back until the wave does.
+    if (combat && this.item && !this.itemReady) {
+      this.itemCharge = Math.min(
+        ACTIVE_ITEMS[this.item].cooldown, this.itemCharge + dt
+      );
+      if (this.itemReady) this.itemReadyFx = true;
+    }
+
     // Ammo Fabricator. Accumulated as a float and spent in whole rounds, so a
     // sub-1-round-per-second rate still pays out instead of truncating to
     // nothing every frame.
-    // Double Dash recharges one charge per DASH_RECHARGE seconds, up to the
-    // mutation's cap. The accumulator is not reset when full: a player sitting
-    // on full charges should get the next one the instant they spend one.
-    if (this.mods.dashCharges > 0) {
-      if (this.dashLeft < this.mods.dashCharges) {
-        this._dashAcc += dt;
-        while (this._dashAcc >= DASH_RECHARGE && this.dashLeft < this.mods.dashCharges) {
-          this._dashAcc -= DASH_RECHARGE;
-          this.dashLeft++;
-        }
-      } else {
-        this._dashAcc = 0;
-      }
-    }
-
     if (combat && this.mods.ammoRegen > 0 && this.reserveAmmo < this.maxReserve) {
       this._ammoRegenAcc += this.mods.ammoRegen * dt;
       if (this._ammoRegenAcc >= 1) {
@@ -2524,7 +2524,6 @@ export class Player {
       d *= 1 + Math.min(this.mods.carnageMax, this.mods.carnageStep * this.carnageStacks);
     }
     // Demonic Dodge's window, read off the frame clock published in update().
-    if (this.rageEnd > this.now) d *= 1 + this.mods.dodgeRage;
     return d;
   }
 

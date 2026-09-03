@@ -7,7 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
-import { controllerGlyph } from './padmenu.js';
+import { controllerGlyph, cap } from './padmenu.js';
 
 // The two player colours, as CSS. The world-space pair lives in main.js beside
 // the code that lights the gun; these are the same two hues written the way
@@ -72,6 +72,13 @@ export class UI {
     this.comboBar = $('combo-bar').firstElementChild;
     this.comboFill = $('combo-fill');
     this.promptEl = $('prompt');
+    // The active item slot, bottom right over the gun readout.
+    this.itemBox = $('item-box');
+    this.itemArt = $('item-art');
+    this.itemName = $('item-name');
+    this.itemKey = $('item-key');
+    this.itemBar = $('item-bar');
+    this.invulnFrame = $('invuln-frame');
     this.crosshair = $('crosshair');
     this.statsPanel = $('stats-panel');
     this.statsMuts = $('stats-muts');
@@ -253,6 +260,97 @@ export class UI {
     this.ammoRes.classList.remove('refund');
     void this.ammoRes.offsetWidth;
     this.ammoRes.classList.add('refund');
+  }
+
+  // ---- THE ACTIVE ITEM SLOT ------------------------------------------------
+
+  /**
+   * Draws the carried item and its charge. Called every frame like every other
+   * setter here, so everything below is guarded against the cache.
+   *
+   * @param {?string} id    item id, or null when nothing is carried
+   * @param {?object} def   its ACTIVE_ITEMS entry
+   * @param {number} frac   0..1 of the way to charged
+   * @param {boolean} held  true at the wave break, when the bar is frozen -
+   *   said explicitly rather than inferred, because a bar that has simply
+   *   stopped moving looks like a fault and this is a rule worth showing.
+   */
+  setItem(id, def, frac, held) {
+    if (this._c.itemId !== id) {
+      this._c.itemId = id;
+      this.itemBox.classList.toggle('hidden', !id);
+      if (def) {
+        this.itemName.textContent = def.name;
+        this.itemBox.style.setProperty(
+          '--item', '#' + def.theme.toString(16).padStart(6, '0')
+        );
+        // The 24x24 plate, at the same call the buff chips use, drawn into the
+        // canvas that is already in the document rather than swapped for a new
+        // one - a slot that replaced its own node on every pickup would leak a
+        // canvas per swap for the life of the run.
+        const art = pixelIconCanvas(id, def.theme, 3);
+        const c = this.itemArt.getContext('2d');
+        c.clearRect(0, 0, this.itemArt.width, this.itemArt.height);
+        c.drawImage(art, 0, 0);
+      }
+    }
+    if (!id) return;
+    // QUANTISED TO WHOLE CELLS, like the health and stamina bars: the bar is
+    // masked into twelve, so writing anything finer is a restyle for a change
+    // that cannot be seen.
+    const cells = Math.round(frac * 12) / 12;
+    if (this._c.itemFrac !== cells) {
+      this._c.itemFrac = cells;
+      this.itemBar.style.transform = 'scaleX(' + cells + ')';
+    }
+    const ready = frac >= 1;
+    if (this._c.itemReady !== ready) {
+      this._c.itemReady = ready;
+      this.itemBox.classList.toggle('ready', ready);
+    }
+    // `held` only matters while the bar is NOT full - the shop freezing a bar
+    // that is already at the top is not a thing the player needs telling.
+    const frozen = held && !ready;
+    if (this._c.itemHeld !== frozen) {
+      this._c.itemHeld = frozen;
+      this.itemBox.classList.toggle('held', frozen);
+    }
+  }
+
+  // The key or button that fires it, following whichever device the player last
+  // touched. Written from main.js's own input mode rather than read from a
+  // global, the same way the E/R1 prompt is.
+  setItemKey(padMode) {
+    if (this._c.itemKey === padMode) return;
+    this._c.itemKey = padMode;
+    this.itemKey.innerHTML = padMode ? cap('L1') : cap('Q');
+  }
+
+  // The item just finished charging. One flash, restarted the way
+  // flashReserve() restarts its own - a second charge inside the animation has
+  // to play again rather than ride the first one out.
+  flashItemReady() {
+    this.itemBox.classList.remove('charged');
+    void this.itemBox.offsetWidth;
+    this.itemBox.classList.add('charged');
+  }
+
+  // AEGIS's window, in seconds remaining - 0 for not running. Both damage sinks
+  // return in silence while it is open, so this frame is the only thing that
+  // says the strongest item in the pool is doing anything at all.
+  setInvuln(secs) {
+    const on = secs > 0;
+    // The last second blinks, so the window is felt ending rather than
+    // discovered by being hit the moment after it does.
+    const ending = on && secs < 1;
+    if (this._c.invulnOn !== on) {
+      this._c.invulnOn = on;
+      this.invulnFrame.classList.toggle('on', on);
+    }
+    if (this._c.invulnEnding !== ending) {
+      this._c.invulnEnding = ending;
+      this.invulnFrame.classList.toggle('ending', ending);
+    }
   }
 
   // Sweep of the ring around the crosshair, 0..1. Quantised to a hundredth
@@ -795,6 +893,11 @@ export class UI {
     // is what ends, not the class - so a new run is the one place it is worth
     // clearing, and it costs one class write per game.
     this.hitmarker.classList.remove('show');
+    // The slot goes with the run. A new game starts carrying nothing, and a
+    // plate left up showing the last run's item would be the first wrong thing
+    // on screen.
+    this.itemBox.className = 'plate hidden';
+    this.invulnFrame.classList.remove('on', 'ending');
     this.promptEl.classList.add('hidden');
     this.hideStats();
     for (const entry of Object.values(this._buffEls)) {

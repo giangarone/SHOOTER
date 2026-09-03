@@ -290,13 +290,24 @@ try {
     t('and it does not resume on its own', notResumed === false);
     t('a second click stops it', runningAgain === true && clickedOff === false);
 
-    // L1 dashes, but only for a build that has a dash to spend - the button
-    // must not invent charges the keyboard would not have had.
-    g.player.mods.dashCharges = 2;
-    g.player.dashLeft = 2;
+    // L1 FIRES THE ACTIVE ITEM - the binding it used to have, the dash, is now
+    // one of the things in that slot. It must not fire an item that is not
+    // charged, and an empty slot must be harmless.
+    g.player.item = null;
+    g.player.itemCharge = 0;
+    await tap(B.L1);
+    t('L1 with an empty slot does nothing', g.player.item === null);
+
+    g.player.giveItem('itemDash');
     g.player.dashEnd = -1;
     await tap(B.L1);
-    t('L1 dashes', g.player.dashLeft === 1, String(g.player.dashLeft));
+    t('L1 fires the active item',
+      g.player.itemCharge === 0 && g.player.dashEnd > g.time, String(g.player.itemCharge));
+
+    // ...and a second press, on an empty bar, spends nothing.
+    g.player.dashEnd = -1;
+    await tap(B.L1);
+    t('L1 on an empty bar spends nothing', g.player.dashEnd < g.time);
 
     // ---- 5. aim assist -----------------------------------------------------
     clearField();
