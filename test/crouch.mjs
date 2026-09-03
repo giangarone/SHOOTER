@@ -10,7 +10,11 @@
 //      on its own clock, standing rather than crouched, and it spends stamina.
 //   4. A jump is available at any point in a slide, and it KEEPS the slide's
 //      speed: the launch is still moving faster than a sprint at the apex.
-//   5. Melee hits exactly one enemy per swing, lands on a delay rather than on
+//   5. THE DIVE. Sprint, jump, and the button pressed IN THE AIR does not
+//      crouch there - it is buffered, and the landing spends it as a slide.
+//      Held or tapped, with the sprint key already released. A jump with no
+//      run behind it is still the plain crouch toggle it always was.
+//   6. Melee hits exactly one enemy per swing, lands on a delay rather than on
 //      the button, draws no ring on the floor, and pays double for the kill.
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
@@ -190,7 +194,94 @@ try {
       speedInSlide.toFixed(2) + ' -> ' + speedInAir.toFixed(2)
       + ' (sprint ' + sprintBeforeSlide.toFixed(2) + ')');
 
-    // ---- 5. the swing ------------------------------------------------------
+    // ---- 5. the dive: sprint, jump, crouch in the air, land sliding --------
+    //
+    // The move the crouch button could NOT do: in the air there is no floor to
+    // slide along, so the press used to fall through to the toggle and the
+    // player landed in a squat having asked for the opposite. It is buffered
+    // now - see SLIDE_BUFFER in player.js.
+    await rest();
+    set({ forward: true, sprint: true });
+    await frames(25);
+    const ranAt = Math.hypot(p.vel.x, p.vel.z);
+    const sprintingAtTakeoff = p.sprinting;
+    set({ jump: true });
+    await frames(2);
+    // THE SPRINT KEY IS RELEASED ON THE WAY UP, which is what most players
+    // actually do and what no live measurement of speed would survive: air
+    // speed drops to the walk the instant it is let go. The takeoff is what
+    // earns the slide, so the takeoff is what the player remembers.
+    set({ jump: false, sprint: false });
+    await frames(2);
+    const airborne = !p.onGround;
+    const runRemembered = p._groundRun;
+    set({ crouch: true });
+    await frames(2);
+    const crouchedInAir = p.crouching;
+    const buffered = p._slideBuf > 0;
+    let landedAt = -1;
+    for (let i = 0; i < 90 && !p.sliding; i++) {
+      await frames(1);
+      if (p.onGround && landedAt < 0) landedAt = i;
+    }
+    set({ crouch: false });
+    const dived = p.sliding;
+    const diveSpeed = Math.hypot(p.vel.x, p.vel.z);
+    const crouchedOnLanding = p.crouching;
+    for (let i = 0; i < 120 && p.sliding; i++) await frames(1);
+    const diveEndedStanding = !p.sliding && !p.crouching;
+    t('the run is on before the jump', sprintingAtTakeoff === true, ranAt.toFixed(2));
+    t('and the takeoff is remembered in the air', airborne === true && runRemembered === true);
+    t('the air press does NOT crouch in mid-air', crouchedInAir === false);
+    t('it is buffered against the landing instead', buffered === true);
+    t('and the landing turns it into a slide', dived === true, 'landed at frame ' + landedAt);
+    t('a dive lands sliding, not crouched', crouchedOnLanding === false);
+    t('the dive is faster than the sprint that fed it',
+      diveSpeed > ranAt, ranAt.toFixed(2) + ' -> ' + diveSpeed.toFixed(2));
+    t('and it ends standing like any other slide', diveEndedStanding === true);
+
+    // A TAP rather than a hold: the buffer alone has to carry it across the
+    // rest of the jump, which is the whole reason it is a second long.
+    await rest();
+    set({ forward: true, sprint: true });
+    await frames(25);
+    set({ jump: true });
+    await frames(2);
+    set({ jump: false, sprint: false });
+    await frames(2);
+    set({ crouch: true });
+    await frames(1);
+    set({ crouch: false });
+    for (let i = 0; i < 90 && !p.sliding && !p.onGround; i++) await frames(1);
+    await frames(2);
+    const tapDived = p.sliding;
+    for (let i = 0; i < 120 && p.sliding; i++) await frames(1);
+    t('a TAP in the air lands as a slide too', tapDived === true);
+
+    // AND THE MOVE THAT IS NOT A DIVE. A jump with no run behind it is still
+    // an ordinary crouch toggle, in the air and on the ground, or every
+    // hop-and-duck in the game would have quietly become a slide.
+    await rest();
+    set({ forward: true });
+    await frames(10);
+    set({ jump: true });
+    await frames(2);
+    set({ jump: false });
+    await frames(2);
+    set({ crouch: true });
+    await frames(2);
+    set({ crouch: false });
+    const walkCrouchedInAir = p.crouching;
+    const walkBuffered = p._slideBuf > 0;
+    for (let i = 0; i < 90 && !p.onGround; i++) await frames(1);
+    await frames(4);
+    const walkLandedCrouched = p.crouching && !p.sliding;
+    t('a walking jump still toggles the crouch in the air',
+      walkCrouchedInAir === true && walkBuffered === false);
+    t('and it lands crouched rather than sliding', walkLandedCrouched === true);
+    await rest();
+
+    // ---- 6. the swing ------------------------------------------------------
     // Three bodies stacked in front of the player, all inside the old arc.
     const Enemy = g.__EnemyForTest;
     const spawn3 = () => {

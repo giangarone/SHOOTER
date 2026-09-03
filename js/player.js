@@ -45,6 +45,13 @@ const DEFAULT_MODS = {
   ammoRegen: 0,         // reserve rounds per second
   ammoRefund: 0,        // Brass Echo: chance a shot that HIT is paid back
   recoilMult: 1,        // Hair Trigger: multiplier on the weapon's pitch kick
+  // THE TWO ACCURACY MODS, both read by Game._shotSpread and by nothing else.
+  // `bloomMult` scales the cone sustained fire opens up (see BLOOM_SPREAD);
+  // `spreadAdd` is a flat NDC penalty on every cone the gun ever fires
+  // through, so a build carrying it is visibly less accurate before the first
+  // round rather than only after the eighth.
+  bloomMult: 1,         // Hair Trigger: multiplier on the sustained-fire cone
+  spreadAdd: 0,         // Hair Trigger: flat NDC added to every shot cone
   staminaDrain: 1,      // Second Wind: multiplier on sprint and slide drain
   staminaRegen: 1,      // Second Wind: multiplier on the refill rate
   // The two per-wave max-HP mutations. Both bank into `hpBanked` on the player
@@ -265,6 +272,36 @@ const MIN_MAX_HEALTH = 20;
 // snappier recovery and a smaller climb; raise it for the opposite.
 const RECOIL_DECAY = 0.33;
 
+// ---- the sustained-fire cone ("bloom") -------------------------------------
+//
+// RECOIL AND BLOOM ARE TWO DIFFERENT COSTS AND THEY ARE KEPT APART. Recoil is
+// the muzzle climbing: it moves where the gun is pointed, the player can see
+// exactly where it went, and pulling back down answers it. Bloom is the gun
+// getting SLOPPY: the point of aim does not move at all, the cone around it
+// widens, and nothing the player does with the stick answers it - the only
+// answer is to stop firing. A weapon that only climbed could be mastered into
+// a laser; one that only bloomed would feel broken rather than hot. Together
+// they are what makes a held trigger a decision.
+//
+// `bloom` is a 0..1 CHARGE, not an angle. Every round adds to it and it
+// saturates at 1, which is the "limit" the whole mechanic needs: a magazine
+// held down reaches its worst cone about eight rounds in and stays there,
+// rather than opening until the crosshair leaves the screen. main.js turns the
+// charge into NDC (see BLOOM_SPREAD there), which is what lets Hair Trigger
+// widen the cone without touching the ramp or the cap.
+const BLOOM_PER_SHOT = 0.135;
+// How fast the charge bleeds off, in units a second. Deliberately several
+// times the fill rate: letting go of the trigger has to READ as the gun
+// settling, and at 3.2 a fully bloomed weapon is back to its resting cone in
+// under a third of a second.
+const BLOOM_RECOVER = 3.2;
+// And the wait before that starts. The floor exists for slow weapons; what
+// actually sets it is the gun's own cadence - see tryShoot, which holds for one
+// and a half shot intervals. Recovery is meant to begin when the player has
+// STOPPED firing, and "stopped" for a ten-rounds-a-second rifle means having
+// missed a cycle, not having been between two rounds.
+const BLOOM_HOLD_MIN = 0.12;
+
 // Two curve helpers the reload animation is built out of. `span` is where `t`
 // sits inside a window as a 0..1 fraction, clamped at both ends; `ease` is the
 // smoothstep every phase is shaped by.
@@ -414,6 +451,29 @@ const SLIDE_STEER = 1.6;
 // Slides are paid for out of the sprint bar, and faster than running is - it
 // is a burst, not a pace.
 const SLIDE_DRAIN = 45;
+// HOW LONG A SLIDE PRESSED IN THE AIR STAYS QUEUED.
+//
+// THE MOVE THIS EXISTS FOR: sprint, jump, and hit the crouch button on the way
+// down so the landing IS the slide. It is the standard shooter dive and it is
+// the one thing the button could not do - in the air there is no ground to
+// slide along, so the press fell through to the crouch toggle and the player
+// landed in a squat having asked for the opposite.
+//
+// Buffered rather than held, and that distinction is the whole feel of it: the
+// player presses on the way down and the game owes them a slide when they
+// arrive, whether or not the button is still down at the moment of contact.
+// Timing a button against a landing frame is not a skill worth testing.
+//
+// A jump is 2 * JUMP_V / 22 = 0.82 seconds in the air, so a second covers one
+// pressed at the very moment of takeoff and still expires inside a long fall -
+// a player who taps crouch at the top of a drop off the high catwalk lands on
+// their feet, which by then is what they expect.
+//
+// It matters less than it looks, because a HELD button refreshes it every
+// frame (see _updateCrouch): this window is what a tap buys, and the move as
+// people actually perform it - hold crouch on the way down - is not on a
+// clock at all.
+const SLIDE_BUFFER = 1;
 // And the floor to start one on, so a slide cannot be entered on the last drop
 // of the bar and end a tenth of a second later.
 const SLIDE_MIN_STAMINA = 15;
@@ -656,6 +716,10 @@ export class Player {
     // 1 while running and bleeding to 0 over SPRINT_SPREAD_FADE afterwards.
     // main.js multiplies the sprint's cone penalty by it.
     this.sprintFade = 0;
+    // THE SUSTAINED-FIRE CHARGE, 0..1. See BLOOM_PER_SHOT. `_bloomHold` is the
+    // game time recovery is allowed to start at, pushed forward by every round.
+    this.bloom = 0;
+    this._bloomHold = -99;
     // The walk/sprint bob. `_bobPhase` is in radians and advances with metres
     // travelled; `_bobAmp` is the eased 0..1 weight the whole animation is
     // scaled by; `_sprintPose` is the eased 0..1 blend into the run carry.
@@ -678,6 +742,16 @@ export class Player {
     this._crouchPose = 0;
     this._slidePose = 0;
     this._prevCrouch = false;
+    // Seconds left on a slide asked for in mid-air. See SLIDE_BUFFER. A
+    // COUNTDOWN rather than a deadline, so nothing has to rebase it.
+    this._slideBuf = 0;
+    // Whether the player was RUNNING the last time they had ground under
+    // them. Read only by the air branch of _updateCrouch, and remembered
+    // rather than measured because horizontal speed in the air is not the
+    // question: letting go of the sprint key at the apex drops it to the walk
+    // instantly, and the player who did that has still just jumped out of a
+    // sprint. It is a fact about the takeoff, so it is recorded at the takeoff.
+    this._groundRun = false;
     // The sprint button's own edge. Sprint is otherwise a HELD input and
     // nothing needed its rising edge until the crouch had to be cancelled by
     // it - see _updateCrouch.
@@ -1314,6 +1388,8 @@ export class Player {
     this.noSprintUntil = -99;
     this._sprintFov = 0;
     this.sprintFade = 0;
+    this.bloom = 0;
+    this._bloomHold = -99;
     this._bobPhase = 0;
     this._bobAmp = 0;
     this._sprintPose = 0;
@@ -1326,6 +1402,8 @@ export class Player {
     this._crouchPose = 0;
     this._slidePose = 0;
     this._prevCrouch = false;
+    this._slideBuf = 0;
+    this._groundRun = false;
     this._prevSprint = false;
     this._momX = 0;
     this._momZ = 0;
@@ -1642,6 +1720,11 @@ export class Player {
         }
       }
     }
+    // THE TAKEOFF, REMEMBERED. Rewritten on every grounded frame and left
+    // alone on every airborne one, so in the air it holds what the player was
+    // doing on the last frame they had a floor. That is what the mid-air
+    // crouch press asks about - see the air branch of _updateCrouch.
+    if (this.onGround) this._groundRun = this.sprinting || this.sliding;
     // Applied here, before collision, so a pull cannot drag the player through
     // a wall or a crate.
     this.pos.x += this.extX * dt;
@@ -1689,6 +1772,14 @@ export class Player {
 
     this.recoilPitch *= Math.pow(RECOIL_DECAY, dt);
     this.kick *= Math.pow(0.0001, dt);
+    // THE CONE SETTLING. Linear rather than exponential, and deliberately: an
+    // exponential tail leaves the crosshair creeping shut for half a second
+    // after it has visibly stopped mattering, and this is the one animation in
+    // the game the player is reading as a promise about the next shot. Linear
+    // arrives, and it arrives when it looks like it is going to.
+    if (this.now >= this._bloomHold && this.bloom > 0) {
+      this.bloom = Math.max(0, this.bloom - BLOOM_RECOVER * dt);
+    }
     // THE GUN'S POSE, as a straight blend between the two. The recoil kick is
     // added on top of whichever pose the blend landed on rather than folded
     // into it, so a shot fired halfway through a raise still kicks by exactly
@@ -1842,10 +1933,17 @@ export class Player {
   /**
    * CROUCH, SLIDE, AND THE ONE BUTTON THAT IS BOTH.
    *
-   * The press is read as an EDGE and what it does depends entirely on what the
-   * player was already doing. At a sprint it opens a slide; anywhere else it
-   * flips the crouch. Nothing here is held: see the note on SLIDE_TIME for why
-   * a slide ignores the button being let go, and why it ends standing.
+   * ON THE GROUND the press is read as an EDGE, and what it does depends
+   * entirely on what the player was already doing: at a sprint it opens a
+   * slide, anywhere else it flips the crouch. A slide, once open, ignores the
+   * button entirely - see the note on SLIDE_TIME for why it runs to its own
+   * clock and why it ends standing.
+   *
+   * IN THE AIR it is read as a HOLD, and it buys a slide on the landing rather
+   * than a crouch on the spot - see SLIDE_BUFFER. That is the one place in
+   * here the button means something the player cannot see happen immediately,
+   * and it is why the branch order below is what it is: a landing spends what
+   * the air press bought before the button gets another say.
    *
    * `f` and `s` are the movement axes update() already resolved, so the stick
    * and the keys steer a slide identically.
@@ -1871,6 +1969,9 @@ export class Player {
     const sprintEdge = sprintWant && !this._prevSprint;
     this._prevSprint = sprintWant;
     if (sprintEdge && this.crouching) this.crouching = false;
+
+    // The air buffer ages wherever the player is. See SLIDE_BUFFER.
+    if (this._slideBuf > 0) this._slideBuf = Math.max(0, this._slideBuf - dt);
 
     if (this.sliding) {
       this.slideT -= dt;
@@ -1902,14 +2003,47 @@ export class Player {
       // and has already ended it by the time this sees the frame, so this is
       // only about falling.
       if (this.slideT <= 0 || !this.onGround) this._endSlide();
+    } else if (this.onGround && this._slideBuf > 0) {
+      // TOUCHDOWN ON A BUFFERED PRESS. This is the sprint-jump-crouch dive
+      // arriving, and it is checked BEFORE the button because the press that
+      // bought it happened in the air and may have been let go of since.
+      //
+      // Spent unconditionally, whether or not the slide can actually open: a
+      // buffer left standing after a landing that failed the stamina test
+      // would fire on the next one, and a slide the player did not just ask
+      // for is worse than a slide they did not get.
+      this._slideBuf = 0;
+      if (this._canSlide(moving, false)) this._startSlide(f, s);
+      // A landing with nothing left to slide on is a landing in cover. The
+      // player pressed crouch and they get a crouch, which is what the button
+      // did before this branch existed.
+      else this.crouching = true;
+    } else if (!this.onGround && want && this._groundRun) {
+      // IN THE AIR, HAVING JUMPED OUT OF A RUN. Nothing to slide along yet,
+      // so the press is kept rather than spent - see SLIDE_BUFFER.
+      //
+      // Gated on `_groundRun` and not on anything measured right now, for a
+      // reason worth stating: neither live speed nor `sprinting` survives
+      // the jump. A player who lets go of the sprint key at the apex is at
+      // walking pace by the time they press crouch, and they have obviously
+      // still just jumped out of a sprint. What earns the slide is the
+      // takeoff, so the takeoff is what is remembered.
+      //
+      // The posture is deliberately NOT changed here. A crouch in mid-air
+      // would take the crouch speed multiplier with it and cut the very
+      // launch the player is trying to convert; the tuck they are asking for
+      // is the slide, and it happens on the floor.
+      //
+      // Read off the HELD button rather than off its edge, which is the
+      // other half of making this feel like a move rather than a trick: the
+      // window is refreshed for as long as the button is down, so a player
+      // who holds crouch through the descent lands in a slide whenever they
+      // land, however long the fall was. The buffer is what a TAP buys.
+      this._slideBuf = SLIDE_BUFFER;
     } else if (edge) {
       // THE RUN IS WHAT MAKES IT A SLIDE. Everything else is a toggle.
-      if (this.sprinting && this.onGround && moving
-        && !this.staminaLocked && this.stamina >= SLIDE_MIN_STAMINA) {
-        this._startSlide(f, s);
-      } else {
-        this.crouching = !this.crouching;
-      }
+      if (this._canSlide(moving, true)) this._startSlide(f, s);
+      else this.crouching = !this.crouching;
     }
 
     // The camera and the two gun blends, all on one ease. `crouching` and
@@ -1919,6 +2053,22 @@ export class Player {
     this.eyeH += (wantEye - this.eyeH) * k;
     this._crouchPose += (((this.crouching || this.sliding) ? 1 : 0) - this._crouchPose) * k;
     this._slidePose += ((this.sliding ? 1 : 0) - this._slidePose) * k;
+  }
+
+  /**
+   * Whether a slide can OPEN this frame. Ground under the player, a direction
+   * to go in, and stamina to spend, always.
+   *
+   * `run` is whether the sprint that pays for it has to be happening right
+   * now. True for a press made on the ground - there, the run IS the input
+   * that distinguishes a slide from a crouch. False for one buffered in the
+   * air, where the run was the one the player jumped out of and demanding it
+   * still be held would fail exactly the players who did the move properly.
+   */
+  _canSlide(moving, run) {
+    return this.onGround && moving
+      && !this.staminaLocked && this.stamina >= SLIDE_MIN_STAMINA
+      && (!run || this.sprinting);
   }
 
   // Opens a slide along the direction the player is currently moving. The
@@ -1934,6 +2084,7 @@ export class Player {
     this.crouching = false;
     this.slideT = SLIDE_TIME;
     this.slideFx = true;
+    this._slideBuf = 0;
   }
 
   // ENDS STANDING. The envelope has already brought the speed down to the
@@ -2258,6 +2409,7 @@ export class Player {
       this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
       this.recoilPitch +=
         (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
+      this._bloomShot();
       return 'shot';
     }
     if (this.mag <= 0) {
@@ -2287,8 +2439,23 @@ export class Player {
     this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
     this.recoilPitch +=
       (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
+    this._bloomShot();
     if (this.mag === 0) this.startReload();
     return 'shot';
+  }
+
+  // ONE ROUND'S WORTH OF SLOP, and the hold that keeps it there. Called from
+  // both branches of tryShoot - the free Opening Salvo round blooms exactly
+  // like a paid one, because the cone is about the gun being fired and not
+  // about who is paying for the ammunition.
+  //
+  // The hold is read off `fireCd`, which the caller has already set to this
+  // shot's interval: a weapon holding its trigger down refills the hold every
+  // cycle and never recovers, and one that stops recovers half a cycle later.
+  // That is the whole "continuous fire" test, and it costs no extra state.
+  _bloomShot() {
+    this.bloom = Math.min(1, this.bloom + BLOOM_PER_SHOT);
+    this._bloomHold = this.now + Math.max(BLOOM_HOLD_MIN, this.fireCd * 1.5);
   }
 
   // Arms a swing. The COOLDOWN is here and the hit is main.js's - see

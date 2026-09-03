@@ -199,6 +199,30 @@
     <div class="opt-row">
       <button id="btn-settings-pause" class="opt-btn">SETTINGS</button>
       <button id="btn-fs-pause" class="opt-btn">FULLSCREEN</button>
+      <!-- The one button on this screen that throws the run away, so it is
+           marked as such and it asks first. See #overlay-confirm. -->
+      <button id="btn-exit-pause" class="opt-btn danger">EXIT</button>
+    </div>
+  </div>
+
+  <!-- ARE YOU SURE. A sub-screen like SETTINGS and HIGH SCORES - layered over
+       the pause menu rather than swapping with it, so BACK is one class change
+       - but it is the only one that asks a question, so it is the only one
+       drawn in red and the only one whose default answer is no.
+
+       CANCEL is the PRIMARY button and EXIT is the outlined one, which is the
+       wrong way round for every other screen in the game and deliberately so
+       here: the big lit cabinet button is the safe one, and throwing away a
+       run takes the deliberate press. -->
+  <div id="overlay-confirm" class="overlay hidden">
+    <div class="marquee plate">
+      <h1>EXIT RUN?</h1>
+      <div class="rule"></div>
+      <p class="sub">THIS WAVE, THIS BUILD AND THIS SCORE ARE LOST</p>
+    </div>
+    <div class="primary-row"><button id="btn-exit-no">KEEP PLAYING</button></div>
+    <div class="opt-row">
+      <button id="btn-exit-yes" class="opt-btn danger">EXIT TO MENU</button>
     </div>
   </div>
 

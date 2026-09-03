@@ -21,7 +21,9 @@
 //    6. R2 fires, R3 melees, SQUARE reloads, TRIANGLE holds the build sheet.
 //    7. OPTIONS pauses and un-pauses; the D-pad walks the menu, and a
 //       settings row spends left/right on its own value rather than on moving
-//       the selection.
+//       the selection. EXIT asks before it exits, the question backs out under
+//       CIRCLE like any other sub-screen, and confirming it leaves the run and
+//       the fight behind on the main screen.
 //    8. Aim assist works inside its cone and not outside it, and its pull
 //       closes an error rather than opening one.
 //    9. Vibration reaches the actuator, and stops when it is turned off.
@@ -424,6 +426,58 @@ try {
       g._sensMult().toFixed(2));
     g._closeSubScreen();
     await frames(2);
+
+    // ---- 6b. EXIT, and the question in front of it -------------------------
+    //
+    // The one control on the pause screen that throws the run away, so it is
+    // the one that is not allowed to do anything on a single press. It opens a
+    // confirmation, and that confirmation is a SUB-SCREEN like SETTINGS - which
+    // is the whole reason it needs asserting here: CIRCLE, OPTIONS and BACK all
+    // route through _subScreenOpen, so a screen that forgot to declare itself
+    // one would be a screen the pad could not back out of.
+    const shown = (el) => !el.classList.contains('hidden');
+    document.getElementById('btn-exit-pause').click();
+    await frames(2);
+    t('exit asks before it exits', shown(g.ui.confirmOv) && g.state === 'paused', g.state);
+    t('the pause menu is still underneath it', shown(g.ui.pauseOv));
+    t('and the pad is pointed at the question', g._menuRoot() === g.ui.confirmOv);
+    // The safe answer is the one the selection starts on, and the one the big
+    // lit button is - a player who mashes CROSS keeps their run.
+    t('the selection starts on the safe answer',
+      g.menu.el === document.getElementById('btn-exit-no'),
+      g.menu.el && g.menu.el.id);
+    await tap(B.CIRCLE);
+    t('circle backs out of the question, not out of the run',
+      !shown(g.ui.confirmOv) && g.state === 'paused', g.state);
+
+    document.getElementById('btn-exit-pause').click();
+    await frames(2);
+    document.getElementById('btn-exit-no').click();
+    await frames(2);
+    t('and so does cancelling it', !shown(g.ui.confirmOv) && g.state === 'paused');
+
+    document.getElementById('btn-exit-pause').click();
+    await frames(2);
+    document.getElementById('btn-exit-yes').click();
+    await frames(4);
+    t('CONFIRMING RETURNS TO THE MAIN SCREEN',
+      g.state === 'menu' && shown(g.ui.startOv), g.state);
+    t('with the pause screen and the question gone',
+      !shown(g.ui.pauseOv) && !shown(g.ui.confirmOv));
+    t('and the HUD down', g.ui.hud.classList.contains('hidden'));
+    // The menu is drawn over a LIVE arena, so an abandoned fight left standing
+    // would be visible through the wash.
+    t('the fight behind the menu is over',
+      g.enemies.length === 0 && g.queue.length === 0, 'enemies ' + g.enemies.length);
+    // OPTIONS is START on this screen, which is how the pad gets back in.
+    await tap(B.OPTIONS);
+    t('and a fresh run starts clean from it',
+      g.state === 'playing' && g.wave === 0 && g.score === 0,
+      'wave ' + g.wave + ' score ' + g.score);
+    await frames(2);
+
+    await tap(B.OPTIONS);
+    t('options pauses again', g.state === 'paused', g.state);
     await tap(B.OPTIONS);
     t('options un-pauses', g.state === 'playing', g.state);
 

@@ -1008,7 +1008,7 @@ html, body {
    the reticle coming loose. */
 #hud.swap #crosshair { opacity: 0; transition: opacity 0.18s linear; }
 
-#overlay-settings, #overlay-scores {
+#overlay-settings, #overlay-scores, #overlay-confirm {
   cursor: default;
   /* SCROLLABLE, because settings only ever grow. The controller block took
      this screen past the bottom of a 720p window and cut BACK off, and the
@@ -1040,6 +1040,43 @@ html, body {
     var(--dither);
   background-size: auto, 4px 4px;
 }
+
+/* ---- the confirmation ----------------------------------------------------
+   A DESTRUCTIVE ANSWER IS NEVER THE EASY ONE. Everywhere else in the cabinet
+   the lit cyan cap is the thing you came to press; here the lit cap is CANCEL
+   and the outlined secondary is the one that ends the run, so a player mashing
+   the obvious button keeps playing. The pad driver starts on the same button
+   for the same reason - see _padMenu.
+
+   Red, and the same red as the death marquee and the low-health bar rather
+   than a new one. The palette is four colours; a fifth would be the only thing
+   on screen that came from somewhere else. */
+#overlay-confirm .marquee { --edge: rgba(255, 59, 48, 0.45); }
+#overlay-confirm .rule {
+  background: repeating-linear-gradient(90deg, var(--red) 0 8px, transparent 8px 16px);
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.5);
+}
+/* Red like the death marquee, but WITHOUT its jitter: the h1.dead twitch is
+   the tube losing sync over a run that has ended, and putting it on a question
+   would read as the interface glitching at the moment it is asking for a
+   decision. */
+#overlay-confirm h1 {
+  color: var(--red);
+  text-shadow: 4px 4px 0 var(--ink), 0 0 30px rgba(255, 59, 48, 0.85);
+}
+
+/* The outlined danger button, used by EXIT on the pause menu and by the
+   confirmation's own yes. Same machined cap as any other .opt-btn - it is only
+   ever the colour that changes, so it cannot read as a different control. */
+.overlay .opt-btn.danger {
+  color: var(--red);
+  box-shadow: inset 0 0 0 2px rgba(255, 59, 48, 0.5);
+}
+.overlay .opt-btn.danger:hover {
+  background: rgba(255, 59, 48, 0.16);
+  box-shadow: inset 0 0 0 2px var(--red);
+}
+.overlay .opt-btn.danger:active { box-shadow: inset 0 0 0 2px var(--red); }
 
 /* ---- settings -----------------------------------------------------------
    One column of rows on a single plate. The label sits hard left and the

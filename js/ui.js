@@ -48,6 +48,7 @@ export class UI {
     this.startOv = $('overlay-start');
     this.overOv = $('overlay-over');
     this.pauseOv = $('overlay-pause');
+    this.confirmOv = $('overlay-confirm');
     // The two sub-screens. They sit OVER whichever menu opened them rather
     // than replacing it, so the one behind is left exactly as it was and BACK
     // is a single class change.
@@ -500,9 +501,17 @@ export class UI {
   hideSubScreens() {
     this.settingsOv.classList.add('hidden');
     this.scoresOv.classList.add('hidden');
+    this.confirmOv.classList.add('hidden');
   }
   showSettings() {
     this.settingsOv.classList.remove('hidden');
+  }
+  // The EXIT confirmation. A sub-screen on exactly the same terms as the other
+  // two - layered over the pause menu, taken down by hideSubScreens - so BACK,
+  // CIRCLE and Escape already do the right thing with it and nothing had to
+  // learn a fourth way to close a screen.
+  showConfirmExit() {
+    this.confirmOv.classList.remove('hidden');
   }
   // The board, drawn fresh every time the screen opens - the player may have
   // banked a run since the last look. An empty board renders to nothing at all

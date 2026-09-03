@@ -335,9 +335,15 @@ export class SFX {
     this.tone({ f: 1180, t: 0.04, v: 0.14, type: 'sine' });
   }
 
-  // A MONEY ORB COLLECTED. Bubbly rather than metallic: two sines gliding up a
-  // fifth, no noise layer at all, because this is the most-played sound in the
-  // game and anything with an edge on it becomes unbearable by wave five.
+  // A MONEY ORB COLLECTED. Bubbly rather than metallic: three tuned partials
+  // gliding up a fifth, no noise layer at all, because this is the most-played
+  // sound in the game and a noise layer on it becomes unbearable by wave five.
+  //
+  // The BRIGHTNESS is bought in harmonics rather than in gain. The obvious way
+  // to make a blip carry is to turn it up, and past a point that just makes a
+  // louder thud; adding a triangle a fifth above and a short sine two octaves
+  // over it puts energy where the ear is most sensitive, so the orb cuts
+  // through the track at a level that still leaves room for the gun.
   //
   // Three things stop a stream of them turning into a wall of noise:
   //   1. A hard throttle. Orbs arrive several per frame during the wave-clear
@@ -361,8 +367,17 @@ export class SFX {
     const f = COIN_LADDER[step] * Math.pow(2, oct) * (0.985 + Math.random() * 0.03);
     // The glide is what makes it a bubble instead of a beep: it arrives from
     // under the note rather than starting on it.
-    this.tone({ f: f * 0.62, f2: f, t: 0.09, type: 'sine', v: 0.22 });
-    this.tone({ f: f * 1.5, f2: f * 2, t: 0.06, type: 'sine', v: 0.07, delay: 0.02 });
+    this.tone({ f: f * 0.62, f2: f, t: 0.09, type: 'sine', v: 0.3 });
+    // THE SPARKLE, and the reason the whole sound reads as brighter rather
+    // than merely louder. A pure sine an octave up is felt as volume; a
+    // triangle has odd harmonics above it, so the same note arrives with an
+    // edge on it and the blip carries over a full arena without having to be
+    // pushed further up the meter.
+    this.tone({ f: f * 1.5, f2: f * 2, t: 0.06, type: 'triangle', v: 0.12, delay: 0.02 });
+    // And a third, brief and very quiet, two octaves up. Short enough (30ms)
+    // to read as the attack of the note rather than as a note of its own,
+    // which is what keeps a chain of forty of these from turning shrill.
+    this.tone({ f: f * 3, t: 0.03, type: 'sine', v: 0.06, delay: 0.01 });
   }
   // The magnet. A rising sweep with a soft thump under it - the sound of the
   // floor being pulled in, played once for however many orbs answer it. The

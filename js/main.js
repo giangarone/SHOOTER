@@ -199,6 +199,23 @@ const MOVE_SPREAD_AIM = 0.25;
 // sprinting, so a penalty that stopped when the sprint did could never be the
 // cone a bullet was actually fired through.
 const SPRINT_SPREAD = 0.085;
+// THE CONE A HELD TRIGGER OPENS, at a full charge. Player.bloom is the 0..1
+// charge and this is what it is worth in NDC, so the ramp and the cap live
+// with the gun (see BLOOM_PER_SHOT in player.js) and the SIZE lives here with
+// the other two cone penalties it has to sit alongside.
+//
+// Sized against them on purpose: a magazine emptied on full auto costs about
+// as much accuracy as walking does, and rather less than a sprint. That is the
+// honest weight for it - a held trigger should be a worse way to shoot, not a
+// broken one, and the player who taps instead should be able to feel that they
+// chose something.
+const BLOOM_SPREAD = 0.075;
+// What is left of it down the sights. Not the same cut MOVE_SPREAD_AIM makes,
+// and it should not be: aiming is a claim about how steadily the gun is being
+// HELD, and it answers a run almost completely. It has much less to say about
+// a barrel that has had thirty rounds through it, so bloom keeps most of its
+// weight with the gun up - the crosshair is hidden there, but the cone is not.
+const BLOOM_AIM = 0.55;
 // The crosshair's arms never close all the way onto the dot: a reticle with no
 // gap in it is a blob, and the aimed cone is small enough to be one.
 const CROSS_MIN_GAP = 4;
@@ -1332,6 +1349,22 @@ class Game {
       e.stopPropagation();
       this._closeSubScreen();
     });
+    // EXIT, in two presses. The first only opens the question; the second is
+    // the one that ends the run. Both stop the event for the same reason every
+    // other button on the pause overlay does - the overlay itself is
+    // click-to-continue, and a stray bubble would resume the game underneath.
+    document.getElementById('btn-exit-pause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.ui.showConfirmExit();
+    });
+    document.getElementById('btn-exit-no').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._closeSubScreen();
+    });
+    document.getElementById('btn-exit-yes').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._exitToMenu();
+    });
     // The sub-screens cover the menu underneath, but a click that lands on the
     // padding around their panels would otherwise fall through to nothing and
     // read as a dead screen. Swallowed rather than treated as BACK: these are
@@ -1341,7 +1374,7 @@ class Game {
     // pointer-events: none, so a click during a handoff falls through to the
     // canvas, where every handler already refuses a state that is not
     // 'playing'. Swallowing it here would be a listener that can never fire.
-    for (const ov of [this.ui.settingsOv, this.ui.scoresOv]) {
+    for (const ov of [this.ui.settingsOv, this.ui.scoresOv, this.ui.confirmOv]) {
       ov.addEventListener('click', (e) => e.stopPropagation());
     }
 
@@ -1616,7 +1649,8 @@ class Game {
   // and still listening, so anything that acts on a menu click has to ask.
   _subScreenOpen() {
     return !this.ui.settingsOv.classList.contains('hidden')
-      || !this.ui.scoresOv.classList.contains('hidden');
+      || !this.ui.scoresOv.classList.contains('hidden')
+      || !this.ui.confirmOv.classList.contains('hidden');
   }
 
 
@@ -2038,6 +2072,7 @@ class Game {
   // is on screen. The sub-screens are checked first because they sit OVER the
   // menu that opened them and that menu is still in the document.
   _menuRoot() {
+    if (!this.ui.confirmOv.classList.contains('hidden')) return this.ui.confirmOv;
     if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
     if (!this.ui.scoresOv.classList.contains('hidden')) return this.ui.scoresOv;
     if (this.state === 'menu') return this.ui.startOv;
@@ -2361,6 +2396,50 @@ class Game {
     this.state = 'playing';
     this.ui.hidePause();
     if (!this.autoTest) this._lock();
+  }
+
+  /**
+   * ABANDON THE RUN AND GO BACK TO THE MENU. Reached only from the pause
+   * screen, and only through the confirmation - see #overlay-confirm.
+   *
+   * NOTHING IS BANKED. A score reaches the leaderboard by dying with it, which
+   * is the arcade's own rule and the reason `_pending` is written in
+   * _postScore and nowhere else: quitting a run at wave nine because it was
+   * going well is not a way to record wave nine. The confirmation says so in
+   * as many words, which is most of why there is a confirmation.
+   *
+   * The teardown is beginGame's, minus the part that starts a run. That is
+   * deliberate: the menu is drawn over a LIVE arena, so a fight left standing
+   * behind it would be visible through the wash, and the next START would
+   * clear it anyway - doing it here means the player never sees the seam.
+   */
+  _exitToMenu() {
+    if (this.state !== 'paused') return;
+    this._closeSubScreen();
+    this.state = 'menu';
+    this._clearInput();
+    this._closeStats();
+    this.pad.stopRumble();
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    // A MATCH ENDS WITH THE RUN THAT WAS ABANDONED. There is no half a versus
+    // match to come back to: both slots are the same run seen twice, and the
+    // player who did not press EXIT is in the room to argue about it.
+    this.mode = 'solo';
+    this.match = null;
+    this._pass = false;
+    this._swapped = false;
+    this.ui.setVersus(null);
+    this.player.setPlayerTag(null);
+    this.player.setHolster(0);
+    this._clearEntities();
+    this.queue.length = 0;
+    this._pendingBuffs.length = 0;
+    this.waveState = 'idle';
+    this.totemArea.dismiss();
+    this.devilArea.dismiss();
+    this.devilPending = false;
+    this.ui.setPrompt(null, false);
+    this.ui.showStart();
   }
 
   // ---- versus: the hot seat ------------------------------------------------
@@ -3280,7 +3359,18 @@ class Game {
     // player who raises it during the sprint's tail gets the steadier weapon
     // they asked for rather than one still carrying the run.
     const moving = MOVE_SPREAD * speed + SPRINT_SPREAD * this.player.sprintFade;
-    return cone + moving * (1 + (MOVE_SPREAD_AIM - 1) * a);
+    // AND THE HELD TRIGGER, which is the one penalty here the player is
+    // spending rather than wearing: it is bought a round at a time and it is
+    // given back the moment they stop. Hair Trigger's bloomMult widens it -
+    // the cost of a doubled rate is a gun that goes to pieces faster - and its
+    // spreadAdd is outside the aim cut because a flat handling penalty is not
+    // something raising the weapon can talk its way out of.
+    const m = this.player.mods;
+    const bloom = BLOOM_SPREAD * this.player.bloom * m.bloomMult;
+    return cone
+      + moving * (1 + (MOVE_SPREAD_AIM - 1) * a)
+      + bloom * (1 + (BLOOM_AIM - 1) * a)
+      + m.spreadAdd;
   }
 
   // One pellet of a shot. Walks the sorted hit list so a piercing weapon can

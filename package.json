@@ -11,6 +11,7 @@
     "test:drops": "node test/drops.mjs",
     "test:melee": "node test/melee.mjs",
     "test:aim": "node test/aim.mjs",
+    "test:accuracy": "node test/accuracy.mjs",
     "test:sprint": "node test/sprint.mjs",
     "test:crouch": "node test/crouch.mjs",
     "test:pad": "node test/pad.mjs",

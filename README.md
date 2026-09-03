@@ -91,6 +91,16 @@ the speed an ordinary walk would have been travelling at — so there is no fram
 where handing control back is felt. It ends **standing**, not crouched. It is
 paid for out of the sprint bar, faster than running is.
 
+**Sprint, jump, and press crouch in the air, and you land in a slide.** In the
+air there is no floor to slide along, so the press is buffered rather than
+spent — hold it through the descent and the landing turns into a slide whenever
+it comes, or tap it and the buffer carries it for a second, which is longer
+than the jump. What earns the dive is the *takeoff*: letting go of sprint on
+the way up drops you to walking pace instantly, so the game remembers whether
+you were running the last time you had a floor rather than measuring how fast
+you happen to be going. A jump with no run behind it is still the plain crouch
+toggle it always was.
+
 **You can jump at any point in a slide, and the jump keeps the slide's speed.**
 That is the reason the two moves are worth having together: the slide is the
 fast, low thing and the jump is how you spend it. The momentum is held as a
@@ -138,6 +148,21 @@ running and shuts when the gun comes up, and it goes gold while aiming — at
 that gap the arms are furniture and the bead in the middle is what is being
 aimed. Movement costs accuracy from either pose, but a quarter as much down the
 sights, so standing still and aiming is the most accurate thing in the game.
+
+**A held trigger blooms the cone.** Every round adds to a 0..1 charge that
+saturates about eight shots in, so a magazine emptied on full auto costs about
+as much accuracy as walking does and then stops getting worse — there is a
+worst case and you reach it. Letting go settles it back to the resting cone in
+under a third of a second, linearly, because this is the one animation the
+player reads as a promise about the next shot and an exponential tail leaves it
+creeping shut long after it has stopped mattering.
+
+Bloom is deliberately **not** recoil, and the two are kept apart. Recoil is the
+muzzle climbing: it moves where the gun is pointed, you can see where it went,
+and pulling back down answers it. Bloom leaves the point of aim exactly where
+it was and widens the cone around it, and the only answer to it is to stop
+firing. A weapon that only climbed could be mastered into a laser; one that
+only bloomed would feel broken rather than hot.
 
 The movement penalty scales continuously off live speed rather than switching
 on past a threshold: standing, walking and sprinting are three different guns,
@@ -368,7 +393,11 @@ context. The start screen says so, and one click anywhere fixes it.
   underneath them and enemy fire passes straight through - the high ground buys
   sightlines and costs you cover.
 - HUD: health, ammo, score, wave + enemies remaining
-- Start, pause, and game-over screens with restart
+- Start, pause, and game-over screens with restart. The pause screen also has
+  **EXIT**, which asks first: the confirmation is the one screen in the cabinet
+  where the big lit button is the safe answer and the outlined one ends the
+  run, so a player mashing the obvious button keeps playing. Nothing is banked
+  by leaving — a score reaches the board by dying with it.
 - **Local leaderboard.** The ten best runs, ranked by score with the wave
   reached as the tiebreak, shown on the title screen and after a death. A run
   that places asks for a name, arcade style; restarting without pressing SAVE
@@ -592,11 +621,19 @@ the sprint's accuracy penalty outlives the run and then settles. `test:pad`
 covers the L3 latch and the settings rows: that one click starts a run and a
 standstill ends it, that it does not resume on its own, and that left and right
 on a sensitivity row move the value while the selection stays on the row.
-`test:crouch` covers the third movement gear and the swing: that the button
+`test:accuracy` covers the cone the gun fires through: that a held trigger
+opens it round by round and opens the crosshair with it, that it saturates
+rather than climbing forever, that it settles all the way back the moment the
+trigger comes up, that the same fire also kicks the pitch without either
+penalty moving where the player is aiming, and that Hair Trigger charges for
+its rate in both currencies. `test:crouch` covers the third movement gear and
+the swing: that the button
 latches a crouch and a second press releases it, that the same button at a
 sprint slides instead and that letting go does NOT end the slide, that a slide
 is faster than the run it came out of and ends standing rather than crouched,
-that a jump out of one keeps its speed to the frame — and, for the melee, that
+that a jump out of one keeps its speed to the frame, that the button pressed in
+mid-air does not crouch there but lands as a slide — held or tapped, and with
+the sprint key already released — and, for the melee, that
 the swing lands on a delay rather than on the button, hits exactly one of three
 bodies standing in front of the player, draws no ring on the floor, and scores
 double what the same body is worth shot.
@@ -634,6 +671,8 @@ test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer
 test/pad.mjs        controller support, driven by a synthetic DualSense
 test/aim.mjs        the sights, the crosshair that reads the cone, the marker
+test/accuracy.mjs   the held trigger blooms, caps, recovers - and is not recoil
+test/crouch.mjs     the crouch, the slide, the dive out of a jump, the swing
 test/sprint.mjs     the second gear and the stamina that pays for it
 pixel-icon-sheet.html    all 66 icons at once, at full size and at arena range
 pixel-icon-viewer.html   one icon at a time, in a mock column

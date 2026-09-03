@@ -173,6 +173,13 @@ const PLAYER_SKIP = new Set([
   // Aiming and sprinting are what the player is DOING this frame; both are
   // recomputed from the controller every frame anyway.
   'aiming', '_aimRaw', 'aimT', 'sprinting', 'sprintFade', '_sprintFov',
+  // The sustained-fire cone and its hold, for the same reason sprintFade is
+  // here: it is what the trigger is doing THIS FRAME. A benched player's gun
+  // has had a whole wave to settle, and the incoming one is not holding it.
+  'bloom', '_bloomHold',
+  // A slide BUFFERED IN THE AIR, on the same terms as a dash in flight: it is
+  // an input waiting to land, and the incoming player did not press it.
+  '_slideBuf', '_groundRun',
   // Pose: the walk bob, the sprint carry, and the six offsets they write.
   '_bobPhase', '_bobAmp', '_sprintPose',
   '_gunOffX', '_gunOffY', '_gunOffZ', '_gunOffRX', '_gunOffRY', '_gunOffRZ',
