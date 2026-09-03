@@ -1274,37 +1274,22 @@ export function rerollCost(n, wave = 1) {
   return blockPrice(wave, REROLL_BASE, REROLL_STEP) * Math.pow(2, n);
 }
 
-// The one thing credits buy outright, sold from a station beside the totems.
-// Healing and shields deliberately are not for sale: health is what upgrades
-// and regeneration are for, and being able to buy safety flattened the wave.
-// The one thing in the game that gives max health BACK, sold from the console
-// on the left of the ACTIVE ITEM row (js/items.js). Executioner is the only
-// mutation left that charges max health, and without a counter it was a trap:
-// a run that took it on wave 6 had no answer for the next thirty waves.
+// WHAT ONE ROLL OF THE MYSTERY BOX COSTS. The reroll's own base and step, and
+// it does NOT double.
 //
-// PRICED SO IT IS A DECISION. $5,000 is several waves of shooting, and it is
-// competing with the ammo and both rerolls for the same wallet. It is bought a
-// fixed number of times per VISIT (items.js sinks the console after) rather
-// than as many times as the bank allows, so a late run cannot simply stand at
-// the break and convert its whole balance into health - and because the row
-// only comes up every third shop, the chances to do it at all are rationed.
+// A reroll escalates because rerolling the same set again is the player
+// refusing an answer the shop already gave them, and the second refusal ought
+// to cost more than the first. A box roll is not that. Every roll is a fresh
+// purchase of a fresh draw from a pool of thirty-odd, and the thing that should
+// decide how many a player buys is how much they killed for - not a punishment
+// curve that makes the third roll of a shop cost eight thousand dollars and
+// prices the deep half of the item pool out of every run that finds it.
 //
-// It grants the CURRENT health too. The debt it pays off would otherwise leave
-// the player at the same number they were on with a bigger bar behind it,
-// which reads as nothing having happened for five thousand dollars.
-export const MAXHP_PURCHASE = {
-  name: 'MAX HEALTH',
-  detail: '+5 MAX HP',
-  cost: 5000,
-  apply: (player) => {
-    // Against the run's own max-HP ledger, kept separate from mods.maxHpFlat
-    // so that a purchase is not undone by the next rebuildMods(). It can go
-    // NEGATIVE, and that is the point: the fifth purchase on a run that never
-    // took Executioner is +25 over base.
-    player.maxHpDebt -= 5;
-    player.health = Math.min(player.maxHealth, player.health + 5);
-  },
-};
+// So the only thing that moves this number is the wave, at the same block
+// boundary every other price in the game steps on.
+export function boxCost(wave = 1) {
+  return blockPrice(wave, REROLL_BASE, REROLL_STEP);
+}
 
 // $500 at waves 1-5, $600 at 6-10, and $100 a block after that. See
 // blockPrice(): `cost` is a function of the wave, not a number, so every

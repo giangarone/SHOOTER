@@ -19,6 +19,10 @@
 // gating the use as well would be a rule the player has to discover by being
 // punished for it, and there is nothing in the shop worth firing at anyway.
 //
+// HOW THEY ARE OBTAINED IS NOT IN THIS FILE. This is the catalogue and the
+// runtime; the mystery box that hands them out lives in js/mysterybox.js, and
+// the only thing it asks of this file is shuffledPool() at the bottom.
+//
 // EACH ITEM IS ONE `use(game)` AND NOTHING ELSE. None of the five reaches for
 // machinery that did not already exist: the heal is the health pickup's sum,
 // the freeze is the status every cryo round applies, the damage window is the
@@ -28,7 +32,6 @@
 
 import * as THREE from 'three';
 import { THEME } from './upgrades.js';
-import { Totem, Station, ROW_Z } from './totems.js';
 import { Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor } from './deploy.js';
 import { BOUND } from './arena.js';
 
@@ -77,7 +80,7 @@ function pay(player, amount) {
   player.health = Math.max(1, player.health - amount);
 }
 
-// The lines under an item's name on its pedestal, in the same vocabulary
+// The lines under an item's name on the box's card, in the same vocabulary
 // upgrades.js uses - 1 benefit, 0 qualifier. An item has no drawbacks to draw
 // in red: what it costs is the slot, and the slot is not on the card.
 const GOOD = 1;
@@ -86,7 +89,7 @@ const NOTE = 0;
 // WHAT AN ITEM'S READOUT DOES NOT SAY: how long it takes to charge.
 //
 // It is the most quotable number an item has and it is deliberately nowhere -
-// not on the pedestal, not in the prompt, not in the HUD. The bar already
+// not on the box's card, not in the prompt, not in the HUD. The bar already
 // answers it, in the only unit it is ever thought about in: one segment is one
 // second, so a glance at the slot says "three blocks" or "twenty hairlines"
 // without a number, and the answer arrives from having carried the thing rather
@@ -104,13 +107,13 @@ const NOTE = 0;
  * row still comes up only every third shop, so a run still sees three or four
  * offers however deep the pool is. Five meant a player saw the same three items
  * every run. Thirty-seven means the offer is a thing that happens TO a run
- * rather than a menu it works through, and the decision at the pedestal is the
+ * rather than a menu it works through, and the decision at the box is the
  * same one it always was: is this better than what I am carrying.
  *
- * @property {string} name      shown on the pedestal and in the HUD slot
+ * @property {string} name      shown on the box's card and in the HUD slot
  * @property {number} cooldown  seconds of WAVE TIME to refill, and the bar
  * @property {number} theme     colour, following THEME's rule: what it DOES
- * @property {Array}  effects   the pedestal's readout, [text, sign] per line
+ * @property {Array}  effects   the box's readout, [text, sign] per line
  * @property {Function} use     (game, s) => void, run once when the button lands
  *
  * AND, FOR THE ITEMS THAT DO NOT FINISH THE MOMENT THEY START:
@@ -280,7 +283,7 @@ export const ACTIVE_ITEMS = {
     // A FIXED RATE, not the player's own burn. Incendiary may not be owned -
     // most runs it is not - and an item that did nothing at all until you
     // happened to draft an unrelated mutation would be the only item in the
-    // pool whose text is a lie on the pedestal it is read from.
+    // pool whose text is a lie on the card it is read from.
     //
     // Three seconds is short and the rate is high, which is the shape fire has
     // everywhere else in this game (see status.js): it is a reason to press
@@ -1391,188 +1394,53 @@ export function itemCells(cooldown) {
 }
 
 /**
- * Rolls the pedestal's offer.
+ * The items a player could be given right now, in a random order.
  *
- * NEVER THE ITEM ALREADY CARRIED. A pedestal offering what is already in the
- * slot is a pedestal with nothing on it: taking it does nothing and the reroll
- * is the only move, which makes the whole visit a formality. With thirty-seven
- * items and one carried there are always thirty-six left, so this can never
- * come up empty.
+ * NEVER THE ITEM ALREADY CARRIED. A box that can hand back what is already in
+ * the slot is a box that can charge two thousand dollars for nothing, and there
+ * is no way for the player to see that coming. With thirty-seven items and one
+ * carried there are always thirty-six left, so this can never come up empty.
+ *
+ * THE EXCLUSION IS PER PLAYER AND COSTS NOTHING TO MAKE SO. Versus is hot seat:
+ * one Player instance whose whole run - `item` included - is snapshotted and
+ * restored at each handoff (see captureRun in versus.js). `carried` is therefore
+ * always the ACTIVE player's item, and a box rolled by player two cannot know
+ * or care what player one is holding. The caller passes `game.player.item` and
+ * that is the whole of it.
+ *
+ * SHUFFLED, NOT SAMPLED, because the box walks this list rather than rolling
+ * against it once per tick. A walk cannot show the same item twice in a row -
+ * which a per-tick roll does roughly once every thirty ticks, and it reads as
+ * the reel having stuck - and over a long spin it shows the player a real
+ * cross-section of what is in the box instead of the same four favourites.
  *
  * FLAT, and never gated on the wave. Every item in the pool is meant to be
- * reachable, and with the row only turning up every third shop a rarity tier
- * on top of that would make its members effectively unseeable - a player would
- * finish a run having never met them. A deep pool is already the thing a
- * weighting would have been for.
+ * reachable. A deep pool is already the thing a weighting would have been for,
+ * and now that the box stands in every shop the pool is the only thing between
+ * a run and its whole catalogue.
+ *
+ * @param {string|null} carried  the id in the player's slot, excluded
+ * @returns {string[]} a fresh array, safe for the caller to keep and consume
+ */
+export function shuffledPool(carried) {
+  const pool = ACTIVE_ITEM_KEYS.filter((k) => k !== carried);
+  // Fisher-Yates, in place on the copy filter() just handed us.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = pool[i];
+    pool[i] = pool[j];
+    pool[j] = t;
+  }
+  return pool;
+}
+
+/**
+ * One item the player is not carrying. The single-draw form of the above, kept
+ * for callers that want an item rather than a reel.
  *
  * @param {string|null} carried  the id in the player's slot, excluded
  * @returns {string} an item id
  */
 export function rollItem(carried) {
-  const pool = ACTIVE_ITEM_KEYS.filter((k) => k !== carried);
-  return pool[(Math.random() * pool.length) | 0];
-}
-
-// ---------------------------------------------------------------------------
-// THE ROW
-// ---------------------------------------------------------------------------
-//
-// One pedestal on the far side of the arena, framed by two consoles. It stands
-// where the Devil's three deals used to (same z, same console spacing, and the
-// arena furniture was already moved out of its way - see the platform list in
-// arena.js), because that walk is the point: the mutation totems are on the
-// near side, and going to the far row is a choice to spend the wave break on
-// something other than the pick that ends it.
-//
-// ONE OFFER, NOT THREE. Three deals were a shop; one item is a decision. With a
-// single slot to put it in, a row of three would be asking the player to
-// compare three things they can only have one of, at a wave break, having
-// already picked a mutation - and the second and third would exist only to be
-// walked past.
-//
-// EVERY THIRD SHOP. Often enough that a run sees three or four of them, rare
-// enough that the row rising is an event and the walk is worth making. The
-// count lives on the game (see `shopCount` in main.js), not here.
-
-export const ITEM_ROW_Z = -ROW_Z + 4.5; //  9.5
-// MAX HEALTH on the left, REROLL on the right, at the same spacing the totem
-// row uses so all four consoles in the game stand in one arrangement.
-//
-// THE SIGNS ARE THE OPPOSITE WAY ROUND TO THE TOTEM ROW'S, and deliberately.
-// That row sits at z = -5 and is walked up to from +z; this one sits at z = 9.5
-// and is walked up to from -z, so the player is facing the other way and world
-// -x is on their RIGHT here where it is on their left there. Left and right are
-// the player's, not the arena's - a console that swapped sides depending on
-// which row you were standing at would be the kind of thing nobody can name and
-// everybody misreads.
-const ITEM_STATION_X = { maxhp: 6.9, reroll: -6.9 };
-
-// Max-health purchases allowed per visit. Three, and the row only comes up
-// every third shop, so this is the whole of a run's supply of bought-back
-// health - which is what keeps Executioner's fifty a price rather than a loan.
-const MAX_HEALTH_BUYS = 3;
-
-/**
- * Owns the whole active-item installation. main.js holds exactly one, built at
- * startup and reused for every visit - the same contract TotemArea has, and the
- * same method names, so main.js drives the two the same way.
- */
-export class ItemArea {
-  constructor(scene) {
-    // A pedestal IS a Totem, at a different z with a doubled floor ring and an
-    // ACTIVE ITEM line on its panel. A Totem already owns the rise, the arm
-    // delay, the orbiting icon, the canvas panel and the single invisible claim
-    // box - all of which a pedestal needs and none of which should exist twice.
-    this.pedestal = new Totem(0, scene, ITEM_ROW_Z);
-    // Re-tagged. A Totem tags its claim box `userData.totem`, and main.js's
-    // shoot() reads that tag to decide what a pellet just bought - a pedestal
-    // routed through _claimTotem() would try to grant an item as a mutation.
-    // The tag is the only thing that separates the two, so it is swapped here
-    // rather than adding a "which kind am I" field to Totem.
-    this.pedestal.hit.userData.totem = null;
-    this.pedestal.hit.userData.item = this.pedestal;
-
-    this.healthStation = new Station(ITEM_STATION_X.maxhp, 'maxhp', scene, ITEM_ROW_Z);
-    this.rerollStation = new Station(ITEM_STATION_X.reroll, 'itemReroll', scene, ITEM_ROW_Z);
-    this.stations = [this.healthStation, this.rerollStation];
-
-    // Rerolls bought against the CURRENT offer; reset every time a fresh one
-    // rises. Priced in credits at the mutation reroll's own rate, and doubling
-    // the same way, on its own counter - see _itemRerollCost in main.js.
-    this.rerolls = 0;
-    // Max-health buys spent this visit, capped at MAX_HEALTH_BUYS.
-    this.healthBuys = 0;
-  }
-
-  // True while any part of the installation is still standing.
-  get active() {
-    return this.pedestal.state !== 'hidden' || this.stations.some((s) => s.state !== 'hidden');
-  }
-
-  // Whether the max-health console is standing and unspent. main.js asks
-  // before it charges, and asks again to draw the label.
-  get healthAvailable() {
-    return this.healthStation.isUp() && this.healthBuys < MAX_HEALTH_BUYS;
-  }
-
-  // True once the item has been taken. Unlike a totem claim this does NOT end
-  // the wave break - it just closes this row.
-  get claimed() {
-    return this.pedestal.claimed;
-  }
-
-  /**
-   * Raises the pedestal and its two consoles.
-   *
-   * @param {object} offer  from _buildItem() in main.js, carrying
-   *   `kind: 'item'` so the pedestal draws itself as one.
-   * @param {boolean} resetRerolls  false when this IS a reroll, so the
-   *   escalating price is not reset by the offer it just paid for.
-   */
-  present(offer, resetRerolls = true) {
-    if (resetRerolls) {
-      this.rerolls = 0;
-      // A reroll re-presents the offer and must NOT hand the allowance back:
-      // the console is spent for the visit, not for the offer.
-      this.healthBuys = 0;
-    }
-    this.pedestal.present(offer);
-    for (const st of this.stations) {
-      if (st === this.healthStation && this.healthBuys >= MAX_HEALTH_BUYS) continue;
-      st.show();
-    }
-  }
-
-  dismiss() {
-    this.pedestal.sink();
-    for (const st of this.stations) st.sink();
-  }
-
-  // One max-health purchase. The console stays up for the second and third and
-  // then sinks on the spot - there is no counter anywhere, so the allowance is
-  // read off the console itself: it is there until it is not. The count is also
-  // what stops present() raising it again on a reroll once it is spent.
-  spendHealth() {
-    this.healthBuys++;
-    if (this.healthBuys >= MAX_HEALTH_BUYS) this.healthStation.sink();
-  }
-
-  // The pedestal, if the player could press E on it. Same contract and same
-  // shape as TotemArea.usable(), so main.js can rank both rows against each
-  // other in one pass - there is only ever one candidate here.
-  usable(playerPos) {
-    const p = this.pedestal;
-    if (!p.canUse()) return null;
-    const d2 = p.useDistance(playerPos);
-    return d2 < 0 ? null : { target: p, d2 };
-  }
-
-  // The nearer of the two consoles in E range. Same contract as
-  // TotemArea.stationInRange().
-  stationInRange(playerPos) {
-    let best = null;
-    let bestD = Infinity;
-    for (const st of this.stations) {
-      if (!st.isUp()) continue;
-      const d = st.useDistance(playerPos);
-      if (d < 0 || d >= bestD) continue;
-      bestD = d;
-      best = st;
-    }
-    return best ? { target: best, d2: bestD } : null;
-  }
-
-  // Appends this row's shootable parts to a raycast target list: the pedestal's
-  // invisible claim box plus the two console bodies.
-  addTargets(out) {
-    if (this.pedestal.state !== 'hidden') out.push(this.pedestal.hit);
-    for (const st of this.stations) {
-      if (st.state !== 'hidden') out.push(st.hit);
-    }
-  }
-
-  update(dt, time, playerPos) {
-    this.pedestal.update(dt, time, playerPos);
-    for (const st of this.stations) st.update(dt, time, playerPos);
-  }
+  return shuffledPool(carried)[0];
 }

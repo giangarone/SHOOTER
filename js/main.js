@@ -73,10 +73,11 @@ import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
-  UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rerollCost, effectLines,
+  UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
 } from './upgrades.js';
 import { TotemArea, ARM_TIME_ITEM } from './totems.js';
-import { ACTIVE_ITEMS, ItemArea, rollItem, RunningItems, HUMOURS } from './items.js';
+import { ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS } from './items.js';
+import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
@@ -153,10 +154,11 @@ const EMPTY_CLICK_COOLDOWN = 0.35;
 const STATION_SHOOT_COOLDOWN = 0.25;
 
 // What a console is called when the prompt has to say why it cannot be used.
-// Four consoles now stand at a wave break - two beside the totems, two beside
-// the active item row - and a blocked line has to name the one being looked at.
+// Two consoles stand at a wave break, both beside the totems, and a blocked
+// line has to name the one being looked at. The mystery box on the far side is
+// not a console and is not in here - it names itself, on its own card.
 const STATION_TITLE = {
-  ammo: 'AMMO', reroll: 'REROLL', maxhp: 'MAX HEALTH', itemReroll: 'REROLL',
+  ammo: 'AMMO', reroll: 'REROLL',
 };
 
 // NO-SPAWN BUBBLE. No enemy is ever placed closer than this to the player.
@@ -298,19 +300,6 @@ const CREDITS_PER_SCORE = 0.18;
 const SPLIT_CHILD_CREDITS = 1.5;
 // Totems offered per set.
 const TOTEM_COUNT = 3;
-// HOW OFTEN THE ACTIVE ITEM ROW COMES UP, counted in shops.
-//
-// Every third, and it is a COUNT rather than a roll. The Devil that used to
-// stand there appeared on odds scored off clean waves, which made his row a
-// reward for playing well - and the trouble with that is the run which most
-// needs an answer is the one least likely to be offered one. An item is a tool,
-// not a prize: the schedule is fixed, the player can see it coming, and
-// planning a swap two shops ahead is a thing they are allowed to do.
-//
-// Three is the number that makes the walk worth making. Every shop and the far
-// row becomes a second errand at every break - which is exactly what killed the
-// Devil's three-deal version. Every fifth and a run barely meets two items.
-const ITEM_SHOP_EVERY = 3;
 
 // ---- the hot seat ---------------------------------------------------------
 //
@@ -582,9 +571,10 @@ class Game {
     // middle of the arena mid-run and solid pillars there would be five new
     // things to get caught on while a wave is chasing you.
     this.totemArea = new TotemArea(this.scene);
-    // The active item row, on the far side of the arena. Built once and
-    // reused like the totems, and hidden for most of a run.
-    this.itemArea = new ItemArea(this.scene);
+    // The mystery box, on the far side of the arena. Built once and reused,
+    // and unlike the row it replaced it stands in EVERY wave break - see the
+    // header of mysterybox.js for why the schedule went away.
+    this.mysteryBox = new MysteryBox(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     // Every credit in the game, lying on the floor. One Points object for the
@@ -676,11 +666,6 @@ class Game {
     // Whether the last wave was cleared without taking damage. Drives the
     // flawless orb shower, the No-Hit stack and the banner.
     this.lastPerfect = false;
-    // Shops opened this run, counted as the totems rise. The active item row
-    // comes up on every ITEM_SHOP_EVERY-th one - a count and not a roll, so
-    // both players in a versus match share one schedule and neither can be
-    // unlucky with it.
-    this.shopCount = 0;
     // 'solo' | 'versus'. Everything the second mode changes is gated on this,
     // and nothing reads it while it is 'solo'.
     this.mode = 'solo';
@@ -965,6 +950,10 @@ class Game {
       // data. Autotest only, like everything else in this block.
       this.__upgradesForTest = UPGRADES;
       this.__itemsForTest = ACTIVE_ITEMS;
+      // The box's reel pool, as a function rather than a snapshot: the whole
+      // property worth testing is that it depends on what the player is
+      // CARRYING at the moment it is asked, which a captured array cannot show.
+      this.__poolForTest = shuffledPool;
       // The Enemy class, so a test can stand one up without a wave.
       this.__EnemyForTest = Enemy;
       window.__report = () => ({
@@ -2272,8 +2261,10 @@ class Game {
   _fillOffers(r) {
     const out = r.offers;
     out.length = 0;
-    const row = this.totemArea.active ? this.totemArea.totems
-      : this.itemArea.active ? [this.itemArea.pedestal] : null;
+    // THE MYSTERY BOX IS NOT IN HERE. It carries its own light - three halos
+    // and a beam - and it is never the only thing standing, so the rig has the
+    // totem row to straddle whenever there is a wave break at all.
+    const row = this.totemArea.active ? this.totemArea.totems : null;
     if (!row) return;
     for (const t of row) {
       if (t.state === 'hidden' || t.claimed || !t.offer) continue;
@@ -2376,7 +2367,7 @@ class Game {
     this._pass = false;
     this._swapped = false;
     this.totemArea.dismiss();
-    this.itemArea.dismiss();
+    this.mysteryBox.dismiss();
     this.wave = 0;
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
@@ -2469,7 +2460,7 @@ class Game {
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
     this.totemArea.dismiss();
-    this.itemArea.dismiss();
+    this.mysteryBox.dismiss();
     this.ui.setPrompt(null, false);
     this.ui.showStart();
   }
@@ -2532,7 +2523,7 @@ class Game {
     if (m.winner >= 0) { this._matchOver(); return; }
     this._clearEntities();
     this.totemArea.dismiss();
-    this.itemArea.dismiss();
+    this.mysteryBox.dismiss();
     // The room keeps the last fight's mood otherwise, and the incoming player
     // would walk into a boss's red on an ordinary wave.
     this.rig.setEnraged(false);
@@ -2619,7 +2610,7 @@ class Game {
     this._closeStats();
     this._clearEntities();
     this.totemArea.dismiss();
-    this.itemArea.dismiss();
+    this.mysteryBox.dismiss();
     this.rig.setEnraged(false);
     this.ui.setPrompt(null, false);
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
@@ -2799,7 +2790,7 @@ class Game {
     // to be taken - but a pedestal standing through a fight would be a
     // shootable box that swaps your item by accident, in a room the player is
     // running around at speed. It goes whether or not anything was taken.
-    this.itemArea.dismiss();
+    this.mysteryBox.dismiss();
     // The pass ends where every wave break ends: with the wave. A pass cut
     // short before the handover still owes it - a match cannot start a wave
     // with the previous player's run loaded.
@@ -3661,14 +3652,14 @@ class Game {
           w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
-      const item = h.object.userData.item;
-      if (item) {
-        // Same contract as a totem: the pellet stops on the pedestal whether or
-        // not the item was taken.
-        this._claimItem(item);
+      const box = h.object.userData.box;
+      if (box) {
+        // Same contract as a totem: the pellet stops on the box whether it
+        // bought a roll, took the item or did nothing at all.
+        this._useBox(false);
         hitProp = true;
         end = h.point;
-        this.effects.impact(end, item.offer ? item.offer.theme : 0xb388ff,
+        this.effects.impact(end, box.offered ? ACTIVE_ITEMS[box.offered].theme : 0xb388ff,
           w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
@@ -3785,7 +3776,7 @@ class Game {
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
     this.totemArea.addTargets(targets);
-    this.itemArea.addTargets(targets);
+    this.mysteryBox.addTargets(targets);
 
     const spread = this._shotSpread();
     let hitAny = false;
@@ -4430,7 +4421,7 @@ class Game {
           return;
         }
         this._presentTotems();
-        this._presentItem();
+        this._presentBox();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
@@ -4456,38 +4447,29 @@ class Game {
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
-    // A REROLL IS NOT A NEW SHOP. The count is what decides whether the far row
-    // comes up, and a player who rerolls three times has not visited three
-    // shops - they have paid three times for one.
-    if (!isReroll) this.shopCount++;
-    // A totem claim is what starts the next wave, so with the item row standing
-    // the arm delay is longer: ending the shopping trip with a pellet that was
+    // A totem claim is what starts the next wave, and the mystery box now
+    // stands in every one of them - so the LONGER arm delay is simply what a
+    // totem always gets. Ending the shopping trip with a pellet that was
     // already in the air when the wave ended is a mistake the player cannot
-    // undo. Read at present() time, which is why _presentItem() runs after this
-    // on a wave clear and re-arms them itself.
-    const arm = this.itemArea.active ? ARM_TIME_ITEM : undefined;
-    this.totemArea.present(this._buildOffers(), !isReroll, arm);
+    // undo, and there is always a second thing out there worth walking to.
+    this.totemArea.present(this._buildOffers(), !isReroll, ARM_TIME_ITEM);
     this._refreshStations();
   }
 
   /**
-   * Raises the active item row, on every ITEM_SHOP_EVERY-th shop.
+   * Raises the mystery box. EVERY shop, unconditionally.
    *
-   * A COUNT, NOT A ROLL, and nothing about the player's performance moves it -
-   * see the note on ITEM_SHOP_EVERY. It runs after _presentTotems() on a wave
-   * clear, which is what lets it re-arm the totems it just made slower.
+   * The row this replaced came up on a count of shops, so a run met four active
+   * items out of thirty-seven and most of the catalogue was unreachable. The
+   * box is always there and is limited by MONEY instead - which is a limit the
+   * player can do something about, and the reason the schedule is gone rather
+   * than merely shortened. See the header of mysterybox.js.
    */
-  _presentItem() {
-    if (this.shopCount % ITEM_SHOP_EVERY !== 0) return;
+  _presentBox() {
     if (!this.totemArea.active) return;
-    this.itemArea.present(this._buildItem());
-    this._refreshItem();
-    // The totems went up first and armed for ARM_TIME. Now that a second row is
-    // standing they need the longer delay, so their timers are pushed out.
-    for (const t of this.totemArea.totems) {
-      if (t.state !== 'hidden' && !t.claimed) t.armT = Math.max(t.armT, ARM_TIME_ITEM);
-    }
-    this.sfx.itemRow();
+    this.mysteryBox.present();
+    this._refreshBox();
+    this.sfx.boxRise();
   }
 
   // Puts each rolled upgrade into the shape a totem can draw.
@@ -4509,51 +4491,14 @@ class Game {
     });
   }
 
-  // The same shape _buildOffers() produces, plus the two fields that make a
-  // pedestal an ACTIVE ITEM: `kind`, which draws the header line and the second
-  // floor ring, and a `note` naming the swap when there is one.
-  //
-  // THE CHARGE TIME IS NOT ON IT. See the note by GOOD/NOTE in items.js - the
-  // bar in the HUD says it in segments, and it is meant to be learned by
-  // carrying the thing rather than read off a pillar.
-  _buildItem() {
-    const id = rollItem(this.player.item);
-    const def = ACTIVE_ITEMS[id];
-    return {
-      id,
-      kind: 'item',
-      name: def.name,
-      theme: def.theme,
-      effects: def.effects,
-      // NO NOTE. The pedestal used to carry a "REPLACES <name>" line, on the
-      // reasoning that the swap is the whole cost of taking the item. It is
-      // not worth a line: there is exactly one slot, so replacing whatever is
-      // in it is the only thing taking an item can possibly do, and a caption
-      // restating the rule on every offer is a caption the player stops
-      // reading. The banner at the moment of the claim still names the swap,
-      // which is where it actually matters.
-      note: '',
-    };
-  }
-
-  // Redraws the item row's two console labels. Called after anything that
-  // spends against them - a reroll, a max-health purchase - and when the row
-  // rises.
-  _refreshItem() {
-    const area = this.itemArea;
-    if (!area.active) return;
-    const cost = this._itemRerollCost();
-    area.rerollStation.setLabel(
-      'REROLL', this._priceLabel(cost), !this._stationBlocked(area.rerollStation)
-    );
-    // The only console that names its gain as well as its price. MAX HEALTH is
-    // the one purchase whose title does not say what it does - see the note on
-    // Station.setLabel - and it is also the most expensive thing in the game.
-    area.healthStation.setLabel(
-      MAXHP_PURCHASE.name, '$' + MAXHP_PURCHASE.cost,
-      !this._stationBlocked(area.healthStation),
-      MAXHP_PURCHASE.detail
-    );
+  // Writes the price onto the box's own card. Called after anything that
+  // changes whether the player can pay - a roll bought, a new wave break - and
+  // when the box rises. Never per frame; the card redraws off it.
+  _refreshBox() {
+    const box = this.mysteryBox;
+    if (!box.active) return;
+    const cost = this._boxCost();
+    box.setPrice('$' + cost, this.credits >= cost);
   }
 
   // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
@@ -4578,14 +4523,16 @@ class Game {
     return rerollCost(this.totemArea.rerolls, this.wave);
   }
 
-  // THE ITEM REROLL IS PRICED AS A MUTATION REROLL, off its own counter. Same
-  // base, same doubling, same block step - rerolling an item is the same act as
-  // rerolling a totem set and should not need a second price to be learned. The
-  // counter is separate so that spending three rerolls on the totems does not
-  // silently make the item unaffordable.
-  _itemRerollCost() {
-    if (this.player.freeRerolls > 0) return 0;
-    return rerollCost(this.itemArea.rerolls, this.wave);
+  // WHAT ONE ROLL OF THE BOX COSTS. The reroll's own base and step, and it
+  // does NOT climb with the number of rolls bought - see boxCost in upgrades.js
+  // for why. Read off the wave just CLEARED, the same as the two consoles: the
+  // box rises during the intermission, before startWave() has counted the next.
+  _boxCost() {
+    // DELIBERATELY NOT this.player.freeRerolls. SECOND OPINION's tokens buy
+    // REROLLS, and the box is not one - it is a purchase of a draw, not a
+    // refusal of an answer already given. A token that paid for a box roll
+    // would hand that mutation a free active item at every wave break.
+    return boxCost(this.wave);
   }
 
   // A console's price as the player reads it. FREE rather than $0, because a
@@ -4640,64 +4587,92 @@ class Game {
     this.pad.rumble(0.5, 0.6, 220, 2);
     this.totemArea.dismiss();
     // The totem claim is the definitive one: it is what starts the next wave,
-    // so the far row packs up with it whether or not anything was taken. That
-    // is the single rule at the boundary, and the item's own panel says so.
-    this.itemArea.dismiss();
+    // so the box packs up with it whether or not it was ever paid. A roll left
+    // spinning is forfeited, which is the same rule an unclaimed totem set has
+    // always followed - one boundary, one thing that closes it.
+    this.mysteryBox.dismiss();
   }
 
-  // Takes the active item the pedestal is offering. Every path in - touch and
-  // shot - funnels through here, so the swap happens in exactly one place.
-  //
-  // IT IS FREE, and it is the SLOT that it costs. There is no price to refuse
-  // and no affordability to check: the only thing taking an item can cost the
-  // player is the item they were already carrying, which is why the banner has
-  // to name the swap. A player who walks away from a pedestal has lost nothing
-  // but the walk.
-  //
-  // The TOTEMS are left standing: the wave is still waiting on them, and a
-  // player who takes an item still has their free mutation to choose. What goes
-  // is this row - the pedestal and both its consoles - because a spent pedestal
-  // still glowing behind a closed shop reads as an offer that is still open.
-  _claimItem(pedestal, byKey = false) {
-    if (!(byKey ? pedestal.canUse() : pedestal.canClaim())) return;
-    const offer = pedestal.offer;
-    this.player.giveItem(offer.id);
-    pedestal.claimed = true;
+  /**
+   * THE ONE WAY IN TO THE BOX, for both the E press and the pellet.
+   *
+   * The box does two different things to the same press depending on what it is
+   * doing - sell a roll, or hand over what it is holding - and putting that
+   * branch here rather than at the two call sites is what guarantees the shot
+   * and the key can never disagree about which one just happened.
+   *
+   * @param {boolean} byKey  true for an E press. A press skips the shot
+   *   cooldown, which exists to stop a held trigger buying eight rolls; a
+   *   deliberate press is never that.
+   */
+  _useBox(byKey = false) {
+    if (this.state !== 'playing') return;
+    const box = this.mysteryBox;
+    if (box.riseState !== 'up') return;
+    if (!byKey) {
+      if (box.shootCd > 0) return;
+      box.shootCd = STATION_SHOOT_COOLDOWN;
+    }
+    if (box.offered) this._grabBox();
+    else this._buyBoxRoll();
+  }
 
-    this.effects.burst(
-      this._killPos.set(pedestal.pos.x, 1.4, pedestal.pos.z), offer.theme, 34, 7, 2.5, 0.8
-    );
-    this.effects.shockwave(this._killPos, offer.theme, 5, 0.5);
+  // Pays for a spin. Every guard the purchase needs is here, so the prompt and
+  // the two ways in cannot get out of step with what actually happens.
+  _buyBoxRoll() {
+    const box = this.mysteryBox;
+    const cost = this._boxCost();
+    if (!box.canBuy || this.credits < cost) {
+      this.sfx.denied();
+      // A refusal has to be felt, or a player who cannot afford something
+      // presses again and again into silence.
+      this.pad.rumble(0.15, 0.5, 60, 1);
+      return;
+    }
+    // CREDITS ONLY, never _payReroll - see the note in _boxCost.
+    this.credits -= cost;
+    // THE POOL IS TAKEN NOW AND KEPT FOR THE WHOLE SPIN. It excludes whatever
+    // the player is carrying, so the carried item cannot even flash past on the
+    // reel - not merely fail to win. In versus this is automatically the ACTIVE
+    // player's item: there is one Player instance and each run's slot is
+    // snapshotted across the handoff. See shuffledPool in items.js.
+    box.roll(shuffledPool(this.player.item));
+    this._refreshBox();
+    this.sfx.boxOpen();
+    this.pad.rumble(0.35, 0.5, 180, 2);
+    this.effects.burst(box.pos, 0xb388ff, 18, 5, 2.5, 0.5);
+  }
+
+  // Takes whatever the box is holding out. Every path in funnels through
+  // _useBox, so the swap happens in exactly one place.
+  //
+  // IT IS ALREADY PAID FOR, and the SLOT is the only other thing it costs.
+  // A player who lets it sink back has lost the roll and nothing else - the
+  // box will sell them another one the moment the lid shuts.
+  //
+  // The TOTEMS are left standing: the wave is still waiting on them. So is the
+  // BOX, unlike the pedestal it replaced - it is never spent, and a shut box
+  // standing behind a taken item reads as exactly what it is, which is a box
+  // that can be paid again.
+  _grabBox() {
+    const box = this.mysteryBox;
+    const id = box.take();
+    if (!id) return;
+    const def = ACTIVE_ITEMS[id];
+    this.player.giveItem(id);
+
+    this._killPos.set(box.pos.x, 1.6, box.pos.z);
+    this.effects.burst(this._killPos, def.theme, 34, 7, 2.5, 0.8);
+    this.effects.shockwave(this._killPos, def.theme, 5, 0.5);
     this.effects.addShake(0.16);
     this.sfx.itemTake();
     this.pad.rumble(0.7, 0.4, 300, 3);
-    // WHAT WAS TAKEN, AND NOTHING ABOUT WHAT IT COST. The banner used to name
-    // the item it replaced, on the reasoning that losing something you were
-    // relying on ought not to happen silently. It reads as a warning about a
-    // choice the player has already made, at the one moment they are pleased
-    // with themselves - and there is one slot, so what happened to the old item
-    // was never in doubt.
-    this.ui.banner(offer.name + '  READY');
-    this.itemArea.dismiss();
-  }
-
-  // An item reroll. Priced in CREDITS at the mutation reroll's own rate and
-  // doubling the same way, so a player who wants a particular item can chase it
-  // and pay a shop's worth of ammo for the privilege.
-  _rerollItem() {
-    const area = this.itemArea;
-    const cost = this._itemRerollCost();
-    if (!area.active || area.claimed || this.credits < cost) {
-      this.sfx.denied();
-      return;
-    }
-    this._payReroll(cost);
-    area.rerolls++;
-    area.present(this._buildItem(), false);
-    this._refreshItem();
-    this._refreshStations();
-    this.effects.burst(area.pedestal.pos, area.pedestal.offer.theme, 20, 5, 2, 0.5);
-    this.sfx.reroll();
+    // WHAT WAS TAKEN, AND NOTHING ABOUT WHAT IT COST. There is one slot, so
+    // what happened to the old item was never in doubt, and a warning about a
+    // choice the player has already made lands at the one moment they are
+    // pleased with themselves.
+    this.ui.banner(def.name + '  READY');
+    this._refreshBox();
   }
 
   // Ticks both installations and writes the E prompt. Shooting is handled in
@@ -4705,7 +4680,8 @@ class Game {
   // it any more - see the note at the top of totems.js.
   _updateTotems(dt) {
     this.totemArea.update(dt, this.time, this.player.pos);
-    this.itemArea.update(dt, this.time, this.player.pos);
+    this.mysteryBox.update(dt, this.time, this.player.pos);
+    this._boxAudio();
 
     const use = this._useTarget();
     if (!use) {
@@ -4717,15 +4693,61 @@ class Game {
   }
 
   /**
+   * The box's noises, and the flash when the reel lands.
+   *
+   * THE BOX DOES NOT OWN THE MIXER. It raises a one-word event on the frame
+   * something happened and main.js plays it, for the same reason nothing else
+   * in the scene graph reaches for game.sfx: a class that did would need the
+   * whole game passed into update() for the sake of six calls, and the box
+   * would become the second place in the codebase that decides what a purchase
+   * sounds like.
+   */
+  _boxAudio() {
+    const box = this.mysteryBox;
+    const e = box.event;
+    if (!e) return;
+    if (e === 'tick') {
+      // Pitched off how far through the spin it is. A reel that only SLOWS
+      // sounds like it is running down; one that also rises sounds like it is
+      // arriving somewhere, which is the difference between a machine stopping
+      // and a machine landing on an answer.
+      this.sfx.boxTick(box.tickProgress);
+      return;
+    }
+    if (e === 'reveal') {
+      const def = ACTIVE_ITEMS[box.showing];
+      this.sfx.boxReveal();
+      this._killPos.set(box.pos.x, 2.2, box.pos.z);
+      this.effects.burst(this._killPos, def.theme, 40, 8, 3, 0.9);
+      this.effects.shockwave(this._killPos, def.theme, 6, 0.55);
+      this.effects.addShake(0.14);
+      this.pad.rumble(0.6, 0.5, 260, 2);
+      return;
+    }
+    if (e === 'warn') {
+      this.sfx.boxWarn();
+      return;
+    }
+    if (e === 'shut') {
+      // Nobody took it. The lid goes down and the box is buyable again, so the
+      // sound is a door closing rather than a failure - the player lost a roll,
+      // not the chance to roll.
+      this.sfx.boxClose();
+      this.effects.burst(box.pos, 0x93a0be, 12, 4, 1.5, 0.4);
+      this._refreshBox();
+    }
+  }
+
+  /**
    * What E would act on right now, or null.
    *
    * ONE RESOLVER FOR THE PROMPT AND THE KEY, so the line on screen can never
-   * name something other than what the press does. Eight things can be in
-   * reach - three totems, three deals and four consoles - and several of their
-   * radii overlap, so the NEAREST wins rather than whichever happened to be
-   * checked first.
+   * name something other than what the press does. Six things can be in reach -
+   * three totems, two consoles and the mystery box - and several of their radii
+   * overlap, so the NEAREST wins rather than whichever happened to be checked
+   * first.
    *
-   * @returns {?{kind: string, target: object}} kind is 'totem' | 'item' |
+   * @returns {?{kind: string, target: object}} kind is 'totem' | 'box' |
    *   'station'.
    */
   _useTarget() {
@@ -4738,9 +4760,9 @@ class Game {
     };
     consider(this.totemArea.usable(this.player.pos), 'totem');
     consider(this.totemArea.stationInRange(this.player.pos), 'station');
-    consider(this.itemArea.usable(this.player.pos), 'item');
-    // Its two consoles rank with the other two: same kind, same resolver.
-    consider(this.itemArea.stationInRange(this.player.pos), 'station');
+    // The box ranks with the rest: same contract, same resolver. It owns no
+    // consoles, so it contributes exactly one candidate.
+    consider(this.mysteryBox.usable(this.player.pos), 'box');
     return best;
   }
 
@@ -4765,19 +4787,23 @@ class Game {
     if (use.kind === 'totem') {
       return [lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
     }
-    if (use.kind === 'item') {
-      // The prompt says what the pillar's bottom line says - the swap this is
-      // about to make - because that is the whole cost of taking it, and a
-      // player standing close enough to read the prompt is looking at the
-      // prompt rather than at the slot in the far corner behind them.
-      //
-      // With an empty slot there is no note and nothing is appended: a trailing
-      // separator with nothing after it reads as a line that failed to load.
+    if (use.kind === 'box') {
+      // THE BOX SAYS WHAT THE PRESS WILL DO, and that is two different things.
+      // Standing in front of an open box holding an item, the only thing worth
+      // saying is the item's name; standing in front of a shut one it is the
+      // price. Nothing is said at all mid-spin: the reel is the message, and a
+      // prompt over it would be a line of text asking to be read at the one
+      // moment the player is watching something else.
+      const id = t.offered;
+      if (id) return [lead + 'TAKE &nbsp;·&nbsp; ' + ACTIVE_ITEMS[id].name, false];
+      if (!t.canBuy) return [null, false];
+      const cost = this._boxCost();
+      if (this.credits < cost) {
+        return ['MYSTERY BOX &nbsp;·&nbsp; NEED $' + cost, true];
+      }
       return [
-        lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name
-        + (t.offer.note
-          ? ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.offer.note + '</span>'
-          : ''),
+        lead + 'MYSTERY BOX &nbsp;·&nbsp; ONE ACTIVE ITEM &nbsp;·&nbsp; '
+        + '<span class="prompt-cost">$' + cost + '</span>',
         false,
       ];
     }
@@ -4787,22 +4813,6 @@ class Game {
       return [
         lead + AMMO_PURCHASE.name + ' &nbsp;·&nbsp; ' + AMMO_PURCHASE.detail
         + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + this._ammoCost() + '</span>',
-        false,
-      ];
-    }
-    if (t.kind === 'maxhp') {
-      return [
-        lead + MAXHP_PURCHASE.name + ' &nbsp;·&nbsp; ' + MAXHP_PURCHASE.detail
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">$' + MAXHP_PURCHASE.cost + '</span>',
-        false,
-      ];
-    }
-    // The two rerolls read the same except for what they redraw. They are
-    // priced identically and off separate counters - see _itemRerollCost.
-    if (t.kind === 'itemReroll') {
-      return [
-        lead + 'REROLL &nbsp;·&nbsp; NEW ITEM &nbsp;·&nbsp; '
-        + '<span class="prompt-cost">' + this._priceLabel(this._itemRerollCost()) + '</span>',
         false,
       ];
     }
@@ -4827,33 +4837,21 @@ class Game {
       if (this.credits < this._ammoCost()) return 'NEED $' + this._ammoCost();
       return null;
     }
-    if (st.kind === 'maxhp') {
-      if (!this.itemArea.healthAvailable) return 'ALREADY BOUGHT';
-      if (this.credits < MAXHP_PURCHASE.cost) return 'NEED $' + MAXHP_PURCHASE.cost;
-      return null;
-    }
-    if (st.kind === 'itemReroll') {
-      const area = this.itemArea;
-      if (!area.active || area.claimed) return 'NOTHING TO REROLL';
-      const cost = this._itemRerollCost();
-      if (this.credits < cost) return 'NEED $' + cost;
-      return null;
-    }
     const cost = this._rerollCost();
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
     if (this.credits < cost) return 'NEED $' + cost;
     return null;
   }
 
-  // E. Takes whatever _useTarget() says is nearest - a mutation, an active
-  // item, a reroll or an ammo refill - so the key always does the thing the
-  // prompt on screen just said it would.
+  // E. Takes whatever _useTarget() says is nearest - a mutation, a roll of the
+  // box, the item the box is holding, a reroll or an ammo refill - so the key
+  // always does the thing the prompt on screen just said it would.
   tryUse() {
     if (this.state !== 'playing') return;
     const use = this._useTarget();
     if (!use) return;
     if (use.kind === 'totem') this._claimTotem(use.target, true);
-    else if (use.kind === 'item') this._claimItem(use.target, true);
+    else if (use.kind === 'box') this._useBox(true);
     else this._useStation(use.target);
   }
 
@@ -4881,19 +4879,6 @@ class Game {
       this.credits -= this._ammoCost();
       AMMO_PURCHASE.apply(this.player, this.time);
       this.sfx.buy();
-    } else if (st.kind === 'maxhp') {
-      this.credits -= MAXHP_PURCHASE.cost;
-      MAXHP_PURCHASE.apply(this.player);
-      // Counts against the visit's allowance. The console stays up until that
-      // is spent and then goes down on the spot rather than standing there
-      // greyed out, because there is nothing left for it to say.
-      this.itemArea.spendHealth();
-      this.ui.banner(MAXHP_PURCHASE.name + '  ' + MAXHP_PURCHASE.detail);
-      this.sfx.buy();
-    } else if (st.kind === 'itemReroll') {
-      // Charged inside _rerollItem(), along with every other guard that
-      // purchase needs - this console is only the way in.
-      this._rerollItem();
     } else {
       this._payReroll(this._rerollCost());
       this.totemArea.rerolls++;
@@ -4902,7 +4887,9 @@ class Game {
     }
     this.effects.burst(st.pos, st.color, 16, 5, 2, 0.45);
     this._refreshStations();
-    this._refreshItem();
+    // Spending at a console changes what the box says it costs relative to the
+    // wallet, so its card is repriced with the labels.
+    this._refreshBox();
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
@@ -5035,6 +5022,9 @@ class Game {
     if (this._creditsDirty) {
       this._creditsDirty = false;
       if (this.totemArea.active) this._refreshStations();
+      // The box's card carries its own price and greys it out when the wallet
+      // cannot cover it, so money landing while it is standing repaints it.
+      if (this.mysteryBox.active) this._refreshBox();
     }
   }
 
@@ -6056,7 +6046,8 @@ class Game {
     if (p.item) {
       const def = ACTIVE_ITEMS[p.item];
       // CHARGING rather than "8 / 20s": the total is the one number the item
-      // deliberately never prints (see _buildItem), and the build sheet is not
+      // deliberately never prints - the HUD bar says it in segments and it is
+      // meant to be learned by carrying the thing - and the build sheet is not
       // the place to give it away.
       rows.push([def.name, p.itemReady ? 'READY' : 'CHARGING', p.itemReady]);
     }

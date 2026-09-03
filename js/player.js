@@ -662,14 +662,6 @@ export class Player {
     this.lastShotCost = 0;
     // Evasion's speed boost, set by main.js when a hit is dodged.
     this.dodgeEnd = 0;
-    // MAX HP BOUGHT BACK, for the rest of the run - negative debt, granted by
-    // the MAX HEALTH console. Deliberately NOT a mod: rebuildMods() replays
-    // the whole stat block from DEFAULT_MODS on every draft pick, so a
-    // purchase stored there would be taken back by the next free totem the
-    // player walked into. Same reasoning as noHitStacks. Executioner's price
-    // goes the other way and IS a mod (mods.maxHpFlat), because it is part of
-    // the build and has to be replayed with it.
-    this.maxHpDebt = 0;
     // Carnage's kill chain, and the invulnerability window AEGIS opens. Both
     // on the player rather than in mods, for the reason above.
     this.carnageStacks = 0;
@@ -1020,7 +1012,7 @@ export class Player {
     // build: Glass Cannon halving the frame it was earned on would quietly
     // take half of every clean wave back with it.
     return Math.max(
-      MIN_MAX_HEALTH, built + this.hpBanked - this.maxHpDebt - this.mods.maxHpFlat
+      MIN_MAX_HEALTH, built + this.hpBanked - this.mods.maxHpFlat
     );
   }
   get magSize() {
@@ -1403,9 +1395,6 @@ export class Player {
     this.breachReady = false;
     this.lastShotCost = 0;
     this.dodgeEnd = 0;
-    // maxHpDebt goes before the health assignment further down, or the new run
-    // would be born at the old one's bought-up cap.
-    this.maxHpDebt = 0;
     this.carnageStacks = 0;
     this.invulnEnd = 0;
     this.frozenUntil = 0;

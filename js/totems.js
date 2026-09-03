@@ -131,7 +131,7 @@ export const RISE_SECONDS = RISE_TIME;
 //
 // The neutral is deliberately still quiet. It is for lines that are neither,
 // and a third loud colour would cost the other two their meaning.
-const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
+export const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
 
 // ---------------------------------------------------------------------------
 // PIXEL TEXT ON A CANVAS TEXTURE
@@ -152,7 +152,7 @@ const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
 //     coarser ladder throws long names straight down to body size.
 const PX_FONT = '"Press Start 2P", monospace';
 
-function pxText(c, text, x, y, size, maxWidth) {
+export function pxText(c, text, x, y, size, maxWidth) {
   let s = size;
   c.font = s + 'px ' + PX_FONT;
   while (s > 12 && c.measureText(text).width > maxWidth) {
@@ -365,7 +365,7 @@ function markAssets() {
 // The two radii are the caller's whole say in how big the mark is - a station
 // takes a smaller one - and everything inside scales off them together, so
 // the rim never drifts out of its pool.
-function makeMark(parent, rimR = RIM_R, poolR = POOL_R) {
+export function makeMark(parent, rimR = RIM_R, poolR = POOL_R) {
   markAssets();
   // One material per part per totem because each wears its own offer's
   // theme; the geometry behind them is shared by every mark in the game.
@@ -398,7 +398,7 @@ function makeMark(parent, rimR = RIM_R, poolR = POOL_R) {
 // Sets the colour of every part of a mark at once. Callers used to tint the
 // shaft and the pool by hand, which is two lines that have to be kept in step
 // and were about to become five.
-function tintMark(mark, hexColor) {
+export function tintMark(mark, hexColor) {
   mark.poolMat.color.setHex(hexColor);
   mark.rimMat.color.setHex(hexColor);
   mark.rippleMat.color.setHex(hexColor);
@@ -408,7 +408,7 @@ function tintMark(mark, hexColor) {
 // Drives one mark. `lit` is 0..1 - the rise, dimmed for an offer that cannot
 // be afforded - and `floorY` is where the world floor sits in the parent's own
 // space, which is the negative of however far the group has sunk.
-function driveMark(mark, lit, floorY, time, phase) {
+export function driveMark(mark, lit, floorY, time, phase) {
   // A slow breath, not a flicker. Fast movement here would read as a fault in
   // the light.
   const b = 0.86 + 0.14 * Math.sin(time * 1.7 + phase);
@@ -457,14 +457,14 @@ function driveMark(mark, lit, floorY, time, phase) {
 // naturally shoot at. It stays a box around the offer rather than growing to
 // cover the whole mark: a claim wants to be a shot AT the icon, not any
 // pellet that clipped the far edge of the light on the ground.
-const HIT_GEOM = new THREE.BoxGeometry(1.7, 3.2, 1.7);
+export const HIT_GEOM = new THREE.BoxGeometry(1.7, 3.2, 1.7);
 // The station's claim volume, covering its mark and the icon orbiting over
 // it. Invisible, exactly like a totem's: see the note in the Station
 // constructor for why the console lost its body.
 const STATION_HIT_GEOM = new THREE.BoxGeometry(1.4, 2.6, 1.4);
 // Invisible, but still a raycast target - the same trick the enemy hitboxes
 // use. three.js raycasts geometry, not visibility.
-const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
+export const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 // The icon ORBITS to stay on the player's side of its mark and turns to face
 // them, so it is legible from any angle.
 //
@@ -473,12 +473,12 @@ const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 // floating absurdly far off the front. With the pillar gone there is nothing
 // to clear, so the icon rides close to the axis of its own light and simply
 // turns to face the player - which is what the orbit was ever for.
-const ICON_Y = 1.5;
-const ICON_RX = 0.5;
-const ICON_RZ = 0.5;
+export const ICON_Y = 1.5;
+export const ICON_RX = 0.5;
+export const ICON_RZ = 0.5;
 // pixelicons.js builds every plate at roughly 0.6m across, which is legible in
 // the hand and too small over a 3.4m-wide mark seen from across the arena.
-const ICON_SCALE = 1.35;
+export const ICON_SCALE = 1.35;
 // The same orbit on the smaller station body: 1.0 wide and 0.5 deep, and only
 // 1.4 tall, so the icon rides lower and closer in and is scaled down to match.
 const ST_ICON_Y = 1.0;
@@ -502,7 +502,7 @@ const ST_ICON_SCALE = 1.0;
 //
 // The card keeps its height, so the row still reads as three marks with three
 // labels at one level rather than as three signs at different depths.
-const PANEL_R = 0.5;
+export const PANEL_R = 0.5;
 const ST_PANEL_R = 0.7;
 
 export function hex(n) {
@@ -575,26 +575,17 @@ export class Totem {
     // a deliberate press and never needs protecting from itself.
     this.armT = ARM_TIME;
 
-    // WHAT KIND OF OFFER IS STANDING HERE: 'upgrade' or 'item'. It changes two
-    // things and nothing else - the header line on the panel and the second rim
-    // on the floor mark - because an active item and a mutation are picked up
-    // the same way and the pillar should not have to be relearned. See _draw().
-    this.kind = 'upgrade';
-
     this.group = new THREE.Group();
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
     // Per-instance because each mark wears its own upgrade's theme.
     this.mark = makeMark(this.group);
-    // The active item's second ring, built with the totem and hidden unless an
-    // item is standing on it - one more mark at 1.5x the radius. Built up front
-    // rather than on demand for the reason everything in this file is: a set
-    // rises at a wave boundary and must not allocate geometry while it does.
-    this.ring2 = makeMark(this.group, RIM_R * 1.5, POOL_R * 1.5);
-    this.ring2.pool.visible = false;
-    this.ring2.haze.visible = false;
-    this.ring2.ripple.visible = false;
+    // NO SECOND RING. A totem used to be able to stand an ACTIVE ITEM as well
+    // as a mutation, and wore a doubled rim when it did. Active items come out
+    // of the mystery box now (js/mysterybox.js) and nothing ever asks a totem
+    // for one, so the extra mark - four more meshes on every totem in the row,
+    // permanently invisible - went with the offer kind it was drawn for.
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
@@ -634,17 +625,13 @@ export class Totem {
    * Assigns an offer and starts the rise.
    *
    * @param {object} offer  { id, name, theme, effects, note } - see
-   *   _buildOffers() and _buildItem() in main.js. `id` doubles as the icon key.
-   *   An ACTIVE ITEM additionally sets `kind: 'item'` and `charge` (its
-   *   cooldown in seconds), which is what the pedestal reads differently.
+   *   _buildOffers() in main.js. `id` doubles as the icon key.
    */
   present(offer, armTime = ARM_TIME) {
     this.offer = offer;
     this.upgradeId = offer.id;
     this.claimed = false;
-    this.kind = offer.kind === 'item' ? 'item' : 'upgrade';
     tintMark(this.mark, offer.theme);
-    tintMark(this.ring2, offer.theme);
     this._showIcon(offer);
     this._draw(offer);
     this.state = 'rising';
@@ -714,17 +701,6 @@ export class Totem {
     // to be read through it.
     //
     // Long weapon names need to shrink to stay on one line.
-    // AN ACTIVE ITEM SAYS SO, ABOVE ITS NAME. This is the one line the pillar
-    // has that a mutation totem does not, and it is here rather than in a
-    // different pillar shape because the two are picked up identically - what
-    // has to be instant is knowing WHICH of the two you are walking to, and a
-    // word in the offer's own colour does that from further out than a
-    // silhouette would. The doubled rim on the floor mark is the other half.
-    if (this.kind === 'item') {
-      c.fillStyle = theme;
-      pxText(c, 'ACTIVE ITEM', 256, 52, 16, 300);
-    }
-
     c.fillStyle = '#ffffff';
     pxText(c, offer.name, 256, 92, 32, 488);
 
@@ -735,9 +711,8 @@ export class Totem {
       y += 38;
     }
 
-    // The bottom line. A mutation's is its OWNED count; an item's is how long
-    // it takes to charge, which is the one number that decides whether it is
-    // worth carrying and is nowhere else on the pillar.
+    // The bottom line: the OWNED count, so a repeat offer is not mistaken for
+    // a new one.
     if (offer.note) {
       // Lifted off the near-black it used to be. With no panel under it, a
       // note at #5b6785 is a line nobody can find in a dark room.
@@ -806,23 +781,6 @@ export class Totem {
     // The mark stays on the floor and comes UP IN BRIGHTNESS instead, which
     // is the one thing that separates a light from a prop.
     driveMark(this.mark, e, -this.group.position.y, time, this.pos.x);
-    // AN ACTIVE ITEM STANDS IN A DOUBLE RING. One extra rim at 1.5x the pool,
-    // counter-spinning, and it is the only piece of geometry that separates the
-    // two kinds of pillar - enough to be unmistakable across the arena, cheap
-    // enough to be one more additive mesh that is simply hidden the rest of the
-    // time. It is driven a beat out of phase with the inner one so the two read
-    // as a mechanism rather than as a single thicker ring.
-    if (this.ring2) {
-      this.ring2.visible = this.kind === 'item';
-      if (this.ring2.visible) {
-        driveMark(this.ring2, e, -this.group.position.y, time, this.pos.x + 2.1);
-        // Counter-spun. driveMark just set this from `time`; negating it here
-        // is what turns two concentric rings into a mechanism instead of one
-        // thick ring that happens to be drawn twice.
-        this.ring2.rim.rotation.y = -this.ring2.rim.rotation.y;
-      }
-    }
-
     // The icon rides around to the player's side of the pillar and turns to
     // face them. Two problems, one fix: an icon parked on the front face is
     // invisible from behind, and a 3D shape left to spin hides itself edge-on
@@ -859,22 +817,20 @@ export class Totem {
 const STATION_LOOK = {
   ammo: { color: 0xffd600, icon: 'ammoBox' },
   reroll: { color: 0x4ef3ff, icon: 'gear' },
-  // The ACTIVE ITEM row's pair. Violet, both of them - that row wears one
-  // colour the way the offers each wear their own, so a console standing in it
-  // reads as belonging to the far row before it reads as a shop. The colour is
-  // the one thing that tells the two REROLL consoles apart at a glance; they
-  // deliberately share the shape, because they do the same job.
-  maxhp: { color: 0xb388ff, icon: 'heart' },
-  itemReroll: { color: 0xb388ff, icon: 'gear' },
 };
 
-// A small console beside a row of offers. Four exist: ammo and reroll beside
-// the totems, max health and reroll beside the active item. All are bought
-// by shooting them or by pressing E in range, and none disturbs the row it
-// stands in.
+// A small console beside a row of offers. Two exist, both beside the mutation
+// totems: ammo and reroll. Both are bought by shooting them or by pressing E in
+// range, and neither disturbs the row it stands in.
+//
+// THE FAR SIDE OF THE ARENA HAS NO CONSOLES ANY MORE. It used to carry two - a
+// MAX HEALTH counter and a second REROLL - flanking the active item pedestal.
+// The mystery box that stands there now is bought FROM ITSELF: it is the offer
+// and the till at once, which is the whole reason it needs no furniture around
+// it. See js/mysterybox.js.
 export class Station {
   constructor(x, kind, scene, z = ROW_Z) {
-    this.kind = kind; // 'ammo' | 'reroll' | 'maxhp' | 'dealReroll'
+    this.kind = kind; // 'ammo' | 'reroll'
     this.pos = new THREE.Vector3(x, 0, z);
     const look = STATION_LOOK[kind];
     this.color = look.color;

@@ -212,10 +212,13 @@ const GAME_FIELDS = [
   'score', 'kills', 'credits',
   'comboKills', 'comboTimer', 'bestCombo',
   'waveDamageTaken', 'lastPerfect',
-  // The shop counter the active item row comes up on. SHARED, in the sense
-  // that both players' runs count their own shops - a schedule is not a reward
-  // and neither player can be unlucky with it.
-  'shopCount',
+  // NO SHOP COUNTER. The active item row used to come up on every third shop
+  // and each run counted its own; the mystery box stands in every wave break
+  // for both players, so there is no longer a schedule to carry. What IS
+  // carried, and is the whole of the per-player item rule, is `item` on the
+  // Player - it falls out of the skip-list copy below like every other field,
+  // which is why the box can never offer a player what they are already
+  // holding no matter whose turn it is. See shuffledPool in items.js.
   'emptyClickCd', '_spreadCd', '_deathCount', '_reliefT',
   '_fireLastX', '_fireLastZ',
   ...GAME_CLOCKS,

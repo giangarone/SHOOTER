@@ -1,10 +1,17 @@
-// Focused check of ACTIVE ITEMS - the slot, the charge, the pedestal row that
-// offers them - and of the eleven mutations that came in from the Devil's row
-// when it was retired. Driven through window.__game.
+// Focused check of ACTIVE ITEMS - the slot, the charge, and the MYSTERY BOX
+// that hands them out - and of the eleven mutations that came in from the
+// Devil's row when it was retired. Driven through window.__game.
 //
 // The two halves are here together on purpose: they are the same change. The
-// row that used to sell mutations for max health now hands out items, and every
-// mutation it used to sell had to be re-priced to stand on a free totem.
+// row that used to sell mutations for max health became a pedestal that gave
+// items away, and then a box that sells them; every mutation it used to sell
+// had to be re-priced to stand on a free totem.
+//
+// WHAT THE BOX HALF IS ACTUALLY GUARDING, since a lot of it looks like a state
+// machine being poked: that a roll is charged EXACTLY ONCE and always the same
+// amount however many are bought, that the reel MOVES rather than showing one
+// item for four seconds, that the item the player is carrying cannot appear on
+// it, and that the shot path and the E path are the same funnel.
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
@@ -33,7 +40,7 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
   await sleep(2500);
 
-  // ---- THE ROW -------------------------------------------------------------
+  // ---- THE MYSTERY BOX -----------------------------------------------------
   const r = await page.evaluate(() => {
     const g = window.__game;
     const out = {};
@@ -42,98 +49,224 @@ try {
     const ITEMS = g.__itemsForTest;
 
     // dismiss() starts a SINK, and nothing here runs frames for it to finish
-    // in, so both rows have to be forced hidden between visits or every
-    // iteration would read the previous one's furniture as still standing.
+    // in, so the furniture has to be forced hidden between visits or every
+    // iteration would read the previous one's as still standing.
     const hide = () => {
-      g.itemArea.dismiss();
-      g.itemArea.pedestal.state = 'hidden';
-      g.itemArea.pedestal.claimed = false;
-      for (const st of g.itemArea.stations) st.state = 'hidden';
+      g.mysteryBox.dismiss();
+      g.mysteryBox.riseState = 'hidden';
+      g.mysteryBox.state = 'idle';
+      g.mysteryBox.group.visible = false;
       g.totemArea.dismiss();
       for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
     };
     // The wave-clear shop, in the order _updateWave runs it.
     const shop = () => {
       g._presentTotems();
-      g._presentItem();
+      g._presentBox();
+    };
+    // Runs the box's rise out. canBuy is gated on riseState, so nothing below
+    // may use the box on the frame it appears.
+    const risen = () => {
+      for (let i = 0; i < 60; i++) {
+        g.time += 0.016;
+        g.totemArea.update(0.016, g.time, P.pos);
+        g.mysteryBox.update(0.016, g.time, P.pos);
+      }
+    };
+    // Drives a bought roll through the lid and the whole reel, stopping the
+    // frame an item is actually on offer. Bounded, so a box that never lands
+    // fails the assertion rather than hanging the harness.
+    const spin = () => {
+      for (let i = 0; i < 500 && !g.mysteryBox.offered; i++) {
+        g.time += 0.016;
+        g.mysteryBox.update(0.016, g.time, P.pos);
+      }
+      return g.mysteryBox.offered;
     };
 
-    // --- THE CADENCE: every third shop, and no other ---
-    // A count, not a roll, so this is exact rather than a rate - which is the
-    // whole reason it is a count.
-    g.shopCount = 0;
+    // --- IT IS THERE EVERY SHOP ---
+    // The row this replaced came up on a count of shops. Nine shops, nine
+    // boxes: the schedule is gone, not shortened.
     const seen = [];
     for (let i = 0; i < 9; i++) {
       hide();
       shop();
-      seen.push(g.itemArea.active ? 1 : 0);
+      seen.push(g.mysteryBox.active ? 1 : 0);
     }
-    out.cadence = seen;
-
-    // A REROLL IS NOT A NEW SHOP. Three rerolls at one break must not walk the
-    // counter forward three places - the far row would then arrive at a break
-    // the player did not earn and skip one they did.
-    g.shopCount = 0;
+    out.everyShop = seen;
+    // A REROLL OF THE TOTEMS IS NOT A NEW BOX EITHER. It re-presents the near
+    // row and must leave the far one exactly as it was - mid-spin included.
     hide();
     shop();
-    for (let i = 0; i < 3; i++) g._presentTotems(true);
-    out.rerollDidNotCount = g.shopCount === 1;
+    risen();
+    g.credits = 100000;
+    g._buyBoxRoll();
+    const spinningWas = g.mysteryBox.state;
+    g._presentTotems(true);
+    out.totemRerollLeftTheBox = g.mysteryBox.state === spinningWas;
 
-    // --- ONE PEDESTAL, framed by two consoles ---
-    g.shopCount = 2;
+    // --- THE BOX ITSELF ---
     hide();
     shop();
-    out.rowUp = g.itemArea.active;
-    out.offerIsItem = g.itemArea.pedestal.offer.kind === 'item';
-    out.offerIsKnown = !!ITEMS[g.itemArea.pedestal.offer.id];
-    out.pedestalKind = g.itemArea.pedestal.kind;
-    out.stationKinds = g.itemArea.stations.map((s) => s.kind);
+    // READ BEFORE THE RISE IS RUN OUT. armT counts down once the totem lands,
+    // so a sample taken after risen() is measuring how long the harness spent
+    // stepping rather than what the totems were armed FOR.
     out.totemArm = Math.max(...g.totemArea.totems.map((t) => t.armT));
+    risen();
+    out.boxUp = g.mysteryBox.active && g.mysteryBox.riseState === 'up';
+    out.boxStartsShut = g.mysteryBox.state === 'idle' && g.mysteryBox.lid === 0;
+    out.boxStartsBuyable = g.mysteryBox.canBuy;
+    out.boxOffersNothingShut = g.mysteryBox.offered === null;
+    // THE FAR ROW HAS NO CONSOLES ANY MORE. The box is the offer and the till.
+    out.noStationInRange = typeof g.mysteryBox.stationInRange !== 'function';
 
-    // --- TAKING IT: full charge, and the swap is named ---
-    const first = g.itemArea.pedestal;
-    const firstId = first.offer.id;
-    first.armT = 0;
-    first.state = 'up';
-    g._claimItem(first);
+    // --- PAYING FOR A ROLL ---
+    g.wave = 1;
+    g.credits = 100000;
+    const before = g.credits;
+    g._buyBoxRoll();
+    out.rollCharged = before - g.credits;
+    out.rollCostIsBoxCost = out.rollCharged === g._boxCost();
+    out.opensOnPurchase = g.mysteryBox.state === 'opening';
+    // A SECOND PRESS MID-SPIN BUYS NOTHING. The box sells one thing at a time.
+    const midSpin = g.credits;
+    g._buyBoxRoll();
+    out.noDoubleBuy = g.credits === midSpin && g.mysteryBox.state !== 'idle';
+
+    // --- THE REEL ---
+    // It must MOVE - a reel that showed one item for four seconds and then
+    // called it a reveal would pass every other check in this file.
+    const shown = new Set();
+    let ticks = 0;
+    for (let i = 0; i < 500 && !g.mysteryBox.offered; i++) {
+      g.time += 0.016;
+      g.mysteryBox.update(0.016, g.time, P.pos);
+      if (g.mysteryBox.event === 'tick') ticks++;
+      if (g.mysteryBox.showing) shown.add(g.mysteryBox.showing);
+    }
+    out.reelTicks = ticks;
+    out.reelShowedMany = shown.size;
+    out.reelIsAllRealItems = [...shown].every((k) => !!ITEMS[k]);
+    out.landed = g.mysteryBox.offered;
+    out.landedIsReal = !!ITEMS[out.landed];
+    out.landedIsOnTheReel = g.mysteryBox.reel.includes(out.landed);
+    out.stateIsRevealed = g.mysteryBox.state === 'revealed';
+
+    // --- TAKING IT: full charge, and the box stays ---
+    const firstId = out.landed;
+    P.item = null;
+    g._grabBox();
     out.carried = P.item === firstId;
     out.arrivesCharged = P.itemReady && P.itemCharge === ITEMS[firstId].cooldown;
-    // Taking an item does NOT end the wave break - the mutation pick still does.
+    // Taking it does NOT end the wave break - the mutation pick still does.
     out.totemsStillUp = g.totemArea.active && !g.totemArea.claimed;
-    out.rowSank = first.state === 'sinking' || first.state === 'hidden';
+    // ...and unlike the pedestal it replaced, the BOX DOES NOT GO AWAY. It is
+    // never spent; it shuts and can be paid again.
+    out.boxStandsAfterTake = g.mysteryBox.active;
+    out.boxShutsAfterTake = g.mysteryBox.state === 'closing';
+    out.nothingOfferedAfterTake = g.mysteryBox.offered === null;
+    for (let i = 0; i < 40; i++) { g.time += 0.016; g.mysteryBox.update(0.016, g.time, P.pos); }
+    out.buyableAgainAfterTake = g.mysteryBox.canBuy;
 
-    // --- THE OFFER IS NEVER WHAT IS ALREADY CARRIED ---
-    // A pedestal offering what is in the slot is a pedestal with nothing on it.
-    let sameAsCarried = 0;
-    for (let i = 0; i < 300; i++) {
-      if (g._buildItem().id === P.item) sameAsCarried++;
+    // --- THE PRICE DOES NOT CLIMB ---
+    // The whole point of the box over the reroll it is priced like. Five rolls
+    // in one visit, every one the same money.
+    g.wave = 1;
+    g.credits = 100000;
+    const costs = [];
+    for (let n = 0; n < 5; n++) {
+      const c = g.credits;
+      g._buyBoxRoll();
+      costs.push(c - g.credits);
+      // Run it out and let the item sink back, so the next roll starts clean.
+      for (let i = 0; i < 1200 && !g.mysteryBox.canBuy; i++) {
+        g.time += 0.05;
+        g.mysteryBox.update(0.05, g.time, P.pos);
+      }
     }
-    out.neverOffersCarried = sameAsCarried;
-    // ...and every one of the other four does turn up.
-    const rolled = new Set();
-    // Enough draws that thirty-six items all turning up is overwhelming rather
-    // than lucky: at 1/36 each, 4000 draws miss a given item with probability
-    // about e^-111.
-    for (let i = 0; i < 4000; i++) rolled.add(g._buildItem().id);
-    out.poolSize = rolled.size;
-    out.poolTotal = Object.keys(ITEMS).length;
-    out.poolMissesCarried = !rolled.has(P.item);
+    out.fiveRollsOneVisit = costs;
+    // ...and it DOES climb with the wave, on the block boundary every other
+    // price in the game steps on.
+    g.wave = 1; const w1 = g._boxCost();
+    g.wave = 5; const w5 = g._boxCost();
+    g.wave = 6; const w6 = g._boxCost();
+    g.wave = 11; const w11 = g._boxCost();
+    out.waveLadder = [w1, w5, w6, w11];
+    g.wave = 1;
 
-    // --- REPLACING: the second item throws the first away ---
-    g.shopCount = 2;
+    // SECOND OPINION'S TOKENS DO NOT PAY FOR A ROLL. The box is a purchase of a
+    // draw, not the refusal of an answer already given - a token that paid for
+    // one would hand that mutation a free active item at every wave break.
+    P.freeRerolls = 2;
+    g.credits = 100000;
+    const tokenCredits = g.credits;
+    out.tokenDoesNotPrice = g._boxCost() === w1;
+    g._buyBoxRoll();
+    out.tokenNotSpent = P.freeRerolls === 2;
+    out.paidCashDespiteToken = tokenCredits - g.credits === w1;
+    P.freeRerolls = 0;
     hide();
     shop();
-    const second = g.itemArea.pedestal;
-    const secondId = second.offer.id;
-    out.secondIsDifferent = secondId !== firstId;
-    // THE PILLAR DOES NOT NAME THE SWAP. It used to; with one slot in the game
-    // "this replaces what you are carrying" is the only thing taking an item
-    // can mean, and a caption restating the rule on every offer is one the
-    // player stops reading. The banner at the claim still says it.
-    out.noteIsEmpty = !second.offer.note;
-    second.armT = 0;
-    second.state = 'up';
-    g._claimItem(second);
+    risen();
+
+    // --- AN EMPTY WALLET ROLLS NOTHING ---
+    g.credits = 0;
+    g._buyBoxRoll();
+    out.brokeRefused = g.mysteryBox.state === 'idle' && g.credits === 0;
+    out.brokeStillBuyable = g.mysteryBox.canBuy;
+
+    // --- THE TEN SECONDS ---
+    // An item nobody takes goes back in, and the box sells another.
+    g.credits = 100000;
+    g._buyBoxRoll();
+    const stranded = spin();
+    out.strandedLanded = !!stranded;
+    P.item = null;
+    // Ten seconds and a bit, at a coarse step - the descent is continuous and
+    // nothing here depends on the frame rate.
+    for (let i = 0; i < 260; i++) { g.time += 0.05; g.mysteryBox.update(0.05, g.time, P.pos); }
+    out.strandedGone = g.mysteryBox.offered === null;
+    out.strandedNotGranted = P.item === null;
+    out.buyableAfterStranding = g.mysteryBox.canBuy;
+    // ...and a grab one frame before the deadline still works, so the window is
+    // the ten seconds it says it is rather than nine and a bit.
+    g._buyBoxRoll();
+    spin();
+    for (let i = 0; i < 190; i++) { g.time += 0.05; g.mysteryBox.update(0.05, g.time, P.pos); }
+    out.stillOfferedLate = !!g.mysteryBox.offered;
+    const lateId = g.mysteryBox.offered;
+    g._grabBox();
+    out.lateGrabWorks = P.item === lateId;
+
+    // --- THE POOL NEVER CONTAINS WHAT IS CARRIED ---
+    // Not merely "never wins": the carried item must not even flash past on the
+    // reel, or the player watches the box offer them what they already have.
+    let carriedOnReel = 0;
+    let poolWrongSize = 0;
+    const everRolled = new Set();
+    for (let i = 0; i < 400; i++) {
+      const pool = g.__poolForTest(P.item);
+      if (pool.includes(P.item)) carriedOnReel++;
+      if (pool.length !== Object.keys(ITEMS).length - 1) poolWrongSize++;
+      for (const k of pool) everRolled.add(k);
+    }
+    out.carriedNeverOnReel = carriedOnReel;
+    out.poolAlwaysFull = poolWrongSize;
+    out.poolSize = everRolled.size;
+    out.poolTotal = Object.keys(ITEMS).length;
+    out.poolMissesCarried = !everRolled.has(P.item);
+    // An EMPTY slot excludes nothing - the whole catalogue is on the reel.
+    out.emptySlotPool = g.__poolForTest(null).length;
+
+    // --- REPLACING: the second item throws the first away ---
+    hide();
+    shop();
+    risen();
+    g.credits = 100000;
+    g._buyBoxRoll();
+    const secondId = spin();
+    out.secondIsDifferent = secondId !== P.item;
+    g._grabBox();
     out.replaced = P.item === secondId;
     out.oneSlotOnly = !!P.item && typeof P.item === 'string';
     out.replacementCharged = P.itemReady;
@@ -181,81 +314,10 @@ try {
     out.emptySlotSafe = P.item === null;
     g.waveState = 'active';
 
-    // --- THE CONSOLES ---
-    // A console has to finish RISING before it can be used - isUp() is part of
-    // the max-health allowance and of _stationBlocked - so every visit below
-    // runs the rise out rather than using the row on the frame it appears.
-    const risen = () => {
-      for (let i = 0; i < 60; i++) {
-        g.time += 0.016;
-        g.totemArea.update(0.016, g.time, g.player.pos);
-        g.itemArea.update(0.016, g.time, g.player.pos);
-      }
-    };
-    // MAX HEALTH: $5,000 for +5, three per visit, and the console goes down on
-    // the third rather than standing there greyed out.
-    g.shopCount = 2;
-    hide();
-    shop();
-    risen();
-    const hs = g.itemArea.healthStation;
-    P.maxHpDebt = 20;
-    P.upgrades = {};
-    P.rebuildMods();
-    const hpBase = P.maxHealth;
-    const buyHealth = () => {
-      g.credits = 12000;
-      g._useStation(hs);
-      return 12000 - g.credits;
-    };
-    out.healthFirst = buyHealth() === 5000;
-    out.healthStandsAfterOne = hs.isUp();
-    out.healthSecond = buyHealth() === 5000;
-    out.healthThird = buyHealth() === 5000;
-    out.boughtThree = P.maxHealth - hpBase === 15;
-    out.healthConsoleSank = hs.state === 'sinking' || hs.state === 'hidden';
-    const hpCap = P.maxHealth;
-    out.healthCapPerVisit = buyHealth() === 0 && P.maxHealth === hpCap;
-    g.shopCount = 2;
-    hide();
-    shop();
-    risen();
-    out.healthReturns = g.itemArea.healthAvailable;
-
-    // REROLL: credits, at the mutation reroll's own price, doubling per reroll
-    // of the same offer - and off its own counter, so the totem row's rerolls
-    // do not raise it.
-    g.shopCount = 2;
-    hide();
-    shop();
-    g.wave = 1;
-    g.credits = 200000;
-    const costs = [];
-    for (let i = 0; i < 3; i++) {
-      const c = g.credits;
-      g._rerollItem();
-      costs.push(c - g.credits);
-    }
-    out.rerollCosts = costs;
-    // The two counters are independent: three totem rerolls must leave the
-    // item's price where it was.
-    g.shopCount = 2;
-    hide();
-    shop();
-    g.credits = 200000;
-    const itemFirst = g._itemRerollCost();
-    for (let i = 0; i < 3; i++) { g.totemArea.rerolls++; }
-    out.countersIndependent = g._itemRerollCost() === itemFirst;
-    // An empty wallet refuses it and changes nothing.
-    g.credits = 0;
-    const offerWas = g.itemArea.pedestal.offer.id;
-    g._rerollItem();
-    out.brokeRerollRefused = g.itemArea.pedestal.offer.id === offerWas && g.credits === 0;
-
     // --- THE SHOOT AND E PATHS ---
-    // This is where the two rows could be confused: a pedestal and a totem are
-    // the same class, told apart only by which userData tag their claim box
-    // carries.
+    // This is where the two rows could be confused: the box and a totem hang
+    // the same kind of invisible claim volume, told apart only by which
+    // userData tag it carries.
     const aimAt = (o) => {
       const t = new g.player.pos.constructor();
       o.getWorldPosition(t);
@@ -271,15 +333,14 @@ try {
       g.camera.updateMatrixWorld(true);
     };
     const stage = () => {
-      g.shopCount = 2;
       hide();
       shop();
-      // Long enough to cover the rise plus the longest arm delay (1s with the
-      // item row standing), or nothing is claimable yet.
+      // Long enough to cover the rise plus the arm delay (ARM_TIME_ITEM, which
+      // every totem now gets), or nothing is claimable yet.
       for (let i = 0; i < 260; i++) {
         g.time += 0.016;
         g.totemArea.update(0.016, g.time, g.player.pos);
-        g.itemArea.update(0.016, g.time, g.player.pos);
+        g.mysteryBox.update(0.016, g.time, g.player.pos);
       }
     };
     const standAt = (x, z) => {
@@ -288,10 +349,9 @@ try {
       for (let i = 0; i < 4; i++) {
         g.time += 0.016;
         g.totemArea.update(0.016, g.time, g.player.pos);
-        g.itemArea.update(0.016, g.time, g.player.pos);
+        g.mysteryBox.update(0.016, g.time, g.player.pos);
       }
     };
-    P.maxHpDebt = 0;
     P.upgrades = {};
     P.rebuildMods();
     P.health = P.maxHealth;
@@ -304,40 +364,54 @@ try {
       g.shoot();
     };
 
+    // SHOOTING THE BOX BUYS A ROLL, and one roll however many pellets land.
+    // A shotgun puts eight in the same box in one frame, and the cooldown that
+    // stops that is the whole reason _useBox has a shot path distinct from the
+    // key path.
     stage();
-    const ped = g.itemArea.pedestal;
-    standAt(ped.pos.x, ped.pos.z - 4);
+    const box = g.mysteryBox;
+    standAt(box.pos.x, box.pos.z - 4);
     P.item = null;
-    aimAt(ped.hit);
+    g.credits = 100000;
+    const cb = g.credits;
+    aimAt(box.hit);
     fire();
-    out.shotTookItem = ped.claimed && P.item === ped.offer.id;
+    out.shotBoughtRoll = cb - g.credits === g._boxCost();
+    out.shotOpenedBox = box.state !== 'idle';
+    // A second shot in the cooldown window buys nothing.
+    const cb2 = g.credits;
+    fire();
+    out.shotDidNotDoubleBuy = g.credits === cb2;
     out.shotDidNotStartWave = g.totemArea.active && !g.totemArea.claimed;
-    // A PEDESTAL COSTS NO HEALTH. It is the one thing the row used to do that
-    // it must not do any more.
-    out.shotCostNoHealth = P.maxHpDebt === 0;
 
-    // The reroll console, through the same raycast.
-    stage();
-    const rr = g.itemArea.rerollStation;
-    standAt(rr.pos.x, rr.pos.z - 3);
-    g.credits = 50000;
-    const cr = g.credits;
-    aimAt(rr.hit);
+    // ...and shooting it again once it is HOLDING something takes that thing,
+    // rather than buying a second roll on top of the first.
+    for (let i = 0; i < 500 && !box.offered; i++) {
+      g.time += 0.016;
+      box.update(0.016, g.time, g.player.pos);
+    }
+    const heldId = box.offered;
+    box.shootCd = 0;
+    const cb3 = g.credits;
+    aimAt(box.hit);
     fire();
-    out.shotRerolled = cr - g.credits === g._rerollCost();
+    out.shotTookItem = P.item === heldId;
+    out.shotTakeWasFree = g.credits === cb3;
 
     // A free totem is still free, and still starts the wave.
     stage();
     const totem = g.totemArea.totems.find((t) => t.state === 'up');
     standAt(totem.pos.x, totem.pos.z + 4);
-    // FREE MEANS NOTHING CHARGED, which is maxHpDebt - not that max health came
-    // out unchanged. Some offers legitimately MOVE the number: shoot a Bulwark
-    // totem and max health goes up 50 because that is what Bulwark does.
-    const debt = P.maxHpDebt;
+    // FREE MEANS NOTHING CHARGED. Some offers legitimately MOVE max health:
+    // shoot a Bulwark totem and it goes up 50 because that is what Bulwark
+    // does - so this reads the wallet, which a totem must never touch.
+    const purse = g.credits;
     aimAt(totem.hit);
     fire();
-    out.shotTookTotem = totem.claimed && P.maxHpDebt === debt;
-    out.totemClosedTheRow = !g.totemArea.claimed || g.itemArea.pedestal.state !== 'up';
+    out.shotTookTotem = totem.claimed && g.credits === purse;
+    // The totem claim starts the next wave, so the box packs up with it - a
+    // roll left spinning is forfeited, the same rule an unclaimed set follows.
+    out.totemClosedTheBox = !g.totemArea.claimed || !g.mysteryBox.canBuy;
 
     // E claims, and WALKING INTO ONE DOES NOT.
     stage();
@@ -353,27 +427,40 @@ try {
     g.tryUse();
     out.keyClaimedTotem = walkTotem.claimed;
 
-    // E on the pedestal.
+    // E ON THE BOX. The same one funnel as the pellet, so the key and the shot
+    // can never disagree about which of the box's two jobs just happened.
     stage();
-    const keyPed = g.itemArea.pedestal;
-    standAt(keyPed.pos.x, keyPed.pos.z - 1.2);
+    const keyBox = g.mysteryBox;
+    standAt(keyBox.pos.x, keyBox.pos.z - 1.2);
     P.item = null;
+    g.credits = 100000;
     const use = g._useTarget();
-    out.promptNamesItem = !!use && use.kind === 'item';
+    out.promptNamesBox = !!use && use.kind === 'box';
+    const kb = g.credits;
     g.tryUse();
-    out.keyTookItem = keyPed.claimed && P.item === keyPed.offer.id;
+    out.keyBoughtRoll = kb - g.credits === g._boxCost() && keyBox.state !== 'idle';
+    for (let i = 0; i < 500 && !keyBox.offered; i++) {
+      g.time += 0.016;
+      keyBox.update(0.016, g.time, g.player.pos);
+    }
+    const keyHeld = keyBox.offered;
+    // The prompt now names the ITEM rather than the price, because the press
+    // now does a different thing.
+    const use2 = g._useTarget();
+    out.promptStillNamesBox = !!use2 && use2.kind === 'box';
+    out.promptTextNamesItem =
+      g._usePrompt(use2)[0].includes(ITEMS[keyHeld].name);
+    g.tryUse();
+    out.keyTookItem = P.item === keyHeld;
 
-    // E at the item row's reroll console. It ranks as an ordinary station,
-    // alongside the two beside the totems.
+    // A BROKE PLAYER GETS A BLOCKED PROMPT, not a silent one - the price is the
+    // reason and it has to be on screen.
     stage();
-    standAt(g.itemArea.rerollStation.pos.x, g.itemArea.rerollStation.pos.z - 1.5);
-    g.credits = 50000;
-    const cr2 = g.credits;
-    const useRr = g._useTarget();
-    out.promptNamesItemStation =
-      !!useRr && useRr.kind === 'station' && useRr.target.kind === 'itemReroll';
-    g.tryUse();
-    out.keyRerolled = cr2 - g.credits === g._rerollCost();
+    standAt(g.mysteryBox.pos.x, g.mysteryBox.pos.z - 1.2);
+    g.credits = 0;
+    const useBroke = g._useTarget();
+    const [brokeText, brokeBlocked] = g._usePrompt(useBroke);
+    out.brokePromptBlocked = brokeBlocked && brokeText.includes(String(g._boxCost()));
 
     // E at a station buys ammo, even standing where a totem's range reaches.
     stage();
@@ -434,7 +521,6 @@ try {
         ...g._statRows().flat().map(String),
       ];
       P.item = null;
-      strings.push(g._buildItem().note || '');
       for (const line of strings) {
         if (line.includes(secs)) out.chargeTimeLeaks.push(key + ': ' + line);
       }
@@ -474,7 +560,6 @@ try {
     const out = {};
     const take = (id) => {
       P.upgrades = {};
-      P.maxHpDebt = 0;
       P.rebuildMods();
       P.upgrades[id] = 1;
       P.rebuildMods();
@@ -724,7 +809,7 @@ try {
     P.freeRerolls = 0;
     const paidCost = g._rerollCost();
     useItem('itemReroll');
-    out.rerollsFree = g._rerollCost() === 0 && g._itemRerollCost() === 0 && paidCost > 0;
+    out.rerollsFree = g._rerollCost() === 0 && paidCost > 0;
     P.freeRerolls = 1;
     const creditsWas = g.credits;
     g._payReroll(g._rerollCost());
@@ -927,11 +1012,25 @@ try {
     return out;
   });
 
-  // FOUR SECONDS OF THE GAME'S OWN LOOP, with nothing driven by hand. Long
+  // FOUR SECONDS OF THE GAME'S OWN CLOCK, with nothing driven by hand. Long
   // enough for BONESAW's 0.4s window and SHORT FUSE's 3s fuse to both come and
   // go on their own - which is the only thing that proves _loop reaches the
   // running list and the deployable list at all.
-  await sleep(4000);
+  //
+  // WAITED OUT IN GAME TIME, NOT WALL TIME. Game.time advances by the real
+  // frame delta CLAMPED TO 50ms, so under this harness's software renderer -
+  // where a frame with the shop standing costs well over that - four seconds at
+  // the wall buys under two on the clock the fuse is measured against, and the
+  // assertion below fails for a reason that has nothing to do with the loop.
+  // The wall-clock cap is still there so a genuinely stalled loop fails fast
+  // instead of hanging the suite.
+  const t0 = await page.evaluate(() => window.__game.time);
+  const waitUntil = Date.now() + 30000;
+  while (Date.now() < waitUntil) {
+    const t = await page.evaluate(() => window.__game.time);
+    if (t - t0 >= 4) break;
+    await sleep(250);
+  }
   const loop = await page.evaluate(() => ({
     running: window.__game.running.list.map((r) => r.id),
     deployed: window.__game._deployed.length,
@@ -940,29 +1039,68 @@ try {
 
   console.log(JSON.stringify({ ...r, mechanics: m, loop }, null, 2));
 
-  // ---- the row ----
-  ok('the row comes up every third shop',
-    JSON.stringify(r.cadence) === '[0,0,1,0,0,1,0,0,1]', JSON.stringify(r.cadence));
-  ok('a reroll is not a new shop', r.rerollDidNotCount);
-  ok('one pedestal, framed by two consoles',
-    r.rowUp && r.pedestalKind === 'item'
-    && JSON.stringify(r.stationKinds) === '["maxhp","itemReroll"]', JSON.stringify(r.stationKinds));
-  ok('the offer is a known active item', r.offerIsItem && r.offerIsKnown);
-  // ARM_TIME_ITEM, less whatever the sampling frame ate. What this guards is
-  // that a second row standing at the break arms the totems LONGER than the
-  // 0.45s a plain break gives them, not any particular number.
-  ok('totems re-armed longer', r.totemArm >= 0.9, String(r.totemArm));
+  // ---- the box ----
+  ok('it stands in every shop',
+    JSON.stringify(r.everyShop) === '[1,1,1,1,1,1,1,1,1]', JSON.stringify(r.everyShop));
+  ok('a totem reroll leaves it alone', r.totemRerollLeftTheBox);
+  ok('it comes up shut and buyable',
+    r.boxUp && r.boxStartsShut && r.boxStartsBuyable && r.boxOffersNothingShut);
+  ok('it has no consoles', r.noStationInRange);
+  // ARM_TIME_ITEM, less whatever the sampling frame ate. The box stands in
+  // every break now, so the LONGER arm is simply what a totem always gets.
+  ok('totems armed for the long delay', r.totemArm >= 1, String(r.totemArm));
+  ok('a roll is charged once, at the box price',
+    r.rollCostIsBoxCost && r.rollCharged > 0, String(r.rollCharged));
+  ok('paying opens it', r.opensOnPurchase);
+  ok('it cannot be bought twice mid-spin', r.noDoubleBuy);
+  ok('an empty wallet rolls nothing', r.brokeRefused && r.brokeStillBuyable);
+
+  // ---- the reel ----
+  ok('the reel actually cycles', r.reelTicks > 20, String(r.reelTicks) + ' ticks');
+  ok('it shows many different items', r.reelShowedMany > 10, String(r.reelShowedMany));
+  ok('everything it shows is a real item', r.reelIsAllRealItems);
+  ok('it lands on one of them',
+    r.landedIsReal && r.landedIsOnTheReel && r.stateIsRevealed, String(r.landed));
+
+  // ---- taking it ----
   ok('taking it fills the slot', r.carried);
   ok('it arrives fully charged', r.arrivesCharged);
   ok('taking it does not start the wave', r.totemsStillUp);
-  ok('the pedestal sinks behind it', r.rowSank);
-  ok('the offer is never what is carried', r.neverOffersCarried === 0, String(r.neverOffersCarried));
+  ok('the box stays standing', r.boxStandsAfterTake && r.boxShutsAfterTake);
+  ok('it offers nothing once taken', r.nothingOfferedAfterTake);
+  ok('and it can be paid again', r.buyableAgainAfterTake);
+  ok('a second item replaces the first',
+    r.secondIsDifferent && r.replaced && r.oneSlotOnly);
+  ok('the replacement is charged too', r.replacementCharged);
+
+  // ---- the price ----
+  // THE ONE THING THAT SEPARATES THIS FROM THE REROLL IT IS PRICED LIKE. Five
+  // rolls in one visit, every one the same money - a doubling curve here would
+  // put the deep half of the pool out of reach of every run that found it.
+  ok('five rolls in one visit all cost the same',
+    new Set(r.fiveRollsOneVisit).size === 1 && r.fiveRollsOneVisit[0] === 2000,
+    JSON.stringify(r.fiveRollsOneVisit));
+  ok('the price steps up per block of five waves',
+    JSON.stringify(r.waveLadder) === '[2000,2000,2500,3000]', JSON.stringify(r.waveLadder));
+  ok('a free-reroll token does not pay for a roll',
+    r.tokenDoesNotPrice && r.tokenNotSpent && r.paidCashDespiteToken);
+
+  // ---- the ten seconds ----
+  ok('an item nobody takes goes back in',
+    r.strandedLanded && r.strandedGone && r.strandedNotGranted);
+  ok('and the box sells another', r.buyableAfterStranding);
+  ok('the window really is ten seconds', r.stillOfferedLate && r.lateGrabWorks);
+
+  // ---- the pool ----
+  ok('the carried item is never even on the reel',
+    r.carriedNeverOnReel === 0, String(r.carriedNeverOnReel));
+  ok('the reel is always the whole rest of the pool',
+    r.poolAlwaysFull === 0, String(r.poolAlwaysFull));
   ok('every other item in the pool is reachable',
     r.poolSize === r.poolTotal - 1 && r.poolMissesCarried,
     r.poolSize + '/' + (r.poolTotal - 1));
-  ok('a second item replaces the first', r.secondIsDifferent && r.replaced && r.oneSlotOnly);
-  ok('the pillar does not restate the one-slot rule', r.noteIsEmpty);
-  ok('the replacement is charged too', r.replacementCharged);
+  ok('an empty slot excludes nothing',
+    r.emptySlotPool === r.poolTotal, String(r.emptySlotPool));
 
   // ---- the charge ----
   ok('the shop charges nothing', r.shopChargesNothing);
@@ -974,30 +1112,20 @@ try {
   ok('an uncharged press spends nothing', r.uncharged);
   ok('an empty slot is harmless', r.emptySlotSafe);
 
-  // ---- the consoles ----
-  ok('max health pays 5 for $5,000', r.healthFirst);
-  ok('the console stands after one buy', r.healthStandsAfterOne);
-  ok('the second and third are charged $5,000 each', r.healthSecond && r.healthThird);
-  ok('three buys pay 15 max HP', r.boughtThree);
-  ok('the console sinks on the third', r.healthConsoleSank);
-  ok('max health is capped at three per visit', r.healthCapPerVisit);
-  ok('a fresh visit offers max health again', r.healthReturns);
-  ok('item rerolls cost 2000, 4000, 8000',
-    JSON.stringify(r.rerollCosts) === '[2000,4000,8000]', JSON.stringify(r.rerollCosts));
-  ok('the two reroll counters are independent', r.countersIndependent);
-  ok('an empty wallet cannot reroll', r.brokeRerollRefused);
-
   // ---- claiming ----
-  ok('shooting the pedestal takes the item', r.shotTookItem);
-  ok('taking it leaves the totems up', r.shotDidNotStartWave);
-  ok('the pedestal costs no health', r.shotCostNoHealth);
-  ok('shooting the reroll console rerolls', r.shotRerolled);
+  ok('shooting the box buys a roll', r.shotBoughtRoll && r.shotOpenedBox);
+  ok('a held trigger buys exactly one', r.shotDidNotDoubleBuy);
+  ok('buying a roll leaves the totems up', r.shotDidNotStartWave);
+  ok('shooting it again takes what it is holding',
+    r.shotTookItem && r.shotTakeWasFree);
   ok('shooting a totem is still free', r.shotTookTotem);
-  ok('a totem claim closes the item row', r.totemClosedTheRow);
+  ok('a totem claim closes the box', r.totemClosedTheBox);
   ok('standing in a totem claims nothing', r.walkingClaimsNothing);
   ok('E takes the totem you are standing at', r.promptNamesTotem && r.keyClaimedTotem);
-  ok('E takes the item off the pedestal', r.promptNamesItem && r.keyTookItem);
-  ok('E at the item reroll console rerolls', r.promptNamesItemStation && r.keyRerolled);
+  ok('E at the box buys a roll', r.promptNamesBox && r.keyBoughtRoll);
+  ok('E at an open box takes the item',
+    r.promptStillNamesBox && r.promptTextNamesItem && r.keyTookItem);
+  ok('a broke player is told the price', r.brokePromptBlocked);
   ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
 
   // ---- the readout ----

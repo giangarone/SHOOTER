@@ -311,15 +311,87 @@ export class SFX {
     this.noise({ t: 0.14, v: 0.22, f: 3200 });
     this.tone({ f: 520, f2: 880, t: 0.12, type: 'triangle', v: 0.22 });
   }
-  // The active item row rising, on the far side of the arena. A low pair
-  // opening UPWARD under a soft swell - deliberately not a sting: the row is
-  // announced by being there, and a fanfare would make the wave break feel like
-  // a cutscene. It is what used to say the Devil had come, turned the other way
-  // up, because what stands there now is a tool and not a bargain.
-  itemRow() {
-    this.tone({ f: 92, f2: 184, t: 0.9, type: 'sawtooth', v: 0.14 });
-    this.tone({ f: 138, f2: 276, t: 1.1, type: 'sine', v: 0.18, delay: 0.05 });
-    this.noise({ t: 0.5, v: 0.09, f: 900, delay: 0.02 });
+  // ---- THE MYSTERY BOX ---------------------------------------------------
+  //
+  // Six voices for one object, which is more than anything else in this file
+  // gets, and it is because the box is the only thing in the game that runs a
+  // five-second animation the player just STANDS THERE and watches. There is no
+  // gunfire over it and nothing else asking for attention, so the sound is
+  // carrying the whole event - and an animation that decelerates in silence
+  // reads as an animation that has hung.
+
+  // The box coming up out of the floor. Deliberately SMALLER than the swell
+  // the active item row used to rise on: that row appeared every third shop
+  // and could afford to be an event, and this one is there every single wave
+  // break. A fanfare thirty times a run is a fanfare nobody hears by wave ten.
+  boxRise() {
+    this.tone({ f: 98, f2: 196, t: 0.5, type: 'sawtooth', v: 0.11 });
+    this.tone({ f: 147, f2: 294, t: 0.6, type: 'sine', v: 0.13, delay: 0.04 });
+    this.noise({ t: 0.3, v: 0.07, f: 900, delay: 0.02 });
+  }
+
+  // The lid. A latch letting go, then the hinge, then the light getting out -
+  // and the rising sine on the end is what turns a crate opening into something
+  // opening that has something in it.
+  boxOpen() {
+    this.noise({ t: 0.05, v: 0.3, f: 3400, mode: 'highpass' });
+    this.tone({ f: 220, f2: 110, t: 0.22, type: 'square', v: 0.2 });
+    this.noise({ t: 0.35, v: 0.14, f: 400, f2: 2600, mode: 'bandpass', q: 3, delay: 0.03 });
+    this.tone({ f: 330, f2: 990, t: 0.4, type: 'sine', v: 0.16, delay: 0.08 });
+  }
+
+  /**
+   * ONE ITEM CHANGING ON THE REEL. This fires about forty times in four
+   * seconds, which sets every number in it.
+   *
+   * QUIET, AND TWELVE MILLISECONDS LONG. Anything with a tail overlaps the next
+   * click and forty of them become a buzz; anything at the volume of a normal
+   * cue in this file becomes unbearable by the third roll of a run.
+   *
+   * IT RISES. The gaps between clicks are already widening - that is the
+   * deceleration - and a pitch that climbs alongside is what makes the widening
+   * read as ARRIVING somewhere rather than as running out of momentum. Straight
+   * off the reel's own progress, so the two can never drift apart.
+   *
+   * @param {number} t  0..1, how far through the spin this tick is
+   */
+  boxTick(t = 0) {
+    const k = Math.max(0, Math.min(1, t));
+    this.noise({ t: 0.012, v: 0.13, f: 5200, mode: 'highpass' });
+    this.tone({ f: 900 + k * 620, t: 0.03, type: 'square', v: 0.09 });
+  }
+
+  // THE REEL LANDS. The one moment the box is allowed to be loud.
+  //
+  // It is the upgrade chime opened out: the same three ascending partials, but
+  // spread over twice the time, with a noise swell underneath that arrives
+  // BEFORE the first note. The swell is what makes it feel like the flash and
+  // the shockwave rather than like a chime that happens to coincide with them.
+  boxReveal() {
+    this.noise({ t: 0.3, v: 0.26, f: 300, f2: 4200, mode: 'bandpass', q: 1.2 });
+    this.tone({ f: 110, f2: 55, t: 0.5, type: 'sine', v: 0.34 });
+    this.tone({ f: 523, f2: 1046, t: 0.24, type: 'triangle', v: 0.3, delay: 0.06 });
+    this.tone({ f: 784, f2: 1568, t: 0.3, type: 'sine', v: 0.26, delay: 0.16 });
+    this.tone({ f: 1046, f2: 2093, t: 0.4, type: 'sine', v: 0.22, delay: 0.28 });
+    this.tone({ f: 1568, t: 0.3, type: 'triangle', v: 0.1, delay: 0.28 });
+  }
+
+  // One second nearer to losing it. Three of these play, at three, two and one,
+  // and they are the same blip getting more insistent - so the player learns
+  // what the sound means on the first roll where they nearly missed one.
+  boxWarn() {
+    this.tone({ f: 780, t: 0.05, type: 'square', v: 0.14 });
+    this.tone({ f: 1170, t: 0.06, type: 'sine', v: 0.1, delay: 0.04 });
+  }
+
+  // The lid coming down on an item nobody took. A DOOR, not a failure: the roll
+  // is gone but the box is not, and it will sell another the moment this
+  // finishes - so it lands rather than droops, and there is no minor third
+  // anywhere in it.
+  boxClose() {
+    this.noise({ t: 0.09, v: 0.24, f: 1400, f2: 200, mode: 'lowpass' });
+    this.tone({ f: 200, f2: 90, t: 0.16, type: 'square', v: 0.2 });
+    this.tone({ f: 70, t: 0.22, type: 'sine', v: 0.22, delay: 0.02 });
   }
 
   // An item taken. The upgrade chime with a mechanical seat under it, so it

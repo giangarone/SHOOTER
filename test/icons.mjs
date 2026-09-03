@@ -26,17 +26,15 @@ import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PLAYER_STATUS } from '../js/status.js';
 import { PIXEL_ICON_KEYS, resolveIcon, GRID } from '../js/pixelicons.js';
 
-// Icons used by things that are not upgrades. Stations and weapons name their
-// icon explicitly - they have no upgrade id to key off - so they are the only
-// entries that can drift.
-// The two REROLL consoles - one beside the totems, one beside the active item
-// pedestal - deliberately share the arrows and are listed once. One shape means
-// one thing is the rule; these two do the same thing in two rows, and teaching
-// a second symbol for it would break the rule rather than keep it.
+// Icons used by things that are not upgrades. Stations, the mystery box and
+// weapons name their icon explicitly - they have no upgrade id to key off - so
+// they are the only entries that can drift.
 const STATION_ICONS = {
   AMMO_STATION: 'ammoBox',
-  REROLL_STATIONS: 'gear',
-  MAXHP_STATION: 'heart',
+  REROLL_STATION: 'gear',
+  // NO ENTRY FOR THE MYSTERY BOX. It wears four question marks built out of
+  // flat geometry on its own sides (see _buildMarks in mysterybox.js), not a
+  // drawing out of this catalogue, so there is no key here to drift.
 };
 
 // The pickups. Unlike an upgrade, a pickup names its drawing explicitly

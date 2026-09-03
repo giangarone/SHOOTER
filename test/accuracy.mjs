@@ -86,9 +86,8 @@ try {
       g._clearEntities();
       for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
       for (const st of g.totemArea.stations) st.state = 'hidden';
-      g.itemArea.pedestal.state = 'hidden';
-      g.itemArea.pedestal.claimed = false;
-      for (const st of g.itemArea.stations) st.state = 'hidden';
+      g.mysteryBox.riseState = 'hidden';
+      g.mysteryBox.group.visible = false;
     };
     const frames = async (n) => { for (let i = 0; i < n; i++) { clear(); await step(); } };
     // A WAIT MEASURED IN GAME TIME, which is what every number in this file

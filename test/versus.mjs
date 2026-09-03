@@ -114,6 +114,47 @@ try {
       'wave=' + g.wave + '/' + g.match.wave);
     t('Player 2 has a run of their own', g.player.health > 0, 'hp=' + Math.round(g.player.health));
 
+    // ---- 2b. THE BOX KNOWS WHOSE SLOT IT IS LOOKING AT ---------------------
+    //
+    // The one item rule that has to hold across a handoff: the mystery box
+    // never offers a player what they are already carrying, and "they" is
+    // whoever is on the controller RIGHT NOW.
+    //
+    // Nothing in mysterybox.js implements this and that is the point. Versus is
+    // hot seat - one Player instance whose `item` is snapshotted and restored
+    // by captureRun/restoreRun - so `player.item` is always the ACTIVE player's,
+    // and shuffledPool() reading it is the whole mechanism. What this guards is
+    // that `item` is still on the carried side of PLAYER_SKIP: the day someone
+    // adds it to that list, the box starts offering player two whatever player
+    // one is holding and nothing else in the suite notices.
+    g.player.giveItem('itemHeal');
+    const p2Pool = g.__poolForTest(g.player.item);
+    t('the box excludes the ACTIVE player\'s item',
+      !p2Pool.includes('itemHeal') && p2Pool.length === Object.keys(g.__itemsForTest).length - 1,
+      'pool=' + p2Pool.length);
+    // THE BENCHED PLAYER'S ITEM IS NOT THE BOX'S BUSINESS. Player 1 is sitting
+    // in a snapshot holding something else; it has to be on Player 2's reel,
+    // because it is not in the slot in front of the box.
+    g.match.slots[0].player.item = 'itemFreeze';
+    t('the benched player\'s item is still on the reel', p2Pool.includes('itemFreeze'));
+    // THE FIELD THIS ALL RESTS ON. `item` is carried because captureRun copies
+    // every Player field NOT named in PLAYER_SKIP - so the day someone adds it
+    // to that list, the box starts reading a stale slot and nothing else in the
+    // suite notices. This is the assertion that would.
+    t('a snapshot carries the slot',
+      Object.prototype.hasOwnProperty.call(g.match.slots[0].player, 'item')
+      && Object.prototype.hasOwnProperty.call(g.match.slots[0].player, 'itemCharge'));
+    // A SPIN CANNOT SURVIVE A HANDOFF. _endTurn dismisses the box, which forces
+    // it idle - so a snapshot can never carry a half-finished reel into the
+    // other player's wave.
+    t('no roll is left running across the pass',
+      g.mysteryBox.state === 'idle' && !g.mysteryBox.offered,
+      g.mysteryBox.state);
+    // Put Player 2 back as this section found them, so the turn order the rest
+    // of this file walks is untouched.
+    g.player.item = null;
+    g.player.itemCharge = 0;
+
     // ---- 3-4. a DEATH hands over, and the countdown runs -------------------
     g.player.maxHealth = 9999;
     g.player.health = 0;

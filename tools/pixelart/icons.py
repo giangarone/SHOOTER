@@ -504,15 +504,6 @@ def _(c):
                 (12 + math.cos(a - 0.30) * 6.0, 12 - math.sin(a - 0.30) * 6.0)], E)
 
 
-@icon('heart')              # the MAX HEALTH station
-def _(c):
-    c.disc(8.2, 8.5, 5.0, S)
-    c.disc(15.8, 8.5, 5.0, S)
-    c.poly([(3.2, 9.5), (20.8, 9.5), (12, 22)], S)
-    c.rect(10.5, 8, 13.5, 16, E)
-    c.rect(7, 11.5, 17, 14.5, E)
-
-
 @icon('untouched')          # +3 max HP for every wave cleared unhurt, kept
 def _(c):
     # A STAIR that keeps climbing, with the health it banks lit on top of it.
@@ -551,7 +542,7 @@ def _(c):
 def _(c):
     # AN ANCHOR. Planted is the whole mutation, and the crossbar through the
     # shank gives it the cross the health family is read by without borrowing
-    # NANOWEAVE's weave or the station's heart.
+    # NANOWEAVE's weave or WATERLINE's heart.
     c.rect(10.6, 3.0, 13.4, 20.0, E)                 # shank
     c.rect(4.0, 7.0, 20.0, 9.6, E)                   # crossbar
     c.ring(12, 3.4, 3.2, 1.6, S)                     # the ring at the head
@@ -938,8 +929,9 @@ def _(c):
 
 @icon('pickHealth')         # the health drop
 def _(c):
-    # A cross, not a heart: the heart is the MAX HEALTH station, and a pickup
-    # that tops you up must not wear the icon of the thing that raises the bar.
+    # A cross, not a heart. The two active items that RAISE the bar - GRAFT
+    # and WATERLINE - are the hearts, and a pickup that only tops you up must
+    # not wear the icon of a thing that moves the ceiling.
     c.rect(9, 2.5, 15, 21.5, S)
     c.rect(2.5, 9, 21.5, 15, S)
     c.rect(10.5, 4.5, 13.5, 19.5, E)
@@ -1294,7 +1286,7 @@ def _(c):
 
 @icon('itemLastStand')      # WATERLINE - heal up to half, never above
 def _(c):
-    # Against pickHealth (a cross) and `heart` (the max-HP station): a heart
+    # Against pickHealth (a cross) and GRAFT (a patched heart): a heart
     # FILLED TO A MARKED LINE. The empty top half is the item - it is the only
     # icon in the set with a deliberate void through the middle of the form.
     c.disc(8.4, 9.4, 4.8, S)
@@ -1479,10 +1471,10 @@ def _(c):
 
 @icon('itemGraft')          # GRAFT - permanent +3 max HP
 def _(c):
-    # Against pickHealth (a cross) and `heart` (the max-HP station): the heart
-    # with a PATCH stitched onto it, and the patch is the lit part. The station
-    # is a plain heart; a heart with a rectangle and four stitches over one
-    # shoulder is a different shape at any size.
+    # Against pickHealth (a cross) and WATERLINE (a heart filled to a line):
+    # the heart with a PATCH stitched onto it, and the patch is the lit part.
+    # A heart with a rectangle and four stitches over one shoulder is a
+    # different shape at any size.
     c.disc(8.4, 9.0, 5.0, S)
     c.disc(15.6, 9.0, 5.0, S)
     c.poly([(3.2, 10.8), (20.8, 10.8), (12, 22.0)], S)

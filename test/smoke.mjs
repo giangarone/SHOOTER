@@ -125,8 +125,10 @@ try {
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.
     ['geometry count bounded', peak.geometries < 120],
-    // The fixed set of canvas panels (three totems, two stations) uploads in
-    // one step the first time a totem set rises, then never grows again. WHEN
+    // The fixed set of canvas panels (three totems, two stations, the mystery
+    // box) uploads in one step the first time a shop rises, then never grows
+    // again. The box's question mark is drawn at construction and uploads with
+    // the first frame that shows it. WHEN
     // that step happens depends on how fast the bot clears wave 1, so any
     // assertion pinned to a sample index is flaky - two earlier attempts here
     // both failed on slow runs. What actually matters is that the count only
@@ -134,29 +136,50 @@ try {
     // blow straight through.
     ['texture count non-decreasing',
       samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
-    // FOURTEEN, and here is every one of them: eight canvas panels (three totem
-    // cards, one active item card, four console labels - every Station carries
-    // its own), the soft glow dot every halo and puff tints, the hard-edged
-    // spark dot the particles use, the creep field, the surface tile the floor
-    // and walls share, the rig's beam gradient and the laser bank's.
+    // SIXTEEN. The canvases are the part of this that is worth naming and the
+    // part that moves: SIX PANELS - three totem cards, two console labels
+    // (every Station carries its own) and the mystery box's card - plus ONE
+    // GLYPH, the question mark on the box's four sides. Then the soft glow dot
+    // every halo and puff tints, the hard-edged spark dot the particles use,
+    // the creep field, the surface tile the floor and walls share, and the
+    // gradients the rig and the laser bank draw their beams on. A few of those
+    // last live outside the scene graph, which is why this is a measured
+    // ceiling and not an arithmetic one.
     //
-    // The cap CAME DOWN from sixteen when the Devil's row was retired: his
-    // three deal cards became one item pedestal, which is two panels out. It
-    // had gone from twelve to thirteen for the pixel-art pass: glow split into a soft
-    // texture for LIGHT and a stepped one for the sparks, which are matter,
-    // and the creep stopped being thirty meshes and became one field on one
-    // texture. It moved from fifteen for the surface tile - ONE texture for
-    // every surface in the room, projected in world space rather than through
-    // each mesh's UVs, which is what stops a 46m wall and a 2m crate drawing
-    // it at different sizes. Note that a run in which the bot never reaches a totem set
-    // peaks below this whatever the ceiling is - the panels upload late - so
-    // this number is the budget on paper, not the number the last run saw.
+    // THE GLYPH IS THE SIXTEENTH, and it was spent deliberately. The mark on
+    // the box was built out of flat primitives precisely to avoid spending it -
+    // an arc, a stem and a dot, costing three geometries and no texture. That
+    // was the wrong economy. It is a CHARACTER; the player reads it as one, and
+    // a hand-approximated glyph standing next to a HUD, a card and a menu that
+    // are all Press Start 2P was the one thing in the room that looked
+    // undesigned. One 128x128 canvas, shared by all four faces, buys the real
+    // face. A texture is worth spending on something the player reads.
+    //
+    // IT WENT UP BY ONE WHEN THE MYSTERY BOX REPLACED THE ITEM PEDESTAL, and
+    // the reason is worth writing down because the paper budget went DOWN by
+    // two at the same time. The far row used to be a pedestal and two consoles
+    // - three panels - but it only rose on every third shop, so most runs never
+    // uploaded any of them and the peak this test SAW was the near row's five.
+    // The box is one panel and it stands in every wave break, so its card is
+    // uploaded in every run that reaches a shop at all. Fewer textures on
+    // paper, one more of them actually realised.
+    //
+    // The cap had come down from sixteen when the Devil's row was retired: his
+    // three deal cards became one item pedestal. It had gone from twelve to
+    // thirteen for the pixel-art pass: glow split into a soft texture for LIGHT
+    // and a stepped one for the sparks, which are matter, and the creep stopped
+    // being thirty meshes and became one field on one texture. It moved from
+    // fifteen for the surface tile - ONE texture for every surface in the room,
+    // projected in world space rather than through each mesh's UVs, which is
+    // what stops a 46m wall and a 2m crate drawing it at different sizes.
+    // A run in which the bot never reaches a shop still peaks below this, so
+    // the number is the ceiling, not the number the last run saw.
     //
     // It is a BUDGET, not a leak canary: the check above ('non-decreasing') is
     // what catches a texture being allocated per wave. This one catches the
     // budget being spent without anyone noticing, which is why raising it is a
     // deliberate edit with a list attached rather than a nudge.
-    ['texture count bounded', peak.textures <= 14],
+    ['texture count bounded', peak.textures <= 16],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

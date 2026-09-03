@@ -97,7 +97,7 @@ export class Turret {
     // FIFTEEN, NOT TWENTY. Not a balance number: an item's readout must never
     // state its charge time (see the note at the top of js/items.js), and a
     // turret that lived exactly as long as its cooldown would print "FOR 20s"
-    // on a pedestal for a twenty-second item - which is the one number the
+    // on the box's card for a twenty-second item - which is the one number the
     // player is meant to learn by carrying the thing. Fifteen also means the
     // slot is genuinely empty for a few seconds between turrets, so a second
     // one is a decision rather than an upkeep.
