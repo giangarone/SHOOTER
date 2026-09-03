@@ -822,8 +822,43 @@ export class Player {
     this.damageBoostEnd = 0;
     this.fireRateMult = 1;
     this.fireRateBoostEnd = 0;
+    // HOW LONG THE WINDOW CURRENTLY RUNNING WAS GRANTED FOR, in seconds. The
+    // HUD chip's fraction is (remaining / this), and it exists because the two
+    // boosts now have more than one source: the RAGE pickup opens ten seconds
+    // and OVERDRIVE five, the FIRE RATE pickup eight and RED LINE six. Measured
+    // against a constant, every chip but the pickup's own opened part-drained -
+    // the bar disagreeing with the effect it was drawn for.
+    //
+    // Written by whatever wrote the DEADLINE, and only when that write actually
+    // won: a five-second item landing under a ten-second pickup leaves both the
+    // deadline and the length alone.
+    this.damageBoostFull = 1;
+    this.fireRateBoostFull = 1;
     this.shield = 0;
     this.shieldEnd = 0;
+    // ---- ACTIVE-ITEM RUNTIME ------------------------------------------
+    //
+    // Written by the running-item list in items.js and read by the shot
+    // pipeline, the damage sinks and the pickup hooks. DELIBERATELY NOT IN
+    // `mods`: rebuildMods() replays the owned upgrade list from fresh defaults
+    // after every totem pick, so anything an item wrote there would be handed
+    // back by the next mutation the player walked into.
+    //
+    // They are also separate from damageMult / fireRateMult rather than folded
+    // into them. Those two are the RAGE pickup's fields and carry its expiry;
+    // an item that borrowed them would either be cancelled by a pickup landing
+    // on top of it or would cancel one, and neither is the honest reading of
+    // two effects granted independently. Multiplying instead means an item and
+    // a pickup stack, which is what a player holding both expects.
+    this.itemDamageMult = 1;   // RED MIST, BLOOD TAX, BODY COUNT
+    this.itemTakenMult = 1;    // RED MIST's other half
+    this.itemRateMult = 1;     // RED LINE
+    this.itemHoming = 0;       // BIRD DOG: Seeker's cone, on a clock
+    this.leechShots = 0;       // HAEMOPHAGE: landed shots still owed a heal
+    this.elementCycle = -1;    // FOUR HUMOURS: -1 off, else the next element
+    this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
+    this.statusLockEnd = 0;    // WHITE CELL: applyStatus refuses until this
+    this.freeRerolls = 0;      // SECOND OPINION: rerolls owed, either console
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1087,14 +1122,14 @@ export class Player {
   // that had to be earned again after being taken would be a pickup the player
   // could not use in the fight it was handed to them for.
   //
-  // Returns the id of the item that was displaced, or null - the caller says
-  // so on the banner, because a silent swap is a run-ending mistake nobody saw.
+  // It used to return the id it displaced, so the claim banner could name the
+  // swap. Nothing names the swap any more - there is one slot, so what became
+  // of the old item was never in question - and a return value with no reader
+  // is a contract waiting to be got wrong.
   giveItem(id) {
-    const had = this.item;
     this.item = id;
     this.itemCharge = ACTIVE_ITEMS[id].cooldown;
     this.itemReadyFx = false;
-    return had === id ? null : had;
   }
 
   // Whether the carried item can be fired right now. Nothing carried is not
@@ -1138,6 +1173,13 @@ export class Player {
   applyStatus(kind, dur) {
     const def = PLAYER_STATUS[kind];
     if (!def) return false;
+    // WHITE CELL's lock. The cleanse alone would be undone on the next frame
+    // by the same lava the player is still standing in, and an item whose
+    // whole payload can expire before the button has finished being pressed is
+    // one the player will read as broken. Refused HERE rather than in
+    // _afflictPlayer so the lock also covers a status the PLAYER's own
+    // machinery would put on them.
+    if (this.now < this.statusLockEnd) return false;
     const d = dur > 0 ? dur : def.duration;
     // The full duration is what the HUD's timer bar measures against. While an
     // effect is running it only ever GROWS - a two-second top-up landing on a
@@ -1370,6 +1412,18 @@ export class Player {
     this.item = null;
     this.itemCharge = 0;
     this.itemReadyFx = false;
+    // The active-item runtime, back to neutral. main.js clears the RUNNING
+    // list separately; these are the marks it leaves on the player, and a new
+    // run inheriting a triple-damage window would be born mid-buff.
+    this.itemDamageMult = 1;
+    this.itemTakenMult = 1;
+    this.itemRateMult = 1;
+    this.itemHoming = 0;
+    this.leechShots = 0;
+    this.elementCycle = -1;
+    this.orbHealEnd = 0;
+    this.statusLockEnd = 0;
+    this.freeRerolls = 0;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);
@@ -1426,8 +1480,10 @@ export class Player {
     this.damageMult = 1;
     this.rageSpeedMult = 1;
     this.damageBoostEnd = 0;
+    this.damageBoostFull = 1;
     this.fireRateMult = 1;
     this.fireRateBoostEnd = 0;
+    this.fireRateBoostFull = 1;
     this.shield = 0;
     this.shieldEnd = 0;
     this.clearStatuses();
@@ -1481,10 +1537,12 @@ export class Player {
       this.damageMult = 1;
       this.rageSpeedMult = 1;
       this.damageBoostEnd = 0;
+      this.damageBoostFull = 1;
     }
     if (this.fireRateBoostEnd > 0 && time >= this.fireRateBoostEnd) {
       this.fireRateMult = 1;
       this.fireRateBoostEnd = 0;
+      this.fireRateBoostFull = 1;
     }
     if (this.shieldEnd > 0 && time >= this.shieldEnd) {
       this.shield = 0;
@@ -2403,7 +2461,7 @@ export class Player {
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
       this.lastShotCost = 0;
       const effRate =
-        w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
+        w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate * this.bloodlustMult();
       this.fireCd = 1 / effRate;
       this.kick = w.kick;
       this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
@@ -2430,7 +2488,7 @@ export class Player {
       this.mag = Math.max(0, this.mag - cost);
     }
     const effectiveFireRate =
-      w.fireRate * this.fireRateMult * this.mods.fireRate * this.bloodlustMult();
+      w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate * this.bloodlustMult();
     this.fireCd = 1 / effectiveFireRate;
     this.kick = w.kick;
     // A round fired is a commitment to being somewhere: it walks the player
@@ -2503,7 +2561,8 @@ export class Player {
   // speed, so the bonus fades in as the player settles and drops the moment
   // they move - it is not a key check, and there is no key to check.
   getEffectiveDamage(base) {
-    let d = base * this.damageMult * this.mods.damage * this.statusDamageMult();
+    let d = base * this.damageMult * this.mods.damage * this.statusDamageMult()
+      * this.itemDamageMult;
     if (this.mods.steady > 0) {
       d *= 1 + this.mods.steady * this.stillness;
     }

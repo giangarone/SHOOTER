@@ -339,9 +339,18 @@ export class SFX {
   // pitched above everything the guns and the enemies occupy, it carries no
   // noise layer at all - noise is what every violent sound in this game is made
   // of - and it is over in a fifth of a second.
+  // THE CHARGE ARRIVING. Louder than it was, and it needed to be: this fires
+  // once, in the middle of a firefight, over the gun and the track, and it is
+  // the only thing that says a button the player has been waiting on is live.
+  // A cue nobody hears is a cue that is not there - and unlike the orb blip
+  // there is no risk of fatigue, because it plays at most once per cooldown.
   itemReady() {
-    this.tone({ f: 1320, t: 0.07, type: 'sine', v: 0.16 });
-    this.tone({ f: 1980, t: 0.11, type: 'sine', v: 0.13, delay: 0.06 });
+    this.tone({ f: 1320, t: 0.08, type: 'sine', v: 0.34 });
+    this.tone({ f: 1980, t: 0.13, type: 'sine', v: 0.28, delay: 0.06 });
+    // A triangle on the top note, for the reason the coin has one: harmonics
+    // above the fundamental buy CARRY, where more gain on a sine just buys a
+    // louder sine that the mix still swallows.
+    this.tone({ f: 1980, t: 0.1, type: 'triangle', v: 0.12, delay: 0.06 });
   }
 
   // The item spent. A short downward thump with a click on the front - the
@@ -355,6 +364,164 @@ export class SFX {
 
   denied() {
     this.tone({ f: 160, f2: 90, t: 0.12, type: 'square', v: 0.22 });
+  }
+
+  // ---- ACTIVE ITEM VOICES ------------------------------------------------
+  //
+  // itemUse() above still plays for EVERY item, and these are laid on top of
+  // it rather than instead of it. That split is deliberate: the thump is the
+  // charge leaving, which is the same event whatever was in the slot, and it
+  // is what makes a press feel like a press even for an item whose payload
+  // happens somewhere the player is not looking. What follows is the payload.
+  //
+  // NONE OF THEM IS LONGER THAN A THIRD OF A SECOND except where the item
+  // itself is - SIX CHAMBERS' spin and EVENT HORIZON's collapse. Anything
+  // longer overlaps the next gunshot, and the gun has to win.
+
+  // Anything that goes off. Body first, then the crack, then the tail - a
+  // blast whose noise burst leads sounds like a snare.
+  itemBlast() {
+    this.tone({ f: 130, f2: 44, t: 0.4, type: 'sine', v: 0.4 });
+    this.noise({ t: 0.28, v: 0.36, f: 1600, f2: 200, mode: 'lowpass' });
+    this.noise({ t: 0.5, v: 0.16, f: 500, f2: 90, delay: 0.05 });
+  }
+
+  // Healing, and the cleanse. Warm and rising, with no noise in it at all -
+  // every hostile sound in the game has grit, so the absence of it is what
+  // says this one is on your side.
+  itemHeal2() {
+    this.tone({ f: 420, f2: 700, t: 0.26, type: 'sine', v: 0.26 });
+    this.tone({ f: 630, f2: 1050, t: 0.3, type: 'triangle', v: 0.14, delay: 0.05 });
+  }
+
+  // Something put on the floor. A mechanical clunk and a latch - it has to
+  // sound like an object being SET DOWN, because the player needs to know the
+  // charge became a thing in the world rather than an effect on them.
+  itemDeploy() {
+    this.noise({ t: 0.05, v: 0.3, f: 3000 });
+    this.tone({ f: 240, f2: 180, t: 0.12, type: 'square', v: 0.22 });
+    this.tone({ f: 700, t: 0.06, type: 'square', v: 0.12, delay: 0.08 });
+  }
+
+  // A buff opening. Short rising pair, no body: it must not be mistakable for
+  // an explosion happening off-screen.
+  itemSurge() {
+    this.tone({ f: 520, f2: 1040, t: 0.18, type: 'triangle', v: 0.2 });
+    this.tone({ f: 780, f2: 1560, t: 0.14, type: 'sine', v: 0.12, delay: 0.04 });
+  }
+
+  // RED MIST. The one buff that costs something, so it goes DOWN into a growl
+  // where the others go up.
+  itemFrenzy() {
+    this.tone({ f: 300, f2: 120, t: 0.3, type: 'sawtooth', v: 0.26 });
+    this.tone({ f: 75, t: 0.36, type: 'square', v: 0.18, delay: 0.02 });
+    this.noise({ t: 0.2, v: 0.14, f: 900, mode: 'bandpass', q: 3 });
+  }
+
+  // BLOOD TAX and OPEN VEIN: health leaving. A wet thud with a low bend under
+  // it - the same shape as being hurt, because it is.
+  itemPact() {
+    this.tone({ f: 210, f2: 70, t: 0.3, type: 'triangle', v: 0.3 });
+    this.noise({ t: 0.16, v: 0.2, f: 700, mode: 'lowpass' });
+  }
+
+  // JACOB'S LADDER. Five clicks up a scale under one bright crack, so the ear
+  // hears the same CHAIN the eye is watching walk through the crowd.
+  itemArc() {
+    this.noise({ t: 0.1, v: 0.3, f: 6000, mode: 'highpass' });
+    for (let i = 0; i < 5; i++) {
+      this.tone({
+        f: 900 * Math.pow(1.22, i), t: 0.05, type: 'square',
+        v: 0.14, delay: i * 0.045,
+      });
+    }
+  }
+
+  // LAST RITES. A bell, low and single. It is the only sound in the game for
+  // an event that is already over by the time it plays.
+  itemRites() {
+    this.tone({ f: 165, t: 0.7, type: 'sine', v: 0.3 });
+    this.tone({ f: 247, t: 0.6, type: 'sine', v: 0.16, delay: 0.02 });
+    this.tone({ f: 494, t: 0.4, type: 'triangle', v: 0.08, delay: 0.04 });
+  }
+
+  // SIX CHAMBERS. The cylinder itself is drawn per click by the item's tick;
+  // this is the spin-up under it.
+  itemSpin() {
+    this.noise({ t: 0.5, v: 0.16, f: 2200, f2: 700, mode: 'bandpass', q: 2 });
+    this.tone({ f: 300, f2: 190, t: 0.5, type: 'square', v: 0.1 });
+  }
+
+  // EVENT HORIZON. A long fall with nothing bright in it - every other voice
+  // here has a crack on the front, and this one deliberately has no attack at
+  // all, because the thing it announces arrives by taking something away.
+  itemSuck() {
+    this.tone({ f: 620, f2: 40, t: 0.9, type: 'sine', v: 0.32 });
+    this.tone({ f: 310, f2: 28, t: 1.0, type: 'triangle', v: 0.18, delay: 0.04 });
+    this.noise({ t: 0.8, v: 0.14, f: 1800, f2: 120, mode: 'lowpass' });
+  }
+
+  // APIARY. Two detuned sawtooths a hair apart - the beat frequency between
+  // them IS the buzz, which is cheaper and far more convincing than trying to
+  // shape one.
+  itemSwarm() {
+    this.tone({ f: 210, f2: 260, t: 0.5, type: 'sawtooth', v: 0.12 });
+    this.tone({ f: 217, f2: 268, t: 0.5, type: 'sawtooth', v: 0.12 });
+    this.tone({ f: 640, f2: 900, t: 0.2, type: 'triangle', v: 0.08, delay: 0.1 });
+  }
+
+  // FALLING SKY. A long approaching whistle, because the rocks themselves are
+  // silent until they land and the item needs to announce three seconds of
+  // something coming.
+  itemSky() {
+    this.noise({ t: 0.9, v: 0.2, f: 400, f2: 3000, mode: 'bandpass', q: 4 });
+    this.tone({ f: 110, f2: 70, t: 0.8, type: 'sine', v: 0.2 });
+  }
+
+  // BOOTSTRAP. A hiss with a thump under it, going UP - the only rising
+  // noise sweep in the set, which is what makes it read as thrust.
+  itemBoot() {
+    this.noise({ t: 0.35, v: 0.3, f: 600, f2: 4000, mode: 'bandpass', q: 1.5 });
+    this.tone({ f: 90, f2: 220, t: 0.3, type: 'square', v: 0.24 });
+  }
+
+  // COLD SPOT. Out and back in: two short bursts with a gap of nothing
+  // between them, which is the only way a teleport sounds like a teleport.
+  itemBlink() {
+    this.tone({ f: 1200, f2: 300, t: 0.1, type: 'sine', v: 0.24 });
+    this.tone({ f: 300, f2: 1400, t: 0.12, type: 'sine', v: 0.24, delay: 0.13 });
+    this.noise({ t: 0.08, v: 0.16, f: 4000, mode: 'highpass', delay: 0.13 });
+  }
+
+  // BONESAW. Grit and a rising body, cut short - the dash is 0.4s and the
+  // sound must not still be going when the player has stopped.
+  itemCharge() {
+    this.noise({ t: 0.22, v: 0.26, f: 1200, f2: 3200, mode: 'bandpass', q: 2 });
+    this.tone({ f: 180, f2: 420, t: 0.2, type: 'sawtooth', v: 0.2 });
+  }
+
+  // LANCE. One long bright lance of a sound, with the body arriving under it
+  // a beat late so the shot reads as bigger than the gun that fired it.
+  itemLance() {
+    this.tone({ f: 1600, f2: 400, t: 0.35, type: 'sawtooth', v: 0.3 });
+    this.noise({ t: 0.3, v: 0.3, f: 5000, f2: 800, mode: 'bandpass', q: 1.5 });
+    this.tone({ f: 120, f2: 55, t: 0.45, type: 'sine', v: 0.3, delay: 0.04 });
+  }
+
+  // GRAFT. The only permanent thing in the pool, so it is the only voice that
+  // resolves upward onto a held note rather than decaying off one.
+  itemGraft() {
+    this.tone({ f: 392, t: 0.16, type: 'sine', v: 0.22 });
+    this.tone({ f: 523, t: 0.16, type: 'sine', v: 0.22, delay: 0.1 });
+    this.tone({ f: 784, t: 0.5, type: 'triangle', v: 0.18, delay: 0.2 });
+  }
+
+  // LITTLE BROTHER'S shot. Deliberately thinner and higher than the player's
+  // own gun: two guns firing in one room have to be tellable apart, and the
+  // one the player is not holding is the one that gives way.
+  turret() {
+    this.tone({ f: 900, f2: 500, t: 0.05, type: 'square', v: 0.1 });
+    this.noise({ t: 0.04, v: 0.08, f: 3500, mode: 'highpass' });
   }
   credits() {
     this.tone({ f: 1180, t: 0.04, v: 0.14, type: 'sine' });

@@ -76,7 +76,7 @@ import {
   UPGRADES, AMMO_PURCHASE, MAXHP_PURCHASE, rollTotems, rerollCost, effectLines,
 } from './upgrades.js';
 import { TotemArea, ARM_TIME_ITEM } from './totems.js';
-import { ACTIVE_ITEMS, ItemArea, rollItem } from './items.js';
+import { ACTIVE_ITEMS, ItemArea, rollItem, RunningItems, HUMOURS } from './items.js';
 import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
@@ -500,6 +500,11 @@ const PROJ_IMPACT = {
   colossus: 0xff5a00,
   harrier: 0x27c4ff,
 };
+// THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
+// queues twelve on its own and APIARY five, so this is not a limit anybody
+// reaches in ordinary play - it is there so that a slot fired repeatedly
+// through a wave break cannot grow the list without bound.
+const MAX_DEPLOYED = 40;
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
 const MAX_MORTARS = 6;
@@ -844,6 +849,16 @@ class Game {
     // them together would put a branch in a hot loop that is wrong half the
     // time it runs.
     this._hazard = [];
+    // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the thirty-seven do not
+    // finish on the frame they are pressed; this is the list that ticks them
+    // and, more importantly, the list that ENDS them. See RunningItems.
+    this.running = new RunningItems();
+    // Reused every frame by the HUD - chips() fills it rather than allocating.
+    this._itemChips = [];
+    // WHAT THE PLAYER HAS LEFT IN THE ARENA - turrets, mines, bees, a bomb on
+    // a fuse, a singularity. Same contract and same eight lines of driving as
+    // this.projectiles; see js/deploy.js.
+    this._deployed = [];
     this._mortars = [];
     this._spreadCd = 0;
     this._deathCount = 0;
@@ -908,6 +923,27 @@ class Game {
       player: this.player,
       effects: this.effects,
       sfx: this.sfx,
+    };
+    // WHAT A DEPLOYABLE IS ALLOWED TO REACH FOR. Built once, beside the other
+    // two, and deliberately narrow: a turret gets the enemy list and a way to
+    // hurt one, and nothing that would let it reach into the run.
+    //
+    // onBlast takes hitPlayer as an argument here where the projectile ctx
+    // hardcodes it to false, and that ONE argument is the whole difference
+    // between a mine and a meteor - the mine's blast does not know who set it
+    // and the meteor's cannot touch the player who called it. Neither of them
+    // owns a copy of the falloff arithmetic.
+    this._deployCtx = {
+      obstacles: this.arena.ground,
+      enemies: this.enemies,
+      effects: this.effects,
+      sfx: this.sfx,
+      player: this.player,
+      onBlast: (pos, dmg, radius, skip, hitPlayer) =>
+        this._blast(pos, dmg, radius, skip || null, !!hitPlayer),
+      hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
+      pull: (point, radius, dist) => this._pull(point, radius, dist, null),
+      deploy: (d) => this.deploy(d),
     };
 
     this._bind();
@@ -2480,6 +2516,17 @@ class Game {
    */
   _endTurn(cleared) {
     const m = this.match;
+    // THE RUNNING ITEMS GO BEFORE THE SNAPSHOT IS TAKEN. An item can be fired
+    // in the shop - see the note in tryItem - so a player can hand over with a
+    // window still open, and everything a window writes (itemDamageMult and its
+    // neighbours) is an ordinary player field that captureRun will copy. The
+    // incoming player would then inherit a triple-damage multiplier with no
+    // activation left anywhere to hand it back.
+    //
+    // A wave clear already clears these; this is the shop-fired case, which is
+    // the only one that reaches here with anything still running.
+    this.running.clear(this);
+    this._clearDeployed();
     if (cleared) m.slots[m.active] = captureRun(this);
     m.advance(cleared);
     if (m.winner >= 0) { this._matchOver(); return; }
@@ -2609,10 +2656,139 @@ class Game {
       this.pad.rumble(0.15, 0.5, 60, 1);
       return;
     }
+    const def = ACTIVE_ITEMS[id];
+    // AN ITEM MAY REFUSE ITSELF, and only LANCE does: it costs thirty rounds,
+    // and a press that spent the charge and fired nothing would be the worst
+    // failure in the pool. The refusal wears the same voice an uncharged press
+    // gets, because it is the same message - not now.
+    if (def.ready && !def.ready(this)) {
+      this.sfx.denied();
+      this.pad.rumble(0.15, 0.5, 60, 1);
+      return;
+    }
     this.player.spendItem();
-    ACTIVE_ITEMS[id].use(this);
+    // Through the running list rather than straight to use(), so an item with
+    // a window is ticked and, above all, ENDED. An item with no duration is
+    // fired and forgotten by start() on the same frame.
+    this.running.start(this, id, def);
     this.sfx.itemUse();
     this.pad.rumble(0.6, 0.5, 200, 2);
+  }
+
+  // ---- what an item is allowed to reach for ------------------------------
+
+  /**
+   * Damage from something that is not a bullet - an item, a turret, a bee, a
+   * wall of fire. It does NOT collect the death: the enemy sweep in
+   * _updateEnemies does that, once per frame, and every kill in the game is
+   * booked there whatever killed it. Anything that tried to score its own kill
+   * here would double-count the combo.
+   *
+   * @param {Enemy} en
+   * @param {number} dmg
+   * @param {THREE.Vector3} [dir]  travel direction, for armour facing
+   */
+  hurtEnemy(en, dmg, dir = null) {
+    if (!en || en.dead) return false;
+    return en.takeDamage(dmg, false, dir ? dir.x : 0, dir ? dir.z : 0);
+  }
+
+  // Adds something to the arena that acts on its own. Capped, because five
+  // items can queue a dozen entities each and a player holding the button
+  // through a shop should not be able to stand up a hundred meteors.
+  deploy(entity) {
+    if (this._deployed.length >= MAX_DEPLOYED) {
+      // The OLDEST goes, not the newest refused: what the player just pressed
+      // must always happen, and a turret from thirty seconds ago is the thing
+      // they have already forgotten about.
+      this._deployed[0].destroy();
+      this._deployed.shift();
+    }
+    this._deployed.push(entity);
+  }
+
+  _updateDeployed(dt) {
+    const ctx = this._deployCtx;
+    for (let i = this._deployed.length - 1; i >= 0; i--) {
+      const d = this._deployed[i];
+      if (d.update(dt, ctx) === 'alive') continue;
+      d.destroy();
+      this._deployed.splice(i, 1);
+    }
+  }
+
+  // Everything the player left standing, taken down. Called from the same
+  // place the hazards are cleared - a wave ending, a death, a restart - so a
+  // turret cannot outlive the fight it was deployed into.
+  _clearDeployed() {
+    for (const d of this._deployed) d.destroy();
+    this._deployed.length = 0;
+  }
+
+  /**
+   * LANCE. One enormous round straight down the crosshair that stops for
+   * nothing: it walks the whole sorted hit list and damages every enemy on it,
+   * where an ordinary shot stops at the first thing that is not one.
+   *
+   * It goes through _landShot like any other hit, so Venom, Incendiary, the
+   * hitmarker, Hot Streak and every other per-shot hook see it and none of
+   * them had to be told this item exists.
+   *
+   * @param {number} mult  multiple of one bullet's damage
+   */
+  megaShot(mult) {
+    const w = this.player.weapon;
+    const targets = this._targets;
+    targets.length = 0;
+    for (const m of this.arena.meshList) targets.push(m);
+    for (const e of this.enemies) targets.push(e.hitbox);
+
+    const ray = this._shotRay;
+    this._screen.set(0, 0);
+    ray.setFromCamera(this._screen, this.camera);
+    const hits = this._hits;
+    hits.length = 0;
+    ray.intersectObjects(targets, false, hits);
+
+    const muzzle = this.player.muzzleInto(this._muzzle);
+    const dealt = this.player.getEffectiveDamage(w.damage) * mult;
+    this._shotHits.clear();
+    this._blastHit = false;
+    let last = null;
+    let hitAny = false;
+    for (const h of hits) {
+      const en = h.object.userData.enemy;
+      // GEOMETRY DOES NOT STOP IT EITHER - the lance is the one shot in the
+      // game that goes through the pillar as well as through the crowd, which
+      // is what thirty rounds buys. `last` still tracks the furthest impact so
+      // the beam is drawn to somewhere real.
+      last = h.point;
+      if (!en || en.dead) continue;
+      this._landShot(en, h.point, ray.ray.direction, dealt, 8);
+      hitAny = true;
+    }
+    this._shotHits.clear();
+    this.player.bumpStreak(hitAny);
+    if (hitAny) {
+      this.stats.hits++;
+      this.ui.hitMarker();
+    }
+    this.stats.shotsFired++;
+    // Drawn to the end of the ray when it hit nothing at all, so a lance fired
+    // at the sky is still a lance.
+    if (!last) {
+      last = this._rayEnd.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 60);
+    }
+    // THE SHOT HAS TO LOOK LIKE THIRTY ROUNDS. One tracer would make the
+    // biggest press in the pool indistinguishable from an ordinary shot, so
+    // the beam is laid down four times with a bloom of sparks along it.
+    for (let i = 0; i < 4; i++) this.effects.beam(muzzle, last, i % 2 ? 0xd6ffb0 : 0x76ff03);
+    this.effects.flash(muzzle);
+    this.effects.burst(last, 0x76ff03, 30, 8, 3, 0.5);
+    this.effects.addShake(0.5);
+    this.player.kick = -0.22;
+    this.pad.rumble(1, 0.6, 240, 2);
+    this.sfx.itemLance();
   }
 
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
@@ -3054,6 +3230,14 @@ class Game {
   _collectOrb(value) {
     this.credits += value;
     this._creditsDirty = true;
+    // BLOOD FROM STONE. A point per ORB and not per credit: the denomination
+    // of an orb is an implementation detail of how a payout is split up, and
+    // healing by the value would make a boss shower a full heal several times
+    // over. What the player can see on the floor is a number of lights, and
+    // that is what this pays out on.
+    if (this.time < this.player.orbHealEnd && this.player.health < this.player.maxHealth) {
+      this.player.health = Math.min(this.player.maxHealth, this.player.health + 1);
+    }
   }
 
   // Extends the kill chain. Called once per enemy death, before the credit is
@@ -3243,12 +3427,33 @@ class Game {
   // the way, rather than giving up on the first blocked one - the enemy
   // closest to your crosshair being behind a pillar should not stop the round
   // finding the one standing beside it in the open.
+  /**
+   * THE HOMING CONE IN FORCE RIGHT NOW, in radians of half-angle. Seeker sets
+   * it permanently; BIRD DOG sets it for five seconds.
+   *
+   * THE WIDER OF THE TWO WINS, they do not add. A player who owns Seeker gets
+   * nothing from the item, which is the honest behaviour: two cones summed
+   * would let one press turn a mutation the game balances at three tiers into
+   * something that hits everything behind the player.
+   *
+   * BIRD DOG's own figure is Seeker at full rank (see upgrades.js: 0.105 per
+   * tier, three tiers), so the item shows the mutation at its best rather than
+   * at some fourth number nobody can compare it to.
+   */
+  _homingAngle() {
+    return Math.max(this.player.mods.homingAngle, this.player.itemHoming ? 0.315 : 0);
+  }
+
+  _homingRange() {
+    return Math.max(this.player.mods.homingRange, this.player.itemHoming ? 30 : 0);
+  }
+
   _homeShot(ray, muzzle, w, dmgMult, burst) {
     const m = this.player.mods;
     const origin = ray.ray.origin;
     const aim = ray.ray.direction;
     const skip = this._homeSkip;
-    const minDot = Math.cos(m.homingAngle);
+    const minDot = Math.cos(this._homingAngle());
     let landed = false;
 
     for (let attempt = 0; attempt < 3 && !landed; attempt++) {
@@ -3262,7 +3467,7 @@ class Game {
         e.hitbox.getWorldPosition(this._homeAt);
         const v = this._homeDir.subVectors(this._homeAt, origin);
         const d = v.length();
-        if (d > m.homingRange || d < 0.001) continue;
+        if (d > this._homingRange() || d < 0.001) continue;
         v.multiplyScalar(1 / d);
         const dot = v.dot(aim);
         if (dot <= bestDot) continue;
@@ -3342,6 +3547,21 @@ class Game {
     }
     if (m.lightningChance && Math.random() < m.lightningChance) {
       this._lightning(en);
+    }
+    // FOUR HUMOURS. Sits with the mutation statuses because it IS one of
+    // them, four at a time - and it advances here, in the per-SHOT half of
+    // _landShot (below the _shotHits guard), so one trigger pull is one
+    // element however many pellets were in it. The same rule Hot Streak and
+    // Devil's Gamble follow.
+    if (this.player.elementCycle >= 0) {
+      const h = HUMOURS[this.player.elementCycle % HUMOURS.length];
+      this.player.elementCycle++;
+      if (h.status === 'arc') this._chain(en, dealt * 0.6, 7);
+      else en.applyStatus(h.status, h.dur, h.power);
+      // The colour is the whole readout: the player has to be able to tell
+      // which of the four this round was, and there is nowhere on the HUD to
+      // print it.
+      this.effects.impact(point, h.color, 8, 4, 2, 0.3);
     }
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
@@ -3486,7 +3706,7 @@ class Game {
     // makes the mutation purely additive: a shot already on target is never
     // moved, so it cannot drag a round off a Colossus weak point or a
     // Bulwark's flank that the player deliberately lined up.
-    if (!damaged && !hitProp && m.homingAngle > 0
+    if (!damaged && !hitProp && this._homingAngle() > 0
       && this._homeShot(ray, muzzle, w, dmgMult, burst)) {
       return true;
     }
@@ -3602,6 +3822,15 @@ class Game {
     if (mods.overloadFrac > 0 && this.player.mag <= 0) this._overload();
 
     // One hitmarker and one sound per shot, however many pellets connected.
+    // HAEMOPHAGE. Spent on a shot that CONNECTED, off the same boolean the
+    // hitmarker is drawn from - a magazine emptied into a wall must not be a
+    // full heal, and requiring the hit is what makes the item something the
+    // player has to shoot well to cash in.
+    if (hitAny && this.player.leechShots > 0) {
+      this.player.leechShots--;
+      this.player.health = Math.min(this.player.maxHealth, this.player.health + 5);
+      this.effects.impact(this.player.eyeInto(this._killPos), 0xff2d6f, 6, 3, 2, 0.3);
+    }
     if (hitAny) {
       this.stats.hits++;
       this.sfx.hit();
@@ -3757,9 +3986,13 @@ class Game {
       this.ui.banner('WARD');
       return;
     }
-    // Blood Pact. Applied after the ward and the dodge, because those are
-    // about whether a hit lands at all and this is about how much it costs.
-    d *= this.player.mods.damageTakenMult;
+    // Blood Pact, and RED MIST's half of its own bargain. Applied after the
+    // ward and the dodge, because those are about whether a hit lands at all
+    // and this is about how much it costs. The item's multiplier is separate
+    // from the mutation's so the two stack instead of one overwriting the
+    // other - which is what a player holding both would expect, and is also
+    // the only reading under which the item's own text stays true.
+    d *= this.player.mods.damageTakenMult * this.player.itemTakenMult;
     // Carnage resets on any hit that actually lands, and Absolute Zero's
     // drawback plants the player for a second. Both are the price of the deal.
     this.player.clearCarnage();
@@ -4292,12 +4525,14 @@ class Game {
       name: def.name,
       theme: def.theme,
       effects: def.effects,
-      // What it REPLACES, when it replaces something. The swap is the whole
-      // cost of taking it and it is the one thing the player cannot read off
-      // the pillar otherwise - the HUD slot is behind them while they read it.
-      note: this.player.item && this.player.item !== id
-        ? 'REPLACES ' + ACTIVE_ITEMS[this.player.item].name
-        : '',
+      // NO NOTE. The pedestal used to carry a "REPLACES <name>" line, on the
+      // reasoning that the swap is the whole cost of taking the item. It is
+      // not worth a line: there is exactly one slot, so replacing whatever is
+      // in it is the only thing taking an item can possibly do, and a caption
+      // restating the rule on every offer is a caption the player stops
+      // reading. The banner at the moment of the claim still names the swap,
+      // which is where it actually matters.
+      note: '',
     };
   }
 
@@ -4309,7 +4544,7 @@ class Game {
     if (!area.active) return;
     const cost = this._itemRerollCost();
     area.rerollStation.setLabel(
-      'REROLL', '$' + cost, !this._stationBlocked(area.rerollStation)
+      'REROLL', this._priceLabel(cost), !this._stationBlocked(area.rerollStation)
     );
     // The only console that names its gain as well as its price. MAX HEALTH is
     // the one purchase whose title does not say what it does - see the note on
@@ -4333,6 +4568,13 @@ class Game {
   }
 
   _rerollCost() {
+    // SECOND OPINION prices the next reroll at nothing, at either console.
+    // Zeroing the COST rather than adding a branch at each of the six places
+    // that shows or charges one is what keeps the item from needing a special
+    // case in the affordability tests, the labels and the prompts: `credits >=
+    // 0` is already true everywhere, and the two charge sites spend the token
+    // instead of the money.
+    if (this.player.freeRerolls > 0) return 0;
     return rerollCost(this.totemArea.rerolls, this.wave);
   }
 
@@ -4342,7 +4584,21 @@ class Game {
   // counter is separate so that spending three rerolls on the totems does not
   // silently make the item unaffordable.
   _itemRerollCost() {
+    if (this.player.freeRerolls > 0) return 0;
     return rerollCost(this.itemArea.rerolls, this.wave);
+  }
+
+  // A console's price as the player reads it. FREE rather than $0, because a
+  // price of zero is the one number on a console that is not a price.
+  _priceLabel(cost) {
+    return cost > 0 ? '$' + cost : 'FREE';
+  }
+
+  // Takes the payment for a reroll, in tokens first and credits second. The
+  // caller has already established the player can afford it.
+  _payReroll(cost) {
+    if (this.player.freeRerolls > 0) this.player.freeRerolls--;
+    else this.credits -= cost;
   }
 
   // Redraws both station labels. Only called when something they display
@@ -4356,7 +4612,9 @@ class Game {
       this.credits >= ammo && AMMO_PURCHASE.enabled(this.player)
     );
     const cost = this._rerollCost();
-    area.rerollStation.setLabel('REROLL', '$' + cost, this.credits >= cost && area.active);
+    area.rerollStation.setLabel(
+      'REROLL', this._priceLabel(cost), this.credits >= cost && area.active
+    );
   }
 
   // Grants the upgrade a totem is offering and sinks the whole set. Every
@@ -4403,7 +4661,7 @@ class Game {
   _claimItem(pedestal, byKey = false) {
     if (!(byKey ? pedestal.canUse() : pedestal.canClaim())) return;
     const offer = pedestal.offer;
-    const replaced = this.player.giveItem(offer.id);
+    this.player.giveItem(offer.id);
     pedestal.claimed = true;
 
     this.effects.burst(
@@ -4413,14 +4671,13 @@ class Game {
     this.effects.addShake(0.16);
     this.sfx.itemTake();
     this.pad.rumble(0.7, 0.4, 300, 3);
-    // NAMING THE SWAP IS THE POINT OF THIS BANNER. Losing an item you were
-    // relying on, silently, at a wave break, is the one mistake this system can
-    // make that the player would not notice until the fight that needed it.
-    this.ui.banner(
-      replaced
-        ? offer.name + '  REPLACES  ' + ACTIVE_ITEMS[replaced].name
-        : offer.name + '  READY'
-    );
+    // WHAT WAS TAKEN, AND NOTHING ABOUT WHAT IT COST. The banner used to name
+    // the item it replaced, on the reasoning that losing something you were
+    // relying on ought not to happen silently. It reads as a warning about a
+    // choice the player has already made, at the one moment they are pleased
+    // with themselves - and there is one slot, so what happened to the old item
+    // was never in doubt.
+    this.ui.banner(offer.name + '  READY');
     this.itemArea.dismiss();
   }
 
@@ -4434,7 +4691,7 @@ class Game {
       this.sfx.denied();
       return;
     }
-    this.credits -= cost;
+    this._payReroll(cost);
     area.rerolls++;
     area.present(this._buildItem(), false);
     this._refreshItem();
@@ -4545,13 +4802,13 @@ class Game {
     if (t.kind === 'itemReroll') {
       return [
         lead + 'REROLL &nbsp;·&nbsp; NEW ITEM &nbsp;·&nbsp; '
-        + '<span class="prompt-cost">$' + this._itemRerollCost() + '</span>',
+        + '<span class="prompt-cost">' + this._priceLabel(this._itemRerollCost()) + '</span>',
         false,
       ];
     }
     return [
       lead + 'REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
-      + '<span class="prompt-cost">$' + this._rerollCost() + '</span>',
+      + '<span class="prompt-cost">' + this._priceLabel(this._rerollCost()) + '</span>',
       false,
     ];
   }
@@ -4638,7 +4895,7 @@ class Game {
       // purchase needs - this console is only the way in.
       this._rerollItem();
     } else {
-      this.credits -= this._rerollCost();
+      this._payReroll(this._rerollCost());
       this.totemArea.rerolls++;
       this._presentTotems(true);
       this.sfx.reroll();
@@ -4830,14 +5087,18 @@ class Game {
   // no clock and are applied immediately, which is also what makes them useful
   // at the shop: the player can see what they are actually short of before
   // they spend.
-  _vacuumPickups() {
+  _vacuumPickups(immediate = false) {
     if (!this.powerups.length) return;
     let took = 0;
     for (const p of this.powerups) {
       if (p.dead) continue;
       // The magnet's payload is the orb sweep, which the wave clear has just
       // done anyway - so it costs nothing here and is simply consumed.
-      if (p.type.duration || p.typeKey === 'shield') {
+      // BANKED at a wave clear, APPLIED NOW when LODESTAR asked for it. The
+      // clear banks them because the wave is over and a ten-second rage spent
+      // in an empty shop is a rage the player never had; the item is pressed
+      // mid-fight, where the opposite is true.
+      if ((p.type.duration || p.typeKey === 'shield') && !immediate) {
         this._pendingBuffs.push(p.type);
       } else {
         p.type.apply(this.player, this.time);
@@ -4998,6 +5259,9 @@ class Game {
       const bounty = e.bounty !== null ? e.bounty : e.score * CREDITS_PER_SCORE;
       this._dropMoney(e.pos, bounty * mult * meleeMult);
       this.player.onKill(this.time);
+      // BODY COUNT's stack, and anything else that ever counts kills. Walked
+      // rather than dispatched - see RunningItems.onKill.
+      this.running.onKill(this);
       if (this.player.mods.ammoOnKill > 0) {
         this.player.reserveAmmo = Math.min(
           this.player.maxReserve,
@@ -5469,7 +5733,8 @@ class Game {
     if (this._pass) return;
     // Eternal Affliction's drawback and Blood Pact's, in that order. Neither
     // touches the ward or Evasion, for the reason in the comment above.
-    d *= this.player.mods.hazardMult * this.player.mods.damageTakenMult;
+    d *= this.player.mods.hazardMult * this.player.mods.damageTakenMult
+      * this.player.itemTakenMult;
     // A pool bleeds a point at a time several times a second, so it is a slow
     // and completely reliable way to lose a Carnage chain. That is correct:
     // standing in fire is being hit.
@@ -5548,6 +5813,13 @@ class Game {
   // over, so a pool thrown a moment before the last enemy died does not keep
   // burning the player through the intermission.
   _clearHazards() {
+    // The running items and the deployables go with the hazards, and for the
+    // same reason: all three are things the last fight left lying around. A
+    // BLOOD TAX still multiplying damage across a wave boundary would be a
+    // buff nobody was granted, and a turret firing into the shop would be
+    // furniture the player has to wait out.
+    this.running.clear(this);
+    this._clearDeployed();
     // Through _releaseHazard, not creepRelease: a gas cloud holds a handle on
     // the cloud pool as well, and a slot released here is a slot the next run
     // gets back. Releasing only the stain left the cluster of sprites parked
@@ -5614,7 +5886,21 @@ class Game {
     const ctx = this._projCtx;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
-      const res = pr.update(dt, ctx);
+      let res = pr.update(dt, ctx);
+      // FIREBREAK. Tested on the same frame the projectile tests the obstacle
+      // list, and after the move, so a round is stopped where the wall is
+      // rather than where it was last frame. This is the ONE thing a
+      // deployable reaches into another system to do, and it is what makes the
+      // item a wall rather than a long thin lava patch - the player finds it
+      // out by standing behind one during a shooter's volley.
+      if (res === 'alive' && this._deployed.length) {
+        for (const d of this._deployed) {
+          if (!d.blocks || !d.blocks(pr.pos.x, pr.pos.z)) continue;
+          this.effects.burst(pr.pos, 0xff9d2e, 10, 4, 2, 0.3);
+          res = 'wall';
+          break;
+        }
+      }
       if (res === 'alive') continue;
       if (res === 'hit') this.effects.burst(pr.pos, 0xff5555, 10, 4, 1, 0.3);
       // A spit paints its own landing splash inside update(), since only it
@@ -5669,13 +5955,23 @@ class Game {
       this.player.aimT > 0.5
     );
     this.ui.setBuffs(
-      this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
-      this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
+      // AGAINST THE WINDOW THAT WAS ACTUALLY GRANTED, not against the pickup's
+      // duration. These used to divide by a hardcoded 10 and 8 - the RAGE and
+      // FIRE RATE pickups' own lengths - which was right while a pickup was
+      // the only thing that could set them. OVERDRIVE grants five seconds and
+      // RED LINE six, so both chips opened part-drained and the bar disagreed
+      // with the effect it was drawn for. `damageBoostFull` records whichever
+      // window won the Math.max, so the fraction is exact for either source.
+      this.player.damageBoostEnd > this.time
+        ? (this.player.damageBoostEnd - this.time) / this.player.damageBoostFull : 0,
+      this.player.fireRateBoostEnd > this.time
+        ? (this.player.fireRateBoostEnd - this.time) / this.player.fireRateBoostFull : 0,
       this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
       this.player.shield,
       this.player.salvoEnd > this.time && this.player.mods.salvoTime > 0
         ? (this.player.salvoEnd - this.time) / this.player.mods.salvoTime : 0
     );
+    this.ui.setItemBuffs(this.running.chips(this._itemChips));
     this.ui.setStatuses(this.player);
     // THE ACTIVE ITEM SLOT. Hidden entirely while nothing is carried - an empty
     // frame in the corner is a permanent question about a system the player has
@@ -5683,11 +5979,7 @@ class Game {
     const item = this.player.item ? ACTIVE_ITEMS[this.player.item] : null;
     this.ui.setItem(
       this.player.item, item,
-      item ? Math.min(1, this.player.itemCharge / item.cooldown) : 0,
-      // The bar is FROZEN, not merely full, at the wave break. Said explicitly
-      // so the plate can show it: a bar that simply stopped moving looks like a
-      // bug, and this is a rule the player has to be able to see.
-      this.waveState !== 'active'
+      item ? Math.min(1, this.player.itemCharge / item.cooldown) : 0
     );
     // AEGIS holds a vignette for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest
@@ -5929,7 +6221,17 @@ class Game {
       if (dot > 0) this._hurtPlayerDot(dot);
       this._updateMortars(dt);
       this._updatePoisonSpread(dt);
+      // The running items tick BEFORE the enemy sweep, so anything SUTURE
+      // ENGINE heals or BODY COUNT is multiplying is already true for the
+      // frame the enemies are updated in - and so an item that expires this
+      // frame has handed its multiplier back before a shot can read it.
+      this.running.update(this, dt);
       this._updateEnemies(dt);
+      // AFTER the enemy sweep, for the same reason the ash and the poison
+      // spread run before it: a turret's kill made here would be a dead enemy
+      // left on the roster for a frame. It is collected next frame instead,
+      // which is one frame later than a bullet's and invisible.
+      this._updateDeployed(dt);
       this._updateProjectiles(dt);
 
       // The roll carries the same intensity setting as the offset - they are

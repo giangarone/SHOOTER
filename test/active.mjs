@@ -111,8 +111,12 @@ try {
     out.neverOffersCarried = sameAsCarried;
     // ...and every one of the other four does turn up.
     const rolled = new Set();
-    for (let i = 0; i < 400; i++) rolled.add(g._buildItem().id);
+    // Enough draws that thirty-six items all turning up is overwhelming rather
+    // than lucky: at 1/36 each, 4000 draws miss a given item with probability
+    // about e^-111.
+    for (let i = 0; i < 4000; i++) rolled.add(g._buildItem().id);
     out.poolSize = rolled.size;
+    out.poolTotal = Object.keys(ITEMS).length;
     out.poolMissesCarried = !rolled.has(P.item);
 
     // --- REPLACING: the second item throws the first away ---
@@ -122,8 +126,11 @@ try {
     const second = g.itemArea.pedestal;
     const secondId = second.offer.id;
     out.secondIsDifferent = secondId !== firstId;
-    // The pillar's bottom line has to name what it is about to take away.
-    out.noteNamesSwap = second.offer.note === 'REPLACES ' + ITEMS[firstId].name;
+    // THE PILLAR DOES NOT NAME THE SWAP. It used to; with one slot in the game
+    // "this replaces what you are carrying" is the only thing taking an item
+    // can mean, and a caption restating the rule on every offer is one the
+    // player stops reading. The banner at the claim still says it.
+    out.noteIsEmpty = !second.offer.note;
     second.armT = 0;
     second.state = 'up';
     g._claimItem(second);
@@ -386,6 +393,11 @@ try {
     out.segments = {};
     out.partialFills = [];
     out.chargeTimeLeaks = [];
+    // The cooldowns as the pool actually states them, so the segment check
+    // below can test itemCells()'s RULE rather than a snapshot of the table.
+    out.cooldowns = Object.fromEntries(
+      Object.entries(ITEMS).map(([k, d]) => [k, d.cooldown])
+    );
     for (const [key, def] of Object.entries(ITEMS)) {
       P.giveItem(key);
       g._updateHud();
@@ -563,7 +575,241 @@ try {
       Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.cooldown])
     );
 
-    // ---- THE ELEVEN ----
+    // ======================================================================
+    // THE WHOLE POOL, FIRED AND EXPIRED
+    // ======================================================================
+    //
+    // THE ONE CHECK THAT SCALES. Thirty-seven items cannot each have a
+    // hand-written assertion for what they do without the file becoming longer
+    // than the pool it is testing, and the failure that actually matters is
+    // the same for all of them: an item that writes a multiplier onto the
+    // player and never hands it back. That is a run-ruining bug, it is silent,
+    // and it is exactly what a missing end() produces.
+    //
+    // So: grant every item in turn, fire it, run frames past the longest
+    // duration in the pool, and demand the player is back to neutral and the
+    // running list is empty. Anything that leaks shows up by name.
+    const NEUTRAL = () => ({
+      itemDamageMult: P.itemDamageMult,
+      itemTakenMult: P.itemTakenMult,
+      itemRateMult: P.itemRateMult,
+      itemHoming: P.itemHoming,
+      leechShots: P.leechShots,
+      elementCycle: P.elementCycle,
+      statusLockEnd: P.statusLockEnd > g.time ? 1 : 0,
+    });
+    const CLEAN = JSON.stringify(
+      { itemDamageMult: 1, itemTakenMult: 1, itemRateMult: 1, itemHoming: 0,
+        leechShots: 0, elementCycle: -1, statusLockEnd: 0 }
+    );
+    out.leaked = [];
+    out.threw = [];
+    out.neverRan = [];
+    out.stillRunning = [];
+    P.upgrades = {};
+    P.rebuildMods();
+    for (const key of Object.keys(g.__itemsForTest)) {
+      clearField();
+      // A crowd to act on, and a boss, so the paths that walk the enemy list
+      // are exercised rather than skipped for an empty arena - and so LAST
+      // RITES gets something it is forbidden to kill.
+      for (let i = 0; i < 4; i++) spawn('chaser', -6 + i * 3, 4);
+      const bossy = spawn('chaser', 8, 8);
+      bossy.boss = true;
+      bossy.hp = 1;
+      P.health = 60;
+      P.reserveAmmo = 200;
+      P.mag = 30;
+      P.pos.set(0, 0, 8);
+      P.invulnEnd = 0;
+      P.hpBanked = 0;
+      P.freeRerolls = 0;
+      try {
+        useItem(key);
+      } catch (e) {
+        out.threw.push(key + ': ' + e.message);
+        continue;
+      }
+      const def = g.__itemsForTest[key];
+      if (def.duration > 0 && !g.running.list.some((r) => r.id === key)) {
+        out.neverRan.push(key);
+      }
+      try {
+        // Twenty-five seconds, which is past HAEMOPHAGE's twenty - the longest
+        // window in the pool.
+        for (let i = 0; i < 500; i++) {
+          g.time += 0.05;
+          g.running.update(g, 0.05);
+          g._updateDeployed(0.05);
+          P.update(0.05, g.input, g.arena.obstacles, g.time, true);
+        }
+      } catch (e) {
+        out.threw.push(key + ' (running): ' + e.message);
+        continue;
+      }
+      if (g.running.list.some((r) => r.id === key)) out.stillRunning.push(key);
+      if (JSON.stringify(NEUTRAL()) !== CLEAN) {
+        out.leaked.push(key + ': ' + JSON.stringify(NEUTRAL()));
+      }
+      // The item's own mark on the run, undone, so the next iteration starts
+      // from the same place this one did.
+      P.hpBanked = 0;
+      g.running.clear(g);
+      g._clearDeployed();
+    }
+    // MARTYR could not be allowed to matter here - it leaves the player at 10 -
+    // so the health is reset above rather than after.
+    P.health = P.maxHealth;
+    clearField();
+
+    // ---- ...AND THE LIST ITSELF ----
+    //
+    // Three rules, and each of them is a bug that would otherwise only show up
+    // in a run: re-firing must refresh rather than stack (two BLOOD TAXes
+    // would be nine times damage through a multiplier neither could hand
+    // back), clear() must run every end(), and a duration must actually end.
+    P.upgrades = {};
+    P.rebuildMods();
+    useItem('itemPact');
+    const pactMult = P.itemDamageMult;
+    useItem('itemPact');
+    out.refreshDoesNotStack = P.itemDamageMult === pactMult
+      && g.running.list.filter((r) => r.id === 'itemPact').length === 1;
+    g.running.clear(g);
+    out.clearRunsEnd = P.itemDamageMult === 1 && g.running.list.length === 0;
+
+    // BODY COUNT counts kills, and only while it is running.
+    useItem('itemTally');
+    const tallyBase = P.itemDamageMult;
+    g.running.onKill(g);
+    g.running.onKill(g);
+    out.tallyStacks = +(P.itemDamageMult - tallyBase).toFixed(2);
+    g.running.clear(g);
+    g.running.onKill(g);
+    out.tallyStopsWhenDone = P.itemDamageMult === 1;
+
+    // LANCE refuses itself when the rounds are not there, and does not spend
+    // the charge doing it - which is the whole reason `ready` exists.
+    P.giveItem('itemLance');
+    P.mag = 0;
+    P.reserveAmmo = 5;
+    const chargeBefore = P.itemCharge;
+    g.tryItem();
+    out.lanceRefused = P.itemCharge === chargeBefore && P.reserveAmmo === 5;
+    P.reserveAmmo = 300;
+    P.mag = 30;
+    g.tryItem();
+    out.lanceSpends = P.mag + P.reserveAmmo === 300;
+
+    // WHITE CELL clears what is on the player AND refuses the next one.
+    P.applyStatus('fire', 5);
+    P.applyStatus('poison', 5);
+    useItem('itemPurify');
+    P.now = g.time;
+    out.purified = !P.hasStatus('fire') && !P.hasStatus('poison');
+    out.purifyLocks = P.applyStatus('fire', 5) === false;
+    g.running.clear(g);
+    P.now = g.time;
+    out.purifyLockLifts = P.applyStatus('fire', 5) === true;
+    P.clearStatuses();
+
+    // GRAFT is the only item that leaves a mark on the run.
+    const hpWas2 = P.maxHealth;
+    useItem('itemGraft');
+    out.graftPermanent = P.maxHealth === hpWas2 + 3;
+    P.hpBanked = 0;
+
+    // SECOND OPINION makes the next reroll free at BOTH consoles, and is spent
+    // by taking one.
+    P.freeRerolls = 0;
+    const paidCost = g._rerollCost();
+    useItem('itemReroll');
+    out.rerollsFree = g._rerollCost() === 0 && g._itemRerollCost() === 0 && paidCost > 0;
+    P.freeRerolls = 1;
+    const creditsWas = g.credits;
+    g._payReroll(g._rerollCost());
+    out.rerollSpendsToken = P.freeRerolls === 0 && g.credits === creditsWas;
+
+    // ---- A CHIP NEVER OUTLIVES THE EFFECT IT IS DRAWN FOR ----
+    //
+    // Found in play: HAEMOPHAGE's chip sat in the strip for the rest of its
+    // twenty-second backstop after the tenth hit had already been spent, so the
+    // HUD was telling the player they were carrying something they were not.
+    // The general rule is that the strip reports the EFFECT, not the clock the
+    // effect happens to be filed under.
+    P.upgrades = {};
+    P.rebuildMods();
+    g.running.clear(g);
+    useItem('itemLeech');
+    out.leechChipUp = g.running.chips([]).length === 1;
+    P.leechShots = 0;
+    g.running.update(g, 0.016);
+    out.leechChipGoesWithTheShots = g.running.chips([]).length === 0;
+
+    // ...and the two pickup-shared windows measure against the window that was
+    // actually granted, not against the pickup's own length. OVERDRIVE opens
+    // five seconds where the RAGE pickup opens ten; the chip must start FULL
+    // for both.
+    P.damageBoostEnd = 0;
+    P.damageMult = 1;
+    useItem('itemRage');
+    out.rageChipStartsFull = +(
+      (P.damageBoostEnd - g.time) / P.damageBoostFull
+    ).toFixed(3);
+    P.fireRateBoostEnd = 0;
+    P.fireRateMult = 1;
+    useItem('itemRate');
+    out.rateChipStartsFull = +(
+      (P.fireRateBoostEnd - g.time) / P.fireRateBoostFull
+    ).toFixed(3);
+    // A five-second item landing under a ten-second pickup must leave the chip
+    // measuring the ten it is actually counting down.
+    P.damageBoostEnd = g.time + 10;
+    P.damageBoostFull = 10;
+    useItem('itemRage');
+    out.shorterWindowLeavesTheLonger = P.damageBoostFull === 10;
+    P.damageBoostEnd = 0;
+    P.damageMult = 1;
+    P.fireRateBoostEnd = 0;
+    P.fireRateMult = 1;
+    g.running.clear(g);
+
+    // A DEPLOYABLE IS AN ENTITY, and it goes when the fight does.
+    clearField();
+    g._clearDeployed();
+    useItem('itemTurret');
+    useItem('itemSwarm');
+    out.deployed = g._deployed.length;
+    g._clearDeployed();
+    out.deployCleared = g._deployed.length === 0;
+    // ...and the list is capped, so a slot fired at a wave break cannot grow
+    // it without bound.
+    for (let i = 0; i < 200; i++) useItem('itemMine');
+    out.deployCapped = g._deployed.length <= 40;
+    g._clearDeployed();
+    g.running.clear(g);
+    P.health = P.maxHealth;
+
+      // ---- ...AND THE GAME LOOP ACTUALLY DRIVES THEM ----
+    //
+    // Everything above steps running.update() and _updateDeployed() by hand,
+    // which proves the machinery and proves nothing about whether _loop calls
+    // it. That is a real failure mode with no symptom in any other test - the
+    // items would simply never end - so this hands both lists something with a
+    // short clock and then gets out of the way.
+    g.state = 'playing';
+    g.waveState = 'active';
+    clearField();
+    g.running.clear(g);
+    g._clearDeployed();
+    P.giveItem('itemCharge');   // 0.4s window
+    g.tryItem();
+    P.giveItem('itemBomb');     // a 3s fuse, and then it is gone
+    g.tryItem();
+    out.loopStartRunning = g.running.list.length;
+    out.loopStartDeployed = g._deployed.length;
+
+  // ---- THE ELEVEN ----
     take('darkPower');
     out.darkPower = +(P.getEffectiveDamage(100)).toFixed(1);
     out.darkPowerFree = P.maxHealth === 100;
@@ -681,7 +927,18 @@ try {
     return out;
   });
 
-  console.log(JSON.stringify({ ...r, mechanics: m }, null, 2));
+  // FOUR SECONDS OF THE GAME'S OWN LOOP, with nothing driven by hand. Long
+  // enough for BONESAW's 0.4s window and SHORT FUSE's 3s fuse to both come and
+  // go on their own - which is the only thing that proves _loop reaches the
+  // running list and the deployable list at all.
+  await sleep(4000);
+  const loop = await page.evaluate(() => ({
+    running: window.__game.running.list.map((r) => r.id),
+    deployed: window.__game._deployed.length,
+    itemDamageMult: window.__game.player.itemDamageMult,
+  }));
+
+  console.log(JSON.stringify({ ...r, mechanics: m, loop }, null, 2));
 
   // ---- the row ----
   ok('the row comes up every third shop',
@@ -700,9 +957,11 @@ try {
   ok('taking it does not start the wave', r.totemsStillUp);
   ok('the pedestal sinks behind it', r.rowSank);
   ok('the offer is never what is carried', r.neverOffersCarried === 0, String(r.neverOffersCarried));
-  ok('the other four are all reachable', r.poolSize === 4 && r.poolMissesCarried, String(r.poolSize));
+  ok('every other item in the pool is reachable',
+    r.poolSize === r.poolTotal - 1 && r.poolMissesCarried,
+    r.poolSize + '/' + (r.poolTotal - 1));
   ok('a second item replaces the first', r.secondIsDifferent && r.replaced && r.oneSlotOnly);
-  ok('the pillar names what it replaces', r.noteNamesSwap);
+  ok('the pillar does not restate the one-slot rule', r.noteIsEmpty);
   ok('the replacement is charged too', r.replacementCharged);
 
   // ---- the charge ----
@@ -747,9 +1006,18 @@ try {
   // .seg declares --cells on the element it is applied to, so a value written
   // to any ancestor is silently ignored and the bar quietly shows twenty cells
   // whatever the item is.
-  ok('the meter renders the right number of segments',
-    JSON.stringify(r.segments) === '{"itemHeal":12,"itemFreeze":10,"itemRage":12,"itemGuard":12,"itemDash":3}',
-    JSON.stringify(r.segments));
+  // THE RULE, not a snapshot of it. A literal map was fine at five items and is
+  // unmaintainable at thirty-seven - and it tested that the table had not
+  // changed rather than that the meter obeys itemCells(), which is the thing
+  // that could actually break.
+  {
+    const wrong = Object.entries(r.segments)
+      .filter(([k, n]) => n !== Math.max(1, Math.min(12, Math.ceil(r.cooldowns[k]))))
+      .map(([k, n]) => k + '=' + n);
+    ok('the meter renders the right number of segments',
+      wrong.length === 0 && Object.keys(r.segments).length === r.poolTotal,
+      wrong.join(', ') || Object.keys(r.segments).length + ' items');
+  }
   ok('the meter never renders a part-lit segment',
     r.partialFills.length === 0, r.partialFills.join(' | '));
   ok('the charge time is printed nowhere',
@@ -759,6 +1027,38 @@ try {
   ok('every converted mutation is rollable',
     r.convertedUnreachable.length === 0, r.convertedUnreachable.join(', '));
   ok('the dropped mutations are gone', r.droppedGone);
+
+  // ---- the whole pool, fired and expired ----
+  ok('every item fires without throwing', m.threw.length === 0, m.threw.join(' | '));
+  ok('every item with a duration actually runs',
+    m.neverRan.length === 0, m.neverRan.join(', '));
+  ok('every window closes', m.stillRunning.length === 0, m.stillRunning.join(', '));
+  ok('no item leaves a multiplier on the player',
+    m.leaked.length === 0, m.leaked.join(' | '));
+  ok('re-firing refreshes and does not stack', m.refreshDoesNotStack);
+  ok('clearing the list runs every end()', m.clearRunsEnd);
+  ok('body count stacks on kills', m.tallyStacks === 0.2, String(m.tallyStacks));
+  ok('body count stops counting once it is over', m.tallyStopsWhenDone);
+  ok('lance refuses itself when the ammo is short', m.lanceRefused);
+  ok('lance spends exactly 30 rounds', m.lanceSpends);
+  ok('white cell clears every affliction', m.purified);
+  ok('white cell refuses the next one', m.purifyLocks);
+  ok('...and the lock lifts with it', m.purifyLockLifts);
+  ok('graft is permanent max health', m.graftPermanent);
+  ok('second opinion frees both consoles', m.rerollsFree);
+  ok('...and a free reroll spends the token, not the credits', m.rerollSpendsToken);
+  ok('a chip goes when its effect does, not when its clock does',
+    m.leechChipUp && m.leechChipGoesWithTheShots);
+  ok('the damage chip opens full', m.rageChipStartsFull === 1, String(m.rageChipStartsFull));
+  ok('the fire rate chip opens full', m.rateChipStartsFull === 1, String(m.rateChipStartsFull));
+  ok('a shorter window does not shrink a longer one', m.shorterWindowLeavesTheLonger);
+  ok('deployables reach the arena', m.deployed === 6, String(m.deployed));
+  ok('the game loop drives the running list',
+    m.loopStartRunning > 0 && loop.running.length === 0, loop.running.join(', '));
+  ok('the game loop drives the deployables',
+    m.loopStartDeployed > 0 && loop.deployed === 0, String(loop.deployed));
+  ok('deployables go with the fight', m.deployCleared);
+  ok('the deployable list is capped', m.deployCapped);
 
   // ---- the five items ----
   ok('trauma kit heals 25', m.healed);

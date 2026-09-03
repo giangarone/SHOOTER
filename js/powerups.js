@@ -52,6 +52,10 @@ export const POWERUP_TYPES = {
       player.damageMult = 1.5;
       player.rageSpeedMult = 1.3;
       player.damageBoostEnd = time + 10;
+      // What the HUD chip measures the countdown against - see the note on
+      // damageBoostFull in player.js. The pickup is no longer the only thing
+      // that can open this window.
+      player.damageBoostFull = 10;
     },
     chance: 0.005,
     icon: 'pickDamage',
@@ -64,6 +68,7 @@ export const POWERUP_TYPES = {
     apply: (player, time) => {
       player.fireRateMult = 1.7;
       player.fireRateBoostEnd = time + 8;
+      player.fireRateBoostFull = 8;
     },
     chance: 0.005,
     icon: 'pickRate',

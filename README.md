@@ -473,29 +473,135 @@ An active item does nothing until it is fired, and firing it is a decision made
 at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
 pad.
 
+Thirty-seven of them, in five groups by what they actually reach for.
+
+**Instant, on the room:**
+
 | Item | Effect | Charge |
 | --- | --- | --- |
 | TRAUMA KIT | Heal 25 HP, no overheal | 20s |
 | CRYO PULSE | Freeze every enemy for 2s | 10s |
+| WHITE CELL | Clear every affliction, then 2s immune | 12s |
+| BRIMSTONE | Set every enemy alight for 3s | 12s |
+| JACOB'S LADDER | Lightning arcs through the 5 nearest | 12s |
+| LAST RITES | Execute everything under 30% health (not bosses) | 24s |
+| TECTONIC | Hurl everything within 9m back, for 40 | 16s |
+| MARTYR | 400 damage over 16m. Leaves you at 10 HP | 45s |
+| FALLING SKY | 12 telegraphed meteors over 3s | 36s |
+
+**Windows on the player:**
+
+| Item | Effect | Charge |
+| --- | --- | --- |
 | OVERDRIVE | 2x damage for 5s | 20s |
 | AEGIS | Invincible for 5s | 20s |
+| RED LINE | Double fire rate for 6s | 18s |
+| RED MIST | 3x damage, but you take 2x, for 5s | 24s |
+| BODY COUNT | +10% damage per kill for 8s, capped at 20 | 32s |
+| BLOOD TAX | 25 HP for 3x damage for 10s | 24s |
+| FOUR HUMOURS | Shots cycle fire, ice, venom, arc for 8s | 24s |
+| BIRD DOG | Seeker's homing for 5s | 14s |
+| HAEMOPHAGE | The next 10 hits heal 5 HP each, within 20s | 16s |
+| BLOOD FROM STONE | Credit orbs also heal 1 HP for 8s | 30s |
+
+**The health bar:**
+
+| Item | Effect | Charge |
+| --- | --- | --- |
+| WATERLINE | Heal up to half health, and no further | 10s |
+| SUTURE ENGINE | 5 HP/s for 8s | 30s |
+| OPEN VEIN | 50 HP for a full ammo reserve | 30s |
+| SIX CHAMBERS | 50/50: full health, or one | 36s |
+| GRAFT | +3 max health, permanently | 60s |
+
+**Getting out of somewhere:**
+
+| Item | Effect | Charge |
+| --- | --- | --- |
 | BLINK DRIVE | The dash | 3s |
+| BONESAW | The dash, dealing 3x bullet damage per body | 4s |
+| BOOTSTRAP | Launch yourself skyward, scorching the ground | 10s |
+| COLD SPOT | Teleport to open ground, 1.5s invincible | 24s |
+| LANCE | One shot, 30x damage, pierces all. Costs 30 ammo | 8s |
+
+**Left in the arena** (see `js/deploy.js`)**, and the shop:**
+
+| Item | Effect | Charge |
+| --- | --- | --- |
+| WELCOME MAT | A proximity mine. 120 over 6m | 8s |
+| SHORT FUSE | A thrown bomb on a 3s fuse. 180 over 8m | 12s |
+| FIREBREAK | A wall of fire that burns and stops shots | 12s |
+| LITTLE BROTHER | An auto-turret, for 15s | 20s |
+| APIARY | Five hunting bees, for 12s | 45s |
+| EVENT HORIZON | A thrown singularity. Drags them in and eats them | 28s |
+| LODESTAR | Pull in every orb and pickup on the floor | 16s |
+| SECOND OPINION | Two free rerolls, at either console | 40s |
+
+**Three of them hurt you, and that is deliberate.** WELCOME MAT's blast does not
+know who laid it, SHORT FUSE's does not know who threw it, and MARTYR's is the
+whole point. A mine you could safely stand next to would be free damage on a
+six-metre circle every eight seconds, and a bomb that could be dropped underfoot
+for nothing would never be thrown anywhere else. FALLING SKY is the exception
+that proves the shape: it cannot touch the player, because every telegraph in
+this game is a question answered by moving, and a dozen rocks landing at random
+where the player did not aim them would be a question with no answer.
+
+**Fifteen of them run for a window** rather than finishing on the frame they are
+pressed, which needed the one piece of machinery this system did not have. An
+item may declare a `duration`, a `tick` and an `end` alongside its `use`, and
+`RunningItems` in `js/items.js` is the whole of it: a list of activations, each
+holding the item that made it, a scratch object and a clock. Re-firing refreshes
+rather than stacks - the same rule `Player.applyStatus` follows, and for the
+same reason, since two BLOOD TAXes at once would be nine times damage through a
+multiplier neither of them could correctly hand back.
+
+What a running item writes on the player lives in its OWN fields -
+`itemDamageMult`, `itemTakenMult`, `itemRateMult` and their neighbours - and not
+in `mods`, because `rebuildMods()` replays the owned upgrade list from fresh
+defaults after every totem pick and would hand back anything an item had
+written there. They are also separate from `damageMult` and `fireRateMult`,
+which belong to the RAGE and FIRE RATE pickups and carry their expiry: an item
+borrowing those would either cancel a pickup or be cancelled by one, where
+multiplying means a player holding both gets both.
+
+**Seven of them leave something in the arena.** `js/deploy.js` holds a turret, a
+mine, a bomb, a wall, a singularity, a bee and a meteor, all under the contract
+`Projectile` and `Grenade` in `js/enemy.js` already established - a constructor
+that adds meshes, an `update(dt, ctx)` returning `'alive'` or `'dead'`, and a
+`destroy()`. `main.js` drives that list with the same eight lines it drives the
+projectiles with, and `_clearHazards()` sweeps it alongside the pools, so
+nothing the player left standing outlives the fight it was deployed into.
+Damage still goes through `_blast` and `hurtEnemy`; the one argument a
+deployable chooses for itself is whether its blast can reach the player.
 
 **The slot is one deep, and that is the feature.** Taking a second item throws
 the first away, so a run carries an answer to ONE problem - the health bar, the
 crowd, the boss, the corner you got caught in - and swapping is a real loss
 rather than an inventory chore. There is no drop, no swap-back and no stash, for
-the same reason there is no upgrade menu: nothing in this game opens. The banner
-names the swap when there is one, because losing an item you were relying on
-silently at a wave break is the one mistake this system can make that the player
-would not notice until the fight that needed it.
+the same reason there is no upgrade menu: nothing in this game opens. **Nothing
+names the swap**, on either surface. The pedestal used to carry a "REPLACES
+<name>" line and the claim banner used to repeat it; with one slot in the game,
+replacing what you are carrying is the only thing taking an item can mean, so
+both were restating a rule the player already knows - the pedestal on every
+offer, and the banner at the one moment they are pleased with themselves. The
+claim reads `<NAME> READY` and nothing else.
+
+**The buff strip reports the effect, not the clock it is filed under.** A
+running item's chip measures against the window it was actually granted -
+`damageBoostFull` and `fireRateBoostFull` exist because OVERDRIVE opens five
+seconds where the RAGE pickup opens ten, and a chip measured against a constant
+opened part-drained. An item whose real payload is a COUNT rather than a clock
+can also end its own window early by setting `s.done` in its `tick`:
+HAEMOPHAGE is ten hits inside twenty seconds, and once the tenth lands the
+effect is gone whatever the clock says.
 
 **The charge is paid in wave time.** `Player.update` fills the bar only while a
 wave is running, gated on the same `combat` flag that stops ammo regeneration
 being farmed at the break. It can still be FIRED in the shop - gating the use as
-well would be a rule the player only ever meets as an unexplained silence - and
-the HUD bar goes grey there rather than merely stopping, because a bar that has
-stopped moving looks like a fault.
+well would be a rule the player only ever meets as an unexplained silence. The
+bar does not change colour there: nobody is watching the meter during a shopping
+trip, and the charge coming back is something the player finds out by the wave
+starting, which is the moment they care about it.
 
 **The charge time is printed nowhere.** Not on the pedestal, not in the prompt,
 not on the build sheet. The meter already says it, in the only unit it is ever

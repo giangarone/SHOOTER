@@ -85,6 +85,11 @@ export class UI {
     this.statsRun = $('stats-run');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
+    // Which active-item chips were drawn last frame - see setItemBuffs. The
+    // buff and status chips are a fixed list and can simply be reported as
+    // zero when they are off; the item chips are not, so the ones that have
+    // gone have to be remembered to be hidden.
+    this._itemChipKeys = [];
     // Stat-row nodes for the held-TAB panel, keyed by label. Built once when
     // the panel first opens and rewritten in place after that - rebuilding the
     // rows every frame the key is held would thrash layout for no reason.
@@ -275,7 +280,7 @@ export class UI {
    *   said explicitly rather than inferred, because a bar that has simply
    *   stopped moving looks like a fault and this is a rule worth showing.
    */
-  setItem(id, def, frac, held) {
+  setItem(id, def, frac) {
     if (this._c.itemId !== id) {
       this._c.itemId = id;
       this.itemBox.classList.toggle('hidden', !id);
@@ -322,13 +327,13 @@ export class UI {
       this._c.itemReady = ready;
       this.itemBox.classList.toggle('ready', ready);
     }
-    // `held` only matters while the bar is NOT full - the shop freezing a bar
-    // that is already at the top is not a thing the player needs telling.
-    const frozen = held && !ready;
-    if (this._c.itemHeld !== frozen) {
-      this._c.itemHeld = frozen;
-      this.itemBox.classList.toggle('held', frozen);
-    }
+    // THE BAR DOES NOT CHANGE COLOUR IN THE SHOP, and this function is no
+    // longer told whether it is in one. It used to grey out while the charge
+    // was frozen at a wave break, on the reasoning that a bar which has simply
+    // stopped moving looks like a fault. In practice nobody is watching the
+    // meter during a shopping trip, and a second bar state to learn buys less
+    // than it costs: the charge coming back is something the player finds out
+    // by the wave starting, which is the moment they care about it.
   }
 
   // The item just finished charging. One flash, restarted the way
@@ -427,6 +432,43 @@ export class UI {
       shield > 0 ? String(Math.ceil(shieldPoints)) : '', false, 2
     );
     this._setBuff('salvo', 'openingSalvo', 0xffd180, salvo, '', false, 3);
+  }
+
+  /**
+   * ACTIVE ITEMS THAT ARE STILL RUNNING, in the same strip, to the right of
+   * the pickup buffs and to the left of the statuses.
+   *
+   * Every chip here wears the ITEM'S OWN ICON and theme colour - the same rule
+   * Opening Salvo's chip follows, and the reason the pixel catalogue is keyed
+   * by item id: one shape holds whether it is standing on a pedestal, sitting
+   * in the corner slot or counting down here, so a player who has learnt the
+   * pedestal has already learnt the chip.
+   *
+   * ORDER BAND 20+, so the item chips can never interleave with the buff chips
+   * (0-3) or the statuses (10+). It is index-based within the band rather than
+   * keyed to the pool, which means two items running at once hold whatever
+   * order they were pressed in - and that is correct: there is one slot, so
+   * the only way to have two is to have started them seconds apart, and the
+   * player's own press order is the one they will look for them in.
+   *
+   * NOTHING IS CLEARED ON THE WAY OUT. _setBuff hides a chip whose fraction is
+   * zero, so a chip that stops being reported has to be told to go - which is
+   * what `_itemChipKeys` is for: it remembers what was drawn last frame and
+   * zeroes anything missing from this one.
+   *
+   * @param {Array} chips  from RunningItems.chips()
+   */
+  setItemBuffs(chips) {
+    for (let i = 0; i < chips.length; i++) {
+      const c = chips[i];
+      this._setBuff('it_' + c.key, c.icon, c.color, c.fraction, c.label, false, 20 + i);
+    }
+    for (const key of this._itemChipKeys) {
+      if (chips.some((c) => c.key === key)) continue;
+      this._setBuff('it_' + key, null, 0, 0);
+    }
+    this._itemChipKeys.length = 0;
+    for (const c of chips) this._itemChipKeys.push(c.key);
   }
 
   // STATUS EFFECTS, in the same strip as the buffs and to the right of them.
@@ -898,6 +940,7 @@ export class UI {
     this.invulnFrame.classList.remove('on', 'ending');
     this.promptEl.classList.add('hidden');
     this.hideStats();
+    this._itemChipKeys.length = 0;
     for (const entry of Object.values(this._buffEls)) {
       entry.el.style.display = 'none';
       entry.shown = false;

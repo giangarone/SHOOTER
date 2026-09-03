@@ -458,11 +458,9 @@ html, body {
   0%   { transform: scale(1.22); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
   100% { transform: none; }
 }
-/* HELD AT THE WAVE BREAK. The bar does not fill in the shop (see the note in
-   Player.update), and a bar that has simply stopped moving looks like a fault -
-   so it says so, by going to the dim ink the rest of the HUD uses for "this is
-   switched off". */
-#item-box.held #item-bar { background: var(--dim); }
+/* The bar used to grey out at the wave break, where the charge is frozen (see
+   the note in Player.update). It does not any more - the rule is in Ui.setItem,
+   and the reason is there. The class is no longer applied by anything. */
 
 /* AEGIS. Both damage sinks return in silence while the window is open, so
    without a frame around the screen five seconds of invulnerability look
