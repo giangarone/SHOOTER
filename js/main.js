@@ -3776,7 +3776,20 @@ class Game {
       this.ui.banner('NINE LIVES');
       return;
     }
-    this.gameOver();
+    // THE DEATH IS NOT BOOKED HERE. Every caller of this method is inside one
+    // of the frame's entity sweeps - a projectile's update, an enemy's, a
+    // blast - and booking a death tears those very lists down underneath the
+    // loop that is walking them. _clearEntities() empties `projectiles` while
+    // _updateProjectiles is midway through its backwards walk, and the next
+    // index it reads is undefined; the throw escapes rAF, which never
+    // reschedules, and the game freezes exactly where it stood. In versus that
+    // is on the handoff caption, because _playerFell starts the pass first.
+    //
+    // So the body is simply left at zero and the loop books it at the end of
+    // the frame, after every sweep has finished with its list - which is what
+    // the health test down there is for. Nothing is lost by the wait: no
+    // second death can be booked off it (gameOver is idempotent, and the wave
+    // that would deal it is over by the next frame).
   }
 
   // `speedScale` is Cryo Rounds slowing the shot a slowed enemy fires. It is
@@ -5499,7 +5512,9 @@ class Game {
       this.ui.banner('NINE LIVES');
       return;
     }
-    this.gameOver();
+    // Left to the loop, for the reason spelled out at the end of _hurtPlayer:
+    // this runs from inside _updateHazard's walk of the pool list, and the
+    // teardown a death brings with it empties that list mid-walk.
   }
 
   // A telegraphed impact: a circle on the floor that fills, then detonates.
@@ -5913,6 +5928,12 @@ class Game {
       }
 
       this._updateHud();
+      // THE ONLY PLACE A DEATH IS BOOKED. The hits themselves just take the
+      // health down - see the note at the end of _hurtPlayer - because the
+      // teardown that follows a death (in solo the hazards, in versus the
+      // whole field, through _endTurn) would be emptying the very lists the
+      // sweeps above are still walking.
+      //
       // NOT DURING A PASS. A versus turn that ended in a death leaves the
       // body at zero for the half second before the other run is written in,
       // and without this the same death would be booked on every frame of it.

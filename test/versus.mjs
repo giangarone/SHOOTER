@@ -27,6 +27,14 @@
 //   7. Nothing damages either player during a pass. Both death paths already
 //      refuse to book a death there, so a hit that landed was banked against
 //      whoever the body became.
+//   8. A player KILLED BY A SHOT, rather than by a test writing zero into their
+//      health. This is the one that froze the game: the fatal hit arrives from
+//      inside _updateProjectiles' walk of the projectile list, the handoff it
+//      starts empties that list underneath the walk, and the next index read is
+//      undefined. The throw escapes rAF, which never reschedules - so the game
+//      stops dead on the pass caption, which is exactly where a player finds it.
+//      Asserted on the CLOCK rather than on frames, because a dead loop cannot
+//      serve the frames a rAF-based wait would be asking for.
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
@@ -171,6 +179,49 @@ try {
       (await until(() => !g._pass && g.waveState === 'active')) >= 0,
       'pass=' + g._pass + ' waveState=' + g.waveState + ' interT=' + g.interT.toFixed(2));
     t('with the caption down', !caption());
+
+    // ---- 8. a REAL death, taken mid-sweep ----------------------------------
+    // Everything above kills a player by writing zero into their health, which
+    // is booked by the loop at the end of the frame - the one safe moment there
+    // is. A round in the air books it from inside the sweep instead, and that
+    // is the whole difference between the two.
+    g.beginGame('versus');
+    g.player.maxHealth = 9999;
+    g.player.health = 9999;
+    await until(() => g.waveState === 'active');
+    await until(() => g.waveState === 'intermission');
+    g.totemArea.dismiss();
+    await until(() => g._pass);
+    await until(() => !g._pass && g.waveState === 'active');
+    t('Player 2 is on the controller', g.match.active === 1, 'active=' + g.match.active);
+
+    // FOUR ROUNDS, NOT ONE. The list is walked backwards, so a single shot is
+    // the last thing the walk touches and the bug hides; the rounds behind the
+    // fatal one are what the loop reaches for after the list has been emptied.
+    g.player.maxHealth = 20;
+    g.player.health = 1;
+    const at = g.player.pos;
+    for (let i = 0; i < 4; i++) g._spawnProjectile(at.x + 3, 1.2, at.z + 3 + i * 0.15);
+    t('four rounds are in the air', g.projectiles.length === 4, String(g.projectiles.length));
+
+    // COUNTED FROM INSIDE THE FRAME. What has to still be turning is the
+    // GAME's loop, and the page's own rAF proves nothing about it: a throw
+    // inside the loop only stops the renderer from asking for another frame,
+    // and the page goes on serving them to everyone else - this test included.
+    // So the counter rides a call only the loop makes, and the frames below are
+    // driven from the page, which is what keeps a dead loop a failure here
+    // rather than a wait that never returns.
+    let frames = 0;
+    const hud = g._updateHud.bind(g);
+    g._updateHud = () => { frames++; hud(); };
+    await raw(30);
+    t('the shot ended Player 2\'s turn', g._pass || g.match.active === 0,
+      'pass=' + g._pass + ' active=' + g.match.active);
+    t('the run did not end', g.state === 'playing', g.state);
+    const framesBefore = frames;
+    await raw(20);
+    t('THE FRAME LOOP SURVIVED THE DEATH', frames > framesBefore + 5,
+      'frames ' + framesBefore + ' -> ' + frames);
 
     return out;
   });

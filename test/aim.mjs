@@ -106,10 +106,23 @@ try {
   });
   ok('marker is off before any hit', markStart.before === '0', markStart.before);
   ok('a hit shows the marker', markStart.during === '1', markStart.during);
-  await sleep(500);
-  const markEnd = await page.evaluate(
-    () => getComputedStyle(document.getElementById('hitmarker')).opacity
-  );
+  // WAITED ON THE ANIMATION, NOT ON A STOPWATCH. A CSS animation is driven by
+  // the document timeline, which only moves when a frame is served, and it does
+  // not even START until the first frame after the class lands. On a renderer
+  // as slow as software GL that is a hundred milliseconds of the wait gone
+  // before the animation begins and another frame's worth of timeline missing
+  // at the end of it, so a fixed sleep of half a second was flaking on a
+  // 200ms effect - the marker was read mid-animation, at full opacity, and the
+  // failure looked exactly like the bug this asserts against. Bounded, so a
+  // marker that genuinely never clears still fails here instead of hanging.
+  const markEnd = await page.evaluate(async () => {
+    const h = document.getElementById('hitmarker');
+    await Promise.race([
+      Promise.all(h.getAnimations().map((a) => a.finished.catch(() => {}))),
+      new Promise((r) => setTimeout(r, 5000)),
+    ]);
+    return getComputedStyle(h).opacity;
+  });
   ok('the marker clears itself', markEnd === '0', markEnd);
   const markAgain = await page.evaluate(() => {
     window.__game.ui.hitMarker();
