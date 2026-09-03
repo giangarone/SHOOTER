@@ -381,9 +381,9 @@ html, body {
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
 
 /* ---- ammunition ---------------------------------------------------------- */
-/* Unframed, for the reason above. The min-width stays: the dashed rule beside
-   the weapon name is what gives the block its shape now that no panel does,
-   and a rule that collapses to nothing on a short name is worse than none. */
+/* Unframed, for the reason above. The min-width stays: it is what keeps the
+   round count from sliding left when the reserve drops a digit, in a corner
+   where nothing else is holding the column still. */
 #ammo-box {
   display: flex; flex-direction: column; align-items: flex-end;
   gap: var(--u);
@@ -391,79 +391,62 @@ html, body {
 }
 
 /* ---- THE ACTIVE ITEM SLOT ------------------------------------------------
-   An icon and a meter, and nothing else. No frame, no name, no plate: this is
-   ONE reading - "what am I holding and can I use it" - and a box around it made
-   it look like a second instrument beside the ammo. It floats on the arena the
-   way the crosshair does.
+   A drawing on the right, with its name and its meter stacked to the left of
+   it. No frame: a plate around it made a second instrument out of what is
+   really one reading, and this sits over a lit 3D scene where an unframed
+   group reads perfectly well.
+
+   THE ICON IS THE OUTBOARD ELEMENT, hard against the edge of the screen. It is
+   the part that is recognised rather than read, so it wants to be the thing the
+   eye lands on first coming in from the corner - and it leaves the name and the
+   meter, which ARE read, sharing a right edge with the round count below them.
 
    --item is the carried item's own theme colour, written from JS along with the
-   segment count. It is the only colour here that changes, and it drives the bar
-   and the ready state together so the two can never disagree about which item
-   is in the slot. */
+   segment count. It is the only colour here that changes, and it drives the
+   name, the bar and the ready state together so they can never disagree about
+   which item is in the slot. */
 #item-box {
-  display: flex; align-items: center; gap: calc(var(--u) * 2);
+  display: flex; align-items: center;
+  gap: calc(var(--u) * 2);
   margin-bottom: calc(var(--u) * 2);
   --item: var(--cyan);
-  /* The height of the whole slot, and therefore of the bar beside it. One
-     number so the two can never drift apart. */
-  --item-h: 48px;
+}
+/* The name over the meter, both right-aligned against the icon beside them. The
+   width is the METER'S - it is the only thing here whose length carries meaning
+   - and the name is trusted not to outrun it. */
+#item-info {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: calc(var(--u) * 1.5);
+  width: calc(var(--u) * 27);   /* 108px */
 }
 #item-art {
-  /* 48 CSS px off a 96px canvas: the drawing is 24 pixels square, so this is a
-     clean 2x on a 1x display and 1:1 device pixels on a 2x one. image-rendering
-     is what keeps it pixel art at all - the browser's default smoothing turns a
-     hand-placed 24-pixel drawing into a blur at any scale but exactly 1. */
-  width: var(--item-h); height: var(--item-h);
+  /* 48 CSS px off a 96px canvas, and both numbers matter: 48 is exactly twice
+     the drawing's own 24 pixels, so a source pixel lands on two whole CSS
+     pixels, and 96 is exactly twice 48, so the canvas maps 1:1 onto the device
+     pixels of a 2x display and 2:1 on a 1x one. Nothing anywhere in that chain
+     is fractional, which is the whole difference between pixel art and a
+     picture of pixel art. image-rendering is what holds it: the default
+     smoothing blurs a hand-placed 24-pixel drawing at any scale but exactly 1. */
+  width: 48px; height: 48px;
   image-rendering: pixelated;
   flex: none;
   filter: drop-shadow(2px 2px 0 var(--ink));
 }
-
-/* ---- THE VERTICAL SEGMENTED METER ----------------------------------------
-   .seg's sibling, turned on its side, with one difference that is the whole
-   point: the cell count is not fixed. --cells is written from JS as the item's
-   cooldown IN SECONDS, so ONE SEGMENT IS ONE SECOND and the bar is always the
-   same height.
-
-   That makes the segment thickness itself a reading. A three-second item wears
-   three fat blocks and a twenty-second one wears twenty hairlines, so a glance
-   says how long this thing takes to come back without a number anywhere - and
-   a player counting the lit cells is counting seconds, which is the only unit
-   the charge is ever actually thought about in.
-
-   --gap comes from JS too, for the same reason: a 2px gap between twenty cells
-   eats the cells, and a 1px gap between three of them is not a gap. */
-.segv {
-  --cells: 10;
-  --gap: 2px;
-  position: relative;
-  width: 10px; height: var(--item-h);
-  flex: none;
-  background: rgba(6, 8, 13, 0.85);
-  box-shadow: inset 0 0 0 1px rgba(43, 51, 72, 0.9);
-  -webkit-mask: repeating-linear-gradient(
-    180deg, #000 0 calc(100% / var(--cells) - var(--gap)),
-    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
-  );
-  mask: repeating-linear-gradient(
-    180deg, #000 0 calc(100% / var(--cells) - var(--gap)),
-    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
-  );
+#item-name {
+  font-size: 8px; letter-spacing: 0.1em; color: var(--item);
+  text-shadow: 1px 1px 0 var(--ink);
+  white-space: nowrap;
 }
-/* Scaled from the BOTTOM, never resized - the same compositor-transform rule
-   .seg's fill follows, and the same deliberate absence of a transition (see the
-   note there: a transition started inside a hidden subtree never arrives). It
-   fills upward because that is the direction every gauge in the world fills. */
-.segv > i {
-  display: block; width: 100%; height: 100%;
-  transform-origin: center bottom; transform: scaleY(0);
-}
+/* The meter. .seg's own rules, at a cell count that changes with the item -
+   see UI.setItem for how the count is chosen. */
+#item-bar-bg { width: 100%; height: 8px; }
 #item-bar { background: var(--item); }
 
-/* CHARGED. The bar takes its glow and the icon comes up to full - legible in
-   peripheral vision without reading a word, which is the whole point, because
-   it becomes true in the middle of a firefight. */
+/* CHARGED. The bar takes its glow, the name comes up to white and the icon to
+   full - legible in peripheral vision without reading a word, which is the
+   whole point, because it becomes true in the middle of a firefight. */
 #item-box:not(.ready) #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(0.72); }
+#item-box.ready #item-name { color: #fff; }
 #item-box.ready #item-bar { box-shadow: 0 0 8px var(--item); }
 
 /* The moment it fills, once. Restarted from JS by removing and re-adding the
@@ -472,7 +455,7 @@ html, body {
    first one out. */
 #item-box.charged #item-art { animation: item-charged 0.4s steps(3, end) 1; }
 @keyframes item-charged {
-  0%   { transform: scale(1.28); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
+  0%   { transform: scale(1.22); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
   100% { transform: none; }
 }
 /* HELD AT THE WAVE BREAK. The bar does not fill in the shop (see the note in
@@ -507,18 +490,6 @@ html, body {
 /* The last second, so the player is told it is ending rather than discovering
    it by being hit. */
 #invuln-frame.ending { animation: blink 0.25s steps(1, end) infinite; }
-/* The dashed rule over the round count, which used to carry the weapon's name
-   on the end of it. One gun, so the name was a label that never changed - but
-   the rule earns its keep now that the active item slot sits above it: it is
-   what separates the two readings instead of what underlined a heading. */
-#weapon-line {
-  display: flex; align-items: center;
-  width: 100%;
-}
-#weapon-line::before {
-  content: ""; flex: 1; height: 2px;
-  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);
-}
 #ammo-line { display: flex; align-items: baseline; gap: calc(var(--u) * 2); }
 #ammo-num {
   font-size: 32px; color: #fff; line-height: 1;

@@ -384,14 +384,35 @@ try {
     // learned by carrying the item, and one stray template would give it away
     // in the one place a player is most likely to be reading.
     out.segments = {};
+    out.partialFills = [];
     out.chargeTimeLeaks = [];
     for (const [key, def] of Object.entries(ITEMS)) {
       P.giveItem(key);
       g._updateHud();
-      out.segments[key] = Number(
-        getComputedStyle(document.getElementById('item-box'))
+      const n = Number(
+        getComputedStyle(document.getElementById('item-bar-bg'))
           .getPropertyValue('--cells').trim()
       );
+      out.segments[key] = n;
+      // Walk the whole cooldown and check the bar only ever stops on a cell
+      // boundary. This is the rendered fill, not the rule behind it: a rounding
+      // slip anywhere between the charge and the transform shows up here.
+      for (let c = 0; c <= def.cooldown; c += 0.1) {
+        P.itemCharge = c;
+        g._updateHud();
+        const v = parseFloat(
+          document.getElementById('item-bar').style.transform.match(/[\d.]+/)[0]
+        );
+        // A generous epsilon on purpose: the browser rounds the transform it
+        // gives back to six decimals, so 2/12 reads as 0.166667 and multiplies
+        // out to 2.000004. A genuinely part-lit cell would miss a boundary by a
+        // large fraction of one, never by four millionths.
+        if (Math.abs(v * n - Math.round(v * n)) > 0.01) {
+          out.partialFills.push(`${key} at ${c.toFixed(1)}s -> ${v}`);
+          break;
+        }
+      }
+      P.itemCharge = def.cooldown;
       // Every string this item can put on screen, against the number it must
       // never contain.
       const secs = String(def.cooldown) + 's';
@@ -721,9 +742,16 @@ try {
   ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
 
   // ---- the readout ----
-  ok('one segment per second of charge',
-    JSON.stringify(r.segments) === '{"itemHeal":20,"itemFreeze":10,"itemRage":20,"itemGuard":20,"itemDash":3}',
+  // The RENDERED count, off the live element - the arithmetic behind it is
+  // covered as pure data in test/icons.mjs. What this catches is the wiring:
+  // .seg declares --cells on the element it is applied to, so a value written
+  // to any ancestor is silently ignored and the bar quietly shows twenty cells
+  // whatever the item is.
+  ok('the meter renders the right number of segments',
+    JSON.stringify(r.segments) === '{"itemHeal":12,"itemFreeze":10,"itemRage":12,"itemGuard":12,"itemDash":3}',
     JSON.stringify(r.segments));
+  ok('the meter never renders a part-lit segment',
+    r.partialFills.length === 0, r.partialFills.join(' | '));
   ok('the charge time is printed nowhere',
     r.chargeTimeLeaks.length === 0, r.chargeTimeLeaks.join(' | '));
 

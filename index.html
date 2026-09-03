@@ -82,27 +82,27 @@
              holding", and an item is the same question asked about the other
              hand.
 
-             NO FRAME AND NO NAME. It is an icon and a meter, floating on the
-             arena like the crosshair does. A plate around it made a second
-             instrument out of what is really one reading, and the name was a
-             word the player reads once and then never again - the drawing is
-             the thing they recognise at a glance, so the drawing is all that is
-             left. The icon is large for the same reason: it is now carrying the
-             whole identity of the slot on its own.
+             NO FRAME. It is an icon, a name and a meter stacked in a column,
+             floating on the arena the way the crosshair does - a plate around
+             it made a second instrument out of what is really one reading.
+
+             The DRAWING sits outboard, against the edge of the screen, with
+             the name and the meter stacked to its left - so the icon lines up
+             with nothing and is read as a shape, while the two things made of
+             pixels-in-rows line up with the round count below them. The name
+             sits over the meter because it is the label for it: what is
+             charging, and how far along it is.
 
              Hidden entirely until something is carried: an empty frame in the
              corner is a permanent question about a system the player may not
              have met yet. -->
         <div id="item-box" class="hidden">
+          <div id="item-info">
+            <div id="item-name">TRAUMA KIT</div>
+            <div id="item-bar-bg" class="seg"><i id="item-bar"></i></div>
+          </div>
           <canvas id="item-art" width="96" height="96"></canvas>
-          <div id="item-bar-bg" class="segv"><i id="item-bar"></i></div>
         </div>
-        <!-- The rule over the round count. It used to be a heading rule with
-             the weapon's name on the end of it; there is only one gun, so the
-             name was a label that never changed and never told anyone anything.
-             The rule stays, because with the item slot above it the ammo block
-             now has something to be separated FROM. -->
-        <div id="weapon-line"></div>
         <div id="ammo-line">
           <span id="ammo-num">30</span>
           <span id="ammo-res">/ 30</span>

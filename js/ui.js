@@ -7,6 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
+import { itemCells } from './items.js';
 import { controllerGlyph } from './padmenu.js';
 
 // The two player colours, as CSS. The world-space pair lives in main.js beside
@@ -74,6 +75,8 @@ export class UI {
     // The active item slot, bottom right over the gun readout.
     this.itemBox = $('item-box');
     this.itemArt = $('item-art');
+    this.itemName = $('item-name');
+    this.itemBarBg = $('item-bar-bg');
     this.itemBar = $('item-bar');
     this.invulnFrame = $('invuln-frame');
     this.crosshair = $('crosshair');
@@ -277,18 +280,20 @@ export class UI {
       this._c.itemId = id;
       this.itemBox.classList.toggle('hidden', !id);
       if (def) {
+        this.itemName.textContent = def.name;
         this.itemBox.style.setProperty(
           '--item', '#' + def.theme.toString(16).padStart(6, '0')
         );
-        // ONE SEGMENT PER SECOND. The bar keeps its height and changes its
-        // resolution, so the thickness of a cell is itself the reading: three
-        // fat blocks or twenty hairlines, and the player counting lit cells is
-        // counting seconds.
-        this.itemBox.style.setProperty('--cells', String(def.cooldown));
-        // The gap has to come down with the cells or it eats them: at twenty
-        // segments in 48px a 2px gap leaves nothing lit, and at three a 1px gap
-        // is not a gap at all.
-        this.itemBox.style.setProperty('--gap', def.cooldown > 8 ? '1px' : '2px');
+        // ON THE BAR ITSELF, not on the box. `.seg` declares --cells on the
+        // element it is applied to, and a declaration on the element beats a
+        // value inherited from an ancestor - so setting this on #item-box would
+        // be silently overridden by the class's own default of twenty.
+        const cells = itemCells(def.cooldown);
+        this.itemBarBg.style.setProperty('--cells', String(cells));
+        // The gap has to come down with the cell count or it eats the cells: at
+        // twelve segments in 108px a 3px gap leaves six pixels lit, and at three
+        // a 2px gap is barely a gap at all.
+        this.itemBarBg.style.setProperty('--gap', cells > 6 ? '2px' : '3px');
         // The 24x24 plate, at the same call the buff chips use, drawn into the
         // canvas that is already in the document rather than swapped for a new
         // one - a slot that replaced its own node on every pickup would leak a
@@ -300,14 +305,17 @@ export class UI {
       }
     }
     if (!id) return;
-    // QUANTISED TO WHOLE CELLS, and FLOORED rather than rounded: a cell is a
-    // second, and a second is not banked until it has actually passed. Rounding
-    // would light the last cell half a second before the item could be fired,
-    // which is the one lie a charge meter must not tell.
-    const cells = Math.floor(frac * def.cooldown) / def.cooldown;
-    if (this._c.itemFrac !== cells) {
-      this._c.itemFrac = cells;
-      this.itemBar.style.transform = 'scaleY(' + cells + ')';
+    // EVERY SEGMENT IS WHOLE OR EMPTY, NEVER PART LIT. The fill is a scaleX, so
+    // it can land anywhere - flooring it onto a cell boundary is what stops it,
+    // and flooring rather than rounding is also the honest direction: a cell is
+    // a unit of charge and a unit of charge is not banked until it has passed.
+    // Rounding would light the last cell before the item could be fired, which
+    // is the one lie a charge meter must not tell.
+    const n = itemCells(def.cooldown);
+    const lit = Math.floor(frac * n) / n;
+    if (this._c.itemFrac !== lit) {
+      this._c.itemFrac = lit;
+      this.itemBar.style.transform = 'scaleX(' + lit + ')';
     }
     const ready = frac >= 1;
     if (this._c.itemReady !== ready) {

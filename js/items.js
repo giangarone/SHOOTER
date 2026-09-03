@@ -155,6 +155,39 @@ export const ACTIVE_ITEMS = {
 
 export const ACTIVE_ITEM_KEYS = Object.keys(ACTIVE_ITEMS);
 
+// The most segments the HUD meter is ever cut into.
+//
+// TWELVE, because past that the cells are thinner than the gaps between them
+// and a bar nobody can count is a bar that has stopped being segmented. It is
+// also about the largest number a player can read at a glance without counting,
+// which is the only way this is ever read.
+export const ITEM_BAR_MAX_CELLS = 12;
+
+/**
+ * How many segments an item's charge meter is cut into.
+ *
+ * ONE RULE, TWO BEHAVIOURS, and the second falls out of the first:
+ *
+ *   - Twelve seconds or less: one segment per second. A three-second item wears
+ *     three fat blocks, so the segment WIDTH is itself a reading - the bar is
+ *     always the same length, and a wide cell means a short cooldown.
+ *   - Longer than twelve: twelve segments, each worth `cooldown / 12` seconds.
+ *
+ * The caller lights `floor(frac * cells)` of them, which is what makes both
+ * cases exact and keeps every segment whole. Under twelve that reduces to
+ * `floor(secondsCharged)` - literally one cell per elapsed second - and over it
+ * the cells are evenly spaced by construction at a rational fraction of the
+ * cooldown, so a 13s, 25s, 27s, 33s or 40s item divides as evenly as twelve
+ * segments can divide anything. Nothing here needs the cooldown to be a
+ * multiple of twelve, or even to be a whole number of seconds.
+ *
+ * @param {number} cooldown  seconds to charge
+ * @returns {number} 1..ITEM_BAR_MAX_CELLS
+ */
+export function itemCells(cooldown) {
+  return Math.max(1, Math.min(ITEM_BAR_MAX_CELLS, Math.ceil(cooldown)));
+}
+
 /**
  * Rolls the pedestal's offer.
  *

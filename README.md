@@ -497,6 +497,18 @@ well would be a rule the player only ever meets as an unexplained silence - and
 the HUD bar goes grey there rather than merely stopping, because a bar that has
 stopped moving looks like a fault.
 
+**The charge time is printed nowhere.** Not on the pedestal, not in the prompt,
+not on the build sheet. The meter already says it, in the only unit it is ever
+thought about in: at twelve seconds or under, one segment is one second, so a
+glance at the slot says "three wide blocks" or "ten narrow ones" and the answer
+arrives from having carried the thing rather than from having read it. Past
+twelve the bar caps at twelve segments worth `cooldown / 12` seconds each - the
+one rule in `itemCells()` covers both, and it needs no cooldown to divide evenly
+into anything, which is why 13s, 25s or 40s all work. **A segment is always
+whole or empty**: the fill is floored onto a cell boundary, and floored rather
+than rounded, because a cell is a unit of charge and rounding would light the
+last one before the item could actually be fired.
+
 **The dash used to be a mutation.** DOUBLE DASH held two charges on a 2.5s timer
 and was reached by double-tapping W, a binding that existed because the game had
 no spare finger - and an active item slot IS a spare finger. So it moved here
@@ -756,6 +768,7 @@ js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
+js/items.js         the five active items, and the pedestal row that offers them
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
 js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations

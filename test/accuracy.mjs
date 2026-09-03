@@ -60,11 +60,61 @@ try {
     const out = [];
     const t = (name, cond, extra = '') => out.push([name, !!cond, String(extra)]);
     const step = () => new Promise((r) => requestAnimationFrame(r));
-    // The spawner would otherwise walk something into the player halfway
-    // through a measurement and shove them, and a shoved player is a moving
-    // player - which is its own term in the cone.
-    const clear = () => { g.queue.length = 0; g._clearEntities(); };
+    // NOTHING MAY BE STANDING IN FRONT OF THE PLAYER. Two separate reasons,
+    // and the second one is why this file was flaky for a long time.
+    //
+    // The spawner would walk something into the player halfway through a
+    // measurement and shove them, and a shoved player is a moving player -
+    // which is its own term in the cone.
+    //
+    // AND THE PLAYER IS FIRING DOWN THE MIDDLE OF THE ARENA AT THE SHOP. Every
+    // measurement here holds the trigger for dozens of frames from the spawn
+    // point, facing the totem row - and because this loop empties the arena on
+    // every frame, each wave completes instantly and raises a fresh set of
+    // totems into the line of fire. The player was picking up two or three
+    // mutations per trigger pull, at random, DURING the measurement: the
+    // resting cone was read off a clean gun and the bloomed cone off whatever
+    // the totems happened to be offering. A Hollow Point broke the cone
+    // assertions, a Bloodlust or a Detonator broke the fire-rate one (both take
+    // a quarter of it), and the run that picked up nothing relevant passed.
+    // Roughly one run in four failed, always somewhere different.
+    //
+    // Forced HIDDEN rather than dismissed: dismiss() only starts a sink, and a
+    // sinking pillar is still a raycast target.
+    const clear = () => {
+      g.queue.length = 0;
+      g._clearEntities();
+      for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
+      for (const st of g.totemArea.stations) st.state = 'hidden';
+      g.itemArea.pedestal.state = 'hidden';
+      g.itemArea.pedestal.claimed = false;
+      for (const st of g.itemArea.stations) st.state = 'hidden';
+    };
     const frames = async (n) => { for (let i = 0; i < n; i++) { clear(); await step(); } };
+    // A WAIT MEASURED IN GAME TIME, which is what every number in this file
+    // actually depends on: the bloom recovers at 3.2 a second, the kick decays
+    // by 0.33 a second, and the rounds that build both arrive at a rate per
+    // second. A frame COUNT is none of those things - dt is clamped to 0.05 in
+    // _loop, so thirty frames is anywhere from half a second to a second and a
+    // half of game time depending on how fast the machine is drawing.
+    //
+    // That is not a hypothetical. 'the kick decays on its own' asserts the
+    // recoil is under a fifth of its peak, which needs 1.45s (0.33^1.45 = 0.2)
+    // and used to be given thirty frames - passing only because this harness
+    // was slow enough to hit the dt clamp on every single frame, 30 x 0.05 =
+    // 1.5s, with 0.05s to spare. Speeding the harness up by any amount broke
+    // it. The assertion was measuring the machine, not the gun.
+    //
+    // The wall-clock guard is a deadlock stop, not a measurement: if the game
+    // clock ever stops advancing this must fail an assertion rather than hang.
+    const secs = async (n) => {
+      const t0 = g.time;
+      const wall = performance.now();
+      while (g.time - t0 < n && performance.now() - wall < 20000) {
+        clear();
+        await step();
+      }
+    };
     const set = (o) => Object.assign(g.input, o);
     // THE CROSSHAIR AS THE PLAYER SEES IT, read off the DOM rather than
     // recomputed - the claim being tested is that the reticle and the raycast
@@ -91,9 +141,9 @@ try {
     const restCone = g._shotSpread();
     const restGap = gap();
     set({ shoot: true });
-    await frames(8);
+    await secs(0.25);
     const earlyCone = g._shotSpread();
-    await frames(45);
+    await secs(1.5);
     const heldCone = g._shotSpread();
     const heldGap = gap();
     const heldBloom = p.bloom;
@@ -104,7 +154,11 @@ try {
     for (let i = 0; i < 60; i++) { await frames(1); peak = Math.max(peak, p.bloom); }
     const cappedCone = g._shotSpread();
     set({ shoot: false });
-    await frames(25);
+    // The bloom recovers at BLOOM_RECOVER (3.2) a second after a hold of about
+    // a tenth, so a full second is comfortably enough to settle from the cap -
+    // and 'all the way back' is asserted to within 1e-6, so 'enough' has to be
+    // a real margin rather than just about.
+    await secs(1.0);
     const settledCone = g._shotSpread();
     const settledGap = gap();
     t('a few rounds already open the cone', earlyCone > restCone,
@@ -127,7 +181,7 @@ try {
     await rest();
     const aimBefore = p.pitch;
     set({ shoot: true });
-    await frames(20);
+    await secs(0.5);
     set({ shoot: false });
     const kicked = p.recoilPitch;
     const bloomed = p.bloom;
@@ -140,7 +194,11 @@ try {
       p.pitch === aimBefore, 'pitch ' + p.pitch);
     // And they come back on their own clocks: the kick decays exponentially,
     // the cone settles linearly, so one is not the other wearing a hat.
-    await frames(30);
+    // 0.33^2 = 0.109, so two seconds leaves the kick at about a ninth of its
+    // peak against a threshold of a fifth. Nearly twice the margin it needs,
+    // which is the point: the number being checked is the decay CONSTANT, and a
+    // window sized to only just clear it is a window that fails on a fast frame.
+    await secs(2.0);
     t('the kick decays on its own', p.recoilPitch < kicked * 0.2,
       kicked.toFixed(3) + ' -> ' + p.recoilPitch.toFixed(3));
 
@@ -161,12 +219,15 @@ try {
       p.bloom = 0;
       // Recoil, though, IS earned - over one trigger pull of a fixed length.
       // The extra rounds a raised fire rate gets through that window are part
-      // of what the card costs, so they belong in the reading.
+      // of what the card costs, so they belong in the reading. A fixed length
+      // in GAME TIME: measured in frames, a machine drawing faster would put
+      // fewer rounds through the same "window" and the card would look weaker
+      // for it, which is the opposite of what this is trying to say.
       set({ shoot: true });
-      await frames(70);
+      await secs(2.0);
       const recoil = p.recoilPitch;
       set({ shoot: false });
-      await frames(30);
+      await secs(0.5);
       return { idle, cone, recoil };
     };
     const before = await trial();

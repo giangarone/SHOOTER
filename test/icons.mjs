@@ -20,7 +20,7 @@
 // Pure data - no browser, no renderer - so it runs in milliseconds and can be
 // the thing that fails first.
 import { UPGRADES, RARITY } from '../js/upgrades.js';
-import { ACTIVE_ITEMS } from '../js/items.js';
+import { ACTIVE_ITEMS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PLAYER_STATUS } from '../js/status.js';
@@ -113,6 +113,57 @@ const badItems = Object.keys(ACTIVE_ITEMS).filter(
   (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].cooldown > 0)
 );
 ok('every active item has a use and a cooldown', badItems.length === 0, badItems.join(', '));
+
+// THE CHARGE METER'S SEGMENT COUNT. Pure arithmetic, so it belongs here rather
+// than behind a browser - and it has to hold for cooldowns nothing in the pool
+// currently uses, because the next item added is exactly when this would break.
+//
+// The contract: never more than twelve, never fewer than one, one per second at
+// or under twelve, and every segment worth the same slice of the cooldown so
+// none of them is ever part lit. That last one is what the awkward values are
+// here for: 13, 25, 27, 33 and 40 do not divide into twelve, and the meter has
+// to stay whole anyway.
+const cellCases = [
+  [1, 1], [2, 2], [3, 3], [10, 10], [12, 12],
+  [13, 12], [20, 12], [25, 12], [27, 12], [33, 12], [40, 12], [120, 12],
+];
+const badCells = cellCases.filter(([cd, want]) => itemCells(cd) !== want);
+ok('the charge meter divides into the right number of segments',
+  badCells.length === 0,
+  badCells.map(([cd, want]) => `${cd}s -> ${itemCells(cd)}, want ${want}`).join(', '));
+
+// EVERY SEGMENT WHOLE, at every instant of every cooldown. Walked in tenths
+// because the failure this catches is a fractional fill, and a fractional fill
+// only shows up between the round numbers.
+const partial = [];
+for (const [cd] of cellCases) {
+  const n = itemCells(cd);
+  if (n > ITEM_BAR_MAX_CELLS || n < 1) partial.push(cd + 's: ' + n + ' cells');
+  for (let c = 0; c <= cd; c += 0.1) {
+    const lit = Math.floor((c / cd) * n) / n;
+    // Whole cells only: lit * n must land on an integer, and inside 0..1.
+    if (Math.abs(lit * n - Math.round(lit * n)) > 1e-9 || lit < 0 || lit > 1) {
+      partial.push(`${cd}s at ${c.toFixed(1)}s -> ${lit}`);
+      break;
+    }
+  }
+}
+ok('no segment is ever part lit', partial.length === 0, partial.join(', '));
+
+// ...and under twelve seconds a segment is exactly one second, which is the
+// half of the rule a player is meant to be able to read off the bar.
+const notPerSecond = cellCases
+  .filter(([cd]) => cd <= ITEM_BAR_MAX_CELLS)
+  .filter(([cd]) => {
+    const n = itemCells(cd);
+    // One cell should light per whole second elapsed.
+    for (let sec = 0; sec <= cd; sec++) {
+      if (Math.floor((sec / cd) * n) !== Math.min(sec, n)) return true;
+    }
+    return false;
+  });
+ok('at twelve seconds or less a segment is one second',
+  notPerSecond.length === 0, notPerSecond.map(([cd]) => cd + 's').join(', '));
 
 console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +
