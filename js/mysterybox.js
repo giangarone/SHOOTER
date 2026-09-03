@@ -97,9 +97,14 @@ const ITEM_LOW = 0.55;
 // The height went up as the plinth came off, so the lid and the item that
 // rises out of it stay at roughly the altitude the far row has always read at
 // from across the arena.
-const BOX_W = 1.35;
+// A SQUARE FOOTPRINT, and that is load-bearing rather than taste. The question
+// marks are CUT OUT of the walls with an alpha mask sampled through each face's
+// own UVs, so every face the mark appears on has to have the same aspect or the
+// glyph shears on two of the four - and one mask for four walls is one texture
+// instead of two, against a cap the whole game is held to.
+const BOX_W = 1.25;
+const BOX_D = 1.25;
 const BOX_H = 1.15;
-const BOX_D = 1.2;
 const LID_T = 0.16;
 
 // How fast the colour travels, in turns per second.
@@ -186,16 +191,29 @@ const QM_BITS = [
   '...##...',
   '...##...',
 ];
-// Twelve device pixels per cell, so the texture lands on exact cell boundaries
-// and NearestFilter has nothing to round.
-const QM_CELL = 12;
 const QM_COLS = QM_BITS[0].length;
 const QM_ROWS = QM_BITS.length;
-// The plane carries the bitmap's own aspect, so the cells stay square in world
-// space - a square plane would stretch a tall glyph and the steps would stop
-// being steps.
-const QM_SCALE = 0.058; // metres per cell
-const QM_GEOM = new THREE.PlaneGeometry(QM_COLS * QM_SCALE, QM_ROWS * QM_SCALE);
+// How big one cell is on the wall, in metres, and how far up the wall the
+// glyph's centre sits.
+const QM_CELL_M = 0.055;
+const QM_AT = 0.54;
+// The mask is drawn at this resolution and stretched over a whole face. The
+// cells are NOT square in the canvas: a face is 1.25 wide by 1.15 tall, so a
+// cell that comes out square on the WALL has to be drawn slightly narrower than
+// it is tall here. Pre-compensating in the drawing is what lets one square
+// texture serve a non-square face without the glyph shearing.
+const QM_MASK = 256;
+
+// THE LIT PANEL BEHIND EACH CUT-OUT - the light inside the box.
+//
+// Bigger than the glyph on every side, so the hole is filled with light from
+// any angle a player can see into it at, rather than showing its own edge as
+// they walk past. These are also what lights the inside of the crate: with the
+// lid up they are four glowing panels on the inner walls, which is exactly what
+// a box with a lamp in it looks like.
+const LAMP_W = QM_COLS * QM_CELL_M + 0.17;
+const LAMP_H = QM_ROWS * QM_CELL_M + 0.17;
+const LAMP_GEOM = new THREE.PlaneGeometry(LAMP_W, LAMP_H);
 
 // ---------------------------------------------------------------------------
 // THE RAINBOW
@@ -367,9 +385,17 @@ const RIM_Z_GEOM = new THREE.PlaneGeometry(IN_D, STRIP_H);
 const LID_X_GEOM = new THREE.PlaneGeometry(BOX_W, LID_T * 0.62);
 const LID_Z_GEOM = new THREE.PlaneGeometry(BOX_D, LID_T * 0.62);
 // The four walls and the floor of the hollow crate.
+// THE SIDE WALLS RUN THE FULL DEPTH and overlap the front and back pair at the
+// corners, rather than being inset between them. Two solids interpenetrating
+// cost nothing and cannot z-fight, and it is what makes all four OUTER faces
+// exactly BOX_W x BOX_H - which is the condition for one cut-out mask serving
+// all of them.
 const WALL_X_GEOM = new THREE.BoxGeometry(BOX_W, BOX_H, WALL_T);
-const WALL_Z_GEOM = new THREE.BoxGeometry(WALL_T, BOX_H, IN_D);
+const WALL_Z_GEOM = new THREE.BoxGeometry(WALL_T, BOX_H, BOX_D);
 const FLOOR_GEOM = new THREE.BoxGeometry(BOX_W, WALL_T, BOX_D);
+// The glow lying on the inside floor, so the crate is lit rather than merely
+// having lit panels in it.
+const INNER_FLOOR_GEOM = new THREE.PlaneGeometry(IN_W, IN_D);
 
 // ---------------------------------------------------------------------------
 
@@ -431,8 +457,15 @@ export class MysteryBox {
     this.group.visible = false;
     scene.add(this.group);
 
+    // The shared rainbow state first: the walls, the strips, the lamps and the
+    // ring on the floor all wear it, and every one of them is built below.
+    this.rain = rainbowUniforms();
+    this.rain.uCenter.value.set(this.pos.x, 0, this.pos.z);
+
+    // The cut-outs before the body, because the walls are built WITH the holes
+    // in them - the mask is part of their material, not something added after.
+    this._buildCutouts();
     this._buildBody();
-    this._buildMarks();
     this._buildPanel();
     this._buildIcons();
 
@@ -467,16 +500,28 @@ export class MysteryBox {
       color: BODY_COLOR, roughness: BODY_ROUGH, metalness: BODY_METAL,
     });
 
-    // FOUR WALLS AND A FLOOR, NO TOP. Outer surfaces sit exactly where the
-    // solid box's did, so the silhouette and the marks on it are unchanged;
-    // what is new is that there is now an inside.
+    // FOUR WALLS AND A FLOOR, NO TOP.
+    //
+    // ONLY THE OUTWARD FACE IS CUT. A BoxGeometry takes a material per face in
+    // the order +x, -x, +y, -y, +z, -z, so each wall is given the masked
+    // material on the one face that faces the room and the plain black on the
+    // other five. Masking the inner face as well would put a SECOND hole
+    // behind the first - and BoxGeometry mirrors the UVs on opposing faces, so
+    // that second `?` would be back to front and would not line up with the
+    // one in front of it anyway.
+    const cut = this.cutMat;
+    const plain = this.bodyMat;
     for (const dz of [1, -1]) {
-      const w = new THREE.Mesh(WALL_X_GEOM, this.bodyMat);
+      const mats = [plain, plain, plain, plain, plain, plain];
+      mats[dz > 0 ? 4 : 5] = cut;
+      const w = new THREE.Mesh(WALL_X_GEOM, mats);
       w.position.set(0, BOX_H / 2, dz * (BOX_D - WALL_T) / 2);
       this.group.add(w);
     }
     for (const dx of [1, -1]) {
-      const w = new THREE.Mesh(WALL_Z_GEOM, this.bodyMat);
+      const mats = [plain, plain, plain, plain, plain, plain];
+      mats[dx > 0 ? 0 : 1] = cut;
+      const w = new THREE.Mesh(WALL_Z_GEOM, mats);
       w.position.set(dx * (BOX_W - WALL_T) / 2, BOX_H / 2, 0);
       this.group.add(w);
     }
@@ -504,8 +549,6 @@ export class MysteryBox {
     //
     // Both strips share ONE material, so they are the same light at the same
     // bearing at every instant - see the note by RAINBOW_GLSL.
-    this.rain = rainbowUniforms();
-    this.rain.uCenter.value.set(this.pos.x, 0, this.pos.z);
     this.stripMat = rainbowMaterial(this.rain, null, true);
 
     // THE BODY'S, ROUND THE INSIDE OF THE OPENING. Each panel faces INWARD -
@@ -546,56 +589,100 @@ export class MysteryBox {
     }
   }
 
-  _buildMarks() {
-    // ONE CANVAS, drawn once. The glyph never changes - only its colour does,
-    // and that is the material's, not the texture's.
+  /**
+   * The question marks, and the light behind them.
+   *
+   * THEY ARE HOLES, NOT DECALS. Until now each mark was an additive quad stuck
+   * on the outside of a wall - light painted onto a black surface, which is a
+   * different thing from light getting out of a box and reads as one. The wall
+   * is now genuinely absent where the glyph is: an alpha mask on the material
+   * discards those fragments, so what the player sees through a `?` is the
+   * inside of the crate.
+   *
+   * ALPHA TEST, NOT TRANSPARENCY. `alphaTest` discards the fragment outright
+   * and leaves the wall an opaque object that depth-sorts like any other; a
+   * transparent wall would have to be sorted against the lamps behind it, the
+   * item hanging over it and the four other walls, and would blend its own
+   * black over whatever it failed to sort in front of.
+   */
+  _buildCutouts() {
+    // ---- the mask ---------------------------------------------------------
+    // White where the wall stays, black where it is cut away.
     const cv = document.createElement('canvas');
-    cv.width = QM_COLS * QM_CELL;
-    cv.height = QM_ROWS * QM_CELL;
+    cv.width = QM_MASK;
+    cv.height = QM_MASK;
     const c = cv.getContext('2d');
-    // White, so the material's colour multiplies cleanly to any hue.
     c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, QM_MASK, QM_MASK);
+    // A cell is square in metres; in MASK PIXELS it is not, because the face it
+    // is stretched over is wider than it is tall. See QM_MASK.
+    const cw = QM_CELL_M / BOX_W * QM_MASK;
+    const ch = QM_CELL_M / BOX_H * QM_MASK;
+    const x0 = (QM_MASK - QM_COLS * cw) / 2;
+    // Texture v runs DOWN from the top of the face, so a height measured up
+    // from the floor becomes a distance down from the top.
+    const y0 = (1 - QM_AT) * QM_MASK - (QM_ROWS * ch) / 2;
+    c.fillStyle = '#000000';
     for (let y = 0; y < QM_ROWS; y++) {
       for (let x = 0; x < QM_COLS; x++) {
-        if (QM_BITS[y][x] === '#') c.fillRect(x * QM_CELL, y * QM_CELL, QM_CELL, QM_CELL);
+        if (QM_BITS[y][x] !== '#') continue;
+        // Rounded to whole pixels so neighbouring cells meet exactly and the
+        // glyph has no seams inside it.
+        const px = Math.round(x0 + x * cw);
+        const py = Math.round(y0 + y * ch);
+        c.fillRect(px, py, Math.round(x0 + (x + 1) * cw) - px, Math.round(y0 + (y + 1) * ch) - py);
       }
     }
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    // The mark is a pixel grid and is meant to stay one: filtered up to half a
-    // metre it turns into a grey smudge of a `?`.
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.LinearFilter;
-    tex.generateMipmaps = false;
+    const mask = new THREE.CanvasTexture(cv);
+    // A mask is read for its alpha and must not be colour-managed on the way
+    // in: sRGB-decoding it would move the threshold the alphaTest compares to.
+    mask.colorSpace = THREE.NoColorSpace;
+    // The glyph is a pixel grid and is meant to stay one - the cut edge should
+    // be a staircase, not a blur.
+    mask.magFilter = THREE.NearestFilter;
+    mask.minFilter = THREE.NearestFilter;
+    mask.generateMipmaps = false;
 
-    // The same rainbow the strips wear, but taken from the HEIGHT up the glyph
-    // rather than from the bearing round the box: a mark is a hand's width
-    // across, so an angular hue would paint each one a single flat colour and
-    // the four of them would be four different flat colours. Down the glyph
-    // instead, it is a ribbon - which is also how the reference reads.
-    this.markMat = rainbowMaterial(this.rain, tex, false);
+    // Same black as the rest of the crate; the only difference is the hole.
+    this.cutMat = new THREE.MeshStandardMaterial({
+      color: BODY_COLOR, roughness: BODY_ROUGH, metalness: BODY_METAL,
+      // NOT `transparent`. alphaTest discards on its own and the wall stays in
+      // the opaque pass, which is the entire point - flagging it transparent as
+      // well would put it back into the sorted pass it was meant to stay out of.
+      alphaMap: mask, alphaTest: 0.5,
+    });
 
-    // Half a face, plus a whisker, so the mark sits ON the panel rather than
-    // inside it - the crate is a solid mesh and a coplanar decal would z-fight
-    // across the whole of it.
-    const outX = BOX_W / 2 + 0.012;
-    const outZ = BOX_D / 2 + 0.012;
-    // [x, z, yaw]. A plane faces its own local +Z, so the yaw both places the
-    // mark and turns it to face out of the side it is on.
-    const faces = [
-      [0, outZ, 0],
-      [0, -outZ, Math.PI],
-      [outX, 0, Math.PI / 2],
-      [-outX, 0, -Math.PI / 2],
-    ];
-    for (const [x, z, yaw] of faces) {
-      const m = new THREE.Mesh(QM_GEOM, this.markMat);
-      // Sat just above the middle of the face. Lower than this and the glyph
-      // sits in the bottom half of a tall crate and reads as having slipped.
-      m.position.set(x, BOX_H * 0.54, z);
-      m.rotation.y = yaw;
+    // ---- the lamps --------------------------------------------------------
+    // The hue runs DOWN the panel rather than round the box: a lamp is a hand's
+    // width across, so an angular hue would make each of the four one flat
+    // colour. Down the panel it is a ribbon, and it is the ribbon that shows
+    // through the glyph.
+    this.lampMat = rainbowMaterial(this.rain, null, false);
+    this.lampMat.side = THREE.DoubleSide;
+
+    const lampY = BOX_H * QM_AT;
+    // Sat on the INNER surface of each wall, directly behind its hole.
+    const inZ = BOX_D / 2 - WALL_T - 0.004;
+    const inX = BOX_W / 2 - WALL_T - 0.004;
+    for (const dz of [1, -1]) {
+      const m = new THREE.Mesh(LAMP_GEOM, this.lampMat);
+      m.position.set(0, lampY, dz * inZ);
       this.group.add(m);
     }
+    for (const dx of [1, -1]) {
+      const m = new THREE.Mesh(LAMP_GEOM, this.lampMat);
+      m.position.set(dx * inX, lampY, 0);
+      m.rotation.y = Math.PI / 2;
+      this.group.add(m);
+    }
+
+    // The floor of the crate, lit. Without it the inside of an open box is a
+    // black pit with four glowing rectangles floating in it; with it there is
+    // a lamp in a box.
+    this.innerFloor = new THREE.Mesh(INNER_FLOOR_GEOM, rainbowMaterial(this.rain, null, true));
+    this.innerFloor.rotation.x = -Math.PI / 2;
+    this.innerFloor.position.y = WALL_T + 0.004;
+    this.group.add(this.innerFloor);
   }
 
   _buildPanel() {
@@ -922,11 +1009,15 @@ export class MysteryBox {
     // A slow breath, and never off: the strips are what draws the crate, so
     // dimming them the way the marks dim would take the box's outline with it.
     this.stripMat.uniforms.uOpacity.value = e * (0.88 + 0.12 * Math.sin(time * 1.9));
-    // The marks breathe with the strips and step back a little once the lid is
-    // up: at that point the reel is what the player is looking at, and four
-    // glowing signs around it compete with the thing they were advertising.
-    this.markMat.uniforms.uOpacity.value =
-      e * (0.70 + 0.20 * Math.sin(time * 1.9)) * (1 - this.lid * 0.35);
+    // THE LAMPS INSIDE. They breathe with the strips and NEVER dim with the
+    // lid: they are the light in the box, and the four question marks are only
+    // holes - dimming these would put the marks out.
+    this.lampMat.uniforms.uOpacity.value = e * (0.80 + 0.20 * Math.sin(time * 1.9));
+    // The floor of the crate is a wash rather than a fixture, so it sits well
+    // under the lamps and comes up as the lid opens - the inside of the box
+    // brightening as it is opened is most of what sells a light being in there.
+    this.innerFloor.material.uniforms.uOpacity.value =
+      e * (0.10 + 0.30 * this.lid) * (0.85 + 0.15 * Math.sin(time * 1.9));
 
     driveMark(this.mark, e, floorY, time, this.pos.x);
 
