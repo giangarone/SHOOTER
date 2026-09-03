@@ -133,6 +133,14 @@ export const RISE_SECONDS = RISE_TIME;
 // and a third loud colour would cost the other two their meaning.
 export const SIGN_COLOR = { '1': '#00ff85', '-1': '#ff2f24', '0': '#93a0be' };
 
+// WHAT A PRICE YOU CANNOT PAY IS WRITTEN IN. Grey, and deliberately not the
+// red of SIGN_COLOR['-1']: red in this game means a stat going the wrong way -
+// a cost, a penalty, damage taken - and a price is none of those things. It is
+// the same number it always was and the player simply does not have it yet.
+// Grey says "not yet" where red says "this is bad for you", and the box's card
+// and the two consoles all say it the same way.
+export const DIM_TEXT = '#8792ad';
+
 // ---------------------------------------------------------------------------
 // PIXEL TEXT ON A CANVAS TEXTURE
 //
@@ -938,18 +946,22 @@ export class Station {
     pxText(c, title, 128, detail ? 58 : 74, 24, 232);
 
     if (detail) {
-      c.fillStyle = enabled ? SIGN_COLOR['1'] : '#8792ad';
+      c.fillStyle = enabled ? SIGN_COLOR['1'] : DIM_TEXT;
       pxText(c, detail, 128, 98, 16, 232);
     }
 
-    // THE PRICE IS ALWAYS LEGIBLE. Everything else on a console the player
-    // cannot afford dims, because that is what says they cannot afford it -
-    // but a price they cannot read is a price they cannot plan against, and
+    // THE PRICE IS ALWAYS LEGIBLE, and it is the one line that never fades:
+    // a price the player cannot read is a price they cannot plan against, and
     // the most expensive purchase in the game is the one they most need to
-    // read. So the cost line alone is drawn white and at full alpha in both
-    // states, and the dimmed bar and title carry the disabled signal.
+    // read. So it is drawn at FULL ALPHA in both states while the bar and the
+    // title dim around it.
+    //
+    // IT DOES CHANGE COLOUR THOUGH. White when the console can be used, grey
+    // when it cannot - because full-alpha white read as "available" next to a
+    // dimmed title, and the two halves of the plate were saying opposite
+    // things. See DIM_TEXT for why grey and not red.
     c.globalAlpha = 1;
-    c.fillStyle = '#ffffff';
+    c.fillStyle = enabled ? '#ffffff' : DIM_TEXT;
     pxText(c, cost, 128, detail ? 138 : 120, 24, 232);
     this.panel.tex.needsUpdate = true;
   }

@@ -121,26 +121,14 @@ try {
     // regression it is meant to catch - a per-instance light or material would
     // blow past this by dozens, not by one.
     //
-    // IT WENT 30 -> 34 FOR THE MYSTERY BOX, which brought four new programs
-    // with it and is the whole of the increase:
-    //
-    //   * the rainbow, angular - the two light strips and the crate's inner
-    //     floor, which share one program because a ShaderMaterial is keyed on
-    //     its source and theirs is identical;
-    //   * the rainbow, vertical - the four lamps behind the question marks,
-    //     the same shader with the hue taken off the quad instead of off the
-    //     bearing, which is a different source and so a second program;
-    //   * the cut-out walls - a MeshStandardMaterial carrying an alphaMap and
-    //     an alphaTest, which no other material in the game does;
-    //   * the floor ring, patched - four MeshBasicMaterials wearing the same
-    //     rainbow through onBeforeCompile, in two flavours (the pool has a
-    //     map, the rim and its ripple have vertex colours).
-    //
-    // Four programs for one object is a lot, and it is the price of the box
-    // being the only thing in the game lit by a moving gradient rather than by
-    // a colour. The headroom over the 31 a full run now shows is for the
-    // content variance above, not for the next four.
-    ['shader programs bounded', peak.programs <= 34],
+    // IT WENT 30 -> 34 FOR THE MYSTERY BOX and then most of the way back. The
+    // box briefly carried a moving rainbow, which cost four programs of its
+    // own - two ShaderMaterials and an onBeforeCompile patch on the floor ring
+    // in two flavours. The rainbow is gone (see the note by lightMaterial in
+    // mysterybox.js) and its programs went with it; what the box still adds is
+    // ONE, for the cut-out walls, which are the only material in the game
+    // carrying an alphaMap and an alphaTest.
+    ['shader programs bounded', peak.programs <= 31],
     // Enemies, projectiles and pickups all draw from a fixed set of shared
     // geometries and materials, so GPU resources stay bounded however long the
     // game runs. Per-instance allocation climbed past this within a minute.

@@ -38,9 +38,9 @@
 
 import * as THREE from 'three';
 import {
-  makeMark, driveMark, makePanel, pxText, hex, roundRect,
+  makeMark, tintMark, driveMark, makePanel, pxText, hex, roundRect,
   HIT_GEOM, HIT_MAT, SUNK_Y, RISE_SECONDS, USE_RADIUS, ICON_Y, PANEL_R,
-  SIGN_COLOR, ROW_Z,
+  SIGN_COLOR, DIM_TEXT, ROW_Z,
 } from './totems.js';
 import { ACTIVE_ITEMS, ACTIVE_ITEM_KEYS } from './items.js';
 import { makeGlowTexture } from './effects.js';
@@ -228,164 +228,77 @@ const LAMP_GEOM = new THREE.PlaneGeometry(LAMP_W, LAMP_H);
 //
 // Both reuse the memoised glow texture from effects.js, so neither is a texture
 // the game did not already have.
+// FIVE LAYERS, NOT TWO, and that is what makes the edge soft.
+//
+// The shared glow texture is a radial gradient that runs LINEARLY to zero at
+// its rim. A linear ramp has a corner in it where it lands on zero, and however
+// faint that corner is, the eye finds it - two sprites meant one bloom with two
+// visible boundaries in it, which is what read as a hard edge.
+//
+// Stacking several at different radii fixes it without touching the texture,
+// which is memoised and shared with every other glow in the game (see the note
+// on it in effects.js - changing the curve there would change all of them). Each
+// layer's boundary lands at a different distance and each is fainter than the
+// one inside it, so the sum falls away smoothly and no single corner is strong
+// enough to be seen. The scales run in a rough geometric progression and the
+// opacities decay faster, which is what makes the composite read as one soft
+// body rather than as five discs.
 const GLOW_SPEC = [
-  // Down in the box, and small enough to read as coming from INSIDE it.
-  { y: 0.45, scale: 1.5, opacity: 0.85 },
-  // The spill. Wide, faint, and centred a little higher so it breaks over the
-  // rim rather than out through the walls.
-  { y: 0.95, scale: 4.2, opacity: 0.34 },
+  // Down in the box, small enough to read as coming from INSIDE it.
+  { y: 0.45, scale: 1.2, opacity: 0.44 },
+  { y: 0.55, scale: 2.0, opacity: 0.31 },
+  { y: 0.70, scale: 3.1, opacity: 0.21 },
+  // The spill. Wide, faint, and centred higher so it breaks over the rim
+  // rather than out through the walls.
+  { y: 0.92, scale: 4.6, opacity: 0.14 },
+  { y: 1.15, scale: 6.6, opacity: 0.09 },
 ];
 
 // ---------------------------------------------------------------------------
-// THE RAINBOW
+// THE LIGHT
 // ---------------------------------------------------------------------------
 //
-// Every light on the box - both strips, the four marks and the ring on the
-// floor - runs ONE moving rainbow rather than one colour at a time.
+// Every light on the box - both halves of the top edge, the four lamps behind
+// the question marks, the crate's inner floor, the glow and the ring on the
+// ground - is ONE COLOUR at any instant, and that colour is:
 //
-// IN A SHADER, because the alternative is not viable. Doing it on the CPU means
-// a colour per vertex and a buffer re-upload every frame for the ring alone
-// (128 segments, three rows), and it still could not put more than one hue on a
-// single flat strip. Here the hue is a function of WHERE THE FRAGMENT IS, so a
-// bar of two triangles carries the whole spectrum and the animation is one
-// float going up.
+//   * WHITE while the box is shut. It is a black crate with a white edge and
+//     four white marks, and that is the whole of its resting state.
+//   * THE COLOUR OF THE ITEM UNDER THE REEL while it spins, snapping to each
+//     new one as the reel ticks.
+//   * THE COLOUR OF THE ITEM IT LANDED ON while that item is on offer.
 //
-// THE HUE COMES FROM THE ANGLE AROUND THE BOX, which is what makes the whole
-// installation read as one object: the strip on the lid, the strip inside the
-// rim and the ring on the floor are all sampling the same wheel at the same
-// bearing, so a colour that is green at the box's left is green on every one of
-// them at once, and the sweep travels round all three together.
-const RAINBOW_GLSL = `
-  uniform float uTime;
-  uniform float uRate;
-  uniform vec3  uSolid;
-  uniform float uMix;
-  // Hue to RGB, no branches: three phase-shifted triangle waves clipped to the
-  // top of their range. Standard, and cheaper than any sextant version.
-  vec3 hue2rgb(float h) {
-    vec3 p = abs(fract(vec3(h) + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-    return clamp(p - 1.0, 0.0, 1.0);
-  }
-  vec3 rainbowAt(float h) {
-    // Lifted off full saturation. A fully saturated sweep has a hard magenta
-    // and a hard green in it that read as two separate lights rather than as
-    // one band moving; pulling it toward white keeps it a single ribbon.
-    vec3 c = mix(vec3(1.0), hue2rgb(fract(h + uTime * uRate)), 0.82);
-    // While an item is revealed the whole installation HOLDS at that item's own
-    // colour - the far side of the arena says what is being held from anywhere
-    // in it. uMix rides in and out so the change is a sweep, not a cut.
-    return mix(c, uSolid, uMix);
-  }
-`;
+// THERE WAS A MOVING RAINBOW HERE and it is gone. It was a real shader - the
+// hue taken from the bearing around the box so the strips and the floor ring
+// sampled one wheel together - and it went because the box only ever wore it
+// when it was NOT holding an item, which is to say: as its resting state. A
+// resting state should be quiet. Once the idle colour is white there is no
+// moment left in the cycle where a rainbow would have been drawn, so what
+// remains is a plain additive material and a colour written into it, and the
+// four shader programs, the onBeforeCompile patch on the floor ring and the
+// per-fragment hue all went with it.
+//
+// The colour SNAPS between items and EASES between white and an item - see
+// _driveLook, where that split is the whole reason the mix is a separate
+// number from the colour.
 
-// How far round the wheel the sweep travels per second, and how many full
-// turns of hue are laid around one lap of the box. TURNS > 1 is what puts
-// several colours on the box at once instead of one; at 1.5 the front face and
-// the back face are never the same colour and the seam where the wheel wraps is
-// always round a corner.
-const RAINBOW_RATE = 0.13;
-const RAINBOW_TURNS = 1.5;
+const WHITE = new THREE.Color(0xffffff);
 
 /**
- * The shared animation state, handed to every material that wears the rainbow.
+ * One of the box's lights.
  *
- * ONE OBJECT, SHARED BY REFERENCE. three.js reads uniforms by identity, so
- * passing these same objects into each material means the per-frame update is
- * three assignments total rather than three per material - and, more to the
- * point, they cannot drift out of step with each other.
- */
-function rainbowUniforms() {
-  return {
-    uTime: { value: 0 },
-    uRate: { value: RAINBOW_RATE },
-    uSolid: { value: new THREE.Color(0xffffff) },
-    uMix: { value: 0 },
-    uCenter: { value: new THREE.Vector3() },
-    uTurns: { value: RAINBOW_TURNS },
-  };
-}
-
-/**
- * A material for one of the box's own lights.
+ * Additive and unlit, like everything else in the far row that is meant to
+ * burn rather than to be painted, and every one of them is driven by colour
+ * and opacity alone - which is why they are plain materials now.
  *
- * @param {object} u        from rainbowUniforms(), shared
- * @param {?THREE.Texture} map  the question mark's bitmap, or null for a strip
- * @param {boolean} angular true to take the hue from the bearing around the
- *   box (the strips), false to take it from the height up the quad (the marks,
- *   which are a hand's width across and would be one flat colour otherwise).
+ * @param {?THREE.Texture} map  a mask, or null for a bare panel
  */
-function rainbowMaterial(u, map, angular) {
-  return new THREE.ShaderMaterial({
-    uniforms: { ...u, uMap: { value: map }, uOpacity: { value: 1 } },
-    vertexShader: `
-      varying vec2 vUv;
-      varying vec3 vPos;
-      uniform vec3 uCenter;
-      void main() {
-        vUv = uv;
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vPos = wp.xyz - uCenter;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `,
-    fragmentShader: RAINBOW_GLSL + `
-      uniform sampler2D uMap;
-      uniform float uOpacity;
-      uniform float uTurns;
-      varying vec2 vUv;
-      varying vec3 vPos;
-      void main() {
-        ${angular
-          ? 'float h = atan(vPos.z, vPos.x) / 6.2831853 * uTurns;'
-          : 'float h = (1.0 - vUv.y) * 0.55;'}
-        vec3 c = rainbowAt(h);
-        float a = uOpacity;
-        ${map ? 'a *= texture2D(uMap, vUv).a;' : ''}
-        gl_FragColor = vec4(c * a, a);
-      }
-    `,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    fog: false,
+function lightMaterial(map) {
+  return new THREE.MeshBasicMaterial({
+    map, color: 0xffffff, transparent: true, opacity: 1,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
     toneMapped: false,
   });
-}
-
-/**
- * Puts the same rainbow on a material this file did not build - the four parts
- * of the floor ring, which come from makeMark() in totems.js and have to stay
- * MeshBasicMaterials so that driveMark() can go on driving their opacity,
- * rotation and visibility exactly as it does for every totem in the game.
- *
- * onBeforeCompile rather than a replacement material, so the ring keeps the
- * dash mask baked into its vertex colours and the soft falloff baked into its
- * texture: this only swaps out where the HUE comes from, and multiplies into
- * whatever mask was already there.
- */
-function patchRainbow(mat, u) {
-  mat.color.setHex(0xffffff);
-  mat.onBeforeCompile = (shader) => {
-    for (const k of Object.keys(u)) shader.uniforms[k] = u[k];
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vRPos;\nuniform vec3 uCenter;')
-      .replace(
-        '#include <begin_vertex>',
-        '#include <begin_vertex>\nvRPos = (modelMatrix * vec4(transformed, 1.0)).xyz - uCenter;'
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vRPos;\nuniform float uTurns;\n' + RAINBOW_GLSL)
-      .replace(
-        '#include <color_fragment>',
-        '#include <color_fragment>\n'
-        + 'diffuseColor.rgb *= rainbowAt(atan(vRPos.z, vRPos.x) / 6.2831853 * uTurns);'
-      );
-  };
-  // Two materials with the same program cache key share a compiled program, and
-  // these now differ from an unpatched MeshBasicMaterial. Without this they can
-  // be handed the stock program and silently render without the rainbow.
-  mat.customProgramCacheKey = () => 'mysteryBoxRainbow';
-  mat.needsUpdate = true;
 }
 
 // The crate's own shared geometry. Built once at module load, not per box -
@@ -482,10 +395,11 @@ export class MysteryBox {
     this.group.visible = false;
     scene.add(this.group);
 
-    // The shared rainbow state first: the walls, the strips, the lamps and the
-    // ring on the floor all wear it, and every one of them is built below.
-    this.rain = rainbowUniforms();
-    this.rain.uCenter.value.set(this.pos.x, 0, this.pos.z);
+    // What every light on the box is showing this frame, and how far it has
+    // eased from white toward it. See _driveLook.
+    this._hsl = new THREE.Color(0xffffff);
+    this._lit = new THREE.Color(0xffffff);
+    this._mix = 0;
 
     // The cut-outs before the body, because the walls are built WITH the holes
     // in them - the mask is part of their material, not something added after.
@@ -506,14 +420,11 @@ export class MysteryBox {
     // The floor mark, doubled the way the pedestal's was. The box wears the
     // rainbow rather than an offer's theme, so this is tinted every frame
     // instead of once at present().
+    // The ring on the floor, tinted with the box's own colour every frame -
+    // stock machinery, driven exactly as every totem's mark is. It used to need
+    // a shader patch to carry the rainbow; a single colour is what tintMark
+    // was already for.
     this.mark = makeMark(this.group);
-    // THE RING ON THE FLOOR RUNS THE SAME WHEEL AS THE BOX. Patched rather than
-    // replaced so driveMark() goes on driving it exactly as it drives every
-    // totem's - see patchRainbow.
-    for (const m of [this.mark.poolMat, this.mark.rimMat, this.mark.rippleMat, this.mark.hazeMat]) {
-      patchRainbow(m, this.rain);
-    }
-    this._hsl = new THREE.Color();
   }
 
   // ---- construction ------------------------------------------------------
@@ -584,7 +495,7 @@ export class MysteryBox {
     // a hand apart read as two objects, and the lid is the part that MOVES -
     // outlining it made the moving half the loud half, when what wants drawing
     // is the mouth the item comes out of.
-    this.stripMat = rainbowMaterial(this.rain, null, true);
+    this.stripMat = lightMaterial(null);
 
     // The frame across the wall tops, facing the sky. The pairs are inset
     // against each other rather than overlapping: this material is additive,
@@ -689,7 +600,7 @@ export class MysteryBox {
     // width across, so an angular hue would make each of the four one flat
     // colour. Down the panel it is a ribbon, and it is the ribbon that shows
     // through the glyph.
-    this.lampMat = rainbowMaterial(this.rain, null, false);
+    this.lampMat = lightMaterial(null);
     this.lampMat.side = THREE.DoubleSide;
 
     const lampY = BOX_H * QM_AT;
@@ -711,7 +622,8 @@ export class MysteryBox {
     // The floor of the crate, lit. Without it the inside of an open box is a
     // black pit with four glowing rectangles floating in it; with it there is
     // a lamp in a box.
-    this.innerFloor = new THREE.Mesh(INNER_FLOOR_GEOM, rainbowMaterial(this.rain, null, true));
+    this.innerFloorMat = lightMaterial(null);
+    this.innerFloor = new THREE.Mesh(INNER_FLOOR_GEOM, this.innerFloorMat);
     this.innerFloor.rotation.x = -Math.PI / 2;
     this.innerFloor.position.y = WALL_T + 0.004;
     this.group.add(this.innerFloor);
@@ -1034,72 +946,66 @@ export class MysteryBox {
     const e = this._eased;
     const floorY = -this.group.position.y;
 
-    // THE RAINBOW IS DRIVEN FROM ONE PLACE, three floats a frame, and every
-    // light on the installation reads them: both strips, the four marks and the
-    // four parts of the ring on the floor. They cannot drift apart because
-    // there is nothing to drift - they are the same uniforms.
-    this.rain.uTime.value = time;
-
-    // THE WHOLE INSTALLATION WEARS THE COLOUR OF THE ITEM UNDER THE REEL, from
-    // the moment the lid is open to the moment the box shuts again - both
-    // strips, the four lamps behind the question marks, the crate's inner
-    // floor, the glow and the ring on the ground.
+    // ---- the colour ------------------------------------------------------
     //
-    // WHILE IT SPINS, TOO, and that is the point of it. The reel is already
-    // changing the icon and the name forty times; having the light change with
-    // them turns the box and the circle it stands in into part of the reel
-    // rather than scenery around one, and the whole far side of the arena
-    // flickers through the pool on the way to an answer. The rainbow is what
-    // the box wears when it is NOT holding an item - shut, opening, or shutting
-    // again afterwards.
+    // THE WHOLE INSTALLATION IS ONE COLOUR: both halves of the top edge, the
+    // four lamps behind the question marks, the crate's inner floor, the glow
+    // and the ring on the ground. They are not kept in step - they are handed
+    // the same value.
+    //
+    // TWO NUMBERS, NOT ONE, and the split is the point. `_hsl` is the item's
+    // colour and it SNAPS - at the top of a spin the reel ticks every sixty
+    // milliseconds, and a colour that eased between items would smear the first
+    // several into one wash instead of flicking through them. `_mix` is how far
+    // the lights have travelled from white toward it, and it EASES - so
+    // arriving at an item is a fast swing off white and losing it is a slow
+    // fade back, and neither is a cut.
     const hold = (this.state === 'spinning' || this.state === 'revealed') && this.showing;
     if (hold) this._hsl.setHex(ACTIVE_ITEMS[this.showing].theme);
-    this.rain.uSolid.value.copy(this._hsl);
-    // IN FAST, OUT SLOW. Going in has to beat the reel: at the top of a spin
-    // the ticks are sixty milliseconds apart, and a ramp slower than that would
-    // smear the first several items into one muddy wash instead of snapping
-    // between them. Coming out is a sweep back to the rainbow, and wants to be
-    // seen.
-    const target = hold ? 1 : 0;
     const step = Math.min(1, dt * (hold ? 16 : 4));
-    this.rain.uMix.value += (target - this.rain.uMix.value) * step;
+    this._mix += ((hold ? 1 : 0) - this._mix) * step;
+    this._lit.copy(WHITE).lerp(this._hsl, this._mix);
 
-    // THE CRATE ITSELF IS NOT LIT AT ALL. No emissive, and the speaker
-    // cabinets' own black - it is the darkest thing in the room on purpose, and
-    // everything that makes it legible is a light attached to it.
+    // A slow breath, and never off: the top edge is what draws the crate, so
+    // dimming it the way the lamps dim would take the box's outline with it.
+    this.stripMat.color.copy(this._lit);
+    this.stripMat.opacity = e * (0.88 + 0.12 * Math.sin(time * 1.9));
 
-    // A slow breath, and never off: the strips are what draws the crate, so
-    // dimming them the way the marks dim would take the box's outline with it.
-    this.stripMat.uniforms.uOpacity.value = e * (0.88 + 0.12 * Math.sin(time * 1.9));
-    // THE LAMPS INSIDE. They breathe with the strips and NEVER dim with the
-    // lid: they are the light in the box, and the four question marks are only
+    // THE LAMPS INSIDE. They breathe with the edge and NEVER dim with the lid:
+    // they are the light in the box, and the four question marks are only
     // holes - dimming these would put the marks out.
-    this.lampMat.uniforms.uOpacity.value = e * (0.80 + 0.20 * Math.sin(time * 1.9));
+    this.lampMat.color.copy(this._lit);
+    this.lampMat.opacity = e * (0.80 + 0.20 * Math.sin(time * 1.9));
+
     // The floor of the crate is a wash rather than a fixture, so it sits well
     // under the lamps and comes up as the lid opens - the inside of the box
     // brightening as it is opened is most of what sells a light being in there.
-    this.innerFloor.material.uniforms.uOpacity.value =
+    this.innerFloorMat.color.copy(this._lit);
+    this.innerFloorMat.opacity =
       e * (0.10 + 0.30 * this.lid) * (0.85 + 0.15 * Math.sin(time * 1.9));
 
+    tintMark(this.mark, this._lit.getHex());
+    driveMark(this.mark, e, floorY, time, this.pos.x);
+
     // THE GLOW, in the item's own colour, and lit for the SPIN as well as the
-    // reveal. It rides the same ramp that swings the rest of the lights over,
-    // so the light coming out of the box and the colour of everything else on
-    // it arrive together and leave together - one event, not two things that
-    // happen to coincide.
+    // reveal. It rides the same ease, so the light coming out of the box and
+    // the colour of everything else on it arrive together and leave together -
+    // one event, not two things that happen to coincide.
     //
     // DOWN A LITTLE WHILE IT SPINS. Every light is the same colour either way;
     // this is the one thing that is not the same BRIGHTNESS, and it is what
     // leaves the reel landing somewhere to go. At full strength throughout, the
     // spin and the answer look identical and the moment it stops stops
     // registering as a moment.
-    const glow = this.rain.uMix.value * (this.state === 'spinning' ? 0.55 : 1);
+    //
+    // OFF ENTIRELY WHILE THE BOX IS SHUT: the glow is the ITEM's light, and a
+    // white bloom around an idle crate is the halo that was taken off it.
+    const glow = this._mix * (this.state === 'spinning' ? 0.55 : 1);
     for (const gl of this.glows) {
       gl.mat.opacity = gl.spec.opacity * e * glow * (0.86 + 0.14 * Math.sin(time * 2.6));
       gl.mat.color.copy(this._hsl);
       gl.sprite.visible = gl.mat.opacity > 0.004;
     }
-
-    driveMark(this.mark, e, floorY, time, this.pos.x);
 
     // The icon rides to the player's side and turns to face them, exactly as a
     // totem's does - the reasoning is identical and is written out at
@@ -1188,9 +1094,17 @@ export class MysteryBox {
   }
 
   _drawIdleCard(c) {
-    // The theme bar every card in the game wears, in the box's own violet. It
-    // is what carries at the distance where the words are not yet legible.
-    const theme = hex(0xb388ff);
+    // The theme bar every card in the game wears - the thing that carries at
+    // the distance where the words are not yet legible.
+    //
+    // WHITE, like the rest of the idle box. It was the violet the far row wore
+    // back when a pedestal and two consoles stood out here in one colour; there
+    // is nothing left to be the odd one out from, and a violet bar over a white
+    // crate was the last piece of that scheme still arguing with the object
+    // under it. When the reel is running the card wears the ITEM's colour
+    // instead - see _drawItemCard - which is the only colour this card ever
+    // needs to carry.
+    const theme = '#ffffff';
     c.fillStyle = theme;
     c.shadowColor = theme;
     c.shadowBlur = 26;
@@ -1205,7 +1119,11 @@ export class MysteryBox {
     // THE PRICE IS WRITTEN ON THE BOX. Every other purchase in the game is made
     // at a console whose whole job is to carry a number; the box has no console,
     // so its card is where the number lives.
-    c.fillStyle = this.affordable === false ? SIGN_COLOR['-1'] : '#ffffff';
+    // GREY, NOT RED, when it cannot be paid - the same grey the two consoles
+    // beside the totems use for the same thing. See DIM_TEXT in totems.js: red
+    // in this game means a stat going the wrong way, and a price the player has
+    // not saved up for yet is not that.
+    c.fillStyle = this.affordable === false ? DIM_TEXT : '#ffffff';
     pxText(c, this.priceLabel || '', 256, 226, 26, 460);
     // NO BOTTOM LINE. It spelled out that the box can be rolled again, which
     // is a rule the player learns the second time they pay and does not need
