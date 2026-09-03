@@ -1067,6 +1067,15 @@ class Game {
         // read here as "close the screen on top" - it can never reach into a
         // live run and change anything.
         case 'Escape': if (this._subScreenOpen()) this._closeSubScreen(); break;
+        // ---- DEBUG ------------------------------------------------------
+        // $1,000, for testing the shop and the box without playing a run up to
+        // the money first. Digit0 and not Numpad0, so it is the key above the
+        // letters and nothing on the pad can reach it.
+        //
+        // THIS IS A CHEAT AND IT IS IN THE SHIPPING BUILD. It is one line and
+        // it is here on purpose - see _debugCredits - but it is the kind of
+        // thing that gets forgotten, so it says so in two places.
+        case 'Digit0': this._debugCredits(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -4890,6 +4899,31 @@ class Game {
     // Spending at a console changes what the box says it costs relative to the
     // wallet, so its card is repriced with the labels.
     this._refreshBox();
+  }
+
+  /**
+   * DEBUG: $1,000 on the 0 key.
+   *
+   * A TEST HOOK, not a feature. The shop, the ammo console and the mystery box
+   * all cost thousands, and reaching that honestly means playing eight waves
+   * before any of it can be looked at - which makes every change to any of them
+   * an eight-wave round trip.
+   *
+   * It goes through the same door a collected orb does: `credits` up, and
+   * `_creditsDirty` set so the console labels and the box's card repaint with
+   * the new balance. Adding to `credits` alone would leave the shop insisting
+   * the player could not afford something they now can.
+   *
+   * NOT gated on the autotest flag, deliberately - the whole point is to have
+   * it in a normal run - but that does mean it ships. Delete this method and
+   * the case that calls it to remove the cheat; nothing else refers to either.
+   */
+  _debugCredits() {
+    if (this.state !== 'playing') return;
+    this.credits += 1000;
+    this._creditsDirty = true;
+    this.sfx.coin();
+    this.ui.banner('DEBUG  +$1,000');
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
