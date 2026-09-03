@@ -165,9 +165,13 @@ html, body {
   font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
   text-shadow: 1px 1px 0 var(--ink);
 }
+/* White, not cyan. Cyan is the interface's accent - it is on the crosshair, the
+   armour theme, the RELOADING bar and half the consoles - and the wave number is
+   not an accent, it is the one fact on screen that says where the run is. White
+   is what the round count beneath it already uses for the same reason. */
 #wave-num {
-  font-size: 32px; color: var(--cyan);
-  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(78, 243, 255, 0.55);
+  font-size: 32px; color: #fff;
+  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 255, 255, 0.35);
   line-height: 1;
 }
 #score-num {
@@ -387,70 +391,88 @@ html, body {
 }
 
 /* ---- THE ACTIVE ITEM SLOT ------------------------------------------------
-   One plate above the gun readout: the icon, the name, the button that fires
-   it, and the charge bar. Everything here is measured in --u like the rest of
-   the sheet, and the frame is the shared .plate, so the slot is the same
-   machine the VITALS box is rather than a second design.
+   An icon and a meter, and nothing else. No frame, no name, no plate: this is
+   ONE reading - "what am I holding and can I use it" - and a box around it made
+   it look like a second instrument beside the ammo. It floats on the arena the
+   way the crosshair does.
 
-   --item is the carried item's own theme colour, written from JS. It is the
-   only colour in the block that changes, and it drives the bar, the ring and
-   the ready state together - one variable so the three can never disagree
-   about which item is in the slot. */
+   --item is the carried item's own theme colour, written from JS along with the
+   segment count. It is the only colour here that changes, and it drives the bar
+   and the ready state together so the two can never disagree about which item
+   is in the slot. */
 #item-box {
   display: flex; align-items: center; gap: calc(var(--u) * 2);
-  padding: calc(var(--u) * 2);
-  margin-bottom: var(--u);
+  margin-bottom: calc(var(--u) * 2);
   --item: var(--cyan);
-  --surface: var(--fill-lo);
-  --edge: var(--line);
+  /* The height of the whole slot, and therefore of the bar beside it. One
+     number so the two can never drift apart. */
+  --item-h: 48px;
 }
 #item-art {
-  /* Fixed at the canvas's own 72px so the 24x24 art lands on whole device
-     pixels. image-rendering is what keeps it pixel art at all - the browser's
-     default smoothing would turn a hand-placed 24-pixel drawing into a blur at
-     any scale that is not exactly 1. */
-  width: 36px; height: 36px;
+  /* 48 CSS px off a 96px canvas: the drawing is 24 pixels square, so this is a
+     clean 2x on a 1x display and 1:1 device pixels on a 2x one. image-rendering
+     is what keeps it pixel art at all - the browser's default smoothing turns a
+     hand-placed 24-pixel drawing into a blur at any scale but exactly 1. */
+  width: var(--item-h); height: var(--item-h);
   image-rendering: pixelated;
   flex: none;
+  filter: drop-shadow(2px 2px 0 var(--ink));
 }
-#item-info {
-  display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
-  min-width: calc(var(--u) * 34);
-}
-#item-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: calc(var(--u) * 2);
-}
-#item-name {
-  font-size: 8px; letter-spacing: 0.1em; color: var(--item);
-  text-shadow: 1px 1px 0 var(--ink);
-}
-/* The button that fires it, in the language of whatever the player is holding.
-   Dim on purpose: it is a label the player reads once and then never again,
-   and it must not compete with the bar beside it. */
-#item-key {
-  font-size: 8px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink);
+
+/* ---- THE VERTICAL SEGMENTED METER ----------------------------------------
+   .seg's sibling, turned on its side, with one difference that is the whole
+   point: the cell count is not fixed. --cells is written from JS as the item's
+   cooldown IN SECONDS, so ONE SEGMENT IS ONE SECOND and the bar is always the
+   same height.
+
+   That makes the segment thickness itself a reading. A three-second item wears
+   three fat blocks and a twenty-second one wears twenty hairlines, so a glance
+   says how long this thing takes to come back without a number anywhere - and
+   a player counting the lit cells is counting seconds, which is the only unit
+   the charge is ever actually thought about in.
+
+   --gap comes from JS too, for the same reason: a 2px gap between twenty cells
+   eats the cells, and a 1px gap between three of them is not a gap. */
+.segv {
+  --cells: 10;
+  --gap: 2px;
+  position: relative;
+  width: 10px; height: var(--item-h);
   flex: none;
+  background: rgba(6, 8, 13, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(43, 51, 72, 0.9);
+  -webkit-mask: repeating-linear-gradient(
+    180deg, #000 0 calc(100% / var(--cells) - var(--gap)),
+    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
+  );
+  mask: repeating-linear-gradient(
+    180deg, #000 0 calc(100% / var(--cells) - var(--gap)),
+    transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
+  );
 }
-#item-bar-bg { --cells: 12; height: 8px; }
+/* Scaled from the BOTTOM, never resized - the same compositor-transform rule
+   .seg's fill follows, and the same deliberate absence of a transition (see the
+   note there: a transition started inside a hidden subtree never arrives). It
+   fills upward because that is the direction every gauge in the world fills. */
+.segv > i {
+  display: block; width: 100%; height: 100%;
+  transform-origin: center bottom; transform: scaleY(0);
+}
 #item-bar { background: var(--item); }
 
-/* CHARGED. The ring takes the item's colour and the name comes up to white, so
-   "you can use this" is legible in peripheral vision without reading a word -
-   which is the whole point, because it becomes true in the middle of a
-   firefight. */
-#item-box.ready { --edge: var(--item); }
-#item-box.ready #item-name { color: #fff; }
-#item-box.ready #item-bar {
-  box-shadow: 0 0 8px var(--item);
-}
+/* CHARGED. The bar takes its glow and the icon comes up to full - legible in
+   peripheral vision without reading a word, which is the whole point, because
+   it becomes true in the middle of a firefight. */
+#item-box:not(.ready) #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(0.72); }
+#item-box.ready #item-bar { box-shadow: 0 0 8px var(--item); }
+
 /* The moment it fills, once. Restarted from JS by removing and re-adding the
    class - the same trick #ammo-res.refund uses, and for the same reason: a
    second charge inside the animation has to play again rather than ride the
    first one out. */
-#item-box.charged { animation: item-charged 0.5s steps(4, end) 1; }
+#item-box.charged #item-art { animation: item-charged 0.4s steps(3, end) 1; }
 @keyframes item-charged {
-  0%   { transform: translateY(-3px); --edge: #fff; }
+  0%   { transform: scale(1.28); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
   100% { transform: none; }
 }
 /* HELD AT THE WAVE BREAK. The bar does not fill in the shop (see the note in
@@ -485,16 +507,14 @@ html, body {
 /* The last second, so the player is told it is ending rather than discovering
    it by being hit. */
 #invuln-frame.ending { animation: blink 0.25s steps(1, end) infinite; }
+/* The dashed rule over the round count, which used to carry the weapon's name
+   on the end of it. One gun, so the name was a label that never changed - but
+   the rule earns its keep now that the active item slot sits above it: it is
+   what separates the two readings instead of what underlined a heading. */
 #weapon-line {
-  display: flex; align-items: center; gap: calc(var(--u) * 2);
-  width: 100%; justify-content: flex-end;
+  display: flex; align-items: center;
+  width: 100%;
 }
-#weapon-name {
-  font-size: 10px; color: var(--cyan); letter-spacing: 0.1em;
-  text-shadow: 1px 1px 0 var(--ink);
-}
-/* A 2px rule that runs from the left edge of the plate to the weapon name,
-   so the name reads as a heading on a machine rather than as a floating word. */
 #weapon-line::before {
   content: ""; flex: 1; height: 2px;
   background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);

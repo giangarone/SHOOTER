@@ -86,25 +86,49 @@ try {
     res.fracAfter = p.statusFraction('fear');
 
     // ---- 2. damage over time ---------------------------------------------
-    // Measured against the CLOCK rather than against a frame count: the sink
-    // bills whole points only, so the assertion has to be a window and not an
-    // equality.
-    clean();
-    p.applyStatus('fire', 3);
-    const hp0 = p.health;
-    const b0 = performance.now();
-    while (performance.now() - b0 < 3200) await step();
-    res.burn = { lost: hp0 - p.health, secs: (performance.now() - b0) / 1000 };
+    // Measured on the GAME'S CLOCK, and burning for longer than the window.
+    // Both of those are fixes for the same flake, and both are worth keeping.
+    //
+    // THE CLOCK. dt is clamped to 0.05 in _loop, so below twenty frames a
+    // second the game's clock LAGS the wall clock - and under swiftshader it
+    // does. A 3.2s WALL window is then some unknown amount of game time, while
+    // the burn it bills is proportional to the game time and not to the window,
+    // so the same correct code measured anywhere from 16 to 22 points depending
+    // on how the frames happened to fall.
+    //
+    // THE DURATION. The refresh check below re-applies every frame and so
+    // always burns for the whole window. A single three-second application
+    // measured over 3.2s does not: it expires inside the window. Comparing the
+    // two was comparing a burn that ended with one that did not, which is a
+    // real difference of about a point and a half sitting inside a tolerance of
+    // four. Both applications now outlast the window, so the only thing left
+    // between them is the whole-point billing, which is worth at most one.
+    //
+    // The wall-clock guard is a deadlock stop, not a measurement: if the game
+    // clock ever stops advancing this must fail an assertion rather than hang
+    // the suite.
+    const burnFor = async (secs, onStep) => {
+      const t0g = g.time;
+      const wall = performance.now();
+      while (g.time - t0g < secs && performance.now() - wall < 20000) {
+        if (onStep) onStep();
+        await step();
+      }
+      return g.time - t0g;
+    };
 
-    // REFRESH, NOT STACK. Four applications over the same window must cost
-    // the same as one - if they stacked, this would be four times the burn.
     clean();
+    p.applyStatus('fire', 30);
+    const hp0 = p.health;
+    const burnSecs = await burnFor(3.2);
+    res.burn = { lost: hp0 - p.health, secs: burnSecs };
+
+    // REFRESH, NOT STACK. An application every frame over the same window must
+    // cost what one did - if they stacked, this would be many times the burn.
+    clean();
+    p.applyStatus('fire', 30);
     const hp1 = p.health;
-    const b1 = performance.now();
-    while (performance.now() - b1 < 3200) {
-      p.applyStatus('fire', 3);
-      await step();
-    }
+    res.stackedSecs = await burnFor(3.2, () => p.applyStatus('fire', 30));
     res.burnStacked = hp1 - p.health;
 
     // ---- 3. fear stops the trigger and nothing else -----------------------
@@ -203,13 +227,20 @@ try {
   ok('an effect is on the moment it is applied', out.fearOnAtStart && out.fracAtStart === 1);
   ok('and off when its clock runs out', !out.fearOffAfter && out.fracAfter === 0);
 
-  // 7 dps over ~3s, billed in whole points, minus whatever the last partial
-  // point never reached. A wide window on purpose: the point is that it bleeds
-  // at roughly the rate on the table, not that it lands on an exact integer.
-  ok('fire costs health at about its rate', out.burn.lost >= 15 && out.burn.lost <= 23,
+  // 7 dps over 3.2s of GAME time is 22.4, billed in whole points, minus
+  // whatever the last partial point never reached. Still a window rather than
+  // an equality - the billing is what makes it one - but a much narrower window
+  // than it used to need, because the measurement is no longer at the mercy of
+  // the frame rate.
+  ok('fire costs health at about its rate', out.burn.lost >= 20 && out.burn.lost <= 23,
     `${out.burn.lost.toFixed(1)} over ${out.burn.secs.toFixed(1)}s`);
+  // Both windows now burn for the same amount of game time and neither expires
+  // inside it, so anything past a point or two apart is the statuses stacking.
+  // The second half is the check the name is actually about: stacking would not
+  // be a near miss, it would be a multiple.
   ok('re-applying it refreshes rather than stacks',
-    Math.abs(out.burnStacked - out.burn.lost) <= 4,
+    Math.abs(out.burnStacked - out.burn.lost) <= 2
+      && out.burnStacked < out.burn.lost * 1.5,
     `${out.burnStacked.toFixed(1)} vs ${out.burn.lost.toFixed(1)}`);
 
   ok('a clean player shoots', out.shootsWhenClean === 'shot', String(out.shootsWhenClean));

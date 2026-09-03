@@ -35,6 +35,16 @@ import { Totem, Station, ROW_Z } from './totems.js';
 const GOOD = 1;
 const NOTE = 0;
 
+// WHAT AN ITEM'S READOUT DOES NOT SAY: how long it takes to charge.
+//
+// It is the most quotable number an item has and it is deliberately nowhere -
+// not on the pedestal, not in the prompt, not in the HUD. The bar already
+// answers it, in the only unit it is ever thought about in: one segment is one
+// second, so a glance at the slot says "three blocks" or "twenty hairlines"
+// without a number, and the answer arrives from having carried the thing rather
+// than from having read it. A player choosing between a heal and a dash should
+// be weighing what they do, and a printed "20s" makes that a sum instead.
+
 /**
  * The pool. Five, deliberately - enough that the pedestal is not the same offer
  * every time, few enough that a player learns all of them inside two runs and
@@ -59,7 +69,7 @@ export const ACTIVE_ITEMS = {
     // pickup has to be walked to across a live arena and this is a button, so
     // the button is the weaker of the two at the thing they both do. Twenty
     // seconds is most of a wave: it is one recovery per fight, not a tap.
-    effects: [['HEAL 25 HP', GOOD], ['20s TO CHARGE', NOTE]],
+    effects: [['HEAL 25 HP', GOOD]],
     use: (game) => {
       const p = game.player;
       p.health = Math.min(p.maxHealth, p.health + 25);
@@ -77,8 +87,9 @@ export const ACTIVE_ITEMS = {
     // dead for two seconds every ten would be the only boss strategy there is.
     //
     // The cheapest cooldown in the pool because it does no damage. It buys
-    // distance, and distance is what the player then has to use.
-    effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 2s', NOTE], ['10s TO CHARGE', NOTE]],
+    // distance, and distance is what the player then has to use - and the
+    // player finds that out by carrying it, not by reading it.
+    effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 2s', NOTE]],
     use: (game) => {
       for (const e of game.enemies) e.applyStatus('freeze', 2);
       game.effects.shockwave(game.player.pos, THEME.ice, 26, 0.9);
@@ -94,7 +105,7 @@ export const ACTIVE_ITEMS = {
     // rage pickup landing on top of this must not DOWNGRADE it to 1.5x - the
     // shorter of two overlapping boosts still wins the expiry, which is the
     // honest reading of "for 5 seconds".
-    effects: [['2x DAMAGE FOR 5s', GOOD], ['20s TO CHARGE', NOTE]],
+    effects: [['2x DAMAGE FOR 5s', GOOD]],
     use: (game) => {
       const p = game.player;
       p.damageMult = Math.max(p.damageMult, 2);
@@ -112,7 +123,7 @@ export const ACTIVE_ITEMS = {
     // not being shot at. The tell is the caller's job: main.js holds a vignette
     // and a buff chip for the duration, or the strongest item in the pool is
     // also the one the player cannot tell is running.
-    effects: [['INVINCIBLE FOR 5s', GOOD], ['20s TO CHARGE', NOTE]],
+    effects: [['INVINCIBLE FOR 5s', GOOD]],
     use: (game) => {
       const p = game.player;
       p.invulnEnd = Math.max(p.invulnEnd, game.time + 5);
@@ -135,7 +146,7 @@ export const ACTIVE_ITEMS = {
     // that comes back fast reads as mobility; two charges that come back slowly
     // read as an escape saved for the worst moment, and the four items above
     // already cover the worst moment.
-    effects: [['DASH FORWARD', GOOD], ['3s TO CHARGE', NOTE]],
+    effects: [['DASH FORWARD', GOOD]],
     use: (game) => {
       game.player.dash(game.time);
     },

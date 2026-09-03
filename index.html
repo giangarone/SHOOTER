@@ -77,29 +77,32 @@
         <div id="stam-bar-bg" class="seg"><i id="stam-bar"></i></div>
       </div>
       <div id="ammo-box">
-        <!-- THE ACTIVE ITEM SLOT, directly over the gun readout.
+        <!-- THE ACTIVE ITEM SLOT, directly over the round count.
              Bottom right is where this player already looks for "what am I
-             holding": the weapon name and the round count are an inch below it,
-             and an item is the same question asked about the other hand. It is
-             built from the parts the rest of the HUD is - a .plate frame, a
-             .seg bar, a pixelicons canvas - so it belongs to the set by
-             construction rather than by imitation.
+             holding", and an item is the same question asked about the other
+             hand.
+
+             NO FRAME AND NO NAME. It is an icon and a meter, floating on the
+             arena like the crosshair does. A plate around it made a second
+             instrument out of what is really one reading, and the name was a
+             word the player reads once and then never again - the drawing is
+             the thing they recognise at a glance, so the drawing is all that is
+             left. The icon is large for the same reason: it is now carrying the
+             whole identity of the slot on its own.
+
              Hidden entirely until something is carried: an empty frame in the
              corner is a permanent question about a system the player may not
              have met yet. -->
-        <div id="item-box" class="plate hidden">
-          <canvas id="item-art" width="72" height="72"></canvas>
-          <div id="item-info">
-            <div id="item-head">
-              <span id="item-name">TRAUMA KIT</span>
-              <span id="item-key"></span>
-            </div>
-            <div id="item-bar-bg" class="seg"><i id="item-bar"></i></div>
-          </div>
+        <div id="item-box" class="hidden">
+          <canvas id="item-art" width="96" height="96"></canvas>
+          <div id="item-bar-bg" class="segv"><i id="item-bar"></i></div>
         </div>
-        <div id="weapon-line">
-          <span id="weapon-name">PULSE RIFLE</span>
-        </div>
+        <!-- The rule over the round count. It used to be a heading rule with
+             the weapon's name on the end of it; there is only one gun, so the
+             name was a label that never changed and never told anyone anything.
+             The rule stays, because with the item slot above it the ammo block
+             now has something to be separated FROM. -->
+        <div id="weapon-line"></div>
         <div id="ammo-line">
           <span id="ammo-num">30</span>
           <span id="ammo-res">/ 30</span>

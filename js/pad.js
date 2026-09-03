@@ -32,6 +32,10 @@ export const BTN = {
   L3: 10, R3: 11,
   UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15,
   PS: 16,
+  // The touch pad, CLICKED. Index 17 is where the standard mapping puts it on
+  // every browser that exposes it - past the sixteen the spec names, which is
+  // why BUTTON_COUNT is 18 and not 17.
+  TOUCHPAD: 17,
 };
 const BUTTON_COUNT = 18;
 

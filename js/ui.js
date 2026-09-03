@@ -7,7 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
-import { controllerGlyph, cap } from './padmenu.js';
+import { controllerGlyph } from './padmenu.js';
 
 // The two player colours, as CSS. The world-space pair lives in main.js beside
 // the code that lights the gun; these are the same two hues written the way
@@ -31,7 +31,6 @@ export class UI {
     this.ammoRes = $('ammo-res');
     this.ammoReload = $('ammo-reload');
     this.reloadRing = $('reload-ring');
-    this.weaponName = $('weapon-name');
     this.vignette = $('vignette');
     this.strobe = $('strobe');
     this.lbOver = $('lb-over');
@@ -75,8 +74,6 @@ export class UI {
     // The active item slot, bottom right over the gun readout.
     this.itemBox = $('item-box');
     this.itemArt = $('item-art');
-    this.itemName = $('item-name');
-    this.itemKey = $('item-key');
     this.itemBar = $('item-bar');
     this.invulnFrame = $('invuln-frame');
     this.crosshair = $('crosshair');
@@ -280,28 +277,37 @@ export class UI {
       this._c.itemId = id;
       this.itemBox.classList.toggle('hidden', !id);
       if (def) {
-        this.itemName.textContent = def.name;
         this.itemBox.style.setProperty(
           '--item', '#' + def.theme.toString(16).padStart(6, '0')
         );
+        // ONE SEGMENT PER SECOND. The bar keeps its height and changes its
+        // resolution, so the thickness of a cell is itself the reading: three
+        // fat blocks or twenty hairlines, and the player counting lit cells is
+        // counting seconds.
+        this.itemBox.style.setProperty('--cells', String(def.cooldown));
+        // The gap has to come down with the cells or it eats them: at twenty
+        // segments in 48px a 2px gap leaves nothing lit, and at three a 1px gap
+        // is not a gap at all.
+        this.itemBox.style.setProperty('--gap', def.cooldown > 8 ? '1px' : '2px');
         // The 24x24 plate, at the same call the buff chips use, drawn into the
         // canvas that is already in the document rather than swapped for a new
         // one - a slot that replaced its own node on every pickup would leak a
         // canvas per swap for the life of the run.
-        const art = pixelIconCanvas(id, def.theme, 3);
+        const art = pixelIconCanvas(id, def.theme, 4);
         const c = this.itemArt.getContext('2d');
         c.clearRect(0, 0, this.itemArt.width, this.itemArt.height);
         c.drawImage(art, 0, 0);
       }
     }
     if (!id) return;
-    // QUANTISED TO WHOLE CELLS, like the health and stamina bars: the bar is
-    // masked into twelve, so writing anything finer is a restyle for a change
-    // that cannot be seen.
-    const cells = Math.round(frac * 12) / 12;
+    // QUANTISED TO WHOLE CELLS, and FLOORED rather than rounded: a cell is a
+    // second, and a second is not banked until it has actually passed. Rounding
+    // would light the last cell half a second before the item could be fired,
+    // which is the one lie a charge meter must not tell.
+    const cells = Math.floor(frac * def.cooldown) / def.cooldown;
     if (this._c.itemFrac !== cells) {
       this._c.itemFrac = cells;
-      this.itemBar.style.transform = 'scaleX(' + cells + ')';
+      this.itemBar.style.transform = 'scaleY(' + cells + ')';
     }
     const ready = frac >= 1;
     if (this._c.itemReady !== ready) {
@@ -315,15 +321,6 @@ export class UI {
       this._c.itemHeld = frozen;
       this.itemBox.classList.toggle('held', frozen);
     }
-  }
-
-  // The key or button that fires it, following whichever device the player last
-  // touched. Written from main.js's own input mode rather than read from a
-  // global, the same way the E/R1 prompt is.
-  setItemKey(padMode) {
-    if (this._c.itemKey === padMode) return;
-    this._c.itemKey = padMode;
-    this.itemKey.innerHTML = padMode ? cap('L1') : cap('Q');
   }
 
   // The item just finished charging. One flash, restarted the way
@@ -398,13 +395,6 @@ export class UI {
     if (this._c.comboFrac !== f) {
       this._c.comboFrac = f;
       this.comboBar.style.transform = 'scaleX(' + f + ')';
-    }
-  }
-
-  setWeapon(name) {
-    if (this._c.weapon !== name) {
-      this._c.weapon = name;
-      this.weaponName.textContent = name;
     }
   }
 
@@ -896,7 +886,7 @@ export class UI {
     // The slot goes with the run. A new game starts carrying nothing, and a
     // plate left up showing the last run's item would be the first wrong thing
     // on screen.
-    this.itemBox.className = 'plate hidden';
+    this.itemBox.className = 'hidden';
     this.invulnFrame.classList.remove('on', 'ending');
     this.promptEl.classList.add('hidden');
     this.hideStats();

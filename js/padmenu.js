@@ -105,9 +105,9 @@ export const KBM_CONTROLS = [
 export const PAD_CONTROLS = [
   ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
   ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
-  ['L1', 'ITEM'], ['cross', 'JUMP'], ['square', 'RELOAD'],
-  ['circle', 'CROUCH'], ['L3 circle', 'SLIDE'], ['R1', 'USE'],
-  ['triangle', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
+  ['R1', 'ITEM'], ['cross', 'JUMP'], ['square', 'RELOAD'],
+  ['circle', 'CROUCH'], ['L3 circle', 'SLIDE'], ['triangle', 'TAKE'],
+  ['TOUCH PAD', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
 ];
 
 /**

@@ -377,6 +377,36 @@ try {
     g.tryUse();
     out.keyBoughtAmmo = P.reserveAmmo === 90;
 
+    // --- THE READOUT: one segment per second, and no number anywhere ---
+    // The bar is the ONLY place the charge time is stated, and it states it in
+    // segments. Everything else - the pedestal's lines, its bottom note, the
+    // prompt, the build sheet - must not print it: the number is meant to be
+    // learned by carrying the item, and one stray template would give it away
+    // in the one place a player is most likely to be reading.
+    out.segments = {};
+    out.chargeTimeLeaks = [];
+    for (const [key, def] of Object.entries(ITEMS)) {
+      P.giveItem(key);
+      g._updateHud();
+      out.segments[key] = Number(
+        getComputedStyle(document.getElementById('item-box'))
+          .getPropertyValue('--cells').trim()
+      );
+      // Every string this item can put on screen, against the number it must
+      // never contain.
+      const secs = String(def.cooldown) + 's';
+      const strings = [
+        ...def.effects.map((e) => e[0]),
+        def.name,
+        ...g._statRows().flat().map(String),
+      ];
+      P.item = null;
+      strings.push(g._buildItem().note || '');
+      for (const line of strings) {
+        if (line.includes(secs)) out.chargeTimeLeaks.push(key + ': ' + line);
+      }
+    }
+
     // --- THE MERGED POOL: everything is rollable, nothing is a deal ---
     // The eleven that came in from the Devil's row have to be REACHABLE on a
     // free totem, which is the one thing a leftover `devil: true` would break
@@ -689,6 +719,13 @@ try {
   ok('E takes the item off the pedestal', r.promptNamesItem && r.keyTookItem);
   ok('E at the item reroll console rerolls', r.promptNamesItemStation && r.keyRerolled);
   ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
+
+  // ---- the readout ----
+  ok('one segment per second of charge',
+    JSON.stringify(r.segments) === '{"itemHeal":20,"itemFreeze":10,"itemRage":20,"itemGuard":20,"itemDash":3}',
+    JSON.stringify(r.segments));
+  ok('the charge time is printed nowhere',
+    r.chargeTimeLeaks.length === 0, r.chargeTimeLeaks.join(' | '));
 
   // ---- the merged pool ----
   ok('every converted mutation is rollable',

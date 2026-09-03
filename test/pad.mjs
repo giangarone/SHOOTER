@@ -18,7 +18,8 @@
 //    4. The left stick is ANALOGUE - half a push is half the distance.
 //    5. The right stick turns the view, and L2 raises the gun - which zooms,
 //       tightens the cone and turns the view at its own sensitivity.
-//    6. R2 fires, R3 melees, SQUARE reloads, TRIANGLE holds the build sheet.
+//    6. R2 fires, R3 melees, SQUARE reloads, the TOUCH PAD holds the build
+//       sheet, and R1 fires the active item.
 //    7. OPTIONS pauses and un-pauses; the D-pad walks the menu, and a
 //       settings row spends left/right on its own value rather than on moving
 //       the selection. EXIT asks before it exits, the question backs out under
@@ -99,6 +100,7 @@ try {
     const B = {
       CROSS: 0, CIRCLE: 1, SQUARE: 2, TRIANGLE: 3, L1: 4, R1: 5, L2: 6, R2: 7,
       OPTIONS: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15,
+      TOUCHPAD: 17,
     };
     const set = (i, on) => {
       pad.buttons[i].pressed = on;
@@ -250,12 +252,23 @@ try {
     await tap(B.SQUARE);
     t('square reloads', g.player.reloading > 0, g.player.reloading.toFixed(2));
 
-    set(B.TRIANGLE, true);
+    // THE BUILD SHEET IS ON THE TOUCH PAD. It moved off Triangle when Triangle
+    // became TAKE, and it is held rather than toggled - the arena keeps running
+    // underneath it either way.
+    set(B.TOUCHPAD, true);
     await frames(3);
     const statsUp = g._statsHeld;
+    set(B.TOUCHPAD, false);
+    await frames(3);
+    t('the touch pad holds the build sheet', statsUp === true && g._statsHeld === false);
+    // ...and Triangle, which used to, must not any more - it takes things now,
+    // and a face button that did both would open the sheet on every pickup.
+    set(B.TRIANGLE, true);
+    await frames(3);
+    const statsOnTriangle = g._statsHeld;
     set(B.TRIANGLE, false);
     await frames(3);
-    t('triangle holds the build sheet', statsUp === true && g._statsHeld === false);
+    t('triangle no longer opens it', statsOnTriangle === false);
 
     // L3 LATCHES. One click starts the run and the player keeps running until
     // something stops them - here, letting go of the stick.
@@ -290,24 +303,36 @@ try {
     t('and it does not resume on its own', notResumed === false);
     t('a second click stops it', runningAgain === true && clickedOff === false);
 
-    // L1 FIRES THE ACTIVE ITEM - the binding it used to have, the dash, is now
-    // one of the things in that slot. It must not fire an item that is not
-    // charged, and an empty slot must be harmless.
+    // R1 FIRES THE ACTIVE ITEM - the shoulder over the trigger finger, which is
+    // where a button pressed mid-firefight has to be. It must not fire an item
+    // that is not charged, and an empty slot must be harmless.
     g.player.item = null;
     g.player.itemCharge = 0;
-    await tap(B.L1);
-    t('L1 with an empty slot does nothing', g.player.item === null);
+    await tap(B.R1);
+    t('R1 with an empty slot does nothing', g.player.item === null);
 
     g.player.giveItem('itemDash');
     g.player.dashEnd = -1;
-    await tap(B.L1);
-    t('L1 fires the active item',
-      g.player.itemCharge === 0 && g.player.dashEnd > g.time, String(g.player.itemCharge));
+    await tap(B.R1);
+    // NOT `itemCharge === 0`: the press spends the charge and the very next
+    // frame starts refilling it, so by the time tap() has released the button
+    // the bar is already a tenth of a second up. What firing means is that the
+    // effect landed and the item is no longer ready.
+    t('R1 fires the active item',
+      !g.player.itemReady && g.player.dashEnd > g.time, String(g.player.itemCharge));
 
     // ...and a second press, on an empty bar, spends nothing.
     g.player.dashEnd = -1;
-    await tap(B.L1);
-    t('L1 on an empty bar spends nothing', g.player.dashEnd < g.time);
+    await tap(B.R1);
+    t('R1 on an empty bar spends nothing', g.player.dashEnd < g.time);
+
+    // AND THE PROMPT NAMES THE BUTTON THAT ACTUALLY TAKES THINGS. This is the
+    // regression that prompted the rebind: TAKE sat on R1 while the prompt said
+    // CIRCLE, so the one button the prompt named was the crouch. The lead is
+    // built in one place for exactly this reason, and this reads it.
+    const lead = g._useLead();
+    t('the take prompt names triangle',
+      lead.includes('g-triangle') && !lead.includes('g-circle'), lead);
 
     // ---- 5. aim assist -----------------------------------------------------
     clearField();

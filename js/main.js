@@ -1786,13 +1786,23 @@ class Game {
     // it into a toggle or a slide depending on what the player is doing, and
     // that decision has to live in one place for both input devices.
     i.crouch = pad.down(BTN.CIRCLE);
-    if (pad.pressed(BTN.R1)) this.tryUse();
-    // THE ACTIVE ITEM, on L1. It used to be the dash, which is now one of the
-    // items this button fires - so the binding did not so much move as widen.
-    if (pad.pressed(BTN.L1)) this.tryItem();
-    // TRIANGLE is HELD, exactly as TAB is: the build sheet costs the player
-    // the seconds they spend reading it and the arena keeps running under it.
-    if (pad.down(BTN.TRIANGLE)) this._openStats();
+    // TAKE / BUY, on TRIANGLE. It was on R1 and the prompt said CIRCLE, which
+    // was wrong on both counts: circle is the crouch inside a live arena, so
+    // the one button the prompt named was the one button that did not do it.
+    // Triangle is the free face button and it is where a "pick this up" prompt
+    // is looked for; R1 went to the active item.
+    if (pad.pressed(BTN.TRIANGLE)) this.tryUse();
+    // THE ACTIVE ITEM, on R1 - the shoulder over the trigger finger, which is
+    // where a button pressed in the middle of a firefight has to be. L2 and R2
+    // are already aim and fire, so R1 is the nearest thing to them that is not
+    // one of them.
+    if (pad.pressed(BTN.R1)) this.tryItem();
+    // THE TOUCH PAD is HELD, exactly as TAB is: the build sheet costs the
+    // player the seconds they spend reading it and the arena keeps running
+    // under it. It moved off Triangle when Triangle became TAKE - the summary
+    // is the one thing on the pad that is never pressed in a hurry, so it is
+    // the one that can afford the button furthest from the sticks.
+    if (pad.down(BTN.TOUCHPAD)) this._openStats();
     else this._closeStats();
     if (pad.pressed(BTN.OPTIONS)) {
       pad.consume(BTN.OPTIONS);
@@ -4268,8 +4278,11 @@ class Game {
 
   // The same shape _buildOffers() produces, plus the two fields that make a
   // pedestal an ACTIVE ITEM: `kind`, which draws the header line and the second
-  // floor ring, and a `note` saying how long it takes to charge - the one
-  // number that decides whether the item is worth the slot.
+  // floor ring, and a `note` naming the swap when there is one.
+  //
+  // THE CHARGE TIME IS NOT ON IT. See the note by GOOD/NOTE in items.js - the
+  // bar in the HUD says it in segments, and it is meant to be learned by
+  // carrying the thing rather than read off a pillar.
   _buildItem() {
     const id = rollItem(this.player.item);
     const def = ACTIVE_ITEMS[id];
@@ -4284,7 +4297,7 @@ class Game {
       // the pillar otherwise - the HUD slot is behind them while they read it.
       note: this.player.item && this.player.item !== id
         ? 'REPLACES ' + ACTIVE_ITEMS[this.player.item].name
-        : def.cooldown + 's TO CHARGE',
+        : '',
     };
   }
 
@@ -4484,7 +4497,7 @@ class Game {
    */
   _useLead() {
     if (this.inputMode !== 'pad') return '<b>SHOOT</b> / <b>E</b> ';
-    return cap('R2') + ' / ' + cap('circle') + ' ';
+    return cap('R2') + ' / ' + cap('triangle') + ' ';
   }
 
   // The prompt line for whatever USE is currently pointed at, as
@@ -4496,13 +4509,18 @@ class Game {
       return [lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name, false];
     }
     if (use.kind === 'item') {
-      // The prompt says what the pillar's bottom line says, because a player
-      // standing close enough to read the prompt is looking at the prompt: it
-      // is either the swap they are about to make or what the item costs in
-      // wave time, and both are the reason to hesitate.
+      // The prompt says what the pillar's bottom line says - the swap this is
+      // about to make - because that is the whole cost of taking it, and a
+      // player standing close enough to read the prompt is looking at the
+      // prompt rather than at the slot in the far corner behind them.
+      //
+      // With an empty slot there is no note and nothing is appended: a trailing
+      // separator with nothing after it reads as a line that failed to load.
       return [
         lead + 'TAKE &nbsp;·&nbsp; ' + t.offer.name
-        + ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.offer.note + '</span>',
+        + (t.offer.note
+          ? ' &nbsp;·&nbsp; <span class="prompt-cost">' + t.offer.note + '</span>'
+          : ''),
         false,
       ];
     }
@@ -5650,7 +5668,6 @@ class Game {
       CROSS_MIN_GAP + this._shotSpread() * innerHeight * 0.25,
       this.player.aimT > 0.5
     );
-    this.ui.setWeapon(this.player.weapon.name);
     this.ui.setBuffs(
       this.player.damageBoostEnd > this.time ? (this.player.damageBoostEnd - this.time) / 10 : 0,
       this.player.fireRateBoostEnd > this.time ? (this.player.fireRateBoostEnd - this.time) / 8 : 0,
@@ -5672,12 +5689,6 @@ class Game {
       // bug, and this is a rule the player has to be able to see.
       this.waveState !== 'active'
     );
-    // The button that fires it, in the language of whatever is in the player's
-    // hands. Called from here rather than from _setInputMode because that only
-    // runs on a CHANGE - a run played entirely on the keyboard never changes
-    // mode, and the label would never be written at all. Cached like every
-    // other setter in ui.js, so the per-frame call costs a comparison.
-    this.ui.setItemKey(this.inputMode === 'pad');
     // AEGIS holds a vignette for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest
     // item in the pool is indistinguishable from a quiet few seconds.
@@ -5752,11 +5763,10 @@ class Game {
     }
     if (p.item) {
       const def = ACTIVE_ITEMS[p.item];
-      rows.push([
-        def.name,
-        p.itemReady ? 'READY' : Math.round(p.itemCharge) + ' / ' + def.cooldown + 's',
-        p.itemReady,
-      ]);
+      // CHARGING rather than "8 / 20s": the total is the one number the item
+      // deliberately never prints (see _buildItem), and the build sheet is not
+      // the place to give it away.
+      rows.push([def.name, p.itemReady ? 'READY' : 'CHARGING', p.itemReady]);
     }
     if (p.mods.extraJumps > 0) {
       rows.push(['AIR JUMPS', p.jumpsLeft + ' / ' + p.mods.extraJumps, p.jumpsLeft > 0]);

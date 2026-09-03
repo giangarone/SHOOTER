@@ -201,20 +201,29 @@ screen is one the player is actually holding.
 | Right stick | Look |
 | R2 | Shoot |
 | L2 | Aim down the sights (hold) |
-| L1 | Use the active item |
+| R1 | Use the active item |
 | R3 | Melee — one swing of the gun, one enemy, double the reward |
 | Cross | Jump. Press again in midair, with the Double Jump mutation |
 | Square | Reload |
 | Circle | Crouch (toggle). At a sprint it SLIDES instead |
-| R1 | Take a mutation, buy, reroll |
-| Triangle | Hold for the run summary |
+| Triangle | Take a mutation or an item, buy, reroll |
+| Touch pad | Hold for the run summary |
 | Options | Pause, resume, and start a run from the menu |
 | D-pad | Walk the menus; Cross confirms |
 
 Circle is still BACK on every menu. It only means crouch inside a live arena,
-where there is nothing to go back from — and USE moved to R1 rather than being
-made contextual, because a crouch that silently failed to happen while standing
-near a totem would be worse than a button one row further out.
+where there is nothing to go back from — and TAKE is its own button rather than
+being made contextual, because a crouch that silently failed to happen while
+standing near a totem would be worse than a button one row further out.
+
+**TAKE is on Triangle**, and for a while the prompt said Circle while the
+binding was R1 — wrong on both counts, and the button the prompt named was the
+one button that would not do it. Triangle is now the whole answer: it is the
+free face button, it is where a "pick this up" prompt is looked for, and the
+prompt and the binding are read from the same place (`_useLead`). R1 went to the
+active item, because a button pressed in the middle of a firefight belongs on
+the shoulder over the trigger finger. The run summary took the touch pad, which
+is the one thing on the pad that is never pressed in a hurry.
 
 On menus, up and down move the selection and Cross confirms. **Inside a
 settings row, left and right change the value** rather than moving the
