@@ -43,6 +43,7 @@ import {
   SIGN_COLOR, ROW_Z,
 } from './totems.js';
 import { ACTIVE_ITEMS, ACTIVE_ITEM_KEYS } from './items.js';
+import { makeGlowTexture } from './effects.js';
 import { buildPixelIcon } from './pixelicons.js';
 
 // Where the pedestal stood. The walk is the point: the mutation totems are on
@@ -215,6 +216,26 @@ const LAMP_W = QM_COLS * QM_CELL_M + 0.17;
 const LAMP_H = QM_ROWS * QM_CELL_M + 0.17;
 const LAMP_GEOM = new THREE.PlaneGeometry(LAMP_W, LAMP_H);
 
+// THE REVEAL GLOW. Two sprites, both in the colour of whatever the reel landed
+// on: a tight one sitting down in the crate, and a wide one that reaches past
+// the walls so the light does not stop at the silhouette.
+//
+// SPRITES, NOT A LIGHT. Rule 1 at the top of this file - a second PointLight
+// recompiles every material in the game and then costs every fragment in the
+// scene forever, for one object that glows for ten seconds at a wave break.
+// Camera-facing quads spill past the box's edges on their own, which is the
+// whole of what a light would have been added for.
+//
+// Both reuse the memoised glow texture from effects.js, so neither is a texture
+// the game did not already have.
+const GLOW_SPEC = [
+  // Down in the box, and small enough to read as coming from INSIDE it.
+  { y: 0.45, scale: 1.5, opacity: 0.85 },
+  // The spill. Wide, faint, and centred a little higher so it breaks over the
+  // rim rather than out through the walls.
+  { y: 0.95, scale: 4.2, opacity: 0.34 },
+];
+
 // ---------------------------------------------------------------------------
 // THE RAINBOW
 // ---------------------------------------------------------------------------
@@ -380,10 +401,14 @@ const LID_GEOM = new THREE.BoxGeometry(BOX_W, LID_T, BOX_D);
 // yawed a quarter turn into place.
 const IN_W = BOX_W - WALL_T * 2;
 const IN_D = BOX_D - WALL_T * 2;
-const RIM_X_GEOM = new THREE.PlaneGeometry(IN_W, STRIP_H);
-const RIM_Z_GEOM = new THREE.PlaneGeometry(IN_D, STRIP_H);
-const LID_X_GEOM = new THREE.PlaneGeometry(BOX_W, LID_T * 0.62);
-const LID_Z_GEOM = new THREE.PlaneGeometry(BOX_D, LID_T * 0.62);
+// THE TOP EDGE, in two halves. The wall tops are a frame WALL_T wide and that
+// frame is the lit part; the band is the same light carried a little way down
+// the outside, so the edge still reads from standing height, where a surface
+// that only faces the sky is invisible. The footprint is square, so one
+// geometry serves all four sides of each.
+const TOP_X_GEOM = new THREE.PlaneGeometry(BOX_W, WALL_T);
+const TOP_Z_GEOM = new THREE.PlaneGeometry(WALL_T, BOX_D - WALL_T * 2);
+const EDGE_GEOM = new THREE.PlaneGeometry(BOX_W, STRIP_H);
 // The four walls and the floor of the hollow crate.
 // THE SIDE WALLS RUN THE FULL DEPTH and overlap the front and back pair at the
 // corners, rather than being inset between them. Two solids interpenetrating
@@ -547,45 +572,52 @@ export class MysteryBox {
 
     // ---- the light ------------------------------------------------------
     //
-    // Both strips share ONE material, so they are the same light at the same
-    // bearing at every instant - see the note by RAINBOW_GLSL.
+    // THE TOP EDGE OF THE CRATE IS THE LIT PART, and nothing else on it is.
+    //
+    // It was inside the box for a while, painted round the mouth, and that put
+    // the one continuous light on the object where it could only be seen by
+    // someone already standing over an open lid. On the edge it is what draws
+    // the box: a bright square line along the top of a black cube, from any
+    // angle and whether the lid is up or down.
+    //
+    // NO STRIP ON THE LID. There was one round its rim; two glowing rectangles
+    // a hand apart read as two objects, and the lid is the part that MOVES -
+    // outlining it made the moving half the loud half, when what wants drawing
+    // is the mouth the item comes out of.
     this.stripMat = rainbowMaterial(this.rain, null, true);
 
-    // THE BODY'S, ROUND THE INSIDE OF THE OPENING. Each panel faces INWARD -
-    // it is painted on the inner surface of its wall - so what the player sees
-    // is the mouth of the box lit from within.
-    const rimY = BOX_H - STRIP_H / 2 - 0.01;
-    const inZ = IN_D / 2 - STRIP_EPS;
-    const inX = IN_W / 2 - STRIP_EPS;
+    // The frame across the wall tops, facing the sky. The pairs are inset
+    // against each other rather than overlapping: this material is additive,
+    // and four bars crossing at the corners would put four bright knots on an
+    // otherwise even line.
+    const topY = BOX_H + STRIP_EPS;
     for (const dz of [1, -1]) {
-      const m = new THREE.Mesh(RIM_X_GEOM, this.stripMat);
-      m.position.set(0, rimY, dz * inZ);
-      // Facing in: the +z wall's skin looks back down -z, and vice versa.
-      m.rotation.y = dz > 0 ? Math.PI : 0;
+      const m = new THREE.Mesh(TOP_X_GEOM, this.stripMat);
+      m.position.set(0, topY, dz * (BOX_D - WALL_T) / 2);
+      m.rotation.x = -Math.PI / 2;
       this.group.add(m);
     }
     for (const dx of [1, -1]) {
-      const m = new THREE.Mesh(RIM_Z_GEOM, this.stripMat);
-      m.position.set(dx * inX, rimY, 0);
-      m.rotation.y = dx > 0 ? -Math.PI / 2 : Math.PI / 2;
+      const m = new THREE.Mesh(TOP_Z_GEOM, this.stripMat);
+      m.position.set(dx * (BOX_W - WALL_T) / 2, topY, 0);
+      m.rotation.x = -Math.PI / 2;
       this.group.add(m);
     }
 
-    // THE LID'S, ROUND ITS RIM, facing outward on all four edges - the one
-    // strip that is visible from ground level with the box shut, and the thing
-    // that draws the raised panel once it is open.
-    const lidY = LID_T / 2;
+    // ...and the same light turned down over the outside, so the edge is still
+    // an edge from the floor. Flush on the face - a skin, not a moulding.
+    const edgeY = BOX_H - STRIP_H / 2;
     for (const dz of [1, -1]) {
-      const m = new THREE.Mesh(LID_X_GEOM, this.stripMat);
-      m.position.set(0, lidY, -BOX_D / 2 + dz * (BOX_D / 2 + STRIP_EPS));
+      const m = new THREE.Mesh(EDGE_GEOM, this.stripMat);
+      m.position.set(0, edgeY, dz * (BOX_D / 2 + STRIP_EPS));
       m.rotation.y = dz > 0 ? 0 : Math.PI;
-      this.hinge.add(m);
+      this.group.add(m);
     }
     for (const dx of [1, -1]) {
-      const m = new THREE.Mesh(LID_Z_GEOM, this.stripMat);
-      m.position.set(dx * (BOX_W / 2 + STRIP_EPS), lidY, -BOX_D / 2);
+      const m = new THREE.Mesh(EDGE_GEOM, this.stripMat);
+      m.position.set(dx * (BOX_W / 2 + STRIP_EPS), edgeY, 0);
       m.rotation.y = dx > 0 ? Math.PI / 2 : -Math.PI / 2;
-      this.hinge.add(m);
+      this.group.add(m);
     }
   }
 
@@ -683,6 +715,24 @@ export class MysteryBox {
     this.innerFloor.rotation.x = -Math.PI / 2;
     this.innerFloor.position.y = WALL_T + 0.004;
     this.group.add(this.innerFloor);
+
+    // ---- the reveal glow --------------------------------------------------
+    const tex = makeGlowTexture();
+    this.glows = GLOW_SPEC.map((spec) => {
+      const mat = new THREE.SpriteMaterial({
+        map: tex, color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+        toneMapped: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.y = spec.y;
+      sprite.scale.setScalar(spec.scale);
+      // Off until something is actually revealed. An invisible sprite is culled
+      // before it rasterises; a transparent one is still drawn.
+      sprite.visible = false;
+      this.group.add(sprite);
+      return { sprite, mat, spec };
+    });
   }
 
   _buildPanel() {
@@ -990,16 +1040,28 @@ export class MysteryBox {
     // there is nothing to drift - they are the same uniforms.
     this.rain.uTime.value = time;
 
-    // WHILE AN ITEM IS REVEALED THE WHEEL HOLDS at that item's own colour, so
-    // the far side of the arena says what is being held from anywhere in it.
-    // Eased in and out over a fifth of a second rather than switched, so the
-    // reel landing is a sweep to one colour and the item sinking away is the
-    // rainbow coming back.
-    const hold = this.state === 'revealed' && this.showing;
+    // THE WHOLE INSTALLATION WEARS THE COLOUR OF THE ITEM UNDER THE REEL, from
+    // the moment the lid is open to the moment the box shuts again - both
+    // strips, the four lamps behind the question marks, the crate's inner
+    // floor, the glow and the ring on the ground.
+    //
+    // WHILE IT SPINS, TOO, and that is the point of it. The reel is already
+    // changing the icon and the name forty times; having the light change with
+    // them turns the box and the circle it stands in into part of the reel
+    // rather than scenery around one, and the whole far side of the arena
+    // flickers through the pool on the way to an answer. The rainbow is what
+    // the box wears when it is NOT holding an item - shut, opening, or shutting
+    // again afterwards.
+    const hold = (this.state === 'spinning' || this.state === 'revealed') && this.showing;
     if (hold) this._hsl.setHex(ACTIVE_ITEMS[this.showing].theme);
     this.rain.uSolid.value.copy(this._hsl);
+    // IN FAST, OUT SLOW. Going in has to beat the reel: at the top of a spin
+    // the ticks are sixty milliseconds apart, and a ramp slower than that would
+    // smear the first several items into one muddy wash instead of snapping
+    // between them. Coming out is a sweep back to the rainbow, and wants to be
+    // seen.
     const target = hold ? 1 : 0;
-    const step = Math.min(1, dt * 5);
+    const step = Math.min(1, dt * (hold ? 16 : 4));
     this.rain.uMix.value += (target - this.rain.uMix.value) * step;
 
     // THE CRATE ITSELF IS NOT LIT AT ALL. No emissive, and the speaker
@@ -1018,6 +1080,24 @@ export class MysteryBox {
     // brightening as it is opened is most of what sells a light being in there.
     this.innerFloor.material.uniforms.uOpacity.value =
       e * (0.10 + 0.30 * this.lid) * (0.85 + 0.15 * Math.sin(time * 1.9));
+
+    // THE GLOW, in the item's own colour, and lit for the SPIN as well as the
+    // reveal. It rides the same ramp that swings the rest of the lights over,
+    // so the light coming out of the box and the colour of everything else on
+    // it arrive together and leave together - one event, not two things that
+    // happen to coincide.
+    //
+    // DOWN A LITTLE WHILE IT SPINS. Every light is the same colour either way;
+    // this is the one thing that is not the same BRIGHTNESS, and it is what
+    // leaves the reel landing somewhere to go. At full strength throughout, the
+    // spin and the answer look identical and the moment it stops stops
+    // registering as a moment.
+    const glow = this.rain.uMix.value * (this.state === 'spinning' ? 0.55 : 1);
+    for (const gl of this.glows) {
+      gl.mat.opacity = gl.spec.opacity * e * glow * (0.86 + 0.14 * Math.sin(time * 2.6));
+      gl.mat.color.copy(this._hsl);
+      gl.sprite.visible = gl.mat.opacity > 0.004;
+    }
 
     driveMark(this.mark, e, floorY, time, this.pos.x);
 
