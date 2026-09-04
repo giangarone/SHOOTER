@@ -79,7 +79,10 @@ import {
   UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
 } from './upgrades.js';
 import { TotemArea, ARM_TIME_ITEM } from './totems.js';
-import { ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS } from './items.js';
+import {
+  ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS,
+  CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
+} from './items.js';
 import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
@@ -777,6 +780,13 @@ class Game {
     this._onOrb = (v) => this._collectOrb(v);
     // Set by _collectOrb, consumed once per frame by _updateMoney.
     this._creditsDirty = false;
+    // Item charge owed but not yet handed over, and the orb value still down
+    // there to carry it. Cleared by _startWaveCharge at the top of every wave;
+    // the defaults here only have to survive the frames before the first one.
+    this._pendingCharge = 0;
+    this._pendingValue = 0;
+    this._addCharge = 0;
+    this._bossChargeFrac = 1;
     // The field of view the orbs were last sized for. Aiming moves it every
     // frame of a raise - see the sync in _loop.
     this._fov = this.camera.fov;
@@ -2735,6 +2745,7 @@ class Game {
     this.wave++;
     this._cfg = waveConfig(this.wave);
     this.queue = this._cfg.queue;
+    this._startWaveCharge();
     this.spawnTimer = 0.8;
     this.waveState = 'active';
     this.bossFight = null;
@@ -2819,6 +2830,49 @@ class Game {
     this.ui.banner(BOSS_NAMES[key]);
     this.sfx.wave();
     this.rig.setEnraged(false);
+  }
+
+  // The per-wave bookkeeping, reset before a single enemy has spawned.
+  //
+  // THERE IS NO WAVE TOTAL TO WORK OUT ANY MORE. Charge is a flat rate on each
+  // enemy's own value (see CHARGE_PER_VALUE), so a wave is worth whatever its
+  // cast happens to add up to and a bigger wave is simply worth more. All this
+  // has to clear is what the LAST wave left behind.
+  _startWaveCharge() {
+    this._pendingCharge = 0;
+    this._pendingValue = 0;
+    this._addCharge = 0;
+    this._bossChargeFrac = 1;
+  }
+
+  // The boss's own share, bled off its health bar rather than paid at the kill.
+  // A boss is a minutes-long fight and the one enemy whose death is the end of
+  // the wave: paying it all at the end would leave the meter dead for the whole
+  // fight and then full with nothing left to use it on.
+  //
+  // Driven by the DROP in the bar, so a boss with several parts needs no
+  // special case and healing - if one ever gets it - simply pays nothing back.
+  _bossChargeDrain() {
+    const bf = this.bossFight;
+    if (!bf || !bf.parts.length) return;
+    const frac = this._bossHpFrac();
+    const fell = this._bossChargeFrac - frac;
+    if (fell <= 0) return;
+    this._bossChargeFrac = frac;
+    // The boss is worth its own value at the same flat rate as anything else -
+    // four to nine thousand, so forty to ninety points, which is what a late
+    // ground wave pays too. It is simply handed over as the bar falls rather
+    // than in one lump at the end: a boss is minutes long, and a meter that sat
+    // dead for all of it and filled on the last shot would be no use in the
+    // fight it was earned in.
+    //
+    // Driven by the DROP in the bar, so a boss with several parts needs no
+    // special case and healing - if one ever gets it - pays nothing back.
+    const def = ENEMY_TYPES[bf.key];
+    if (!def) return;
+    // Paid straight into the meter. There are no orbs to carry it - the boss
+    // does not drop its money until it dies - so the pickup vehicle cannot.
+    this.player.addItemCharge(def.value * CHARGE_PER_VALUE * fell);
   }
 
   // Live health across every part, for the bar.
@@ -3191,9 +3245,49 @@ class Game {
   // pick, or a hit taken while the orbs are still lying there, can never
   // retroactively revalue money that has already been dropped.
   _dropMoney(pos, amount, maxOrbs, spread, hold) {
-    if (amount <= 0) return;
+    if (amount <= 0) return 0;
     const paid = amount * this.player.mods.creditMult * this.flawlessMult();
     this.money.spawn(pos, paid, maxOrbs, spread, hold);
+    // The figure paid comes back out for the item charge, which is handed over
+    // as those orbs are collected and in proportion to what each one is worth -
+    // see _collectOrb. Nothing about the MONEY itself needs it.
+    return paid;
+  }
+
+  // WHAT A KILL IS WORTH, banked as the enemy dies and paid out as its orbs are
+  // picked up. The two halves are deliberately separate: banking is where the
+  // PRICE lives (a flat rate on the enemy's own value, with no multiplier able
+  // to reach it) and paying out is where the FEEL lives (the meter climbs as
+  // the lights stream in). Splitting them is what lets the charge be immune to
+  // Midas and to the flawless streak while still arriving on the pickup.
+  //
+  // `worth` is the enemy's value and `paid` is the money its orbs actually
+  // carry - two different numbers on purpose. The first sets how much charge is
+  // owed; the second only sets how it is spread over the pickups.
+  _bankKillCharge(worth, paid) {
+    if (!(worth > 0) || !(paid > 0)) return;
+    let points = worth * CHARGE_PER_VALUE;
+    // THE ONE CEILING IN THE SYSTEM. A boss wave's adds never stop arriving, so
+    // without this a player could leave the boss standing and farm the trickle
+    // - which is the stall this whole change exists to remove, wearing a hat.
+    // Every other wave has a fixed cast and so needs no limit at all.
+    if (this.bossFight) {
+      const room = BOSS_ADD_CHARGE_CAP - this._addCharge;
+      if (room <= 0) return;
+      points = Math.min(points, room);
+      this._addCharge += points;
+    }
+    this._pendingCharge += points;
+    this._pendingValue += paid;
+  }
+
+  // Everything still owed, handed over at once. Called when the wave ends, so
+  // charge can never be stranded on an orb that was never picked up - or on one
+  // the MAX_ORBS cap folded into its neighbour.
+  _flushItemCharge() {
+    if (this._pendingCharge > 0) this.player.addItemCharge(this._pendingCharge);
+    this._pendingCharge = 0;
+    this._pendingValue = 0;
   }
 
   // An orb reached the player. The single entry point for the balance going
@@ -3201,6 +3295,24 @@ class Game {
   _collectOrb(value) {
     this.credits += value;
     this._creditsDirty = true;
+    // THE ITEM METER MOVES HERE AND NOWHERE ELSE, in proportion to what this
+    // orb is WORTH rather than to it being one orb. The split rule can put a
+    // kill's money into anything from one orb to five (see Money.spawn), so
+    // paying per orb would hand a fat orb and a thin one the same charge; per
+    // value, a kill's charge arrives at the same rate whichever way it split.
+    //
+    // A bonus orb - a boss shower, a flawless payout - banked nothing when it
+    // dropped, so it can only pull forward charge the player had already
+    // earned. The total is fixed by the bank, and the wave-end flush pays out
+    // whatever the proportions left behind.
+    if (this._pendingValue > 0 && this._pendingCharge > 0) {
+      const slice = Math.min(
+        this._pendingCharge, this._pendingCharge * (value / this._pendingValue)
+      );
+      this.player.addItemCharge(slice);
+      this._pendingCharge -= slice;
+      this._pendingValue = Math.max(0, this._pendingValue - value);
+    }
     // BLOOD FROM STONE. A point per ORB and not per credit: the denomination
     // of an orb is an implementation detail of how a payout is split up, and
     // healing by the value would make a boss shower a full heal several times
@@ -4334,6 +4446,7 @@ class Game {
       if (this.bossFight) {
         this._updateBossAdds(dt);
         this._bossBleed();
+        this._bossChargeDrain();
       }
 
       // A boss wave ends when the BOSS is dead, not when the field is clear -
@@ -4358,6 +4471,9 @@ class Game {
         // health crate the player never had a safe second to walk over.
         this.money.vacuum();
         this._vacuumPickups();
+        // And with it everything the item is still owed, so a wave always pays
+        // its full budget whether or not every orb was walked over.
+        this._flushItemCharge();
         let msg = 'WAVE ' + this.wave + ' CLEARED';
         if (this.lastPerfect) {
           // ONE MORE CLEAN WAVE ON THE STREAK, and it is banked BEFORE the
@@ -5288,7 +5404,18 @@ class Game {
       // A flat bounty wins over the value-derived figure where one is set -
       // see Enemy.bounty. The melee double rides on both.
       const bounty = e.bounty !== null ? e.bounty : e.value * CREDITS_PER_VALUE;
-      this._dropMoney(e.pos, bounty * meleeMult);
+      const paid = this._dropMoney(e.pos, bounty * meleeMult);
+      // WHAT THE ITEM IS OWED FOR IT, held against the orbs just thrown.
+      // Deliberately read off `value` and not off the bounty: the melee double
+      // and the flawless streak are MONEY, and money is not what charges an
+      // item. A split child has a value of zero and so is worth nothing here,
+      // which is the right answer - it is a fragment of a kill already paid
+      // for, and its orb is the cheapest one in the game.
+      //
+      // A BOSS PART PAYS NOTHING HERE. Its value was already handed over as its
+      // health bar fell - see _bossChargeDrain - and paying again at the death
+      // would be paying twice for the same fight.
+      if (!e.boss) this._bankKillCharge(e.value, paid);
       this.player.onKill(this.time);
       // BODY COUNT's stack, and anything else that ever counts kills. Walked
       // rather than dispatched - see RunningItems.onKill.
@@ -6026,7 +6153,7 @@ class Game {
     const item = this.player.item ? ACTIVE_ITEMS[this.player.item] : null;
     this.ui.setItem(
       this.player.item, item,
-      item ? Math.min(1, this.player.itemCharge / item.cooldown) : 0
+      item ? Math.min(1, this.player.itemCharge / item.charge) : 0
     );
     // AEGIS holds its frame for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest

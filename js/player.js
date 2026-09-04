@@ -711,9 +711,11 @@ export class Player {
 
     // THE ACTIVE ITEM SLOT. One at a time, by id into ACTIVE_ITEMS
     // (js/items.js), or null - a run starts carrying nothing. `itemCharge` is
-    // seconds banked toward the item's cooldown; it is filled to the top the
-    // moment an item is taken, so a pedestal never hands over something the
-    // player has to wait to use.
+    // points banked toward the item's cost; it is filled to the top the moment
+    // an item is taken, so a pedestal never hands over something the player has
+    // to wait to use. It is NOT cleared between waves - a cost above WAVE_CHARGE
+    // is meant to carry, which is the only way an item can cost more than one
+    // wave is worth.
     this.item = null;
     this.itemCharge = 0;
     // One-shot, read and cleared by main.js on the frame the bar fills - the
@@ -955,7 +957,7 @@ export class Player {
     // Double Jump state; `jumpsLeft` refills on landing. The DASH kept its
     // motion but lost its bookkeeping: it is an active item now (BLINK DRIVE,
     // js/items.js) and the item's charge bar IS its cooldown, so nothing here
-    // counts charges any more.
+    // counts charges any more. That bar fills on wave progress, not on time.
     this.jumpsLeft = 0;
     this.dashStart = 0;
     this.dashEnd = 0;
@@ -1170,14 +1172,14 @@ export class Player {
   // is a contract waiting to be got wrong.
   giveItem(id) {
     this.item = id;
-    this.itemCharge = ACTIVE_ITEMS[id].cooldown;
+    this.itemCharge = ACTIVE_ITEMS[id].charge;
     this.itemReadyFx = false;
   }
 
   // Whether the carried item can be fired right now. Nothing carried is not
   // ready, so every caller can ask this one question.
   get itemReady() {
-    return !!this.item && this.itemCharge >= ACTIVE_ITEMS[this.item].cooldown;
+    return !!this.item && this.itemCharge >= ACTIVE_ITEMS[this.item].charge;
   }
 
   // Spends the charge. The EFFECT is not here - it lives on the item's own
@@ -1185,6 +1187,23 @@ export class Player {
   spendItem() {
     this.itemCharge = 0;
     this.itemReadyFx = false;
+  }
+
+  // Banks charge points toward the carried item. THE ONLY WAY THE METER MOVES,
+  // and main.js calls it from one place - the orb pickup - so what fills the
+  // bar is always something the player went and got.
+  //
+  // Carrying nothing is not an error and is not saved for later: charge belongs
+  // to an item, and a player holding no item is simply not earning any. The
+  // clamp is at the top only, so an item already full silently drops the rest -
+  // the alternative is a hidden overflow that makes the next charge instant.
+  addItemCharge(points) {
+    if (!this.item || !(points > 0)) return;
+    const was = this.itemReady;
+    this.itemCharge = Math.min(
+      ACTIVE_ITEMS[this.item].charge, this.itemCharge + points
+    );
+    if (!was && this.itemReady) this.itemReadyFx = true;
   }
 
 
@@ -1600,18 +1619,14 @@ export class Player {
       this.shieldEnd = 0;
     }
 
-    // THE ACTIVE ITEM CHARGES ON THE WAVE'S CLOCK AND NOTHING ELSE. Gated on
-    // `combat` for exactly the reason ammo regeneration below is: the wave
-    // break has no timer on it, so an item that filled there would be free to
-    // anyone willing to stand still, and standing still would be the correct
-    // play. Note that this gates the CHARGE and not the USE - a full item can
-    // be fired in the shop, it simply does not come back until the wave does.
-    if (combat && this.item && !this.itemReady) {
-      this.itemCharge = Math.min(
-        ACTIVE_ITEMS[this.item].cooldown, this.itemCharge + dt
-      );
-      if (this.itemReady) this.itemReadyFx = true;
-    }
+    // THE ACTIVE ITEM DOES NOT CHARGE HERE ANY MORE, and there is no longer any
+    // per-frame work to do for it at all. It used to fill at one point per
+    // second of `combat` time, which paid the player for taking longer over a
+    // wave - stand off the last enemy and a sixty-point item came back free.
+    // Charge is bought with dead enemies now - a flat rate on each one's own
+    // value, banked by main.js as they die and paid into the meter as their
+    // orbs are collected: see CHARGE_PER_VALUE in items.js and addItemCharge
+    // above.
 
     // Ammo Fabricator. Accumulated as a float and spent in whole rounds, so a
     // sub-1-round-per-second rate still pays out instead of truncating to

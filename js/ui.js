@@ -285,7 +285,7 @@ export class UI {
         // element it is applied to, and a declaration on the element beats a
         // value inherited from an ancestor - so setting this on #item-box would
         // be silently overridden by the class's own default of twenty.
-        const cells = itemCells(def.cooldown);
+        const cells = itemCells(def.charge);
         this.itemBarBg.style.setProperty('--cells', String(cells));
         // The gap has to come down with the cell count or it eats the cells: at
         // twelve segments in 108px a 3px gap leaves six pixels lit, and at three
@@ -308,7 +308,7 @@ export class UI {
     // a unit of charge and a unit of charge is not banked until it has passed.
     // Rounding would light the last cell before the item could be fired, which
     // is the one lie a charge meter must not tell.
-    const n = itemCells(def.cooldown);
+    const n = itemCells(def.charge);
     const lit = Math.floor(frac * n) / n;
     if (this._c.itemFrac !== lit) {
       this._c.itemFrac = lit;

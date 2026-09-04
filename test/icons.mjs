@@ -108,19 +108,19 @@ ok('every upgrade has a real rarity', badRarity.length === 0, badRarity.join(', 
 // An item with no `use` is a button that does nothing, which the game has no
 // way to notice: tryItem() would spend the charge and call undefined.
 const badItems = Object.keys(ACTIVE_ITEMS).filter(
-  (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].cooldown > 0)
+  (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].charge > 0)
 );
-ok('every active item has a use and a cooldown', badItems.length === 0, badItems.join(', '));
+ok('every active item has a use and a charge cost', badItems.length === 0, badItems.join(', '));
 
 // THE CHARGE METER'S SEGMENT COUNT. Pure arithmetic, so it belongs here rather
-// than behind a browser - and it has to hold for cooldowns nothing in the pool
+// than behind a browser - and it has to hold for costs nothing in the pool
 // currently uses, because the next item added is exactly when this would break.
 //
-// The contract: never more than twelve, never fewer than one, one per second at
-// or under twelve, and every segment worth the same slice of the cooldown so
-// none of them is ever part lit. That last one is what the awkward values are
-// here for: 13, 25, 27, 33 and 40 do not divide into twelve, and the meter has
-// to stay whole anyway.
+// The contract: never more than twelve, never fewer than one, one per point at
+// or under twelve, and every segment worth the same slice of the cost so none
+// of them is ever part lit. That last one is what the awkward values are here
+// for: 13, 25, 27, 33 and 40 do not divide into twelve, and the meter has to
+// stay whole anyway.
 const cellCases = [
   [1, 1], [2, 2], [3, 3], [10, 10], [12, 12],
   [13, 12], [20, 12], [25, 12], [27, 12], [33, 12], [40, 12], [120, 12],
@@ -128,9 +128,9 @@ const cellCases = [
 const badCells = cellCases.filter(([cd, want]) => itemCells(cd) !== want);
 ok('the charge meter divides into the right number of segments',
   badCells.length === 0,
-  badCells.map(([cd, want]) => `${cd}s -> ${itemCells(cd)}, want ${want}`).join(', '));
+  badCells.map(([cd, want]) => `${cd} -> ${itemCells(cd)}, want ${want}`).join(', '));
 
-// EVERY SEGMENT WHOLE, at every instant of every cooldown. Walked in tenths
+// EVERY SEGMENT WHOLE, at every point of every cost. Walked in tenths
 // because the failure this catches is a fractional fill, and a fractional fill
 // only shows up between the round numbers.
 const partial = [];

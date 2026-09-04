@@ -111,7 +111,7 @@ const NOTE = 0;
  * same one it always was: is this better than what I am carrying.
  *
  * @property {string} name      shown on the box's card and in the HUD slot
- * @property {number} cooldown  seconds of WAVE TIME to refill, and the bar
+ * @property {number} charge    points of WAVE PROGRESS to refill, and the bar
  * @property {number} theme     colour, following THEME's rule: what it DOES
  * @property {Array}  effects   the box's readout, [text, sign] per line
  * @property {Function} use     (game, s) => void, run once when the button lands
@@ -137,7 +137,7 @@ const NOTE = 0;
 export const ACTIVE_ITEMS = {
   itemHeal: {
     name: 'TRAUMA KIT',
-    cooldown: 20,
+    charge: 20,
     theme: THEME.vitality,
     // NO OVERHEAL, unlike the health pickup, which goes 25 over the cap. A
     // pickup has to be walked to across a live arena and this is a button, so
@@ -152,7 +152,7 @@ export const ACTIVE_ITEMS = {
   },
   itemFreeze: {
     name: 'CRYO PULSE',
-    cooldown: 10,
+    charge: 10,
     theme: THEME.ice,
     // The whole floor at once, through the same per-enemy status a cryo round
     // applies - which means bosses downgrade it to a slow through the
@@ -160,7 +160,7 @@ export const ACTIVE_ITEMS = {
     // the correct answer and not a special case: an item that could stop a boss
     // dead for two seconds every ten would be the only boss strategy there is.
     //
-    // The cheapest cooldown in the pool because it does no damage. It buys
+    // The cheapest item in the pool because it does no damage. It buys
     // distance, and distance is what the player then has to use - and the
     // player finds that out by carrying it, not by reading it.
     effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 2s', NOTE]],
@@ -171,7 +171,7 @@ export const ACTIVE_ITEMS = {
   },
   itemRage: {
     name: 'OVERDRIVE',
-    cooldown: 20,
+    charge: 20,
     theme: THEME.damage,
     // Rides damageBoostEnd, the same field the RAGE pickup uses, so it expires
     // through machinery that already exists and shows in the buff strip without
@@ -196,7 +196,7 @@ export const ACTIVE_ITEMS = {
   },
   itemGuard: {
     name: 'AEGIS',
-    cooldown: 20,
+    charge: 20,
     theme: THEME.holy,
     // invulnEnd is read as the FIRST line of both damage sinks in main.js, so
     // this needs no new guard anywhere - but both of those sinks return in
@@ -213,7 +213,7 @@ export const ACTIVE_ITEMS = {
   },
   itemDash: {
     name: 'BLINK DRIVE',
-    cooldown: 3,
+    charge: 3,
     theme: THEME.surge,
     // THE DASH USED TO BE A MUTATION. Double Dash held two charges on a 2.5s
     // timer and was fired by double-tapping W, which is a binding that exists
@@ -253,7 +253,7 @@ export const ACTIVE_ITEMS = {
 
   itemPurify: {
     name: 'WHITE CELL',
-    cooldown: 12,
+    charge: 12,
     theme: THEME.antidote,
     // THE CLEANSE ALONE IS NOT THE ITEM. Every status in the game arrives from
     // something that is still there - a lava patch under your feet, a gas
@@ -278,7 +278,7 @@ export const ACTIVE_ITEMS = {
 
   itemInferno: {
     name: 'BRIMSTONE',
-    cooldown: 12,
+    charge: 12,
     theme: THEME.fire,
     // A FIXED RATE, not the player's own burn. Incendiary may not be owned -
     // most runs it is not - and an item that did nothing at all until you
@@ -313,7 +313,7 @@ export const ACTIVE_ITEMS = {
 
   itemArc: {
     name: "JACOB'S LADDER",
-    cooldown: 12,
+    charge: 12,
     theme: THEME.electric,
     // A CHAIN, NOT A BURST, and the difference is the whole drawing: the bolt
     // walks from the player through five bodies in order, so what the item did
@@ -345,7 +345,7 @@ export const ACTIVE_ITEMS = {
 
   itemMercy: {
     name: 'LAST RITES',
-    cooldown: 24,
+    charge: 24,
     theme: THEME.executioner,
     // FINISHES, IT DOES NOT KILL. Thirty percent is low enough that this is
     // never the thing that won the fight - the player already did the work -
@@ -370,7 +370,7 @@ export const ACTIVE_ITEMS = {
 
   itemQuake: {
     name: 'TECTONIC',
-    cooldown: 16,
+    charge: 16,
     theme: THEME.impact,
     // THE FORCE IS THE POINT AND THE DAMAGE IS THE RECEIPT. Forty is not much;
     // nine metres of everything leaving at once is a great deal, and what the
@@ -404,7 +404,7 @@ export const ACTIVE_ITEMS = {
 
   itemMartyr: {
     name: 'MARTYR',
-    cooldown: 45,
+    charge: 45,
     theme: THEME.blast,
     // THE BIGGEST NUMBER IN THE POOL, AND THE ONLY ONE THAT COSTS EVERYTHING.
     // It is not a nuke with a downside: it is a trade the player makes at ten
@@ -432,7 +432,7 @@ export const ACTIVE_ITEMS = {
 
   itemMeteor: {
     name: 'FALLING SKY',
-    cooldown: 36,
+    charge: 36,
     theme: THEME.ember,
     // TWELVE ROCKS OVER THREE SECONDS, PLACED AT RANDOM. The randomness is the
     // item: it is the one thing in the pool the player does not aim, so what
@@ -471,7 +471,7 @@ export const ACTIVE_ITEMS = {
 
   itemRate: {
     name: 'RED LINE',
-    cooldown: 18,
+    charge: 18,
     theme: THEME.rate,
     // Rides fireRateMult and fireRateBoostEnd - the fire-rate PICKUP's own two
     // fields - so it expires through machinery that already exists and shows
@@ -498,7 +498,7 @@ export const ACTIVE_ITEMS = {
 
   itemFrenzy: {
     name: 'RED MIST',
-    cooldown: 24,
+    charge: 24,
     theme: THEME.rage,
     // THE DRAWBACK IS THE FEATURE. Three times damage for five seconds is the
     // hardest hit in the pool, and taking double while it runs is what stops
@@ -527,7 +527,7 @@ export const ACTIVE_ITEMS = {
 
   itemTally: {
     name: 'BODY COUNT',
-    cooldown: 32,
+    charge: 32,
     theme: THEME.carnage,
     // AN EMPTY BUTTON THAT THE PLAYER FILLS. Pressed into an empty room it
     // does literally nothing, and pressed into a crowd it is the biggest
@@ -562,7 +562,7 @@ export const ACTIVE_ITEMS = {
 
   itemPact: {
     name: 'BLOOD TAX',
-    cooldown: 24,
+    charge: 24,
     theme: THEME.pact,
     // PAID UP FRONT, IN THE ONE CURRENCY THE PLAYER CANNOT FARM. It is the
     // same trade RED MIST offers with the terms reversed: that one is cheap
@@ -585,7 +585,7 @@ export const ACTIVE_ITEMS = {
 
   itemHumours: {
     name: 'FOUR HUMOURS',
-    cooldown: 24,
+    charge: 24,
     theme: THEME.affliction,
     // EVERY ELEMENT IN THE GAME, ONE ROUND AT A TIME. The point is not the
     // damage - each of the four is weaker than the mutation that owns it - it
@@ -608,7 +608,7 @@ export const ACTIVE_ITEMS = {
 
   itemHoming: {
     name: 'BIRD DOG',
-    cooldown: 14,
+    charge: 14,
     theme: THEME.precision,
     // SEEKER, ON A CLOCK. It reads the same _homeShot path the mutation does -
     // the same cone, the same line-of-sight check, the same bent tracer - so a
@@ -630,7 +630,7 @@ export const ACTIVE_ITEMS = {
 
   itemLeech: {
     name: 'HAEMOPHAGE',
-    cooldown: 16,
+    charge: 16,
     theme: THEME.blood,
     // TEN SHOTS THAT HIT, not ten trigger pulls - a magazine emptied into a
     // wall must not be a full heal, and requiring the hit is also what makes
@@ -669,7 +669,7 @@ export const ACTIVE_ITEMS = {
 
   itemStone: {
     name: 'BLOOD FROM STONE',
-    cooldown: 30,
+    charge: 30,
     theme: THEME.blood,
     // MONEY BECOMES MEDICINE, and only while it is running - which turns a
     // wave's payout into a heal exactly once, and makes the press a question
@@ -694,7 +694,7 @@ export const ACTIVE_ITEMS = {
 
   itemLastStand: {
     name: 'WATERLINE',
-    cooldown: 10,
+    charge: 10,
     theme: THEME.vitality,
     // A FLOOR, NOT A HEAL, and it is worth less than TRAUMA KIT at every
     // health total above twenty-five missing - which is most of them. What it
@@ -723,7 +723,7 @@ export const ACTIVE_ITEMS = {
 
   itemRegen: {
     name: 'SUTURE ENGINE',
-    cooldown: 30,
+    charge: 30,
     theme: THEME.vitality,
     // FORTY HEALTH THAT ARRIVES SLOWLY, against TRAUMA KIT's twenty-five that
     // arrives now. That is the whole comparison and it is a real one: this is
@@ -753,7 +753,7 @@ export const ACTIVE_ITEMS = {
 
   itemDonate: {
     name: 'OPEN VEIN',
-    cooldown: 30,
+    charge: 30,
     theme: THEME.blood,
     // HEALTH INTO AMMUNITION, at a rate that only looks bad. A full reserve is
     // three hundred rounds and there is no other way to buy them mid-wave: the
@@ -778,7 +778,7 @@ export const ACTIVE_ITEMS = {
 
   itemRoulette: {
     name: 'SIX CHAMBERS',
-    cooldown: 36,
+    charge: 36,
     theme: THEME.gamble,
     // THE ONLY ITEM IN THE POOL THE PLAYER CANNOT PLAN AROUND. Fifty-fifty
     // between a full heal and one health, which is worth pressing at almost
@@ -834,7 +834,7 @@ export const ACTIVE_ITEMS = {
 
   itemGraft: {
     name: 'GRAFT',
-    cooldown: 60,
+    charge: 60,
     theme: THEME.temper,
     // THE ONLY ITEM THAT LEAVES A MARK ON THE RUN. Everything else in the pool
     // is spent the moment it is pressed; this one is three health that is
@@ -863,7 +863,7 @@ export const ACTIVE_ITEMS = {
 
   itemBoot: {
     name: 'BOOTSTRAP',
-    cooldown: 10,
+    charge: 10,
     theme: THEME.leap,
     // STRAIGHT UP, AND THAT IS THE WHOLE DESIGN. BLINK DRIVE goes forward,
     // which is useless when what is wrong is that you are surrounded; this
@@ -897,7 +897,7 @@ export const ACTIVE_ITEMS = {
 
   itemBlink: {
     name: 'COLD SPOT',
-    cooldown: 24,
+    charge: 24,
     theme: THEME.poise,
     // NOT A TELEPORT THE PLAYER AIMS. They press it because they are in
     // trouble, and being asked to pick a destination at that moment is being
@@ -962,7 +962,7 @@ export const ACTIVE_ITEMS = {
 
   itemCharge: {
     name: 'BONESAW',
-    cooldown: 4,
+    charge: 4,
     theme: THEME.surge,
     // THE SAME DASH BLINK DRIVE FIRES, with a hitbox on it. Deliberately the
     // same movement - the same envelope, the same distance, the same
@@ -1006,7 +1006,7 @@ export const ACTIVE_ITEMS = {
 
   itemLance: {
     name: 'LANCE',
-    cooldown: 8,
+    charge: 8,
     theme: THEME.pierce,
     // THIRTY ROUNDS AT ONCE, AS ONE ROUND. It is the magazine spent in a
     // straight line, which is why it costs the ammunition rather than being
@@ -1037,7 +1037,7 @@ export const ACTIVE_ITEMS = {
 
   itemTurret: {
     name: 'LITTLE BROTHER',
-    cooldown: 20,
+    charge: 20,
     theme: THEME.feed,
     // FIRE FROM SOMEWHERE THE PLAYER IS NOT. That is the only thing in this
     // game a second gun can buy, and it is worth a slot: a turret behind the
@@ -1066,7 +1066,7 @@ export const ACTIVE_ITEMS = {
 
   itemMine: {
     name: 'WELCOME MAT',
-    cooldown: 8,
+    charge: 8,
     theme: THEME.shrapnel,
     // THE PLAYER CANNOT SET IT OFF AND CAN STILL BE KILLED BY IT. Both halves
     // were asked for and both are right: the trigger belongs to the enemy, and
@@ -1094,7 +1094,7 @@ export const ACTIVE_ITEMS = {
 
   itemBomb: {
     name: 'SHORT FUSE',
-    cooldown: 12,
+    charge: 12,
     theme: THEME.blast,
     // THREE SECONDS IS THE ITEM. Every other blast in the pool happens at the
     // moment it is asked for; this one happens where the fight is GOING to be,
@@ -1116,7 +1116,7 @@ export const ACTIVE_ITEMS = {
 
   itemWall: {
     name: 'FIREBREAK',
-    cooldown: 12,
+    charge: 12,
     theme: THEME.hellfire,
     // A LINE, WHERE EVERYTHING ELSE IS A CIRCLE. The answer to every radial
     // effect in this game is the same - back off - and the one item that asks
@@ -1144,7 +1144,7 @@ export const ACTIVE_ITEMS = {
 
   itemSwarm: {
     name: 'APIARY',
-    cooldown: 45,
+    charge: 45,
     theme: THEME.salvage,
     // FIVE SMALL THINGS RATHER THAN ONE BIG ONE. A single strong ally is a
     // second turret; five weak ones are a CLOUD, and a cloud does the one
@@ -1168,7 +1168,7 @@ export const ACTIVE_ITEMS = {
 
   itemHole: {
     name: 'EVENT HORIZON',
-    cooldown: 28,
+    charge: 28,
     theme: THEME.gravity,
     // THROWN, NOT PLACED. The orb flies flat and fast along the line of sight,
     // so where the hole opens is a shot the player took rather than a circle
@@ -1197,7 +1197,7 @@ export const ACTIVE_ITEMS = {
 
   itemLodestar: {
     name: 'LODESTAR',
-    cooldown: 16,
+    charge: 16,
     theme: THEME.lodestone,
     // THE WAVE-CLEAR SWEEP, ON DEMAND. Every orb and every pickup in the arena
     // comes in at once - the same sweep a cleared wave already does for free,
@@ -1224,7 +1224,7 @@ export const ACTIVE_ITEMS = {
 
   itemReroll: {
     name: 'SECOND OPINION',
-    cooldown: 40,
+    charge: 40,
     theme: THEME.charge,
     // THE ONLY ITEM IN THE POOL THAT DOES NOTHING IN A FIGHT, and it is priced
     // as one: two rerolls, not one, spent at either console. What it is really
@@ -1384,6 +1384,50 @@ export class RunningItems {
   }
 }
 
+// WHAT A POINT OF ITEM CHARGE COSTS, in enemy value.
+//
+// ONE POINT IS ONE BASIC ENEMY. A chaser is worth 100 value, so at a hundredth
+// of a point per value it pays exactly 1. That is the whole unit: an item's
+// `charge` above is HOW MANY CHASERS IT COSTS. A three-point dash is three of
+// them, the sixty-point items are sixty, and a tank at 300 value pays three at
+// once because it is three chasers' worth of wave.
+//
+// ITEMS USED TO CHARGE ON THE CLOCK, one point per second of wave time, and
+// that paid the player for taking longer: kiting the last enemy of a wave was
+// the cheapest way to refill the dearest item in the pool. It is the same
+// defect the bounty had when the kill chain multiplied it - see the note at the
+// kill sweep in main.js - and it has the same answer. Charge is bought with
+// DEAD ENEMIES now, and the only way to get more is to kill more.
+//
+// A FLAT RATE, DELIBERATELY, rather than a share of the wave. A share would
+// mean the same chaser paid twelve times more on wave one than on wave
+// twenty-six, when the wave-twenty-six one has five and a half times the health
+// - less charge for strictly more work, which is backwards. The cost of a thing
+// should not depend on where in the run you meet it.
+//
+// SO LATER WAVES DO GRANT MORE, and that is the intended trade: wave 1 is six
+// enemies (~6 points) and wave 26 is thirty-five (~71). More enemies on the
+// floor is exactly when a crowd-clear should come back more often. It is also
+// bounded - `value` never scales with the wave and the ground count caps at 34
+// - so it plateaus around wave 26 instead of running away.
+//
+// READ OFF `value` AND NEVER OFF THE MONEY DROPPED. value is a flat per-type
+// figure with no multipliers on it, so Midas, the flawless streak and the melee
+// double cannot reach the charge. Paying on the credits actually collected
+// would have turned all three into cooldown reduction, and made the richest
+// runs - the ones least in need of help - the fastest-charging ones.
+export const CHARGE_PER_VALUE = 0.01;
+
+// The most charge a boss wave's adds can be worth between them.
+//
+// THE ONE PLACE A FLAT RATE NEEDS A CEILING. Every other wave has a fixed cast,
+// so killing more is simply not possible; a boss wave trickles adds for as long
+// as the boss is alive, which makes "leave it standing and farm" a strategy
+// again unless something stops it. Set at roughly what the nominal sixteen adds
+// a boss wave is reckoned to be worth would pay, so a player who fights the
+// wave normally never touches it and a player who stalls gets nothing for it.
+export const BOSS_ADD_CHARGE_CAP = 24;
+
 // The most segments the HUD meter is ever cut into.
 //
 // TWELVE, because past that the cells are thinner than the gaps between them
@@ -1397,24 +1441,28 @@ export const ITEM_BAR_MAX_CELLS = 12;
  *
  * ONE RULE, TWO BEHAVIOURS, and the second falls out of the first:
  *
- *   - Twelve seconds or less: one segment per second. A three-second item wears
+ *   - Twelve points or less: one segment per point. A three-point item wears
  *     three fat blocks, so the segment WIDTH is itself a reading - the bar is
- *     always the same length, and a wide cell means a short cooldown.
- *   - Longer than twelve: twelve segments, each worth `cooldown / 12` seconds.
+ *     always the same length, and a wide cell means a cheap item.
+ *   - Longer than twelve: twelve segments, each worth `charge / 12` points.
  *
  * The caller lights `floor(frac * cells)` of them, which is what makes both
  * cases exact and keeps every segment whole. Under twelve that reduces to
- * `floor(secondsCharged)` - literally one cell per elapsed second - and over it
- * the cells are evenly spaced by construction at a rational fraction of the
- * cooldown, so a 13s, 25s, 27s, 33s or 40s item divides as evenly as twelve
- * segments can divide anything. Nothing here needs the cooldown to be a
- * multiple of twelve, or even to be a whole number of seconds.
+ * `floor(pointsBanked)` - literally one cell per point earned - and over it the
+ * cells are evenly spaced by construction at a rational fraction of the cost,
+ * so a 13, 25, 27, 33 or 40 point item divides as evenly as twelve segments can
+ * divide anything. Nothing here needs the cost to be a multiple of twelve, or
+ * even to be a whole number of points.
  *
- * @param {number} cooldown  seconds to charge
+ * THE NUMBERS DID NOT MOVE WHEN THE UNIT DID. This used to be seconds, and the
+ * costs are the same thirty-seven figures they always were - what changed is
+ * what fills them, so the segmenting is untouched along with the ratios.
+ *
+ * @param {number} charge  points to fill
  * @returns {number} 1..ITEM_BAR_MAX_CELLS
  */
-export function itemCells(cooldown) {
-  return Math.max(1, Math.min(ITEM_BAR_MAX_CELLS, Math.ceil(cooldown)));
+export function itemCells(charge) {
+  return Math.max(1, Math.min(ITEM_BAR_MAX_CELLS, Math.ceil(charge)));
 }
 
 /**

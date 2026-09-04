@@ -161,7 +161,7 @@ try {
     P.item = null;
     g._grabBox();
     out.carried = P.item === firstId;
-    out.arrivesCharged = P.itemReady && P.itemCharge === ITEMS[firstId].cooldown;
+    out.arrivesCharged = P.itemReady && P.itemCharge === ITEMS[firstId].charge;
     // Taking it does NOT end the wave break - the mutation pick still does.
     out.totemsStillUp = g.totemArea.active && !g.totemArea.claimed;
     // ...and unlike the pedestal it replaced, the BOX DOES NOT GO AWAY. It is
@@ -277,28 +277,43 @@ try {
     out.oneSlotOnly = !!P.item && typeof P.item === 'string';
     out.replacementCharged = P.itemReady;
 
-    // --- THE CHARGE IS PAID IN WAVE TIME AND NOWHERE ELSE ---
+    // --- THE CHARGE IS PAID IN WAVE PROGRESS AND NOWHERE ELSE ---
+    // TIME BUYS NOTHING NOW, in the shop OR in the fight. That second half is
+    // the point of the whole system: an item that filled on the clock paid the
+    // player for taking longer over a wave, so standing off the last enemy was
+    // the cheapest refill in the game.
     const runFrames = (n, combat) => {
       for (let i = 0; i < n; i++) {
         g.time += 0.05;
         P.update(0.05, g.input, g.arena.obstacles, g.time, combat);
       }
     };
-    P.giveItem('itemHeal');   // 20s, the longest in the pool
+    P.giveItem('itemHeal');   // 20 points, among the dearest in the pool
     P.itemCharge = 0;
     runFrames(40, false);     // two seconds of SHOP
     out.shopChargesNothing = P.itemCharge === 0;
-    runFrames(40, true);      // two seconds of WAVE
-    out.waveCharges = P.itemCharge > 1.9 && P.itemCharge < 2.1;
-    // The ready flag is one-shot: set on the frame it fills, and never again.
+    runFrames(400, true);     // twenty seconds of WAVE - enough to have filled
+    out.timeChargesNothing = P.itemCharge === 0;
+    // Points are the only thing that moves it.
+    P.addItemCharge(2);
+    out.pointsCharge = P.itemCharge === 2;
+    // The ready flag is one-shot: set on the call it fills, and never again.
     P.itemCharge = 0;
     P.itemReadyFx = false;
-    runFrames(410, true);
+    P.addItemCharge(19.5);
+    out.notReadyEarly = !P.itemReadyFx && !P.itemReady;
+    P.addItemCharge(5);
     out.readyFired = P.itemReadyFx;
+    // The overflow is dropped rather than banked - see addItemCharge.
     out.chargeCaps = P.itemCharge === 20;
     P.itemReadyFx = false;
-    runFrames(20, true);
+    P.addItemCharge(5);
     out.readyFiresOnce = !P.itemReadyFx;
+    // An empty slot swallows charge instead of saving it for the next item.
+    P.item = null;
+    P.itemCharge = 0;
+    P.addItemCharge(10);
+    out.noSlotNoCharge = P.itemCharge === 0;
 
     // --- FIRING IT ---
     g.state = 'playing';
@@ -491,7 +506,7 @@ try {
     // The cooldowns as the pool actually states them, so the segment check
     // below can test itemCells()'s RULE rather than a snapshot of the table.
     out.cooldowns = Object.fromEntries(
-      Object.entries(ITEMS).map(([k, d]) => [k, d.cooldown])
+      Object.entries(ITEMS).map(([k, d]) => [k, d.charge])
     );
     for (const [key, def] of Object.entries(ITEMS)) {
       P.giveItem(key);
@@ -504,7 +519,7 @@ try {
       // Walk the whole cooldown and check the bar only ever stops on a cell
       // boundary. This is the rendered fill, not the rule behind it: a rounding
       // slip anywhere between the charge and the transform shows up here.
-      for (let c = 0; c <= def.cooldown; c += 0.1) {
+      for (let c = 0; c <= def.charge; c += 0.1) {
         P.itemCharge = c;
         g._updateHud();
         const v = parseFloat(
@@ -519,10 +534,10 @@ try {
           break;
         }
       }
-      P.itemCharge = def.cooldown;
+      P.itemCharge = def.charge;
       // Every string this item can put on screen, against the number it must
       // never contain.
-      const secs = String(def.cooldown) + 's';
+      const secs = String(def.charge) + 's';
       const strings = [
         ...def.effects.map((e) => e[0]),
         def.name,
@@ -677,7 +692,7 @@ try {
 
     // ---- and the cooldowns are what the pool says ----
     out.cooldowns = Object.fromEntries(
-      Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.cooldown])
+      Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.charge])
     );
 
     // ======================================================================
@@ -1125,9 +1140,12 @@ try {
 
   // ---- the charge ----
   ok('the shop charges nothing', r.shopChargesNothing);
-  ok('a wave charges it', r.waveCharges);
+  ok('WAVE TIME CHARGES NOTHING EITHER - the stall is gone', r.timeChargesNothing);
+  ok('points charge it', r.pointsCharge);
+  ok('a part-filled bar is not ready', r.notReadyEarly);
   ok('the ready flag fires when it fills', r.readyFired);
-  ok('the charge caps at the cooldown', r.chargeCaps);
+  ok('the charge caps at the cost', r.chargeCaps);
+  ok('an empty slot banks nothing', r.noSlotNoCharge);
   ok('the ready flag fires exactly once', r.readyFiresOnce);
   ok('it can still be fired in the shop', r.firesInShop);
   ok('an uncharged press spends nothing', r.uncharged);
