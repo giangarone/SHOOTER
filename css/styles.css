@@ -239,25 +239,15 @@ html, body {
   background: #fff; box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9);
 }
 
-/* Reload ring. The sweep is still one conic gradient driven by --p, but a
-   second mask cuts it into 16 spokes, so the arc fills a SEGMENT at a time
-   rather than sliding. A smooth arc is the one thing on screen that would
-   admit the interface is vector. */
-#reload-ring {
-  position: absolute; inset: -16px;
-  background: conic-gradient(
-    var(--cyan) calc(var(--p, 0) * 1turn), rgba(120, 140, 180, 0.22) 0
-  );
-  -webkit-mask:
-    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
-    radial-gradient(closest-side, transparent 72%, #000 74%);
-  mask:
-    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
-    radial-gradient(closest-side, transparent 72%, #000 74%);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-  filter: drop-shadow(0 0 4px rgba(78, 243, 255, 0.6));
-}
+/* RELOADING IS THE CROSSHAIR GOING AWAY. There were two sweeps for this - a
+   ring around the reticle and a dial beside the round count - and between them
+   they said the same thing twice while the gun could not be fired at all. What
+   a reload actually means is that aiming is pointless for the next moment, and
+   the honest drawing of that is the aim disappearing. It comes back the instant
+   the magazine is in, which is the frame the player can shoot again.
+
+   No transition on the way out: the gun is unusable NOW. */
+#crosshair.reloading { opacity: 0; }
 
 /* THE HIT MARKER IS AN ANIMATION, NOT A CLASS THAT IS TAKEN OFF AGAIN.
    It used to be `opacity: 1` under a `.show` that nothing ever removed, so the
@@ -512,9 +502,17 @@ html, body {
   font-variant-numeric: tabular-nums;
   min-width: 2ch; text-align: right;
 }
-#ammo-num.empty { color: var(--red); text-shadow: 2px 2px 0 var(--ink), 0 0 14px rgba(255, 59, 48, 0.6); }
+/* RED FROM TEN ROUNDS DOWN, not from empty. Empty is the one number the player
+   does not need told - the gun has already stopped - and a warning that arrives
+   at zero is not a warning. Ten is about a second and a half of fire, which is
+   enough to break contact or start the reload on the player's own terms. */
+#ammo-num.low { color: var(--red); text-shadow: 2px 2px 0 var(--ink), 0 0 14px rgba(255, 59, 48, 0.6); }
 #ammo-res { font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink); }
-#ammo-res.warn { color: var(--amber); }
+/* RED BELOW ONE FULL MAGAZINE. Measured against the magazine rather than a flat
+   number because the magazine is what a reserve is FOR: the moment the reserve
+   can no longer refill the gun once is the moment the run is on a clock, and
+   that moment moves as the player takes magazine upgrades. */
+#ammo-res.low  { color: var(--red); }
 #ammo-res.out  { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
 /* BRASS ECHO paying out. The reserve is a 12px number in the corner of the
    screen and a refund moves it by one, which is invisible while the magazine
@@ -527,32 +525,6 @@ html, body {
   0%   { color: var(--amber); transform: translateY(-3px) scale(1.35); }
   100% { color: var(--dim); transform: none; }
 }
-/* THE RELOAD DIAL. What used to be here was a full-width RELOADING bar UNDER
-   the count, and it was laid out - so it appeared and disappeared, and every
-   reload shoved the ammo line and the item slot up the screen and dropped them
-   again. This sits INSIDE the ammo line and never leaves it: ui.setAmmo toggles
-   `visibility`, which paints nothing and reserves everything, so the HUD is the
-   same shape whether or not the gun is loading.
-
-   Same conic sweep and the same 16 spokes as #reload-ring at the crosshair, so
-   the two are one instrument shown where the eye happens to be. */
-#ammo-dial {
-  width: calc(var(--u) * 7); height: calc(var(--u) * 7);
-  flex: none; align-self: center; visibility: hidden;
-  background: conic-gradient(
-    var(--cyan) calc(var(--p, 0) * 1turn), rgba(120, 140, 180, 0.22) 0
-  );
-  -webkit-mask:
-    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
-    radial-gradient(closest-side, transparent 58%, #000 60%);
-  mask:
-    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
-    radial-gradient(closest-side, transparent 58%, #000 60%);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-  filter: drop-shadow(0 0 3px rgba(78, 243, 255, 0.6));
-}
-
 /* ---- boss ---------------------------------------------------------------
    The name plate OVERLAPS the bar's top edge rather than stacking above it,
    which is what makes the two read as one instrument instead of two rows. */
@@ -873,9 +845,16 @@ html, body {
     transparent 0 50%, rgba(0, 0, 0, 0.55) 50% 70%, #000 70%);
   mask: radial-gradient(ellipse 78% 78% at center,
     transparent 0 50%, rgba(0, 0, 0, 0.55) 50% 70%, #000 70%);
+}
+/* THE ANIMATION HANGS OFF `.on`, NOT OFF THE ELEMENT. It was on the base rule,
+   and its keyframes set `opacity` - which beats the `opacity: 0` above at every
+   moment of the loop, so the ring was on screen for the whole run whether or
+   not anyone was poisoned. A keyframe that writes a property the base rule uses
+   to hide the element has to be gated on the class that shows it. */
+#fx-poison.on {
+  opacity: 1;
   animation: fx-poison 1.6s steps(6, end) infinite;
 }
-#fx-poison.on { opacity: 1; }
 /* A slow breathe, with the stipple drifting one cell as it goes: the crust is
    alive, but it is in no hurry. */
 @keyframes fx-poison {
@@ -1515,7 +1494,7 @@ html, body {
   background: rgba(5, 7, 11, 0.5);
 }
 #stats-card {
-  width: 880px; max-width: 94vw; max-height: 88vh; overflow: hidden;
+  width: 1180px; max-width: 96vw; max-height: 88vh; overflow: hidden;
   padding: calc(var(--u) * 6) calc(var(--u) * 7);
   --surface: rgba(6, 8, 13, 0.94);
   --edge: var(--line-hi);
@@ -1540,10 +1519,11 @@ html, body {
 }
 /* THE MUTATIONS SECTION IS THE ONE THAT CAN OVERFLOW - a long run owns twenty
    picks - so it takes the leftover height and scrolls inside itself rather
-   than growing the card off the screen. The item section is one entry and is
+   than growing the card off the screen. The item below it is one entry and is
    never allowed to shrink. */
-.stats-sec:last-child { min-height: 0; display: flex; flex-direction: column; }
-.stats-sec:last-child .inv-grid { overflow-y: auto; min-height: 0; }
+.stats-sec.muts { min-height: 0; display: flex; flex-direction: column; }
+.stats-sec.muts .inv-grid { overflow-y: auto; min-height: 0; }
+.stats-sec.item { flex: none; }
 
 /* A COLUMN GRID, NOT A LIST. Twenty mutations down one column is a page the
    player has to scroll while a fight runs; three columns of seven is a sheet
@@ -1587,17 +1567,20 @@ html, body {
   font-style: normal; color: var(--gold); font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-/* The effect lines, in the three SIGN_COLOR values the totem card used, so a
-   line the player read as a cost when they took the offer still reads as one.
-   8px and loosely tracked: this is the body text of the sheet. */
+/* THE BODY TEXT OF THE SHEET, and it is plain. The totem card and the box card
+   colour these lines by SIGN - green for a benefit, red for a cost, grey for a
+   note - because there the player is deciding whether to take the thing. Here
+   they already own it, so "this part is good" is telling them something they
+   settled long ago, and an item, whose lines are ALL good, came out entirely
+   green: a wall of colour carrying no information.
+   Only a COST still earns its colour, and it gets it in `.inv-line.bad`. */
 .inv-line {
   font-size: 8px; letter-spacing: 0.08em; line-height: 1.7;
+  color: #93a0be;
 }
-/* A READY item is the one live fact worth carrying onto this sheet, and it is
-   a state rather than a number - so it is a lit edge on the entry, the same
-   gold the HUD's charge bar goes when it fills. */
-.inv.ready .inv-art { filter: drop-shadow(0 0 8px rgba(255, 233, 94, 0.7)); }
-.inv.ready .inv-name { color: var(--gold); }
+/* A live drawback - Blood Pact's extra damage taken, Malady's halved duration.
+   The one thing on this sheet the player might want to be reminded of. */
+.inv-line.bad { color: var(--red); }
 .inv-empty { font-size: 8px; color: var(--dim); letter-spacing: 0.08em; }
 
 /* =========================================================================

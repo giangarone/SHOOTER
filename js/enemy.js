@@ -4299,11 +4299,15 @@ export class Enemy {
       d *= (dirX || dirZ || point) ? def.armor(this, dirX, dirZ, point) : def.armorDefault;
     }
     if (this.buffT > 0) d *= CONDUIT_RESIST;
-    const before = this.hp;
     this.hp -= d;
-    // The number is what actually came off, floor included: a hit that takes a
-    // body from 3hp to dead shows 3, not the 400 that was aimed at it.
-    if (damageSink) damageSink(this.pos, before - Math.max(0, this.hp), crit);
+    // WHAT THE HIT WAS WORTH, NOT WHAT THE BODY HAD LEFT. `d` here is already
+    // through ward, freeze vulnerability, armour facing and the Conduit's
+    // resistance, so it is the true strength of the blow - and it is NOT
+    // clamped to the remaining health. A rifle hitting a body with 5hp left
+    // reads 40, because 40 is what the player's gun does; clamping it to 5
+    // would make every killing blow in the game report a small number and turn
+    // the one hit worth celebrating into the weakest-looking one on screen.
+    if (damageSink) damageSink(this.pos, d, crit);
     if (!silent) this.flash = 0.12;
     if (this.hp <= 0) {
       this.hp = 0;

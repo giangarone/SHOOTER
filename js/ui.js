@@ -7,7 +7,6 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
-import { SIGN_COLOR } from './totems.js';
 import { itemCells } from './items.js';
 import { controllerGlyph } from './padmenu.js';
 
@@ -30,8 +29,6 @@ export class UI {
     this.stamBar = $('stam-bar');
     this.ammoNum = $('ammo-num');
     this.ammoRes = $('ammo-res');
-    this.ammoDial = $('ammo-dial');
-    this.reloadRing = $('reload-ring');
     this.fxDamage = $('fx-damage');
     this.fxFire = $('fx-fire');
     this.fxPoison = $('fx-poison');
@@ -81,6 +78,7 @@ export class UI {
     this.statsPanel = $('stats-panel');
     this.statsMuts = $('stats-muts');
     this.statsActive = $('stats-active');
+    this.statsItemSec = $('stats-item-sec');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
     // Which active-item chips were drawn last frame - see setItemBuffs. The
@@ -225,26 +223,32 @@ export class UI {
     }
   }
 
-  setAmmo(mag, reserve, reloading) {
+  /**
+   * The round count.
+   *
+   * @param {number} magSize what a full magazine holds, which is what decides
+   *   when the RESERVE is low - see the note on #ammo-res.low.
+   */
+  setAmmo(mag, reserve, reloading, magSize = 30) {
     if (this._c.mag !== mag) {
       this._c.mag = mag;
       this.ammoNum.textContent = mag;
-      this.ammoNum.classList.toggle('empty', mag === 0);
+      this.ammoNum.classList.toggle('low', mag <= 10);
     }
-    if (this._c.reserve !== reserve) {
+    if (this._c.reserve !== reserve || this._c.magSize !== magSize) {
       this._c.reserve = reserve;
+      this._c.magSize = magSize;
       this.ammoRes.textContent = '/ ' + reserve;
       this.ammoRes.classList.toggle('out', reserve === 0);
-      this.ammoRes.classList.toggle('warn', reserve > 0 && reserve < 30);
+      // Less than one full reload left in the bag.
+      this.ammoRes.classList.toggle('low', reserve > 0 && reserve < magSize);
     }
     if (this._c.reload !== reloading) {
       this._c.reload = reloading;
-      this.reloadRing.classList.toggle('hidden', !reloading);
-      // VISIBILITY, NOT `hidden`. The dial's slot in the ammo line is held
-      // open whether or not a reload is running, because the one thing this
-      // readout must never do is move the rest of the HUD - which is exactly
-      // what the RELOADING bar it replaced did every time the gun ran dry.
-      this.ammoDial.style.visibility = reloading ? 'visible' : 'hidden';
+      // THE RELOAD IS THE CROSSHAIR GOING AWAY, and that is the whole readout -
+      // see #crosshair.reloading. Nothing is added to the HUD, so nothing in it
+      // can move.
+      this.crosshair.classList.toggle('reloading', reloading);
     }
   }
 
@@ -355,21 +359,6 @@ export class UI {
     }
   }
 
-  // Sweep of the ring around the crosshair, 0..1. Quantised to a hundredth
-  // before it is written: this is called every frame, and a custom-property
-  // write the browser has to restyle for is not worth spending on a change
-  // nobody can see.
-  // Drives BOTH sweeps off one number: the ring around the crosshair, where
-  // the player is looking, and the dial beside the ammo count, where the
-  // number it belongs to lives. Same conic, same 16 spokes, so they read as
-  // one instrument shown twice rather than two.
-  setReloadProgress(p) {
-    const q = Math.round(p * 100);
-    if (this._c.reloadP === q) return;
-    this._c.reloadP = q;
-    this.reloadRing.style.setProperty('--p', q / 100);
-    this.ammoDial.style.setProperty('--p', q / 100);
-  }
   // THE ONLY NUMBER IN THE TOP RIGHT. It took the score's place there when the
   // score was removed: a run is measured by the wave it reached, and the one
   // figure that changes moment to moment and that the player can spend is this
@@ -817,7 +806,7 @@ export class UI {
   // array of { id, name, effects, theme, tier }.
 
   showStats(active, passives) {
-    const key = (active ? active.id + (active.ready ? '!' : '') : '-')
+    const key = (active ? active.id : '-')
       + '|' + passives.map((m) => m.id + m.tier).join(',');
     if (this._statsOpen && key === this._statsKey) return;
     this._statsKey = key;
@@ -867,12 +856,17 @@ export class UI {
       name.appendChild(tier);
     }
     body.appendChild(name);
-    for (const [text, sign] of def.effects || []) {
+    // Array.isArray, not a truthiness check: a mutation's `effects` can be a
+    // FUNCTION of the stack count - see effectLines() - and a function is
+    // truthy and not iterable, which is how this threw the moment a player
+    // opened the sheet owning a tiered upgrade. main.js resolves them before
+    // they get here; this is the net under that.
+    for (const [text, sign] of Array.isArray(def.effects) ? def.effects : []) {
       const line = document.createElement('div');
-      line.className = 'inv-line';
-      // The same three colours the totem card uses, so a line the player read
-      // as a cost when they took the offer still reads as a cost here.
-      line.style.color = SIGN_COLOR[String(sign)];
+      // PLAIN, EXCEPT FOR A COST. See .inv-line in styles.css: the sign colours
+      // belong to an offer being weighed, and this is a sheet of things already
+      // owned. Only a live drawback is still worth a colour.
+      line.className = sign < 0 ? 'inv-line bad' : 'inv-line';
       line.textContent = text;
       body.appendChild(line);
     }
@@ -880,21 +874,14 @@ export class UI {
     return cell;
   }
 
+  // THE WHOLE SECTION GOES when nothing is carried, heading and all. A labelled
+  // box reading EMPTY HANDED is a question about a system the player may not
+  // have met yet, and it costs the mutations above it a strip of the card.
   _buildActive(active) {
     this.statsActive.textContent = '';
-    if (!active) {
-      const empty = document.createElement('div');
-      empty.className = 'inv-empty';
-      empty.textContent = 'EMPTY HANDED';
-      this.statsActive.appendChild(empty);
-      return;
-    }
-    const cell = this._entry(active);
-    // READY is the one live fact about a held item worth carrying onto this
-    // sheet, and it is a state rather than a number - so it is a class on the
-    // entry, not a row that has to be kept up to date.
-    cell.classList.toggle('ready', !!active.ready);
-    this.statsActive.appendChild(cell);
+    this.statsItemSec.classList.toggle('hidden', !active);
+    if (!active) return;
+    this.statsActive.appendChild(this._entry(active));
   }
 
   _buildPassives(passives) {

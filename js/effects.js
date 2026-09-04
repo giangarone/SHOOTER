@@ -85,6 +85,22 @@ const CORPSE_GRAVITY = 26;
 // skitter around the floor like dropped cutlery.
 const CORPSE_SPIN = 11;
 const CORPSE_BOUNCE = 0.22;
+// THE HIT FLASH, CARRIED ONTO THE BODY AS IT COMES APART. Every other point of
+// damage in the game turns the enemy white for a tenth of a second - except the
+// one that kills it, because Enemy.update() returns early once `dead` is set
+// and the flash is applied from there. So the LAST hit, the only one the player
+// is really waiting for, was the one hit that showed nothing.
+//
+// That went unnoticed for as long as the gun was the only thing killing
+// anything: a rifle lands thirty flashes on a body and misses the thirty-first.
+// MELEE one-shots most of what it touches, so for melee it was every swing.
+//
+// Matching BODY_FLASH_HEX and BODY_FLASH_INTENSITY in enemy.js, and the same
+// tenth of a second, because it is the same flash - it just happens to be
+// playing on a body that is already in pieces.
+const CORPSE_FLASH = 0.12;
+const CORPSE_FLASH_HEX = 0xffffff;
+const CORPSE_FLASH_INTENSITY = 0.9;
 // Sideways and upward speed of the throw, before the caller's own force
 // multiplier. Up beats out: a body that bursts outward reads as an explosion,
 // and one that comes apart upward and falls reads as a body coming apart.
@@ -458,11 +474,31 @@ const CREEP_VERT = /* glsl */ `
 //     update() now takes one.
 const DMG_POOL = 64;
 const DMG_DIGITS = 5;          // up to 99999; anything larger clamps
-const DMG_LIFE = 0.9;
+// THE THREE ACTS OF A DAMAGE NUMBER, in seconds. It leaves the body FAST and
+// at full strength - a number that fades while it is still travelling reads as
+// already leaving, and the moment it appears is the moment it is worth reading
+// - then it STOPS dead at the top of its arc and simply sits there, which is
+// the part that makes it legible in a firefight. Only then does it go, and it
+// goes by collapsing to nothing rather than dissolving: a shrink is a definite
+// end, where a fade alone leaves a smear the eye keeps returning to.
+const DMG_RISE = 0.28;
+const DMG_HOLD = 0.30;
+const DMG_OUT = 0.24;
+// How far it travels during the rise, in world units, before the jitter.
+const DMG_CLIMB = 1.05;
 // The atlas is one row of ten cells. 64px a cell is comfortably above the size
 // a number is ever drawn at on screen, so the glyphs are downsampled rather
 // than stretched.
 const DMG_CELL = 64;
+// HOW WIDE A DIGIT IS DRAWN, and HOW FAR THE NEXT ONE STARTS FROM IT. They are
+// deliberately two numbers rather than one. The atlas cell carries air either
+// side of its glyph, so laying the quads edge to edge sets every digit a cell's
+// worth of margin apart and the number reads as l o o s e l y  s p a c e d. The
+// advance is shorter than the quad, which slides the quads over one another
+// into that air - the glyphs themselves are untouched and keep their size,
+// only the gap between them closes.
+const DMG_QUAD_W = 0.62;
+const DMG_ADVANCE = 0.44;
 // Size in world units at the low end and the high end - see damageNumber().
 const DMG_MIN_H = 0.30;
 const DMG_MAX_H = 0.85;
@@ -475,21 +511,36 @@ const DMG_WHITE = new THREE.Color(0xffffff);
 // is currently true.
 const DMG_CRIT = new THREE.Color(0xffe95e);
 
-// The ten digits in a strip, in the HUD's face. Drawn once at boot.
+// The ten digits in a strip, in the HUD's face, each with the hard black drop
+// shadow every other piece of text in this interface wears - see `.overlay h1`
+// in styles.css. Drawn once at boot.
 function makeDigitAtlas() {
   const c = document.createElement('canvas');
   c.width = DMG_CELL * 10;
   c.height = DMG_CELL;
   const x = c.getContext('2d');
-  // WHITE GLYPHS ON TRANSPARENT, tinted per number by vertex colour. Painting
-  // the colour into the atlas would need one atlas per colour, and a crit is
-  // the same digits in a different ink.
-  x.fillStyle = '#ffffff';
   x.textAlign = 'center';
   x.textBaseline = 'middle';
-  x.font = Math.round(DMG_CELL * 0.78) + 'px "Press Start 2P", monospace';
+  x.font = Math.round(DMG_CELL * 0.62) + 'px "Press Start 2P", monospace';
+  // OFFSET, NOT BLURRED. The interface's shadow is a hard copy of the glyph a
+  // few pixels down and right, which is the only kind of shadow that survives
+  // being magnified by the tube pass.
+  const off = Math.round(DMG_CELL * 0.08);
+  // The glyph sits up and left of the cell's centre by half the offset, so the
+  // pair is centred and the shadow has room inside the cell. A shadow that ran
+  // past the edge would appear on the neighbouring digit.
+  const cx = DMG_CELL / 2 - off / 2;
+  const cy = DMG_CELL * 0.52 - off / 2;
   for (let i = 0; i < 10; i++) {
-    x.fillText(String(i), i * DMG_CELL + DMG_CELL / 2, DMG_CELL * 0.54);
+    const ox = i * DMG_CELL;
+    // BLACK, and it STAYS black on a crit. The tint is applied as a vertex
+    // colour, which multiplies - so a black texel comes out black whatever
+    // colour is riding on it, and a white one comes out as the tint. That is
+    // the whole reason the shadow can live in a shared atlas.
+    x.fillStyle = '#05070b';
+    x.fillText(String(i), ox + cx + off, cy + off);
+    x.fillStyle = '#ffffff';
+    x.fillText(String(i), ox + cx, cy);
   }
   const t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
@@ -575,6 +626,11 @@ export class Effects {
         base: new Float32Array(CORPSE_PIECES * 3),
         floorY: 0,
         life: 0,
+        // The kill flash, and what to put back when it burns out. Reused
+        // arrays rather than fresh ones per death - see CORPSE_FLASH.
+        flashT: 0,
+        em: [],
+        emI: [],
       });
     }
 
@@ -914,6 +970,20 @@ export class Effects {
     }
     slot.group = group;
     slot.mats = mats;
+    // WHITE FIRST, its own colours a tenth of a second later. Each material's
+    // emissive is put aside so the cool-down has something to restore to -
+    // these are the enemy's own per-instance materials and the corpse owns
+    // them from here, so nothing else is going to write them back.
+    slot.flashT = CORPSE_FLASH;
+    slot.em.length = 0;
+    slot.emI.length = 0;
+    for (const m of mats) {
+      slot.em.push(m.emissive ? m.emissive.getHex() : 0);
+      slot.emI.push(m.emissiveIntensity);
+      if (!m.emissive) continue;
+      m.emissive.setHex(CORPSE_FLASH_HEX);
+      m.emissiveIntensity = CORPSE_FLASH_INTENSITY;
+    }
     // The floor, in the group's own space. A flier dies five metres up and its
     // group sits at that altitude, so its pieces have five metres to fall -
     // which is the best this effect ever looks and comes out for free.
@@ -962,6 +1032,21 @@ export class Effects {
       if (c.life <= 0) continue;
       c.life -= dt;
       if (c.life <= 0) { this._retireCorpse(c); continue; }
+      // The kill flash cooling off. One write when it expires rather than a
+      // lerp every frame: the body flash it matches is a hard on and a hard
+      // off, and a corpse fading out of white would read as a different event
+      // from the thirty hits that led up to it.
+      if (c.flashT > 0) {
+        c.flashT -= dt;
+        if (c.flashT <= 0) {
+          for (let i = 0; i < c.mats.length; i++) {
+            const m = c.mats[i];
+            if (!m.emissive) continue;
+            m.emissive.setHex(c.em[i]);
+            m.emissiveIntensity = c.emI[i];
+          }
+        }
+      }
       // The last third of the life closes the pieces down to nothing, on a
       // curve rather than a ramp so they are still full size for most of the
       // fall and then go quickly.
@@ -997,6 +1082,9 @@ export class Effects {
   // are freed. This is the ONLY place either happens, so an early retirement
   // at the cap and an expiry at the end of the life cannot diverge.
   _retireCorpse(c) {
+    // Nothing is restored here on purpose: the materials are disposed below,
+    // so a corpse retired mid-flash has nothing left to put a colour back on.
+    c.flashT = 0;
     if (c.group) this.scene.remove(c.group);
     if (c.mats) for (const m of c.mats) m.dispose();
     for (let i = 0; i < c.n; i++) c.meshes[i] = null;
@@ -1635,19 +1723,26 @@ export class Effects {
 
   _initDamageNumbers() {
     this.dmgTex = makeDigitAtlas();
-    // ONE MATERIAL FOR THE WHOLE POOL, and ADDITIVE. Both of those are the same
-    // decision: a shared material has one opacity, so per-number fading cannot
-    // ride on it - but under additive blending, fading a vertex colour toward
-    // black IS fading out. So colour and alpha are both per-vertex, sixty-four
-    // numbers are one material, and the numbers glow like everything else this
-    // file draws over a dark arena.
+    // ONE MATERIAL FOR THE WHOLE POOL, blending NORMALLY, with a FOUR-component
+    // vertex colour. Every part of that is one decision.
+    //
+    // It cannot be additive, because additive light only ever adds and the drop
+    // shadow in the atlas is black - under additive blending a black texel is
+    // simply nothing, and the shadow would not exist. Normal blending is also
+    // what makes the numbers read as printed rather than as glowing, which is
+    // what the rest of this interface's text does.
+    //
+    // And once it is normal, per-number fading cannot be a colour scaled toward
+    // black any more - it has to be real alpha. A shared material has ONE
+    // opacity, so the alpha rides in the vertex colour's fourth component,
+    // which three.js multiplies into the fragment alpha. Sixty-four numbers,
+    // each with its own colour and its own fade, one material, one shader.
     //
     // depthTest off so a number is never buried inside the body it came off,
     // and depthWrite off so it never occludes one.
     this.dmgMat = new THREE.MeshBasicMaterial({
       map: this.dmgTex,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
       depthTest: false,
       vertexColors: true,
@@ -1662,7 +1757,8 @@ export class Effects {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 12), 3));
       g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 8), 2));
-      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 12), 3));
+      // FOUR components, not three: the fourth is this number's own alpha.
+      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 16), 4));
       const idx = new Uint16Array(DMG_DIGITS * 6);
       for (let q = 0; q < DMG_DIGITS; q++) {
         const v = q * 4;
@@ -1677,11 +1773,15 @@ export class Effects {
       mesh.renderOrder = 10;
       this.scene.add(mesh);
       this.dmgNums.push({
-        mesh, life: 0, maxLife: 0, seq: 0, digits: 0,
-        x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, scale: 1,
-        // The colour this number is at full strength. The fade scales toward
-        // black from here, so it has to be remembered rather than read back
-        // out of the buffer it is being written into.
+        mesh, live: false, t: 0, seq: 0, digits: 0,
+        // Where it started and how far it climbs, rather than a velocity that
+        // is integrated: the hold has to stop at an exact height, and a number
+        // that arrived there by accumulating steps would drift by a little on
+        // every frame rate.
+        x0: 0, y0: 0, z0: 0, dx: 0, dz: 0, climb: 0,
+        rise: 0, hold: 0, out: 0, scale: 1,
+        // The colour this number is at full strength, and the last alpha
+        // actually written - the buffer is only rewritten when it changes.
         r: 1, g: 1, b: 1, lastA: -1,
       });
     }
@@ -1697,25 +1797,29 @@ export class Effects {
    * clamp at DMG_MAX_H is the ceiling the whole thing needs to stay readable
    * in a crowd.
    *
-   * EVERY NUMBER MOVES DIFFERENTLY. The drift, the rise, the lifetime and the
-   * starting scale are all jittered per number, because the thing this system
-   * does most is fire repeatedly at the same body - and forty identical
-   * animations stacked on one enemy reads as one flickering number rather than
-   * as forty hits.
+   * EVERY NUMBER MOVES DIFFERENTLY. The climb, the drift, the three act
+   * lengths and the starting scale are all jittered per number, because the
+   * thing this system does most is fire repeatedly at the same body - and
+   * forty identical animations stacked on one enemy read as a single
+   * flickering number rather than as forty hits.
    *
    * @param {THREE.Vector3} pos  where it came off
-   * @param {number} amount      damage actually dealt, post-armour
+   * @param {number} amount      damage dealt, before the body's remaining
+   *                             health is taken into account
    * @param {boolean} crit
    */
   damageNumber(pos, amount, crit = false) {
-    const n = Math.max(1, Math.min(99999, Math.round(amount)));
     // Sub-1 damage rounds to 1 rather than to 0: a tick that did something has
     // to say so, and "0" floating off a body reads as a bug.
+    const n = Math.max(1, Math.min(99999, Math.round(amount)));
     let slot = null;
     for (const d of this.dmgNums) {
-      if (d.life <= 0) { slot = d; break; }
+      if (!d.live) { slot = d; break; }
     }
     if (!slot) {
+      // Everything is busy, so the OLDEST goes: the hit that just landed is the
+      // one the player is looking at, and a dropped hit is worse than a
+      // truncated one.
       let oldest = this.dmgNums[0];
       for (const d of this.dmgNums) if (d.seq < oldest.seq) oldest = d;
       slot = oldest;
@@ -1736,16 +1840,19 @@ export class Effects {
 
     // Started a little off the centre of the body in every direction, so two
     // hits on the same frame do not print on top of each other.
-    slot.x = pos.x + (Math.random() - 0.5) * 0.5;
-    slot.y = pos.y + 1.1 + (Math.random() - 0.5) * 0.3;
-    slot.z = pos.z + (Math.random() - 0.5) * 0.5;
+    slot.x0 = pos.x + (Math.random() - 0.5) * 0.5;
+    slot.y0 = pos.y + 1.05 + (Math.random() - 0.5) * 0.3;
+    slot.z0 = pos.z + (Math.random() - 0.5) * 0.5;
     const ang = Math.random() * Math.PI * 2;
-    const drift = 0.35 + Math.random() * 0.5;
-    slot.vx = Math.cos(ang) * drift;
-    slot.vz = Math.sin(ang) * drift;
-    slot.vy = 1.5 + Math.random() * 0.7 + (crit ? 0.5 : 0);
-    slot.maxLife = DMG_LIFE * (0.9 + Math.random() * 0.25);
-    slot.life = slot.maxLife;
+    const drift = 0.18 + Math.random() * 0.28;
+    slot.dx = Math.cos(ang) * drift;
+    slot.dz = Math.sin(ang) * drift;
+    slot.climb = DMG_CLIMB * (0.85 + Math.random() * 0.3) * (crit ? 1.15 : 1);
+    slot.rise = DMG_RISE * (0.9 + Math.random() * 0.2);
+    slot.hold = DMG_HOLD * (0.85 + Math.random() * 0.3);
+    slot.out = DMG_OUT * (0.9 + Math.random() * 0.2);
+    slot.t = 0;
+    slot.live = true;
     slot.mesh.visible = true;
   }
 
@@ -1755,14 +1862,13 @@ export class Effects {
   _writeNumber(geo, n, alpha, slot) {
     const pos = geo.attributes.position.array;
     const uv = geo.attributes.uv.array;
-    const c = geo.attributes.color.array;
     const s = String(n);
     const len = Math.min(DMG_DIGITS, s.length);
-    // Cell width is 0.62 of the height, which is a touch tighter than the
-    // face's own square cell - the atlas leaves air either side of a glyph and
-    // the default spacing reads as a gap between every digit.
-    const w = 0.62;
-    const x0 = -(len * w) / 2;
+    const w = DMG_QUAD_W;
+    // Centred on what the number actually COVERS - the last quad still runs its
+    // full width past the last advance - so a two-digit and a five-digit number
+    // are both centred on the body they came off.
+    const x0 = -((len - 1) * DMG_ADVANCE + w) / 2;
     for (let i = 0; i < DMG_DIGITS; i++) {
       const p = i * 12;
       const u = i * 8;
@@ -1770,7 +1876,7 @@ export class Effects {
         for (let k = 0; k < 12; k++) pos[p + k] = 0;
         continue;
       }
-      const l = x0 + i * w;
+      const l = x0 + i * DMG_ADVANCE;
       const r = l + w;
       // Quad corners: bottom-left, bottom-right, top-right, top-left.
       pos[p] = l;      pos[p + 1] = -0.5; pos[p + 2] = 0;
@@ -1790,57 +1896,79 @@ export class Effects {
     geo.attributes.uv.needsUpdate = true;
   }
 
-  // The fade. Under additive blending a colour scaled toward black is a number
-  // scaled toward invisible, so this is the whole of the alpha channel.
+  // The tint and the fade, in one write. RGB is the number's colour and stays
+  // put; the fourth component is the alpha, which is the only part that moves.
   _tintNumber(geo, alpha, slot) {
     const c = geo.attributes.color;
     const arr = c.array;
-    const r = slot.r * alpha;
-    const g = slot.g * alpha;
-    const b = slot.b * alpha;
     for (let i = 0; i < DMG_DIGITS * 4; i++) {
-      arr[i * 3] = r;
-      arr[i * 3 + 1] = g;
-      arr[i * 3 + 2] = b;
+      const o = i * 4;
+      arr[o] = slot.r;
+      arr[o + 1] = slot.g;
+      arr[o + 2] = slot.b;
+      arr[o + 3] = alpha;
     }
     c.needsUpdate = true;
   }
 
-  // Rise, drift, fade. `camera` is only needed to face the numbers at it; when
-  // it is missing they simply keep the orientation they had, which is what a
-  // headless test wants.
+  /**
+   * Rise, hold, collapse.
+   *
+   * Driven off ELAPSED TIME rather than by integrating a velocity, because the
+   * middle act has to stop at an exact height and stay there: a number that
+   * climbed by accumulating steps would settle a little differently on every
+   * frame rate, and forty of them at forty different heights is the noise this
+   * animation exists to avoid.
+   *
+   * `camera` is only needed to face the numbers at it; when it is missing they
+   * keep the orientation they had, which is what a headless test wants.
+   */
   _stepDamageNumbers(dt, camera) {
     for (const d of this.dmgNums) {
-      if (d.life <= 0) continue;
-      d.life -= dt;
-      if (d.life <= 0) {
+      if (!d.live) continue;
+      d.t += dt;
+      const total = d.rise + d.hold + d.out;
+      if (d.t >= total) {
+        d.live = false;
         d.mesh.visible = false;
         continue;
       }
-      const f = d.life / d.maxLife;
-      // The rise EASES OFF rather than running at a constant speed: a number
-      // that decelerates reads as thrown, and one at constant speed reads as
-      // scrolling. Drift decays faster than the rise, so the whole thing curves
-      // out of the body and then settles into a straight climb.
-      d.vy *= 1 - Math.min(1, dt * 1.6);
-      d.vx *= 1 - Math.min(1, dt * 3.5);
-      d.vz *= 1 - Math.min(1, dt * 3.5);
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
-      d.z += d.vz * dt;
-      d.mesh.position.set(d.x, d.y, d.z);
+
+      // ACT ONE: up, fast, and easing off as it arrives. Nothing fades here -
+      // the number is at full strength for the whole climb.
+      // ACTS TWO AND THREE: it does not move again. The top of the arc is
+      // where it is read, so that is where it waits.
+      let k = 1;
+      if (d.t < d.rise) {
+        const p = d.t / d.rise;
+        k = 1 - (1 - p) * (1 - p) * (1 - p);   // ease-out cubic
+      }
+      d.mesh.position.set(
+        d.x0 + d.dx * k,
+        d.y0 + d.climb * k,
+        d.z0 + d.dz * k
+      );
       if (camera) d.mesh.quaternion.copy(camera.quaternion);
-      // A short pop on the way in - the number arrives at 60% and reaches full
-      // size in the first twelfth of a second, which is what makes a hit read
-      // as an impact rather than as text appearing.
-      const inT = Math.min(1, (d.maxLife - d.life) / 0.08);
-      d.mesh.scale.setScalar(d.scale * (0.6 + 0.4 * inT));
-      // FULL STRENGTH FOR THE FIRST 40% OF ITS LIFE, then out. Fading from the
-      // first frame makes every number look like it is already leaving, which
-      // is exactly backwards: the moment it appears is the moment it is worth
-      // reading. Quantised to 32 steps so a number that has not visibly changed
+
+      // A short pop on the way in - it arrives at 60% and reaches full size in
+      // the first twelfth of a second, which is what makes a hit read as an
+      // impact rather than as text appearing.
+      let scale = d.scale * (0.6 + 0.4 * Math.min(1, d.t / 0.08));
+      let alpha = 1;
+      // ACT THREE: collapse to nothing and fade out together. The shrink is
+      // eased IN, so it holds its size a moment longer and then goes quickly -
+      // a linear collapse starts leaving the instant the hold ends and reads as
+      // the number being cut short.
+      if (d.t > d.rise + d.hold) {
+        const p = Math.min(1, (d.t - d.rise - d.hold) / d.out);
+        const e = p * p;
+        scale = d.scale * (1 - e);
+        alpha = 1 - e;
+      }
+      d.mesh.scale.setScalar(Math.max(0.0001, scale));
+      // Quantised to 32 steps so a number whose alpha has not visibly moved
       // does not rewrite its colour buffer.
-      const a = Math.round(Math.min(1, f / 0.6) * 32) / 32;
+      const a = Math.round(alpha * 32) / 32;
       if (a !== d.lastA) {
         d.lastA = a;
         this._tintNumber(d.mesh.geometry, a, d);

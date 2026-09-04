@@ -44,7 +44,6 @@
 
     <div id="crosshair">
       <i></i><i></i><i></i><i></i>
-      <span id="reload-ring" class="hidden"></span>
       <span id="hitmarker"></span>
     </div>
 
@@ -105,16 +104,14 @@
           </div>
           <canvas id="item-art" width="96" height="96"></canvas>
         </div>
-        <!-- THE RELOAD DIAL SITS INSIDE THE LINE, NOT UNDER IT. What was here
-             before was a full-width RELOADING bar below the round count, and
-             it appeared and disappeared - so every reload pushed the item slot
-             and the ammo line upward and dropped them again. The dial holds
-             its slot open at all times (ui.setAmmo toggles VISIBILITY, never
-             `display`), so nothing in the HUD moves when the gun runs dry.
-             Same conic sweep and same 16 spokes as #reload-ring, because they
-             are one instrument shown in two places. -->
+        <!-- NOTHING IS ADDED TO THIS LINE DURING A RELOAD. What was here first
+             was a full-width RELOADING bar below the round count, which pushed
+             the item slot and the ammo line up the screen every time the gun
+             ran dry; then a dial inside the line, which held its slot open but
+             was one more thing to read. The reload is said by the CROSSHAIR
+             GOING AWAY instead - see #crosshair.reloading - which costs the HUD
+             no space at all and puts the message where the eye already is. -->
         <div id="ammo-line">
-          <span id="ammo-dial"></span>
           <span id="ammo-num">30</span>
           <span id="ammo-res">/ 30</span>
         </div>
@@ -147,13 +144,19 @@
   <div id="stats-panel" class="hidden">
     <div id="stats-card" class="plate">
       <div class="stats-head">CARRYING</div>
-      <div class="stats-sec">
-        <h3>ACTIVE ITEM</h3>
-        <div id="stats-active" class="inv-grid one"></div>
-      </div>
-      <div class="stats-sec">
+      <!-- MUTATIONS FIRST. They are the bulk of what a run accumulates and the
+           part the player cannot see anywhere else, so they get the top of the
+           sheet and the space; the one item is a footnote under them. The item
+           section is hidden outright when nothing is carried - an empty
+           labelled box is a question about a system the player may not have
+           met yet. -->
+      <div class="stats-sec muts">
         <h3>MUTATIONS</h3>
         <div id="stats-muts" class="inv-grid"></div>
+      </div>
+      <div class="stats-sec item hidden" id="stats-item-sec">
+        <h3>ACTIVE ITEM</h3>
+        <div id="stats-active" class="inv-grid one"></div>
       </div>
     </div>
   </div>

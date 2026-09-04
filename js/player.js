@@ -2425,13 +2425,6 @@ export class Player {
     mag.rotation.x = t < 0.5 ? 1.1 * out : 0;
   }
 
-  // 0 while idle, otherwise how far through the current reload we are. Drives
-  // both sweeps: the ring around the crosshair and the dial in the ammo line.
-  get reloadProgress() {
-    const total = this.reloadTime;
-    if (this.reloading <= 0 || total <= 0) return 0;
-    return Math.min(1, Math.max(0, 1 - this.reloading / total));
-  }
 
   applyCamera() {
     // Clamped on the SUM, not on pitch alone: the mouse handler already holds

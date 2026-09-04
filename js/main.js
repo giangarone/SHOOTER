@@ -3855,10 +3855,10 @@ class Game {
     // of ending up inside it.
     this._knockback.subVectors(target.pos, this.player.pos).setY(0).normalize();
     target.knock(this._knockback.x, this._knockback.z, 3);
-    this.effects.burst(
-      this._killPos.set(target.pos.x, target.pos.y + 1.1, target.pos.z),
-      0xffd600, 14, 4, 1.5, 0.4
-    );
+    // NO PARTICLES ON THE HIT. The swing already has a hitmarker, the body's
+    // white flash, the damage number floating off it and a shove that visibly
+    // moves it - a spray of gold sparks on top was a fifth signal for one
+    // event, and the loudest of the five.
     this.ui.hitMarker();
     this.effects.addShake(0.08);
     this.pad.rumble(0.7, 0.4, 130, 2);
@@ -5154,7 +5154,6 @@ class Game {
       mini.group.scale.setScalar(0.6);
       this.scene.add(mini.group);
       this._pendingSpawns.push(mini);
-      this.effects.burst(spawnPos, e.colorHex, 10, 3, 1.5, 0.4);
     }
   }
 
@@ -5912,8 +5911,10 @@ class Game {
     this.ui.setStamina(
       this.player.staminaFrac, this.player.staminaLow, this.player.staminaLocked
     );
-    this.ui.setAmmo(this.player.mag, this.player.reserveAmmo, this.player.reloading > 0);
-    this.ui.setReloadProgress(this.player.reloadProgress);
+    this.ui.setAmmo(
+      this.player.mag, this.player.reserveAmmo, this.player.reloading > 0,
+      this.player.magSize
+    );
     // THE CROSSHAIR IS THE CONE. _shotSpread is an NDC half-extent, and NDC 1
     // is half the viewport, so half of it across half the height is the radius
     // in pixels the next pellet can land inside. The arms are pushed out to
@@ -5994,11 +5995,6 @@ class Game {
       name: def.name,
       effects: def.effects,
       theme: def.theme,
-      // READY rather than a charge fraction: the total is the one number an
-      // item deliberately never prints - the HUD bar says it in segments and it
-      // is meant to be learned by carrying the thing - and the build sheet is
-      // not the place to give it away.
-      ready: p.itemReady,
     };
   }
 
@@ -6010,7 +6006,23 @@ class Game {
     for (const [id, n] of Object.entries(this.player.upgrades)) {
       const def = UPGRADES[id];
       if (!def || n <= 0) continue;
-      out.push({ id, name: def.name, effects: def.effects, theme: def.theme, tier: n });
+      out.push({
+        id,
+        name: def.name,
+        // RESOLVED, because eighteen of these are FUNCTIONS of the stack count
+        // rather than fixed arrays - a tiered readout, see effectLines(). The
+        // sheet handed the raw property straight to the DOM builder and threw
+        // the moment the player owned one of them.
+        //
+        // Resolved against n - 1 rather than n: step() prints "what you have
+        // now -> what the next pick gives", and on a sheet of what is already
+        // owned the interesting end is the one being stood on. At n - 1 a
+        // single-stack mutation prints its value flat, and a stacked one prints
+        // the rung below it and then the rung it is on.
+        effects: effectLines(def, Math.max(0, n - 1)),
+        theme: def.theme,
+        tier: n,
+      });
     }
     return out;
   }
