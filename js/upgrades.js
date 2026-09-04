@@ -328,26 +328,6 @@ export const UPGRADES = {
       mods.shockwaveRadius = 5 + n;
     },
   },
-  bloodlust: {
-    name: 'BLOODLUST',
-    rarity: 'rare',
-    max: 1,
-    theme: THEME.frenzy,
-    // A gun that starts worse and is bought back by the kill chain. Tied to
-    // the COMBO rather than to a timer of its own: the run already has one
-    // clock for "are you still killing", and a second one beside it would be
-    // two bars saying almost the same thing.
-    effects: [
-      ['-25% FIRE RATE', BAD],
-      ['+5% PER COMBO KILL', GOOD],
-      ['10 KILLS, UP TO +50%', NOTE],
-    ],
-    apply: (mods, n) => {
-      mods.fireRate *= Math.pow(0.75, n);
-      mods.bloodlust = 0.05 * n;
-      mods.bloodlustMax = 10;
-    },
-  },
   ammoFab: {
     name: 'AMMO FABRICATOR',
     rarity: 'rare',
@@ -1037,9 +1017,6 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.carnage,
-    // Named CARNAGE and not Bloodlust because BLOODLUST is already in this map
-    // above, paying fire rate for a combo. Two mutations with one name would be
-    // unreadable on the build sheet.
     // A CAP, and a smaller step under it. Uncapped at 5% a kill it was the
     // best damage in the game after twenty kills and absurd after fifty. At 1%
     // to a ceiling of +100% the hundred-kill chain is the target rather than

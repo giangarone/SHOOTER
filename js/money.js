@@ -200,8 +200,11 @@ export class MoneyOrbs {
     this.vel = new Float32Array(MAX_ORBS * 3);
     this.value = new Float32Array(MAX_ORBS);
     this.state = new Uint8Array(MAX_ORBS);
-    // Seconds a vacuumed orb waits before it starts moving, so a wave's worth
-    // of money arrives as a stream rather than a lump.
+    // SECONDS BEFORE THIS ORB ANSWERS THE PULL. One field, one meaning, in
+    // every state: a vacuumed orb waits it out before it starts moving, so a
+    // wave's worth of money arrives as a stream rather than a lump; a thrown
+    // orb waits it out before the magnet may claim it, so a shower is seen to
+    // land. See spawn()'s `hold` and vacuum()'s `delay`.
     this.delay = new Float32Array(MAX_ORBS);
 
     const g = new THREE.BufferGeometry();
@@ -275,8 +278,18 @@ export class MoneyOrbs {
    * @param {number} amount       credits, total
    * @param {number} maxOrbs      cap on the split (the boss shower passes its own)
    * @param {number} spread       horizontal launch speed
+   * @param {number} hold         seconds before these orbs answer the magnet
+   *
+   * `hold` EXISTS FOR THE SHOWERS, and specifically for one thrown at the
+   * player's own feet. A drop that lands inside the magnet radius is grabbed
+   * on its first frame and yanked back at PULL_ACCEL, so a shower spawned at
+   * the player - the flawless bonus - was collected before it had travelled a
+   * metre and never read as a shower at all. Held for the length of the arc,
+   * the same orbs fly out, land, and are seen to be money on the floor before
+   * anything comes for them. An ordinary kill drop passes nothing and behaves
+   * exactly as it always has.
    */
-  spawn(p, amount, maxOrbs = MAX_ORBS_PER_DROP, spread = 3.2) {
+  spawn(p, amount, maxOrbs = MAX_ORBS_PER_DROP, spread = 3.2, hold = 0) {
     if (!(amount > 0)) return;
     const n = Math.max(1, Math.min(maxOrbs, Math.round(amount / ORB_TARGET_VALUE)));
     const each = amount / n;
@@ -286,14 +299,14 @@ export class MoneyOrbs {
       this._add(
         p.x, p.y + 0.7 + Math.random() * 0.3, p.z,
         Math.cos(a) * s, 2.2 + Math.random() * 2.6, Math.sin(a) * s,
-        each
+        each, hold
       );
     }
   }
 
   // One orb, or - if the arena is already at MAX_ORBS - its value folded into
   // the nearest orb already down there. Money is never lost to the cap.
-  _add(x, y, z, vx, vy, vz, value) {
+  _add(x, y, z, vx, vy, vz, value, hold = 0) {
     let i = this.count;
     if (i >= MAX_ORBS) {
       const j = this._nearest(x, z);
@@ -315,7 +328,7 @@ export class MoneyOrbs {
     this.phase[i] = Math.random() * Math.PI * 2;
     this.born[i] = this.time;
     this.state[i] = FLY;
-    this.delay[i] = 0;
+    this.delay[i] = hold;
     this._dirty = true;
     this.aHue.needsUpdate = true;
     this.aSize.needsUpdate = true;
@@ -359,6 +372,10 @@ export class MoneyOrbs {
     for (let i = 0; i < this.count; i++) {
       if (this.state[i] === HOME) continue;
       this.state[i] = HOME;
+      // OVERWRITES any spawn hold outright. The sweep is the last thing that
+      // happens to an orb and it must be able to claim one however recently it
+      // was thrown, or a shower fired just before a clear would sit out its
+      // hold with nothing left to come for it.
       this.delay[i] = delay + Math.random() * 0.7;
     }
   }
@@ -394,6 +411,8 @@ export class MoneyOrbs {
         // The whole point of the settled state: no integration, no writes.
         // Just the two tests that can get it out of that state again.
         if (this.time - this.born[i] >= ORB_LIFETIME) { this._remove(i--); continue; }
+        // Landed early, still held. It sits there and is not collectable yet.
+        if (this.delay[i] > 0) { this.delay[i] -= dt; continue; }
         const dx = this.pos[i3] - px;
         const dz = this.pos[i3 + 2] - pz;
         const d2 = dx * dx + dz * dz;
@@ -461,6 +480,10 @@ export class MoneyOrbs {
           this.vel[i3 + 2] *= 0.6;
         }
       }
+      // Held orbs still fly - it is the arc that is the point - they just
+      // cannot be collected or grabbed while the hold runs. Decremented after
+      // the integration above so a held orb is never a frozen one.
+      if (this.delay[i] > 0) { this.delay[i] -= dt; continue; }
       const dx = this.pos[i3] - px;
       const dz = this.pos[i3 + 2] - pz;
       const fd2 = dx * dx + dz * dz;

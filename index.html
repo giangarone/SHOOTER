@@ -29,6 +29,11 @@
       <div id="credit-box">
         <span id="credit-label">CREDITS</span>
         <span id="credit-num">$0</span>
+        <!-- The flawless streak's multiplier. UNDER the balance rather than
+             anywhere else on the frame because it is a fact ABOUT the balance:
+             it is the rate everything being picked up is paid at. Hidden
+             entirely at x1 - a permanent "x1" is not information. -->
+        <span id="flawless" class="hidden">FLAWLESS x1.25</span>
       </div>
     </div>
 
@@ -47,21 +52,12 @@
       <span id="hitmarker"></span>
     </div>
 
-    <!-- Buffs and combo share the bottom centre: both answer "what is true
-         about me right now", and the eye is already on the multiplier. -->
+    <!-- Buffs have the bottom centre to themselves. The combo gauge used to
+         share it, and came off with the kill chain's payout: the chain still
+         runs and still drives the room, but it buys the player nothing, and a
+         multiplier on the HUD that cannot be spent is a thing to play toward
+         for no reason. -->
     <div id="buffs"></div>
-    <div id="combo" class="hidden">
-      <div id="combo-head">
-        <span id="combo-mult">x1.0</span>
-        <span id="combo-count">0 KILLS</span>
-      </div>
-      <div id="combo-gauge" class="seg">
-        <i id="combo-fill"></i>
-        <span class="combo-tick" style="left:33.33%"></span>
-        <span class="combo-tick" style="left:66.66%"></span>
-      </div>
-      <div id="combo-bar"><i></i></div>
-    </div>
 
     <div id="hud-bottom">
       <div id="hp-box">

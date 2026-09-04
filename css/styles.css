@@ -159,6 +159,16 @@ html, body {
 }
 #credit-box { align-items: flex-end; text-align: right; }
 
+/* THE FLAWLESS STREAK, under the balance. Deliberately the size of a label and
+   not of a number: it is the only multiplier left on the HUD and it still must
+   not compete with the figure it modifies. Green rather than gold, because
+   what it is saying is "you have not been hit" and only incidentally "you are
+   being paid more" - it is the same reading the vitals bar gives. */
+#flawless {
+  font-size: 8px; letter-spacing: 0.16em; color: #7dff9b;
+  text-shadow: 1px 1px 0 var(--ink), 0 0 10px rgba(125, 255, 155, 0.5);
+}
+
 /* Section labels. 8px is the face's native size and the only place tracking
    earns its keep - a label read as a texture rather than as a word. */
 #wave-label, #credit-label {
@@ -279,7 +289,7 @@ html, body {
 }
 
 /* ---- SEGMENTED BARS ------------------------------------------------------
-   Health, boss health and the combo gauge are all one component: a track that
+   Health and boss health are one component: a track that
    is CUT INTO CELLS by a mask, with a plain-width fill inside it. The mask is
    on the TRACK, not the fill, so the cells stay put while the fill moves -
    the value reads as a count of lit cells rather than as a length, which is
@@ -658,66 +668,6 @@ html, body {
       inset 0 0 0 3px rgba(255, 59, 48, 0.9),
       0 0 16px 0 var(--red);
   }
-}
-
-/* ---- combo ---------------------------------------------------------------
-   Bottom centre, on the sight line but below where the eye tracks. It is a
-   GAUGE rather than a number: the cells say how close the chain is to its
-   ceiling at a glance, and the line under it drains as the window runs out. */
-#combo {
-  position: absolute; left: 50%; bottom: calc(var(--u) * 24);
-  transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center;
-  gap: calc(var(--u) * 1.5);
-  pointer-events: none;
-}
-#combo-head {
-  position: relative; width: 272px;
-  display: flex; align-items: flex-end; justify-content: center;
-}
-#combo-mult {
-  font-size: 32px; color: var(--gold); line-height: 1.1;
-  /* A tight glow only. At 32px a wide halo in the glyphs' own colour floods
-     the counters of a bitmap face and the number stops being a number. */
-  text-shadow: 2px 2px 0 var(--ink), 0 0 10px rgba(255, 233, 94, 0.45);
-}
-/* Parked at the LEFT end of the row, not the right: the multiplier is centred
-   on the screen's midline and the chain length is the smaller reading, so the
-   two need the full width of the gauge between them. */
-#combo-count {
-  position: absolute; left: 0; bottom: 4px;
-  font-size: 8px; letter-spacing: 0.16em; color: #93a0c0;
-}
-#combo-gauge { width: 272px; height: 10px; --cells: 16; }
-#combo-fill {
-  background: var(--amber);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 12px rgba(255, 160, 40, 0.55);
-}
-/* Where x2 and x3 fall. Notches, not labels: the player needs to know the bar
-   has landmarks, not what they are called. */
-.combo-tick {
-  position: absolute; top: -3px; bottom: -3px; width: 2px; z-index: 3;
-  background: var(--text); opacity: 0.65;
-}
-/* The decay window, drained from the centre out. */
-#combo-bar { width: 272px; height: 3px; background: rgba(255, 255, 255, 0.1); }
-#combo-bar i {
-  display: block; height: 100%; background: var(--gold);
-  box-shadow: 0 0 8px var(--gold);
-  transform-origin: center;
-}
-/* Capped. The gauge cannot say any more with its length, so it says it with
-   light instead. */
-#combo.combo-max #combo-fill {
-  background: #ff6a3d;
-  animation: combo-max-pulse 0.5s steps(1, end) infinite alternate;
-}
-#combo.combo-max #combo-mult {
-  color: #ff6a3d; text-shadow: 2px 2px 0 var(--ink), 0 0 12px rgba(255, 90, 45, 0.7);
-}
-@keyframes combo-max-pulse {
-  from { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 8px rgba(255, 90, 45, 0.5); }
-  to   { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 26px rgba(255, 90, 45, 1); }
 }
 
 /* =========================================================================
@@ -1209,13 +1159,13 @@ html, body {
    a hard pixel grid, but a physical object being taken away is the one thing
    here that is a MOVEMENT, and stepping it would read as a dropped frame
    rather than as a deliberate exit. */
-#hud-top, #hud-bottom, #combo, #buffs {
+#hud-top, #hud-bottom, #buffs {
   transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1),
               opacity 0.28s linear;
 }
 #hud.swap #hud-top { transform: translateY(-160%); opacity: 0; }
 #hud.swap #hud-bottom { transform: translateY(160%); opacity: 0; }
-#hud.swap #combo, #hud.swap #buffs { opacity: 0; }
+#hud.swap #buffs { opacity: 0; }
 /* The crosshair goes too, and instantly: it is the one HUD element that reads
    as part of the gun rather than as a panel, and sliding it would look like
    the reticle coming loose. */
@@ -1618,7 +1568,6 @@ html, body {
   #credit-num { font-size: 16px; }
   #ammo-num { font-size: 24px; }
   #hp-box { width: 200px; }
-  #combo-head, #combo-gauge, #combo-bar { width: 200px; }
   #over-hero { font-size: 44px; }
   .run-strip { --surface: transparent; }
   .run-strip .rs { padding: calc(var(--u) * 2) calc(var(--u) * 3); }
@@ -1640,7 +1589,6 @@ html, body {
   #hp-box.spent #stam-bar,
   .overlay h1.dead,
   .primary-row::before, .primary-row::after,
-  #combo.combo-max #combo-fill,
   #boss-bar.enraged #boss-note { animation: none; }
   /* NOT the hit marker: it carries information no other element repeats, and
      switching its animation off would leave it stuck on the first hit - the

@@ -59,7 +59,9 @@
 
 import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
-import { Player, NO_HIT_CAP, MAX_SPEED } from './player.js';
+import {
+  Player, NO_HIT_CAP, MAX_SPEED, flawlessStreakMult, FLAWLESS_STREAK_CAP,
+} from './player.js';
 import { PLAYER_STATUS } from './status.js';
 import {
   Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink,
@@ -282,14 +284,19 @@ const COMBO_MAX = 3;
 // because paying them at this rate off a real value would make splitters the
 // best credit source in the game.
 //
-// 0.18 rather than the 0.1 it was for most of the game's life, because KILLS
-// ARE NOW THE ONLY INCOME. The flat wave-clear bonus is gone (see _finishWave):
-// it paid out a third to a half of a wave's money for standing still at the
-// moment the last enemy died, which is the one moment in a wave that asks
-// nothing of the player. Everything it used to pay now has to be picked up off
-// the floor, and this is the dial that keeps a run's total roughly where it
-// was - plus a margin for the orbs that time out uncollected.
-const CREDITS_PER_VALUE = 0.18;
+// 0.25 rather than the 0.18 it was, because THE KILL CHAIN NO LONGER PAYS.
+// The combo used to multiply every kill's bounty by up to three, which made
+// the best way to earn money hoarding a wave and then clearing it in one
+// chain - a strategy of NOT shooting things, in a shooter. That multiplier is
+// gone (the chain still exists, but only to drive the room - see comboMult),
+// and the flawless streak replaces it: money now comes from not being hit
+// rather than from the shape of a kill order.
+//
+// The two do not trade evenly on purpose. A chain averaged somewhere near 1.6x
+// over a busy wave, so a flat 0.25 leaves a player who takes hits earning
+// slightly LESS than before, while a clean run reaches 0.25 x 3 and earns far
+// more. That gap is the point of the change.
+const CREDITS_PER_VALUE = 0.25;
 // What one splitter child pays. Flat, and set here rather than by giving the
 // child a `value`, because the two numbers answer different questions: the
 // children are still worth NOTHING - killing them must not pay twice for work
@@ -516,6 +523,23 @@ const BOSS_ORB_SWEEP_DELAY = 1.1;
 const FLAWLESS_BONUS_BASE = 60;
 const FLAWLESS_BONUS_PER_WAVE = 30;
 const FLAWLESS_ORBS = 8;
+// HOW LONG THE FLAWLESS SHOWER IS LEFT ALONE, and then how long before it is
+// swept up. Both exist because this shower is thrown at the PLAYER'S OWN FEET
+// and everything else in the game is not.
+//
+// Without the hold there was no shower to see: eight orbs spawned inside the
+// magnet radius (they are thrown at `spread` 5.5 and BASE_MAGNET_RADIUS is
+// 5.5) were claimed on their first frame and pulled straight back in, and the
+// ones that spawned on top of the player were collected outright by the touch
+// radius before they had moved at all. The bonus paid correctly and was
+// completely invisible - which for a reward whose entire job is to SAY you
+// were not hit is the same as not paying it.
+//
+// Held for the length of the arc, they fly out, land, and are money on the
+// floor for a beat. The sweep then brings in whatever the player has not
+// walked over, exactly as the boss shower does.
+const FLAWLESS_ORB_HOLD = 0.5;
+const FLAWLESS_ORB_SWEEP_DELAY = 1;
 // Ammo and health are pulled from this fraction of the money radius, at this
 // many metres a second at the very centre of it.
 const MAGNET_PICKUP_FRACTION = 0.55;
@@ -661,8 +685,6 @@ class Game {
     this.credits = 0;
     this.comboKills = 0;
     this.comboTimer = 0;
-    this.player.setBloodlustStacks(0);
-    this.bestCombo = 0;
     // Reset at the start of every wave; drives the perfect-clear bonus.
     this.waveDamageTaken = 0;
     // Whether the last wave was cleared without taking damage. Drives the
@@ -975,7 +997,8 @@ class Game {
         wave: this.wave,
         kills: this.kills,
         credits: this.credits,
-        bestCombo: this.bestCombo,
+        flawlessStreak: this.player.flawlessStreak,
+        flawlessMult: this.flawlessMult(),
         upgrades: { ...this.player.upgrades },
         upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
         weapon: this.player.weapon.name,
@@ -2269,11 +2292,8 @@ class Game {
     this.credits = 0;
     this.comboKills = 0;
     this.comboTimer = 0;
-    this.bestCombo = 0;
     this.waveDamageTaken = 0;
     this.lastPerfect = false;
-    this.cleanWaves = 0;
-    this.wavesCleared = 0;
     this._pass = false;
     this._swapped = false;
     this.totemArea.dismiss();
@@ -2391,7 +2411,6 @@ class Game {
     this.ui.banner(m.label() + ' FELL ON WAVE ' + m.wave);
     this.comboKills = 0;
     this.comboTimer = 0;
-    this.player.setBloodlustStacks(0);
     this._endTurn(false);
   }
 
@@ -2972,7 +2991,10 @@ class Game {
     // number that changed in the corner of the screen. The wave-clear vacuum
     // that follows sweeps up anything the player does not walk over.
     const at = this._bossDeathPos;
-    this.money.spawn(at, bonus * this.player.mods.creditMult, BOSS_ORBS, 7.5);
+    // Through _dropMoney like every other payout, so Midas and the flawless
+    // streak are applied in one place. Thrown from where the boss died, which
+    // is why this one needs no hold: it lands well outside the magnet.
+    this._dropMoney(at, bonus, BOSS_ORBS, 7.5);
     // AND THEN THEY COME TO YOU. The wave-clear vacuum has already run by the
     // time this is called, so without a second sweep the boss's own payout was
     // the one drop in the game left lying on the floor - forty orbs thrown
@@ -2985,14 +3007,17 @@ class Game {
     // would make the run's largest single payout a matter of whose turn wave
     // ten happened to be. The other player's balance is simply larger when
     // they next look at it - announcing it would be telling them about a fight
-    // they did not have. Scaled by THEIR Midas, not this player's, which is
-    // why the snapshot caches the multiplier.
+    // they did not have. Scaled by THEIR Midas and THEIR flawless streak, not
+    // this player's, which is why the snapshot caches both multipliers: a
+    // benched build is plain data, and neither number can be recomputed from
+    // it once the live Player belongs to somebody else.
     if (this.match) {
       const s = this.match.slots[this.match.other];
-      s.game.credits += bonus * s.creditMult;
+      s.game.credits += bonus * s.creditMult * s.flawlessMult;
     }
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
-    this.ui.banner('BOSS DOWN  +$' + Math.round(bonus * this.player.mods.creditMult));
+    this.ui.banner('BOSS DOWN  +$'
+      + Math.round(bonus * this.player.mods.creditMult * this.flawlessMult()));
   }
 
   // A turret, in the air, on its way to (tx, tz). Everything that makes it a
@@ -3090,7 +3115,6 @@ class Game {
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
     this.comboKills = 0;
     this.comboTimer = 0;
-    this.player.setBloodlustStacks(0);
     this.ui.setPrompt(null, false);
     this.ui.setBoss(null, 0, '', '');
     // The boss keeps its telegraphs until it is disposed, and on the game-over
@@ -3105,9 +3129,7 @@ class Game {
     this._clearHazards();
     const st = this.stats;
     const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
-    this.ui.showOver(
-      this.wave, this.kills, acc + '%', this.bestCombo, Math.floor(this.credits)
-    );
+    this.ui.showOver(this.wave, this.kills, acc + '%', Math.floor(this.credits));
     // The heaviest the sound goes. This is the run ending, not a body.
     this.sfx.death(1.2);
     // And the heaviest the pad goes, at a priority nothing else in the game
@@ -3115,23 +3137,63 @@ class Game {
     this.pad.rumble(1, 0.8, 700, 4);
   }
 
-  // Current credit multiplier from the live kill chain.
+  // How hard the kill chain is running, 1 upward.
+  //
+  // IT BUYS NOTHING. This used to multiply every kill's bounty, and the money
+  // is why it is not on the HUD any more: paying for a chain made hoarding a
+  // wave and killing it all at once the most profitable way to play, which is
+  // a strategy of not shooting things. The chain survives because rig.js reads
+  // this to drive how hard the room is being pushed - the lights and the music
+  // still get more excited the better you are doing, and now that is ALL it
+  // does. Nothing the player has to read, and nothing they can play toward.
   comboMult() {
     if (this.comboKills < 2) return 1;
     return Math.min(COMBO_MAX, 1 + COMBO_STEP * (this.comboKills - 1));
   }
 
+  // The flawless streak's multiplier, live. See flawlessStreakMult.
+  flawlessMult() {
+    return flawlessStreakMult(this.player.flawlessStreak);
+  }
+
+  // A HIT LANDED, and the single place that fact is booked.
+  //
+  // Both of the game's damage paths - a body or a shot in _hurtPlayer, a
+  // hazard tick in _hazardDamage - come through here, because the flawless
+  // streak is worth real money and a second place that forgot to break it
+  // would be a way to earn the multiplier while being hit. `lastDamageTaken`
+  // is what LANDED after curse and mitigation, which is the same number
+  // lastPerfect is decided on, so the streak and the FLAWLESS banner can never
+  // disagree about whether the player was touched.
+  _noteDamage() {
+    const d = this.player.lastDamageTaken;
+    if (d <= 0) return;
+    this.stats.damaged += d;
+    this.waveDamageTaken += d;
+    // IMMEDIATELY, not at the wave clear. The rest of this wave is paid at 1x,
+    // and the player feels the multiplier go the instant they are hit rather
+    // than finding out about it in a banner thirty seconds later.
+    this.player.flawlessStreak = 0;
+  }
+
   // MONEY DROPPED, not money earned. Everything a kill is worth goes onto the
   // floor as orbs and the balance only moves when they are collected.
   //
-  // Midas's creditMult is applied HERE rather than at collection, so the orbs
-  // that hit the floor are already worth what the player's build says they are
-  // worth - a Midas run visibly drops more money, which is the whole point of
-  // taking it - and so a mid-run pick can never retroactively revalue orbs
-  // that were already lying there.
-  _dropMoney(pos, amount) {
+  // EVERY PAYOUT IN THE GAME GOES THROUGH HERE - a kill, the flawless shower,
+  // the boss bounty - which is what guarantees the two multipliers below are
+  // applied once each and to all of them. The showers pass their own orb count
+  // and spread; a kill takes the defaults.
+  //
+  // Midas's creditMult and the flawless streak are applied HERE rather than at
+  // collection, so the orbs that hit the floor are already worth what the
+  // player's build and their run say they are worth - a Midas run visibly
+  // drops more money, which is the whole point of taking it - and so a mid-run
+  // pick, or a hit taken while the orbs are still lying there, can never
+  // retroactively revalue money that has already been dropped.
+  _dropMoney(pos, amount, maxOrbs, spread, hold) {
     if (amount <= 0) return;
-    this.money.spawn(pos, amount * this.player.mods.creditMult);
+    const paid = amount * this.player.mods.creditMult * this.flawlessMult();
+    this.money.spawn(pos, paid, maxOrbs, spread, hold);
   }
 
   // An orb reached the player. The single entry point for the balance going
@@ -3149,13 +3211,11 @@ class Game {
     }
   }
 
-  // Extends the kill chain. Called once per enemy death, before the credit is
-  // computed, so the kill that starts a chain already counts toward it.
+  // Extends the kill chain. Called once per enemy death. Nothing is paid for
+  // it any more - it drives the room and only the room, see comboMult.
   _bumpCombo() {
     this.comboKills++;
     this.comboTimer = COMBO_WINDOW;
-    if (this.comboKills > this.bestCombo) this.bestCombo = this.comboKills;
-    this.player.setBloodlustStacks(this.comboKills);
   }
 
   // Reactive Plating. Detonates around the player when they are hit; damage
@@ -3924,8 +3984,8 @@ class Game {
     this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
     // What LANDED, not what was thrown: curse is applied inside takeDamage.
-    this.stats.damaged += this.player.lastDamageTaken;
-    this.waveDamageTaken += this.player.lastDamageTaken;
+    // Books the damage and breaks the flawless streak - see _noteDamage.
+    this._noteDamage();
     this._shockwave();
     this.effects.addShake(0.25);
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
@@ -4300,19 +4360,34 @@ class Game {
         this._vacuumPickups();
         let msg = 'WAVE ' + this.wave + ' CLEARED';
         if (this.lastPerfect) {
+          // ONE MORE CLEAN WAVE ON THE STREAK, and it is banked BEFORE the
+          // shower is paid: the wave that was just cleared counts toward its
+          // own bonus, so the number the banner announces is the number the
+          // HUD is about to show and the shower is worth. Clamped at the cap
+          // so the stored count never runs past what it can ever be paid for.
+          this.player.flawlessStreak = Math.min(
+            FLAWLESS_STREAK_CAP, this.player.flawlessStreak + 1
+          );
           // WHAT FLAWLESS PAYS NOW. The clear bonus used to double for a wave
           // taken without damage, which was the game's loudest "you were not
           // hit" signal; with the flat bonus gone it is paid as a shower of
           // orbs at the player's feet instead. Same reward, and it arrives as
           // something that happens in the room rather than as a bigger number
           // in a banner.
-          this.money.spawn(
+          //
+          // Through _dropMoney like every other payout, so it takes Midas and
+          // the streak it just extended. Held and then swept - see
+          // FLAWLESS_ORB_HOLD for why a shower thrown at the player's own feet
+          // needs both, and why without them this was invisible.
+          this._dropMoney(
             this.player.pos,
-            (FLAWLESS_BONUS_BASE + FLAWLESS_BONUS_PER_WAVE * this.wave)
-              * this.player.mods.creditMult,
-            FLAWLESS_ORBS, 5.5
+            FLAWLESS_BONUS_BASE + FLAWLESS_BONUS_PER_WAVE * this.wave,
+            FLAWLESS_ORBS, 5.5, FLAWLESS_ORB_HOLD
           );
-          msg += '  FLAWLESS';
+          // The wave-clear sweep above has already run, so these orbs would
+          // otherwise be the one drop left lying on the floor.
+          this.money.vacuum(FLAWLESS_ORB_SWEEP_DELAY);
+          msg += '  FLAWLESS x' + this.flawlessMult();
         }
         // No-Hit Bonus. Read from the same flag the clear bonus just set, so
         // the two can never disagree about what flawless means, and banked on
@@ -5197,21 +5272,23 @@ class Game {
       // SPLIT_CHILD_CREDITS - because they are three bodies you have to stop
       // and deal with.
       this._bumpCombo();
-      const mult = this.comboMult();
       // KILLED WITH THE GUN ITSELF, tagged by _meleeStrike. It rides on top of
       // the combo rather than replacing it: a melee kill inside a chain is
       // worth the chain AND the double, which is the whole reason to walk into
       // something rather than shoot it.
       const meleeMult = e.meleeKill ? MELEE_KILL_MULT : 1;
       // MONEY IS NOT AWARDED HERE ANY MORE. The kill drops orbs where it died
-      // and the balance moves when the player picks them up - see
-      // _collectOrb. The combo multiplier is still applied at the moment of
-      // death, so a chain is worth what it was worth when it happened rather
-      // than what it is worth when the money is collected.
+      // and the balance moves when the player picks them up - see _collectOrb.
+      // THE KILL CHAIN IS NOT IN THIS LINE. It used to multiply the bounty by
+      // up to three and that is exactly what made stockpiling a wave the best
+      // way to earn - see comboMult. What multiplies a kill now is the melee
+      // double here and, inside _dropMoney, the flawless streak: both are
+      // decided by how the player is playing rather than by how long they
+      // waited to start.
       // A flat bounty wins over the value-derived figure where one is set -
-      // see Enemy.bounty. The combo multiplier rides on both.
+      // see Enemy.bounty. The melee double rides on both.
       const bounty = e.bounty !== null ? e.bounty : e.value * CREDITS_PER_VALUE;
-      this._dropMoney(e.pos, bounty * mult * meleeMult);
+      this._dropMoney(e.pos, bounty * meleeMult);
       this.player.onKill(this.time);
       // BODY COUNT's stack, and anything else that ever counts kills. Walked
       // rather than dispatched - see RunningItems.onKill.
@@ -5704,8 +5781,8 @@ class Game {
     // standing in fire is being hit.
     this.player.clearCarnage();
     const h = this.player.takeDamage(d, this.time);
-    this.stats.damaged += this.player.lastDamageTaken;
-    this.waveDamageTaken += this.player.lastDamageTaken;
+    // Standing in fire is being hit, for the streak as much as for Carnage.
+    this._noteDamage();
     // Throttled, and NO LONGER THE DAMAGE FLASH. The fire and poison layers are
     // up for as long as the player is burning or poisoned - driven every frame
     // in the HUD sync, see Ui.setStatusFx - so the screen is already saying
@@ -5903,10 +5980,10 @@ class Game {
     // payout - so it is floored for display and for the run summary. Nothing
     // is lost: the fraction is still in the balance and still spends.
     this.ui.setCredits(Math.floor(this.credits));
-    const cm = this.comboMult();
-    this.ui.setCombo(
-      this.comboKills, cm, (cm - 1) / (COMBO_MAX - 1), this.comboTimer / COMBO_WINDOW
-    );
+    // Beside the balance, because it is a fact about the balance: it is the
+    // rate everything on the floor is being paid at. Hidden at 1x - a "x1"
+    // sitting there permanently is not information.
+    this.ui.setFlawless(this.flawlessMult());
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setStamina(
       this.player.staminaFrac, this.player.staminaLow, this.player.staminaLocked
@@ -6059,12 +6136,7 @@ class Game {
       if (this.emptyClickCd > 0) this.emptyClickCd -= dt;
       if (this.comboTimer > 0) {
         this.comboTimer -= dt;
-        // The chain lapsing is what takes Bloodlust's bonus away, so the
-        // upgrade has exactly one clock and the player can already see it.
-        if (this.comboTimer <= 0) {
-          this.comboKills = 0;
-          this.player.setBloodlustStacks(0);
-        }
+        if (this.comboTimer <= 0) this.comboKills = 0;
       }
       // THE CONTROLLER PASS, on a live game. It only moves the weapon and the
       // instruments; the wave break it rides on is the ordinary one, and the

@@ -61,11 +61,7 @@ export class UI {
     this.overHeroLabel = $('over-hero-label');
     this.buffsEl = $('buffs');
     this.creditNum = $('credit-num');
-    this.comboEl = $('combo');
-    this.comboMult = $('combo-mult');
-    this.comboCount = $('combo-count');
-    this.comboBar = $('combo-bar').firstElementChild;
-    this.comboFill = $('combo-fill');
+    this.flawlessEl = $('flawless');
     this.promptEl = $('prompt');
     // The active item slot, bottom right over the gun readout.
     this.itemBox = $('item-box');
@@ -131,7 +127,7 @@ export class UI {
       if (name) this.bossName.textContent = name;
     }
     if (!name) return;
-    // Quantised like the combo bar: the width is a style write and the health
+    // Quantised: the width is a style write and the health
     // changes by a fraction of a percent on most frames, which would be a
     // layout every frame for a change nobody can see.
     const q = Math.round(Math.max(0, Math.min(1, frac)) * 200) / 200;
@@ -372,42 +368,30 @@ export class UI {
       this.creditNum.textContent = '$' + n.toLocaleString();
     }
   }
-  // `kills` is the current chain length, `level` is 0..1 of the way to the
-  // multiplier's ceiling and `fraction` is 0..1 of the time left before the
-  // chain drops. A chain of 1 shows nothing - a multiplier of x1.0 on screen
-  // after every single kill is just noise.
+  // The flawless streak's credit multiplier, under the balance.
   //
-  // main.js owns the ceiling and hands `level` down already divided, so the UI
-  // never has to know what COMBO_MAX is - the same reason it is handed `mult`
-  // rather than the step and the count.
-  setCombo(kills, mult, level, fraction) {
-    const show = kills >= 2;
-    if (this._c.comboShown !== show) {
-      this._c.comboShown = show;
-      this.comboEl.classList.toggle('hidden', !show);
-    }
-    if (!show) return;
-    if (this._c.comboKills !== kills) {
-      this._c.comboKills = kills;
-      this.comboMult.textContent = 'x' + mult.toFixed(1);
-      this.comboCount.textContent = kills + ' KILLS';
-      // The gauge only moves when the chain does, so this is a per-kill write
-      // rather than a per-frame one.
-      const lv = Math.max(0, Math.min(1, level));
-      this.comboFill.style.transform = 'scaleX(' + lv.toFixed(3) + ')';
-      this.comboEl.classList.toggle('combo-max', lv >= 1);
-    }
-    const f = Math.round(Math.max(0, Math.min(1, fraction)) * 50) / 50;
-    if (this._c.comboFrac !== f) {
-      this._c.comboFrac = f;
-      this.comboBar.style.transform = 'scaleX(' + f + ')';
-    }
+  // HIDDEN AT x1, which is most of a bad run: the element is not a slot that
+  // sometimes reads one, it is a thing that is either true or absent. That is
+  // also what makes it readable as an event - it appears when a clean wave is
+  // banked and it is gone the frame the player is hit, and there is no state
+  // in between for the eye to have to compare against.
+  //
+  // Written only when the number changes, like every other readout here: the
+  // HUD sync calls this every frame.
+  setFlawless(mult) {
+    if (this._c.flawless === mult) return;
+    this._c.flawless = mult;
+    const show = mult > 1;
+    this.flawlessEl.classList.toggle('hidden', !show);
+    // Quarter steps, so a plain toString is exact and never trails a zero:
+    // x1.25, x1.5, x3. A toFixed here would say "x3.00".
+    if (show) this.flawlessEl.textContent = 'FLAWLESS x' + mult;
   }
 
   // Each argument is 0..1 of that buff's remaining duration; 0 hides its chip.
   //
-  // The chips sit beside the combo gauge, and they are the ONLY thing that
-  // says a buff is up. The shield used to light the whole frame as well, which
+  // The chips have the bottom centre to themselves, and they are the ONLY
+  // thing that says a buff is up. The shield used to light the whole frame as well, which
   // was the loudest element in the game for the rarest pickup in it and hid
   // the room behind a blue wash for fifteen seconds at a time. The chip does
   // the same job: it carries a points label as well as a timer, because the
@@ -739,7 +723,7 @@ export class UI {
    * the number on the screen, set at four times the size of anything under it.
    * Everything else is context for it, and reads as context.
    */
-  showOver(wave, kills, accuracy, bestCombo = 0, credits = 0) {
+  showOver(wave, kills, accuracy, credits = 0) {
     // Taken back off in case the last thing on this screen was a versus win.
     const h1 = this.overOv.querySelector('h1');
     h1.textContent = 'YOU DIED';
@@ -747,14 +731,13 @@ export class UI {
     this.hideSubScreens();
     this.overHeroLabel.textContent = 'REACHED WAVE';
     this.overHero.textContent = String(wave);
-    // Four columns of one reading, not one sentence. At 8x8 a run-on line of
+    // Columns of one reading each, not one sentence. At 8x8 a run-on line of
     // labels and numbers separated by middots is a wall the player has to read
     // left to right; a divided strip is scanned in a glance.
     this.overStats.textContent = '';
     const stats = [
       ['KILLS', String(kills)],
       ['ACCURACY', accuracy],
-      ['BEST CHAIN', String(bestCombo)],
       ['CREDITS', '$' + credits.toLocaleString()],
     ];
     for (const [label, value] of stats) {
@@ -903,7 +886,7 @@ export class UI {
     this.bossBar.className = 'plate hidden';
     this.hpBox.classList.remove('low', 'stam-low', 'spent');
     this.enemies.classList.remove('clear');
-    this.comboEl.classList.add('hidden');
+    this.flawlessEl.classList.add('hidden');
     this.crosshair.classList.remove('aim');
     // The marker's `.show` is never taken off in play - the animation under it
     // is what ends, not the class - so a new run is the one place it is worth

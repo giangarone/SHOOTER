@@ -19,6 +19,7 @@
     "test:seeker": "node test/seeker.mjs",
     "test:active": "node test/active.mjs",
     "test:money": "node test/money.mjs",
+    "test:flawless": "node test/flawless.mjs",
     "test:icons": "node test/icons.mjs",
     "test:status": "node test/status.mjs",
     "test:afflict": "node test/afflict.mjs"

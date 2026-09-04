@@ -210,7 +210,7 @@ for (const k of PLAYER_CLOCKS) {
 // run - naming what belongs to a player is much the shorter list.
 const GAME_FIELDS = [
   'kills', 'credits',
-  'comboKills', 'comboTimer', 'bestCombo',
+  'comboKills', 'comboTimer',
   'waveDamageTaken', 'lastPerfect',
   // NO SHOP COUNTER. The active item row used to come up on every third shop
   // and each run counted its own; the mystery box stands in every wave break
@@ -264,6 +264,12 @@ export function captureRun(game) {
     // Midas needs their mods - which do not exist while their build is sitting
     // in a snapshot. One scalar, read at the only moment it is available.
     creditMult: p.mods.creditMult,
+    // AND THEIR FLAWLESS STREAK, for the same reason and at the same moment.
+    // The streak itself rides in `player` like every other Player field - it
+    // is what makes the counter per-player at all - but the multiplier the
+    // mirrored bounty needs is read here, while there is still a live run to
+    // read it from.
+    flawlessMult: game.flawlessMult(),
   };
 }
 

@@ -90,7 +90,13 @@ try {
     // banked upgrades - the guard fires on a normal run rather than passing
     // vacuously, which earlier revisions of it did.
     ['granted upgrades', rep.wave < 3 || rep.upgradeCount > 0],
-    ['combo chained', rep.bestCombo >= 2],
+    // The flawless streak is the run's only credit multiplier now, so the
+    // guard is that its two halves agree: a bot that gets hit constantly may
+    // legitimately finish on a streak of nothing, but the multiplier must
+    // always be exactly what the count says it is - a quarter a wave, capped
+    // at three. A renamed field or a cap that drifted fails here.
+    ['flawless multiplier matches the streak',
+      rep.flawlessMult === Math.min(3, 1 + 0.25 * rep.flawlessStreak)],
     // One lit plate on the receiver per owned bullet mutation. Covers
     // refreshGunMarks() being called on every draft pick, not just the first.
     ['gun marks match build', rep.gunMarks === rep.markedUpgrades],

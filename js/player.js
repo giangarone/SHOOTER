@@ -70,8 +70,6 @@ const DEFAULT_MODS = {
   ammoOnKill: 0,        // reserve rounds granted per kill
   magnetMult: 1,        // Lodestone: multiplier on the money-orb collection
                         // radius (and, at a reduced rate, on the pickup one)
-  bloodlust: 0,         // Bloodlust: fire rate gained per kill in the combo
-  bloodlustMax: 0,      // Bloodlust: kills past which it stops climbing
   shockwave: 0,         // damage dealt to nearby enemies when hit
   shockwaveRadius: 0,
   steady: 0,            // extra damage fraction while standing still
@@ -251,6 +249,37 @@ function dashShape(u) {
 // because main.js says the current total on the clear banner and has to agree
 // with rebuildMods about where it stops.
 export const NO_HIT_CAP = 0.4;
+// THE FLAWLESS STREAK. The credit multiplier carried by consecutive waves
+// cleared without taking a single point of damage - the game's only credit
+// multiplier now that the kill chain does not pay (see Game._dropMoney).
+//
+// It is DELIBERATELY NOT the No-Hit Bonus above, and the two must not be
+// merged however similar they look: No-Hit is a permanent ramp that a hit
+// never takes away, and this drops to nothing the instant the player is
+// touched. One is a build that grows, the other is a run you are currently
+// getting away with. They read the SAME flawless flag, so they can never
+// disagree about what an untouched wave is - they only disagree about what
+// losing one costs.
+//
+// A quarter per wave, capped at three, so the ceiling is eight clean waves.
+const FLAWLESS_STEP = 0.25;
+const FLAWLESS_MAX_MULT = 3;
+// Clean waves past which the streak stops climbing. Derived from the two above
+// rather than written down, so the cap and the step can never disagree.
+export const FLAWLESS_STREAK_CAP =
+  Math.round((FLAWLESS_MAX_MULT - 1) / FLAWLESS_STEP);
+
+/**
+ * The credit multiplier a streak of `n` clean waves is worth.
+ *
+ * A free function and not a method because versus.js has to compute it for a
+ * player whose Player object is not the live one - a benched build is a plain
+ * snapshot, and the boss bounty mirrored into it still has to be scaled by
+ * THEIR streak and not the active player's. See captureRun.
+ */
+export function flawlessStreakMult(n) {
+  return Math.min(FLAWLESS_MAX_MULT, 1 + FLAWLESS_STEP * Math.max(0, n));
+}
 // The floor no max-health cost may take the player below, enforced inside the
 // maxHealth getter itself rather than at any one charging site - which is the
 // whole guarantee that a build can never reduce itself to nothing. Twenty is a
@@ -883,7 +912,15 @@ export class Player {
     this._statusDot = 0;
     // What the last takeDamage() call actually cost, after curse - see there.
     this.lastDamageTaken = 0;
-    this.bloodlustStacks = 0;
+    // The flawless streak: consecutive waves cleared without being hit.
+    //
+    // ON THE PLAYER, NOT ON THE GAME, and that is the whole of what makes it
+    // work in versus: captureRun copies every Player field that is not on the
+    // skip list, so a streak follows its owner onto the bench and comes back
+    // with them. The same counter on Game would have to be named in
+    // GAME_FIELDS, and the failure mode of forgetting is one player inheriting
+    // the other's streak - silent, and worth real money.
+    this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
     // Holy Mantle's charge, re-armed at every wave start, and Dead Cat's
     // revive counter, which is spent once per run and not refilled.
@@ -1288,9 +1325,9 @@ export class Player {
     this.dodgeEnd = time + DODGE_TIME;
   }
 
-  // Called by main.js on every kill. Only Vampiric Rounds uses it now:
-  // Bloodlust rides the combo counter, which main.js owns, and is pushed in
-  // through setBloodlustStacks() whenever that counter moves.
+  // Called by main.js on every kill. Vampiric Rounds, Blood Pact and Carnage
+  // are all that hang off it - nothing else in the game is paid per kill any
+  // more, the credit multiplier included.
   onKill(time) {
     if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
       this.health = Math.min(this.maxHealth, this.health + 1);
@@ -1302,12 +1339,6 @@ export class Player {
       this.health = Math.min(this.maxHealth, this.health + this.mods.killHeal);
     }
     this.bumpCarnage();
-  }
-
-  // Bloodlust. `kills` is the length of the CURRENT combo; the cap is the mod
-  // so the upgrade owns its own ceiling.
-  setBloodlustStacks(kills) {
-    this.bloodlustStacks = Math.min(this.mods.bloodlustMax, kills);
   }
 
   // Holy Mantle. Called at the start of every wave: the ward is a per-wave
@@ -1391,14 +1422,6 @@ export class Player {
     return gain;
   }
 
-  // Current fire-rate multiplier from Bloodlust's kill chain. It is paid ON
-  // TOP of the flat penalty the upgrade applies to mods.fireRate, so a cold
-  // gun with Bloodlust is worse than no Bloodlust at all - that is the deal.
-  bloodlustMult() {
-    if (this.bloodlustStacks <= 0) return 1;
-    return 1 + this.mods.bloodlust * this.bloodlustStacks;
-  }
-
   // Back to a fresh-run state. Called on every new game, so anything added to
   // the constructor that changes during play must be reset here too.
   reset() {
@@ -1427,7 +1450,7 @@ export class Player {
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
     this._equipModel();
     this.refreshGunMarks();
-    this.bloodlustStacks = 0;
+    this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
     this.wardReady = false;
     this.livesUsed = 0;
@@ -2482,7 +2505,7 @@ export class Player {
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
       this.lastShotCost = 0;
       const effRate =
-        w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate * this.bloodlustMult();
+        w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate;
       this.fireCd = 1 / effRate;
       this.kick = w.kick;
       this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
@@ -2509,7 +2532,7 @@ export class Player {
       this.mag = Math.max(0, this.mag - cost);
     }
     const effectiveFireRate =
-      w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate * this.bloodlustMult();
+      w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate;
     this.fireCd = 1 / effectiveFireRate;
     this.kick = w.kick;
     // A round fired is a commitment to being somewhere: it walks the player
