@@ -123,10 +123,14 @@ try {
     // --- PAYING FOR A ROLL ---
     g.wave = 1;
     g.credits = 100000;
+    g.totemArea.boxRolls = 0;
     const before = g.credits;
+    // READ BEFORE THE PURCHASE. Buying steps the box's own counter, so asking
+    // _boxCost() afterwards is asking what the NEXT roll costs.
+    const quoted = g._boxCost();
     g._buyBoxRoll();
     out.rollCharged = before - g.credits;
-    out.rollCostIsBoxCost = out.rollCharged === g._boxCost();
+    out.rollCostIsBoxCost = out.rollCharged === quoted;
     out.opensOnPurchase = g.mysteryBox.state === 'opening';
     // A SECOND PRESS MID-SPIN BUYS NOTHING. The box sells one thing at a time.
     const midSpin = g.credits;
@@ -173,6 +177,7 @@ try {
     // in one visit, every one the same money.
     g.wave = 1;
     g.credits = 100000;
+    g.totemArea.boxRolls = 0;
     const costs = [];
     for (let n = 0; n < 5; n++) {
       const c = g.credits;
@@ -187,6 +192,7 @@ try {
     out.fiveRollsOneVisit = costs;
     // ...and it DOES climb with the wave, on the block boundary every other
     // price in the game steps on.
+    g.totemArea.boxRolls = 0;
     g.wave = 1; const w1 = g._boxCost();
     g.wave = 5; const w5 = g._boxCost();
     g.wave = 6; const w6 = g._boxCost();
@@ -374,9 +380,10 @@ try {
     P.item = null;
     g.credits = 100000;
     const cb = g.credits;
+    const shotQuote = g._boxCost();
     aimAt(box.hit);
     fire();
-    out.shotBoughtRoll = cb - g.credits === g._boxCost();
+    out.shotBoughtRoll = cb - g.credits === shotQuote;
     out.shotOpenedBox = box.state !== 'idle';
     // A second shot in the cooldown window buys nothing.
     const cb2 = g.credits;
@@ -437,8 +444,9 @@ try {
     const use = g._useTarget();
     out.promptNamesBox = !!use && use.kind === 'box';
     const kb = g.credits;
+    const keyQuote = g._boxCost();
     g.tryUse();
-    out.keyBoughtRoll = kb - g.credits === g._boxCost() && keyBox.state !== 'idle';
+    out.keyBoughtRoll = kb - g.credits === keyQuote && keyBox.state !== 'idle';
     for (let i = 0; i < 500 && !keyBox.offered; i++) {
       g.time += 0.016;
       keyBox.update(0.016, g.time, g.player.pos);
@@ -518,7 +526,12 @@ try {
       const strings = [
         ...def.effects.map((e) => e[0]),
         def.name,
-        ...g._statRows().flat().map(String),
+        // The build sheet's own entry for it: name, effect lines, and the
+        // READY state - none of which may print the cooldown either.
+        ...(() => {
+          const a = g._statActive();
+          return a ? [a.name, ...a.effects.map((e) => e[0])] : [];
+        })(),
       ];
       P.item = null;
       for (const line of strings) {
@@ -577,6 +590,13 @@ try {
     const tick = (n, dt = 0.05) => {
       for (let i = 0; i < n; i++) {
         g.time += dt;
+        // THE MUSIC HAS TO RUN. Fire and poison tick on Music.pulse now, and
+        // this helper drives the enemy step directly rather than going through
+        // the frame loop - so without this the pulse never advances and no
+        // damage-over-time in the game ever lands. sample() falls back to a
+        // free-running tempo when there is no audio, which is exactly the case
+        // in a headless run.
+        g.music.sample(dt);
         g._updateFire(dt);
         g._updateEnemies(dt);
       }
@@ -1074,14 +1094,15 @@ try {
   ok('the replacement is charged too', r.replacementCharged);
 
   // ---- the price ----
-  // THE ONE THING THAT SEPARATES THIS FROM THE REROLL IT IS PRICED LIKE. Five
-  // rolls in one visit, every one the same money - a doubling curve here would
-  // put the deep half of the pool out of reach of every run that found it.
-  ok('five rolls in one visit all cost the same',
-    new Set(r.fiveRollsOneVisit).size === 1 && r.fiveRollsOneVisit[0] === 2000,
+  // IT IS PRICED LIKE THE REROLL AND IT ESCALATES LIKE ONE. Standing at the box
+  // feeding it credits until it hands over the item you wanted is the shop
+  // answering a question already asked, so the second asking costs double - and
+  // the counter is the box's own, reset when a fresh set of totems rises.
+  ok('rolls double within one visit, from $1,000',
+    JSON.stringify(r.fiveRollsOneVisit) === '[1000,2000,4000,8000,16000]',
     JSON.stringify(r.fiveRollsOneVisit));
   ok('the price steps up per block of five waves',
-    JSON.stringify(r.waveLadder) === '[2000,2000,2500,3000]', JSON.stringify(r.waveLadder));
+    JSON.stringify(r.waveLadder) === '[1000,1000,1500,2000]', JSON.stringify(r.waveLadder));
   ok('a free-reroll token does not pay for a roll',
     r.tokenDoesNotPrice && r.tokenNotSpent && r.paidCashDespiteToken);
 

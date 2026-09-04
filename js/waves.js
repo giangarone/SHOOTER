@@ -6,8 +6,8 @@
 //
 // The old version rolled every slot in the queue against one flat weight
 // table, which meant one run could meet six tanks on wave 8 and the next six
-// chasers. Scores from two runs were not comparable, and the leaderboard was
-// measuring luck as much as skill.
+// chasers. Two runs were not comparable, and reaching wave 12 measured luck
+// as much as skill.
 //
 // So a wave's SHAPE is fixed and its CAST is not. Each wave declares how many
 // enemies of each ROLE it contains - a pure function of the wave number, the
@@ -167,8 +167,8 @@ function bossPressure(n) {
 // Index is the wave number; boss waves are null because their composition
 // comes from the trickle instead.
 //
-// EVERY NUMBER HERE IS A PURE FUNCTION OF THE WAVE NUMBER. That is the
-// guarantee the leaderboard rests on.
+// EVERY NUMBER HERE IS A PURE FUNCTION OF THE WAVE NUMBER. That is what makes
+// the wave a run reached mean the same thing in every run.
 const SLOTS = [
   null,
   { rusher: 6 },

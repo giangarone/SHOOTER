@@ -433,12 +433,78 @@ const CREEP_VERT = /* glsl */ `
   }
 `;
 
+// ---------------------------------------------------------------------------
+// DAMAGE NUMBERS
+// ---------------------------------------------------------------------------
+//
+// Every point of damage an enemy loses now floats off the body as a number.
+// This is the whole feedback loop the game was missing: a body flashed white
+// whether it took 3 or 3,000, damage over time was invisible, and there was no
+// way to tell an armoured hit from a soft one except by how long the enemy
+// took to die.
+//
+// HOW IT IS DRAWN, and why not the obvious way. The obvious way is a DOM node
+// per number projected to screen space, or a Sprite per number with its own
+// canvas texture. Both allocate per hit, and this fires dozens of times a
+// second - see the note at the top of this file. So:
+//
+//   · ONE ATLAS, built once: the ten digits, in the game's own face, at a
+//     power-of-two size with NEAREST filtering so a digit lands on texels.
+//   · A FIXED POOL of meshes, each a preallocated strip of MAX_DIGITS quads.
+//     Acquiring one rewrites its positions, its UVs and its vertex colours -
+//     no geometry is created, no texture is uploaded, and the whole pool shares
+//     one material.
+//   · BILLBOARDED by copying the camera's quaternion in update(), which is why
+//     update() now takes one.
+const DMG_POOL = 64;
+const DMG_DIGITS = 5;          // up to 99999; anything larger clamps
+const DMG_LIFE = 0.9;
+// The atlas is one row of ten cells. 64px a cell is comfortably above the size
+// a number is ever drawn at on screen, so the glyphs are downsampled rather
+// than stretched.
+const DMG_CELL = 64;
+// Size in world units at the low end and the high end - see damageNumber().
+const DMG_MIN_H = 0.30;
+const DMG_MAX_H = 0.85;
+// What one of the player's opening shots is worth. The size curve is measured
+// against this, so "a normal hit" is a normal-sized number on wave 1 and still
+// a normal-sized number on wave 30 once the build has multiplied everything.
+const DMG_REF = 34;
+const DMG_WHITE = new THREE.Color(0xffffff);
+// The interface's own gold, the colour it uses everywhere for the thing that
+// is currently true.
+const DMG_CRIT = new THREE.Color(0xffe95e);
+
+// The ten digits in a strip, in the HUD's face. Drawn once at boot.
+function makeDigitAtlas() {
+  const c = document.createElement('canvas');
+  c.width = DMG_CELL * 10;
+  c.height = DMG_CELL;
+  const x = c.getContext('2d');
+  // WHITE GLYPHS ON TRANSPARENT, tinted per number by vertex colour. Painting
+  // the colour into the atlas would need one atlas per colour, and a crit is
+  // the same digits in a different ink.
+  x.fillStyle = '#ffffff';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.font = Math.round(DMG_CELL * 0.78) + 'px "Press Start 2P", monospace';
+  for (let i = 0; i < 10; i++) {
+    x.fillText(String(i), i * DMG_CELL + DMG_CELL / 2, DMG_CELL * 0.54);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export class Effects {
   constructor(scene) {
     this.scene = scene;
     this.glowTex = makeGlowTexture();
     this.sparkTex = makeSparkTexture();
     this._initParticles();
+    this._initDamageNumbers();
 
     // Tracer pool. Each is a two-vertex line whose endpoints are rewritten on
     // use; frustum culling is off because the endpoints move without the
@@ -1476,7 +1542,11 @@ export class Effects {
     return out;
   }
 
-  update(dt) {
+  // `camera` is only used to billboard the damage numbers at it. Optional, so
+  // a headless harness that drives effects without a camera still settles
+  // everything else.
+  update(dt, camera = null) {
+    this._stepDamageNumbers(dt, camera);
     // Beams are redrawn from scratch each frame, so anything not claimed since
     // the last update belongs to an owner that is gone.
     for (let i = this._beamCount; i < this.beams.length; i++) this.beams[i].visible = false;
@@ -1559,6 +1629,223 @@ export class Effects {
     this._stepCorpses(dt);
     this._stepPool(this.sparks, dt);
     this._stepPool(this.impacts, dt);
+  }
+
+  // ---- damage numbers ------------------------------------------------------
+
+  _initDamageNumbers() {
+    this.dmgTex = makeDigitAtlas();
+    // ONE MATERIAL FOR THE WHOLE POOL, and ADDITIVE. Both of those are the same
+    // decision: a shared material has one opacity, so per-number fading cannot
+    // ride on it - but under additive blending, fading a vertex colour toward
+    // black IS fading out. So colour and alpha are both per-vertex, sixty-four
+    // numbers are one material, and the numbers glow like everything else this
+    // file draws over a dark arena.
+    //
+    // depthTest off so a number is never buried inside the body it came off,
+    // and depthWrite off so it never occludes one.
+    this.dmgMat = new THREE.MeshBasicMaterial({
+      map: this.dmgTex,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: false,
+      vertexColors: true,
+      fog: false,
+    });
+    this.dmgNums = [];
+    // Newest-first recycling: when everything is busy the OLDEST number is
+    // taken, because the hit that just landed is the one the player is looking
+    // at and a dropped hit is worse than a truncated one.
+    this._dmgSeq = 0;
+    for (let i = 0; i < DMG_POOL; i++) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 12), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 8), 2));
+      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(DMG_DIGITS * 12), 3));
+      const idx = new Uint16Array(DMG_DIGITS * 6);
+      for (let q = 0; q < DMG_DIGITS; q++) {
+        const v = q * 4;
+        idx.set([v, v + 1, v + 2, v, v + 2, v + 3], q * 6);
+      }
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      const mesh = new THREE.Mesh(g, this.dmgMat);
+      mesh.visible = false;
+      // The vertices are rewritten every acquire without the bounding sphere
+      // being recomputed, so the frustum test would cull numbers at random.
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 10;
+      this.scene.add(mesh);
+      this.dmgNums.push({
+        mesh, life: 0, maxLife: 0, seq: 0, digits: 0,
+        x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, scale: 1,
+        // The colour this number is at full strength. The fade scales toward
+        // black from here, so it has to be remembered rather than read back
+        // out of the buffer it is being written into.
+        r: 1, g: 1, b: 1, lastA: -1,
+      });
+    }
+  }
+
+  /**
+   * Float a number off a body.
+   *
+   * SIZE IS LOGARITHMIC, not proportional. A build that hits for 4,000 is not
+   * a hundred times more interesting than one that hits for 40, and a number
+   * scaled that way would fill the screen. The log curve makes a big hit
+   * visibly bigger and a huge hit only a little bigger than that, and the
+   * clamp at DMG_MAX_H is the ceiling the whole thing needs to stay readable
+   * in a crowd.
+   *
+   * EVERY NUMBER MOVES DIFFERENTLY. The drift, the rise, the lifetime and the
+   * starting scale are all jittered per number, because the thing this system
+   * does most is fire repeatedly at the same body - and forty identical
+   * animations stacked on one enemy reads as one flickering number rather than
+   * as forty hits.
+   *
+   * @param {THREE.Vector3} pos  where it came off
+   * @param {number} amount      damage actually dealt, post-armour
+   * @param {boolean} crit
+   */
+  damageNumber(pos, amount, crit = false) {
+    const n = Math.max(1, Math.min(99999, Math.round(amount)));
+    // Sub-1 damage rounds to 1 rather than to 0: a tick that did something has
+    // to say so, and "0" floating off a body reads as a bug.
+    let slot = null;
+    for (const d of this.dmgNums) {
+      if (d.life <= 0) { slot = d; break; }
+    }
+    if (!slot) {
+      let oldest = this.dmgNums[0];
+      for (const d of this.dmgNums) if (d.seq < oldest.seq) oldest = d;
+      slot = oldest;
+    }
+    slot.seq = ++this._dmgSeq;
+
+    const t = Math.log10(1 + n / DMG_REF) / Math.log10(1 + 40);
+    const h = DMG_MIN_H + (DMG_MAX_H - DMG_MIN_H) * Math.min(1, t);
+    slot.scale = h * (crit ? 1.25 : 1) * (0.92 + Math.random() * 0.16);
+
+    const col = crit ? DMG_CRIT : DMG_WHITE;
+    slot.r = col.r;
+    slot.g = col.g;
+    slot.b = col.b;
+    slot.lastA = -1;
+    slot.digits = Math.min(DMG_DIGITS, String(n).length);
+    this._writeNumber(slot.mesh.geometry, n, 1, slot);
+
+    // Started a little off the centre of the body in every direction, so two
+    // hits on the same frame do not print on top of each other.
+    slot.x = pos.x + (Math.random() - 0.5) * 0.5;
+    slot.y = pos.y + 1.1 + (Math.random() - 0.5) * 0.3;
+    slot.z = pos.z + (Math.random() - 0.5) * 0.5;
+    const ang = Math.random() * Math.PI * 2;
+    const drift = 0.35 + Math.random() * 0.5;
+    slot.vx = Math.cos(ang) * drift;
+    slot.vz = Math.sin(ang) * drift;
+    slot.vy = 1.5 + Math.random() * 0.7 + (crit ? 0.5 : 0);
+    slot.maxLife = DMG_LIFE * (0.9 + Math.random() * 0.25);
+    slot.life = slot.maxLife;
+    slot.mesh.visible = true;
+  }
+
+  // Lays `n` out as centred quads and points each one at its digit in the
+  // atlas. Unused quads collapse to zero area rather than being hidden, which
+  // keeps the index buffer and the draw call the same size every time.
+  _writeNumber(geo, n, alpha, slot) {
+    const pos = geo.attributes.position.array;
+    const uv = geo.attributes.uv.array;
+    const c = geo.attributes.color.array;
+    const s = String(n);
+    const len = Math.min(DMG_DIGITS, s.length);
+    // Cell width is 0.62 of the height, which is a touch tighter than the
+    // face's own square cell - the atlas leaves air either side of a glyph and
+    // the default spacing reads as a gap between every digit.
+    const w = 0.62;
+    const x0 = -(len * w) / 2;
+    for (let i = 0; i < DMG_DIGITS; i++) {
+      const p = i * 12;
+      const u = i * 8;
+      if (i >= len) {
+        for (let k = 0; k < 12; k++) pos[p + k] = 0;
+        continue;
+      }
+      const l = x0 + i * w;
+      const r = l + w;
+      // Quad corners: bottom-left, bottom-right, top-right, top-left.
+      pos[p] = l;      pos[p + 1] = -0.5; pos[p + 2] = 0;
+      pos[p + 3] = r;  pos[p + 4] = -0.5; pos[p + 5] = 0;
+      pos[p + 6] = r;  pos[p + 7] = 0.5;  pos[p + 8] = 0;
+      pos[p + 9] = l;  pos[p + 10] = 0.5; pos[p + 11] = 0;
+      const d = s.charCodeAt(i) - 48;
+      const u0 = d / 10;
+      const u1 = (d + 1) / 10;
+      uv[u] = u0;     uv[u + 1] = 0;
+      uv[u + 2] = u1; uv[u + 3] = 0;
+      uv[u + 4] = u1; uv[u + 5] = 1;
+      uv[u + 6] = u0; uv[u + 7] = 1;
+    }
+    this._tintNumber(geo, alpha, slot);
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.uv.needsUpdate = true;
+  }
+
+  // The fade. Under additive blending a colour scaled toward black is a number
+  // scaled toward invisible, so this is the whole of the alpha channel.
+  _tintNumber(geo, alpha, slot) {
+    const c = geo.attributes.color;
+    const arr = c.array;
+    const r = slot.r * alpha;
+    const g = slot.g * alpha;
+    const b = slot.b * alpha;
+    for (let i = 0; i < DMG_DIGITS * 4; i++) {
+      arr[i * 3] = r;
+      arr[i * 3 + 1] = g;
+      arr[i * 3 + 2] = b;
+    }
+    c.needsUpdate = true;
+  }
+
+  // Rise, drift, fade. `camera` is only needed to face the numbers at it; when
+  // it is missing they simply keep the orientation they had, which is what a
+  // headless test wants.
+  _stepDamageNumbers(dt, camera) {
+    for (const d of this.dmgNums) {
+      if (d.life <= 0) continue;
+      d.life -= dt;
+      if (d.life <= 0) {
+        d.mesh.visible = false;
+        continue;
+      }
+      const f = d.life / d.maxLife;
+      // The rise EASES OFF rather than running at a constant speed: a number
+      // that decelerates reads as thrown, and one at constant speed reads as
+      // scrolling. Drift decays faster than the rise, so the whole thing curves
+      // out of the body and then settles into a straight climb.
+      d.vy *= 1 - Math.min(1, dt * 1.6);
+      d.vx *= 1 - Math.min(1, dt * 3.5);
+      d.vz *= 1 - Math.min(1, dt * 3.5);
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.z += d.vz * dt;
+      d.mesh.position.set(d.x, d.y, d.z);
+      if (camera) d.mesh.quaternion.copy(camera.quaternion);
+      // A short pop on the way in - the number arrives at 60% and reaches full
+      // size in the first twelfth of a second, which is what makes a hit read
+      // as an impact rather than as text appearing.
+      const inT = Math.min(1, (d.maxLife - d.life) / 0.08);
+      d.mesh.scale.setScalar(d.scale * (0.6 + 0.4 * inT));
+      // FULL STRENGTH FOR THE FIRST 40% OF ITS LIFE, then out. Fading from the
+      // first frame makes every number look like it is already leaving, which
+      // is exactly backwards: the moment it appears is the moment it is worth
+      // reading. Quantised to 32 steps so a number that has not visibly changed
+      // does not rewrite its colour buffer.
+      const a = Math.round(Math.min(1, f / 0.6) * 32) / 32;
+      if (a !== d.lastA) {
+        d.lastA = a;
+        this._tintNumber(d.mesh.geometry, a, d);
+      }
+    }
   }
 
   // One pool's simulation. Nothing alive means nothing moved, so the sweep and

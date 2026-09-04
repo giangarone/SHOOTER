@@ -76,37 +76,37 @@ const _armorB = new THREE.Vector3();
 
 export const ENEMY_TYPES = {
   chaser: {
-    hp: 42, speed: 3.4, damage: 12, score: 100, color: 0xff3b30, eye: 0xffe08a,
+    hp: 42, speed: 3.4, damage: 12, value: 100, color: 0xff3b30, eye: 0xffe08a,
     scale: 1, radius: 0.5, mass: 1,
     melee: { windup: 0.45, start: 1.5, hit: 2.2, cd: 1.1 },
     build: buildChaser, ai: aiMelee,
   },
   shooter: {
-    hp: 28, speed: 2.7, damage: 8, score: 150, color: 0xb14aed, eye: 0x4ef3ff,
+    hp: 28, speed: 2.7, damage: 8, value: 150, color: 0xb14aed, eye: 0x4ef3ff,
     scale: 1.08, radius: 0.5, mass: 1,
     orbit: { dist: 7.5, band: 1.5, out: 1, in: -0.7, strafe: 0.5, flip: 1, flipVar: 2 },
     build: buildShooter, ai: aiShooter,
   },
   tank: {
-    hp: 180, speed: 1.8, damage: 25, score: 300, color: 0xff6b00, eye: 0xffaa00,
+    hp: 180, speed: 1.8, damage: 25, value: 300, color: 0xff6b00, eye: 0xffaa00,
     scale: 1.5, radius: 0.5, mass: 1,
     melee: { windup: 0.8, start: 3.5, hit: 4.0, cd: 3.0 },
     build: buildTank, ai: aiMelee,
   },
   sniper: {
-    hp: 18, speed: 2.2, damage: 15, score: 200, color: 0x00ff88, eye: 0x88ffcc,
+    hp: 18, speed: 2.2, damage: 15, value: 200, color: 0x00ff88, eye: 0x88ffcc,
     scale: 0.9, radius: 0.5, mass: 1,
     orbit: { dist: 22, band: 2, out: 0.8, in: -0.5, strafe: 0.4, flip: 2, flipVar: 3 },
     build: buildSniper, ai: aiSniper,
   },
   splitter: {
-    hp: 30, speed: 3.0, damage: 10, score: 120, color: 0xff00aa, eye: 0xff88dd,
+    hp: 30, speed: 3.0, damage: 10, value: 120, color: 0xff00aa, eye: 0xff88dd,
     scale: 1.0, radius: 0.5, mass: 1,
     melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.0 },
     build: buildSplitter, ai: aiSplitter,
   },
   bomber: {
-    hp: 35, speed: 2.0, damage: 18, score: 180, color: 0xff4400, eye: 0xff8844,
+    hp: 35, speed: 2.0, damage: 18, value: 180, color: 0xff4400, eye: 0xff8844,
     scale: 1.1, radius: 0.5, mass: 1,
     orbit: { dist: 10, band: 2, out: 0.6, in: -0.3, strafe: 0.3, flip: 2.5, flipVar: 2 },
     build: buildBomber, ai: aiBomber,
@@ -121,7 +121,7 @@ export const ENEMY_TYPES = {
   // who has locked onto the crowd in front loses health to something they
   // never saw. Cheap in HP because it is meant to die the moment it is noticed.
   wraith: {
-    hp: 26, speed: 4.2, damage: 11, score: 190, color: 0x6f5bff, eye: 0xd0c4ff,
+    hp: 26, speed: 4.2, damage: 11, value: 190, color: 0x6f5bff, eye: 0xd0c4ff,
     scale: 0.95, radius: 0.45, mass: 1,
     melee: { windup: 0.35, start: 1.4, hit: 2.0, cd: 0.9 },
     build: buildWraith, ai: aiWraith,
@@ -141,7 +141,7 @@ export const ENEMY_TYPES = {
   // unchanged: Venom and Incendiary should still have an enemy they are
   // obviously right for.
   bulwark: {
-    hp: 110, speed: 1.6, damage: 18, score: 280, color: 0x8d9db6, eye: 0xffd54f,
+    hp: 110, speed: 1.6, damage: 18, value: 280, color: 0x8d9db6, eye: 0xffd54f,
     scale: 1.35, radius: 0.62, mass: 2,
     melee: { windup: 0.7, start: 2.6, hit: 3.2, cd: 2.2 },
     // A SOLID-ANGLE TEST, not a box test, and the reason is what the raycast
@@ -177,7 +177,7 @@ export const ENEMY_TYPES = {
   // everything around it tougher and faster, and draws a line to each one so
   // the player can see exactly what killing it would undo.
   conduit: {
-    hp: 55, speed: 2.2, damage: 0, score: 320, color: 0x00e5b0, eye: 0xa7ffe8,
+    hp: 55, speed: 2.2, damage: 0, value: 320, color: 0x00e5b0, eye: 0xa7ffe8,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.8, in: -0.6, strafe: 0.35, flip: 2, flipVar: 2 },
     build: buildConduit, ai: aiConduit,
@@ -187,7 +187,7 @@ export const ENEMY_TYPES = {
   // are standing cost health, so the answer is always to give up the position.
   // Does no direct damage: the ground it leaves behind is the whole threat.
   blight: {
-    hp: 48, speed: 1.9, damage: 0, score: 240, color: 0x7ac943, eye: 0xd6ff8a,
+    hp: 48, speed: 1.9, damage: 0, value: 240, color: 0x7ac943, eye: 0xd6ff8a,
     scale: 1.15, radius: 0.55, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
     build: buildBlight, ai: aiBlight,
@@ -200,7 +200,7 @@ export const ENEMY_TYPES = {
   // trail is the reason to break off and take an angle rather than backpedal
   // in a straight line.
   magma: {
-    hp: 52, speed: 2.7, damage: 9, score: 210, color: 0xff5a1f, eye: 0xffd166,
+    hp: 52, speed: 2.7, damage: 9, value: 210, color: 0xff5a1f, eye: 0xffd166,
     scale: 1.05, radius: 0.52, mass: 1,
     melee: { windup: 0.5, start: 1.5, hit: 2.2, cd: 1.3 },
     build: buildMagma, ai: aiMagma,
@@ -217,7 +217,7 @@ export const ENEMY_TYPES = {
   // to stone. A player who cannot tell why their shots stopped landing is the
   // one failure this enemy can have.
   warden: {
-    hp: 70, speed: 2.0, damage: 0, score: 360, color: 0x9aa5b1, eye: 0xfff2b0,
+    hp: 70, speed: 2.0, damage: 0, value: 360, color: 0x9aa5b1, eye: 0xfff2b0,
     scale: 1.2, radius: 0.52, mass: 1,
     orbit: { dist: 10, band: 2, out: 0.7, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
     build: buildWarden, ai: aiWarden,
@@ -258,7 +258,7 @@ export const ENEMY_TYPES = {
   // Refusable by not being touched, which is the most basic answer in the game
   // and the right one to teach a status with.
   cinder: {
-    hp: 30, speed: 3.9, damage: 5, score: 200, color: 0xff7a18, eye: 0xffd166,
+    hp: 30, speed: 3.9, damage: 5, value: 200, color: 0xff7a18, eye: 0xffd166,
     scale: 0.95, radius: 0.46, mass: 1,
     melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.2 },
     // Four seconds at the table's seven a second: 28 points spread thin, in
@@ -276,7 +276,7 @@ export const ENEMY_TYPES = {
   // answer everything else, so the enemy laying it has to be the thing you are
   // trying to walk away from.
   rime: {
-    hp: 58, speed: 2.5, damage: 8, score: 220, color: 0x63b3ff, eye: 0xd8f0ff,
+    hp: 58, speed: 2.5, damage: 8, value: 220, color: 0x63b3ff, eye: 0xd8f0ff,
     scale: 1.05, radius: 0.52, mass: 1,
     melee: { windup: 0.55, start: 1.5, hit: 2.2, cd: 1.4 },
     build: buildRime, ai: aiRime,
@@ -291,7 +291,7 @@ export const ENEMY_TYPES = {
   // a brute invites you to stand and shoot, and this is the one that charges
   // you for it. Killing it at range, or moving after it dies, costs nothing.
   husk: {
-    hp: 130, speed: 1.5, damage: 14, score: 300, color: 0x8fbf4a, eye: 0xd6ff8a,
+    hp: 130, speed: 1.5, damage: 14, value: 300, color: 0x8fbf4a, eye: 0xd6ff8a,
     scale: 1.4, radius: 0.6, mass: 2,
     melee: { windup: 0.8, start: 2.8, hit: 3.4, cd: 2.4 },
     onDeath: (e, ctx) => {
@@ -312,7 +312,7 @@ export const ENEMY_TYPES = {
   // It does no direct damage at all, exactly like the blight: what it throws
   // is the entire enemy.
   vitriol: {
-    hp: 46, speed: 1.9, damage: 0, score: 260, color: 0x4fe06a, eye: 0xd6ffb0,
+    hp: 46, speed: 1.9, damage: 0, value: 260, color: 0x4fe06a, eye: 0xd6ffb0,
     scale: 1.12, radius: 0.55, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
     build: buildVitriol, ai: aiVitriol,
@@ -330,7 +330,7 @@ export const ENEMY_TYPES = {
   // already drawn for you. Standing in it and shooting the howler first is the
   // other answer, and it is the better one.
   howler: {
-    hp: 60, speed: 2.1, damage: 0, score: 340, color: 0xb06bff, eye: 0xffd6ff,
+    hp: 60, speed: 2.1, damage: 0, value: 340, color: 0xb06bff, eye: 0xffd6ff,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 6, band: 1.5, out: 0.8, in: -0.7, strafe: 0.35, flip: 2, flipVar: 2 },
     build: buildHowler, ai: aiHowler, cleanup: releaseHowl,
@@ -345,7 +345,7 @@ export const ENEMY_TYPES = {
   // the tether is what says so, drawn from it to you and impossible to lose in
   // a crowd. Kill it, or break the range, and the channel is wasted.
   hexer: {
-    hp: 58, speed: 2.2, damage: 0, score: 380, color: 0xff2d6f, eye: 0xffd6e4,
+    hp: 58, speed: 2.2, damage: 0, value: 380, color: 0xff2d6f, eye: 0xffd6e4,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 14, band: 2.5, out: 0.8, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
     build: buildHexer, ai: aiHexer,
@@ -378,7 +378,7 @@ export const ENEMY_TYPES = {
   // in the roster whose window belongs to the PLAYER's patience rather than
   // its own timer.
   harrier: {
-    hp: 62, speed: 3.2, damage: 0, score: 340, color: 0x27c4ff, eye: 0xd7f4ff,
+    hp: 62, speed: 3.2, damage: 0, value: 340, color: 0x27c4ff, eye: 0xd7f4ff,
     // Oversized against its collision circle, and deliberately: it is fought
     // at five metres up and fifteen out, where a body sized like a chaser's is
     // a dot. The hitbox scales with the model, so what the player shoots at is
@@ -410,7 +410,7 @@ export const ENEMY_TYPES = {
   // shrikes at once being an unavoidable hit: they both aim at a spot, and
   // moving beats both of them.
   shrike: {
-    hp: 54, speed: 4.4, damage: 20, score: 300, color: 0xeef2ff, eye: 0xff5c7a,
+    hp: 54, speed: 4.4, damage: 20, value: 300, color: 0xeef2ff, eye: 0xff5c7a,
     scale: 1.15, radius: 0.45, mass: 1,
     hitbox: { r: 0.55, y: 1.0 },
     fly: { height: 5.2 },
@@ -428,7 +428,7 @@ export const ENEMY_TYPES = {
   // roster because on its own it barely does anything, which is exactly the
   // enemy it is meant to be.
   shade: {
-    hp: 46, speed: 4.6, damage: 6, score: 320, color: 0xb06bff, eye: 0xf0d6ff,
+    hp: 46, speed: 4.6, damage: 6, value: 320, color: 0xb06bff, eye: 0xf0d6ff,
     scale: 1.1, radius: 0.45, mass: 1,
     hitbox: { r: 0.55, y: 1.0 },
     fly: { height: 5.0 },
@@ -472,7 +472,7 @@ export const ENEMY_TYPES = {
   // right answer that costs the player the damage they would rather have put
   // into the vent.
   turret: {
-    hp: 130, speed: 0, damage: 0, score: 120, color: 0x6d4c2f, eye: 0xff5a00,
+    hp: 130, speed: 0, damage: 0, value: 120, color: 0x6d4c2f, eye: 0xff5a00,
     scale: 1.15, radius: 0.5, mass: 6,
     hitbox: { r: 0.55, y: 0.6 },
     // It is a machine bolted to the floor: nothing lands on it, nothing scares
@@ -482,7 +482,7 @@ export const ENEMY_TYPES = {
   },
 
   colossus: {
-    hp: 3600, speed: 2.0, damage: 34, score: 4000, color: 0x8c5a2b, eye: 0xffb300,
+    hp: 3600, speed: 2.0, damage: 34, value: 4000, color: 0x8c5a2b, eye: 0xffb300,
     scale: 3.2, radius: 2.0, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
@@ -512,7 +512,7 @@ export const ENEMY_TYPES = {
   // they should always have been - the reason you cannot simply back away
   // from the thing walking at you.
   siege: {
-    hp: 3200, speed: 2.9, damage: 22, score: 5000, color: 0x455a64, eye: 0xff5533,
+    hp: 3200, speed: 2.9, damage: 22, value: 5000, color: 0x455a64, eye: 0xff5533,
     scale: 2.6, radius: 1.6, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
@@ -529,7 +529,7 @@ export const ENEMY_TYPES = {
   // first split, 0.5H for the second and a full H to finish the four, so
   // clearing it costs 2x this number. See the sanity check in waves.js.
   schism: {
-    hp: 1550, speed: 3.0, damage: 18, score: 6000, color: 0xd500f9, eye: 0xffb0ff,
+    hp: 1550, speed: 3.0, damage: 18, value: 6000, color: 0xd500f9, eye: 0xffb0ff,
     scale: 2.2, radius: 1.3, mass: 5, boss: true,
     hitbox: { r: 0.7, y: 0.8 },
     statusMul: 0.35, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
@@ -542,7 +542,7 @@ export const ENEMY_TYPES = {
   // continuously and rolls rings outward along the floor that have to be
   // JUMPED - the one boss that asks for a control the game has barely used.
   maw: {
-    hp: 3300, speed: 1.2, damage: 26, score: 7000, color: 0x311b92, eye: 0x7c4dff,
+    hp: 3300, speed: 1.2, damage: 26, value: 7000, color: 0x311b92, eye: 0x7c4dff,
     scale: 3.0, radius: 1.8, mass: 10, boss: true,
     hitbox: { r: 0.75, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
@@ -556,7 +556,7 @@ export const ENEMY_TYPES = {
   // is nearly dead, so the last third is the hardest part of the fight rather
   // than the easiest.
   herald: {
-    hp: 3400, speed: 2.8, damage: 20, score: 9000, color: 0xffd54f, eye: 0xfff8e1,
+    hp: 3400, speed: 2.8, damage: 20, value: 9000, color: 0xffd54f, eye: 0xfff8e1,
     scale: 2.6, radius: 1.5, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },
     statusMul: 0.25, freezeSlow: true, slowFactor: 0.8, freezeVuln: 1.0,
@@ -3498,6 +3498,28 @@ const _blinkAt = new THREE.Vector3();
 // from _blinkAt because both ends of the line are needed at once.
 const _blinkFrom = new THREE.Vector3();
 
+// WHERE DAMAGE NUMBERS COME OUT. takeDamage is the single point in the game at
+// which an enemy's hp is ever reduced - every bullet, blast, burn, mine, sentry
+// and item in the codebase funnels through it - so it is the one place a
+// number has to be spawned from to cover all of them.
+//
+// A MODULE-LEVEL SINK rather than a reference on the Enemy, because an Enemy is
+// constructed from a type and a position and holds nothing belonging to the
+// game: threading effects through every construction site, every split, every
+// boss part and every test that stands one up would be a far larger change than
+// the feature is. main.js installs this once at boot.
+//
+// It is also the reason the number is read off the HP DELTA rather than off the
+// damage that was asked for: by the time hp has moved, ward, freeze
+// vulnerability, armour facing and the Conduit's resistance have all been
+// applied, and those are exactly the mechanics a number is worth showing for.
+// A staggered Colossus taking full damage instead of 22% is now visible.
+let damageSink = null;
+
+export function setDamageSink(fn) {
+  damageSink = fn;
+}
+
 // The one AI frame object, filled and handed to an ai() per enemy per frame.
 // Reused rather than allocated: thirty enemies at 60fps is 1800 objects a
 // second, which is exactly the kind of churn the geometry and material caches
@@ -3528,11 +3550,11 @@ export class Enemy {
     this.hp = this.maxHp;
     this.speed = def.speed * speedScale;
     this.damage = def.damage * dmgScale;
-    this.score = def.score;
+    this.value = def.value;
     // What this body is WORTH IN CREDITS, when that cannot be derived from its
-    // score. Null for everything the waves spawn - main.js reads the score and
+    // `value`. Null for everything the waves spawn - main.js reads `value` and
     // one rate, so the two curves cannot drift apart. It exists for the things
-    // that score nothing and are still meant to pay: a splitter's children.
+    // worth nothing and still meant to pay: a splitter's children.
     this.bounty = null;
     // Set by the player's melee when a swing is what killed this body, and
     // read once by the death sweep in main.js - see MELEE_KILL_MULT. It lives
@@ -3618,10 +3640,27 @@ export class Enemy {
     // Status timers, seconds remaining. Every key in STATUS_ORDER is present
     // from birth so the tick never has to test for existence.
     this.status = { freeze: 0, burn: 0, poison: 0, slow: 0, fear: 0 };
-    // Damage-over-time rates, kept per source so a player carrying both Venom
-    // and Incendiary gets both, rather than the larger of the two.
-    this._dps = { poison: 0, burn: 0 };
-    this._dotAcc = 0;
+    // DAMAGE PER TICK, kept per source so a player carrying both Venom and
+    // Incendiary gets both rather than the larger of the two.
+    //
+    // PER TICK, NOT PER SECOND. Both of these used to be rates, accrued as a
+    // float and paid out in whole points whenever the accumulator crossed one -
+    // so a 12 dps poison was twelve unrelated pinpricks a second, and fire and
+    // poison were the two systems in the game with no relationship to the music
+    // everything else in it moves to. Now a tick is a discrete event on the
+    // beat: burn twice a bar-beat, poison once. See _tickStatus.
+    this._dot = { poison: 0, burn: 0 };
+    // Where the pulse stood at the last tick. -1 until the first one is seen,
+    // so an enemy set alight mid-beat waits for the next edge rather than
+    // taking a tick on the frame it caught fire.
+    this._dotPulse = -1;
+    // KNOCKBACK IN FLIGHT. A speed and the time left to run it for, applied in
+    // the movement step - see knock() and update(). Melee used to displace the
+    // body outright on the frame of the hit, which read as the enemy blinking
+    // to a new spot rather than as being hit by anything.
+    this.knockX = 0;
+    this.knockZ = 0;
+    this.knockT = 0;
     // One drip timer per status, so each effect keeps its own rhythm instead
     // of every status on an enemy puffing on the same frame.
     this._dripAcc = { freeze: 0, burn: 0, poison: 0, slow: 0, fear: 0 };
@@ -3739,7 +3778,7 @@ export class Enemy {
    *
    * @param {string} kind  a key of STATUS_TINT
    * @param {number} dur   seconds; the longer of this and what is already on
-   * @param {number} power damage per second, for 'poison' and 'burn' only
+   * @param {number} power damage PER TICK, for 'poison' and 'burn' only
    */
   applyStatus(kind, dur, power = 0) {
     if (this.dead || !(kind in this.status)) return;
@@ -3762,7 +3801,40 @@ export class Enemy {
       this._statusCd[kind] = dur * 2;
     }
     this.status[kind] = Math.max(this.status[kind], dur);
-    if (power > 0 && kind in this._dps) this._dps[kind] = Math.max(this._dps[kind], power);
+    if (power > 0 && kind in this._dot) this._dot[kind] = Math.max(this._dot[kind], power);
+  }
+
+  /**
+   * Shove this body, visibly, over `time` rather than instantly.
+   *
+   * THE DISTANCE IS EXACT. The speed is chosen so the whole of `dist` is
+   * covered in `time` and the applied displacement is then constant, which is
+   * what lets this replace a straight position add without changing where
+   * anything ends up - only how it got there.
+   *
+   * Written into pos through the ordinary movement step, NOT into
+   * group.position like the crowd dance: a body that has been knocked back
+   * really is somewhere else, and pathing, crowding and collision all have to
+   * agree with what the player just watched happen.
+   *
+   * REFRESHES RATHER THAN ACCUMULATING, so two hits in quick succession are
+   * one shove at the newer angle instead of a body launched across the arena.
+   *
+   * @param {number} dirX  need not be normalised
+   * @param {number} dirZ
+   * @param {number} dist  metres
+   * @param {number} time  seconds to cover them in
+   */
+  knock(dirX, dirZ, dist, time = 0.18) {
+    // A heavy body is not shoved, the same rule every other push in the game
+    // respects - see immovable.
+    if (this.immovable || this.dead) return;
+    const len = Math.hypot(dirX, dirZ);
+    if (len < 1e-6 || time <= 0) return;
+    const speed = dist / time;
+    this.knockX = (dirX / len) * speed;
+    this.knockZ = (dirZ / len) * speed;
+    this.knockT = time;
   }
 
   // Movement speed after Cryo and Petrify. Every speed read inside update()
@@ -3818,25 +3890,37 @@ export class Enemy {
       this.status[k] -= dt;
       if (this.status[k] <= 0) {
         this.status[k] = 0;
-        if (k in this._dps) this._dps[k] = 0;
+        if (k in this._dot) this._dot[k] = 0;
       } else {
         any = true;
       }
     }
 
-    // Damage accrues as a float and is dealt in whole points, so a 12 dps
-    // poison is twelve separate ticks a second rather than a fractional nibble
-    // every frame. `silent` keeps it from firing the white hit flash, which
-    // would strobe over the status tint for as long as the status lasts.
-    const dps = (this.status.poison > 0 ? this._dps.poison : 0)
-      + (this.status.burn > 0 ? this._dps.burn : 0);
-    if (dps > 0) {
-      this._dotAcc += dps * dt;
-      if (this._dotAcc >= 1) {
-        const whole = Math.floor(this._dotAcc);
-        this._dotAcc -= whole;
-        this.takeDamage(whole, true);
-        if (this.dead) return;
+    // DAMAGE OVER TIME IS ON THE BEAT.
+    //
+    // BURN ticks on every pulse - twice a beat, the downbeat and the upbeat.
+    // POISON ticks on whole beats only, so it is half fire's rate: fire is the
+    // fierce one and poison is the patient one, and that difference is now
+    // audible rather than buried in two dps constants.
+    //
+    // Both are ONE takeDamage per tick rather than an accumulator drained per
+    // frame, which is also what makes them legible: a tick is a number the
+    // player sees float off the body in time with the music (see the damage
+    // sink below), where a fractional nibble every frame was nothing at all.
+    //
+    // `silent` keeps it from firing the white hit flash, which would strobe
+    // over the status tint for as long as the status lasts.
+    const pulsed = ctx.pulse !== undefined && ctx.pulse !== this._dotPulse;
+    if (pulsed) {
+      const first = this._dotPulse < 0;
+      this._dotPulse = ctx.pulse;
+      if (!first) {
+        const dmg = (this.status.burn > 0 ? this._dot.burn : 0)
+          + (this.status.poison > 0 && ctx.pulseWhole ? this._dot.poison : 0);
+        if (dmg > 0) {
+          this.takeDamage(dmg, true);
+          if (this.dead) return;
+        }
       }
     }
 
@@ -4087,6 +4171,17 @@ export class Enemy {
     }
     this.pos.x += vx * dt;
     this.pos.z += vz * dt;
+    // KNOCKBACK, ON TOP OF WHATEVER THE AI WANTED. Added after the step cap so
+    // being shoved is not something the enemy's own speed limit can argue with
+    // - a knocked body moves at the speed it was hit with - and BEFORE the wall
+    // clamp and the obstacle resolve below, which is the whole reason this
+    // lives here rather than where the hit lands.
+    if (this.knockT > 0) {
+      const k = Math.min(this.knockT, dt);
+      this.knockT -= dt;
+      this.pos.x += this.knockX * k;
+      this.pos.z += this.knockZ * k;
+    }
     // Pulled in by however much wider than standard this enemy is, so a big
     // body stops at the wall rather than half inside it.
     const B = 21.6 - (this.radius - 0.5);
@@ -4185,7 +4280,7 @@ export class Enemy {
   // one. Only a type whose armour is a PLACE on the body rather than a facing
   // needs it - see the Bulwark, whose small shield is tested against the spot
   // that was actually struck.
-  takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null) {
+  takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null, crit = false) {
     if (this.dead) return false;
     // A warded enemy takes NOTHING - not bullets, not blasts, not the damage
     // over time already ticking on it. A partial reduction here would leave
@@ -4204,7 +4299,11 @@ export class Enemy {
       d *= (dirX || dirZ || point) ? def.armor(this, dirX, dirZ, point) : def.armorDefault;
     }
     if (this.buffT > 0) d *= CONDUIT_RESIST;
+    const before = this.hp;
     this.hp -= d;
+    // The number is what actually came off, floor included: a hit that takes a
+    // body from 3hp to dead shows 3, not the 400 that was aimed at it.
+    if (damageSink) damageSink(this.pos, before - Math.max(0, this.hp), crit);
     if (!silent) this.flash = 0.12;
     if (this.hp <= 0) {
       this.hp = 0;

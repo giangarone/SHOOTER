@@ -180,7 +180,18 @@ try {
     g.input.shoot = false;
     g.input.shootFresh = false;
     const t0 = g.effects.arcs.filter((a) => a.life > 0).length;
-    await new Promise((r) => setTimeout(r, 900));
+    // WAIT FOR FRAMES, NOT FOR WALL TIME. An arc lives a fraction of a second
+    // of GAME time, and this suite runs on a software rasteriser that can
+    // deliver anywhere between four and sixty frames in the same 900ms - so a
+    // fixed sleep was really asserting "the machine was fast enough today".
+    // Polling until the pool is empty tests the thing the check is named after
+    // and nothing else; the wall-clock cap is still there so a pool that
+    // genuinely never drains fails instead of hanging.
+    const until = Date.now() + 8000;
+    while (Date.now() < until) {
+      if (!g.effects.arcs.some((a) => a.life > 0)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
     return {
       t0,
       live: g.effects.arcs.filter((a) => a.life > 0).length,

@@ -466,15 +466,14 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.poison,
-    // THE POISON IS AS STRONG AS THE GUN. It used to be a flat 12 a second,
-    // which was a real number on wave 3 and a rounding error on wave 30 - the
-    // one status in the pool that got weaker the longer a run went on. It is
-    // charged as a MULTIPLE of the weapon's base bullet damage now (see
-    // Player.venomDps), so a rifle that hits for 34 poisons for 34 a second
-    // and the mutation is worth the same slot at either end of a run.
-    effects: [['HITS POISON', GOOD], ['YOUR BULLET DAMAGE', NOTE], ['PER SECOND, FOR 4s', NOTE]],
+    // THE POISON IS AS STRONG AS THE GUN, and it ticks on the beat - once a
+    // beat, where fire ticks twice. See Player.dotHit and Enemy._tickStatus.
+    // No number in the text on purpose: the tick is one of the player's own
+    // shots, which is a moving figure, and printing whatever it happens to be
+    // on wave 1 would be a lie for the rest of the run.
+    effects: [['YOUR SHOTS APPLY POISON', GOOD], ['FOR 4s', NOTE]],
     apply: (mods, n) => {
-      mods.poisonDps = 1 * n;
+      mods.poisonPower = 1 * n;
       mods.poisonTime = 4 * n;
     },
   },
@@ -484,9 +483,11 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.fire,
-    effects: [['HITS SET FIRE', GOOD], ['20 DMG / SEC, 3s', NOTE], ['SPREADS ON DEATH', NOTE]],
+    // Twice a beat where poison is once: fire is the fierce, short one and
+    // poison the patient one, and on the beat that difference is audible.
+    effects: [['YOUR SHOTS SET FIRE', GOOD], ['FOR 3s', NOTE], ['SPREADS ON DEATH', NOTE]],
     apply: (mods, n) => {
-      mods.burnDps = 20 * n;
+      mods.burnPower = 1 * n;
       mods.burnTime = 3 * n;
       mods.burnSpread = 3 * n;
     },
@@ -756,9 +757,12 @@ export const UPGRADES = {
     // burning enemy in a wave dies burning, and a cloud per corpse buried the
     // arena in ash: the zones stopped being places the player had to steer
     // enemies into and became the floor. At 15% a cloud is an event again.
-    effects: [['15% OF BURNING DEAD', NOTE], ['LEAVE ASH: 18 DMG/s, 4s', GOOD], ['IN A 3.5m CLOUD', NOTE]],
+    effects: [['15% OF BURNING DEAD', NOTE], ['LEAVE BURNING ASH, 4s', GOOD], ['IN A 3.5m CLOUD', NOTE]],
     apply: (mods, n) => {
-      mods.ashDps = 18 * n;
+      // A cloud SETS FIRE to what stands in it rather than dealing its own
+      // damage - see _updateAsh. One number, one system: every point of fire
+      // damage in the game is a burn tick now.
+      mods.ashPower = 1 * n;
       mods.ashRadius = 3.5;
       mods.ashTime = 4;
       mods.ashChance = 0.15;
@@ -1066,9 +1070,10 @@ export const UPGRADES = {
     theme: THEME.hellfire,
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
-    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 3s', GOOD], ['60 DMG/s TO ENEMIES', NOTE]],
+    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 3s', GOOD], ['IT BURNS WHAT WALKS IN', NOTE]],
     apply: (mods, n) => {
-      mods.hellfireDps = 60 * n;
+      // Sets fire, like every other fire in the game - see _updateFire.
+      mods.hellfirePower = 1.5 * n;
       mods.hellfireTime = 3;
       mods.hellfireRadius = 1.8;
     },
@@ -1274,21 +1279,24 @@ export function rerollCost(n, wave = 1) {
   return blockPrice(wave, REROLL_BASE, REROLL_STEP) * Math.pow(2, n);
 }
 
-// WHAT ONE ROLL OF THE MYSTERY BOX COSTS. The reroll's own base and step, and
-// it does NOT double.
+// $1,000 at waves 1-5, $1,500 at 6-10, and $500 a block after that. Half the
+// reroll's opening price, because the box asks for the item SLOT as well as
+// the money - a roll the player takes costs them whatever they were carrying.
+export const BOX_BASE = 1000;
+export const BOX_STEP = 500;
+
+// WHAT ONE ROLL OF THE MYSTERY BOX COSTS, for the nth roll bought at a single
+// shop (n starts at 0). It doubles on the same terms a reroll does, and for
+// the same reason: standing at the box feeding it credits until it hands over
+// the item you wanted is the shop answering a question you have already asked,
+// and the second asking ought to cost more than the first. The counter is the
+// box's own and resets when a fresh totem set rises - see TotemArea.boxRolls -
+// so walking away and coming back next wave is what makes it cheap again.
 //
-// A reroll escalates because rerolling the same set again is the player
-// refusing an answer the shop already gave them, and the second refusal ought
-// to cost more than the first. A box roll is not that. Every roll is a fresh
-// purchase of a fresh draw from a pool of thirty-odd, and the thing that should
-// decide how many a player buys is how much they killed for - not a punishment
-// curve that makes the third roll of a shop cost eight thousand dollars and
-// prices the deep half of the item pool out of every run that finds it.
-//
-// So the only thing that moves this number is the wave, at the same block
-// boundary every other price in the game steps on.
-export function boxCost(wave = 1) {
-  return blockPrice(wave, REROLL_BASE, REROLL_STEP);
+// The base it doubles from is the wave's, so the doubling and the block step
+// compound exactly as they do for rerolls.
+export function boxCost(wave = 1, rolls = 0) {
+  return blockPrice(wave, BOX_BASE, BOX_STEP) * Math.pow(2, rolls);
 }
 
 // $500 at waves 1-5, $600 at 6-10, and $100 a block after that. See

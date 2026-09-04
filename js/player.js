@@ -80,11 +80,11 @@ const DEFAULT_MODS = {
   // one upgrade with max: 1, so they are flags and rates rather than
   // multipliers that stack. Zero means the mutation is not owned, which is
   // what every hook in main.js tests.
-  poisonDps: 0,         // Venom: poison damage per second as a MULTIPLE of the
-                        // weapon's base bullet damage - see Player.venomDps
+  poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of one of
+                        // the player's own shots - see Player.dotHit
   poisonTime: 0,
-  burnDps: 0,           // Incendiary: damage per second, for burnTime seconds
-  burnTime: 0,
+  burnPower: 0,         // Incendiary: burn damage per tick, same multiple, for
+  burnTime: 0,          // burnTime seconds
   burnSpread: 0,        // metres the burn jumps when a burning enemy dies
   slowTime: 0,          // Cryo: seconds of movement and projectile slow
   fearTime: 0,          // Terror: seconds an enemy flees instead of attacking
@@ -116,11 +116,23 @@ const DEFAULT_MODS = {
   reloadShardDamage: 0,
   shatterDamage: 0,     // Crystallize: blast when a frozen enemy dies
   shatterRadius: 0,
-  ashDps: 0,            // Ashen: lingering cloud where a burning enemy died
+  ashPower: 0,          // Ashen: lingering cloud where a burning enemy died;
+                        // it SETS FIRE rather than dealing its own damage
   ashRadius: 0,
   ashTime: 0,
   poisonSpread: 0,      // Neurotoxin: radius poison jumps to a clean enemy
   entropyBelow: 0,      // Entropy: HP fraction under which statuses never end
+  // CRITICAL HITS. Every player starts with a 5% chance of one, so the system
+  // is felt from the first magazine of the first run rather than being a thing
+  // that switches on when an item is found - and so an item that raises it is
+  // raising a number the player has already seen.
+  //
+  // IT LIVES IN DEFAULT_MODS, not on the Player, precisely BECAUSE it has a
+  // non-zero default: rebuildMods() replaces the whole mods object from this
+  // template on every draft pick, so a base written anywhere else would be
+  // wiped by the next totem. See the contract at the top of upgrades.js.
+  critChance: 0.05,
+  critMult: 1.5,
   dotPower: 1,          // Malady: multiplier on poison and burn damage
   dotTime: 1,           // Malady: multiplier on poison and burn duration
   chargeDamage: 0,      // Breach Round: blast on the first shot after a reload
@@ -151,7 +163,8 @@ const DEFAULT_MODS = {
   carnageMax: 0,        // and the ceiling it climbs to
   killHeal: 0,          // Blood Pact: HP healed per kill
   damageTakenMult: 1,   // Blood Pact: multiplier on all damage the player takes
-  hellfireDps: 0,       // Hellfire: burning trail dropped behind a reload
+  hellfirePower: 0,     // Hellfire: burning trail dropped behind a reload;
+                        // sets fire, like every other fire in the game
   hellfireTime: 0,
   hellfireRadius: 0,
   statusEternal: 0,     // Eternal Affliction: enemy statuses never expire
@@ -1312,12 +1325,38 @@ export class Player {
     this._planted = 0;
   }
 
-  // VENOM ROUNDS, in damage per second. A multiple of the weapon's own base
-  // bullet damage rather than a flat rate, so the poison is worth what the gun
-  // is - and Malady still multiplies it, which is what keeps that trade honest
-  // on both statuses. Zero unless the mutation is owned.
-  get venomDps() {
-    return this.weapon.damage * this.mods.poisonDps * this.mods.dotPower;
+  /**
+   * Rolls a critical hit.
+   *
+   * ONCE PER TRIGGER PULL, never per pellet - the same house rule Devil's
+   * Gamble follows, and for the same reason: nine pellets each tossing their
+   * own coin averages out to almost exactly nothing, where one roll for the
+   * whole shot is an event. Melee rolls once a swing and the lance once a beam.
+   *
+   * PROCS DO NOT CRIT. Chain lightning, thorns, blasts, overload, mines,
+   * sentries and damage over time all pass flat numbers and stay flat: a crit
+   * is a thing the player's own shot did, and a critical burn tick landing on
+   * the beat would be a gold number nobody aimed.
+   */
+  rollCrit() {
+    return Math.random() < this.mods.critChance;
+  }
+
+  // ONE TICK OF DAMAGE OVER TIME: one of the player's own shots, before the
+  // per-status multiplier the caller applies on top.
+  //
+  // getEffectiveDamage, not the raw weapon number. Fire and poison used to be
+  // flat rates, which made them real numbers on wave 3 and rounding errors on
+  // wave 30 - the two statuses in the pool that got weaker the longer a run
+  // went on. Charged as one of the player's SHOTS, they are worth exactly what
+  // the gun is worth at the moment they are applied, and every damage mutation
+  // in the build feeds them. Malady still multiplies on top, which is what
+  // keeps that trade honest on both statuses.
+  //
+  // Snapshotted by the caller into the enemy's own _dot, so a burn already
+  // running is not retroactively rescaled by a totem claimed after it started.
+  get dotHit() {
+    return this.getEffectiveDamage(this.weapon.damage);
   }
 
   // BRASS ECHO. Called once per shot that connected; a shot that hit nothing
@@ -2387,7 +2426,7 @@ export class Player {
   }
 
   // 0 while idle, otherwise how far through the current reload we are. Drives
-  // the ring around the crosshair.
+  // both sweeps: the ring around the crosshair and the dial in the ammo line.
   get reloadProgress() {
     const total = this.reloadTime;
     if (this.reloading <= 0 || total <= 0) return 0;

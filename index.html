@@ -23,9 +23,11 @@
         <span id="wave-num">01</span>
         <span id="enemies-left">00 LEFT</span>
       </div>
-      <div id="score-box">
-        <span id="score-label">SCORE</span>
-        <span id="score-num">000000</span>
+      <!-- CREDITS, where the score used to be. A run is measured by the wave
+           it reached - that readout is on the left - so the one number worth
+           the top right is the one the player can actually spend. -->
+      <div id="credit-box">
+        <span id="credit-label">CREDITS</span>
         <span id="credit-num">$0</span>
       </div>
     </div>
@@ -103,35 +105,55 @@
           </div>
           <canvas id="item-art" width="96" height="96"></canvas>
         </div>
+        <!-- THE RELOAD DIAL SITS INSIDE THE LINE, NOT UNDER IT. What was here
+             before was a full-width RELOADING bar below the round count, and
+             it appeared and disappeared - so every reload pushed the item slot
+             and the ammo line upward and dropped them again. The dial holds
+             its slot open at all times (ui.setAmmo toggles VISIBILITY, never
+             `display`), so nothing in the HUD moves when the gun runs dry.
+             Same conic sweep and same 16 spokes as #reload-ring, because they
+             are one instrument shown in two places. -->
         <div id="ammo-line">
+          <span id="ammo-dial"></span>
           <span id="ammo-num">30</span>
           <span id="ammo-res">/ 30</span>
         </div>
-        <span id="ammo-reload" class="hidden">RELOADING</span>
       </div>
     </div>
   </div>
 
   <div id="strobe"></div>
-  <div id="vignette"></div>
+  <!-- WHAT IS HAPPENING TO YOU, one layer per answer. There used to be a single
+       red radial here called #vignette, and every one of these fired it: a hit,
+       a burn, a poisoning, standing in lava, and three items that cost health.
+       So the screen said "something bad" and never which - and the two states
+       the player can actually ACT on, fire and poison, looked identical to the
+       one they cannot. Each is now its own designed effect, built out of hard
+       stops and dithered steps rather than a soft gradient. See styles.css. -->
+  <div id="fx-damage"></div>
+  <div id="fx-fire"></div>
+  <div id="fx-poison"></div>
   <!-- AEGIS's window. See #invuln-frame in styles.css. -->
   <div id="invuln-frame"></div>
   <div id="banner"></div>
 
   <div id="prompt" class="plate hidden"></div>
 
-  <!-- Held-TAB build sheet. Rows are built by ui.js; the shell is here so the
-       card and its two columns are styled once and never rebuilt. -->
+  <!-- Held-TAB inventory sheet. Entries are built by ui.js; the shell is here
+       so the card and its two sections are styled once and never rebuilt.
+       WHAT YOU ARE CARRYING, not what the run has counted - every number that
+       used to be here is either on the HUD already or is trivia, and none of it
+       answered the one question a build sheet exists for. -->
   <div id="stats-panel" class="hidden">
     <div id="stats-card" class="plate">
-      <div class="stats-head">RUN SUMMARY</div>
-      <div class="stats-col muts">
-        <h3>MUTATIONS</h3>
-        <div id="stats-muts"></div>
+      <div class="stats-head">CARRYING</div>
+      <div class="stats-sec">
+        <h3>ACTIVE ITEM</h3>
+        <div id="stats-active" class="inv-grid one"></div>
       </div>
-      <div class="stats-col">
-        <h3>RUN</h3>
-        <div id="stats-run"></div>
+      <div class="stats-sec">
+        <h3>MUTATIONS</h3>
+        <div id="stats-muts" class="inv-grid"></div>
       </div>
     </div>
   </div>
@@ -168,7 +190,6 @@
     <p id="audio-hint" class="set-note hidden">CLICK ONCE TO ENABLE SOUND</p>
     <div class="opt-row">
       <button id="btn-settings-start" class="opt-btn">SETTINGS</button>
-      <button id="btn-scores-start" class="opt-btn">HIGH SCORES</button>
       <button id="btn-fs-start" class="opt-btn">FULLSCREEN</button>
     </div>
   </div>
@@ -177,24 +198,14 @@
     <div class="marquee plate">
       <h1 class="dead">YOU DIED</h1>
       <div class="rule warm"></div>
+      <!-- HOW FAR YOU GOT, at the size it deserves. The wave is the only
+           measure of a run now, so it is the screen rather than a quarter of
+           a strip; the four readings below it are context for it. -->
+      <div id="over-hero-label">REACHED WAVE</div>
+      <div id="over-hero">1</div>
       <div id="over-stats" class="run-strip"></div>
     </div>
 
-    <!-- Shown only when the run places in the top ten. -->
-    <div id="lb-entry" class="plate hidden">
-      <label for="lb-name">NEW HIGH SCORE - ENTER NAME</label>
-      <div class="lb-entry-row">
-        <input id="lb-name" type="text" maxlength="12" autocomplete="off" spellcheck="false"/>
-        <button id="btn-lb-save">SAVE</button>
-      </div>
-      <!-- The pad cannot type. Built once by padmenu.js and shown only while
-           the controller is the thing in the player's hands - a keyboard
-           player already has one, and a second one on screen would be a
-           question about which of the two the game wants them to use. -->
-      <div id="kb" class="kb pad-only"></div>
-    </div>
-
-    <div id="lb-over" class="lb"></div>
     <div class="primary-row"><button id="btn-restart">RESTART</button></div>
   </div>
 
@@ -343,19 +354,6 @@
     <div class="primary-row"><button id="btn-settings-back">BACK</button></div>
   </div>
 
-  <!-- HIGH SCORES. Also its own screen, for the same reason: ten rows of data
-       is a page, not a footnote under a title. -->
-  <div id="overlay-scores" class="overlay hidden">
-    <div class="marquee plate">
-      <h1>HIGH SCORES</h1>
-      <div class="rule"></div>
-      <p class="sub">TEN BEST RUNS</p>
-    </div>
-
-    <div id="lb-menu" class="lb tall"></div>
-    <div id="lb-none" class="plate hidden">NO RUNS RECORDED YET</div>
-
-    <div class="primary-row"><button id="btn-scores-back">BACK</button></div>
   </div>
 
   <!-- The tube, in two layers, and they are separate elements for a reason

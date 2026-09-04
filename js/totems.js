@@ -1039,6 +1039,11 @@ export class TotemArea {
     this.stations = [this.ammoStation, this.rerollStation];
     // Rerolls bought against the CURRENT set; reset every time one rises.
     this.rerolls = 0;
+    // Box rolls bought at the CURRENT shop, on the same terms and reset at the
+    // same moment. Its OWN counter rather than a share of `rerolls`: a reroll
+    // and a box roll are different purchases, and alternating between them
+    // should not price either out - see boxCost in upgrades.js.
+    this.boxRolls = 0;
   }
 
   // True while any totem is still standing, claimed or not.
@@ -1057,10 +1062,15 @@ export class TotemArea {
    *
    * @param {object[]} offers  up to three offers from _buildOffers()
    * @param {boolean} resetRerolls  false when this is itself a reroll, so the
-   *   escalating price is not reset by the set it just paid for.
+   *   escalating price is not reset by the set it just paid for. The box's
+   *   counter rides along with it: a reroll does not make the box cheap again
+   *   any more than it makes itself cheap again.
    */
   present(offers, resetRerolls = true, armTime = undefined) {
-    if (resetRerolls) this.rerolls = 0;
+    if (resetRerolls) {
+      this.rerolls = 0;
+      this.boxRolls = 0;
+    }
     this.totems.forEach((t, i) => {
       if (i < offers.length) t.present(offers[i], armTime);
       else t.sink();

@@ -209,7 +209,7 @@ for (const k of PLAYER_CLOCKS) {
 // scratch vector in the frame loop and a hundred other things that are not a
 // run - naming what belongs to a player is much the shorter list.
 const GAME_FIELDS = [
-  'score', 'kills', 'credits',
+  'kills', 'credits',
   'comboKills', 'comboTimer', 'bestCombo',
   'waveDamageTaken', 'lastPerfect',
   // NO SHOP COUNTER. The active item row used to come up on every third shop

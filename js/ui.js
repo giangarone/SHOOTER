@@ -7,6 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
+import { SIGN_COLOR } from './totems.js';
 import { itemCells } from './items.js';
 import { controllerGlyph } from './padmenu.js';
 
@@ -23,22 +24,18 @@ export class UI {
     this.hud = $('hud');
     this.waveNum = $('wave-num');
     this.enemies = $('enemies-left');
-    this.scoreNum = $('score-num');
     this.hpBox = $('hp-box');
     this.hpBar = $('hp-bar');
     this.hpText = $('hp-text');
     this.stamBar = $('stam-bar');
     this.ammoNum = $('ammo-num');
     this.ammoRes = $('ammo-res');
-    this.ammoReload = $('ammo-reload');
+    this.ammoDial = $('ammo-dial');
     this.reloadRing = $('reload-ring');
-    this.vignette = $('vignette');
+    this.fxDamage = $('fx-damage');
+    this.fxFire = $('fx-fire');
+    this.fxPoison = $('fx-poison');
     this.strobe = $('strobe');
-    this.lbOver = $('lb-over');
-    this.lbEntry = $('lb-entry');
-    this.lbName = $('lb-name');
-    this.lbMenu = $('lb-menu');
-    this.lbNone = $('lb-none');
     this.bossBar = $('boss-bar');
     this.bossName = $('boss-name');
     this.bossHp = $('boss-hp');
@@ -53,7 +50,6 @@ export class UI {
     // than replacing it, so the one behind is left exactly as it was and BACK
     // is a single class change.
     this.settingsOv = $('overlay-settings');
-    this.scoresOv = $('overlay-scores');
     // The pass-the-controller screen. Not a sub-screen: it is layered over a
     // live match rather than over a menu, and nothing takes it down but its
     // own countdown.
@@ -62,8 +58,10 @@ export class UI {
     this.handoffStake = $('handoff-stake');
     this.handoffCount = $('handoff-count');
     this.handoffIcon = $('handoff-icon');
-    this.scoreLabel = $('score-label');
+    this.creditLabel = $('credit-label');
     this.overStats = $('over-stats');
+    this.overHero = $('over-hero');
+    this.overHeroLabel = $('over-hero-label');
     this.buffsEl = $('buffs');
     this.creditNum = $('credit-num');
     this.comboEl = $('combo');
@@ -82,7 +80,7 @@ export class UI {
     this.crosshair = $('crosshair');
     this.statsPanel = $('stats-panel');
     this.statsMuts = $('stats-muts');
-    this.statsRun = $('stats-run');
+    this.statsActive = $('stats-active');
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
     // Which active-item chips were drawn last frame - see setItemBuffs. The
@@ -93,10 +91,13 @@ export class UI {
     // Stat-row nodes for the held-TAB panel, keyed by label. Built once when
     // the panel first opens and rewritten in place after that - rebuilding the
     // rows every frame the key is held would thrash layout for no reason.
-    this._statRows = {};
     this._statsOpen = false;
+    // What the sheet was last built from, so a build that has not changed is
+    // not torn down and redrawn every frame the key is held - pixelIconCanvas
+    // walks 576 cells per icon and this panel can be showing a dozen.
+    this._statsKey = '';
     // Whose turn it is in versus, 1 or 2, or null in solo. It takes over the
-    // score readout - see setVersus.
+    // credits readout - see setVersus.
     this._versus = null;
   }
 
@@ -122,7 +123,7 @@ export class UI {
    * The boss bar. Pass a null name to hide it.
    *
    * @param {number} frac  0..1 of the boss's combined health
-   * @param {string} note  a short line under the bar - 'STAGGERED', 'PARTS 4'
+   * @param {string} note  a short line under the bar - 'CORE EXPOSED', 'PARTS 4'
    * @param {string} state '' | 'vulnerable' | 'enraged', a class on the bar
    */
   setBoss(name, frac, note, state) {
@@ -153,38 +154,25 @@ export class UI {
   }
 
   /**
-   * Hands the score box over to versus, or takes it back.
+   * Hands the credits box over to versus, or takes it back.
    *
-   * SCORE DOES NOT EXIST IN VERSUS - it is a survival duel, and a number
-   * nobody is playing for would be the largest thing on the HUD. The cells are
-   * reused rather than a fifth box added to a crowded frame: whose turn it is
-   * is exactly the kind of thing the top-right readout is for.
+   * The cells are reused rather than a fifth box added to a crowded frame:
+   * whose turn it is is exactly the kind of thing the top-right readout is
+   * for, and a balance neither player is spending is not.
    *
    * @param {?number} n 1 or 2, or null for solo.
    */
   setVersus(n) {
     this._versus = n;
-    this.scoreLabel.textContent = n ? 'VERSUS' : 'SCORE';
+    this.creditLabel.textContent = n ? 'VERSUS' : 'CREDITS';
     // The same two colours the gun's flank strip carries, so the readout that
     // NAMES the player and the band that marks their weapon teach each other.
-    this.scoreNum.style.color = n ? PLAYER_INK[n - 1] : '';
+    this.creditNum.style.color = n ? PLAYER_INK[n - 1] : '';
     // Written straight out both ways rather than left to the next frame's
-    // setScore: leaving solo puts the menu up, and the menu does not tick the
-    // HUD, so a deferred repaint left 'P1' sitting in the score cells.
-    this.scoreNum.textContent = n ? 'P' + n : '000000';
-    this._c.score = undefined;
-  }
-  setScore(n) {
-    // Nothing writes over the turn readout, whatever the run is still scoring
-    // internally.
-    if (this._versus) return;
-    if (this._c.score !== n) {
-      this._c.score = n;
-      // Six fixed cells, no separators: the arcade high-score readout. In a
-      // bitmap face a comma is a wobble in an otherwise perfect column, and a
-      // score that changes width every few kills never settles.
-      this.scoreNum.textContent = String(n).padStart(6, '0');
-    }
+    // setCredits: leaving solo puts the menu up, and the menu does not tick the
+    // HUD, so a deferred repaint left 'P1' sitting in the readout.
+    this.creditNum.textContent = n ? 'P' + n : '$0';
+    this._c.credits = undefined;
   }
   setHealth(h, max) {
     // Keyed off the displayed number, not the clamped bar width, so overheal
@@ -251,8 +239,12 @@ export class UI {
     }
     if (this._c.reload !== reloading) {
       this._c.reload = reloading;
-      this.ammoReload.classList.toggle('hidden', !reloading);
       this.reloadRing.classList.toggle('hidden', !reloading);
+      // VISIBILITY, NOT `hidden`. The dial's slot in the ammo line is held
+      // open whether or not a reload is running, because the one thing this
+      // readout must never do is move the rest of the HUD - which is exactly
+      // what the RELOADING bar it replaced did every time the gun ran dry.
+      this.ammoDial.style.visibility = reloading ? 'visible' : 'hidden';
     }
   }
 
@@ -367,13 +359,25 @@ export class UI {
   // before it is written: this is called every frame, and a custom-property
   // write the browser has to restyle for is not worth spending on a change
   // nobody can see.
+  // Drives BOTH sweeps off one number: the ring around the crosshair, where
+  // the player is looking, and the dial beside the ammo count, where the
+  // number it belongs to lives. Same conic, same 16 spokes, so they read as
+  // one instrument shown twice rather than two.
   setReloadProgress(p) {
     const q = Math.round(p * 100);
     if (this._c.reloadP === q) return;
     this._c.reloadP = q;
     this.reloadRing.style.setProperty('--p', q / 100);
+    this.ammoDial.style.setProperty('--p', q / 100);
   }
+  // THE ONLY NUMBER IN THE TOP RIGHT. It took the score's place there when the
+  // score was removed: a run is measured by the wave it reached, and the one
+  // figure that changes moment to moment and that the player can spend is this
+  // one. Right-aligned in the markup, so a wide `$12,345` grows leftward into
+  // empty frame and cannot push anything.
   setCredits(n) {
+    // Nothing writes over the turn readout during a versus match.
+    if (this._versus) return;
     if (this._c.credits !== n) {
       this._c.credits = n;
       this.creditNum.textContent = '$' + n.toLocaleString();
@@ -596,12 +600,39 @@ export class UI {
     this.strobe.style.opacity = q;
   }
 
+  /**
+   * FIRE AND POISON ARE STATES, NOT EVENTS, so they are driven every frame off
+   * the player's own status timers rather than flashed on a damage tick - the
+   * same way the AEGIS frame is driven off invulnEnd.
+   *
+   * That is the whole difference between this and what it replaced. The old
+   * vignette fired once per throttled tick, which told the player "something
+   * hurt" half a second after it started and said nothing at all in between; a
+   * layer that is simply UP for as long as you are burning is a condition you
+   * can see you are in, and see the end of.
+   *
+   * @param {boolean} fire
+   * @param {boolean} poison
+   */
+  setStatusFx(fire, poison) {
+    if (this._c.fxFire !== fire) {
+      this._c.fxFire = fire;
+      this.fxFire.classList.toggle('on', fire);
+    }
+    if (this._c.fxPoison !== poison) {
+      this._c.fxPoison = poison;
+      this.fxPoison.classList.toggle('on', poison);
+    }
+  }
+
+  // A HIT. One shot, and the only one of the three that is: taking damage is an
+  // event with a moment attached, and the frame cracking is the drawing of it.
   damage() {
-    this.vignette.classList.remove('flash');
-    void this.vignette.offsetWidth;
-    this.vignette.classList.add('flash');
+    this.fxDamage.classList.remove('flash');
+    void this.fxDamage.offsetWidth;
+    this.fxDamage.classList.add('flash');
     clearTimeout(this._vt);
-    this._vt = setTimeout(() => this.vignette.classList.remove('flash'), 130);
+    this._vt = setTimeout(() => this.fxDamage.classList.remove('flash'), 130);
   }
   // Every one of these closes the sub-screens as well. They are layered over
   // the menus rather than swapped with them, so a state change underneath -
@@ -638,7 +669,6 @@ export class UI {
   // ---- sub-screens ---------------------------------------------------------
   hideSubScreens() {
     this.settingsOv.classList.add('hidden');
-    this.scoresOv.classList.add('hidden');
     this.confirmOv.classList.add('hidden');
   }
   showSettings() {
@@ -650,15 +680,6 @@ export class UI {
   // learn a fourth way to close a screen.
   showConfirmExit() {
     this.confirmOv.classList.remove('hidden');
-  }
-  // The board, drawn fresh every time the screen opens - the player may have
-  // banked a run since the last look. An empty board renders to nothing at all
-  // (`.lb:empty` is display:none), so the placeholder stands in for it rather
-  // than leaving the screen with a hole between the title and BACK.
-  showScores(entries) {
-    this.renderBoard(this.lbMenu, entries, -1);
-    this.lbNone.classList.toggle('hidden', entries.length > 0);
-    this.scoresOv.classList.remove('hidden');
   }
   // ---- the hot seat --------------------------------------------------------
 
@@ -705,47 +726,47 @@ export class UI {
 
   /**
    * The end of a versus match. Reuses the death screen's furniture - the
-   * marquee, the stat strip, RESTART - because it is the same moment in the
-   * cabinet's shape, and hides the leaderboard half of it: a two-player result
-   * has no business on a solo board.
+   * marquee, the hero number, RESTART - because it is the same moment in the
+   * cabinet's shape.
    */
   showMatchOver(who, wave) {
     this.hideSubScreens();
-    this.hideNameEntry();
     this.hideHandoff();
-    this.lbOver.textContent = '';
     const h1 = this.overOv.querySelector('h1');
     h1.textContent = who + ' WINS';
     h1.classList.remove('dead');
+    this.overHeroLabel.textContent = 'CLEARED WAVE';
+    this.overHero.textContent = String(wave);
     this.overStats.textContent = '';
-    const cell = document.createElement('div');
-    cell.className = 'rs';
-    const l = document.createElement('u');
-    l.textContent = 'CLEARED WAVE';
-    const v = document.createElement('b');
-    v.textContent = String(wave);
-    cell.append(l, v);
-    this.overStats.appendChild(cell);
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
   }
 
-  showOver(score, wave, kills, bestCombo = 0) {
+  /**
+   * The death screen.
+   *
+   * THE WAVE IS THE RUN. With the score gone it is the only measure of how far
+   * the player got, so it is not a cell in a strip of four any more - it is
+   * the number on the screen, set at four times the size of anything under it.
+   * Everything else is context for it, and reads as context.
+   */
+  showOver(wave, kills, accuracy, bestCombo = 0, credits = 0) {
     // Taken back off in case the last thing on this screen was a versus win.
     const h1 = this.overOv.querySelector('h1');
     h1.textContent = 'YOU DIED';
     h1.classList.add('dead');
     this.hideSubScreens();
+    this.overHeroLabel.textContent = 'REACHED WAVE';
+    this.overHero.textContent = String(wave);
     // Four columns of one reading, not one sentence. At 8x8 a run-on line of
     // labels and numbers separated by middots is a wall the player has to read
-    // left to right; a divided strip is scanned in a glance, and the number
-    // the player came for is the largest thing in each column.
+    // left to right; a divided strip is scanned in a glance.
     this.overStats.textContent = '';
     const stats = [
-      ['WAVE', String(wave)],
-      ['SCORE', String(score).padStart(6, '0')],
       ['KILLS', String(kills)],
+      ['ACCURACY', accuracy],
       ['BEST CHAIN', String(bestCombo)],
+      ['CREDITS', '$' + credits.toLocaleString()],
     ];
     for (const [label, value] of stats) {
       const cell = document.createElement('div');
@@ -759,54 +780,6 @@ export class UI {
     }
     this.overOv.classList.remove('hidden');
     this.hud.classList.add('hidden');
-  }
-  // Draws a score table into `el`. `highlight` is the index of the run just
-  // played, or -1.
-  //
-  // Built with createElement and textContent rather than innerHTML, unlike the
-  // rest of this file: every other string here is ours, but a leaderboard name
-  // is typed by the player, and dropping that into innerHTML would let a name
-  // like `<img src=x onerror=...>` execute. Even on a board only its author
-  // can see, that is the wrong way round.
-  renderBoard(el, entries, highlight = -1) {
-    el.textContent = '';
-    if (!entries.length) return;
-    const title = document.createElement('div');
-    title.className = 'lb-title';
-    title.textContent = 'BEST RUNS';
-    el.appendChild(title);
-    entries.forEach((e, i) => {
-      const row = document.createElement('div');
-      row.className = i === highlight ? 'lb-row you' : 'lb-row';
-      const cell = (cls, text) => {
-        const d = document.createElement('span');
-        d.className = cls;
-        d.textContent = text;
-        row.appendChild(d);
-      };
-      cell('lb-rank', String(i + 1));
-      cell('lb-name', e.name || '---');
-      cell('lb-wave', 'WAVE ' + e.wave);
-      // Padded, not separated, to match the score readout on the HUD and the
-      // one in the run strip above the board: three different renderings of the
-      // same number on one screen is three numbers as far as the eye is
-      // concerned.
-      cell('lb-score', String(e.score).padStart(6, '0'));
-      el.appendChild(row);
-    });
-  }
-
-  // Opens the name field for a qualifying run and puts the caret in it, so the
-  // player can type without hunting for the box.
-  showNameEntry(defaultName) {
-    this.lbEntry.classList.remove('hidden');
-    this.lbName.value = defaultName || '';
-    this.lbName.focus();
-    this.lbName.select();
-  }
-
-  hideNameEntry() {
-    this.lbEntry.classList.add('hidden');
   }
 
   // Station prompt. `text` is null when the player is not near a station.
@@ -825,39 +798,33 @@ export class UI {
     this.promptEl.classList.remove('hidden');
   }
 
-  // ---- held-TAB build sheet -----------------------------------------------
+  // ---- held-TAB inventory sheet -------------------------------------------
   //
-  // Opened by a HELD key over a live fight, so it is built once on the way in
-  // and only its numbers are rewritten after that. The mutation list cannot
-  // change while the key is down - totems are claimed by walking into them, and
-  // the player is not walking anywhere with Tab held - so it is written on open
-  // and never touched again.
+  // WHAT YOU ARE CARRYING, and nothing else. This used to be a RUN SUMMARY -
+  // wave, kills, accuracy, damage taken, a dozen live counters - and every one
+  // of those numbers was either already on the HUD or was trivia. What it never
+  // showed was the one thing a build sheet is for: what the mutations the
+  // player has been walking into all run actually DO. A player six upgrades
+  // deep could not find out what any of them was without dying.
   //
-  // `muts` is an array of { name, color, tier }, `rows` an array of
-  // [label, value, highlight] built by main.js, which owns what a run counts.
+  // So it is an inventory now. Icon, name, and the same effect lines the totem
+  // printed when the offer was made - the card the player read once, kept.
+  //
+  // Opened by a HELD key over a live fight, so it is built on the way in and
+  // rebuilt only when the build itself changes - see `_statsKey`.
+  //
+  // `active` is { id, name, effects, theme, ready } or null; `passives` is an
+  // array of { id, name, effects, theme, tier }.
 
-  showStats(muts, rows) {
-    if (!this._statsOpen) {
-      this._statsOpen = true;
-      this._buildMuts(muts);
-      this._buildStatRows(rows);
-      this.statsPanel.classList.remove('hidden');
-      return;
-    }
-    this.updateStats(rows);
-  }
-
-  // Live numbers only. The game keeps running underneath the panel, so score,
-  // kills and ammo tick while it is open.
-  updateStats(rows) {
-    if (!this._statsOpen) return;
-    for (const [label, value] of rows) {
-      const row = this._statRows[label];
-      if (row && row.last !== value) {
-        row.last = value;
-        row.val.textContent = value;
-      }
-    }
+  showStats(active, passives) {
+    const key = (active ? active.id + (active.ready ? '!' : '') : '-')
+      + '|' + passives.map((m) => m.id + m.tier).join(',');
+    if (this._statsOpen && key === this._statsKey) return;
+    this._statsKey = key;
+    this._statsOpen = true;
+    this._buildActive(active);
+    this._buildPassives(passives);
+    this.statsPanel.classList.remove('hidden');
   }
 
   hideStats() {
@@ -865,59 +832,81 @@ export class UI {
     this._statsOpen = false;
     this.statsPanel.classList.add('hidden');
     // Dropped rather than kept: the next open is a different build, and a
-    // stale row cache would silently suppress the write that would fix it.
-    this._statRows = {};
+    // stale key would silently suppress the rebuild that would fix it.
+    this._statsKey = '';
     this.statsMuts.textContent = '';
-    this.statsRun.textContent = '';
+    this.statsActive.textContent = '';
   }
 
-  _buildMuts(muts) {
-    this.statsMuts.textContent = '';
-    if (!muts.length) {
+  /**
+   * One entry: the icon, the name, and the effect lines under it.
+   *
+   * The icon is drawn in the item's or mutation's own THEME COLOUR, which is
+   * the same colour the totem or the box card carried when it was offered -
+   * that is the whole reason it is worth the 576 cells, because the shape and
+   * the colour together are how the player recognises a thing they took twenty
+   * minutes ago. The NAME stays white: several themes - Berserker's near-black
+   * red, Ashen's burnt orange - are unreadable as text on a dark panel, which
+   * is why the old row put the colour on a dot and never on the words.
+   */
+  _entry(def) {
+    const cell = document.createElement('div');
+    cell.className = 'inv';
+    const art = pixelIconCanvas(def.id, def.theme, 2);
+    art.className = 'inv-art';
+    const body = document.createElement('div');
+    body.className = 'inv-body';
+    const name = document.createElement('div');
+    name.className = 'inv-name';
+    name.textContent = def.name;
+    // A tier is only shown where there is one to show: printing "x1" on every
+    // single-tier mutation would make the stacking ones invisible.
+    if (def.tier > 1) {
+      const tier = document.createElement('em');
+      tier.textContent = 'x' + def.tier;
+      name.appendChild(tier);
+    }
+    body.appendChild(name);
+    for (const [text, sign] of def.effects || []) {
+      const line = document.createElement('div');
+      line.className = 'inv-line';
+      // The same three colours the totem card uses, so a line the player read
+      // as a cost when they took the offer still reads as a cost here.
+      line.style.color = SIGN_COLOR[String(sign)];
+      line.textContent = text;
+      body.appendChild(line);
+    }
+    cell.append(art, body);
+    return cell;
+  }
+
+  _buildActive(active) {
+    this.statsActive.textContent = '';
+    if (!active) {
       const empty = document.createElement('div');
-      empty.className = 'mut-empty';
+      empty.className = 'inv-empty';
+      empty.textContent = 'EMPTY HANDED';
+      this.statsActive.appendChild(empty);
+      return;
+    }
+    const cell = this._entry(active);
+    // READY is the one live fact about a held item worth carrying onto this
+    // sheet, and it is a state rather than a number - so it is a class on the
+    // entry, not a row that has to be kept up to date.
+    cell.classList.toggle('ready', !!active.ready);
+    this.statsActive.appendChild(cell);
+  }
+
+  _buildPassives(passives) {
+    this.statsMuts.textContent = '';
+    if (!passives.length) {
+      const empty = document.createElement('div');
+      empty.className = 'inv-empty';
       empty.textContent = 'NONE YET';
       this.statsMuts.appendChild(empty);
       return;
     }
-    for (const m of muts) {
-      const row = document.createElement('div');
-      row.className = 'mut-row';
-      const dot = document.createElement('i');
-      // The colour goes on the DOT, never on the row. Theme colours are picked
-      // to be read as a light on a pillar across an arena, and several of them
-      // - Berserker's near-black red, Ashen's burnt orange - are unreadable as
-      // body text on a dark panel. The dot carries the identity; the name stays
-      // legible.
-      dot.style.color = m.color;
-      const name = document.createElement('span');
-      name.textContent = m.name;
-      row.append(dot, name);
-      // A tier is only shown where there is one to show: printing "x1" on
-      // every single-tier mutation would make the stacking ones invisible.
-      if (m.tier > 1) {
-        const tier = document.createElement('em');
-        tier.textContent = 'x' + m.tier;
-        row.appendChild(tier);
-      }
-      this.statsMuts.appendChild(row);
-    }
-  }
-
-  _buildStatRows(rows) {
-    this.statsRun.textContent = '';
-    this._statRows = {};
-    for (const [label, value, highlight] of rows) {
-      const row = document.createElement('div');
-      row.className = highlight ? 'stat-row good' : 'stat-row';
-      const l = document.createElement('span');
-      l.textContent = label;
-      const v = document.createElement('b');
-      v.textContent = value;
-      row.append(l, v);
-      this.statsRun.appendChild(row);
-      this._statRows[label] = { val: v, last: value };
-    }
+    for (const m of passives) this.statsMuts.appendChild(this._entry(m));
   }
 
   // Called on a new game: forces every setter to repaint on the next frame and

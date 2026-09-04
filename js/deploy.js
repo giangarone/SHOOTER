@@ -92,8 +92,14 @@ function nearest(enemies, x, z, maxD, obstacles = null) {
 // IT DOES NOT LEAD ITS TARGET. A turret that predicted movement would out-aim
 // the player, and the player is the one holding the interesting gun.
 export class Turret {
-  constructor(game, x, z) {
+  constructor(game, x, z, damage) {
     this.pos = new THREE.Vector3(x, 0, z);
+    // ONE OF THE PLAYER'S OWN SHOTS PER ROUND, snapshotted when the turret is
+    // set down rather than read live: the thing was built out of the gun the
+    // player was holding at the time, and a turret that quietly got stronger
+    // because a totem was claimed while it was standing would be a second
+    // weapon nobody is aiming.
+    this.damage = damage;
     // FIFTEEN, NOT TWENTY. Not a balance number: an item's readout must never
     // state its charge time (see the note at the top of js/items.js), and a
     // turret that lived exactly as long as its cooldown would print "FOR 20s"
@@ -102,7 +108,12 @@ export class Turret {
     // slot is genuinely empty for a few seconds between turrets, so a second
     // one is a decision rather than an upkeep.
     this.life = 15;
-    this.cd = 0.35;
+    // WHERE THE PULSE STOOD WHEN THIS WAS SET DOWN. It fires on the edge, so a
+    // turret placed mid-beat waits for the next one rather than firing
+    // instantly and then again a fraction of a second later - see Music.pulse.
+    this._lastPulse = -1;
+    // Seconds since the last shot, for the barrel heat alone.
+    this.since = 9;
     this.yaw = 0;
     this.dead = false;
 
@@ -159,21 +170,29 @@ export class Turret {
       this.yaw = Math.atan2(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
       this.head.rotation.y = this.yaw + Math.PI;
     }
-    // The barrel glows on the beat of its own fire rate, so a turret with
-    // nothing to shoot at is visibly idle rather than visibly broken.
-    const heat = target ? 1.6 * Math.max(0, this.cd / 0.35) : 0;
+    // The barrel glows off the beat it fires on, so a turret with nothing to
+    // shoot at is visibly idle rather than visibly broken - and one that IS
+    // shooting pulses in time with the music the player is hearing.
+    this.since += dt;
+    const heat = target ? 1.6 * Math.max(0, 1 - this.since / 0.3) : 0;
     this.eye.material.emissiveIntensity = 1.4 + heat;
     this.halo.material.opacity = 0.45 + heat * 0.35;
-    this.cd -= dt;
-    if (!target || this.cd > 0) return 'alive';
-    this.cd = 0.33;
+    // TWICE A BEAT, ON THE DOWNBEAT AND THE UPBEAT. It used to run on a private
+    // 0.33s timer, which meant a room full of turrets was a wash of unrelated
+    // clicks over the top of the soundtrack. On the pulse they land together,
+    // with the music and with each other, and the arena sounds like one machine.
+    const first = this._lastPulse < 0;
+    if (ctx.pulse === this._lastPulse) return 'alive';
+    this._lastPulse = ctx.pulse;
+    if (!target || first) return 'alive';
+    this.since = 0;
     this.muzzle.set(
       this.pos.x - Math.sin(this.yaw) * 0.5, 0.68, this.pos.z - Math.cos(this.yaw) * 0.5
     );
     _v.copy(target.pos).setY(0.9);
     ctx.effects.tracer(this.muzzle, _v);
     ctx.effects.flash(this.muzzle);
-    ctx.hurtEnemy(target, 12);
+    ctx.hurtEnemy(target, this.damage);
     ctx.sfx.turret();
     // A shallow blink DOWN on the shot rather than a flare up: the flash at
     // the muzzle is already the bright thing, and two bright things on the
@@ -200,12 +219,16 @@ export class Turret {
 // under your own feet would make the item unplaceable in the half of the arena
 // worth placing it in.
 //
-// IT ARMS AFTER HALF A SECOND, for one reason only: it is thrown at the
-// player's feet, and a mine armed on frame one would be triggered by whatever
-// was already chasing them, at contact range, which is a suicide button.
+// IT ARMS AFTER HALF A SECOND. It is thrown now rather than dropped - see Lob -
+// so it usually lands clear of whatever is chasing the player, but it can still
+// be lobbed into a body at contact range, and a mine armed on frame one would
+// make that a suicide button.
 export class Mine {
-  constructor(game, x, z) {
+  constructor(game, x, z, damage) {
     this.pos = new THREE.Vector3(x, 0.06, z);
+    // FIVE OF THE PLAYER'S OWN SHOTS, snapshotted when it is thrown for the
+    // same reason the turret's is: it was built out of the gun in hand.
+    this.damage = damage;
     this.arm = 0.5;
     this.life = 45;
     this.blink = 0;
@@ -284,7 +307,7 @@ export class Mine {
   detonate(ctx) {
     _v.set(this.pos.x, 0, this.pos.z);
     // hitPlayer true: see the note at the top of the class.
-    ctx.onBlast(_v, 120, 6, null, true);
+    ctx.onBlast(_v, this.damage, 6, null, true);
     ctx.effects.burst(this.pos, 0xffd166, 26, 9, 4, 0.5);
     ctx.effects.burst(this.pos, 0xff7043, 34, 6, 6, 0.7);
     ctx.effects.shockwave(this.pos, 0xff7043, 6, 0.5);
@@ -394,8 +417,11 @@ export class Bomb {
 // segment goes onto ctx.blockers and the projectile step tests it on the same
 // frame it tests the obstacle list.
 export class FireWall {
-  constructor(game, x, z, dirX, dirZ) {
+  constructor(game, x, z, dirX, dirZ, burn) {
     this.life = 8;
+    // What one burn tick off this wall is worth. Snapshotted at the cast, like
+    // every other fire in the game - see Player.dotHit.
+    this.burn = burn;
     this.dead = false;
     // Perpendicular to the look direction, so the wall faces the player.
     const px = -dirZ;
@@ -405,7 +431,6 @@ export class FireWall {
     this.az = z + pz * half;
     this.bx = x - px * half;
     this.bz = z - pz * half;
-    this.tick = 0;
 
     this.group = new THREE.Group();
     this.mats = [];
@@ -450,16 +475,15 @@ export class FireWall {
     this.effects.creepSet(
       this.creep, (this.ax + this.bx) / 2, (this.az + this.bz) / 2, 4.4, 0xdd2c00, fade * 0.6
     );
-    // Damage on a tick rather than per frame, for the reason the hazard pools
-    // tick: 30 dps billed sixty times a second is sixty flashes on one body.
-    this.tick -= dt;
-    const bite = this.tick <= 0;
-    if (bite) this.tick = 0.25;
+    // IT SETS FIRE AND NOTHING ELSE. It used to do both - 7.5 direct every
+    // quarter second AND a burn on top - which was two damage systems on one
+    // wall, only one of which the player could see. The burn is the whole of it
+    // now: refreshed for as long as they are standing in the flame, running
+    // down once they are through, ticking on the beat like every other fire.
     for (const e of ctx.enemies) {
       if (e.dead) continue;
       if (this._distance(e.pos.x, e.pos.z) > 0.9 + e.radius) continue;
-      if (bite) ctx.hurtEnemy(e, 7.5);
-      e.applyStatus('burn', 2, 10);
+      e.applyStatus('burn', 2, this.burn);
     }
     return 'alive';
   }
@@ -687,6 +711,98 @@ export class HoleOrb {
 }
 
 // ---------------------------------------------------------------------------
+// THE THROW - what carries a mine or a turret out in front of the player
+// ---------------------------------------------------------------------------
+//
+// Both of these used to be PLACED: the item wrote them into the arena at
+// `player.pos + facing * 1.4` and that was the whole deployment. Which made two
+// items whose entire decision is WHERE into items with no decision at all - the
+// answer was always "here", because here is the only place you could reach.
+//
+// Thrown, the placement is aimed. A mine goes over the crowd and lands behind
+// it; a turret is set down across the room rather than at the player's heel,
+// where it was only ever shooting at whatever had already caught them.
+//
+// The arc is the Bomber's, and the Bomb's, and the enemy Grenade's - 11 forward,
+// 6.5 up, 22 down - because a fourth throw in the game that flew differently
+// would read as a different physics rather than as a different payload. What it
+// LANDS as is the only thing that varies, and that is one string.
+export class Lob {
+  /**
+   * @param {object} game
+   * @param {THREE.Vector3} from   the muzzle, so it leaves the gun
+   * @param {THREE.Vector3} dir    flattened facing
+   * @param {'mine'|'turret'} kind what to stand up where it lands
+   * @param {number} damage        snapshotted at the throw - see Mine, Turret
+   */
+  constructor(game, from, dir, kind, damage) {
+    this.pos = new THREE.Vector3(from.x, from.y, from.z);
+    this.vel = new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar(11);
+    this.vel.y = 6.5;
+    this.kind = kind;
+    this.damage = damage;
+    this.game = game;
+    this.dead = false;
+    // A CEILING ON THE FLIGHT, not a fuse: it lands when it lands, and this is
+    // only here so a throw that somehow never touches down cannot become a
+    // permanent resident of the deployed list.
+    this.life = 4;
+    this.spin = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+
+    const tint = kind === 'mine' ? 0xff7043 : 0xffab40;
+    this.mat = emissive(0x2a2f3a, 0.2);
+    this.mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), this.mat);
+    // The same halo the thing it becomes will wear, so the throw and the object
+    // read as one event - the player watches the colour they are about to own.
+    this.halo = glow(game.effects.glowTex, tint, 0.8, 0.75);
+    this.mesh.add(this.halo);
+    this.mesh.position.copy(this.pos);
+    game.scene.add(this.mesh);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    this.vel.y -= 22 * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    this.mesh.rotation.x += this.spin.x * dt * 9;
+    this.mesh.rotation.z += this.spin.z * dt * 9;
+    this.mesh.position.copy(this.pos);
+    // BACKS OUT OF WHAT IT HIT rather than passing through it: a throw into a
+    // pillar drops at the pillar's face, which is where the player can see it
+    // land. Same test the Bomb uses, for the same reason.
+    if (pointInObstacle(this.pos, ctx.obstacles)) {
+      this.pos.addScaledVector(this.vel, -dt);
+      this.land(ctx);
+      return 'dead';
+    }
+    if (this.pos.y <= 0.1 || this.life <= 0) {
+      this.land(ctx);
+      return 'dead';
+    }
+    return 'alive';
+  }
+
+  land(ctx) {
+    // Clamped inside the arena, so a throw at a wall still stands its mine or
+    // its turret up somewhere the fight can reach.
+    const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.x));
+    const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.z));
+    ctx.deploy(this.kind === 'mine'
+      ? new Mine(this.game, x, z, this.damage)
+      : new Turret(this.game, x, z, this.damage));
+    _v.set(x, 0.1, z);
+    ctx.effects.impact(_v, this.kind === 'mine' ? 0xff7043 : 0xffab40, 8, 3, 1, 0.3);
+  }
+
+  destroy() {
+    this.mesh.parent?.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    this.mat.dispose();
+    this.halo.material.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // APIARY - the bees
 // ---------------------------------------------------------------------------
 //
@@ -701,7 +817,11 @@ export class Bee {
   constructor(game, x, z, i) {
     this.pos = new THREE.Vector3(x + Math.cos(i) * 0.8, 1.6, z + Math.sin(i) * 0.8);
     this.vel = new THREE.Vector3();
-    this.life = 12;
+    // TWENTY-FOUR SECONDS. A bee does a tenth of what the player's gun does and
+    // spends most of its life travelling, so at twelve the swarm was gone
+    // before it had crossed the arena once - the item read as a burst rather
+    // than as the cloud it is meant to be.
+    this.life = 24;
     this.cd = 0.3 + i * 0.12;
     this.phase = Math.random() * Math.PI * 2;
     this.dead = false;

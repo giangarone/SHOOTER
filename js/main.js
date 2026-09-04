@@ -61,14 +61,15 @@ import * as THREE from 'three';
 import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
 import { Player, NO_HIT_CAP, MAX_SPEED } from './player.js';
 import { PLAYER_STATUS } from './status.js';
-import { Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES } from './enemy.js';
+import {
+  Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink,
+} from './enemy.js';
 import { Effects } from './effects.js';
 import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
 import { Rig } from './rig.js';
-import * as leaderboard from './leaderboard.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
@@ -80,7 +81,7 @@ import { ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS } from './items.js';
 import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
 import { Pad, BTN } from './pad.js';
-import { MenuDriver, renderControls, cap, buildNameKeyboard } from './padmenu.js';
+import { MenuDriver, renderControls, cap } from './padmenu.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
 import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
@@ -235,7 +236,7 @@ const MELEE_DAMAGE = 50;
 const MELEE_SWING = 0.12;
 // WHAT A KILL WITH THE GUN ITSELF IS WORTH. Melee is the shortest range in the
 // game, it has a cooldown, it hits one body and it has to be walked into - so
-// it pays double, in score and in credits both.
+// it pays double.
 const MELEE_KILL_MULT = 2;
 
 // innerWidth and innerHeight are both 0 in some real situations - a minimised
@@ -275,11 +276,11 @@ const COMBO_WINDOW = 3;
 // late wave full of splitter children cannot run the multiplier to absurdity.
 const COMBO_STEP = 0.15;
 const COMBO_MAX = 3;
-// Credits per enemy are derived from its score so the two curves cannot drift
-// apart. Splitter children score 0 and so fall outside this rate entirely;
-// they pay a small flat bounty instead - see SPLIT_CHILD_CREDITS - because
-// paying them at this rate off a real score would make splitters the best
-// credit source in the game.
+// Credits per enemy are derived from its `value` so the two curves cannot
+// drift apart. Splitter children are worth 0 and so fall outside this rate
+// entirely; they pay a small flat bounty instead - see SPLIT_CHILD_CREDITS -
+// because paying them at this rate off a real value would make splitters the
+// best credit source in the game.
 //
 // 0.18 rather than the 0.1 it was for most of the game's life, because KILLS
 // ARE NOW THE ONLY INCOME. The flat wave-clear bonus is gone (see _finishWave):
@@ -288,11 +289,11 @@ const COMBO_MAX = 3;
 // nothing of the player. Everything it used to pay now has to be picked up off
 // the floor, and this is the dial that keeps a run's total roughly where it
 // was - plus a margin for the orbs that time out uncollected.
-const CREDITS_PER_SCORE = 0.18;
+const CREDITS_PER_VALUE = 0.18;
 // What one splitter child pays. Flat, and set here rather than by giving the
-// child a score, because the two numbers answer different questions: the
-// children still score NOTHING - killing them must not run the scoreboard up
-// for work the parent was already paid for - but a splitter that bursts into
+// child a `value`, because the two numbers answer different questions: the
+// children are still worth NOTHING - killing them must not pay twice for work
+// the parent was already paid for - but a splitter that bursts into
 // three bodies you have to stop and deal with should not leave the floor
 // empty. Small on purpose: three children come to 4.5 credits against the
 // parent's ~21, so clearing the whole family is worth about a fifth more than
@@ -530,6 +531,14 @@ const BOSS_NAMES = {
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 
+// HOW LONG A FIRE ZONE'S BURN LASTS once an enemy steps out of it. Short on
+// purpose: the zone refreshes it every frame they are inside, so this is only
+// the tail - long enough that the burn survives a beat and pays out at least
+// one tick for a body that walked through the edge, short enough that a trail
+// is a place on the floor rather than a permanent condition applied to whatever
+// once brushed it.
+const FIRE_ZONE_BURN = 0.8;
+
 class Game {
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -647,14 +656,7 @@ class Game {
     this._invertLook = false;
     this._loadPadPrefs();
 
-    // Prefilled into the name field so a returning player just presses Enter.
-    this._lastName = '';
-    try { this._lastName = localStorage.getItem('va-last-name') || ''; } catch {}
-    // The run waiting to be named, or null. Guards against double submission.
-    this._pending = null;
-
     this.state = 'menu';
-    this.score = 0;
     this.kills = 0;
     this.credits = 0;
     this.comboKills = 0;
@@ -929,7 +931,19 @@ class Game {
       hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
       pull: (point, radius, dist) => this._pull(point, radius, dist, null),
       deploy: (d) => this.deploy(d),
+      // THE BEAT, for anything that fires on it. Refreshed per frame in
+      // _updateDeployed alongside the enemy context's copy - see Music.pulse.
+      pulse: 0,
+      pulseWhole: true,
     };
+
+    // EVERY NUMBER IN THE GAME COMES OUT OF HERE. Enemy.takeDamage is the one
+    // place hp is ever reduced, so installing the sink once covers bullets,
+    // melee, fire, poison, mines, sentries, thorns, blasts and every item at
+    // the same time - see setDamageSink in enemy.js.
+    setDamageSink((pos, dealt, crit) => {
+      if (dealt > 0) this.effects.damageNumber(pos, dealt, crit);
+    });
 
     this._bind();
     // Try to get the music going straight away. Blocked until the player
@@ -959,7 +973,6 @@ class Game {
       window.__report = () => ({
         state: this.state,
         wave: this.wave,
-        score: this.score,
         kills: this.kills,
         credits: this.credits,
         bestCombo: this.bestCombo,
@@ -1022,10 +1035,9 @@ class Game {
   _bind() {
     const canvas = this.renderer.domElement;
     addEventListener('keydown', (e) => {
-      // The leaderboard name field is the only text input in the game, and
-      // these handlers are on the window. Without this, typing a space into it
-      // would be swallowed by the jump binding's preventDefault, and R and E
-      // would fire game actions mid-word.
+      // Guards any text input that ever ends up on screen: without this a
+      // space would be swallowed by the jump binding's preventDefault, and R
+      // and E would fire game actions mid-word.
       if (this._typing(e.target)) return;
       // Any key at all hands control back to the keyboard. The player's hands
       // are the only authority on which device is in use, and this is what
@@ -1330,13 +1342,6 @@ class Game {
     // The on-screen keyboard, built once. It only ever appears in pad mode -
     // see the .pad-only rule - and it writes straight into the same field the
     // keyboard player types in, so there is one name and one save path.
-    this._kbEl = document.getElementById('kb');
-    buildNameKeyboard(
-      this._kbEl,
-      (ch) => this._nameChar(ch),
-      () => this._nameDelete(),
-      () => this._saveScore()
-    );
     this._audioHint = document.getElementById('audio-hint');
     // ONE SOURCE OF TRUTH for the bindings on screen. The panel starts empty
     // in the markup and is filled here for the keyboard; _setInputMode swaps
@@ -1355,15 +1360,7 @@ class Game {
       e.stopPropagation();
       this._openSettings();
     });
-    document.getElementById('btn-scores-start').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._openScores();
-    });
     document.getElementById('btn-settings-back').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._closeSubScreen();
-    });
-    document.getElementById('btn-scores-back').addEventListener('click', (e) => {
       e.stopPropagation();
       this._closeSubScreen();
     });
@@ -1392,7 +1389,7 @@ class Game {
     // pointer-events: none, so a click during a handoff falls through to the
     // canvas, where every handler already refuses a state that is not
     // 'playing'. Swallowing it here would be a listener that can never fire.
-    for (const ov of [this.ui.settingsOv, this.ui.scoresOv, this.ui.confirmOv]) {
+    for (const ov of [this.ui.settingsOv, this.ui.confirmOv]) {
       ov.addEventListener('click', (e) => e.stopPropagation());
     }
 
@@ -1412,23 +1409,6 @@ class Game {
     document.addEventListener('fullscreenchange', () => this._syncFsBtns());
     document.addEventListener('webkitfullscreenchange', () => this._syncFsBtns());
     this._syncFsBtns();
-
-    // Name entry. Both paths go through _saveScore, which is idempotent.
-    document.getElementById('btn-lb-save').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._saveScore();
-    });
-    this.ui.lbName.addEventListener('keydown', (e) => {
-      // Enter commits. Stopped from propagating so it cannot also reach the
-      // overlay handlers and restart the run out from under the player.
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        this._saveScore();
-      }
-    });
-    // Clicking the field must not fall through to anything that restarts.
-    this.ui.lbName.addEventListener('click', (e) => e.stopPropagation());
 
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
@@ -1656,11 +1636,6 @@ class Game {
     this.ui.showSettings();
   }
 
-  _openScores() {
-    this._audioGesture();
-    this.ui.showScores(leaderboard.load());
-  }
-
   _closeSubScreen() {
     // The menu underneath was never hidden, so BACK is only ever this. Both
     // are taken down rather than the one that is up: it costs a class write
@@ -1668,11 +1643,10 @@ class Game {
     this.ui.hideSubScreens();
   }
 
-  // True while either sub-screen is up. The menus underneath are still there
+  // True while a sub-screen is up. The menus underneath are still there
   // and still listening, so anything that acts on a menu click has to ask.
   _subScreenOpen() {
     return !this.ui.settingsOv.classList.contains('hidden')
-      || !this.ui.scoresOv.classList.contains('hidden')
       || !this.ui.confirmOv.classList.contains('hidden');
   }
 
@@ -2020,12 +1994,6 @@ class Game {
     if (root !== this._padRoot) {
       this._padRoot = root;
       this.menu.setRoot(root);
-      // A qualifying death asks for a name, so the selection starts on the
-      // keyboard rather than on RESTART - the button that would throw the
-      // entry away is the last thing to put the cursor on.
-      if (root === this.ui.overOv && !this.ui.lbEntry.classList.contains('hidden')) {
-        this.menu.focus(this._kbEl.querySelector('.kb-key'));
-      }
     }
     if (!root) return;
 
@@ -2051,18 +2019,9 @@ class Game {
     }
     if (pad.pressed(BTN.CIRCLE)) {
       pad.consume(BTN.CIRCLE);
-      // BACK, and on the death screen it is the delete key for the name being
-      // entered - there is nothing else for BACK to mean there.
+      // BACK.
       if (this._subScreenOpen()) this._closeSubScreen();
       else if (this.state === 'paused') this.resume();
-      else if (this.state === 'gameover' && !this.ui.lbEntry.classList.contains('hidden')) {
-        this._nameDelete();
-      }
-    }
-    if (pad.pressed(BTN.SQUARE) && this.state === 'gameover'
-      && !this.ui.lbEntry.classList.contains('hidden')) {
-      pad.consume(BTN.SQUARE);
-      this._nameChar(' ');
     }
     if (pad.pressed(BTN.OPTIONS)) {
       pad.consume(BTN.OPTIONS);
@@ -2086,9 +2045,6 @@ class Game {
    * that.
    */
   _restartFromOver() {
-    // Restarting without pressing SAVE still banks the run - losing a top-ten
-    // score because you hit the obvious button first would be indefensible.
-    this._saveScore();
     if (this.match) {
       this.mode = 'solo';
       this.match = null;
@@ -2106,28 +2062,10 @@ class Game {
   _menuRoot() {
     if (!this.ui.confirmOv.classList.contains('hidden')) return this.ui.confirmOv;
     if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
-    if (!this.ui.scoresOv.classList.contains('hidden')) return this.ui.scoresOv;
     if (this.state === 'menu') return this.ui.startOv;
     if (this.state === 'paused') return this.ui.pauseOv;
     if (this.state === 'gameover') return this.ui.overOv;
     return null;
-  }
-
-  // Letters, from the on-screen keyboard. Written straight into the same field
-  // the keyboard player types in, so _saveScore has one place to read from.
-  // maxlength does not apply to a value set from script, hence the guard.
-  _nameChar(ch) {
-    const el = this.ui.lbName;
-    if (el.value.length >= 12) return;
-    el.value += ch;
-    // The same blip a coin makes. A key that types in silence on a machine
-    // where everything else answers reads as a key that did not register.
-    this.sfx.coin();
-  }
-
-  _nameDelete() {
-    const el = this.ui.lbName;
-    el.value = el.value.slice(0, -1);
   }
 
   // A gamepad press is NOT a user gesture as far as a browser is concerned, so
@@ -2291,39 +2229,6 @@ class Game {
     return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
   }
 
-  // Called once the run is over and the score is final. Shows the board, and
-  // opens the name field first when the run placed.
-  _postScore() {
-    this._pending = null;
-    if (leaderboard.qualifies(this.score, this.wave)) {
-      this._pending = {
-        score: this.score, wave: this.wave, kills: this.kills, combo: this.bestCombo,
-      };
-      this.ui.showNameEntry(this._lastName);
-      // The board underneath still shows the standing table, so the player can
-      // see what they are about to break into.
-      this.ui.renderBoard(this.ui.lbOver, leaderboard.load(), -1);
-    } else {
-      this.ui.hideNameEntry();
-      this.ui.renderBoard(this.ui.lbOver, leaderboard.load(), -1);
-    }
-  }
-
-  // Commits the pending run under whatever name is in the field. Safe to call
-  // twice - the second call has nothing pending and does nothing, which is what
-  // stops a double-click from writing the run in twice.
-  _saveScore() {
-    if (!this._pending) return;
-    const name = (this.ui.lbName.value || '').trim().slice(0, 12) || 'ANON';
-    this._lastName = name;
-    try { localStorage.setItem('va-last-name', name); } catch {}
-    const { list, index } = leaderboard.add({ ...this._pending, name });
-    this._pending = null;
-    this.ui.hideNameEntry();
-    this.ui.renderBoard(this.ui.lbOver, list, index);
-    this.sfx.upgrade();
-  }
-
   // Primes the audio graph and gets the soundtrack going. Every user gesture
   // that reaches audio routes through here rather than calling sfx.ensure()
   // directly, because the music has to be (re)started on a gesture too and a
@@ -2353,17 +2258,13 @@ class Game {
   // leftover state used to carry into the next run.
   beginGame(mode = 'solo') {
     this._audioGesture();
-    // Any unnamed run is banked before the state that produced it is reset.
-    this._saveScore();
     this.mode = mode;
     // VERSUS IS A MATCH, NOT A RUN. The wave counter below is still the one
     // the arena reads; the match owns whose wave it is and what is riding on
     // it, and both players' saved runs hang off it.
     this.match = mode === 'versus' ? new VersusMatch() : null;
-    this.ui.hideNameEntry();
     this.player.reset();
     this._clearEntities();
-    this.score = 0;
     this.kills = 0;
     this.credits = 0;
     this.comboKills = 0;
@@ -2435,11 +2336,8 @@ class Game {
    * ABANDON THE RUN AND GO BACK TO THE MENU. Reached only from the pause
    * screen, and only through the confirmation - see #overlay-confirm.
    *
-   * NOTHING IS BANKED. A score reaches the leaderboard by dying with it, which
-   * is the arcade's own rule and the reason `_pending` is written in
-   * _postScore and nowhere else: quitting a run at wave nine because it was
-   * going well is not a way to record wave nine. The confirmation says so in
-   * as many words, which is most of why there is a confirmation.
+   * The confirmation says as much in as many words, which is most of why
+   * there is a confirmation.
    *
    * The teardown is beginGame's, minus the part that starts a run. That is
    * deliberate: the menu is drawn over a LIVE arena, so a fight left standing
@@ -2624,8 +2522,6 @@ class Game {
     this.ui.setPrompt(null, false);
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     this.sfx.upgrade();
-    // NOT _postScore. A versus match is not a run, its score was never shown,
-    // and banking one would put a two-player result on a solo board.
     this.ui.showMatchOver(m.label(m.winner), m.wave);
   }
 
@@ -2681,7 +2577,7 @@ class Game {
    * Damage from something that is not a bullet - an item, a turret, a bee, a
    * wall of fire. It does NOT collect the death: the enemy sweep in
    * _updateEnemies does that, once per frame, and every kill in the game is
-   * booked there whatever killed it. Anything that tried to score its own kill
+   * booked there whatever killed it. Anything that tried to book its own kill
    * here would double-count the combo.
    *
    * @param {Enemy} en
@@ -2709,6 +2605,9 @@ class Game {
 
   _updateDeployed(dt) {
     const ctx = this._deployCtx;
+    // Sentry guns fire on this edge, twice a beat - see Turret.update.
+    ctx.pulse = this.music.pulse;
+    ctx.pulseWhole = this.music.pulseWhole;
     for (let i = this._deployed.length - 1; i >= 0; i--) {
       const d = this._deployed[i];
       if (d.update(dt, ctx) === 'alive') continue;
@@ -2751,7 +2650,11 @@ class Game {
     ray.intersectObjects(targets, false, hits);
 
     const muzzle = this.player.muzzleInto(this._muzzle);
-    const dealt = this.player.getEffectiveDamage(w.damage) * mult;
+    // ONE ROLL PER BEAM. The lance is a single shot that happens to pass
+    // through everything in the room, so it crits like one.
+    const crit = this.player.rollCrit();
+    const dealt = this.player.getEffectiveDamage(w.damage) * mult
+      * (crit ? this.player.mods.critMult : 1);
     this._shotHits.clear();
     this._blastHit = false;
     let last = null;
@@ -2764,7 +2667,7 @@ class Game {
       // the beam is drawn to somewhere real.
       last = h.point;
       if (!en || en.dead) continue;
-      this._landShot(en, h.point, ray.ray.direction, dealt, 8);
+      this._landShot(en, h.point, ray.ray.direction, dealt, 8, crit);
       hitAny = true;
     }
     this._shotHits.clear();
@@ -2914,9 +2817,13 @@ class Game {
     const bf = this.bossFight;
     if (!bf) return;
     if (kind === 'stagger') {
+      // NO TEXT, EITHER ON THE SCREEN OR IN THE BAR. A boss slamming into a
+      // pillar already blacks the room out and flares it white, the bar turns
+      // cyan for as long as the window is open, and the damage numbers coming
+      // off it go from 22% to full - three signals, all of them showing rather
+      // than telling. A banner reading STAGGERED over the top of that was the
+      // game narrating something the player could already see.
       bf.state = 'vulnerable';
-      bf.note = 'STAGGERED';
-      this.ui.banner('STAGGERED');
       this.sfx.impact();
       // Black out, then flare white as it comes back up.
       this.rig.cueStagger();
@@ -2928,8 +2835,8 @@ class Game {
       this.rig.setEnraged(false);
     } else if (kind === 'vent') {
       // Colossus's chest core opening and closing. The quietest boss note
-      // there is, and it yields to STAGGERED and ENRAGED - those are one-shot
-      // events the player must not lose sight of behind a label that changes
+      // there is, and it yields to ENRAGED - that is a one-shot event the
+      // player must not lose sight of behind a label that changes
       // every few seconds.
       if (!bf.state) bf.note = enemy.bs.weakOpen ? 'CORE EXPOSED' : '';
     } else if (kind === 'charge') {
@@ -2987,9 +2894,9 @@ class Game {
       child.group.scale.setScalar(shrink);
       child.radius = ENEMY_TYPES.schism.radius * shrink;
       child.speed = e.speed * (tier === 1 ? 1.2 : tier === 2 ? 1.4 : 1.55);
-      // The score is divided rather than duplicated: splitting is the boss
+      // The payout is divided rather than duplicated: splitting is the boss
       // surviving, not four more bosses to be paid for.
-      child.score = Math.round(e.score * 0.5);
+      child.value = Math.round(e.value * 0.5);
       resolveCircle(child.pos, child.radius, this.arena.obstacles, child.collideH);
       this.scene.add(child.group);
       this._pendingSpawns.push(child);
@@ -2998,7 +2905,7 @@ class Game {
     // The parent dies of the split itself.
     e.hp = 0;
     e.dead = true;
-    e.score = 0;
+    e.value = 0;
     bf.note = 'PARTS ' + bf.parts.length;
     this.effects.shockwave(e.pos, ENEMY_TYPES.schism.color, 6, 0.5);
     this.effects.burst(
@@ -3030,8 +2937,8 @@ class Game {
   // field is cleared out - the fight is over, and leaving a handful of adds to
   // mop up would end the wave on an anticlimax.
   //
-  // Deliberately no score and no combo for the purge: five free kills at the
-  // wave boundary would inflate both the payout and the best-chain stat with
+  // Deliberately no payout and no combo for the purge: five free kills at the
+  // wave boundary would inflate both the money and the best-chain stat with
   // something the player did not do.
   _finishBossWave() {
     for (const e of this.enemies) {
@@ -3059,7 +2966,6 @@ class Game {
   // decision the free refill was taking away.
   _payBossBonus() {
     const bonus = BOSS_BONUS_BASE + BOSS_BONUS_PER_WAVE * this.wave;
-    this.score += bonus * 4;
     // The one payout in the game that is still a lump sum, and it arrives as a
     // shower: BOSS_ORBS orbs thrown wide from where the boss was standing, so
     // the reward for the fight is a floor covered in money rather than a
@@ -3197,8 +3103,11 @@ class Game {
       this.bossFight = null;
     }
     this._clearHazards();
-    this.ui.showOver(this.score, this.wave, this.kills, this.bestCombo);
-    this._postScore();
+    const st = this.stats;
+    const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
+    this.ui.showOver(
+      this.wave, this.kills, acc + '%', this.bestCombo, Math.floor(this.credits)
+    );
     // The heaviest the sound goes. This is the run ending, not a body.
     this.sfx.death(1.2);
     // And the heaviest the pad goes, at a priority nothing else in the game
@@ -3206,7 +3115,7 @@ class Game {
     this.pad.rumble(1, 0.8, 700, 4);
   }
 
-  // Current credit/score multiplier from the live kill chain.
+  // Current credit multiplier from the live kill chain.
   comboMult() {
     if (this.comboKills < 2) return 1;
     return Math.min(COMBO_MAX, 1 + COMBO_STEP * (this.comboKills - 1));
@@ -3448,7 +3357,7 @@ class Game {
     return Math.max(this.player.mods.homingRange, this.player.itemHoming ? 30 : 0);
   }
 
-  _homeShot(ray, muzzle, w, dmgMult, burst) {
+  _homeShot(ray, muzzle, w, dmgMult, burst, crit = false) {
     const m = this.player.mods;
     const origin = ray.ray.origin;
     const aim = ray.ray.direction;
@@ -3486,7 +3395,7 @@ class Game {
       this._homeRay.intersectObjects(this._targets, false, hits);
       if (hits.length && hits[0].object.userData.enemy === best) {
         const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage) * dmgMult;
-        this._landShot(best, hits[0].point, this._homeDir, dealt, burst);
+        this._landShot(best, hits[0].point, this._homeDir, dealt, burst, crit);
         this._lastImpact.copy(hits[0].point);
         this.effects.arc(muzzle, hits[0].point, aim);
         // A second burst in Seeker's own colour on top of the ordinary hit
@@ -3511,7 +3420,7 @@ class Game {
   // drift: status, chaining, knockback and Detonator have to behave the same
   // whether the player's aim was on target or the round curved onto it.
   // `dir` is the direction the shot ARRIVED from, which is what armour reads.
-  _landShot(en, point, dir, dealt, burst) {
+  _landShot(en, point, dir, dealt, burst, crit = false) {
     const m = this.player.mods;
     // A warded enemy eats the shot whole (see Enemy.takeDamage). It gets the
     // stone-grey spark rather than the ordinary yellow one, so a player
@@ -3524,7 +3433,7 @@ class Game {
     // `point` is handed on so a placed shield - the Bulwark's buckler - can
     // test where on the body the pellet actually landed, not just which way it
     // was travelling.
-    en.takeDamage(dealt, false, dir.x, dir.z, point);
+    en.takeDamage(dealt, false, dir.x, dir.z, point, crit);
     // NO PARTICLES ON A HIT. A shot landing on an enemy is already the most
     // confirmed event in the game - the hitmarker, the body's flash and the
     // health bar all say so - and a spray on top of that was three signals for
@@ -3537,9 +3446,11 @@ class Game {
     // Malady scales the two statuses that HAVE a strength. Cryo, Terror
     // and Petrify are left alone: shortening them buys nothing back.
     if (m.poisonTime) {
-      en.applyStatus('poison', m.poisonTime * m.dotTime, this.player.venomDps);
+      en.applyStatus('poison', m.poisonTime * m.dotTime, this.player.dotHit * m.poisonPower * m.dotPower);
     }
-    if (m.burnTime) en.applyStatus('burn', m.burnTime * m.dotTime, m.burnDps * m.dotPower);
+    if (m.burnTime) {
+      en.applyStatus('burn', m.burnTime * m.dotTime, this.player.dotHit * m.burnPower * m.dotPower);
+    }
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
     if (m.petrifyChance && Math.random() < m.petrifyChance) {
@@ -3621,7 +3532,7 @@ class Game {
   // pass through several enemies, stopping at the first thing that is not one.
   // Returns true if it damaged anything, so the caller can play a single hit
   // sound per shot rather than one per pellet.
-  _firePellet(muzzle, targets, spread, w, dmgMult = 1) {
+  _firePellet(muzzle, targets, spread, w, dmgMult = 1, crit = false) {
     const m = this.player.mods;
     const ray = this._shotRay;
     this._screen.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
@@ -3691,7 +3602,7 @@ class Game {
       }
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
         * Math.pow(falloff, pierced) * dmgMult;
-      this._landShot(en, h.point, ray.ray.direction, dealt, burst);
+      this._landShot(en, h.point, ray.ray.direction, dealt, burst, crit);
       damaged = true;
       pierced++;
       if (pierced > pierceCap) {
@@ -3707,7 +3618,7 @@ class Game {
     // moved, so it cannot drag a round off a Colossus weak point or a
     // Bulwark's flank that the player deliberately lined up.
     if (!damaged && !hitProp && this._homingAngle() > 0
-      && this._homeShot(ray, muzzle, w, dmgMult, burst)) {
+      && this._homeShot(ray, muzzle, w, dmgMult, burst, crit)) {
       return true;
     }
 
@@ -3756,6 +3667,12 @@ class Game {
       this.effects.burst(this.player.eyeInto(this._killPos), 0x6a1b9a, 10, 4, 2, 0.35);
     }
 
+    // THE CRIT, rolled once per trigger pull, beside the other two rolls that
+    // work the same way and fold into the same multiplier. Per SHOT and not
+    // per pellet for the reason spelled out under Devil's Gamble below.
+    const crit = this.player.rollCrit();
+    if (crit) dmgMult *= mods.critMult;
+
     // DEVIL'S GAMBLE, rolled once per trigger pull and applied to every pellet
     // in it. Per SHOT and not per pellet on purpose: nine pellets each tossing
     // their own coin would average out to almost exactly nothing, and the
@@ -3796,7 +3713,7 @@ class Game {
     // pull, so an enemy caught by both still takes one dose of status.
     for (let v = 0; v < mods.volley; v++) {
       for (let i = 0; i < w.pellets; i++) {
-        if (this._firePellet(muzzle, targets, spread, w, dmgMult)) hitAny = true;
+        if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
       }
     }
     if (this._blastHit) {
@@ -3879,7 +3796,10 @@ class Game {
   _meleeStrike() {
     if (this.state !== 'playing') return;
     const forward = this.player.forwardInto(this._meleeDir);
-    const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE);
+    // ONE ROLL PER SWING, the same rule the trigger pull follows.
+    const crit = this.player.rollCrit();
+    const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE)
+      * (crit ? this.player.mods.critMult : 1);
     const cosArc = Math.cos(MELEE_ARC);
     let target = null;
     let bestD = Infinity;
@@ -3920,16 +3840,21 @@ class Game {
     const d = Math.hypot(bestDX, bestDZ) || 1;
     // A swing travels from the player toward the enemy, which is what tells
     // a shield or a weak point whether it was struck.
-    target.takeDamage(dealt, false, bestDX / d, bestDZ / d);
+    target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, crit);
     // TAGGED, NOT PAID. The reward is worked out in one place - the death
     // sweep in _updateEnemies - and this only records how the body died, so
     // the combo multiplier and the double still compose there.
     if (target.dead) target.meleeKill = true;
-    if (!target.immovable) {
-      target.pos.add(
-        this._knockback.subVectors(target.pos, this.player.pos).setY(0).normalize().multiplyScalar(3)
-      );
-    }
+    // KNOCKBACK IS NOW A MOVE, NOT A TELEPORT. This used to add three metres to
+    // the enemy's position on the frame of the hit, so the body was simply
+    // somewhere else on the next frame - which read as the enemy blinking
+    // rather than as the swing having any force behind it. Enemy.knock spreads
+    // the same three metres over a fifth of a second, and it goes through the
+    // enemy's own movement step, which also gets it the obstacle resolve this
+    // never had: a body knocked into a pillar now stops at the pillar instead
+    // of ending up inside it.
+    this._knockback.subVectors(target.pos, this.player.pos).setY(0).normalize();
+    target.knock(this._knockback.x, this._knockback.z, 3);
     this.effects.burst(
       this._killPos.set(target.pos.x, target.pos.y + 1.1, target.pos.z),
       0xffd600, 14, 4, 1.5, 0.4
@@ -4367,7 +4292,6 @@ class Game {
         if (this.bossFight) this._finishBossWave();
         this._clearHazards();
         this.waveState = 'intermission';
-        this.score += 100 * this.wave;
         this.lastPerfect = this.waveDamageTaken <= 0;
         // Everything still on the floor comes in, so a wave's money can never
         // be lost to the shopping trip that follows it - and neither can a
@@ -4532,16 +4456,16 @@ class Game {
     return rerollCost(this.totemArea.rerolls, this.wave);
   }
 
-  // WHAT ONE ROLL OF THE BOX COSTS. The reroll's own base and step, and it
-  // does NOT climb with the number of rolls bought - see boxCost in upgrades.js
-  // for why. Read off the wave just CLEARED, the same as the two consoles: the
-  // box rises during the intermission, before startWave() has counted the next.
+  // WHAT ONE ROLL OF THE BOX COSTS. Doubles with every roll already bought at
+  // this shop, on the same terms a reroll does - see boxCost in upgrades.js.
+  // Read off the wave just CLEARED, the same as the two consoles: the box
+  // rises during the intermission, before startWave() has counted the next.
   _boxCost() {
     // DELIBERATELY NOT this.player.freeRerolls. SECOND OPINION's tokens buy
     // REROLLS, and the box is not one - it is a purchase of a draw, not a
     // refusal of an answer already given. A token that paid for a box roll
     // would hand that mutation a free active item at every wave break.
-    return boxCost(this.wave);
+    return boxCost(this.wave, this.totemArea.boxRolls);
   }
 
   // A console's price as the player reads it. FREE rather than $0, because a
@@ -4640,6 +4564,9 @@ class Game {
     }
     // CREDITS ONLY, never _payReroll - see the note in _boxCost.
     this.credits -= cost;
+    // Counted AFTER the charge, so the roll being paid for is priced at what
+    // the player was shown and the next one is the one that costs double.
+    this.totemArea.boxRolls++;
     // THE POOL IS TAKEN NOW AND KEPT FOR THE WHOLE SPIN. It excludes whatever
     // the player is carrying, so the carried item cannot even flash past on the
     // reel - not merely fail to win. In versus this is automatically the ACTIVE
@@ -5207,7 +5134,7 @@ class Game {
     this.player.health = Math.min(this.player.maxHealth, this.player.health + whole);
   }
 
-  // Splitter death: three weaker, faster, smaller chasers worth no score, but
+  // Splitter death: three weaker, faster, smaller chasers worth nothing, but
   // carrying a small flat bounty - see SPLIT_CHILD_CREDITS. They go to
   // _pendingSpawns, not straight into the enemy list - see _updateEnemies.
   _splitInto(e) {
@@ -5222,7 +5149,7 @@ class Game {
         'chaser', spawnPos,
         this._cfg.hpScale * 0.5, this._cfg.speedScale * 1.1, this._cfg.dmgScale * 0.7
       );
-      mini.score = 0;
+      mini.value = 0;
       mini.bounty = SPLIT_CHILD_CREDITS;
       mini.group.scale.setScalar(0.6);
       this.scene.add(mini.group);
@@ -5236,6 +5163,10 @@ class Game {
     ctx.time = this.time;
     ctx.beat = this.music.beat;
     ctx.level = this.music.level;
+    // Fire ticks twice a beat and poison once, both off this edge - see
+    // Enemy._tickStatus and Music.pulse.
+    ctx.pulse = this.music.pulse;
+    ctx.pulseWhole = this.music.pulseWhole;
     // Re-read every frame, never captured: rebuildMods() replaces the whole
     // mods object on each draft pick, so a reference taken once would be the
     // pre-upgrade block for the rest of the run.
@@ -5262,9 +5193,10 @@ class Game {
         continue;
       }
       this.kills++;
-      // Splitter children score 0, so they extend the chain without moving the
-      // scoreboard. They still drop a little money - see SPLIT_CHILD_CREDITS -
-      // because they are three bodies you have to stop and deal with.
+      // Splitter children are worth 0, so they extend the chain without
+      // paying for it. They still drop a little money - see
+      // SPLIT_CHILD_CREDITS - because they are three bodies you have to stop
+      // and deal with.
       this._bumpCombo();
       const mult = this.comboMult();
       // KILLED WITH THE GUN ITSELF, tagged by _meleeStrike. It rides on top of
@@ -5272,15 +5204,14 @@ class Game {
       // worth the chain AND the double, which is the whole reason to walk into
       // something rather than shoot it.
       const meleeMult = e.meleeKill ? MELEE_KILL_MULT : 1;
-      this.score += Math.round(e.score * mult * meleeMult);
       // MONEY IS NOT AWARDED HERE ANY MORE. The kill drops orbs where it died
       // and the balance moves when the player picks them up - see
       // _collectOrb. The combo multiplier is still applied at the moment of
       // death, so a chain is worth what it was worth when it happened rather
       // than what it is worth when the money is collected.
-      // A flat bounty wins over the score-derived figure where one is set -
+      // A flat bounty wins over the value-derived figure where one is set -
       // see Enemy.bounty. The combo multiplier rides on both.
-      const bounty = e.bounty !== null ? e.bounty : e.score * CREDITS_PER_SCORE;
+      const bounty = e.bounty !== null ? e.bounty : e.value * CREDITS_PER_VALUE;
       this._dropMoney(e.pos, bounty * mult * meleeMult);
       this.player.onKill(this.time);
       // BODY COUNT's stack, and anything else that ever counts kills. Walked
@@ -5317,7 +5248,7 @@ class Game {
       const wasFrozen = e.status.freeze > 0;
       if (m.corpseDamage > 0
         || (m.burnSpread > 0 && wasBurning)
-        || (m.ashDps > 0 && wasBurning)
+        || (m.ashPower > 0 && wasBurning)
         || (m.shatterDamage > 0 && wasFrozen)) {
         this._recordDeath(e.pos, wasBurning, wasFrozen);
       }
@@ -5415,7 +5346,7 @@ class Game {
       // upgrades above already own that shape.
       // A CHANCE, not a rule: with Incendiary running every corpse in a wave
       // is a burning one, and a cloud per death paved the arena.
-      if (m.ashDps > 0 && this._deathBurn[i] && Math.random() < m.ashChance) {
+      if (m.ashPower > 0 && this._deathBurn[i] && Math.random() < m.ashChance) {
         this._addAsh(at);
       }
       // The fire jumps to exactly one neighbour, so a burning crowd cascades
@@ -5432,7 +5363,7 @@ class Game {
           }
         }
         if (best) {
-          best.applyStatus('burn', m.burnTime, m.burnDps);
+          best.applyStatus('burn', m.burnTime, this.player.dotHit * m.burnPower * m.dotPower);
           this.effects.burst(at, 0xff7a18, 8, 4, 2, 0.4);
         }
       }
@@ -5451,7 +5382,7 @@ class Game {
     const m = this.player.mods;
     this._ash.push({
       x: pos.x, z: pos.z, life: m.ashTime, maxLife: m.ashTime,
-      dps: m.ashDps, radius: m.ashRadius, drip: 0,
+      power: this.player.dotHit * m.ashPower * m.dotPower, radius: m.ashRadius, drip: 0,
       // Friendly: the smooth shape family, the one that never hurts the
       // player. Standing in your own ash has to be visibly safe.
       creep: this.effects.creepAcquire(false),
@@ -5478,7 +5409,8 @@ class Game {
     }
     const m = this.player.mods;
     this._fire.push({
-      x, z, life: 2.4, dps: m.hellfireDps, radius: m.hellfireRadius, drip: 0,
+      x, z, life: 2.4, power: this.player.dotHit * m.hellfirePower * m.dotPower,
+      radius: m.hellfireRadius, drip: 0,
       creep: this.effects.creepAcquire(false),
     });
     this.effects.burst(this._ashAt.set(x, 0.3, z), CREEP_FIRE, 5, 1.8, 1.6, 0.5);
@@ -5512,9 +5444,16 @@ class Game {
         const dx = e.pos.x - f.x;
         const dz = e.pos.z - f.z;
         if (dx * dx + dz * dz > f.radius * f.radius) continue;
-        // `true` marks it as damage over time, the same flag ash passes, so
-        // it does not spawn a hitmarker or count as a shot that connected.
-        e.takeDamage(f.dps * dt, true);
+        // IT SETS FIRE. It used to deal its own damage-per-second, which made
+        // the trail a third fire system with its own rate, unrelated to the
+        // burn the same mutation's bullets apply and unrelated to the music.
+        // Now standing in it burns you, on the beat, like every other fire in
+        // the game - one system, one number, one rhythm.
+        //
+        // Re-applied every frame an enemy is inside: applyStatus refreshes
+        // rather than stacking, so this tops the timer up for as long as they
+        // stand in it and lets it run down the moment they leave.
+        e.applyStatus('burn', FIRE_ZONE_BURN, f.power);
       }
       // A third the rate a pool drips at: there can be twenty of these on the
       // floor at once, and at the pool's rate one reload would stand a couple
@@ -5532,9 +5471,10 @@ class Game {
     }
   }
 
-  // Runs the clouds down and tickles whatever is standing in one. Damage is
-  // dealt per second of exposure, so walking through the edge of a cloud costs
-  // an enemy far less than being pushed into the middle of it.
+  // Runs the clouds down and sets fire to whatever is standing in one. The
+  // burn is refreshed for as long as they are inside and runs down once they
+  // leave, so walking through the edge of a cloud still costs an enemy far
+  // less than being pushed into the middle of it.
   _updateAsh(dt) {
     for (let i = this._ash.length - 1; i >= 0; i--) {
       const a = this._ash[i];
@@ -5554,7 +5494,8 @@ class Game {
         const dx = e.pos.x - a.x;
         const dz = e.pos.z - a.z;
         if (dx * dx + dz * dz > a.radius * a.radius) continue;
-        e.takeDamage(a.dps * dt, true);
+        // Ash BURNS, on the same terms the trail does - see _updateFire.
+        e.applyStatus('burn', FIRE_ZONE_BURN, a.power);
       }
       // The cloud has to READ as a zone you keep enemies out of: three dark
       // red specks every fifth of a second vanished against the floor. It now
@@ -5766,13 +5707,18 @@ class Game {
     const h = this.player.takeDamage(d, this.time);
     this.stats.damaged += this.player.lastDamageTaken;
     this.waveDamageTaken += this.player.lastDamageTaken;
-    // Throttled: the vignette flashing on every tick reads as a strobe.
+    // Throttled, and NO LONGER THE DAMAGE FLASH. The fire and poison layers are
+    // up for as long as the player is burning or poisoned - driven every frame
+    // in the HUD sync, see Ui.setStatusFx - so the screen is already saying
+    // what this is. Cracking the frame on top of that would say "you were hit"
+    // several times a second for something that is not a hit.
+    //
+    // The sound and the camera flinch still fire, still throttled, because
+    // those are what say a tick LANDED: a layer that is continuously up cannot
+    // mark a moment, and a flinch on every tick really would be a strobe.
     if (this.time - (this._lastDotFx || 0) > 0.5) {
       this._lastDotFx = this.time;
-      this.ui.damage();
       this.sfx.hurt();
-      // Inside the throttle with the vignette, for the reason named above: a
-      // flinch on every damage tick really would be a strobe.
       this.rig.cueDamage();
     }
     if (h > 0) return;
@@ -5873,7 +5819,7 @@ class Game {
         const dst = list[j];
         if (dst === src || dst.dead || dst.status.poison > 0) continue;
         if (dst.pos.distanceTo(src.pos) > m.poisonSpread) continue;
-        dst.applyStatus('poison', m.poisonTime * m.dotTime, this.player.venomDps);
+        dst.applyStatus('poison', m.poisonTime * m.dotTime, this.player.dotHit * m.poisonPower * m.dotPower);
         this.effects.burst(
           this._ashAt.set(dst.pos.x, 1.0, dst.pos.z), 0x39d353, 6, 3, 1.5, 0.35
         );
@@ -5954,7 +5900,6 @@ class Game {
     } else {
       this.ui.setBoss(null, 0, '', '');
     }
-    this.ui.setScore(this.score);
     // The balance is a float now - orb values are an exact split of a kill's
     // payout - so it is floored for display and for the run summary. Nothing
     // is lost: the fraction is still in the balance and still spends.
@@ -6005,13 +5950,17 @@ class Game {
       this.player.item, item,
       item ? Math.min(1, this.player.itemCharge / item.cooldown) : 0
     );
-    // AEGIS holds a vignette for the length of its window. Both damage sinks
+    // AEGIS holds its frame for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest
     // item in the pool is indistinguishable from a quiet few seconds.
     this.ui.setInvuln(
       this.player.invulnEnd > this.time ? (this.player.invulnEnd - this.time) : 0
     );
-    if (this._statsHeld) this.ui.updateStats(this._statRows());
+    // BURNING AND POISONED, on exactly the same terms: driven off the timers
+    // themselves rather than flashed on a damage tick, so each is up for as
+    // long as the condition is and the player can watch it end.
+    this.ui.setStatusFx(this.player.status.fire > 0, this.player.status.poison > 0);
+    if (this._statsHeld) this.ui.showStats(this._statActive(), this._statPassives());
   }
 
   // ---- held-TAB build sheet ------------------------------------------------
@@ -6024,7 +5973,7 @@ class Game {
   _openStats() {
     if (this._statsHeld || this.state !== 'playing') return;
     this._statsHeld = true;
-    this.ui.showStats(this._statMuts(), this._statRows());
+    this.ui.showStats(this._statActive(), this._statPassives());
   }
 
   _closeStats() {
@@ -6033,62 +5982,37 @@ class Game {
     this.ui.hideStats();
   }
 
+  // THE HELD ACTIVE ITEM, or null. Same shape as a passive so the sheet can
+  // draw both with one function - the player thinks of them as two kinds of
+  // thing they are carrying, and the panel should agree.
+  _statActive() {
+    const p = this.player;
+    if (!p.item) return null;
+    const def = ACTIVE_ITEMS[p.item];
+    return {
+      id: p.item,
+      name: def.name,
+      effects: def.effects,
+      theme: def.theme,
+      // READY rather than a charge fraction: the total is the one number an
+      // item deliberately never prints - the HUD bar says it in segments and it
+      // is meant to be learned by carrying the thing - and the build sheet is
+      // not the place to give it away.
+      ready: p.itemReady,
+    };
+  }
+
   // The owned build, in the order it was picked up, carrying each upgrade's own
-  // theme colour so the list reads as the totems the player has been walking
-  // into all run.
-  _statMuts() {
+  // theme colour and its own effect lines so the list reads as the totems the
+  // player has been walking into all run - and says what each of them did.
+  _statPassives() {
     const out = [];
     for (const [id, n] of Object.entries(this.player.upgrades)) {
       const def = UPGRADES[id];
       if (!def || n <= 0) continue;
-      out.push({ name: def.name, color: '#' + def.theme.toString(16).padStart(6, '0'), tier: n });
+      out.push({ id, name: def.name, effects: def.effects, theme: def.theme, tier: n });
     }
     return out;
-  }
-
-  // Label/value/highlight rows. Order matters: the run's headline numbers
-  // first, then the shooting, then the live mutation counters, which are here
-  // because they have nowhere else to be seen at all.
-  _statRows() {
-    const p = this.player;
-    const st = this.stats;
-    const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
-    const rows = [
-      ['WAVE', String(this.wave)],
-      ['SCORE', String(this.score)],
-      ['CREDITS', '$' + Math.floor(this.credits)],
-      ['KILLS', String(this.kills)],
-      ['BEST COMBO', String(this.bestCombo)],
-      ['ACCURACY', acc + '%'],
-      ['DAMAGE TAKEN', String(Math.round(st.damaged))],
-      ['HEALTH', Math.ceil(p.health) + ' / ' + p.maxHealth],
-      ['AMMO', p.mag + ' + ' + p.reserveAmmo + ' / ' + p.maxReserve],
-    ];
-    // Only shown when the mutation that produces them is owned. A row reading
-    // "0" for a stat the player has no way to earn is noise.
-    if (p.mods.noHitBonus > 0) {
-      const pct = Math.round(Math.min(NO_HIT_CAP, p.mods.noHitBonus * p.noHitStacks) * 100);
-      rows.push(['NO-HIT BONUS', '+' + pct + '%', p.noHitStacks > 0]);
-    }
-    if (p.mods.streakStep > 0) {
-      const pct = Math.round(p.streak * 100);
-      rows.push(['HOT STREAK', (pct > 0 ? '+' : '') + pct + '%', pct > 0]);
-    }
-    if (p.mods.hpBankCap > 0) {
-      rows.push(['BANKED MAX HP', '+' + p.hpBanked + ' / ' + p.mods.hpBankCap, p.hpBanked > 0]);
-    }
-    if (p.item) {
-      const def = ACTIVE_ITEMS[p.item];
-      // CHARGING rather than "8 / 20s": the total is the one number the item
-      // deliberately never prints - the HUD bar says it in segments and it is
-      // meant to be learned by carrying the thing - and the build sheet is not
-      // the place to give it away.
-      rows.push([def.name, p.itemReady ? 'READY' : 'CHARGING', p.itemReady]);
-    }
-    if (p.mods.extraJumps > 0) {
-      rows.push(['AIR JUMPS', p.jumpsLeft + ' / ' + p.mods.extraJumps, p.jumpsLeft > 0]);
-    }
-    return rows;
   }
 
   // The frame. See the FRAME ORDER note at the top before reordering anything.
@@ -6150,7 +6074,7 @@ class Game {
         // trail itself is laid by _updateFire as they move. Armed by the same
         // one-frame signal Reload Burst rides, so a build holding both gets
         // both off one magazine.
-        if (this.player.mods.hellfireDps > 0) {
+        if (this.player.mods.hellfirePower > 0) {
           this._fireUntil = this.time + this.player.mods.hellfireTime;
           this._fireLastX = this.player.pos.x;
           this._fireLastZ = this.player.pos.z;
@@ -6301,7 +6225,7 @@ class Game {
     // has settled this frame's colour so the two are never a frame apart.
     this.money.setHouseColour(this.rig.houseColour);
 
-    this.effects.update(dt);
+    this.effects.update(dt, this.camera);
     this.crt.render(this.scene, this.camera);
   }
 }

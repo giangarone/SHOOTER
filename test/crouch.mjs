@@ -330,19 +330,23 @@ try {
       ringsBefore + ' -> ' + ringsUp());
 
     // ---- and what a melee kill is worth -----------------------------------
+    // Measured at the DROP, not at the balance: the money leaves the body as
+    // orbs and only reaches `credits` once they are walked over, so reading
+    // g.credits here would be timing the magnet rather than the payout.
     const kill = async (melee) => {
       clear();
       for (let i = 0; i < 30; i++) await step();
       await rest();
-      g.score = 0;
       g.comboKills = 0;
       g.comboTimer = 0;
       p.meleeCd = 0;
+      let paid = 0;
+      const real = g._dropMoney.bind(g);
+      g._dropMoney = (pos, amount) => { paid += amount; };
       const e = new Enemy('chaser', new THREE.Vector3(0, 0, -2), 1, 1, 1);
       e.group.position.copy(e.pos);
       g.scene.add(e.group);
       g.enemies.push(e);
-      const worth = e.score;
       if (melee) {
         e.hp = 1;
         g.tryMelee();
@@ -352,14 +356,14 @@ try {
         e.takeDamage(50);
         for (let i = 0; i < 6; i++) await step();
       }
-      return { score: g.score, worth };
+      g._dropMoney = real;
+      return paid;
     };
     const shot = await kill(false);
     const swung = await kill(true);
-    t('a shot kill scores what the body is worth', shot.score === shot.worth,
-      shot.score + ' vs ' + shot.worth);
-    t('a melee kill scores double', swung.score === shot.worth * 2,
-      swung.score + ' vs ' + shot.worth * 2);
+    t('a shot kill pays what the body is worth', shot > 0, String(shot));
+    t('a melee kill pays double', Math.abs(swung - shot * 2) < 1e-6,
+      swung + ' vs ' + shot * 2);
 
     clear();
     return out;

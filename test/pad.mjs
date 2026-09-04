@@ -508,8 +508,8 @@ try {
     // OPTIONS is START on this screen, which is how the pad gets back in.
     await tap(B.OPTIONS);
     t('and a fresh run starts clean from it',
-      g.state === 'playing' && g.wave === 0 && g.score === 0,
-      'wave ' + g.wave + ' score ' + g.score);
+      g.state === 'playing' && g.wave === 0 && g.credits === 0,
+      'wave ' + g.wave + ' credits ' + g.credits);
     await frames(2);
 
     await tap(B.OPTIONS);

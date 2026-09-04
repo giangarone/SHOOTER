@@ -13,8 +13,6 @@
 //      buttons actually are on screen and moves to the nearest one in the
 //      direction pushed. Nothing has to declare a grid, and the layout can be
 //      rearranged in the HTML without a nav table falling out of step with it.
-//   3. THE NAME KEYBOARD. A pad cannot type, and the leaderboard is the one
-//      place in the game that asks for letters.
 //
 // Nothing in here touches the game. main.js owns what a press does.
 
@@ -320,52 +318,3 @@ export class MenuDriver {
 // Four rows of ten. A-Z then 0-9 in reading order, because a player hunting
 // for a letter on a grid they have never seen scans alphabetically and nothing
 // else; a QWERTY layout would be a map of a keyboard that is not in the room.
-const KB_ROWS = [
-  'ABCDEFGHIJ',
-  'KLMNOPQRST',
-  'UVWXYZ0123',
-  '456789',
-];
-
-/**
- * Builds the on-screen keyboard once, into `el`. The keys are ordinary
- * buttons, so the focus driver walks them with no special case - a 10-wide
- * grid is just geometry.
- *
- * @param {HTMLElement} el the container
- * @param {(ch: string) => void} onChar
- * @param {() => void} onDelete
- * @param {() => void} onDone
- */
-export function buildNameKeyboard(el, onChar, onDelete, onDone) {
-  el.textContent = '';
-  for (const row of KB_ROWS) {
-    const r = document.createElement('div');
-    r.className = 'kb-row';
-    for (const ch of row) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'kb-key';
-      b.textContent = ch;
-      b.addEventListener('click', (e) => { e.stopPropagation(); onChar(ch); });
-      r.appendChild(b);
-    }
-    // The last row is short, and its tail is where the three keys that are not
-    // letters go - they are the ones the player is looking for once the name
-    // is typed, and they read as keys rather than as a toolbar somewhere else.
-    if (row === KB_ROWS[KB_ROWS.length - 1]) {
-      const wide = (label, cls, fn) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'kb-key ' + cls;
-        b.innerHTML = label;
-        b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
-        r.appendChild(b);
-      };
-      wide('SPACE', 'kb-space', () => onChar(' '));
-      wide('DEL', 'kb-del', onDelete);
-      wide('OK', 'kb-ok', onDone);
-    }
-    el.appendChild(r);
-  }
-}

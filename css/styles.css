@@ -144,7 +144,7 @@ html, body {
 }
 
 /* NO PLATE UNDER THE CORNER READOUTS.
-   These three - the wave, the score and the ammunition - are the readings the
+   These three - the wave, the credits and the ammunition - are the readings the
    player is glancing at mid-fight, and a framed panel behind each one put a
    solid rectangle over the corner of the arena for the whole run. They are
    made of LIGHT now, like everything in the room they are drawn over: the
@@ -153,30 +153,25 @@ html, body {
    What replaces the panel is the 1px ink shadow on every line below. It is not
    decoration - with no fill behind it, an 8px label crossing a lit floor or a
    muzzle flash has no other way to hold its edge. */
-#wave-box, #score-box {
+#wave-box, #credit-box {
   display: flex; flex-direction: column;
   gap: var(--u);
 }
-#score-box { align-items: flex-end; text-align: right; }
+#credit-box { align-items: flex-end; text-align: right; }
 
 /* Section labels. 8px is the face's native size and the only place tracking
    earns its keep - a label read as a texture rather than as a word. */
-#wave-label, #score-label {
+#wave-label, #credit-label {
   font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
   text-shadow: 1px 1px 0 var(--ink);
 }
 /* White, not cyan. Cyan is the interface's accent - it is on the crosshair, the
-   armour theme, the RELOADING bar and half the consoles - and the wave number is
+   armour theme, the reload dial and half the consoles - and the wave number is
    not an accent, it is the one fact on screen that says where the run is. White
    is what the round count beneath it already uses for the same reason. */
 #wave-num {
   font-size: 32px; color: #fff;
   text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 255, 255, 0.35);
-  line-height: 1;
-}
-#score-num {
-  font-size: 24px; color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 233, 94, 0.45);
   line-height: 1;
 }
 /* The enemy count reads as a status line under the wave, with a square pip
@@ -194,9 +189,14 @@ html, body {
 #enemies-left.clear::before {
   background: var(--green); box-shadow: 0 0 8px rgba(55, 224, 139, 0.8);
 }
+/* Right-aligned by #credit-box, so a wide `$12,345` grows leftward into empty
+   frame. Gold: the colour this interface uses for money and for the thing that
+   is currently true, and the same weight the score readout had here before. */
 #credit-num {
-  font-size: 12px; color: var(--amber);
-  text-shadow: 1px 1px 0 var(--ink), 0 0 10px rgba(255, 179, 0, 0.4);
+  font-size: 24px; color: var(--gold);
+  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 233, 94, 0.45);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- crosshair -----------------------------------------------------------
@@ -462,22 +462,32 @@ html, body {
    the note in Player.update). It does not any more - the rule is in Ui.setItem,
    and the reason is there. The class is no longer applied by anything. */
 
-/* AEGIS. Both damage sinks return in silence while the window is open, so
-   without a frame around the screen five seconds of invulnerability look
-   exactly like five seconds of not being shot at. Gold rather than the
-   damage vignette's red, stepped the same way, and it does NOT pulse: a
-   flashing frame in a firefight is the thing that makes players look at the
-   edge of the screen instead of the middle of it. */
+/* AEGIS - THE SHIELD. Both damage sinks return in silence while the window is
+   open, so without something around the screen five seconds of invulnerability
+   look exactly like five seconds of not being shot at.
+
+   THE CLEAN ONE. It is the same ring the three status layers use - see the note
+   above #fx-damage for why a ring is the only shape that works at the edge of
+   this screen - and it is told apart from them by being the one that is
+   perfectly smooth, perfectly still and gold: no texture cut into it, no
+   animation, nothing licking or breathing. A wound is abrupt, a poisoning
+   crawls, fire moves; being protected is the absence of all three, and the
+   plate around the glass says so by doing nothing.
+
+   The inner rim is brighter than the body, which is what stops it reading as
+   the damage vignette in a different ink: this ring has an EDGE facing the
+   player, like armour, where the red one fades inward like a wound. */
 #invuln-frame {
   position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0;
-  background: radial-gradient(
-    ellipse 82% 82% at center,
-    transparent 0 60%, rgba(255, 242, 176, 0.10) 60% 78%,
-    rgba(255, 242, 176, 0.22) 78% 100%
-  );
   transition: opacity 0.25s steps(4, end);
+  background: radial-gradient(ellipse 82% 82% at center,
+    transparent 0 58%,
+    rgba(255, 242, 176, 0.34) 58% 61%,
+    rgba(255, 242, 176, 0.10) 61% 78%,
+    rgba(255, 242, 176, 0.22) 78% 100%);
 }
-/* IT SNAPS ON AND FADES OFF, the same asymmetry #vignette uses for a hit, and
+
+/* IT SNAPS ON AND FADES OFF, the same asymmetry #fx-damage uses for a hit, and
    for the same two reasons. A transition started inside a subtree the browser
    is not painting is left running with a frozen clock and never arrives - the
    note on `.seg > i` is the long version - and, feel aside, a window that opens
@@ -489,10 +499,18 @@ html, body {
    it by being hit. */
 #invuln-frame.ending { animation: blink 0.25s steps(1, end) infinite; }
 #ammo-line { display: flex; align-items: baseline; gap: calc(var(--u) * 2); }
+/* TWO DIGITS WIDE WHATEVER IS IN IT. tabular-nums keeps each glyph the same
+   width, but it cannot keep the COUNT of them the same - and a magazine
+   emptying goes 30, 9, 0, which narrowed this box by a digit and dragged the
+   whole ammo line right, in the middle of the reload the dial beside it exists
+   to make still. It grows past two digits for a magazine that has been upgraded
+   past 99, which is a change to the gun rather than something that happens
+   mid-reload. */
 #ammo-num {
   font-size: 32px; color: #fff; line-height: 1;
   text-shadow: 2px 2px 0 var(--ink);
   font-variant-numeric: tabular-nums;
+  min-width: 2ch; text-align: right;
 }
 #ammo-num.empty { color: var(--red); text-shadow: 2px 2px 0 var(--ink), 0 0 14px rgba(255, 59, 48, 0.6); }
 #ammo-res { font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink); }
@@ -509,21 +527,36 @@ html, body {
   0%   { color: var(--amber); transform: translateY(-3px) scale(1.35); }
   100% { color: var(--dim); transform: none; }
 }
-/* RELOADING is a full-width bar under the count rather than a word beside it:
-   the plate itself changing is visible in peripheral vision, and the word is
-   not. */
-#ammo-reload {
-  width: 100%; text-align: center;
-  font-size: 8px; letter-spacing: 0.24em; color: var(--ink);
-  background: var(--cyan);
-  padding: 3px 0 4px;
-  animation: blink 0.4s steps(1, end) infinite;
+/* THE RELOAD DIAL. What used to be here was a full-width RELOADING bar UNDER
+   the count, and it was laid out - so it appeared and disappeared, and every
+   reload shoved the ammo line and the item slot up the screen and dropped them
+   again. This sits INSIDE the ammo line and never leaves it: ui.setAmmo toggles
+   `visibility`, which paints nothing and reserves everything, so the HUD is the
+   same shape whether or not the gun is loading.
+
+   Same conic sweep and the same 16 spokes as #reload-ring at the crosshair, so
+   the two are one instrument shown where the eye happens to be. */
+#ammo-dial {
+  width: calc(var(--u) * 7); height: calc(var(--u) * 7);
+  flex: none; align-self: center; visibility: hidden;
+  background: conic-gradient(
+    var(--cyan) calc(var(--p, 0) * 1turn), rgba(120, 140, 180, 0.22) 0
+  );
+  -webkit-mask:
+    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
+    radial-gradient(closest-side, transparent 58%, #000 60%);
+  mask:
+    repeating-conic-gradient(#000 0 16deg, transparent 16deg 22.5deg),
+    radial-gradient(closest-side, transparent 58%, #000 60%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  filter: drop-shadow(0 0 3px rgba(78, 243, 255, 0.6));
 }
 
 /* ---- boss ---------------------------------------------------------------
    The name plate OVERLAPS the bar's top edge rather than stacking above it,
    which is what makes the two read as one instrument instead of two rows. */
-/* Its top edge sits on the SAME LINE as the wave and score readouts, so the
+/* Its top edge sits on the SAME LINE as the wave and credit readouts, so the
    three of them read as one instrument row across the top of the screen rather
    than as a bar that floats at whatever height was left over. */
 #boss-bar {
@@ -728,16 +761,128 @@ html, body {
 
 /* Damage. Now a stepped ring of red rather than a soft radial wash - the
    gradient has hard stops, so it reads as a frame slamming shut. */
-#vignette {
+/* =========================================================================
+   WHAT IS HAPPENING TO YOU
+   Four layers, one per answer. All of them were ONE element before this - a
+   soft red radial named #vignette that fired for a hit, a burn, a poisoning,
+   standing in lava and three items that cost health. So the screen could say
+   "you are losing health" and could not say WHICH, which meant the two states
+   the player can act on - break contact to stop burning, wait the poison out -
+   looked exactly like the one they cannot.
+
+   WHAT SEPARATES THEM IS NOT SHAPE. Two earlier versions of this tried to give
+   each effect its own geometry - corner shards for a hit, radial spokes for a
+   crack, a bracketed frame for the shield - and both failed for the same
+   reason, which is worth writing down: THIS SCREEN IS A TUBE. #crt masks the
+   arena into an oval, #scanlines blends over the top of it in `overlay`, and
+   the corners are bezel. A rectangle's corners land outside the glass; a ring
+   cut into spokes reads as a roulette wheel once the scanlines stripe it.
+   There is exactly one shape that works at the edge of a round screen, and it
+   is a ring.
+
+   SO THEY ARE FOUR READINGS OF ONE RING, and what tells them apart is
+   everything else: the COLOUR, the TEXTURE cut into it, the way it MOVES, and
+   for fire, where it is anchored.
+
+     damage   red     · smooth steps · snaps on, gone in eight frames
+     fire     amber   · flame tongues · climbs from the bottom, fast
+     poison   green   · 45-degree dither · breathes, slowly, all round
+     shield   gold    · clean and unbroken · does not move at all
+
+   Every edge is a hard colour stop. Everything animates in `steps()`. And the
+   middle is never covered, because the player is aiming through it.
+   ========================================================================= */
+
+/* ---- DAMAGE ------------------------------------------------------------
+   The one that is an EVENT rather than a condition, and the whole drawing says
+   so: it snaps on with no transition and steps off over eight frames. Three
+   hard red steps with a bright inner rim - that rim is the difference between
+   this and a stain, because a hit has an edge where it landed. */
+#fx-damage {
   position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
-  background: radial-gradient(
-    ellipse 78% 78% at center,
-    transparent 0 52%, rgba(255, 30, 30, 0.22) 52% 66%,
-    rgba(255, 30, 30, 0.42) 66% 82%, rgba(255, 30, 30, 0.62) 82% 100%
-  );
+  background: radial-gradient(ellipse 78% 78% at center,
+    transparent 0 50%,
+    rgba(255, 120, 120, 0.30) 50% 53%,
+    rgba(255, 30, 30, 0.22) 53% 66%,
+    rgba(255, 30, 30, 0.42) 66% 82%,
+    rgba(255, 30, 30, 0.62) 82% 100%);
   transition: opacity 0.4s steps(8, end);
 }
-#vignette.flash { opacity: 1; transition: none; }
+#fx-damage.flash { opacity: 1; transition: none; }
+
+/* ---- FIRE --------------------------------------------------------------
+   THE ONE THAT IS NOT A RING, which is the point: fire has a direction and it
+   is up. Amber tongues climb off the bottom of the tube, cut by a stepped mask
+   so each has a real top edge instead of dissolving, and they move fast - fire
+   is the status that wants the player to break contact right now.
+
+   IT STOPS SHORT OF THE HUD. An earlier cut reached a fifth of the way up the
+   screen and put flames over the VITALS bar, which is the exact readout someone
+   on fire needs to see. Held under it now, and at 80% so the bar reads through
+   the tallest tongue.
+
+   Persistent, not a flash: up for as long as the player is burning - see
+   Ui.setStatusFx - which is what makes it a condition rather than an event. */
+#fx-fire {
+  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  transition: opacity 0.2s steps(4, end);
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(255, 122, 24, 0.9) 0 14px, rgba(255, 61, 0, 0.9) 14px 22px,
+      transparent 22px 30px, rgba(255, 179, 0, 0.9) 30px 40px, transparent 40px 56px),
+    linear-gradient(0deg, rgba(255, 87, 34, 0.5) 0 3%, rgba(255, 87, 34, 0.16) 3% 8%, transparent 8%);
+  -webkit-mask: linear-gradient(0deg,
+    #000 0 3%, rgba(0, 0, 0, 0.7) 3% 6%, rgba(0, 0, 0, 0.35) 6% 9%,
+    rgba(0, 0, 0, 0.12) 9% 12%, transparent 12%);
+  mask: linear-gradient(0deg,
+    #000 0 3%, rgba(0, 0, 0, 0.7) 3% 6%, rgba(0, 0, 0, 0.35) 6% 9%,
+    rgba(0, 0, 0, 0.12) 9% 12%, transparent 12%);
+  animation: fx-fire 0.5s steps(4, end) infinite;
+}
+#fx-fire.on { opacity: 0.8; }
+/* The tongues slide by exactly one period, so the loop is seamless and they
+   read as licking rather than as a texture being panned. */
+@keyframes fx-fire {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 56px 0, 0 0; }
+}
+
+/* ---- POISON ------------------------------------------------------------
+   The SLOW one, and it is the opposite of fire in every respect: no direction,
+   no hurry, all the way round. The green is laid down as a 45-degree dither in
+   4px steps - a stipple, which is how a machine with sixteen colours shaded
+   anything - and it breathes at walking pace.
+
+   THE DITHER IS WHY IT SURVIVES THE TUBE. Flat green at this radius sat under
+   the bezel's own green scanlines and read as part of the cabinet; a stipple
+   does not, because nothing else on this screen has that texture. */
+#fx-poison {
+  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  transition: opacity 0.3s steps(4, end);
+  background:
+    repeating-linear-gradient(45deg,
+      rgba(57, 211, 83, 0.5) 0 4px, transparent 4px 8px),
+    radial-gradient(ellipse 78% 78% at center,
+      transparent 0 50%,
+      rgba(30, 140, 50, 0.20) 50% 66%,
+      rgba(30, 140, 50, 0.34) 66% 82%,
+      rgba(30, 140, 50, 0.5) 82% 100%);
+  /* The stipple only exists where the wash does, so the middle of the screen
+     is never textured. */
+  -webkit-mask: radial-gradient(ellipse 78% 78% at center,
+    transparent 0 50%, rgba(0, 0, 0, 0.55) 50% 70%, #000 70%);
+  mask: radial-gradient(ellipse 78% 78% at center,
+    transparent 0 50%, rgba(0, 0, 0, 0.55) 50% 70%, #000 70%);
+  animation: fx-poison 1.6s steps(6, end) infinite;
+}
+#fx-poison.on { opacity: 1; }
+/* A slow breathe, with the stipple drifting one cell as it goes: the crust is
+   alive, but it is in no hurry. */
+@keyframes fx-poison {
+  0%   { opacity: 0.6; background-position: 0 0, 0 0; }
+  50%  { opacity: 1;   background-position: 4px 4px, 0 0; }
+  100% { opacity: 0.6; background-position: 8px 8px, 0 0; }
+}
 
 /* Wave banner. It arrives in STEPS - four discrete scales rather than a
    smooth ease - because a smoothly tweened word in a pixel interface is the
@@ -1097,7 +1242,7 @@ html, body {
    the reticle coming loose. */
 #hud.swap #crosshair { opacity: 0; transition: opacity 0.18s linear; }
 
-#overlay-settings, #overlay-scores, #overlay-confirm {
+#overlay-settings, #overlay-confirm {
   cursor: default;
   /* SCROLLABLE, because settings only ever grow. The controller block took
      this screen past the bottom of a 720p window and cut BACK off, and the
@@ -1278,25 +1423,31 @@ html, body {
 }
 #pixel-val.off { color: var(--dim); }
 
-/* ---- the high-score screen ---------------------------------------------- */
-/* On a screen of its own the board is the content, not a footnote under a
-   title, so it is allowed most of the height rather than 34vh of it. */
-.lb.tall { max-height: 56vh; }
-/* The board carries its own BEST RUNS strap for the game-over screen, where it
-   arrives unannounced under a run summary. Here the marquee overhead already
-   says what this is, and printing it twice makes the second one read as a
-   column header for a table that has none. */
-#overlay-scores .lb-title { display: none; }
-#lb-none {
-  padding: calc(var(--u) * 5) calc(var(--u) * 8);
-  font-size: 10px; letter-spacing: 0.18em; color: var(--dim);
-  --surface: rgba(6, 8, 13, 0.9);
+
+/* ---- the wave a run reached ---------------------------------------------
+   THE ONE NUMBER A RUN IS JUDGED ON. With the score gone this is the whole
+   result, so it is set at four times the size of the strip beneath it and in
+   the white the wave readout already uses on the HUD - the same fact, at the
+   size it deserves once the run is over. The label above it is 8px and dim for
+   the same reason every other label in this interface is: it names the number
+   once and then gets out of its way. */
+#over-hero-label {
+  font-size: 8px; letter-spacing: 0.3em; color: var(--dim);
+  text-align: center;
+  margin-top: calc(var(--u) * 2);
+}
+#over-hero {
+  font-size: 64px; line-height: 1; color: #fff;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 3px 3px 0 var(--ink), 0 0 28px rgba(255, 255, 255, 0.4);
+  margin: calc(var(--u) * 2) 0 calc(var(--u) * 4);
 }
 
 /* ---- run summary strip --------------------------------------------------
-   The four numbers a finished run is judged on. A divided strip, not four
-   cards: they are one reading with four columns, and boxing each of them
-   would say they were four separate things. */
+   The four readings that give the wave above them its context. A divided
+   strip, not four cards: they are one reading with four columns, and boxing
+   each of them would say they were four separate things. */
 .run-strip {
   display: flex; flex-wrap: wrap; justify-content: center;
   --surface: rgba(6, 8, 13, 0.9);
@@ -1317,93 +1468,6 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- leaderboard --------------------------------------------------------- */
-.lb {
-  width: min(92vw, 560px);
-  /* The only block on these screens whose height is DATA. A full board of ten
-     runs is 300px, which is enough to push PRESS START off a laptop screen, so
-     it scrolls inside itself rather than growing the page. */
-  max-height: 34vh; overflow-y: auto;
-}
-.lb:empty { display: none; }
-.lb-title {
-  font-size: 8px; letter-spacing: 0.3em; color: var(--dim);
-  text-align: center; padding: calc(var(--u) * 2.5) 0;
-  background: rgba(6, 8, 13, 0.9);
-  clip-path: var(--cut-sm);
-  box-shadow: inset 0 0 0 2px var(--line);
-  margin-bottom: calc(var(--u) * 2);
-}
-.lb-row {
-  display: grid;
-  /* The two right-hand columns are FIXED, not auto: with `auto` a long name
-     and a seven-figure score share whatever is left and collide on the one
-     row that matters most - the player's own. */
-  grid-template-columns: calc(var(--u) * 8) 1fr calc(var(--u) * 20) calc(var(--u) * 22);
-  gap: calc(var(--u) * 3); align-items: center;
-  padding: calc(var(--u) * 2) calc(var(--u) * 3);
-  font-size: 10px; color: var(--text);
-  text-align: left;
-}
-/* Alternating rows are DITHERED rather than tinted: a 25% checker is how a
-   machine with sixteen colours striped a table, and it reads at a glance
-   without introducing a new value into the palette. */
-.lb-row:nth-child(odd) {
-  background: repeating-conic-gradient(rgba(78, 243, 255, 0.07) 0% 25%, transparent 0% 50%);
-  background-size: 4px 4px;
-}
-.lb-row .lb-rank { color: var(--dim); font-variant-numeric: tabular-nums; }
-/* The name is the only field holding text the player typed, so it is the only
-   one that can be long or awkward. Clip it rather than letting it push the
-   score column around. */
-.lb-row .lb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-row .lb-wave { color: var(--dim); font-size: 8px; letter-spacing: 0.1em; text-align: right; }
-.lb-row .lb-score { color: var(--gold); font-variant-numeric: tabular-nums; text-align: right; }
-.lb-row.you {
-  background: rgba(78, 243, 255, 0.14);
-  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
-  clip-path: var(--cut-sm);
-}
-.lb-row.you .lb-name { color: var(--cyan); }
-.lb-row.you .lb-rank { color: var(--cyan); }
-
-/* ---- name entry ---------------------------------------------------------- */
-#lb-entry {
-  display: flex; flex-direction: column; align-items: center;
-  gap: calc(var(--u) * 3);
-  padding: calc(var(--u) * 4) calc(var(--u) * 6);
-  --surface: rgba(6, 8, 13, 0.92);
-  --edge: rgba(255, 233, 94, 0.5);
-}
-#lb-entry label {
-  font-size: 10px; letter-spacing: 0.2em; color: var(--gold);
-  text-shadow: 1px 1px 0 var(--ink);
-  animation: blink 0.9s steps(1, end) infinite;
-}
-.lb-entry-row { display: flex; gap: calc(var(--u) * 2); align-items: stretch; }
-#lb-name {
-  width: 260px; padding: calc(var(--u) * 3) calc(var(--u) * 3);
-  font-family: inherit; text-transform: uppercase;
-  font-size: 12px; letter-spacing: 0.2em; text-align: center;
-  color: var(--cyan); background: #05070b;
-  border: none; outline: none;
-  clip-path: var(--cut-sm);
-  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
-  caret-color: var(--cyan);
-}
-#lb-name:focus { box-shadow: inset 0 0 0 2px var(--cyan), 0 0 16px rgba(78, 243, 255, 0.3); }
-#lb-name::placeholder { color: var(--dim); }
-/* SAVE belongs to the gold entry block it sits in, not to the red RESTART it
-   would otherwise match: two identical red buttons on one screen is two
-   primary actions, and only one of them ends the screen. */
-#overlay-over #btn-lb-save {
-  padding: 0 calc(var(--u) * 6);
-  font-size: 10px; letter-spacing: 0.16em;
-  color: var(--ink); background: var(--gold); text-shadow: none;
-  box-shadow:
-    inset 0 -5px 0 rgba(0, 0, 0, 0.3), inset 0 3px 0 rgba(255, 255, 255, 0.4),
-    0 0 20px rgba(255, 233, 94, 0.35);
-}
 #overlay-over #btn-lb-save:hover { background: #fff3a0; }
 
 /* ---- station prompt ------------------------------------------------------ */
@@ -1436,12 +1500,13 @@ html, body {
 #prompt.blocked b { background: #1a1d26; color: var(--dim); box-shadow: inset 0 0 0 2px #2b3348; }
 
 /* =========================================================================
-   HELD-TAB BUILD SHEET
-   Everything a run accumulates that the HUD has no room for. Held, not
-   toggled, and the game keeps RUNNING underneath - a panel that paused the
-   arena would be a free timeout on demand, so this is a glance the player
-   pays for. Deliberately not an `.overlay`: it never takes the cursor and
-   never covers the crosshair's own row.
+   HELD-TAB INVENTORY SHEET
+   What the player is CARRYING - the held item and every mutation - each with
+   its icon, its name and the same effect lines its totem printed when the
+   offer was made. Held, not toggled, and the game keeps RUNNING underneath:
+   a panel that paused the arena would be a free timeout on demand, so this is
+   a glance the player pays for. Deliberately not an `.overlay`: it never takes
+   the cursor and never covers the crosshair's own row.
    ========================================================================= */
 #stats-panel {
   position: fixed; inset: 0; z-index: 8;
@@ -1450,61 +1515,90 @@ html, body {
   background: rgba(5, 7, 11, 0.5);
 }
 #stats-card {
-  width: 680px; max-width: 92vw; max-height: 86vh; overflow: hidden;
+  width: 880px; max-width: 94vw; max-height: 88vh; overflow: hidden;
   padding: calc(var(--u) * 6) calc(var(--u) * 7);
   --surface: rgba(6, 8, 13, 0.94);
   --edge: var(--line-hi);
-  display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 6) calc(var(--u) * 7);
+  display: flex; flex-direction: column; gap: calc(var(--u) * 5);
 }
 .stats-head {
-  grid-column: 1 / -1;
   display: flex; align-items: center; gap: calc(var(--u) * 3);
   font-size: 10px; letter-spacing: 0.2em; color: var(--cyan);
-  padding-bottom: calc(var(--u) * 3);
+  padding-bottom: calc(var(--u) * 2);
 }
-/* The heading's rule runs to the right edge of the card, so the two columns
-   read as hanging off one header instead of floating under a word. */
+/* The heading's rule runs to the right edge of the card, so the sections read
+   as hanging off one header instead of floating under a word. */
 .stats-head::after {
   content: ""; flex: 1; height: 2px;
   background: repeating-linear-gradient(90deg, var(--line-hi) 0 4px, transparent 4px 8px);
 }
-.stats-col h3 {
+.stats-sec h3 {
   font-size: 8px; font-weight: 400; letter-spacing: 0.24em;
   color: var(--dim); margin-bottom: calc(var(--u) * 3);
   padding-bottom: calc(var(--u) * 2);
   box-shadow: inset 0 -2px 0 rgba(43, 51, 72, 0.9);
 }
-/* Stat rows are label-left / value-right, so the eye can run down either
-   column without reading the other. */
-.stat-row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: calc(var(--u) * 3); padding: calc(var(--u) * 1.5) 0;
-  font-size: 8px; letter-spacing: 0.08em; color: var(--dim);
-}
-.stat-row b { color: var(--text); font-weight: 400; font-size: 10px; font-variant-numeric: tabular-nums; }
-.stat-row.good b { color: var(--gold); text-shadow: 1px 1px 0 var(--ink); }
+/* THE MUTATIONS SECTION IS THE ONE THAT CAN OVERFLOW - a long run owns twenty
+   picks - so it takes the leftover height and scrolls inside itself rather
+   than growing the card off the screen. The item section is one entry and is
+   never allowed to shrink. */
+.stats-sec:last-child { min-height: 0; display: flex; flex-direction: column; }
+.stats-sec:last-child .inv-grid { overflow-y: auto; min-height: 0; }
 
-/* One mutation. The pip carries the upgrade's own theme colour - the same
-   colour its totem and its plate on the receiver wear - so the list reads as
-   the build the player has been looking at all run, not as a fresh index. */
-.mut-row {
-  display: flex; align-items: center; gap: calc(var(--u) * 2.5);
-  padding: calc(var(--u) * 1.5) 0;
-  font-size: 8px; letter-spacing: 0.08em; color: var(--text);
+/* A COLUMN GRID, NOT A LIST. Twenty mutations down one column is a page the
+   player has to scroll while a fight runs; three columns of seven is a sheet
+   they can take in at a glance, which is the only thing this panel is for.
+   auto-fill rather than a fixed count, so the same rule gives a narrow window
+   two columns and a wide one three without a second breakpoint. */
+.inv-grid {
+  display: grid; gap: calc(var(--u) * 2) calc(var(--u) * 5);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-content: start;
 }
-.mut-row i {
-  width: 8px; height: 8px; flex: none;
-  background: currentColor; box-shadow: 0 0 8px currentColor;
+/* The item slot holds exactly one entry, so it does not get a grid to spread
+   across - a lone card stretched over 880px would read as a banner. */
+.inv-grid.one { grid-template-columns: minmax(240px, 380px); }
+
+/* One entry: the drawing on the left, the name and what it does on the right.
+   Baseline-aligned to the name rather than centred, so a one-line entry and a
+   three-line one still start on the same row. */
+.inv {
+  display: flex; gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2) 0;
+  align-items: flex-start;
 }
-.mut-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mut-row em {
+/* The icon carries the theme colour - the same colour its totem and its plate
+   on the receiver wear - because the shape and the colour together are how a
+   player recognises a pick they took twenty minutes ago. */
+.inv-art {
+  width: calc(var(--u) * 12); height: calc(var(--u) * 12);
+  flex: none; image-rendering: pixelated;
+}
+.inv-body { min-width: 0; }
+/* WHITE, not the theme colour. Several themes - Berserker's near-black red,
+   Ashen's burnt orange - are unreadable as text on a dark panel; the icon
+   beside it is already carrying the identity. */
+.inv-name {
+  font-size: 10px; letter-spacing: 0.08em; color: var(--text);
+  display: flex; align-items: baseline; gap: calc(var(--u) * 2);
+  margin-bottom: calc(var(--u) * 1.5);
+}
+.inv-name em {
   font-style: normal; color: var(--gold); font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-.mut-empty { font-size: 8px; color: var(--dim); letter-spacing: 0.08em; }
-/* The mutation column is the one that can overflow - a long run owns twenty
-   picks - so it scrolls inside itself rather than growing the card. */
-.stats-col.muts { max-height: 58vh; overflow-y: auto; }
+/* The effect lines, in the three SIGN_COLOR values the totem card used, so a
+   line the player read as a cost when they took the offer still reads as one.
+   8px and loosely tracked: this is the body text of the sheet. */
+.inv-line {
+  font-size: 8px; letter-spacing: 0.08em; line-height: 1.7;
+}
+/* A READY item is the one live fact worth carrying onto this sheet, and it is
+   a state rather than a number - so it is a lit edge on the entry, the same
+   gold the HUD's charge bar goes when it fills. */
+.inv.ready .inv-art { filter: drop-shadow(0 0 8px rgba(255, 233, 94, 0.7)); }
+.inv.ready .inv-name { color: var(--gold); }
+.inv-empty { font-size: 8px; color: var(--dim); letter-spacing: 0.08em; }
 
 /* =========================================================================
    NARROW AND SHORT VIEWPORTS
@@ -1535,23 +1629,20 @@ html, body {
     gap: calc(var(--u) * 2.5) calc(var(--u) * 2);
     padding: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 3);
   }
-  .lb { max-height: 26vh; }
-  .lb-row { padding: calc(var(--u) * 1.5) calc(var(--u) * 3); }
   .overlay button { padding: calc(var(--u) * 3) calc(var(--u) * 6); font-size: 10px; }
   #banner { font-size: 20px; }
   #wave-num { font-size: 24px; }
-  #score-num { font-size: 16px; }
+  #credit-num { font-size: 16px; }
   #ammo-num { font-size: 24px; }
   #hp-box { width: 200px; }
   #combo-head, #combo-gauge, #combo-bar { width: 200px; }
+  #over-hero { font-size: 44px; }
   .run-strip { --surface: transparent; }
   .run-strip .rs { padding: calc(var(--u) * 2) calc(var(--u) * 3); }
-  #stats-card { grid-template-columns: 1fr; }
+  .inv-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .overlay h1 { font-size: 16px; }
-  #lb-name { width: 180px; }
-  .lb-row { font-size: 8px; }
 }
 
 /* A player who has asked the system to stop moving things gets a HUD that
@@ -1561,8 +1652,8 @@ html, body {
   #banner.show,
   #hp-box.low #hp-text,
   #ammo-res.out,
-  #ammo-reload,
-  #lb-entry label,
+  #fx-fire,
+  #fx-poison,
   #hp-box.spent #stam-bar,
   .overlay h1.dead,
   .primary-row::before, .primary-row::after,
@@ -1597,7 +1688,6 @@ html, body {
 body.pad-seen .set-row.pad-only,
 body.pad-seen .set-head.pad-only { display: flex !important; }
 body.pad-seen p.pad-only { display: block !important; }
-body.pad-mode #kb.pad-only { display: flex !important; }
 
 /* No cursor over a game being played on a pad. Pointer lock normally hides it
    and pad play does not use pointer lock - see _setInputMode in main.js - so
@@ -1652,9 +1742,7 @@ body.pad-mode #game canvas { cursor: none; }
 /* The outlined controls keep their outlined shape - a filled cap where every
    neighbour is a hollow one would read as a different KIND of control rather
    than as the selected one. */
-.overlay .opt-btn.pad-focus,
-.overlay .kb-key.pad-focus,
-#overlay-over .kb-key.pad-focus {
+.overlay .opt-btn.pad-focus {
   color: var(--gold);
   background: rgba(255, 233, 94, 0.16);
   box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 233, 94, 0.35);
@@ -1677,51 +1765,6 @@ body.pad-mode #game canvas { cursor: none; }
   box-shadow: inset 0 0 0 2px rgba(43, 51, 72, 0.9);
 }
 
-/* The name field is a text box. Filling it gold would read as a button that
-   has been pressed, so it takes the ring alone. */
-#lb-name.pad-focus {
-  color: var(--gold);
-  background: #05070b;
-  box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 233, 94, 0.3);
-  caret-color: var(--gold);
-}
-
-/* ---- the name keyboard --------------------------------------------------
-   Four rows of ten, walked by the same geometric focus driver that walks
-   every other screen - a grid is only geometry, so it needs no special case.
-   Keys are square and small: forty of them at menu-button size would be a
-   screen of its own. */
-.kb {
-  display: flex; flex-direction: column; align-items: center;
-  gap: calc(var(--u) * 1.5);
-  margin-top: calc(var(--u) * 3);
-}
-.kb-row { display: flex; gap: calc(var(--u) * 1.5); }
-.overlay .kb-key,
-#overlay-over .kb-key {
-  width: calc(var(--u) * 8); height: calc(var(--u) * 8);
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; font-size: 10px; letter-spacing: 0;
-  color: var(--cyan); background: transparent;
-  clip-path: var(--cut-sm);
-  box-shadow: inset 0 0 0 2px rgba(78, 243, 255, 0.45);
-  text-shadow: none;
-}
-.overlay .kb-key:hover,
-#overlay-over .kb-key:hover { background: rgba(78, 243, 255, 0.14); }
-/* The three keys that are not letters. Wider, and OK is the one filled key on
-   the board because it is the only one that ends the screen. */
-#overlay-over .kb-space { width: calc(var(--u) * 18); font-size: 8px; }
-#overlay-over .kb-del {
-  width: calc(var(--u) * 12); font-size: 8px; color: var(--amber);
-  box-shadow: inset 0 0 0 2px rgba(255, 179, 0, 0.5);
-}
-#overlay-over .kb-ok {
-  width: calc(var(--u) * 12); font-size: 8px;
-  color: var(--ink); background: var(--gold);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3);
-}
-#overlay-over .kb-ok:hover { background: #fff3a0; }
 
 /* The sound notice under PRESS START. Amber, because it is the one line on the
    screen that is asking for something rather than telling. */

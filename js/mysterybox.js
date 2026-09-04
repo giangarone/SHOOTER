@@ -1147,19 +1147,25 @@ export class MysteryBox {
     c.fillStyle = '#ffffff';
     pxText(c, def.name, 256, 92, 32, 488);
 
-    // MID-SPIN THE CARD SAYS ONLY THE NAME. Four lines of effect text swapping
-    // twenty times a second is unreadable noise, and worse, it makes the whole
-    // card flicker in a way that pulls the eye off the icon - which is the part
-    // that is actually meant to be watched. The full readout arrives with the
-    // reveal, at the moment there is something to read it for.
-    if (!revealed) return;
-
+    // THE CARD SAYS WHAT THE ITEM DOES, SPINNING OR NOT. It used to print the
+    // name alone until the reveal, on the theory that effect text swapping with
+    // the reel was unreadable noise - but a player watching a name they have
+    // never seen go past has been told nothing at all, and the reel slows to
+    // half a second a face long before it stops. What it costs is a card that
+    // is busy early; what it buys is a player who can see the pool.
+    //
+    // MID-SPIN IT IS DIMMED. Full-strength effect text competes with the icon,
+    // which is the part meant to be watched while the reel is running, so the
+    // lines are painted at reduced alpha until the reveal lands and then come
+    // up to full - the card resolving is itself the cue that it has stopped.
+    c.globalAlpha = revealed ? 1 : 0.55;
     let y = 156;
     for (const [text, sign] of def.effects) {
       c.fillStyle = SIGN_COLOR[String(sign)];
       pxText(c, text, 256, y, 16, 460);
       y += 38;
     }
+    c.globalAlpha = 1;
 
     // NO COUNTDOWN NUMERAL. The item is visibly sinking into the box for the
     // whole ten seconds and the last three tick audibly; a number counting the

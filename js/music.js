@@ -186,6 +186,26 @@ export class Music {
     // count, not a bar: nothing here knows where the ONE is, which is why
     // `downbeat` stays false and `synced` says so.
     this._barCount = 0;
+    // THE PULSE. A monotonically increasing HALF-beat index: it steps on every
+    // downbeat and again on every upbeat, so `pulse` changing is the single
+    // edge that everything rhythmic in the game acts on - sentry guns firing
+    // twice a beat, fire ticking twice a beat, poison ticking once.
+    //
+    // A COUNTER, NOT AN EVENT. There is no subscription anywhere in this file
+    // and there should not be: consumers keep their own `_lastPulse` and
+    // compare, which is the same edge-detect trick the lighting rig already
+    // uses on `bar`, and it cannot miss a beat inside a long frame or fire one
+    // twice inside a short one.
+    //
+    // `pulseWhole` says whether the pulse now standing is a whole beat rather
+    // than the upbeat between two - that is what separates poison's one tick a
+    // beat from fire's two.
+    this._pulse = 0;
+    this._pulseWhole = true;
+    // Where the pulse stood last frame, in track seconds when the map is
+    // driving and in free-running half-beats when it is not.
+    this._pulseAt = null;
+    this._pulseFree = 0;
     this._cal = null;
   }
 
@@ -416,6 +436,20 @@ export class Music {
       this._downbeat = b.downbeat;
       this._bpm = b.bpm;
       this._synced = true;
+      // THE UPBEAT IS THE MIDPOINT, which is the one thing the map hands over
+      // for free: it already knows where this beat started and where the next
+      // one lands. Both edges are tested against the grid rather than counted
+      // per frame, so a stall cannot drift the pulse off the music.
+      const mid = (b.last + b.next) / 2;
+      const at = heard >= mid ? mid : b.last;
+      if (this._pulseAt === null || at !== this._pulseAt) {
+        // A seek or a loop can move `at` BACKWARDS. The index still only ever
+        // goes up - consumers compare for inequality, not for order, and an
+        // index that went back would make one of them fire twice.
+        this._pulseAt = at;
+        this._pulse++;
+        this._pulseWhole = at === b.last;
+      }
     } else {
       this._realBeat = this._fluxBeat;
       if (fired) this._barCount = (this._barCount + 1) & 3;
@@ -423,6 +457,22 @@ export class Music {
       this._downbeat = false;
       this._bpm = 0;
       this._synced = false;
+    }
+    // NO MAP, SO THE PULSE FREE-RUNS. Combat is built on this edge now - fire,
+    // poison and every sentry gun in the arena - so it cannot simply stop
+    // because the beat map is missing, the track has run past its end or the
+    // player has muted the music. It falls back to the detector's tempo where
+    // there is one and to FALLBACK_BPS otherwise, which is the same clock the
+    // brightness already falls back to.
+    if (!this._synced) {
+      const bps = this._bpm > 0 ? this._bpm / 60 : FALLBACK_BPS;
+      this._pulseFree += dt * bps * 2;
+      const n = Math.floor(this._pulseFree);
+      if (this._pulseAt !== n) {
+        this._pulseAt = n;
+        this._pulse++;
+        this._pulseWhole = (n & 1) === 0;
+      }
     }
     if (this._cal) this._calibrateStep(dt, pos, fired);
 
@@ -535,6 +585,34 @@ export class Music {
 
   get downbeat() {
     return this._downbeat;
+  }
+
+  /**
+   * A monotonically increasing HALF-beat index. It steps once on each downbeat
+   * and once on each upbeat, so two per beat, and it keeps stepping whether or
+   * not the beat map is driving - see the fallback in sample().
+   *
+   * READ IT AS AN EDGE, never as a value:
+   *
+   *     if (music.pulse !== this._lastPulse) {
+   *       this._lastPulse = music.pulse;
+   *       ...
+   *     }
+   *
+   * which is the same shape the lighting rig uses on `bar`. It cannot miss a
+   * pulse inside a long frame or fire one twice inside a short one, and it
+   * needs no subscription for the same reason nothing else in this file has
+   * one.
+   */
+  get pulse() {
+    return this._pulse;
+  }
+
+  // True when the pulse now standing is a whole beat rather than the upbeat
+  // between two. Anything that wants ONE tick a beat gates on this; anything
+  // that wants two ignores it.
+  get pulseWhole() {
+    return this._pulseWhole;
   }
 
   // Tempo of the section playing, or 0 when the map is not driving.

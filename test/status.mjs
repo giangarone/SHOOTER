@@ -80,8 +80,15 @@ try {
     p.applyStatus('fear', 0.4);
     res.fearOnAtStart = p.hasStatus('fear');
     res.fracAtStart = p.statusFraction('fear');
-    const t0 = performance.now();
-    while (performance.now() - t0 < 1200) await step();
+    // WAITED IN GAME TIME, NOT WALL TIME. The status clock counts down in
+    // game seconds, and this suite runs on a software rasteriser whose frame
+    // rate varies by an order of magnitude - so a fixed 1200ms of wall time
+    // was really asserting "the machine was fast enough today". The wall-clock
+    // cap is still there so a clock that genuinely never runs out fails rather
+    // than hanging.
+    const t0 = g.time;
+    const wall = performance.now();
+    while (g.time - t0 < 1.2 && performance.now() - wall < 15000) await step();
     res.fearOffAfter = p.hasStatus('fear');
     res.fracAfter = p.statusFraction('fear');
 

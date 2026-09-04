@@ -32,7 +32,7 @@
 
 import * as THREE from 'three';
 import { THEME } from './upgrades.js';
-import { Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor } from './deploy.js';
+import { Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob } from './deploy.js';
 import { BOUND } from './arena.js';
 
 // Scratch vectors. Every one of these functions runs at most once per button
@@ -288,12 +288,17 @@ export const ACTIVE_ITEMS = {
     // Three seconds is short and the rate is high, which is the shape fire has
     // everywhere else in this game (see status.js): it is a reason to press
     // the advantage now rather than a clock to wait out.
+    //
+    // TWICE ONE OF THE PLAYER'S OWN SHOTS PER TICK, at two ticks a beat, on
+    // every enemy at once - so an item that used to be a flat 14 a second is
+    // worth the same slot on wave 30 as on wave 3. See Player.dotHit.
     effects: [['SET EVERY ENEMY ALIGHT', GOOD], ['FOR 3s', NOTE]],
     use: (game) => {
       let n = 0;
+      const burn = game.player.dotHit * 2;
       for (const e of game.enemies) {
         if (e.dead) continue;
-        e.applyStatus('burn', 3, 14);
+        e.applyStatus('burn', 3, burn);
         // Lit one at a time from the player outward would be the nicer
         // animation and the wrong read: the item is ONE event, and thirty
         // little fires starting on the same frame is what says so.
@@ -929,10 +934,24 @@ export const ACTIVE_ITEMS = {
       if (best) {
         game.effects.burst(p.eyeInto(_v), 0x7c4dff, 30, 7, 3, 0.6);
         game.effects.shockwave(p.pos, THEME.poise, 6, 0.5);
+        const fromX = p.pos.x;
+        const fromZ = p.pos.z;
         p.pos.set(best.x, p.pos.y, best.z);
         p.vel.set(0, p.vel.y, 0);
         p.extX = 0;
         p.extZ = 0;
+        // TURNED TO FACE WHERE YOU JUST WERE. A blink that left the view
+        // pointing wherever it happened to be pointing dropped the player into
+        // a strange corner facing a wall, with the thing they escaped somewhere
+        // behind them - so the first second of a 1.5s invulnerability was spent
+        // finding the fight again. Looking back at it means the escape and the
+        // reassessment are the same moment.
+        //
+        // Forward is (-sin yaw, 0, -cos yaw) - see Player.forwardInto - so the
+        // yaw that points at a delta is atan2 of its negated components.
+        const dx = fromX - p.pos.x;
+        const dz = fromZ - p.pos.z;
+        if (dx * dx + dz * dz > 1e-6) p.yaw = Math.atan2(-dx, -dz);
       }
       p.invulnEnd = Math.max(p.invulnEnd, game.time + 1.5);
       game.effects.shockwave(p.pos, THEME.poise, 8, 0.7);
@@ -1025,19 +1044,22 @@ export const ACTIVE_ITEMS = {
     // crowd means the crowd is taking fire while it walks toward you, which is
     // a position no amount of the player's own damage can create.
     //
-    // Twelve a shot at three a second is about five hundred over its life -
-    // roughly what the player deals in ten seconds. It is placement, not
-    // damage, and it is deliberately worse than standing there yourself.
-    effects: [['DEPLOY AN AUTO-TURRET', GOOD], ['FOR 15s', NOTE]],
+    // ONE OF THE PLAYER'S OWN SHOTS PER ROUND, twice a beat, for fifteen
+    // seconds - so it scales with the build instead of falling off it, and it
+    // is still placement rather than damage: everything it does, the player
+    // could have done by standing there, and standing there is the thing the
+    // turret is buying them out of.
+    //
+    // THROWN, NOT PLACED. It used to be set down a step and a half in front,
+    // which made an item whose entire decision is WHERE into one with no
+    // decision at all. Now it goes where it is aimed - across the room, behind
+    // the crowd - which is the only place a second gun is worth having.
+    effects: [['THROW AN AUTO-TURRET', GOOD], ['FOR 15s', NOTE]],
     use: (game) => {
       const p = game.player;
+      p.muzzleInto(_v);
       facing(game);
-      // A step and a half in front, so it is never inside the player and never
-      // somewhere they have to walk to.
-      const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.x + _dir.x * 1.6));
-      const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.z + _dir.z * 1.6));
-      game.deploy(new Turret(game, x, z));
-      game.effects.shockwave(_v.set(x, 0, z), THEME.feed, 4, 0.45);
+      game.deploy(new Lob(game, _v, _dir, 'turret', p.getEffectiveDamage(p.weapon.damage)));
       game.sfx.itemDeploy();
     },
   },
@@ -1049,21 +1071,23 @@ export const ACTIVE_ITEMS = {
     // THE PLAYER CANNOT SET IT OFF AND CAN STILL BE KILLED BY IT. Both halves
     // were asked for and both are right: the trigger belongs to the enemy, and
     // the blast belongs to the room. A mine you could safely stand next to
-    // would be a hundred and twenty free damage on a six-metre circle every
-    // eight seconds; a mine that went off under your own feet could not be
-    // placed anywhere worth placing it.
+    // would be five free shots' worth on a six-metre circle every eight
+    // seconds; a mine that went off under your own feet could not be thrown
+    // anywhere worth throwing it.
+    //
+    // FIVE OF THE PLAYER'S OWN SHOTS. It is the biggest single number the item
+    // pool hands out, and it should be: it has to be aimed, it has to be
+    // waited for, and the thing it kills has to walk onto it.
     //
     // Eight seconds, so the player can lay a line of them across the way in
     // during a lull - which is the item, and it is a completely different item
     // from pressing it once when something is already on top of you.
-    effects: [['DROP A PROXIMITY MINE', GOOD], ['THE BLAST DOES NOT KNOW YOU', NOTE]],
+    effects: [['THROW A PROXIMITY MINE', GOOD], ['THE BLAST DOES NOT KNOW YOU', NOTE]],
     use: (game) => {
       const p = game.player;
+      p.muzzleInto(_v);
       facing(game);
-      const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.x + _dir.x * 1.2));
-      const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.z + _dir.z * 1.2));
-      game.deploy(new Mine(game, x, z));
-      game.effects.burst(_v.set(x, 0.2, z), THEME.shrapnel, 12, 3, 2, 0.4);
+      game.deploy(new Lob(game, _v, _dir, 'mine', p.getEffectiveDamage(p.weapon.damage) * 5));
       game.sfx.itemDeploy();
     },
   },
@@ -1112,7 +1136,7 @@ export const ACTIVE_ITEMS = {
       // three the flames sat on the camera and the arena behind them was gone.
       const x = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.x + _dir.x * 4.5));
       const z = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.z + _dir.z * 4.5));
-      game.deploy(new FireWall(game, x, z, _dir.x, _dir.z));
+      game.deploy(new FireWall(game, x, z, _dir.x, _dir.z, game.player.dotHit * 1.5));
       game.effects.shockwave(_v.set(x, 0, z), THEME.hellfire, 5, 0.5);
       game.sfx.itemDeploy();
     },
@@ -1130,7 +1154,7 @@ export const ACTIVE_ITEMS = {
     // Forty-five seconds, not sixty-four. Sixty-four is longer than most waves
     // last, which means the item would frequently be uncastable in the fight
     // it was taken for.
-    effects: [['RELEASE FIVE HUNTING BEES', GOOD], ['FOR 12s', NOTE]],
+    effects: [['RELEASE FIVE HUNTING BEES', GOOD], ['FOR 24s', NOTE]],
     use: (game) => {
       const p = game.player;
       for (let i = 0; i < 5; i++) {
