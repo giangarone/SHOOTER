@@ -14,6 +14,7 @@
 
 import {
   generateLayout, validate, costBudget, primsToAabbs, makeRng, cellCentre,
+  PLAZA_PIECES, PLAZA_MAX,
 } from '../js/terrain.js';
 import { isBossWave } from '../js/waves.js';
 import {
@@ -58,6 +59,14 @@ let blockedMax = 0;
 // blocked figure above deliberately counts only walls, so this is the one that
 // answers "does the room feel furnished".
 let coverSum = 0;
+// AND THE SAME FIGURE WITH THE PLAZA TAKEN OUT. The whole-floor number is no
+// longer the one that answers "does the room feel furnished": the generator
+// now holds a fourteen-metre disc of it deliberately clear, so a global
+// average that stayed where it was would mean the rest of the room had gone
+// denser to compensate, and one that falls is exactly what the plaza is for.
+// What must not fall is the density of the part of the room that is SUPPOSED
+// to be dense, which is this.
+let coverOutSum = 0;
 let pieceSum = 0;
 const pieceUse = new Map();
 const byWaveBlocked = new Map();
@@ -83,17 +92,27 @@ for (let run = 0; run < RUNS; run++) {
       // Footprint coverage, sampled on a 1m lattice inside the playable floor.
       let hit = 0;
       let n = 0;
+      let hitOut = 0;
+      let nOut = 0;
+      const pl = layout.plaza;
       const boxes = primsToAabbs(layout.prims);
       for (let x = -21; x <= 21; x++) {
         for (let z = -21; z <= 21; z++) {
           n++;
-          if (boxes.some((b) => x > b.min.x && x < b.max.x && z > b.min.z && z < b.max.z)) hit++;
+          const on = boxes.some((b) => x > b.min.x && x < b.max.x &&
+                                       z > b.min.z && z < b.max.z);
+          if (on) hit++;
+          if ((x - pl.x) ** 2 + (z - pl.z) ** 2 > pl.r * pl.r) {
+            nOut++;
+            if (on) hitOut++;
+          }
         }
       }
       const cover = hit / n;
       coverSum += cover;
+      coverOutSum += hitOut / nOut;
       const c = byWaveBlocked.get(wave) || [0, 0];
-      byWaveBlocked.set(wave, [c[0] + cover, c[1] + 1]);
+      byWaveBlocked.set(wave, [c[0] + cover, c[1] + 1, (c[2] || 0) + hitOut / nOut]);
     }
 
     // 1. It has to pass its own validator. The fallback is exempt only from
@@ -147,6 +166,73 @@ for (let run = 0; run < RUNS; run++) {
         ' -> ' + ex.toFixed(2) + 'x' + ez.toFixed(2));
     }
 
+    // 3c. THERE IS SOMEWHERE TO MOVE. Every layout declares a plaza - the
+    //     disc of floor the generator held clear - and this is the assertion
+    //     that it really is clear, because the plaza is the whole point of
+    //     the density work and nothing else in this file would notice if it
+    //     quietly filled in. Density has no other spatial term: without this,
+    //     a broken footprint test would show up as nothing worse than a
+    //     slightly different coverage number.
+    //
+    //     Two things are checked, and they fail differently: WHAT is standing
+    //     in there (only the landmark pieces - a wall or a crate cluster in
+    //     the plaza means the footprint test stopped working) and HOW MANY
+    //     pieces (a plaza with eight towers in it is a pillar-dance camp, not
+    //     open floor).
+    {
+      const pl = layout.plaza;
+      check('wave ' + wave + ' declares a plaza',
+        !!pl && pl.r > 0 && Math.abs(pl.x) < 20 && Math.abs(pl.z) < 20);
+      const inside = new Set();
+      for (const p of layout.prims) {
+        if (!p.solid) continue;
+        // The prim's OWN footprint this time, padding included - the
+        // generator measures whole grid cells, so anything that gets in here
+        // on a real overlap is a genuine intrusion and not a rounding.
+        const dx = Math.max(0, Math.abs(p.x - pl.x) - (p.w + p.pad) / 2);
+        const dz = Math.max(0, Math.abs(p.z - pl.z) - (p.d + p.pad) / 2);
+        if (dx * dx + dz * dz >= pl.r * pl.r) continue;
+        inside.add(p.key);
+        check('wave ' + wave + ' plaza holds only landmarks',
+          PLAZA_PIECES.has(p.key) || p.key === 'fallback',
+          p.key + ' at ' + p.x.toFixed(1) + ',' + p.z.toFixed(1));
+      }
+      let pieces = 0;
+      const seen = new Set();
+      for (const p of layout.prims) {
+        if (!p.solid || seen.has(p.order)) continue;
+        const dx = Math.max(0, Math.abs(p.x - pl.x) - (p.w + p.pad) / 2);
+        const dz = Math.max(0, Math.abs(p.z - pl.z) - (p.d + p.pad) / 2);
+        if (dx * dx + dz * dz >= pl.r * pl.r) continue;
+        seen.add(p.order);
+        pieces++;
+      }
+      if (!layout.fallback) {
+        check('wave ' + wave + ' plaza stays sparse', pieces <= PLAZA_MAX,
+          pieces + ' pieces in it');
+      }
+      // And it has to be open ground, not a hole in the middle of a mass of
+      // geometry: sample the disc and count how much of it a mover could not
+      // walk across.
+      let pts = 0;
+      let blocked = 0;
+      const boxes = primsToAabbs(layout.prims);
+      for (let x = pl.x - pl.r; x <= pl.x + pl.r; x += 0.5) {
+        for (let z = pl.z - pl.r; z <= pl.z + pl.r; z += 0.5) {
+          if ((x - pl.x) ** 2 + (z - pl.z) ** 2 > pl.r * pl.r) continue;
+          pts++;
+          if (boxes.some((b) => x > b.min.x && x < b.max.x &&
+                                z > b.min.z && z < b.max.z &&
+                                b.max.y > STEP_HEIGHT)) blocked++;
+        }
+      }
+      // Three big_pillars is the worst PLAZA_PIECES can do - twelve square
+      // metres of a seventy-eight metre disc - so a fifth is the line. It is
+      // a guard against the plaza filling up, not a tuning value.
+      check('wave ' + wave + ' plaza is walkable', blocked / pts < 0.2,
+        (100 * blocked / pts).toFixed(0) + '% blocked');
+    }
+
     // 4. Nothing may stand where the player is, or outside the room.
     const aabbs = primsToAabbs(layout.prims);
     for (const b of aabbs) {
@@ -195,22 +281,40 @@ for (let run = 0; run < RUNS; run++) {
     //     flight whose length depends on how tall it is, leaving a bright bar
     //     hanging in the air past the top step. A strip either lies on
     //     something or hangs from something.
+    //
+    //     ALONG ITS WHOLE LENGTH, and that qualifier is the whole check. The
+    //     first version of this asked whether ANY solid box touched the strip
+    //     anywhere, which a strip only needs one end - or one middle - held to
+    //     satisfy: a gateway's top strip ran the full 8.2m width of the piece
+    //     at 0.84m above its wall tops, resting on the 2.8m lintel in the
+    //     middle, and passed. In game that is two bright bars hanging in
+    //     mid-air either side of the doorway.
     for (const p of layout.prims) {
       if (p.solid) continue;
       const base = p.y - p.h / 2;
       const top = p.y + p.h / 2;
       if (base < 0.1) continue;
-      const x0 = p.x - p.w / 2;
-      const x1 = p.x + p.w / 2;
-      const z0 = p.z - p.d / 2;
-      const z1 = p.z + p.d / 2;
-      const held = aabbs.some((o) =>
-        o.min.x < x1 - 0.05 && o.max.x > x0 + 0.05 &&
-        o.min.z < z1 - 0.05 && o.max.z > z0 + 0.05 &&
+      // Lies on something, or hangs from it. Both are legitimate, and so is
+      // being embedded in it - a glowing band round a pillar's waist.
+      const holds = (o, x, z) =>
+        o.min.x < x && o.max.x > x && o.min.z < z && o.max.z > z &&
         ((o.max.y >= base - 0.12 && o.min.y <= base + 0.01) ||
-         (o.min.y <= top + 0.12 && o.max.y >= top - 0.01)));
-      check('wave ' + wave + ' no trim hangs in the air', held,
-        p.mat + ' at y' + base.toFixed(2));
+         (o.min.y <= top + 0.12 && o.max.y >= top - 0.01));
+      // Walked along the strip's LONG axis. The 0.1 inset is for the 2cm each
+      // side an edge strip is deliberately wider than the deck it trims.
+      const along = p.w >= p.d;
+      const half = (along ? p.w : p.d) / 2 - 0.1;
+      const steps = Math.max(1, Math.ceil((half * 2) / 0.4));
+      let loose = 0;
+      for (let i = 0; i <= steps; i++) {
+        const t = -half + (2 * half * i) / steps;
+        const x = p.x + (along ? t : 0);
+        const z = p.z + (along ? 0 : t);
+        if (!aabbs.some((o) => holds(o, x, z))) loose++;
+      }
+      check('wave ' + wave + ' no trim hangs in the air', loose === 0,
+        p.mat + ' at y' + base.toFixed(2) + ', ' + loose + '/' + (steps + 1) +
+        ' of its length unsupported');
     }
 
     // 6. THE SHAPE CONTRACT. Every riser a mover is meant to walk has to be
@@ -262,7 +366,7 @@ for (const k of ['crate_cluster', 'low_barrier', 'planter', 'tower', 'big_pillar
 // little more of the same room rather than the first room worth playing in.
 const w1 = byWaveBlocked.get(1);
 const w34 = byWaveBlocked.get(34);
-check('wave 1 is already a built arena', w1[0] / w1[1] > 0.16,
+check('wave 1 is already a built arena', w1[2] / w1[1] > 0.16,
   (w1[0] / w1[1] * 100).toFixed(1) + '%');
 check('and later waves are denser still', w34[0] / w34[1] >= w1[0] / w1[1],
   (w1[0] / w1[1] * 100).toFixed(1) + '% -> ' + (w34[0] / w34[1] * 100).toFixed(1) + '%');
@@ -424,13 +528,20 @@ console.log('layouts generated: ' + total
   + '   fallback: ' + fallbacks
   + '   pieces/layout: ' + (pieceSum / total).toFixed(1)
   + '   floor covered: ' + (coverSum / total * 100).toFixed(1) + '%'
+  + ' (' + (coverOutSum / total * 100).toFixed(1) + '% outside the plaza)'
   + '   of which wall: ' + (blockedSum / (total - fallbacks) * 100).toFixed(1) + '%'
   + '   peak wall: ' + (blockedMax * 100).toFixed(1) + '%');
 
 // THE ROOM HAS TO FEEL FURNISHED. A layout that passes every safety check and
 // still leaves the floor almost empty is the bug this whole library exists to
 // fix, so it is asserted rather than eyeballed.
-check('the arena is actually furnished', coverSum / total > 0.16,
+check('the arena is actually furnished', coverOutSum / total > 0.16,
+  (coverOutSum / total * 100).toFixed(1) + '% outside the plaza');
+// And the room as a whole must not get thin on the plaza's account. The plaza
+// is about a tenth of the floor, so the whole-floor figure lands a couple of
+// points under the outside-the-plaza one by arithmetic; this is the guard
+// against a change that quietly empties the room and calls it openness.
+check('and the room as a whole is not thin', coverSum / total > 0.15,
   (coverSum / total * 100).toFixed(1) + '%');
 check('and every layout is a real layout', pieceSum / total >= 8,
   (pieceSum / total).toFixed(1) + ' pieces');
