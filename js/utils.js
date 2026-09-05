@@ -16,28 +16,77 @@
 // Movers that are not this tall pass their own: the player (shorter) and
 // bosses (much taller) both do.
 export const AGENT_HEIGHT = 2.5;
-// Bosses are 2.2x to 3.2x scale and stand several metres tall, so the
-// perimeter catwalks are a wall to them rather than something to duck under.
+// Bosses are 2.2x to 3.2x scale and stand several metres tall, so anything
+// suspended overhead is a wall to them rather than something to duck under.
 // main.js bakes navBig with this, and boss collision uses it too - if the two
 // disagreed, the flow field would route a boss around a deck that collision
 // would happily let it walk through.
 export const BOSS_HEIGHT = 5;
+
+// THE STEP. How far up a mover walks without being asked to jump.
+//
+// Everything in the arena is generated now, and generated terrain is made of
+// stacked boxes: a stair is four of them, a tiered platform is three. Without
+// a step, every one of those edges is a wall you stop dead against and have to
+// jump - which turns a staircase into four separate jumps and makes a dense
+// arena feel like it is made of furniture rather than of ground.
+//
+// 0.62 is chosen against the library rather than picked: the tallest single
+// riser terrain builds is 0.6 (see terrain.js), so every stair in the game
+// walks, and the shortest thing that is meant to be COVER is a 0.95 speaker
+// cabinet, which does not. That gap is the whole design - a mover steps onto
+// anything shaped like ground and stops against anything shaped like an
+// obstacle - and it is why the two numbers must not drift toward each other.
+//
+// The player, ground enemies and the nav grid all import this. A grid that
+// disagreed with collision would route enemies up a step they then bounce off,
+// which is the single most maddening class of bug in this file's history.
+export const STEP_HEIGHT = 0.62;
 
 // Pushes `pos` out of any box it overlaps, along whichever axis needs the
 // smallest correction. Mutates `pos` in place.
 //
 // `height` is how tall the mover is, and only matters for geometry suspended
 // overhead - see the second skip below.
+// How many times the push-out below is repeated. ONE PASS IS NOT ENOUGH once
+// the arena is built out of clustered boxes: each box is resolved on its own,
+// so being pushed out of a stair's second step can put the mover inside its
+// third - and the third was already visited, so nothing looks at it again and
+// the mover ends the frame standing inside solid geometry.
+//
+// That is exactly the "obstacles are not quite solid" symptom: not a gap in
+// the test, but a correction that was undone by the next box in the list.
+// Three passes settles every arrangement the piece library can build; the loop
+// exits early the moment a pass moves nothing, so open ground still costs one.
+const RESOLVE_PASSES = 3;
+
 export function resolveCircle(pos, radius, obstacles, height = AGENT_HEIGHT) {
+  for (let pass = 0; pass < RESOLVE_PASSES; pass++) {
+    if (!resolvePass(pos, radius, obstacles, height)) break;
+  }
+}
+
+// One push-out sweep. Returns true if anything moved, so the loop above can
+// stop as soon as the position is settled.
+function resolvePass(pos, radius, obstacles, height) {
+  let moved = false;
   for (const b of obstacles) {
     // Standing on top of the box: the player is supported, not intersecting,
     // so pushing sideways here would shove them off every ledge.
     if (pos.y >= b.max.y - 0.06) continue;
-    // The mirror image of the test above: a catwalk suspended above head
-    // height is something you walk UNDER, not into. Without this every raised
-    // walkway would carve an invisible pillar all the way down to the floor,
-    // for enemies as well as the player.
-    if (b.min.y > pos.y + height) continue;
+    // The mirror image of the test above: a deck suspended above head height is
+    // something you walk UNDER, not into. Without this every raised walkway
+    // would carve an invisible pillar all the way down to the floor, for
+    // enemies as well as the player.
+    //
+    // THE EPSILON IS LOAD-BEARING, and it pairs this test with the player's
+    // ceiling check. That check stops a jump with the head EXACTLY on a deck's
+    // underside - which is the one position where a strict `>` here decides the
+    // mover is no longer underneath, and shoves them sideways out from under
+    // the deck. The symptom was a player standing in a covered passage being
+    // slid out of it for no visible reason. Touching the underside is being
+    // under it.
+    if (b.min.y >= pos.y + height - 0.03) continue;
     const minX = b.min.x - radius;
     const maxX = b.max.x + radius;
     const minZ = b.min.z - radius;
@@ -53,8 +102,68 @@ export function resolveCircle(pos, radius, obstacles, height = AGENT_HEIGHT) {
       else if (m === pr) pos.x = maxX;
       else if (m === zl) pos.z = minZ;
       else pos.z = maxZ;
+      moved = true;
     }
   }
+  return moved;
+}
+
+/**
+ * The surface a GROUND-LOCKED mover belongs on at `pos`: the top of the
+ * highest box it overlaps that is within one step above its feet, or the floor
+ * when there is nothing under it.
+ *
+ * Unlike stepSurface this looks DOWN as well as up, because a mover with no
+ * jump of its own has no other way to come off a stair - it is not falling,
+ * it is walking, and the ground under it simply changes height. The caller
+ * decides how fast to descend; going up is instant, which is what a step is.
+ */
+export function groundSurface(pos, radius, obstacles, step = STEP_HEIGHT) {
+  let best = 0;
+  const ceil = pos.y + step;
+  for (const b of obstacles) {
+    const top = b.max.y;
+    if (top <= best || top > ceil) continue;
+    if (pos.x <= b.min.x - radius || pos.x >= b.max.x + radius) continue;
+    if (pos.z <= b.min.z - radius || pos.z >= b.max.z + radius) continue;
+    best = top;
+  }
+  return best;
+}
+
+/**
+ * The highest surface a mover standing at `pos` may step up onto.
+ *
+ * Only boxes the mover's circle actually overlaps count, and only those whose
+ * top is within `step` of the mover's feet - so this finds the stair tread in
+ * front of you and never the wall beside it. Returns the current foot height
+ * when there is nothing to climb, so the caller can compare and move on.
+ *
+ * IT ONLY EVER LOOKS UP. Stepping DOWN is gravity's job: snapping a mover down
+ * onto whatever is beneath them would glue them to the floor over a gap and
+ * take away the fall off the end of a platform, which is a real part of moving
+ * around up there.
+ *
+ * @param {{x:number,y:number,z:number}} pos
+ * @param {number} radius
+ * @param {object[]} obstacles
+ * @param {number} step   how far up is walkable - STEP_HEIGHT for everything
+ *   that is not deliberately different
+ */
+export function stepSurface(pos, radius, obstacles, step = STEP_HEIGHT) {
+  let best = pos.y;
+  const ceil = pos.y + step;
+  for (const b of obstacles) {
+    const top = b.max.y;
+    // Already at or above it, or too tall to walk onto. The second test is
+    // what keeps a wall a wall: a mover cannot climb a 2.6m slab 0.62m at a
+    // time, because a slab is ONE box whose top is out of reach in one go.
+    if (top <= best || top > ceil) continue;
+    if (pos.x <= b.min.x - radius || pos.x >= b.max.x + radius) continue;
+    if (pos.z <= b.min.z - radius || pos.z >= b.max.z + radius) continue;
+    best = top;
+  }
+  return best;
 }
 
 // True if a point is inside any box. Used by projectiles, which are treated as

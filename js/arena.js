@@ -1,6 +1,22 @@
-// Static level geometry and lighting. Built once at startup and never
-// modified - nothing here is per-frame. The animated rave lighting that plays
-// over all of this lives in rig.js; what is here is the venue itself.
+// The ROOM: floor, four walls, ceiling, lights. Built once at startup and
+// never modified - nothing here is per-frame. The animated rave lighting that
+// plays over all of this lives in rig.js; what is here is the venue itself.
+//
+// THE INTERIOR IS NOT HERE ANY MORE. Platforms, cover, towers, walls and
+// walkways are generated fresh for every wave by terrain.js, rise out of the
+// floor on the beat when a wave starts, and sink away again when it clears -
+// so the shop phase always happens on a bare floor. What this file still owns
+// is only the part of the venue that never changes.
+//
+// Two consequences worth knowing about here:
+//   - `obstacles`, `ground` and `meshList` are returned holding ONLY the room.
+//     TerrainSet appends to them and truncates back, in place. Nothing may
+//     replace those arrays: main.js hands the same references to the enemy
+//     context, the projectile context, aim assist and the player.
+//   - the KEEP-CLEAR RULE that used to govern where floor furniture could
+//     stand relative to the totem row and the mystery box is gone, because the
+//     furniture is gone during a wave break. terrain.js reserves a circle
+//     around an unclaimed totem row instead, and only while one is standing.
 //
 // buildArena() returns:
 //   group       the parent Object3D holding all level meshes
@@ -36,10 +52,15 @@ export const BOUND = 22;
 // 1.84m and the highest catwalk is 4.6 - so the room reads as a big warehouse
 // venue rather than a lid pressed down on the fight.
 export const CEIL_Y = 16;
-// Top surface of the perimeter catwalks. Above every ordinary enemy's head, so
-// they walk underneath it: see the overhead skip in resolveCircle and the
-// filter in the NavGrid constructor.
-export const CATWALK_Y = 4.6;
+// The perimeter climb chain - two floor stacks, two wall-mounted ledges and
+// two catwalk runs at 4.6 - is GONE, and with it the CATWALK_Y that named its
+// deck height. It was the one piece of high ground that never changed, which
+// made it the one piece nobody had to think about; all verticality is
+// generated now, so where you can get above the floor is a question the player
+// has to answer again every wave. What it used to teach the rest of the code -
+// that a thing suspended above AGENT_HEIGHT is walked UNDER, not into - is
+// unchanged and still lives in utils.js, and terrain.js's pillar_gate and
+// overpass pieces are what exercise it.
 
 // Base fog density. EXPONENTIAL, not linear: a linear fog has a hard near
 // plane and a hard far plane, and a room with a visible band across it reads
@@ -322,190 +343,35 @@ export function buildArena(scene) {
   // spacing was tuned around them, so the boxes are fixed points: what changed
   // is only what they look like.
 
+  // ---- the materials generated terrain is dressed in --------------------
+  //
+  // Every one of these is created HERE, once, and handed to terrain.js through
+  // `mats`. That is the whole reason they survived the interior moving out:
+  // three.js compiles a shader program per material configuration, and the
+  // smoke test caps the program count at 31. A generator that made its own
+  // materials per wave would add one program per prop per wave; a generator
+  // handed these adds none, however many layouts a run gets through.
+  //
+  // The emissive ones are the SAME instances rig.js pulses (see the block at
+  // the bottom of Rig.update), so a platform that rose thirty seconds ago
+  // lights with the room exactly as the hand-placed ones always did.
   const platMat = new THREE.MeshStandardMaterial({ color: 0x252b3a, roughness: 0.5, metalness: 0.25 });
   const platEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.2 });
-  // Raised platforms - solid, and jumpable via the step-up test in player.js.
-  // h is the height of the top surface.
-  //
-  // TWO OF THEM MOVED, AND ONLY TWO. The note above is still the rule - these
-  // footprints are what enemy pathing is baked from and what the combat
-  // spacing was tuned around - but the far row at z = 9.5 has to be walkable
-  // from side to side, and the platforms at (8, 8) and (-9, 9) stood exactly
-  // where a player has to be able to get to it. They moved for two consoles
-  // that stood out at x = +-6.9; those are gone and the MYSTERY BOX stands
-  // alone in the middle of that band now, but they stay where they are: the
-  // box is approached from any angle, and an open run across the far side is
-  // worth more to it than it ever was to a pair of consoles.
-  //
-  // They moved OUT along the same diagonal rather than shrinking or
-  // disappearing: same size, same height, same job holding the two far corners,
-  // pushed back to the +Z corners so the whole band across z = 9.5 is open from
-  // wall to wall. The middle of the floor, where the fight actually happens, is
-  // untouched.
-  //
-  // THE CENTRE PLATFORM IS GONE. It stood at (0, 0), squarely between the
-  // totem row at z = -5 and the mystery box at z = 9.5 - which is to say, in the
-  // one corridor the player walks every single wave break, with a card to
-  // read at each end. It was cover nobody used and an obstacle everybody
-  // clipped. The middle of the floor is now open.
-  const platforms = [
-    { x: -8, z: -8, w: 5, d: 4, h: 1.2 },
-    { x: 12, z: 13.5, w: 6, d: 5, h: 1.3 },
-    { x: -12.5, z: 13.5, w: 4, d: 4, h: 1.6 },
-    { x: 9, z: -9, w: 4, d: 4, h: 1.5 },
-  ];
-  for (const p of platforms) {
-    const m = box(group, platMat, p.x, p.h / 2, p.z, p.w, p.h, p.d);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    meshList.push(m);
-    obstacles.push(makeAabb(p.x, p.h / 2, p.z, p.w, p.h, p.d));
-    box(group, platEdgeMat, p.x, p.h + 0.01, p.z, p.w + 0.04, 0.05, p.d + 0.04);
-  }
-
-  // Low cover, now speaker cabinets. The collision box is slightly wider than
-  // the mesh (1.15 vs 0.95) to compensate for the random Y rotation, which the
-  // AABB can't model.
   const speakerMat = new THREE.MeshStandardMaterial({ color: 0x191d26, roughness: 0.85, metalness: 0.1 });
   const coneMat = new THREE.MeshStandardMaterial({ color: 0x1c1f28, roughness: 0.6, metalness: 0.4 });
-  //
-  // TWO OF THESE MOVED, AND FOR THE SAME REASON THE PLATFORMS DID.
-  //
-  // (-2, -5.5) stood INSIDE the totem row - 1.6m from the middle offer and
-  // 1.6m from the left one, close enough to sit in both of their floor marks.
-  // (3.5, -3) stood two metres directly in FRONT of the right offer, on the
-  // line every player walks up to read it, and cut the foot of that offer out
-  // of the picture.
-  //
-  // Neither was a fair piece of cover. A speaker cabinet in the middle of the
-  // row is not something the player chose to fight behind; it is furniture
-  // standing between them and a build-defining choice, which is the one thing
-  // the wave break has to be clear of. It mattered more once the offers became
-  // marks ON THE FLOOR: a shaft of light twelve metres tall cleared a 0.95m box
-  // and a pool of light lying on the ground does not.
-  //
-  // THE KEEP-CLEAR RULE, so this does not drift back. It is two tests, and
-  // every piece of floor furniture in this file passes both:
-  //
-  //   1. NOTHING IN FRONT OF A ROW. |x| <= 9.5 and z from the row line to a
-  //      metre and a half in front of it - z -5..-1.5 for the totems, and
-  //      9.5..6.3 for the mystery box, which is walked up to from -z. That
-  //      wedge is the whole of what the player looks THROUGH to read an offer.
-  //   2. NOTHING STANDING IN A MARK. No box may reach within 1.7m of a totem
-  //      or 1.15m of a console, which are the radii the marks are drawn at.
-  //
-  // BEHIND a row is deliberately still allowed, and the platforms at (-8, -8)
-  // and (9, -9) stay exactly where they are. A prop behind the row is a
-  // backdrop, not an obstruction: it never comes between the player and an
-  // offer, and it gives the marks something to stand against.
-  //
-  // ONE CONTACT IS ACCEPTED. The platform at (-8, -8) has its front face at
-  // z = -6 and the ammo console's mark reaches z = -6.15, so the outer 15cm of
-  // that ring meets the platform and is hidden by it. That is what light on a
-  // floor does when it runs into a step, it is behind the console rather than
-  // in front of it, and moving a corner platform to save 15cm of a ring would
-  // cost more than it buys.
-  //
-  // Same count, same size, same height, so enemy pathing and the cover density
-  // the fight was tuned around are unchanged - they moved, they did not go.
-  const crates = [
-    { x: -10.5, z: -2.5 }, { x: -4, z: 2.5 }, { x: 2, z: 5.5 }, { x: -2, z: -9.5 }, { x: 12, z: -2 },
-  ];
-  for (const c of crates) {
-    const m = box(group, speakerMat, c.x, 0.475, c.z, 0.95, 0.95, 0.95);
-    m.rotation.y = Math.random() * 0.6 - 0.3;
-    m.castShadow = true;
-    m.receiveShadow = true;
-    meshList.push(m);
-    obstacles.push(makeAabb(c.x, 0.475, c.z, 1.15, 0.95, 1.15));
-    // Driver cones on the front face, purely decorative.
-    const cone = box(group, coneMat, 0, 0.12, 0.5, 0.62, 0.62, 0.04);
-    const cone2 = box(group, coneMat, 0, -0.22, 0.5, 0.34, 0.34, 0.04);
-    m.add(cone);
-    m.add(cone2);
-  }
-
-  // Tall cover, now lighting-truss towers. Too high to jump onto. Boxed as a
-  // square AABB around the cylinder, so the corners collide a little wider
-  // than they look.
   const towerMat = new THREE.MeshStandardMaterial({ color: 0x1c2130, roughness: 0.45, metalness: 0.35 });
-  const pillars = [
-    { x: -14, z: 0 }, { x: 14, z: -2 }, { x: 0, z: 14 }, { x: -3, z: -14 }, { x: 3, z: 14 },
-  ];
-  for (const pl of pillars) {
-    const m = new THREE.Mesh(CYL, towerMat);
-    m.position.set(pl.x, 1.15, pl.z);
-    m.scale.set(1, 2.3, 1);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    group.add(m);
-    meshList.push(m);
-    obstacles.push(makeAabb(pl.x, 1.15, pl.z, 1.5, 2.3, 1.5));
-    // A lamp head on top of each tower, lit by rig.js.
-    box(group, trimMat, pl.x, 2.42, pl.z, 0.5, 0.14, 0.5);
-  }
-
-  // ---- perimeter traversal -----------------------------------------------
-  // Going up is OPTIONAL. Everything here hugs the walls so the middle of the
-  // floor - where the fight actually happens - is exactly as open as it was.
-  //
-  // The climb is floor -> stack (1.5) -> ledge (2.9) -> catwalk (4.3). The
-  // jump apex is 1.84m, so every hop has ~0.44m of margin; tighter than that
-  // and the step-up test in player.js becomes a coin flip.
-  //
-  // The ledges and the catwalk are SUSPENDED: their undersides sit at 2.65 and
-  // 4.05, above the 2.5m agent height the NavGrid filters on, so enemies walk
-  // straight under them instead of treating them as pillars. The stacks are
-  // the only part of the chain standing on the floor, and they are ordinary
-  // cover like the speaker cabinets.
-  //
-  // There is no railing and no cover up here on purpose: high ground buys you
-  // sightlines, and costs you being an easy target for every gunner in the room.
   const deckMat = new THREE.MeshStandardMaterial({ color: 0x232838, roughness: 0.55, metalness: 0.25 });
   const deckEdgeMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0xffb300, emissiveIntensity: 1.0 });
-
-  // Step 1: solid stacks on the floor. These DO block pathing, like any crate.
-  // Placed clear of the spawn points at +-18.
-  const stacks = [{ x: -16.0, z: -19.4 }, { x: 16.0, z: 19.4 }];
-  for (const st of stacks) {
-    const m = box(group, speakerMat, st.x, 0.75, st.z, 1.4, 1.5, 1.4);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    meshList.push(m);
-    obstacles.push(makeAabb(st.x, 0.75, st.z, 1.4, 1.5, 1.4));
-  }
-
-  // Step 2: wall-mounted ledges, underside at 2.65.
-  //
-  // These sit BEYOND the ends of the catwalk runs, never beneath one. That is
-  // not cosmetic: resolveCircle only ignores a box the mover is standing on or
-  // is entirely underneath, so a deck 1.15m above a ledge is neither, and it
-  // would shove the player sideways off the ledge they were standing on. The
-  // climb has to happen where there is open air overhead.
-  const ledges = [{ x: -15.6, z: -20.6 }, { x: 15.6, z: 20.6 }];
-  for (const l of ledges) {
-    const m = box(group, deckMat, l.x, 2.775, l.z, 2.0, 0.25, 2.0);
-    m.castShadow = true;
-    meshList.push(m);
-    obstacles.push(makeAabb(l.x, 2.775, l.z, 2.0, 0.25, 2.0));
-  }
-
-  // Step 3: two catwalk runs, on the north and south walls, underside at 4.05.
-  // They stop at |x| = 14 so the access ledges above have clear sky, and so
-  // the two sides are not joined - you come down to cross the room, which
-  // keeps the floor the fastest way to anywhere.
-  const catwalks = [
-    { x: 0, z: -20.6, w: 28, d: 1.8 },
-    { x: 0, z: 20.6, w: 28, d: 1.8 },
-  ];
-  for (const c of catwalks) {
-    const m = box(group, deckMat, c.x, 4.175, c.z, c.w, 0.25, c.d);
-    m.receiveShadow = true;
-    meshList.push(m);
-    obstacles.push(makeAabb(c.x, 4.175, c.z, c.w, 0.25, c.d));
-    // Lit edge strip so the walkway reads from the floor below.
-    box(group, deckEdgeMat, c.x, 4.31, c.z, c.w, 0.04, 0.12);
-  }
+  // Generated walls get the room's own tiled wall material, so an interior
+  // wall and the perimeter agree about how big a pixel is - see applyTile.
+  const innerWallMat = applyTile(
+    new THREE.MeshStandardMaterial({ color: 0x232a3a, roughness: 0.75, metalness: 0.14 }),
+    tileTex
+  );
+  // And a lit cap strip along the top of one. Its colour is written by rig.js
+  // every frame like every other emissive in the venue - the value here is
+  // only what it wears on the first frame, before the show has said anything.
+  const wallGlowMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, emissive: 0x4ef3ff, emissiveIntensity: 1.2 });
 
   // ---- lighting: exactly 4 lights here, see the note at the top of this file
   // 1) hemisphere fill, 2) shadow-casting key light, 3+4) two colour accents.
@@ -558,16 +424,26 @@ export function buildArena(scene) {
   // `lights` is handed to rig.js, which animates them. `mats` are the emissive
   // materials rig.js pulses - shared instances, so writing one changes every
   // prop that uses it.
-  // Obstacles a ground-level thing can actually run into. The suspended decks
-  // are excluded, which is what lets enemy fire pass UNDER a catwalk instead
-  // of stopping dead on its underside - see the note where projectiles use it
-  // in main.js. `obstacles` stays the full list, for the player's landing test.
+  // Obstacles a ground-level thing can actually run into. The room itself has
+  // none - the walls are handled by a clamp, not by collision - so this starts
+  // empty and is filled by TerrainSet, which applies the same AGENT_HEIGHT
+  // filter per piece. What it buys is unchanged: enemy fire passes UNDER a
+  // generated overpass or gate instead of stopping dead on its underside, and
+  // `obstacles` stays the full list for the player's landing test.
   const ground = obstacles.filter((o) => o.min.y <= AGENT_HEIGHT);
 
   return {
     group, obstacles, ground, meshList, spawnPoints,
     lights: { hemi, dir, p1, p2 },
-    mats: { trim: trimMat, platEdge: platEdgeMat, deckEdge: deckEdgeMat, wallStrip },
+    // `mats` is two things at once now: the emissive set rig.js pulses, and
+    // the full palette terrain.js draws generated pieces with. Shared
+    // instances, so writing one changes every prop that uses it.
+    mats: {
+      trim: trimMat, platEdge: platEdgeMat, deckEdge: deckEdgeMat, wallStrip,
+      wallGlow: wallGlowMat,
+      plat: platMat, speaker: speakerMat, cone: coneMat, tower: towerMat,
+      deck: deckMat, wall: innerWallMat,
+    },
     shared: { BOX, CYL },
   };
 }

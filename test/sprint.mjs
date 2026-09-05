@@ -43,6 +43,25 @@ try {
 
   const results = await page.evaluate(async () => {
     const g = window.__game;
+    // THE ARENA IS PROCEDURAL, so a fixture that walks a fixed path across it
+    // is measuring the layout as much as the mechanic. This clears the
+    // generated interior and pins the wave open - an empty queue would clear
+    // the wave, sink the shop in and generate a fresh layout mid-measurement -
+    // so every run below happens on the same bare floor.
+    const clearArena = () => {
+      if (g.terrain.state !== 'hidden') {
+        g.terrain.reset();
+        g.terrain.clearCollision();
+        g.nav.rebake(g.arena.obstacles);
+        g.navBig.rebake(g.arena.obstacles);
+      }
+      // A wave with an empty queue clears on the frame it starts, which sinks
+      // the shop in and generates a fresh layout halfway through whatever is
+      // being measured. One entry that never spawns holds it open instead.
+      g.waveState = 'active';
+      if (!g.queue.length) g.queue.push('chaser');
+      g.spawnTimer = 1e9;
+    };
     const p = g.player;
     const out = [];
     const t = (name, cond, extra = '') => out.push([name, !!cond, String(extra)]);
@@ -60,6 +79,7 @@ try {
     // player to the middle of the room first so a wall never ends a run early.
     const set = (o) => Object.assign(g.input, o);
     const rest = () => {
+      clearArena();
       set({ forward: false, back: false, left: false, right: false, sprint: false, shoot: false, aim: false });
       p.pos.set(0, 0, 0);
       p.moveVX = 0;

@@ -324,6 +324,16 @@ export class SFX {
   // the active item row used to rise on: that row appeared every third shop
   // and could afford to be an event, and this one is there every single wave
   // break. A fanfare thirty times a run is a fanfare nobody hears by wave ten.
+  // ONE PIECE OF ARENA LANDING. This fires a dozen times in under two seconds
+  // while the room assembles itself, so it has to be SHORT and it has to sit
+  // under the music rather than on top of it: a low thud with a slap of noise
+  // on the front and nothing sustained. Anything with a tail turns a build
+  // into a drone.
+  terrainRise() {
+    this.tone({ f: 74, f2: 41, t: 0.16, type: 'sine', v: 0.16 });
+    this.noise({ t: 0.07, v: 0.09, f: 700, mode: 'lowpass' });
+  }
+
   boxRise() {
     this.tone({ f: 98, f2: 196, t: 0.5, type: 'sawtooth', v: 0.11 });
     this.tone({ f: 147, f2: 294, t: 0.6, type: 'sine', v: 0.13, delay: 0.04 });

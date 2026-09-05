@@ -78,13 +78,14 @@ import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
   UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
 } from './upgrades.js';
-import { TotemArea, ARM_TIME_ITEM } from './totems.js';
+import { TotemArea, ARM_TIME_ITEM, ROW_Z as TOTEM_ROW_Z } from './totems.js';
 import {
   ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS,
   CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
 } from './items.js';
 import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
+import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './terrain.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap } from './padmenu.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
@@ -596,9 +597,19 @@ class Game {
     // so a boss steered by it would be routed through gaps it cannot fit
     // through and grind against the corners. Flooded only while something big
     // is actually alive, which is never on a normal wave.
-    // Also taller: a boss stands well clear of the perimeter catwalks that
-    // ordinary enemies walk under, so anything overhead is a wall to it.
-    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT);
+    // Also taller: a boss stands well clear of anything generated terrain
+    // suspends overhead - a gate's lintel, an overpass - which ordinary
+    // enemies walk under, so all of it is a wall to a boss.
+    //
+    // BOTH GRIDS ARE REBAKED ONCE PER WAVE, when a new layout finishes rising.
+    // See _settleTerrain: it happens in the break, with nothing alive that
+    // could be standing in a cell about to turn solid.
+    //
+    // AND IT DOES NOT CLIMB. The step height is zero, so any raised surface is
+    // a wall to this grid - which is exactly the routing it had before the
+    // arena knew about height, and what it should keep: a body 3m across
+    // taking a 0.6m step onto a crate reads as a bug, not as a step.
+    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT, 0);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list. That USED to be because walking into one claimed
@@ -619,6 +630,16 @@ class Game {
     this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
     this.ui = new UI();
     this.sfx = new SFX();
+    // THE ARENA'S INTERIOR, generated per wave. Built here rather than in
+    // buildArena because it wants the effects pool and the sfx bank for the
+    // dust and the thump as a piece lands, and both of those are younger than
+    // the arena. Its mesh pool is allocated in this constructor and never
+    // grows - see the budget note at the top of terrain.js.
+    this.terrain = new TerrainSet(this.arena, this.effects, this.sfx);
+    // The seed every layout in this run is drawn from. One number, so a run's
+    // arenas are reproducible from it and a layout that turns out to be no fun
+    // can be replayed in the test.
+    this._terrainSeed = (Math.random() * 0xffffffff) >>> 0;
     this.music = new Music('/assets/audio/soundtrack.m4a');
     // Read before the first gesture builds the graph, so a muted player never
     // hears the opening bar leak out before the setting is applied.
@@ -1549,6 +1570,30 @@ class Game {
     for (const f of this._fire) this.effects.creepRelease(f.creep);
     this._fire.length = 0;
     this._fireUntil = 0;
+    // THE ARENA IS DELIBERATELY NOT TOUCHED HERE. This clears ENTITIES, and it
+    // is called from the turn handover as well as from a run reset - so it can
+    // be called while a perfectly good layout is standing, and it is called
+    // every frame by fixtures that hold the field empty.
+    //
+    // Tearing terrain down here is a loop: the wave break generates a layout
+    // and holds the wave clock open for it, this wipes it, the next idle frame
+    // generates another and re-arms the clock, and the countdown never reaches
+    // zero. A run that actually restarts calls _resetTerrain instead - see
+    // beginGame and _exitToMenu.
+  }
+
+  // The arena, torn down instantly rather than sunk. For a run that is
+  // starting or a run being abandoned: there is nobody in the room to watch an
+  // animation, and the next idle frame generates a fresh layout anyway.
+  //
+  // ONLY FROM A RUN BOUNDARY. It generates nothing itself and it is cheap, but
+  // it does two full nav bakes, so it must never end up on a per-frame path.
+  _resetTerrain() {
+    this.terrain.reset();
+    this.terrain.clearCollision();
+    this.nav.rebake(this.arena.obstacles);
+    this.navBig.rebake(this.arena.obstacles);
+    this.rig.setTerrainColliders(this.terrain.colliders);
   }
 
   // Both buttons show one shared state, so muting on the pause screen is
@@ -2355,6 +2400,8 @@ class Game {
     this.match = mode === 'versus' ? new VersusMatch() : null;
     this.player.reset();
     this._clearEntities();
+    // A previous run's arena, if there is one still standing.
+    this._resetTerrain();
     this.kills = 0;
     this.credits = 0;
     this.comboKills = 0;
@@ -2450,6 +2497,7 @@ class Game {
     this.player.setPlayerTag(null);
     this.player.setHolster(0);
     this._clearEntities();
+    this._resetTerrain();
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
@@ -4472,6 +4520,88 @@ class Game {
     return true;
   }
 
+  // ---- the arena's interior, per wave --------------------------------------
+  //
+  // THE ORDER MATTERS, and it is the same three beats every wave:
+  //
+  //   wave clears  -> _sinkTerrain(). Collision is dropped IMMEDIATELY and the
+  //                   meshes slide under the floor over the next second. The
+  //                   field is empty at this point, so nothing can be caught
+  //                   inside a box on its way down, and a player standing on a
+  //                   platform rides it back to the floor. The shop then rises
+  //                   onto a completely bare floor - which is why the
+  //                   keep-clear rule that used to live in arena.js is gone.
+  //
+  //   break ends   -> _buildTerrain(). A layout is generated and starts
+  //                   rising, and the wave countdown is held open for at least
+  //                   as long as the build takes, so terrain is always settled
+  //                   before the first enemy spawns.
+  //
+  //   rise settles -> _settleTerrain(). The AABBs are published into the
+  //                   arena's lists, both nav grids are rebaked, and the
+  //                   lasers are told what they can land on.
+  //
+  // Called from the idle branch rather than from startWave() so that every
+  // route into a wave - a fresh run, a reset, a versus handoff, an ordinary
+  // wave break - gets terrain without any of them having to remember to ask.
+  _ensureTerrain() {
+    if (this.terrain.state !== 'hidden') return;
+    this._buildTerrain();
+  }
+
+  _buildTerrain() {
+    // NOTHING RISES UNDER THE PLAYER. They are standing somewhere on the floor
+    // with no say in where the next layout lands, and a wall that materialises
+    // around them is the one thing procedural terrain can do that is simply
+    // unfair. Reserved generously - a piece is placed by its centre, and the
+    // generator grows this by the piece's own footprint.
+    const reserved = [{ x: this.player.pos.x, z: this.player.pos.z, r: 4 }];
+    // And nothing rises on an unclaimed totem row. A set the player walked
+    // away from is deliberately left standing into the next wave (see the
+    // intermission branch below), so for that one case the row is furniture
+    // the layout has to work around.
+    // The whole row, offers and stations, at the x positions totems.js builds
+    // them at - if one is standing, all five are.
+    if (this.totemArea.active && !this.totemArea.claimed) {
+      for (const x of [-6.9, -3.6, 0, 3.6, 6.9]) {
+        reserved.push({ x, z: TOTEM_ROW_Z, r: 4 });
+      }
+    }
+    const layout = generateLayout(this.wave + 1, {
+      seed: this._terrainSeed,
+      bound: ARENA_BOUND,
+      spawnPoints: this.arena.spawnPoints,
+      reserved,
+    });
+    this.terrain.build(layout);
+    // The countdown is held to the build, never shortened by it: a handoff
+    // already runs on a longer clock and must keep it.
+    this.interT = Math.max(this.interT, TERRAIN_BUILD_TIME);
+  }
+
+  _settleTerrain() {
+    this.terrain.collect();
+    this.nav.rebake(this.arena.obstacles);
+    this.navBig.rebake(this.arena.obstacles);
+    this.rig.setTerrainColliders(this.terrain.colliders);
+    // The clearance circle above makes this very nearly impossible, but "very
+    // nearly" is not a guarantee: the player is free to walk into a piece
+    // while it is on its way up, when nothing is solid yet. One push-out on
+    // the frame collision is published costs nothing and closes it.
+    resolveCircle(this.player.pos, 0.4, this.arena.obstacles, 1.8);
+  }
+
+  _sinkTerrain() {
+    this.terrain.beginSink();
+    // Collision goes NOW, not when the animation finishes. A box that is
+    // halfway into the floor is not something to walk into or shoot at, and
+    // the shop is about to rise through where it stands.
+    this.terrain.clearCollision();
+    this.nav.rebake(this.arena.obstacles);
+    this.navBig.rebake(this.arena.obstacles);
+    this.rig.setTerrainColliders(this.terrain.colliders);
+  }
+
   // Drives the wave state machine and the enemy trickle. A wave ends only when
   // the queue is empty AND no enemies are left alive.
   _updateWave(dt) {
@@ -4491,6 +4621,12 @@ class Game {
     // whether a handoff is running and the same flag runs it out, so there is
     // no second opinion left to disagree with.
     if (this._pass) {
+      this._ensureTerrain();
+      // The same guarantee the idle branch below makes. It matters more here:
+      // the swap halfway through a handoff tears the arena down (see
+      // _clearEntities), so a pass can find itself rebuilding with less of the
+      // handoff clock left than a build needs.
+      if (this.terrain.state === 'rising') this.interT = Math.max(this.interT, 0.05);
       this.interT -= dt;
       if (this.interT <= 0) this.startWave();
       return;
@@ -4523,6 +4659,8 @@ class Game {
       if (done) {
         if (this.bossFight) this._finishBossWave();
         this._clearHazards();
+        // The room empties before the shop fills it.
+        this._sinkTerrain();
         this.waveState = 'intermission';
         this.lastPerfect = this.waveDamageTaken <= 0;
         // Everything still on the floor comes in, so a wave's money can never
@@ -4623,6 +4761,13 @@ class Game {
         this.interT = 0.4;
       }
     } else if (this.waveState === 'idle') {
+      this._ensureTerrain();
+      // A WAVE NEVER STARTS ON A HALF-BUILT ARENA. _buildTerrain holds the
+      // countdown to the build's own length and the build has its own backstop
+      // for overrunning it, but this is the one that cannot be got wrong by a
+      // timing change in either of them: while pieces are still coming up, the
+      // clock does not reach zero.
+      if (this.terrain.state === 'rising') this.interT = Math.max(this.interT, 0.05);
       this.interT -= dt;
       if (this.interT <= 0) this.startWave();
     }
@@ -6499,6 +6644,13 @@ class Game {
     // Sampled before the rig reads it, so a beat lights the room on the same
     // frame it happens rather than the next one.
     this.music.sample(dt);
+    // The build runs on the beat, so it is stepped straight after the sample
+    // that produced this frame's pulse and before the rig draws anything -
+    // a piece landing and the light that lands with it are the same frame.
+    // Outside the `playing` branch for the same reason the rig is: `dt` is
+    // real time, and a build must not stall because the game is paused mid
+    // wave break.
+    if (this.terrain.update(dt, this.music.pulse) === 'settled') this._settleTerrain();
     this.rig.update(dt, this._fillRigState());
     this.ui.setStrobe(this.rig.flash);
     // The orbs' rim colour rides the ceiling. One uniform, read after the rig

@@ -106,8 +106,12 @@ export const ARM_TIME_ITEM = 1.0;
 export const STATION_RADIUS = 2.6;
 
 // Fixed positions near the arena centre, in a row the player is already facing
-// when they spawn. Checked against the platforms, crates and pillars in
-// arena.js - keep them clear if you move anything.
+// when they spawn. They no longer have to be checked against arena furniture:
+// generated terrain has sunk back under the floor before a set rises, so the
+// row always stands on a bare floor. The one case where the two can meet is a
+// set left UNCLAIMED into the next wave, and terrain.js reserves a circle
+// around the row for exactly that - see the `reserved` argument to
+// generateLayout.
 // Exported so items.js can place its own row relative to this one rather than
 // hardcoding a second magic number that has to be kept in step.
 export const ROW_Z = -5;

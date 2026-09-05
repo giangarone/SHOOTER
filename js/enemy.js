@@ -28,7 +28,9 @@
 // damaging the player and spawning projectiles.
 
 import * as THREE from 'three';
-import { resolveCircle, pointInObstacle, AGENT_HEIGHT, BOSS_HEIGHT } from './utils.js';
+import {
+  resolveCircle, pointInObstacle, groundSurface, AGENT_HEIGHT, BOSS_HEIGHT, STEP_HEIGHT,
+} from './utils.js';
 
 // Base stats before per-wave scaling (waves.js supplies the multipliers).
 //
@@ -841,6 +843,15 @@ const FREEZE_VULN = 1.5;
 // ai() is asking for, as an exponential-approach rate. Per-enemy, because the
 // difference between a shrike FALLING out of the sky and a harrier settling
 // back to station is the whole distinction between the two types.
+// How fast a ground enemy comes down off a step it has walked off. Not
+// gravity: these have no vertical velocity, and a rusher stepping off a tread
+// should read as taking the step down rather than as being dropped.
+const GROUND_FALL = 9;
+// How long the model takes to catch up with a step the body has already taken.
+// Short enough to still read as a step rather than as floating, long enough
+// that four treads read as a climb instead of four cuts. Matched to the
+// player's own camera smoothing so both sides of the fight move alike.
+const STEP_EASE = 0.11;
 const FLY_RATE_DEFAULT = 4;
 // Ceiling on altitude, so nothing can climb out of the arena's lighting or
 // past the point where a shot from the floor stops being a fair ask.
@@ -3607,6 +3618,10 @@ export class Enemy {
     // when the clamp was a constant; a shrike raises it for the length of a
     // dive, which is the one attack in the game meant to outrun the player.
     this.stepMul = 1.4;
+    // How far the drawn model is currently BELOW the body, because it just
+    // took a step up. Eased to zero every frame - see the ground block in
+    // update().
+    this._stepLag = 0;
     this.attackCd = 0.8 + Math.random();
     this.windup = 0;
     // Seconds left on a swing that has already been thrown - see _meleeCycle.
@@ -4195,6 +4210,45 @@ export class Enemy {
     const hitWall = preX !== this.pos.x || preZ !== this.pos.z;
     const ix = this.pos.x;
     const iz = this.pos.z;
+    // ---- THE GROUND UNDERFOOT ------------------------------------------
+    //
+    // `pos.y` used to be zero for everything that was not a flier, because
+    // the arena had a flat floor and four things standing on it. It does not
+    // any more: the interior is generated, and it is made of stairs, tiers and
+    // decks that an enemy is expected to walk up in the same way the player
+    // does.
+    //
+    // So a ground enemy now stands on whatever is under it. UP IS INSTANT -
+    // that is what a step is, and it matches both the player's step and the
+    // rule the flow field plans routes with, which is the important part: a
+    // grid that promised a route collision then refused would have enemies
+    // grinding into the side of a tread forever. DOWN IS A FALL, at a fixed
+    // rate rather than under gravity, because these have no vertical velocity
+    // of their own and a walk off a kerb should not become a plunge.
+    //
+    // BEFORE the push-out below, deliberately. Raising the feet first means
+    // the box just climbed is one this enemy is standing ON, and resolveCircle
+    // skips those - without the ordering it would be shoved straight back off
+    // every step it took.
+    if (!this.flying) {
+      const target = groundSurface(this.pos, this.radius, ctx.obstacles, STEP_HEIGHT);
+      if (target > this.pos.y) {
+        // THE BODY GOES UP NOW, THE MODEL CATCHES UP. `pos.y` has to move on
+        // this frame - collision, the melee reach test and the flow field all
+        // read it, and a body that lags them would be shot at where it is not.
+        // But a rusher that teleports up 0.6m the instant its centre crosses a
+        // tread reads as a glitch rather than as a step, so the DRAWN height
+        // keeps an offset that eases away over STEP_EASE. Same trick the
+        // player's camera uses, for the same reason.
+        this._stepLag = Math.min(STEP_HEIGHT, this._stepLag + (target - this.pos.y));
+        this.pos.y = target;
+      } else if (target < this.pos.y) {
+        this.pos.y = Math.max(target, this.pos.y - GROUND_FALL * dt);
+      }
+      if (this._stepLag > 0) {
+        this._stepLag = Math.max(0, this._stepLag - this._stepLag * Math.min(1, dt / STEP_EASE) - dt * 0.15);
+      }
+    }
     resolveCircle(this.pos, this.radius, ctx.obstacles, this.collideH);
     // Distance collision had to move it back this frame, walls included. A
     // charging boss reads it to know it slammed into something, which is
@@ -4238,7 +4292,9 @@ export class Enemy {
       this.pos.y += (target - this.pos.y) * Math.min(1, dt * this.flyRate);
     }
     const bob = this.status.freeze > 0 ? 0 : this._dance * amp + sway;
-    this.group.position.set(this.pos.x, this.pos.y + bob, this.pos.z);
+    // `_stepLag` is the step-up smoothing above: the body is already at the new
+    // height and the model is still on its way there.
+    this.group.position.set(this.pos.x, this.pos.y - this._stepLag + bob, this.pos.z);
     this.group.rotation.y = Math.atan2(-dx, -dz);
 
     // THE WEIGHT SHIFT. Bouncing straight up and down reads as bobbing; what

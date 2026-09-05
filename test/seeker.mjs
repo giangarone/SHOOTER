@@ -47,7 +47,33 @@ try {
     const THREE = await import('three');
     const { Enemy } = await import('/js/enemy.js');
     const g = window.__game;
+    // THE ARENA IS PROCEDURAL NOW, so this rig cannot assume a lane is clear
+    // or that a particular pillar is standing. Every run wipes the generated
+    // interior and puts down exactly the cover the case under test asks for -
+    // which is what a fixture should have been doing all along.
+    const coverMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+    const coverGeo = new THREE.BoxGeometry(1, 1, 1);
+    let cover = null;
     window.__rig = async (opts) => {
+      // Terrain is torn down BEFORE the shot, and the nav grids with it, so
+      // the only thing between the muzzle and the target is whatever `cover`
+      // puts there.
+      g.terrain.reset();
+      g.terrain.clearCollision();
+      if (cover) { g.scene.remove(cover); cover = null; }
+      if (opts.cover) {
+        const [cx, cz] = opts.cover;
+        cover = new THREE.Mesh(coverGeo, coverMat);
+        cover.position.set(cx, 1.15, cz);
+        cover.scale.set(1.5, 2.3, 1.5);
+        cover.updateMatrixWorld(true);
+        g.scene.add(cover);
+        g.arena.meshList.push(cover);
+        g.arena.obstacles.push({
+          min: { x: cx - 0.75, y: 0, z: cz - 0.75 },
+          max: { x: cx + 0.75, y: 2.3, z: cz + 0.75 },
+        });
+      }
       g.state = 'playing';
       g.waveState = 'active';
       g.queue.length = 0;
@@ -109,10 +135,10 @@ try {
 
   const run = (opts) => page.evaluate((o) => window.__rig(o), opts);
 
-  // Every shot below is fired down the lane at x = 6 heading -z, which is
-  // clear of every platform, crate and pillar in the arena - checked, because
-  // the obvious lane through the middle runs straight into the pillar at
-  // (0, 14) and every result was a miss for the wrong reason.
+  // Every shot below is fired down the lane at x = 6 heading -z. The rig wipes
+  // generated terrain before each one, so the lane is empty unless the case
+  // asks for cover - which is the only reason a shot in this file can miss for
+  // a reason other than the mechanic under test.
   const lane = (dz) => [6, dz];
 
   // Enemy 0.9m to the right at 10m out - about 5 degrees off, inside the 6
@@ -144,8 +170,11 @@ try {
     onTarget.hurt[0] > 0 && onTarget.hurt[1] === 0 && onTarget.arcs === 0,
     `aimed=${onTarget.hurt[0]} bystander=${onTarget.hurt[1]} arcs=${onTarget.arcs}`);
 
-  // Deliberately back in the middle lane: the pillar at (0, 14) is the cover.
-  const covered = await run({ from: [0, 20], enemies: [[0.8, 12]], seeker: true, aimDist: 8 });
+  // A truss tower stood in the lane, at the size and height the generator's
+  // `tower` piece builds one: 1.5m square, 2.3m tall.
+  const covered = await run({
+    from: [0, 20], enemies: [[0.8, 12]], seeker: true, aimDist: 8, cover: [0, 14],
+  });
   check('cover still stops a homed shot', covered.hurt[0] === 0,
     `damage=${covered.hurt[0]}`);
 

@@ -22,11 +22,30 @@
 //      aims at the FARTHEST cell it still has a clear line to. That is string
 //      pulling: it cuts the staircase off a grid path and rounds corners.
 //
-// The grid is static because the arena is. Nothing here allocates after the
-// constructor - the distance field, the queue and the blocked mask are typed
-// arrays sized once and rewritten in place.
+// THE GRID HAS A HEIGHT, NOT JUST A FLAG, and that is what makes a generated
+// arena navigable rather than a set of walls with gaps in it. Every cell
+// records the top of whatever a ground agent would be standing on there - 0 on
+// bare floor, 0.42 on the first tread of a stair, 1.5 on a deck - and the
+// flood is allowed to step between two cells only when the difference between
+// their heights is something the agent could actually walk. Up is limited to
+// STEP_HEIGHT, the same figure collision uses; down is allowed considerably
+// further, because falling off a step is free.
+//
+// Without it, every raised thing in the room is an island: enemies gather at
+// the foot of a staircase they can plainly walk up and mill about, while the
+// player stands three treads above them. With it, a stair is a route and a
+// deck with a stair on it is high ground both sides can contest.
+//
+// A cell whose surface is above MAX_STAND is a WALL rather than a floor - see
+// the note there. That single number is the whole contract between this file
+// and the piece library in terrain.js: decks stay under it, walls stay over.
+//
+// The arena is rebuilt between waves and never during one, so the bake runs
+// again on each new layout - see rebake(). Nothing here allocates after the
+// constructor: the height field, the distance field, the queue and the blocked
+// mask are typed arrays sized once and rewritten in place.
 
-import { segmentClear, AGENT_HEIGHT } from './utils.js';
+import { segmentClear, AGENT_HEIGHT, STEP_HEIGHT } from './utils.js';
 
 // Half a metre. Fine enough to find the gap between two crates, coarse enough
 // that a full flood is ~8000 cells - well under a millisecond.
@@ -41,6 +60,17 @@ const LOOKAHEAD = 12;
 // enemies are asking.
 const REBUILD_INTERVAL = 0.2;
 
+// The tallest surface a ground agent is allowed to end up standing on.
+// Terrain's walkable decks are all at or below this and its walls are all
+// above it, which is what turns "how tall is this box" into "is this floor or
+// is this a wall" without either file having to know anything else about the
+// other.
+const MAX_STAND = 2.6;
+// How far the flood may step DOWN between two cells. Generous next to the
+// step up, because dropping off a ledge costs an agent nothing but a moment -
+// and capped anyway, so a route is never planned off the top of a tower.
+const DROP_MAX = 1.9;
+
 // Eight-way neighbourhood, orthogonals first so ties break toward straight
 // movement rather than toward a diagonal.
 const NX = [1, -1, 0, 0, 1, 1, -1, -1];
@@ -53,14 +83,32 @@ export class NavGrid {
    * @param {number} bound        arena half-width
    * @param {number} agentRadius  radius of the thing being routed
    */
-  constructor(obstacles, bound, agentRadius = 0.5, agentHeight = AGENT_HEIGHT) {
+  /**
+   * @param {object[]} obstacles
+   * @param {number} bound
+   * @param {number} agentRadius
+   * @param {number} agentHeight
+   * @param {number} stepHeight  how far up this agent walks. Pass 0 for one
+   *   that cannot climb at all - bosses are routed that way, since a body that
+   *   size stepping onto a crate looks like a bug rather than a step.
+   */
+  constructor(obstacles, bound, agentRadius = 0.5, agentHeight = AGENT_HEIGHT,
+              stepHeight = STEP_HEIGHT) {
     // Ground agents path UNDER anything suspended above their heads, so the
     // catwalks are filtered out here rather than special-cased later. This one
     // list feeds the bake AND both line-of-sight tests below, so filtering
     // once is all it takes - without it a walkway overhead would carve a
     // pillar through the flow field down to the floor and enemies would walk
-    // around thin air. Filtered once at construction because the grid is baked
-    // once; nothing may be added to `obstacles` after startup anyway.
+    // around thin air.
+    //
+    // THE ARENA CHANGES BETWEEN WAVES, NEVER DURING ONE. terrain.js generates
+    // a new interior for every wave, so the filter and the bake are factored
+    // into rebake() below and run again each time a layout settles - always in
+    // the wave break, with nothing alive to be standing in a cell that is
+    // about to become solid.
+    this.agentHeight = agentHeight;
+    this.stepHeight = stepHeight;
+    this.bound = bound;
     this.obstacles = obstacles.filter((o) => o.min.y <= agentHeight);
     this.radius = agentRadius;
     // Line-of-sight is tested a little tighter than the agent really is.
@@ -72,6 +120,9 @@ export class NavGrid {
 
     const n = this.dim * this.dim;
     this.blocked = new Uint8Array(n);
+    // The standing surface per cell, in metres. Read by the flood and by the
+    // steering below; written only by _bake.
+    this.height = new Float32Array(n);
     this.dist = new Float32Array(n);
     this.queue = new Int32Array(n);
     this.ready = false;
@@ -83,6 +134,23 @@ export class NavGrid {
     this._bake(bound);
   }
 
+  /**
+   * Re-derive the grid from a changed obstacle list. Called once per wave,
+   * after terrain has finished rising and published its AABBs.
+   *
+   * Allocates nothing but the filtered array: `blocked`, `dist` and `queue`
+   * are sized off the arena, which does not change, so they are rewritten in
+   * place. The field is invalidated rather than reflooded here - the next
+   * update() call does that, against the player's position at the time.
+   */
+  rebake(obstacles) {
+    this.obstacles = obstacles.filter((o) => o.min.y <= this.agentHeight);
+    this._bake(this.bound);
+    this.ready = false;
+    this.targetCell = -1;
+    this.timer = 0;
+  }
+
   // Marks every cell an enemy cannot stand in. Obstacles are grown by a little
   // under the enemy radius: at exactly the radius the flood refuses to squeeze
   // through gaps the collision resolver would actually let an enemy walk.
@@ -92,23 +160,53 @@ export class NavGrid {
     // unreachable, and leaving them open lets a route hug a wall it will then
     // be shoved off.
     const edge = bound - 0.6;
+    // An agent that cannot step treats ANY raised surface as a wall, which is
+    // exactly the behaviour this grid had before it knew about height - so a
+    // boss grid is bit-for-bit what it always was.
+    const maxStand = this.stepHeight > 0 ? MAX_STAND : 0.02;
+    // The walls, for line of sight. A deck the agent can walk onto must not
+    // break its own sightline, or an enemy standing on a platform decides it
+    // cannot see anything and falls back to the grid for a route it is
+    // already standing on.
+    this.losObstacles = this.obstacles.filter((o) => o.max.y > maxStand);
     for (let iz = 0; iz < this.dim; iz++) {
       for (let ix = 0; ix < this.dim; ix++) {
         const x = this.origin + ix * CELL;
         const z = this.origin + iz * CELL;
-        let solid = Math.abs(x) > edge || Math.abs(z) > edge;
-        if (!solid) {
-          for (const o of this.obstacles) {
-            if (x > o.min.x - grow && x < o.max.x + grow &&
-                z > o.min.z - grow && z < o.max.z + grow) {
-              solid = true;
-              break;
-            }
+        const i = iz * this.dim + ix;
+        if (Math.abs(x) > edge || Math.abs(z) > edge) {
+          this.blocked[i] = 1;
+          this.height[i] = 0;
+          continue;
+        }
+        // The highest thing under this cell. Obstacles are grown by a little
+        // under the agent radius, for the same reason they always were: at
+        // exactly the radius the flood refuses gaps collision would let an
+        // agent walk through.
+        let top = 0;
+        for (const o of this.obstacles) {
+          if (o.max.y <= top) continue;
+          if (x > o.min.x - grow && x < o.max.x + grow &&
+              z > o.min.z - grow && z < o.max.z + grow) {
+            top = o.max.y;
           }
         }
-        this.blocked[iz * this.dim + ix] = solid ? 1 : 0;
+        // Above what an agent may stand on, so it is a wall and not a floor.
+        this.blocked[i] = top > maxStand ? 1 : 0;
+        this.height[i] = top;
       }
     }
+  }
+
+  // Can an agent walk from cell `a` to cell `b`? Both have to be open, and the
+  // change in surface height has to be something it could actually do. This is
+  // the only place the two directions are treated differently, and it is why
+  // enemies walk UP a staircase one tread at a time but never plan a route
+  // that starts by dropping off a tower.
+  _passable(a, b) {
+    if (this.blocked[b]) return false;
+    const dh = this.height[b] - this.height[a];
+    return dh <= this.stepHeight && dh >= -DROP_MAX;
   }
 
   index(x, z) {
@@ -189,6 +287,12 @@ export class NavGrid {
         if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) continue;
         const i = iz * dim + ix;
         if (blocked[i] || dist[i] !== Infinity) continue;
+        // THE FLOOD RUNS OUTWARD FROM THE PLAYER, so a step from `c` to `i` in
+        // the field is a step from `i` to `c` when an enemy walks it. The
+        // arguments are reversed here for exactly that reason: what is being
+        // asked is whether the agent could make the move it will actually
+        // make, which is toward the player and therefore toward `c`.
+        if (!this._passable(i, c)) continue;
         // No corner cutting: a diagonal between two blocked cells is a
         // diagonal through the corner of a crate.
         if (NX[k] !== 0 && NZ[k] !== 0 && (blocked[cz * dim + ix] || blocked[iz * dim + cx])) continue;
@@ -212,6 +316,7 @@ export class NavGrid {
       if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) continue;
       const i = iz * dim + ix;
       if (blocked[i] || dist[i] >= bestD) continue;
+      if (!this._passable(c, i)) continue;
       if (NX[k] !== 0 && NZ[k] !== 0 && (blocked[cz * dim + ix] || blocked[iz * dim + cx])) continue;
       bestD = dist[i];
       best = i;
@@ -258,7 +363,7 @@ export class NavGrid {
     if (!this.ready) return false;
 
     // Pass 1: nothing in the way, so ignore the grid entirely.
-    if (segmentClear(x, z, this.tx, this.tz, this.losRadius, this.obstacles)) {
+    if (segmentClear(x, z, this.tx, this.tz, this.losRadius, this.losObstacles)) {
       return this._aim(x, z, this.tx, this.tz, out);
     }
 
@@ -289,7 +394,7 @@ export class NavGrid {
         wx = px;
         wz = pz;
         have = true;
-      } else if (segmentClear(x, z, px, pz, this.losRadius, this.obstacles)) {
+      } else if (segmentClear(x, z, px, pz, this.losRadius, this.losObstacles)) {
         wx = px;
         wz = pz;
       } else {

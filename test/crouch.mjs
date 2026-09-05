@@ -49,6 +49,25 @@ try {
   const results = await page.evaluate(async () => {
     const THREE = await import('three');
     const g = window.__game;
+    // THE ARENA IS PROCEDURAL, so a fixture that walks a fixed path across it
+    // is measuring the layout as much as the mechanic. This clears the
+    // generated interior and pins the wave open - an empty queue would clear
+    // the wave, sink the shop in and generate a fresh layout mid-measurement -
+    // so every run below happens on the same bare floor.
+    const clearArena = () => {
+      if (g.terrain.state !== 'hidden') {
+        g.terrain.reset();
+        g.terrain.clearCollision();
+        g.nav.rebake(g.arena.obstacles);
+        g.navBig.rebake(g.arena.obstacles);
+      }
+      // A wave with an empty queue clears on the frame it starts, which sinks
+      // the shop in and generates a fresh layout halfway through whatever is
+      // being measured. One entry that never spawns holds it open instead.
+      g.waveState = 'active';
+      if (!g.queue.length) g.queue.push('chaser');
+      g.spawnTimer = 1e9;
+    };
     // ?autotest, because the Enemy class is only handed out there - and the
     // bot that comes with it has to be taken off the sticks first, or it
     // rewrites `input` under every measurement below.
@@ -59,7 +78,7 @@ try {
     const step = () => new Promise((r) => requestAnimationFrame(r));
     // The spawner would otherwise walk something into the player halfway
     // through a measurement and change the numbers being measured.
-    const clear = () => { g.queue.length = 0; g._clearEntities(); };
+    const clear = () => { g.queue.length = 0; g._clearEntities(); clearArena(); };
     const frames = async (n) => { for (let i = 0; i < n; i++) { clear(); await step(); } };
     const set = (o) => Object.assign(g.input, o);
     const rest = async () => {

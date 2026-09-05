@@ -71,7 +71,17 @@ const RIG_POINTS = [
 // only travels twelve metres straight down fades over twelve metres rather
 // than being cut off a fifth of the way through its gradient.
 //
-// The depth test still handles pillars and crates. This handles the box.
+// AND IT HANDLES THE TERRAIN TOO, now that there is terrain to handle. The
+// depth test always hid the part of a ray that had passed behind a platform,
+// but the ray still ARRIVED at the far wall - so its fade was spent on
+// distance it never travelled, and the landing spot was painted on a wall the
+// beam could not reach. setColliders() hands the bank the boxes generated
+// terrain put in the room, and _exit() stops the ray on the nearest one.
+//
+// DELIBERATELY NOT EVERY BOX. TerrainSet only offers up pieces at least 1.5m
+// tall and 2m across (see its collect()): a fan clipping on knee-high crates
+// flickers on every sweep and reads as static rather than as light landing on
+// something.
 const MAX_LEN = 70;
 
 // RAY WIDTH IS ANGULAR, NOT METRIC, and this is the difference between the
@@ -288,6 +298,9 @@ class Bank {
 
 export class Lasers {
   constructor(parent, boxGeo) {
+    // What a ray stops on besides the room itself. Replaced wholesale between
+    // waves and emptied for the wave break, when the floor is bare.
+    this._colliders = [];
     const apertureGeo = new THREE.SphereGeometry(0.17, 8, 6);
     const housingMat = new THREE.MeshBasicMaterial({ color: 0x0b0e14 });
     this.banks = RIG_POINTS.map((pt) => new Bank(parent, pt, boxGeo, apertureGeo, housingMat));
@@ -346,9 +359,18 @@ export class Lasers {
     this._hitNx = 0; this._hitNy = 1; this._hitNz = 0;
   }
 
-  // How far a ray from (ox,oy,oz) along (dx,dy,dz) travels before it leaves
-  // the room, and which of the six planes it leaves through. Slab
-  // intersection, nearest positive hit.
+  /**
+   * The terrain a ray may land on. Plain AABBs from terrain.js; an empty list
+   * puts the bank back to the room-only behaviour it had before there was any.
+   */
+  setColliders(list) {
+    this._colliders = list || [];
+  }
+
+  // How far a ray from (ox,oy,oz) along (dx,dy,dz) travels before it hits
+  // something, and which face it hits. Slab intersection, nearest positive
+  // hit: first against the six planes of the room, then against each terrain
+  // box, keeping whichever is nearest.
   //
   // The plane is the whole reason this is not just a distance: knowing WHICH
   // surface was struck gives the impact decal its orientation for free. The
@@ -378,6 +400,66 @@ export class Lasers {
       const h = -oy / dy;
       if (h < t) { t = h; axis = 1; sign = 1; }
     }
+    // Then the terrain. A box is three pairs of slabs: clip the ray's [0, t]
+    // range against each pair in turn, and if a range survives all three the
+    // ray is inside the box from t0 onward. The axis that produced t0 is the
+    // face it entered through, which is what gives the impact decal its
+    // orientation - the same trick the room test above uses.
+    for (const b of this._colliders) {
+      let t0 = 0;
+      let t1 = t;
+      let ax = -1;
+      let sg = 1;
+      // x
+      if (Math.abs(dx) < 1e-6) {
+        if (ox <= b.min.x || ox >= b.max.x) continue;
+      } else {
+        const inv = 1 / dx;
+        let ta = (b.min.x - ox) * inv;
+        let tb = (b.max.x - ox) * inv;
+        let s0 = dx > 0 ? -1 : 1;
+        if (ta > tb) { const q = ta; ta = tb; tb = q; }
+        if (ta > t0) { t0 = ta; ax = 0; sg = s0; }
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) continue;
+      }
+      // y
+      if (Math.abs(dy) < 1e-6) {
+        if (oy <= b.min.y || oy >= b.max.y) continue;
+      } else {
+        const inv = 1 / dy;
+        let ta = (b.min.y - oy) * inv;
+        let tb = (b.max.y - oy) * inv;
+        let s0 = dy > 0 ? -1 : 1;
+        if (ta > tb) { const q = ta; ta = tb; tb = q; }
+        if (ta > t0) { t0 = ta; ax = 1; sg = s0; }
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) continue;
+      }
+      // z
+      if (Math.abs(dz) < 1e-6) {
+        if (oz <= b.min.z || oz >= b.max.z) continue;
+      } else {
+        const inv = 1 / dz;
+        let ta = (b.min.z - oz) * inv;
+        let tb = (b.max.z - oz) * inv;
+        let s0 = dz > 0 ? -1 : 1;
+        if (ta > tb) { const q = ta; ta = tb; tb = q; }
+        if (ta > t0) { t0 = ta; ax = 2; sg = s0; }
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) continue;
+      }
+      // ax < 0 means the ray started inside the box on every axis it could be
+      // clipped on. Nothing to land on: the projectors hang at 12.4m and
+      // nothing generated reaches them, so this only ever happens to a
+      // degenerate ray, and letting it through is better than stopping it dead
+      // at zero length.
+      if (ax < 0 || t0 <= 0.6 || t0 >= t) continue;
+      t = t0;
+      axis = ax;
+      sign = sg;
+    }
+
     this._hitNx = axis === 0 ? sign : 0;
     this._hitNy = axis === 1 ? sign : 0;
     this._hitNz = axis === 2 ? sign : 0;

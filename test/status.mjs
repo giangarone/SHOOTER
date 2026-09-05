@@ -51,6 +51,25 @@ try {
 
   const out = await page.evaluate(async () => {
     const g = window.__game;
+    // THE ARENA IS PROCEDURAL, so a fixture that walks a fixed path across it
+    // is measuring the layout as much as the mechanic. This clears the
+    // generated interior and pins the wave open - an empty queue would clear
+    // the wave, sink the shop in and generate a fresh layout mid-measurement -
+    // so every run below happens on the same bare floor.
+    const clearArena = () => {
+      if (g.terrain.state !== 'hidden') {
+        g.terrain.reset();
+        g.terrain.clearCollision();
+        g.nav.rebake(g.arena.obstacles);
+        g.navBig.rebake(g.arena.obstacles);
+      }
+      // A wave with an empty queue clears on the frame it starts, which sinks
+      // the shop in and generates a fresh layout halfway through whatever is
+      // being measured. One entry that never spawns holds it open instead.
+      g.waveState = 'active';
+      if (!g.queue.length) g.queue.push('chaser');
+      g.spawnTimer = 1e9;
+    };
     const p = g.player;
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
@@ -181,6 +200,7 @@ try {
       for (const k of ['forward', 'back', 'left', 'right', 'jump', 'shoot']) {
         g.input[k] = false;
       }
+      clearArena();
       if (slowed) p.applyStatus('slowness');
       p.pos.set(0, 0, 8);
       p.yaw = 0;

@@ -525,6 +525,15 @@ export class Rig {
   // at once. It plays out of the break's blackout, which is why the hit is the
   // half that matters here - the room was already dark. The blackout is what makes the hit land - without it a bright
   // room just gets slightly brighter.
+  /**
+   * The terrain a laser may land on, handed straight through to the bank.
+   * Called by main.js when a generated layout settles, and with an empty list
+   * when it sinks - see setColliders in lasers.js.
+   */
+  setTerrainColliders(list) {
+    this.lasers.setColliders(list);
+  }
+
   cueWaveStart() {
     this._waveT = 0.9;
   }
@@ -907,6 +916,17 @@ export class Rig {
     this.mats.deckEdge.emissiveIntensity = (0.8 + hit * 1.6) * emGain;
     this.mats.platEdge.emissive.copy(emCol);
     this.mats.platEdge.emissiveIntensity = (0.9 + hit * 1.4) * emGain;
+    // The cap strip along the top of a GENERATED wall.
+    //
+    // IT WEARS THE ROOM'S COLOUR like every other emissive here. It was given
+    // a fixed magenta for a while, on the theory that a wall which was not
+    // there ten seconds ago is worth picking out at a glance - but a rig whose
+    // job is to make one room out of a floor, a ceiling and everything between
+    // them cannot have a whole class of surface sitting the show out. Half the
+    // arena stayed magenta through every colour change, which read as a bug in
+    // the lighting rather than as a highlight.
+    this.mats.wallGlow.emissive.copy(emCol);
+    this.mats.wallGlow.emissiveIntensity = (0.9 + hit * 1.5) * emGain;
 
     // ---- the wall chase ----------------------------------------------------
     // The head-height strips around the four walls are cut into cells with

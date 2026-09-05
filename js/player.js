@@ -13,7 +13,7 @@
 // camera so it renders as a first-person viewmodel.
 
 import * as THREE from 'three';
-import { resolveCircle } from './utils.js';
+import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
 import { UPGRADES } from './upgrades.js';
 import { WEAPONS, STARTING_WEAPON, setGunMarks, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
@@ -461,6 +461,10 @@ const SPRINT_FOV_TIME = 0.2;
 // of it is that it costs the player the second they spend in it. It ends
 // STANDING rather than crouched - the run flows back out of it - so the player
 // never has to press the button again to get their height back.
+// How long the eye takes to catch up with a step the body has already taken.
+// Short: this is smoothing, not an animation, and anything longer reads as the
+// camera being dragged up rather than as the player climbing.
+const _STEP_EASE = 0.11;
 const STAND_EYE = 1.7;
 const CROUCH_EYE = 1.05;
 // Lower than the crouch, and deliberately: the slide is the one moment the
@@ -784,6 +788,11 @@ export class Player {
     this.slideDX = 0;
     this.slideDZ = 0;
     this.eyeH = STAND_EYE;
+    // How far the eye is currently BEHIND the feet, because the body just took
+    // a step up. Eased back to zero every frame - see the step block in
+    // update() - and subtracted by both eyeInto and applyCamera so the view and
+    // every hit test read the same height.
+    this._stepLag = 0;
     // The two pose blends the gun rides on, and the crouch button's edge
     // detector - the button is HELD by the time this sees it, and a toggle
     // driven by a held button would flip once a frame.
@@ -1525,6 +1534,11 @@ export class Player {
     this.slideDX = 0;
     this.slideDZ = 0;
     this.eyeH = STAND_EYE;
+    // How far the eye is currently BEHIND the feet, because the body just took
+    // a step up. Eased back to zero every frame - see the step block in
+    // update() - and subtracted by both eyeInto and applyCamera so the view and
+    // every hit test read the same height.
+    this._stepLag = 0;
     this._crouchPose = 0;
     this._slidePose = 0;
     this._prevCrouch = false;
@@ -1565,7 +1579,7 @@ export class Player {
   // pickup test and aim-assist ray in the game comes off this - so a crouched
   // player really is shooting from where their head is.
   eyeInto(v) {
-    v.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z);
+    v.set(this.pos.x, this.pos.y + this.eyeH - this._stepLag, this.pos.z);
     return v;
   }
 
@@ -1814,14 +1828,54 @@ export class Player {
     }
 
     // Vertical resolution. Landing on a box only counts when falling onto its
-    // top face from above (prevY above the top, new Y at or below it), which
-    // is what makes platforms and crates jumpable but not climbable from the
-    // side.
+    // top face from above (prevY at or above the top, new Y at or below it),
+    // which is what makes a platform something you jump onto rather than
+    // something you walk up the side of. The STEP below is the deliberate
+    // exception.
+    //
+    // THE TOLERANCE HERE MUST BE LOOSER THAN THE ONE IN resolveCircle, which
+    // stops pushing a mover out of a box once they are within 0.06 of its top.
+    // Those two numbers were 0.02 and 0.06, which left a four-centimetre band
+    // where the push-out had already let go but the landing had not yet caught
+    // on: a player crossing an edge at exactly that height slid over the lip
+    // without being set down on it, and in a cluster of overlapping boxes
+    // could end up wedged inside one. 0.07 closes the band from this side.
     const prevY = this.pos.y;
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.pos.y += this.vel.y * dt;
     this.onGround = false;
+
+    // ---- THE CEILING --------------------------------------------------------
+    //
+    // A jump that meets the underside of something STOPS THERE. Without this
+    // the only vertical test in the game was the landing one below, which only
+    // ever looks downward - so a player jumping up through a deck passed
+    // straight through the slab and arrived standing on top of it. Every raised
+    // walkway in a generated arena was a one-way door.
+    //
+    // Tested as a CROSSING of the underside rather than as an overlap: the head
+    // was below it last frame and is above it now. An overlap test would fire
+    // for a player already standing inside a doorway's opening and pin them to
+    // the floor, and it is the crossing that is the actual event.
+    //
+    // The same +-0.2 window the landing test uses, deliberately, so the two
+    // agree about what counts as being under a box. Wider - the full collision
+    // radius - and jumping alongside a platform would clip your head on air.
+    if (this.vel.y > 0) {
+      const headPrev = prevY + PLAYER_HEIGHT;
+      const headNow = this.pos.y + PLAYER_HEIGHT;
+      for (const b of obstacles) {
+        if (this.pos.x <= b.min.x - 0.2 || this.pos.x >= b.max.x + 0.2) continue;
+        if (this.pos.z <= b.min.z - 0.2 || this.pos.z >= b.max.z + 0.2) continue;
+        if (headPrev <= b.min.y + 0.01 && headNow > b.min.y) {
+          this.pos.y = b.min.y - PLAYER_HEIGHT;
+          this.vel.y = 0;
+          break;
+        }
+      }
+    }
+
     if (this.pos.y <= 0) {
       this.pos.y = 0;
       this.vel.y = 0;
@@ -1833,7 +1887,7 @@ export class Player {
         if (
           this.pos.x > b.min.x - 0.2 && this.pos.x < b.max.x + 0.2 &&
           this.pos.z > b.min.z - 0.2 && this.pos.z < b.max.z + 0.2 &&
-          prevY >= top - 0.02 && this.pos.y <= top
+          prevY >= top - 0.07 && this.pos.y <= top
         ) {
           this.pos.y = top;
           this.vel.y = 0;
@@ -1843,6 +1897,45 @@ export class Player {
         }
       }
     }
+    // ---- THE STEP -----------------------------------------------------------
+    //
+    // Walk into something low enough and you go up it instead of stopping.
+    // Without this the generated arena is unplayable: a staircase is four
+    // separate jumps, a tiered platform is three, and every kerb in the room
+    // is a wall you bounce off in the middle of a fight.
+    //
+    // It runs AFTER the vertical resolution and BEFORE resolveCircle, and that
+    // order is the whole trick. Raising the feet first means the box the
+    // player just climbed is one they are now standing ON, so the push-out
+    // below skips it (see the first test in resolveCircle) and never shoves
+    // them back off the step they just took.
+    //
+    // ONLY OFF THE GROUND, never in the air. A player rising through a
+    // platform's side on the way up a jump must not be caught by its lip and
+    // set down on it - the arc is theirs, and a jump that silently turns into
+    // a step is a jump the player did not get.
+    if (this.onGround || this.vel.y <= 0) {
+      const top = stepSurface(this.pos, 0.4, obstacles, STEP_HEIGHT);
+      if (top > this.pos.y + 1e-4) {
+        // THE CAMERA DOES NOT TELEPORT. The body goes up on this frame - it
+        // has to, or collision and the step disagree - and the eye is left
+        // behind by exactly as much, then catches up over _STEP_EASE. Four
+        // steps up a staircase read as a climb rather than as four cuts.
+        this._stepLag = Math.min(STEP_HEIGHT, this._stepLag + (top - this.pos.y));
+        this.pos.y = top;
+        this.vel.y = 0;
+        this.onGround = true;
+        this.jumpsLeft = this.mods.extraJumps;
+      }
+    }
+    // The eye catching up. Exponential rather than linear so it arrives softly
+    // instead of stopping dead, and fast enough that it is never a lag the
+    // player could aim with - see eyeInto, which subtracts the same offset so
+    // that what the camera sees and what the hit tests use can never disagree.
+    if (this._stepLag > 0) {
+      this._stepLag = Math.max(0, this._stepLag - this._stepLag * Math.min(1, dt / _STEP_EASE) - dt * 0.2);
+    }
+
     // THE TAKEOFF, REMEMBERED. Rewritten on every grounded frame and left
     // alone on every airborne one, so in the air it holds what the player was
     // doing on the last frame they had a floor. That is what the mid-air
@@ -2469,7 +2562,7 @@ export class Player {
     // roll the view over the top at the exact moment the player is looking up.
     const aim = Math.max(-1.5, Math.min(1.5, this.pitch + this.recoilPitch));
     this.camera.rotation.set(aim, this.yaw, 0);
-    this.camera.position.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z);
+    this.camera.position.set(this.pos.x, this.pos.y + this.eyeH - this._stepLag, this.pos.z);
   }
 
   // Returns false when a reload is pointless (already reloading, mag full, or
