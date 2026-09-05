@@ -200,17 +200,6 @@ try {
     out.waveLadder = [w1, w5, w6, w11];
     g.wave = 1;
 
-    // SECOND OPINION'S TOKENS DO NOT PAY FOR A ROLL. The box is a purchase of a
-    // draw, not the refusal of an answer already given - a token that paid for
-    // one would hand that mutation a free active item at every wave break.
-    P.freeRerolls = 2;
-    g.credits = 100000;
-    const tokenCredits = g.credits;
-    out.tokenDoesNotPrice = g._boxCost() === w1;
-    g._buyBoxRoll();
-    out.tokenNotSpent = P.freeRerolls === 2;
-    out.paidCashDespiteToken = tokenCredits - g.credits === w1;
-    P.freeRerolls = 0;
     hide();
     shop();
     risen();
@@ -839,16 +828,35 @@ try {
     out.graftPermanent = P.maxHealth === hpWas2 + 3;
     P.hpBanked = 0;
 
-    // SECOND OPINION makes the next reroll free at BOTH consoles, and is spent
-    // by taking one.
-    P.freeRerolls = 0;
-    const paidCost = g._rerollCost();
-    useItem('itemReroll');
-    out.rerollsFree = g._rerollCost() === 0 && paidCost > 0;
-    P.freeRerolls = 1;
+    // SECOND OPINION IS THE REROLL. Pressed with a set standing it redraws the
+    // three offers on the spot - no token, no walk to a console - and it takes
+    // nothing from the wallet and nothing from the console's price ladder.
+    g.totemArea.present(g._buildOffers(), true, 0);
+    const rerollsWas = g.totemArea.rerolls;
     const creditsWas = g.credits;
-    g._payReroll(g._rerollCost());
-    out.rerollSpendsToken = P.freeRerolls === 0 && g.credits === creditsWas;
+    // Counted at the door rather than by comparing the three ids: a fresh roll
+    // may legitimately hand back an offer the set already had, and a test that
+    // failed on that would be testing the dice.
+    const realPresent = g.totemArea.present.bind(g.totemArea);
+    let presented = 0;
+    let presentReset = null;
+    g.totemArea.present = (offers, reset, arm) => {
+      presented++; presentReset = reset;
+      return realPresent(offers, reset, arm);
+    };
+    useItem('itemReroll');
+    g.totemArea.present = realPresent;
+    out.rerollRedrew = presented === 1 && presentReset === false;
+    out.rerollFree = g.credits === creditsWas;
+    out.rerollKeepsLadder = g.totemArea.rerolls === rerollsWas;
+    // ...and with the totems down there is nothing to reroll, so the press is
+    // refused before the charge is spent.
+    g.totemArea.dismiss();
+    for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
+    P.giveItem('itemReroll');
+    const chargeWas = P.itemCharge;
+    g.tryItem();
+    out.rerollRefusedOffShop = P.itemCharge === chargeWas;
 
     // ---- A CHIP NEVER OUTLIVES THE EFFECT IT IS DRAWN FOR ----
     //
@@ -1118,8 +1126,6 @@ try {
     JSON.stringify(r.fiveRollsOneVisit));
   ok('the price steps up per block of five waves',
     JSON.stringify(r.waveLadder) === '[1000,1000,1500,2000]', JSON.stringify(r.waveLadder));
-  ok('a free-reroll token does not pay for a roll',
-    r.tokenDoesNotPrice && r.tokenNotSpent && r.paidCashDespiteToken);
 
   // ---- the ten seconds ----
   ok('an item nobody takes goes back in',
@@ -1212,8 +1218,9 @@ try {
   ok('white cell refuses the next one', m.purifyLocks);
   ok('...and the lock lifts with it', m.purifyLockLifts);
   ok('graft is permanent max health', m.graftPermanent);
-  ok('second opinion frees both consoles', m.rerollsFree);
-  ok('...and a free reroll spends the token, not the credits', m.rerollSpendsToken);
+  ok('second opinion rerolls the shop on use', m.rerollRedrew);
+  ok('...for nothing, and without moving the console price', m.rerollFree && m.rerollKeepsLadder);
+  ok('...and is refused when there is nothing to reroll', m.rerollRefusedOffShop);
   ok('a chip goes when its effect does, not when its clock does',
     m.leechChipUp && m.leechChipGoesWithTheShots);
   ok('the damage chip opens full', m.rageChipStartsFull === 1, String(m.rageChipStartsFull));

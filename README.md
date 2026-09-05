@@ -535,7 +535,7 @@ Thirty-seven of them, in five groups by what they actually reach for.
 | APIARY | Five hunting bees, for 12s | 45s |
 | EVENT HORIZON | A thrown singularity. Drags them in and eats them | 28s |
 | LODESTAR | Pull in every orb and pickup on the floor | 16s |
-| SECOND OPINION | Two free rerolls, at either console | 40s |
+| SECOND OPINION | Rerolls the shop on use, free | 40s |
 
 **Three of them hurt you, and that is deliberate.** WELCOME MAT's blast does not
 know who laid it, SHORT FUSE's does not know who threw it, and MARTYR's is the

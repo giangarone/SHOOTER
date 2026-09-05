@@ -872,7 +872,12 @@ export const ACTIVE_ITEMS = {
     // get on top of the room on purpose.
     //
     // The blast underneath is not free damage, it is the reason the launch is
-    // believable - and it is small enough that nobody presses this for it.
+    // believable - and it is priced as FOUR OF THE PLAYER'S OWN BULLETS rather
+    // than as a flat number, which is what a flat 45 stopped being worth by
+    // wave ten. Read live off the gun through getEffectiveDamage, so every
+    // damage mutation in the build feeds it exactly the way it feeds a shot,
+    // and it is still four rounds' worth at wave twenty - big enough to matter
+    // under a crowd, nowhere near enough to press this for the damage.
     //
     // Ten seconds, not sixteen. An escape that is not there when you need it
     // is not an escape, and this one commits the player to an arc they cannot
@@ -881,7 +886,7 @@ export const ACTIVE_ITEMS = {
     use: (game) => {
       const p = game.player;
       _v.set(p.pos.x, 0, p.pos.z);
-      game._blast(_v, 45, 5, null, false);
+      game._blast(_v, p.getEffectiveDamage(p.weapon.damage) * 4, 5, null, false);
       // Written straight onto the velocity, above the 22 m/s^2 in update() -
       // 17 tops out at about 6.5m, which is over the catwalks and over
       // everything in the enemy pool.
@@ -1226,19 +1231,30 @@ export const ACTIVE_ITEMS = {
     name: 'SECOND OPINION',
     charge: 40,
     theme: THEME.charge,
-    // THE ONLY ITEM IN THE POOL THAT DOES NOTHING IN A FIGHT, and it is priced
-    // as one: two rerolls, not one, spent at either console. What it is really
-    // buying is the escalating price - the second reroll of a visit already
-    // costs double, and this pays both at zero.
+    // THE ONLY ITEM IN THE POOL THAT DOES NOTHING IN A FIGHT, and it IS the
+    // reroll rather than a token that buys one. It used to hand out two free
+    // rerolls to be spent at a console afterwards, which made the press a
+    // piece of bookkeeping: the player pressed the button, read a banner, and
+    // then still had to walk to the console and do the thing. One press, one
+    // new set of three, no second step.
+    //
+    // Free, and it does not touch the console's own ladder - see _itemReroll
+    // in main.js. What the player is buying is the escalating price they are
+    // not paying.
     //
     // A charge that fills in wave time and spends in the shop is also the one
     // item whose timing is trivially correct, which is a fair trade for it
     // being useless the other ninety percent of the time.
-    effects: [['TWO FREE REROLLS', GOOD], ['AT EITHER CONSOLE', NOTE]],
+    effects: [['REROLLS SHOP ON USE', GOOD], ['FREE OF CHARGE', NOTE]],
+    // REFUSED WHERE THERE IS NOTHING TO REROLL - between waves the totems are
+    // down, and a press that spent a forty-second charge on an empty room
+    // would be the worst failure in the pool. Same voice an uncharged press
+    // gets, and the same voice the console gives for NOTHING TO REROLL.
+    ready: (game) => game.totemArea.active && !game.totemArea.claimed,
     use: (game) => {
-      game.player.freeRerolls += 2;
+      game._itemReroll();
       game.effects.shockwave(game.player.pos, THEME.charge, 6, 0.5);
-      game.ui.banner('2 FREE REROLLS');
+      game.ui.banner('REROLLED');
       game.sfx.reroll();
     },
   },

@@ -666,6 +666,10 @@ class Game {
     // in; a pad that is never connected costs one array read a frame.
     this.pad = new Pad();
     this.menu = new MenuDriver();
+    // THE PAD'S SELECTION TICKS. Same voice the mouse gets for a hover in
+    // _wireMenuSounds - moving onto a control is one event with two devices,
+    // and the player must not be able to hear which one they are holding.
+    this.menu.onMove = () => this.sfx.menuMove();
     // Which device the player has their hands on RIGHT NOW. Everything the
     // player can see follows it - the prompts, the control sheet, the menu
     // selection - and it flips on use rather than on connection, so a pad left
@@ -1443,6 +1447,8 @@ class Game {
     document.addEventListener('webkitfullscreenchange', () => this._syncFsBtns());
     this._syncFsBtns();
 
+    this._wireMenuSounds();
+
     document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2019,6 +2025,52 @@ class Game {
     return true;
   }
 
+  /**
+   * THE MOUSE'S HALF OF THE MENU VOICES. Two delegated listeners on the
+   * document rather than a pair on each of the forty-odd controls, because the
+   * name keyboard and the leaderboard build their buttons at runtime and a
+   * per-button wiring would have to be re-run every time one of those redraws.
+   *
+   * DELEGATION MEANS THE SELECTOR IS THE RULE: anything that is a control on an
+   * overlay makes a noise, and nothing else in the game does. `.overlay` is
+   * what every menu screen in index.html already is.
+   *
+   * The click listener is on the CAPTURE phase. Half the buttons on the start
+   * screen call stopPropagation - the overlay behind them is click-to-start and
+   * they must not also start a run - so a bubbling listener on the document
+   * would hear from some buttons and not others, which is the worst of the
+   * three possible behaviours.
+   *
+   * ONE SOUND PER PRESS, whatever pressed it: the pad's CROSS activates the
+   * focused control by clicking it (see MenuDriver.activate), so the press
+   * comes through here for a controller too and there is no second, quieter
+   * copy of this in _padMenu.
+   */
+  _wireMenuSounds() {
+    const SEL = '.overlay button:not([disabled]), .overlay .stepper';
+    const control = (t) => (t instanceof Element ? t.closest(SEL) : null);
+    // What the cursor was last over, so crossing a label or a glyph INSIDE a
+    // button is not a second hover of the button it is drawn on.
+    let hover = null;
+    document.addEventListener('pointerover', (e) => {
+      const el = control(e.target);
+      if (el === hover) return;
+      hover = el;
+      // offsetParent is null for a control on a screen that is not up - the
+      // same test MenuDriver.items() uses, and for the same reason.
+      if (el && el.offsetParent !== null) this.sfx.menuMove();
+    });
+    document.addEventListener('click', (e) => {
+      if (!control(e.target)) return;
+      // The press IS the gesture the browser wants before it will let a page
+      // make a sound, so the context is opened on the same event that needs it.
+      // The very first click of a session may still land silent - resume() is
+      // a promise - and the second one never does.
+      this._audioGesture();
+      this.sfx.menuSelect();
+    }, true);
+  }
+
   // The pad on a menu. One driver walks whichever overlay is on top; see
   // padmenu.js for why the navigation is geometric rather than a list.
   _padMenu() {
@@ -2052,18 +2104,22 @@ class Game {
     }
     if (pad.pressed(BTN.CIRCLE)) {
       pad.consume(BTN.CIRCLE);
-      // BACK.
-      if (this._subScreenOpen()) this._closeSubScreen();
-      else if (this.state === 'paused') this.resume();
+      // BACK. The one menu press with no button under it - it closes the
+      // screen rather than pressing anything on it - so it is also the one
+      // that has to make its own noise. See _wireMenuSounds for why every
+      // other press does not.
+      if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
+      else if (this.state === 'paused') { this.resume(); this.sfx.menuBack(); }
     }
     if (pad.pressed(BTN.OPTIONS)) {
       pad.consume(BTN.OPTIONS);
       // START, in the arcade sense: it starts and it un-pauses, and it does
       // nothing at all on a screen that is layered over one of those.
-      if (this._subScreenOpen()) this._closeSubScreen();
-      else if (this.state === 'paused') this.resume();
-      else if (this.state === 'menu') this.beginGame();
-      else if (this.state === 'gameover') this._restartFromOver();
+      this._audioGesture();
+      if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
+      else if (this.state === 'paused') { this.resume(); this.sfx.menuBack(); }
+      else if (this.state === 'menu') { this.sfx.menuSelect(); this.beginGame(); }
+      else if (this.state === 'gameover') { this.sfx.menuSelect(); this._restartFromOver(); }
     }
   }
 
@@ -4637,13 +4693,6 @@ class Game {
   }
 
   _rerollCost() {
-    // SECOND OPINION prices the next reroll at nothing, at either console.
-    // Zeroing the COST rather than adding a branch at each of the six places
-    // that shows or charges one is what keeps the item from needing a special
-    // case in the affordability tests, the labels and the prompts: `credits >=
-    // 0` is already true everywhere, and the two charge sites spend the token
-    // instead of the money.
-    if (this.player.freeRerolls > 0) return 0;
     return rerollCost(this.totemArea.rerolls, this.wave);
   }
 
@@ -4652,10 +4701,6 @@ class Game {
   // Read off the wave just CLEARED, the same as the two consoles: the box
   // rises during the intermission, before startWave() has counted the next.
   _boxCost() {
-    // DELIBERATELY NOT this.player.freeRerolls. SECOND OPINION's tokens buy
-    // REROLLS, and the box is not one - it is a purchase of a draw, not a
-    // refusal of an answer already given. A token that paid for a box roll
-    // would hand that mutation a free active item at every wave break.
     return boxCost(this.wave, this.totemArea.boxRolls);
   }
 
@@ -4665,11 +4710,31 @@ class Game {
     return cost > 0 ? '$' + cost : 'FREE';
   }
 
-  // Takes the payment for a reroll, in tokens first and credits second. The
-  // caller has already established the player can afford it.
+  // Takes the payment for a reroll. The caller has already established the
+  // player can afford it.
   _payReroll(cost) {
-    if (this.player.freeRerolls > 0) this.player.freeRerolls--;
-    else this.credits -= cost;
+    this.credits -= cost;
+  }
+
+  /**
+   * SECOND OPINION, pressed. A reroll that costs nothing and happens where the
+   * player is standing, rather than a token they carry to a console.
+   *
+   * It does NOT advance `totemArea.rerolls`, which is the console's price
+   * ladder: that number is how many rerolls have been BOUGHT at this shop, and
+   * an item that made the next paid reroll cost double would be charging the
+   * player for having carried it. The item is the reroll it gives, and nothing
+   * else about the visit changes.
+   *
+   * The guard is the item's own `ready` - see ACTIVE_ITEMS.itemReroll - so a
+   * press with the totems down is refused before the charge is spent, the same
+   * way the console answers NOTHING TO REROLL.
+   */
+  _itemReroll() {
+    if (!this.totemArea.active || this.totemArea.claimed) return;
+    this._presentTotems(true);
+    this._refreshStations();
+    this._refreshBox();
   }
 
   // Redraws both station labels. Only called when something they display

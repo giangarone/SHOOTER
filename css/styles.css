@@ -135,6 +135,19 @@ html, body {
    HUD
    ========================================================================= */
 
+/* THE LAYER MAP, and the one rule it exists to keep: NOTHING THE ARENA DOES TO
+   THE PLAYER IS EVER DRAWN OVER THE READOUTS.
+     0-3  arena, and anything stacking inside a plate
+     4    what is happening to you - #strobe, #fx-damage, #fx-fire,
+          #fx-poison, #invuln-frame
+     5-7  the HUD - #hud, #buffs, #prompt, #banner
+     8    layered captions and panels - #handoff, #stats-panel
+     10+  menus, then the tube itself
+   The four status washes used to sit at 6, one above the HUD, so a player on
+   fire had amber tongues climbing over the vitals bar - the exact readout
+   someone on fire is looking at - and the fire layer carried a mask cut short
+   of the bar to work around it. They are under the HUD now, which is where a
+   thing that happens to the ROOM belongs. */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 
 #hud-top {
@@ -175,7 +188,7 @@ html, body {
   font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
   text-shadow: 1px 1px 0 var(--ink);
 }
-/* White, not cyan. Cyan is the interface's accent - it is on the crosshair, the
+/* White, not cyan. Cyan is the interface's accent - it is on the
    armour theme, the reload dial and half the consoles - and the wave number is
    not an accent, it is the one fact on screen that says where the run is. White
    is what the round count beneath it already uses for the same reason. */
@@ -218,11 +231,17 @@ html, body {
   width: 26px; height: 26px;
   transform: translate(-50%, -50%);
 }
+/* WHITE, AND ONLY WHITE. The reticle used to be cyan with a gold aimed state,
+   which put the interface's two accent colours on the one element that is
+   never not on screen - and both of them are meanings elsewhere: cyan is the
+   armour theme and the consoles, gold is the thing that is currently true. A
+   reticle that borrows a meaning is a reticle that is saying something on
+   every frame. White says nothing, which is what it is for. */
 #crosshair i {
-  position: absolute; background: var(--cyan);
+  position: absolute; background: #fff;
   box-shadow:
     0 0 0 1px rgba(5, 7, 11, 0.9),
-    0 0 6px rgba(78, 243, 255, 0.8);
+    0 0 6px rgba(255, 255, 255, 0.8);
 }
 /* THE ARMS ARE PLACED BY --gap, WHICH IS THE GUN'S SPREAD.
    ui.setCrosshair writes it every frame from the same cone the shot ray is
@@ -237,12 +256,13 @@ html, body {
 #crosshair i:nth-child(3) { width: 8px; height: 3px; transform: translate(calc(-100% - var(--gap, 10px)), -50%); }
 #crosshair i:nth-child(4) { width: 8px; height: 3px; transform: translate(var(--gap, 10px), -50%); }
 /* AIMED. The arms are already almost shut by the time this lands - the gap is
-   the cone and the aimed cone is tiny - so the aimed state says so in the one
-   way a closing gap cannot: it goes gold, the colour this interface uses for
-   the thing that is currently true. The dot grows into a proper bead, because
-   at that gap the arms are furniture and the bead is what is being aimed. */
-#crosshair.aim i { background: var(--gold); box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 6px rgba(255, 233, 94, 0.8); }
-#crosshair.aim::after { width: 5px; height: 5px; box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 8px rgba(255, 233, 94, 0.9); }
+   the cone and the aimed cone is tiny - so the aimed state is said by the DOT
+   rather than by a colour: it grows into a proper bead, because at that gap the
+   arms are furniture and the bead is what is being aimed. It used to go gold
+   here, which is the one colour on this screen that means "currently true" and
+   was needed elsewhere more than it was needed on a reticle. */
+#crosshair.aim i { box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 6px rgba(255, 255, 255, 0.9); }
+#crosshair.aim::after { width: 5px; height: 5px; box-shadow: 0 0 0 1px rgba(5, 7, 11, 0.9), 0 0 8px rgba(255, 255, 255, 0.9); }
 #crosshair::after {
   content: ""; position: absolute; left: 50%; top: 50%;
   width: 3px; height: 3px; transform: translate(-50%, -50%);
@@ -478,7 +498,7 @@ html, body {
    the damage vignette in a different ink: this ring has an EDGE facing the
    player, like armour, where the red one fades inward like a wound. */
 #invuln-frame {
-  position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0;
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
   transition: opacity 0.25s steps(4, end);
   background: radial-gradient(ellipse 82% 82% at center,
     transparent 0 58%,
@@ -721,7 +741,7 @@ html, body {
    hard red steps with a bright inner rim - that rim is the difference between
    this and a stain, because a hit has an edge where it landed. */
 #fx-damage {
-  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
   background: radial-gradient(ellipse 78% 78% at center,
     transparent 0 50%,
     rgba(255, 120, 120, 0.30) 50% 53%,
@@ -746,7 +766,7 @@ html, body {
    Persistent, not a flash: up for as long as the player is burning - see
    Ui.setStatusFx - which is what makes it a condition rather than an event. */
 #fx-fire {
-  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
   transition: opacity 0.2s steps(4, end);
   background:
     repeating-linear-gradient(90deg,
@@ -779,7 +799,7 @@ html, body {
    the bezel's own green scanlines and read as part of the cabinet; a stipple
    does not, because nothing else on this screen has that texture. */
 #fx-poison {
-  position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
   transition: opacity 0.3s steps(4, end);
   background:
     repeating-linear-gradient(45deg,

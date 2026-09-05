@@ -894,7 +894,6 @@ export class Player {
     this.elementCycle = -1;    // FOUR HUMOURS: -1 off, else the next element
     this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
     this.statusLockEnd = 0;    // WHITE CELL: applyStatus refuses until this
-    this.freeRerolls = 0;      // SECOND OPINION: rerolls owed, either console
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1493,7 +1492,6 @@ export class Player {
     this.elementCycle = -1;
     this.orbHealEnd = 0;
     this.statusLockEnd = 0;
-    this.freeRerolls = 0;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);

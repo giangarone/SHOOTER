@@ -137,6 +137,16 @@ export class MenuDriver {
   constructor() {
     this.root = null;
     this.el = null;   // the focused element, or null
+    // Fired when the selection LANDS somewhere new, so the caller can make a
+    // noise about it. A callback rather than a call into the game's audio
+    // because nothing else in this file knows the game exists, and the rule
+    // that keeps it navigable is worth more than the one import.
+    //
+    // NOT fired when a screen opens and seats the selection on its default
+    // control: nobody moved, and a menu that ticks at you for appearing is a
+    // menu that ticks twice - once for itself and once for the button that
+    // opened it. See focus()'s `quiet`.
+    this.onMove = null;
   }
 
   /**
@@ -147,7 +157,7 @@ export class MenuDriver {
     if (root === this.root) return;
     this.clear();
     this.root = root;
-    if (root) this.focus(this._default());
+    if (root) this.focus(this._default(), true);
   }
 
   /**
@@ -181,12 +191,13 @@ export class MenuDriver {
     return items.find((e) => e.closest('.primary-row')) || items[0];
   }
 
-  focus(el) {
+  focus(el, quiet = false) {
     if (this.el === el) return;
     if (this.el) this.el.classList.remove('pad-focus');
     this.el = el || null;
     if (!this.el) return;
     this.el.classList.add('pad-focus');
+    if (!quiet && this.onMove) this.onMove(this.el);
     // Focused for real as well as marked: it keeps the browser's own notion of
     // focus with the selection, so a player who reaches back for the keyboard
     // finds it where the pad left it.
@@ -307,7 +318,7 @@ export class MenuDriver {
     // range - so the selection is re-seated rather than left on a node that
     // may now be gone or dead.
     if (!this.root || !this.root.contains(el) || el.disabled || el.offsetParent === null) {
-      this.focus(this._default());
+      this.focus(this._default(), true);
     }
     return el;
   }

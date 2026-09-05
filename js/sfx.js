@@ -438,6 +438,41 @@ export class SFX {
     this.tone({ f: 160, f2: 90, t: 0.12, type: 'square', v: 0.22 });
   }
 
+  // ---- THE MENUS ---------------------------------------------------------
+  //
+  // THREE VOICES, and they are the quietest things in this file on purpose.
+  // They fire on hover, which means they fire while the player is doing
+  // nothing but looking around a screen - a cursor dragged across the settings
+  // list plays a dozen of these in a second, and anything with body to it
+  // becomes a rattle by the third one. They are ticks: short enough to read as
+  // the interface acknowledging the cursor rather than as a sound.
+  //
+  // They are also the only sounds in the game that play with the run stopped,
+  // so they have nothing to sit under and can afford to be small.
+
+  // MOVING ONTO A CONTROL. One clean blip, no tail. The pad's focus driver and
+  // the mouse's hover both land here, because they are the same event: the
+  // selection is now on this thing.
+  menuMove() {
+    this.tone({ f: 880, t: 0.035, type: 'square', v: 0.1 });
+    this.noise({ t: 0.02, v: 0.05, f: 5200 });
+  }
+
+  // PRESSING ONE. Up, because the press is the player committing - and short,
+  // because most of these open another screen that has its own voice.
+  menuSelect() {
+    this.tone({ f: 660, f2: 1180, t: 0.07, type: 'square', v: 0.16 });
+    this.tone({ f: 1320, t: 0.05, type: 'sine', v: 0.1, delay: 0.05 });
+  }
+
+  // BACKING OUT. The same gesture pointing the other way, which is the whole
+  // reason it is a third sound and not the second one again: a screen closing
+  // and a screen opening must not sound alike, or the player stops hearing
+  // either.
+  menuBack() {
+    this.tone({ f: 620, f2: 330, t: 0.09, type: 'square', v: 0.14 });
+  }
+
   // ---- ACTIVE ITEM VOICES ------------------------------------------------
   //
   // itemUse() above still plays for EVERY item, and these are laid on top of
