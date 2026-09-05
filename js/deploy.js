@@ -536,12 +536,24 @@ export class FireWall {
 // IT NEVER PULLS THE PLAYER. Asked for explicitly, and correct: a pull the
 // player cannot fight is the one thing in the game that takes the movement
 // away, and this is an item they chose to spend a slot on.
+// How far the hole reaches, in metres. The pull and the bite are the same
+// circle deliberately - a hole that dragged from further than it ate would be
+// a hole with an invisible second radius the player could only learn by dying
+// just outside it.
+const PULL_R = 14;
+
 export class Singularity {
-  constructor(game, x, z) {
+  constructor(game, x, z, damage) {
     this.pos = new THREE.Vector3(x, 1.6, z);
-    this.life = 4;
+    this.life = 5;
     this.age = 0;
-    this.tick = 0;
+    // TWICE ONE OF THE PLAYER'S OWN SHOTS, snapshotted when the item was
+    // thrown - see EVENT HORIZON in js/items.js and the note on Turret.damage,
+    // which this follows for the same reason.
+    this.damage = damage;
+    // Where the pulse stood when the hole opened, so it eats on the next beat
+    // edge rather than instantly and again a fraction of a second later.
+    this._lastPulse = -1;
     this.dead = false;
 
     this.group = new THREE.Group();
@@ -577,7 +589,10 @@ export class Singularity {
       color: 0x3d1f7a, transparent: true, opacity: 0.28,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide, fog: false,
     });
-    this.lens = new THREE.Mesh(new THREE.SphereGeometry(2.6, 18, 14), lensMat);
+    // Scaled with PULL_R rather than fixed: the lens is the only thing on
+    // screen that says how far the hole reaches, and a drawing that stayed the
+    // size it was when the circle grew is the item lying about its own area.
+    this.lens = new THREE.Mesh(new THREE.SphereGeometry(2.6 * (PULL_R / 9), 18, 14), lensMat);
     this.lens.renderOrder = 0;
 
     this.group.add(this.lens, this.disc, this.inner, this.hole);
@@ -586,7 +601,7 @@ export class Singularity {
     game.scene.add(this.group);
     this.effects = game.effects;
     this.effects.addShake(0.25);
-    this.effects.shockwave(this.pos, 0x9b6bff, 10, 0.7);
+    this.effects.shockwave(this.pos, 0x9b6bff, PULL_R, 0.7);
   }
 
   update(dt, ctx) {
@@ -612,7 +627,7 @@ export class Singularity {
     // this read as orbit rather than as suction is that it does not.
     for (let i = 0; i < 3; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = 3.4 + Math.random() * 1.2;
+      const r = (3.4 + Math.random() * 1.2) * (PULL_R / 9);
       _v.set(this.pos.x + Math.cos(a) * r, 0.5 + Math.random() * 2.4, this.pos.z + Math.sin(a) * r);
       _v2.set(this.pos.x - _v.x, this.pos.y - _v.y, this.pos.z - _v.z).normalize();
       this.effects.impact(
@@ -625,19 +640,30 @@ export class Singularity {
 
     // THE PULL. _pull moves each enemy a DISTANCE per call, so the figure here
     // is metres per second and has to carry the dt itself - eighteen at the
-    // centre, falling to nothing at nine metres. That is about six times a
+    // centre, falling to nothing at the edge. That is about six times a
     // chaser's own speed: fast enough that the hole visibly takes the crowd
     // away from the player, slow enough that an enemy is seen travelling
     // rather than teleporting, which is the whole reason to draw one of these.
-    ctx.pull(this.pos, 9, 18 * dt);
-    this.tick -= dt;
-    if (this.tick > 0) return 'alive';
-    this.tick = 0.2;
+    //
+    // FOURTEEN METRES, NOT NINE. Nine was a circle the crowd walked around:
+    // most of a wave was outside it on the frame it opened, so the item drew
+    // beautifully and gathered whoever happened to be standing there. Fourteen
+    // is most of the half of the arena it is thrown into, which is what makes
+    // the throw a decision about a CROWD rather than about three enemies.
+    ctx.pull(this.pos, PULL_R, 18 * dt);
+    // ON THE BEAT, like the sentry gun and like fire and poison - see
+    // Music.pulse. It used to eat on a private 0.2s timer, which made the one
+    // thing in the arena that is visibly rotating the one thing in the arena
+    // with no relationship to the music it is rotating over.
+    if (ctx.pulse === this._lastPulse) return 'alive';
+    const first = this._lastPulse < 0;
+    this._lastPulse = ctx.pulse;
+    if (first || !ctx.pulseWhole) return 'alive';
     for (const e of ctx.enemies) {
       if (e.dead) continue;
       const d = Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
-      if (d > 9) continue;
-      ctx.hurtEnemy(e, 5);
+      if (d > PULL_R) continue;
+      ctx.hurtEnemy(e, this.damage);
     }
     return 'alive';
   }
@@ -646,8 +672,8 @@ export class Singularity {
     // The collapse is louder than the opening. It has to be: everything the
     // hole was holding is released on this frame, and a singularity that
     // simply faded out would look like it had been switched off.
-    this.effects.shockwave(this.pos, 0xe8dcff, 12, 0.5);
-    this.effects.burst(this.pos, 0x9b6bff, 34, 11, 4, 0.6);
+    this.effects.shockwave(this.pos, 0xe8dcff, PULL_R + 3, 0.5);
+    this.effects.burst(this.pos, 0x9b6bff, 34, PULL_R, 4, 0.6);
     this.group.parent?.remove(this.group);
     for (const g of this.geos) g.dispose();
     for (const m of this.mats) m.dispose();
@@ -657,7 +683,7 @@ export class Singularity {
 // The orb that carries it. Flat and fast rather than lobbed: the player is
 // aiming this one, and a three-second charge on a parabola is a different item.
 export class HoleOrb {
-  constructor(game, x, y, z, dirX, dirY, dirZ) {
+  constructor(game, x, y, z, dirX, dirY, dirZ, damage) {
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3(dirX, dirY, dirZ).normalize().multiplyScalar(24);
     this.life = 2.2;
@@ -669,6 +695,7 @@ export class HoleOrb {
     this.mesh.position.copy(this.pos);
     game.scene.add(this.mesh);
     this.game = game;
+    this.damage = damage;
   }
 
   update(dt, ctx) {
@@ -697,7 +724,10 @@ export class HoleOrb {
     // of its pull inside the room.
     const x = Math.max(-BOUND + 3, Math.min(BOUND - 3, this.pos.x));
     const z = Math.max(-BOUND + 3, Math.min(BOUND - 3, this.pos.z));
-    ctx.deploy(new Singularity(this.game, x, z));
+    // The clamp is deliberately NOT widened to PULL_R: a hole thrown at a wall
+    // should open at the wall. What the clamp is for is keeping the thing
+    // inside the room at all, and its reach falls off to nothing anyway.
+    ctx.deploy(new Singularity(this.game, x, z, this.damage));
     ctx.sfx.itemSuck();
     return 'dead';
   }
@@ -900,10 +930,14 @@ export class Bee {
 // there for the reading (it says the item is working, and where) and the blast
 // is the enemy's problem alone.
 export class Meteor {
-  constructor(game, x, z, delay) {
+  constructor(game, x, z, delay, damage) {
     this.x = x;
     this.z = z;
     this.wait = delay;
+    // THREE OF THE PLAYER'S OWN SHOTS, snapshotted at the press - see FALLING
+    // SKY in js/items.js. The flat 70 it used to carry was most of a chaser on
+    // wave three and a rounding error on wave thirty.
+    this.damage = damage;
     this.fall = -1;
     this.dead = false;
     this.effects = game.effects;
@@ -950,7 +984,7 @@ export class Meteor {
     }
     _v.set(this.x, 0, this.z);
     // hitPlayer false - see the note at the top of the class.
-    ctx.onBlast(_v, 70, 3.5, null, false);
+    ctx.onBlast(_v, this.damage, 3.5, null, false);
     this.effects.burst(_v, 0xffd166, 18, 8, 4, 0.45);
     this.effects.burst(_v, 0xff6f00, 22, 5, 5, 0.6);
     this.effects.shockwave(_v, 0xff6f00, 3.5, 0.4);

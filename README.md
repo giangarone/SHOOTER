@@ -481,63 +481,63 @@ Thirty-seven of them, in five groups by what they actually reach for.
 
 | Item | Effect | Charge |
 | --- | --- | --- |
-| TRAUMA KIT | Heal 25 HP, no overheal | 20s |
-| CRYO PULSE | Freeze every enemy for 2s | 10s |
-| WHITE CELL | Clear every affliction, then 2s immune | 12s |
-| BRIMSTONE | Set every enemy alight for 3s | 12s |
-| JACOB'S LADDER | Lightning arcs through the 5 nearest | 12s |
-| LAST RITES | Execute everything under 30% health (not bosses) | 24s |
-| TECTONIC | Hurl everything within 9m back, for 40 | 16s |
-| MARTYR | 400 damage over 16m. Leaves you at 10 HP | 45s |
-| FALLING SKY | 12 telegraphed meteors over 3s | 36s |
+| TRAUMA KIT | Heal 25 HP, no overheal | 50 |
+| CRYO PULSE | Freeze every enemy for 5s | 40 |
+| WHITE CELL | Clear every negative effect, then 2s immune | 20 |
+| BRIMSTONE | Burn all enemies for 3s | 40 |
+| JACOB'S LADDER | Lightning arcs through the 5 nearest, 2x bullet damage each | 40 |
+| LAST RITES | Execute everything under 30% health, bosses included | 40 |
+| TECTONIC | Hurl everything within 9m back, for bullet damage | 20 |
+| MARTYR | 20x bullet damage over 16m. Leaves you at 10 HP | 60 |
+| FALLING SKY | 12 telegraphed meteors over 3s, 3x bullet damage each | 60 |
 
 **Windows on the player:**
 
 | Item | Effect | Charge |
 | --- | --- | --- |
-| OVERDRIVE | 2x damage for 5s | 20s |
-| AEGIS | Invincible for 5s | 20s |
-| RED LINE | Double fire rate for 6s | 18s |
-| RED MIST | 3x damage, but you take 2x, for 5s | 24s |
-| BODY COUNT | +10% damage per kill for 8s, capped at 20 | 32s |
-| BLOOD TAX | 25 HP for 3x damage for 10s | 24s |
-| FOUR HUMOURS | Shots cycle fire, ice, venom, arc for 8s | 24s |
-| BIRD DOG | Seeker's homing for 5s | 14s |
-| HAEMOPHAGE | The next 10 hits heal 5 HP each, within 20s | 16s |
-| BLOOD FROM STONE | Credit orbs also heal 1 HP for 8s | 30s |
+| OVERDRIVE | 2x damage for 10s | 60 |
+| AEGIS | Invincible for 8s | 60 |
+| RED LINE | Double fire rate for 6s | 30 |
+| RED MIST | 3x damage, but you take 2x, for 10s | 40 |
+| BODY COUNT | +10% damage per kill for 8s, capped at 20 | 32 |
+| BLOOD TAX | 25 HP for 3x damage for 10s | 30 |
+| FOUR HUMOURS | Shots cycle fire, ice, venom, arc for 8s | 40 |
+| BIRD DOG | Seeker's homing for 10s | 40 |
+| HAEMOPHAGE | The next 20 hits heal 1 HP each, no time limit | 60 |
+| BLOOD FROM STONE | Credit orbs also heal 1 HP for 8s | 30 |
 
 **The health bar:**
 
 | Item | Effect | Charge |
 | --- | --- | --- |
-| WATERLINE | Heal up to half health, and no further | 10s |
-| SUTURE ENGINE | 5 HP/s for 8s | 30s |
-| OPEN VEIN | 50 HP for a full ammo reserve | 30s |
-| SIX CHAMBERS | 50/50: full health, or one | 36s |
-| GRAFT | +3 max health, permanently | 60s |
+| WATERLINE | Heal up to half health, and no further | 40 |
+| SUTURE ENGINE | 2 HP/s for 10s | 30 |
+| OPEN VEIN | 50 HP for a full ammo reserve | 50 |
+| SIX CHAMBERS | 50/50: full health, or one | 36 |
+| GRAFT | +3 max health, permanently | 60 |
 
 **Getting out of somewhere:**
 
 | Item | Effect | Charge |
 | --- | --- | --- |
-| BLINK DRIVE | The dash | 3s |
-| BONESAW | The dash, dealing 3x bullet damage per body | 4s |
-| BOOTSTRAP | Launch yourself skyward, scorching the ground | 10s |
-| COLD SPOT | Teleport to open ground, 1.5s invincible | 24s |
-| LANCE | One shot, 30x damage, pierces all. Costs 30 ammo | 8s |
+| BLINK DRIVE | The dash, wherever you are looking - pitch included | 3 |
+| BONESAW | A longer dash, invulnerable, 3x bullet damage per body | 15 |
+| BOOTSTRAP | Launch yourself skyward, scorching the ground | 30 |
+| COLD SPOT | Teleport to open ground, 1.5s invincible | 40 |
+| LANCE | One shot, 30x damage, pierces all. Costs 30 ammo | 20 |
 
 **Left in the arena** (see `js/deploy.js`)**, and the shop:**
 
 | Item | Effect | Charge |
 | --- | --- | --- |
-| WELCOME MAT | A proximity mine. 120 over 6m | 8s |
-| SHORT FUSE | A thrown bomb on a 3s fuse. 180 over 8m | 12s |
-| FIREBREAK | A wall of fire that burns and stops shots | 12s |
-| LITTLE BROTHER | An auto-turret, for 15s | 20s |
-| APIARY | Five hunting bees, for 12s | 45s |
-| EVENT HORIZON | A thrown singularity. Drags them in and eats them | 28s |
-| LODESTAR | Pull in every orb and pickup on the floor | 16s |
-| SECOND OPINION | Rerolls the shop on use, free | 40s |
+| WELCOME MAT | A proximity mine. 5x bullet damage over 6m | 30 |
+| SHORT FUSE | A thrown bomb on a 3s fuse. 180 over 8m | 30 |
+| FIREBREAK | A wall of fire that burns and stops shots | 12 |
+| LITTLE BROTHER | An auto-turret, for 15s | 40 |
+| APIARY | Five hunting bees, for 24s | 45 |
+| EVENT HORIZON | A thrown singularity. 14m reach, 2x bullet damage a beat, 5s | 60 |
+| LODESTAR | Pull in every orb and pickup on the floor | 60 |
+| SECOND OPINION | Rerolls the shop on use, free | 50 |
 
 **Three of them hurt you, and that is deliberate.** WELCOME MAT's blast does not
 know who laid it, SHORT FUSE's does not know who threw it, and MARTYR's is the

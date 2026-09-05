@@ -944,19 +944,29 @@ export const UPGRADES = {
   },
   // HEALTH BOUGHT WITH SIGHT. Bulwark sells max HP for speed; this sells it
   // for the range at which the room can be read at all, which is a much
-  // stranger thing to own - the haze sits thicker than a boss wave's, so
+  // stranger thing to own - the haze sits far thicker than a boss wave's, so
   // enemy colour arrives late and a shot across the arena is taken on a shape.
   // Driven through rig.js, which owns the fog and breathes it with the music,
   // so this is one multiplier on the target rather than a second writer.
+  //
+  // 3.2x, NOT 1.9x. At 1.9 the far wall was slightly greyer and fifty-five
+  // health was free: the fog is exponential-squared (FogExp2), so at the base
+  // 0.013 the haze does not start EATING anything until well past the far side
+  // of a 43m room, and doubling a number that small doubles nothing the player
+  // can see. The curve has to be moved to where the fight actually happens.
+  // At 0.042 an enemy at twenty metres - across the arena, the range a shot is
+  // taken at - is half washed out, and one at thirty is most of the way gone,
+  // so colour arrives late and the far half of the room is a set of shapes.
+  // That is the drawback the card has always claimed and never charged.
   blackout: {
     name: 'BLACKOUT',
     rarity: 'cursed',
     max: 1,
     theme: THEME.murk,
-    effects: [['+55 MAX HEALTH', GOOD], ['THE HAZE CLOSES IN', BAD], ['YOU SEE MUCH LESS', BAD]],
+    effects: [['+55 MAX HEALTH', GOOD], ['THE HAZE CLOSES RIGHT IN', BAD], ['YOU SEE VERY LITTLE', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 55 * n;
-      mods.fogMult *= 1 + 0.9 * n;
+      mods.fogMult *= 1 + 2.2 * n;
     },
   },
   // TEN SECONDS OFF THE TOP OF EVERY WAVE with no magazine to think about -

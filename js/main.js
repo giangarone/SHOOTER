@@ -3570,26 +3570,56 @@ class Game {
     this.effects.addShake(0.3);
   }
 
-  // Knockout Drops. Shoves an enemy along the shot, then resolves it out of
-  // any obstacle it landed in - without that, a shove into cover would leave
-  // the enemy stuck inside a crate.
+  // Knockout Drops. Shoves an enemy along the shot.
+  //
+  // A MOVE, NOT A TELEPORT, and it is the melee swing's own knockback - see
+  // Enemy.knock and the note at the swing in _melee. This used to add the
+  // whole distance to the position on the frame of the hit, which read as the
+  // body blinking to a new spot rather than as being hit by anything, and it
+  // is the one thing every shove in the game shares: TECTONIC hurling a crowd
+  // and BONESAW clipping a body now travel the same way a punch does.
+  //
+  // The obstacle resolve comes free with it: knock goes through the enemy's
+  // own movement step, which already resolves out of cover, so a body thrown
+  // into a pillar stops at the pillar instead of ending up inside it.
+  //
+  // THE TIME IS READ OFF THE DISTANCE so the SPEED is the constant. Melee's
+  // three metres in 0.18s is 16.7 m/s, and everything here travels at about
+  // that: a nine-metre hurl takes half a second and a two-metre nudge takes a
+  // tenth, which is what makes a big shove read as big rather than as fast.
   _shove(en, dir, dist) {
     if (en.immovable) return;
-    en.pos.add(this._knockback.set(dir.x, 0, dir.z).normalize().multiplyScalar(dist));
-    resolveCircle(en.pos, en.radius, this.arena.obstacles, en.collideH);
+    this._knockback.set(dir.x, 0, dir.z);
+    en.knock(this._knockback.x, this._knockback.z, dist,
+      Math.max(0.1, Math.min(0.55, dist / 18)));
   }
 
   // Gravity Rounds. Drags everything around the impact toward it, the pull
   // fading to nothing at the edge of the radius so an enemy at 5m twitches and
   // one at arm's length is yanked. `skip` is the enemy that took the shot: it
   // is already at the impact point, and pulling it into itself jitters it.
-  _pull(point, radius, dist, skip) {
+  //
+  // `time` IS WHAT SEPARATES THE TWO CALLERS. The singularity pulls a little
+  // every frame, so its motion is already continuous and it wants the distance
+  // applied now (time 0); Gravity Rounds pulls a metre and a half ONCE per
+  // hit, and applied on the frame of the shot that is a body teleporting
+  // inward. Given a time it goes through Enemy.knock instead - the same travel
+  // _shove and the melee swing use - so the crowd is visibly dragged together
+  // rather than found already gathered.
+  _pull(point, radius, dist, skip, time = 0) {
     for (const e of this.enemies) {
       if (e === skip || e.dead || e.immovable) continue;
       const d = e.pos.distanceTo(point);
       if (d > radius || d < 0.001) continue;
       this._pullTo.set(point.x - e.pos.x, 0, point.z - e.pos.z).normalize();
-      e.pos.addScaledVector(this._pullTo, Math.min(dist * (1 - d / radius), d));
+      // Never past the point itself: an enemy at arm's length is pulled to the
+      // impact and no further, whichever path it travels.
+      const step = Math.min(dist * (1 - d / radius), d);
+      if (time > 0) {
+        e.knock(this._pullTo.x, this._pullTo.z, step, time);
+        continue;
+      }
+      e.pos.addScaledVector(this._pullTo, step);
       resolveCircle(e.pos, e.radius, this.arena.obstacles, e.collideH);
     }
     this.effects.burst(point, 0x536dfe, 10, 3, 1.5, 0.35);
@@ -3772,7 +3802,7 @@ class Game {
     }
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
-    if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en);
+    if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en, 0.18);
     // Detonator goes off once per trigger pull, at the first enemy the
     // shot touched. Per-pellet it would fire eight blasts from one shell
     // and exhaust the four-ring pool on its own.
@@ -4041,7 +4071,7 @@ class Game {
     // player has to shoot well to cash in.
     if (hitAny && this.player.leechShots > 0) {
       this.player.leechShots--;
-      this.player.health = Math.min(this.player.maxHealth, this.player.health + 5);
+      this.player.health = Math.min(this.player.maxHealth, this.player.health + 1);
       this.effects.impact(this.player.eyeInto(this._killPos), 0xff2d6f, 6, 3, 2, 0.3);
     }
     if (hitAny) {

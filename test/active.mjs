@@ -659,7 +659,8 @@ try {
     // A RAGE pickup landing on top must not DOWNGRADE it to 1.5x.
     P.damageMult = Math.max(P.damageMult, 1.5);
     out.rageNotDowngraded = P.damageMult === 2;
-    for (let i = 0; i < 130; i++) {
+    // Past ten seconds, which is the window OVERDRIVE opens.
+    for (let i = 0; i < 260; i++) {
       g.time += 0.05;
       P.update(0.05, g.input, g.arena.obstacles, g.time, true);
     }
@@ -716,13 +717,16 @@ try {
       itemTakenMult: P.itemTakenMult,
       itemRateMult: P.itemRateMult,
       itemHoming: P.itemHoming,
-      leechShots: P.leechShots,
       elementCycle: P.elementCycle,
       statusLockEnd: P.statusLockEnd > g.time ? 1 : 0,
     });
     const CLEAN = JSON.stringify(
+      // leechShots is deliberately NOT here. HAEMOPHAGE has no duration any
+      // more - twenty hits that keep until they are spent - so a count still
+      // standing when the frames run out is the item working, not leaking. It
+      // is a mark on the run like hpBanked, and it is cleared below with it.
       { itemDamageMult: 1, itemTakenMult: 1, itemRateMult: 1, itemHoming: 0,
-        leechShots: 0, elementCycle: -1, statusLockEnd: 0 }
+        elementCycle: -1, statusLockEnd: 0 }
     );
     out.leaked = [];
     out.threw = [];
@@ -776,6 +780,7 @@ try {
       // The item's own mark on the run, undone, so the next iteration starts
       // from the same place this one did.
       P.hpBanked = 0;
+      P.leechShots = 0;
       g.running.clear(g);
       g._clearDeployed();
     }
@@ -871,21 +876,32 @@ try {
     g.tryItem();
     out.rerollRefusedOffShop = P.itemCharge === chargeWas;
 
-    // ---- A CHIP NEVER OUTLIVES THE EFFECT IT IS DRAWN FOR ----
+    // ---- HAEMOPHAGE IS A COUNT, AND THE COUNT HAS NO CLOCK ----
     //
-    // Found in play: HAEMOPHAGE's chip sat in the strip for the rest of its
-    // twenty-second backstop after the tenth hit had already been spent, so the
-    // HUD was telling the player they were carrying something they were not.
-    // The general rule is that the strip reports the EFFECT, not the clock the
-    // effect happens to be filed under.
+    // It used to be ten hits inside a twenty-second backstop, and the bug that
+    // window produced was a chip sitting in the strip for the rest of the
+    // twenty after the tenth hit had been spent - the HUD telling the player
+    // they were carrying something they were not. The window is gone: twenty
+    // hits keep until they are shot, so there is no clock for a chip to
+    // outlive and the item never joins the running list at all.
+    //
+    // Which means the same rule is now checked from the other side: nothing is
+    // left running, and the twenty hits survive frames that would have expired
+    // any window in the pool.
     P.upgrades = {};
     P.rebuildMods();
     g.running.clear(g);
-    useItem('itemLeech');
-    out.leechChipUp = g.running.chips([]).length === 1;
     P.leechShots = 0;
-    g.running.update(g, 0.016);
-    out.leechChipGoesWithTheShots = g.running.chips([]).length === 0;
+    useItem('itemLeech');
+    out.leechGrantsTwenty = P.leechShots === 20;
+    out.leechRunsNothing = g.running.list.length === 0
+      && g.running.chips([]).length === 0;
+    for (let i = 0; i < 600; i++) {
+      g.time += 0.05;
+      g.running.update(g, 0.05);
+    }
+    out.leechOutlivesEveryClock = P.leechShots === 20;
+    P.leechShots = 0;
 
     // ...and the two pickup-shared windows measure against the window that was
     // actually granted, not against the pickup's own length. OVERDRIVE opens
@@ -951,6 +967,11 @@ try {
     out.loopStartDeployed = g._deployed.length;
 
   // ---- THE ELEVEN ----
+    //
+    // BONESAW was fired into the loop above and its dash is invulnerable for
+    // the length of the movement (see js/items.js), so the window is still
+    // open on this frame. Every check below is a hit that has to land.
+    P.invulnEnd = 0;
     take('darkPower');
     out.darkPower = +(P.getEffectiveDamage(100)).toFixed(1);
     out.darkPowerFree = P.maxHealth === 100;
@@ -1236,8 +1257,9 @@ try {
   ok('second opinion rerolls the shop on use', m.rerollRedrew);
   ok('...for nothing, and without moving the console price', m.rerollFree && m.rerollKeepsLadder);
   ok('...and is refused when there is nothing to reroll', m.rerollRefusedOffShop);
-  ok('a chip goes when its effect does, not when its clock does',
-    m.leechChipUp && m.leechChipGoesWithTheShots);
+  ok('haemophage grants twenty hits and no window',
+    m.leechGrantsTwenty && m.leechRunsNothing);
+  ok('...and the hits outlive every clock in the pool', m.leechOutlivesEveryClock);
   ok('the damage chip opens full', m.rageChipStartsFull === 1, String(m.rageChipStartsFull));
   ok('the fire rate chip opens full', m.rateChipStartsFull === 1, String(m.rateChipStartsFull));
   ok('a shorter window does not shrink a longer one', m.shorterWindowLeavesTheLonger);

@@ -980,6 +980,14 @@ export class Player {
     this.dashEnd = 0;
     this.dashDX = 0;
     this.dashDZ = 0;
+    // The VERTICAL component of the dash, sin(pitch) at the moment it fired.
+    // Zero for anything that dashes flat; BLINK DRIVE fills it from the view.
+    this.dashDY = 0;
+    // Multiplier on DASH_SPEED for this dash. BONESAW's is slightly longer
+    // than BLINK DRIVE's - bought with speed rather than with time, so the
+    // envelope and the window are still the one shape every dash in the game
+    // shares.
+    this.dashBoost = 1;
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
@@ -1139,9 +1147,24 @@ export class Player {
   // that it commits you to a direction, and committing to AWAY costs nothing.
   // It goes straight down the camera's bearing now whatever the feet are
   // doing, so the dash is a way into a fight rather than a free disengage.
-  dash(time) {
-    this.dashDX = -Math.sin(this.yaw);
-    this.dashDZ = -Math.cos(this.yaw);
+  //
+  // IT GOES WHERE THE VIEW GOES, PITCH INCLUDED. A dash taken looking slightly
+  // up leaves the floor slightly; one taken level is exactly the flat dash it
+  // always was, because sin(0) is zero and cos(0) is one. The horizontal
+  // component is scaled by cos(pitch) rather than left at full length, so the
+  // dash is a DIRECTION rather than a flat dash with a jump bolted on top -
+  // the harder you look up, the more of the same speed goes upward.
+  //
+  // @param {number} time   game time
+  // @param {number} boost  multiplier on DASH_SPEED, so a longer dash costs
+  //                        speed and not the shared envelope
+  // @param {number} pitch  radians, positive looking up; 0 is the flat dash
+  dash(time, boost = 1, pitch = 0) {
+    const c = Math.cos(pitch);
+    this.dashDX = -Math.sin(this.yaw) * c;
+    this.dashDZ = -Math.cos(this.yaw) * c;
+    this.dashDY = Math.sin(pitch);
+    this.dashBoost = boost;
     this.dashStart = time;
     this.dashEnd = time + DASH_TIME;
     this.dashFx = true;
@@ -1775,8 +1798,21 @@ export class Player {
     // switched off - there is no frame where the velocity jumps.
     if (time < this.dashEnd) {
       const k = dashShape((time - this.dashStart) / DASH_TIME);
-      this.vel.x = this.moveVX * (1 - k) + this.dashDX * DASH_SPEED * k;
-      this.vel.z = this.moveVZ * (1 - k) + this.dashDZ * DASH_SPEED * k;
+      const sp = DASH_SPEED * this.dashBoost;
+      this.vel.x = this.moveVX * (1 - k) + this.dashDX * sp * k;
+      this.vel.z = this.moveVZ * (1 - k) + this.dashDZ * sp * k;
+      // The vertical half rides the SAME blend weight, so a dash taken looking
+      // up hands the player back to gravity as smoothly as it hands them back
+      // to their own walk. Gravity is applied below and is not suppressed:
+      // while k is high it is simply outvoted, and as the curve falls it takes
+      // over again, which is what turns the climb into an arc rather than into
+      // a lift that switches off.
+      //
+      // Guarded, because a flat dash must not touch vel.y at all - writing a
+      // zero through this blend would cancel a jump the dash was fired out of.
+      if (this.dashDY !== 0) {
+        this.vel.y = this.vel.y * (1 - k) + this.dashDY * sp * k;
+      }
     }
 
     // SLIDE MOMENTUM, laid over the result the same way the dash is. Set by

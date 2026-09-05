@@ -140,7 +140,7 @@ const NOTE = 0;
 export const ACTIVE_ITEMS = {
   itemHeal: {
     name: 'TRAUMA KIT',
-    charge: 40,
+    charge: 50,
     theme: THEME.vitality,
     // NO OVERHEAL, unlike the health pickup, which goes 25 over the cap. A
     // pickup has to be walked to across a live arena and this is a button, so
@@ -155,7 +155,7 @@ export const ACTIVE_ITEMS = {
   },
   itemFreeze: {
     name: 'CRYO PULSE',
-    charge: 20,
+    charge: 40,
     theme: THEME.ice,
     // The whole floor at once, through the same per-enemy status a cryo round
     // applies - which means bosses downgrade it to a slow through the
@@ -174,7 +174,7 @@ export const ACTIVE_ITEMS = {
   },
   itemRage: {
     name: 'OVERDRIVE',
-    charge: 20,
+    charge: 60,
     theme: THEME.damage,
     // Rides damageBoostEnd, the same field the RAGE pickup uses, so it expires
     // through machinery that already exists and shows in the buff strip without
@@ -182,24 +182,24 @@ export const ACTIVE_ITEMS = {
     // rage pickup landing on top of this must not DOWNGRADE it to 1.5x - the
     // shorter of two overlapping boosts still wins the expiry, which is the
     // honest reading of "for 5 seconds".
-    effects: [['2x DAMAGE FOR 5s', GOOD]],
+    effects: [['2x DAMAGE FOR 10s', GOOD]],
     use: (game) => {
       const p = game.player;
       p.damageMult = Math.max(p.damageMult, 2);
       // The length goes with the deadline, and ONLY when this write wins it:
       // five seconds landing under a rage pickup's remaining ten must leave
       // the HUD chip measuring against the ten it is actually counting down.
-      const end = game.time + 5;
+      const end = game.time + 10;
       if (end > p.damageBoostEnd) {
         p.damageBoostEnd = end;
-        p.damageBoostFull = 5;
+        p.damageBoostFull = 10;
       }
       game.effects.shockwave(p.pos, THEME.damage, 6, 0.6);
     },
   },
   itemGuard: {
     name: 'AEGIS',
-    charge: 20,
+    charge: 60,
     theme: THEME.holy,
     // invulnEnd is read as the FIRST line of both damage sinks in main.js, so
     // this needs no new guard anywhere - but both of those sinks return in
@@ -207,10 +207,10 @@ export const ACTIVE_ITEMS = {
     // not being shot at. The tell is the caller's job: main.js holds a vignette
     // and a buff chip for the duration, or the strongest item in the pool is
     // also the one the player cannot tell is running.
-    effects: [['INVINCIBLE FOR 5s', GOOD]],
+    effects: [['INVINCIBLE FOR 8s', GOOD]],
     use: (game) => {
       const p = game.player;
-      p.invulnEnd = Math.max(p.invulnEnd, game.time + 5);
+      p.invulnEnd = Math.max(p.invulnEnd, game.time + 8);
       game.effects.shockwave(p.pos, THEME.holy, 7, 0.7);
     },
   },
@@ -230,9 +230,16 @@ export const ACTIVE_ITEMS = {
     // on a 2.5s timer. A single charge that comes back fast reads as mobility;
     // two charges that come back slowly read as an escape saved for the worst
     // moment, and the four items above already cover the worst moment.
-    effects: [['DASH FORWARD', GOOD]],
+    effects: [['DASH WHERE YOU ARE LOOKING', GOOD]],
     use: (game) => {
-      game.player.dash(game.time);
+      // THE DASH GOES WHERE THE VIEW GOES, up as well as along. It used to be
+      // flattened onto the floor, which made the one item in the pool that is
+      // pure movement the one item that ignored half of where the player was
+      // pointing - a dash taken at a catwalk went along the ground under it.
+      // Pitch is the raw view angle rather than the recoil-shifted aim: the
+      // player is dashing where they are LOOKING, and a shot's kick must not
+      // steer them.
+      game.player.dash(game.time, 1, game.player.pitch);
     },
   },
 
@@ -248,15 +255,15 @@ export const ACTIVE_ITEMS = {
   // THE FILE'S OLD NOTE SAID an item that needed a new system would be a system
   // with one caller. That was true at five and it is not true at thirty-eight:
   // seven items leave something in the arena, so there is one deployable list
-  // (js/deploy.js) with seven callers, and fifteen run for a window, so there
-  // is one running-item list with fifteen. Two systems, twenty-two callers.
+  // (js/deploy.js) with seven callers, and fourteen run for a window, so there
+  // is one running-item list with fourteen. Two systems, twenty-one callers.
   // Nothing here has a system of its own.
 
   // ---- the room, all at once ---------------------------------------------
 
   itemPurify: {
     name: 'WHITE CELL',
-    charge: 12,
+    charge: 20,
     theme: THEME.antidote,
     // THE CLEANSE ALONE IS NOT THE ITEM. Every status in the game arrives from
     // something that is still there - a lava patch under your feet, a gas
@@ -265,7 +272,7 @@ export const ACTIVE_ITEMS = {
     // and an item whose whole payload expires before the button finishes being
     // pressed is one the player will call broken. Two seconds is enough to
     // walk out of what put it on you, which is the actual answer.
-    effects: [['CLEAR ALL AFFLICTIONS', GOOD], ['AND 2s IMMUNE', GOOD]],
+    effects: [['CLEAR ALL NEGATIVE EFFECTS', GOOD], ['AND 2s IMMUNE TO THEM', GOOD]],
     duration: 2,
     hud: true,
     use: (game) => {
@@ -281,7 +288,7 @@ export const ACTIVE_ITEMS = {
 
   itemInferno: {
     name: 'BRIMSTONE',
-    charge: 12,
+    charge: 40,
     theme: THEME.fire,
     // A FIXED RATE, not the player's own burn. Incendiary may not be owned -
     // most runs it is not - and an item that did nothing at all until you
@@ -295,7 +302,7 @@ export const ACTIVE_ITEMS = {
     // TWICE ONE OF THE PLAYER'S OWN SHOTS PER TICK, at two ticks a beat, on
     // every enemy at once - so an item that used to be a flat 14 a second is
     // worth the same slot on wave 30 as on wave 3. See Player.dotHit.
-    effects: [['SET EVERY ENEMY ALIGHT', GOOD], ['FOR 3s', NOTE]],
+    effects: [['BURN ALL ENEMIES', GOOD], ['FOR 3s', NOTE]],
     use: (game) => {
       let n = 0;
       const burn = game.player.dotHit * 2;
@@ -316,7 +323,7 @@ export const ACTIVE_ITEMS = {
 
   itemArc: {
     name: "JACOB'S LADDER",
-    charge: 12,
+    charge: 40,
     theme: THEME.electric,
     // A CHAIN, NOT A BURST, and the difference is the whole drawing: the bolt
     // walks from the player through five bodies in order, so what the item did
@@ -326,8 +333,14 @@ export const ACTIVE_ITEMS = {
     // Five, because the beam pool and the eye both stop being able to follow a
     // chain at about six links, and because a number the player can count is
     // worth more here than a number that scales.
+    // TWICE ONE OF THE PLAYER'S OWN SHOTS PER LINK, read live off the gun
+    // through getEffectiveDamage the way BOOTSTRAP's blast is - so a flat 45
+    // that had stopped mattering by wave ten is now five hits that are still
+    // worth a slot at wave thirty.
     effects: [['LIGHTNING ARCS THROUGH', GOOD], ['THE 5 NEAREST ENEMIES', NOTE]],
     use: (game) => {
+      const p = game.player;
+      const dmg = p.getEffectiveDamage(p.weapon.damage) * 2;
       const chain = nearestEnemies(game, 5);
       if (!chain.length) {
         game.effects.shockwave(game.player.pos, THEME.electric, 6, 0.4);
@@ -338,7 +351,7 @@ export const ACTIVE_ITEMS = {
         const to = e.pos.clone().setY(1.0);
         game.effects.beam(from, to, 0xffee58);
         game.effects.lightning(e.pos.x, e.pos.z, 2.2);
-        game.hurtEnemy(e, 45);
+        game.hurtEnemy(e, dmg);
         from = to;
       }
       game.effects.addShake(0.2);
@@ -348,20 +361,23 @@ export const ACTIVE_ITEMS = {
 
   itemMercy: {
     name: 'LAST RITES',
-    charge: 24,
+    charge: 40,
     theme: THEME.executioner,
     // FINISHES, IT DOES NOT KILL. Thirty percent is low enough that this is
     // never the thing that won the fight - the player already did the work -
     // and high enough that a room full of half-dead chaff clears in one press,
     // which is the moment the item exists for.
     //
-    // BOSSES ARE EXEMT, on the same reasoning CRYO PULSE's note makes about
-    // freezing one: an item that deletes a boss's last phase from across the
-    // room would not be a boss strategy, it would be the only one.
+    // BOSSES ARE NOT EXEMPT. They used to be, on the reasoning that an item
+    // which deletes a boss's last phase would be the only boss strategy there
+    // is - and at twenty-four points that was true. At forty it is a whole
+    // fight's charge spent on the third of a health bar the player was already
+    // going to win, and a finisher that refuses at the one moment a finisher
+    // is worth pressing is a finisher nobody presses.
     effects: [['EXECUTE EVERY ENEMY', GOOD], ['UNDER 30% HEALTH', NOTE]],
     use: (game) => {
       for (const e of game.enemies) {
-        if (e.dead || e.boss) continue;
+        if (e.dead) continue;
         if (e.hp > e.maxHp * 0.3) continue;
         game.effects.impact(e.pos, 0xff2d6f, 10, 5, 3, 0.4);
         game.hurtEnemy(e, e.hp + 1);
@@ -373,7 +389,7 @@ export const ACTIVE_ITEMS = {
 
   itemQuake: {
     name: 'TECTONIC',
-    charge: 16,
+    charge: 20,
     theme: THEME.impact,
     // THE FORCE IS THE POINT AND THE DAMAGE IS THE RECEIPT. Forty is not much;
     // nine metres of everything leaving at once is a great deal, and what the
@@ -381,9 +397,15 @@ export const ACTIVE_ITEMS = {
     // walk back. It answers the one thing nothing else in the pool answers -
     // being surrounded - without killing anything, so the fight is still
     // there when it lands.
-    effects: [['HURL EVERY NEARBY ENEMY BACK', GOOD], ['AND DEAL 40 DAMAGE', GOOD]],
+    // THE SHOVE IS A TRAVEL, NOT A PLACEMENT. It goes through _shove, which
+    // goes through Enemy.knock - the melee swing's own knockback - so a crowd
+    // is visibly thrown out over half a second instead of being found already
+    // scattered on the next frame. That half second IS the item: what the
+    // player bought is the walk back, and they have to be able to watch it.
+    effects: [['HURL EVERY NEARBY ENEMY BACK', GOOD], ['AND DEAL BULLET DAMAGE', GOOD]],
     use: (game) => {
       const p = game.player;
+      const dmg = p.getEffectiveDamage(p.weapon.damage);
       for (const e of game.enemies) {
         if (e.dead) continue;
         const d = e.pos.distanceTo(p.pos);
@@ -394,8 +416,8 @@ export const ACTIVE_ITEMS = {
         // thrown the furthest. A flat shove would move the far edge of the
         // circle as hard as the enemy in your face, which is the opposite of
         // what an explosion looks like.
-        game._shove(e, _v, 9 * (1 - d / 9) + 2);
-        game.hurtEnemy(e, 40);
+        game._shove(e, _v, 18 * (1 - d / 9) + 4);
+        game.hurtEnemy(e, dmg);
       }
       game.effects.shockwave(p.pos, THEME.impact, 9, 0.6);
       game.effects.burst(p.pos, 0x00e5c0, 30, 9, 3, 0.6);
@@ -407,7 +429,7 @@ export const ACTIVE_ITEMS = {
 
   itemMartyr: {
     name: 'MARTYR',
-    charge: 45,
+    charge: 60,
     theme: THEME.blast,
     // THE BIGGEST NUMBER IN THE POOL, AND THE ONLY ONE THAT COSTS EVERYTHING.
     // It is not a nuke with a downside: it is a trade the player makes at ten
@@ -421,7 +443,10 @@ export const ACTIVE_ITEMS = {
     use: (game) => {
       const p = game.player;
       _v.set(p.pos.x, 0, p.pos.z);
-      game._blast(_v, 400, 16, null, false);
+      // TWENTY OF THE PLAYER'S OWN SHOTS, read live off the gun rather than
+      // the flat 400 it used to be - the biggest number in the pool has to
+      // still be the biggest number in the pool at wave thirty.
+      game._blast(_v, p.getEffectiveDamage(p.weapon.damage) * 20, 16, null, false);
       p.health = Math.min(p.health, 10);
       p.clearCarnage();
       game.effects.shockwave(_v, THEME.blast, 16, 1.0);
@@ -435,7 +460,7 @@ export const ACTIVE_ITEMS = {
 
   itemMeteor: {
     name: 'FALLING SKY',
-    charge: 36,
+    charge: 60,
     theme: THEME.ember,
     // TWELVE ROCKS OVER THREE SECONDS, PLACED AT RANDOM. The randomness is the
     // item: it is the one thing in the pool the player does not aim, so what
@@ -448,6 +473,12 @@ export const ACTIVE_ITEMS = {
     // from nowhere in particular would be a question with no answer.
     effects: [['METEORS STRIKE THE ARENA', GOOD], ['FOR 3s', NOTE]],
     use: (game) => {
+      // THREE OF THE PLAYER'S OWN SHOTS PER ROCK, snapshotted at the press for
+      // the same reason a turret's is: the shower was called down by the gun
+      // in hand, and twelve rocks that quietly got stronger because a totem
+      // was claimed while they were falling would be damage nobody aimed.
+      const p = game.player;
+      const dmg = p.getEffectiveDamage(p.weapon.damage) * 3;
       for (let i = 0; i < 12; i++) {
         // Biased toward wherever the enemies actually are, by picking a random
         // one and scattering around it. Uniform over the whole floor would put
@@ -462,7 +493,8 @@ export const ACTIVE_ITEMS = {
           game,
           Math.max(-BOUND + 2, Math.min(BOUND - 2, cx + Math.cos(a) * r)),
           Math.max(-BOUND + 2, Math.min(BOUND - 2, cz + Math.sin(a) * r)),
-          (i / 12) * 3 * (0.7 + Math.random() * 0.6)
+          (i / 12) * 3 * (0.7 + Math.random() * 0.6),
+          dmg
         ));
       }
       game.effects.shockwave(game.player.pos, THEME.ember, 8, 0.5);
@@ -474,7 +506,7 @@ export const ACTIVE_ITEMS = {
 
   itemRate: {
     name: 'RED LINE',
-    charge: 18,
+    charge: 30,
     theme: THEME.rate,
     // Rides fireRateMult and fireRateBoostEnd - the fire-rate PICKUP's own two
     // fields - so it expires through machinery that already exists and shows
@@ -501,7 +533,7 @@ export const ACTIVE_ITEMS = {
 
   itemFrenzy: {
     name: 'RED MIST',
-    charge: 24,
+    charge: 40,
     theme: THEME.rage,
     // THE DRAWBACK IS THE FEATURE. Three times damage for five seconds is the
     // hardest hit in the pool, and taking double while it runs is what stops
@@ -511,8 +543,8 @@ export const ACTIVE_ITEMS = {
     // Both halves are the ITEM's multipliers rather than the shared ones, so a
     // rage pickup and this one stack instead of overwriting each other, and a
     // Blood Pact's damageTakenMult is not silently replaced by the two.
-    effects: [['3x DAMAGE FOR 5s', GOOD], ['BUT YOU TAKE 2x', NOTE]],
-    duration: 5,
+    effects: [['3x DAMAGE FOR 10s', GOOD], ['BUT YOU TAKE 2x', NOTE]],
+    duration: 10,
     use: (game) => {
       const p = game.player;
       p.itemDamageMult = 3;
@@ -565,7 +597,7 @@ export const ACTIVE_ITEMS = {
 
   itemPact: {
     name: 'BLOOD TAX',
-    charge: 24,
+    charge: 30,
     theme: THEME.pact,
     // PAID UP FRONT, IN THE ONE CURRENCY THE PLAYER CANNOT FARM. It is the
     // same trade RED MIST offers with the terms reversed: that one is cheap
@@ -588,7 +620,7 @@ export const ACTIVE_ITEMS = {
 
   itemHumours: {
     name: 'FOUR HUMOURS',
-    charge: 24,
+    charge: 40,
     theme: THEME.affliction,
     // EVERY ELEMENT IN THE GAME, ONE ROUND AT A TIME. The point is not the
     // damage - each of the four is weaker than the passive item that owns it -
@@ -611,19 +643,19 @@ export const ACTIVE_ITEMS = {
 
   itemHoming: {
     name: 'BIRD DOG',
-    charge: 14,
+    charge: 40,
     theme: THEME.precision,
     // SEEKER, ON A CLOCK. It reads the same _homeShot path the passive item
     // does - the same cone, the same line-of-sight check, the same bent tracer
     // - so a player who has carried Seeker already knows exactly what this
-    // does, and a player who has not gets shown the mechanic for five seconds.
+    // does, and a player who has not gets shown the mechanic for ten seconds.
     //
     // It does not stack with the passive item and it does not need to: the
     // shot path takes the wider of the two cones, so owning Seeker makes this
     // item a dead press rather than a double one, which is the honest
     // behaviour.
-    effects: [['YOUR SHOTS FIND THEIR MARK', GOOD], ['FOR 5s', NOTE]],
-    duration: 5,
+    effects: [['YOUR SHOTS FIND THEIR MARK', GOOD], ['FOR 10s', NOTE]],
+    duration: 10,
     use: (game) => {
       game.player.itemHoming = 1;
       game.effects.shockwave(game.player.pos, THEME.precision, 6, 0.5);
@@ -634,41 +666,35 @@ export const ACTIVE_ITEMS = {
 
   itemLeech: {
     name: 'HAEMOPHAGE',
-    charge: 16,
+    charge: 60,
     theme: THEME.blood,
-    // TEN SHOTS THAT HIT, not ten trigger pulls - a magazine emptied into a
-    // wall must not be a full heal, and requiring the hit is also what makes
-    // the item something the player has to shoot WELL to spend.
+    // TWENTY SHOTS THAT HIT, not twenty trigger pulls - a magazine emptied
+    // into a wall must not be a heal at all, and requiring the hit is also
+    // what makes the item something the player has to shoot WELL to spend.
     //
-    // Five a shot, not ten. Ten would be a hundred health off one press, which
-    // is a second health bar, and this is a sixteen-second item.
+    // ONE HP A HIT, AND THAT IS THE WHOLE SHAPE. Five a hit was a second
+    // health bar arriving in four bursts; one a hit is twenty points that
+    // accrue while the player does the thing they were going to do anyway, so
+    // the item is a slow refill earned by accuracy rather than a heal with a
+    // strange trigger on it.
     //
-    // THE WINDOW IS THE DEVIATION. The ask was "the next ten shots" with no
-    // clock on it, which would let a player bank a charge through a wave break
-    // and open the next fight already loaded. Twenty seconds is long enough
-    // that ten shots is never the binding constraint in a fight, and short
-    // enough that the item is spent in the fight it was pressed in.
+    // THERE IS NO CLOCK ON IT. There used to be a twenty-second backstop, on
+    // the reasoning that a player could otherwise bank a charge through a wave
+    // break and open the next fight already loaded - which is true, and is
+    // also just the item being carried rather than spent. Twenty hits is a
+    // real cost at sixty points of charge, and a window that expired with
+    // hits left on it was the item silently taking back what it granted.
     //
-    // IT ENDS ON WHICHEVER RUNS OUT FIRST, and that is not a detail. The clock
-    // is the BACKSTOP and the shots are the effect: a player who spends all
-    // ten in three seconds is no longer leeching, and a chip that sat there
-    // for the other seventeen would be the HUD telling them they still have
-    // something they do not. The item is over when the last shot is spent.
-    effects: [['NEXT 10 HITS HEAL 5 HP', GOOD], ['WITHIN 20s', NOTE]],
-    duration: 20,
-    use: (game, s) => {
-      game.player.leechShots = 10;
-      s.label = '10';
+    // WITH NO DURATION IT NEVER JOINS THE RUNNING LIST, which is why there is
+    // no tick and no end here: `leechShots` is the entire state, it is spent
+    // by the shot path in main.js, and it is cleared with the rest of the run
+    // on a death or a restart (see Player.reset).
+    effects: [['NEXT 20 HITS HEAL 1 HP', GOOD], ['NO TIME LIMIT', NOTE]],
+    use: (game) => {
+      game.player.leechShots = 20;
       game.effects.shockwave(game.player.pos, THEME.blood, 6, 0.5);
       game.sfx.itemSurge();
     },
-    tick: (game, s) => {
-      s.label = String(game.player.leechShots);
-      // The runtime reads this and closes the window on the same frame - see
-      // RunningItems.update.
-      if (game.player.leechShots <= 0) s.done = true;
-    },
-    end: (game) => { game.player.leechShots = 0; },
   },
 
   itemStone: {
@@ -729,23 +755,20 @@ export const ACTIVE_ITEMS = {
     name: 'SUTURE ENGINE',
     charge: 30,
     theme: THEME.vitality,
-    // FORTY HEALTH THAT ARRIVES SLOWLY, against TRAUMA KIT's twenty-five that
-    // arrives now. That is the whole comparison and it is a real one: this is
-    // more total and worse under pressure, so it is the item you press BEFORE
-    // the wave rather than during it - and it heals through damage rather than
-    // being erased by it, which nothing else in the pool does.
-    //
-    // Thirty seconds, not sixty. At sixty it heals fifteen more than a
-    // twenty-second item and takes three times as long to come back, which is
-    // not a trade anybody would take twice.
-    effects: [['REGENERATE 5 HP/s', GOOD], ['FOR 8s', NOTE]],
-    duration: 8,
+    // TWENTY HEALTH THAT ARRIVES SLOWLY, against TRAUMA KIT's twenty-five that
+    // arrives now - and TRAUMA KIT costs fifty where this costs thirty. That
+    // is the whole comparison and it is a real one: this is cheaper, slower
+    // and worse under pressure, so it is the item you press BEFORE the wave
+    // rather than during it - and it heals through damage rather than being
+    // erased by it, which nothing else in the pool does.
+    effects: [['REGENERATE 2 HP/s', GOOD], ['FOR 10s', NOTE]],
+    duration: 10,
     use: (game) => {
       game.effects.shockwave(game.player.pos, THEME.vitality, 6, 0.5);
       game.sfx.itemHeal2();
     },
     tick: (game, s, dt) => {
-      heal(game.player, 5 * dt);
+      heal(game.player, 2 * dt);
       // A drip rather than a stream: sixty motes a second is a fog, and this
       // has to still read as healing eight seconds later.
       s.drip = (s.drip || 0) - dt;
@@ -906,7 +929,7 @@ export const ACTIVE_ITEMS = {
 
   itemBlink: {
     name: 'COLD SPOT',
-    charge: 24,
+    charge: 40,
     theme: THEME.poise,
     // NOT A TELEPORT THE PLAYER AIMS. They press it because they are in
     // trouble, and being asked to pick a destination at that moment is being
@@ -971,7 +994,7 @@ export const ACTIVE_ITEMS = {
 
   itemCharge: {
     name: 'BONESAW',
-    charge: 4,
+    charge: 15,
     theme: THEME.surge,
     // THE SAME DASH BLINK DRIVE FIRES, with a hitbox on it. Deliberately the
     // same movement - the same envelope, the same distance, the same
@@ -980,12 +1003,24 @@ export const ACTIVE_ITEMS = {
     // the other one goes through it, and a player choosing between them should
     // be choosing what happens on the way, not learning a second movement.
     //
-    // Four seconds against BLINK DRIVE's three. The damage costs a second.
-    effects: [['DASH THROUGH ENEMIES', GOOD], ['3x BULLET DAMAGE ON CONTACT', GOOD]],
-    duration: 0.4,
+    // A QUARTER LONGER, AND INVULNERABLE FOR ALL OF IT. Both halves are the
+    // same fix: an item whose whole instruction is "go through them" cannot
+    // charge the player for the bodies it goes through, or the correct way to
+    // press it is at nothing. The window is exactly the dash - it opens on the
+    // press and closes when the movement does - so there is no invulnerability
+    // left over on the far side to play around.
+    //
+    // The extra distance is bought with SPEED rather than with time (see
+    // Player.dash), so the envelope, the window and the hand-back are still
+    // BLINK DRIVE's to the frame, and the two items are still the same
+    // movement with different things happening on the way.
+    effects: [['DASH THROUGH ENEMIES', GOOD], ['3x BULLET DAMAGE, AND UNTOUCHABLE', GOOD]],
+    duration: 0.7,
     hud: false,
     use: (game, s) => {
-      game.player.dash(game.time);
+      const p = game.player;
+      p.dash(game.time, 1.25, p.pitch);
+      p.invulnEnd = Math.max(p.invulnEnd, game.time + 0.7);
       s.hit = new Set();
       game.effects.burst(game.player.pos, THEME.surge, 18, 6, 2, 0.4);
       game.sfx.itemCharge();
@@ -1103,7 +1138,7 @@ export const ACTIVE_ITEMS = {
 
   itemBomb: {
     name: 'SHORT FUSE',
-    charge: 12,
+    charge: 30,
     theme: THEME.blast,
     // THREE SECONDS IS THE ITEM. Every other blast in the pool happens at the
     // moment it is asked for; this one happens where the fight is GOING to be,
@@ -1177,7 +1212,7 @@ export const ACTIVE_ITEMS = {
 
   itemHole: {
     name: 'EVENT HORIZON',
-    charge: 28,
+    charge: 60,
     theme: THEME.gravity,
     // THROWN, NOT PLACED. The orb flies flat and fast along the line of sight,
     // so where the hole opens is a shot the player took rather than a circle
@@ -1196,7 +1231,10 @@ export const ACTIVE_ITEMS = {
       // thing in the pool the player aims with the crosshair, so a shot taken
       // at a flier has to go up.
       game.camera.getWorldDirection(_dir);
-      game.deploy(new HoleOrb(game, _v.x, _v.y, _v.z, _dir.x, _dir.y, _dir.z));
+      // TWICE ONE OF THE PLAYER'S OWN SHOTS A BEAT, snapshotted at the throw
+      // the way a turret's damage is: the hole was opened by the gun in hand.
+      game.deploy(new HoleOrb(game, _v.x, _v.y, _v.z, _dir.x, _dir.y, _dir.z,
+        p.getEffectiveDamage(p.weapon.damage) * 2));
       game.pad.rumble(0.5, 0.6, 220, 2);
       game.sfx.itemDeploy();
     },
@@ -1206,7 +1244,7 @@ export const ACTIVE_ITEMS = {
 
   itemLodestar: {
     name: 'LODESTAR',
-    charge: 30,
+    charge: 60,
     theme: THEME.lodestone,
     // THE WAVE-CLEAR SWEEP, ON DEMAND. Every orb and every pickup in the arena
     // comes in at once - the same sweep a cleared wave already does for free,
@@ -1285,7 +1323,7 @@ export const HUMOURS = [
 // THE RUNNING LIST
 // ---------------------------------------------------------------------------
 //
-// Fifteen of the thirty-seven items do not finish on the frame they start.
+// Fourteen of the thirty-seven items do not finish on the frame they start.
 // This is the four lines that make that possible, and it is deliberately the
 // smallest thing that could: a list of activations, each holding the item that
 // made it, its own scratch object and a clock. No registry, no ids to keep in
