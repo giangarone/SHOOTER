@@ -1,11 +1,11 @@
 // Focused check of ACTIVE ITEMS - the slot, the charge, and the MYSTERY BOX
-// that hands them out - and of the eleven mutations that came in from the
-// Devil's row when it was retired. Driven through window.__game.
+// that hands them out - and of the eleven passive items that came in from the
+// max-health row when it was retired. Driven through window.__game.
 //
 // The two halves are here together on purpose: they are the same change. The
-// row that used to sell mutations for max health became a pedestal that gave
-// items away, and then a box that sells them; every mutation it used to sell
-// had to be re-priced to stand on a free totem.
+// row that used to sell passive items for max health became a pedestal that
+// gave items away, and then a box that sells them; every passive item it used
+// to sell had to be re-priced to stand on a free totem.
 //
 // WHAT THE BOX HALF IS ACTUALLY GUARDING, since a lot of it looks like a state
 // machine being poked: that a roll is charged EXACTLY ONCE and always the same
@@ -162,7 +162,8 @@ try {
     g._grabBox();
     out.carried = P.item === firstId;
     out.arrivesCharged = P.itemReady && P.itemCharge === ITEMS[firstId].charge;
-    // Taking it does NOT end the wave break - the mutation pick still does.
+    // Taking it does NOT end the wave break - the passive item pick still
+    // does.
     out.totemsStillUp = g.totemArea.active && !g.totemArea.claimed;
     // ...and unlike the pedestal it replaced, the BOX DOES NOT GO AWAY. It is
     // never spent; it shuts and can be paid again.
@@ -277,24 +278,31 @@ try {
         P.update(0.05, g.input, g.arena.obstacles, g.time, combat);
       }
     };
-    P.giveItem('itemHeal');   // 20 points, among the dearest in the pool
+    // THE COST IS READ FROM THE POOL, never written down here. Charge costs
+    // are tuned, and a copy in this file would only ever be a copy of what
+    // they were the day it was written: the next tuning pass would fail three
+    // assertions with nothing actually broken. Everything below is stated as a
+    // distance from `cost` so it follows items.js wherever it goes.
+    const cost = ITEMS.itemHeal.charge;
+    P.giveItem('itemHeal');
     P.itemCharge = 0;
     runFrames(40, false);     // two seconds of SHOP
     out.shopChargesNothing = P.itemCharge === 0;
-    runFrames(400, true);     // twenty seconds of WAVE - enough to have filled
+    runFrames(400, true);     // twenty seconds of WAVE
     out.timeChargesNothing = P.itemCharge === 0;
     // Points are the only thing that moves it.
     P.addItemCharge(2);
     out.pointsCharge = P.itemCharge === 2;
     // The ready flag is one-shot: set on the call it fills, and never again.
+    // Half a point short of the cost, then a push that clears it outright.
     P.itemCharge = 0;
     P.itemReadyFx = false;
-    P.addItemCharge(19.5);
+    P.addItemCharge(cost - 0.5);
     out.notReadyEarly = !P.itemReadyFx && !P.itemReady;
     P.addItemCharge(5);
     out.readyFired = P.itemReadyFx;
     // The overflow is dropped rather than banked - see addItemCharge.
-    out.chargeCaps = P.itemCharge === 20;
+    out.chargeCaps = P.itemCharge === cost;
     P.itemReadyFx = false;
     P.addItemCharge(5);
     out.readyFiresOnce = !P.itemReadyFx;
@@ -483,18 +491,18 @@ try {
     g.tryUse();
     out.keyBoughtAmmo = P.reserveAmmo === 90;
 
-    // --- THE READOUT: one segment per second, and no number anywhere ---
-    // The bar is the ONLY place the charge time is stated, and it states it in
+    // --- THE READOUT: one segment per point, and no number anywhere ---
+    // The bar is the ONLY place the charge cost is stated, and it states it in
     // segments. Everything else - the pedestal's lines, its bottom note, the
     // prompt, the build sheet - must not print it: the number is meant to be
     // learned by carrying the item, and one stray template would give it away
     // in the one place a player is most likely to be reading.
     out.segments = {};
     out.partialFills = [];
-    out.chargeTimeLeaks = [];
-    // The cooldowns as the pool actually states them, so the segment check
+    out.chargeCostLeaks = [];
+    // The charge costs as the pool actually states them, so the segment check
     // below can test itemCells()'s RULE rather than a snapshot of the table.
-    out.cooldowns = Object.fromEntries(
+    out.chargeCosts = Object.fromEntries(
       Object.entries(ITEMS).map(([k, d]) => [k, d.charge])
     );
     for (const [key, def] of Object.entries(ITEMS)) {
@@ -505,7 +513,7 @@ try {
           .getPropertyValue('--cells').trim()
       );
       out.segments[key] = n;
-      // Walk the whole cooldown and check the bar only ever stops on a cell
+      // Walk the whole charge and check the bar only ever stops on a cell
       // boundary. This is the rendered fill, not the rule behind it: a rounding
       // slip anywhere between the charge and the transform shows up here.
       for (let c = 0; c <= def.charge; c += 0.1) {
@@ -526,12 +534,18 @@ try {
       P.itemCharge = def.charge;
       // Every string this item can put on screen, against the number it must
       // never contain.
+      //
+      // THE SUFFIX IS THE POINT. The cost is a bare count now, and bare counts
+      // legitimately appear in effect lines - DONATION costs 50 points and
+      // says COSTS 50 HP. What must never come back is the number worn as a
+      // DURATION, which is the shape every template printed it in while items
+      // charged on the clock.
       const secs = String(def.charge) + 's';
       const strings = [
         ...def.effects.map((e) => e[0]),
         def.name,
         // The build sheet's own entry for it: name, effect lines, and the
-        // READY state - none of which may print the cooldown either.
+        // READY state - none of which may print the cost either.
         ...(() => {
           const a = g._statActive();
           return a ? [a.name, ...a.effects.map((e) => e[0])] : [];
@@ -539,15 +553,14 @@ try {
       ];
       P.item = null;
       for (const line of strings) {
-        if (line.includes(secs)) out.chargeTimeLeaks.push(key + ': ' + line);
+        if (line.includes(secs)) out.chargeCostLeaks.push(key + ': ' + line);
       }
     }
 
-    // --- THE MERGED POOL: everything is rollable, nothing is a deal ---
-    // The eleven that came in from the Devil's row have to be REACHABLE on a
-    // free totem, which is the one thing a leftover `devil: true` would break
-    // silently: the mutation is in the map, has a drawing, and can never be
-    // offered.
+    // --- THE MERGED POOL: everything in it is rollable --- The eleven that
+    // came in from the max-health row have to be REACHABLE on a free totem.
+    // A pick that is in the map, has a drawing and can still never be offered
+    // is the one failure nothing else here would see.
     const wanted = new Set([
       'carnage', 'bloodPact', 'hellfire', 'eternalAffliction', 'absoluteZero',
       'overload', 'executioner', 'antidote', 'devilsGamble', 'thorns', 'darkPower',
@@ -568,7 +581,7 @@ try {
     return out;
   });
 
-  // ---- THE FIVE ITEMS, AND THE ELEVEN MUTATIONS ----------------------------
+  // ---- THE FIVE ITEMS, AND THE ELEVEN PASSIVE ITEMS ------------------------
   // Each is exercised against a live enemy or a live hit, because a field that
   // is set correctly and read nowhere looks identical from the outside.
   const m = await page.evaluate(() => {
@@ -662,7 +675,7 @@ try {
     g._hurtPlayer(40, P.pos, null);
     out.invulnEnds = P.health < 100;
 
-    // ---- BLINK DRIVE: the dash moves you, with no mutation behind it ----
+    // ---- BLINK DRIVE: the dash moves you, with no passive item behind it ----
     P.upgrades = {};
     P.rebuildMods();
     P.dashEnd = 0;
@@ -676,11 +689,11 @@ try {
       P.update(0.016, g.input, g.arena.obstacles, g.time, true);
     }
     out.dashMoved = Math.abs(P.pos.z - 8) > 2;
-    out.dashNeedsNoMutation = !P.mods.dashCharges;
+    out.dashNeedsNoPassive = !P.mods.dashCharges;
     P.pos.set(0, 0, z0);
 
-    // ---- and the cooldowns are what the pool says ----
-    out.cooldowns = Object.fromEntries(
+    // ---- and the charge costs are what the pool says ----
+    out.chargeCosts = Object.fromEntries(
       Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.charge])
     );
 
@@ -1023,9 +1036,9 @@ try {
     out.hazardDouble = +(hpHaz - P.health).toFixed(1);
     P.baseMaxHealth = 100;
 
-    // EXECUTIONER: half a boss, and the ONE mutation that still costs health.
-    // Charged as a mod, so it has to survive a rebuild - which is exactly what
-    // the old payment could not have done.
+    // EXECUTIONER: half a boss, and the ONE passive item that still costs
+    // health. Charged as a mod, so it has to survive a rebuild - which is
+    // exactly what the old payment could not have done.
     take('executioner');
     out.bossHpMult = P.mods.bossHpMult;
     out.executionerCost = 100 - P.maxHealth;
@@ -1185,7 +1198,9 @@ try {
   // that could actually break.
   {
     const wrong = Object.entries(r.segments)
-      .filter(([k, n]) => n !== Math.max(1, Math.min(12, Math.ceil(r.cooldowns[k]))))
+      .filter(([k, n]) => (
+        n !== Math.max(1, Math.min(12, Math.ceil(r.chargeCosts[k])))
+      ))
       .map(([k, n]) => k + '=' + n);
     ok('the meter renders the right number of segments',
       wrong.length === 0 && Object.keys(r.segments).length === r.poolTotal,
@@ -1193,13 +1208,13 @@ try {
   }
   ok('the meter never renders a part-lit segment',
     r.partialFills.length === 0, r.partialFills.join(' | '));
-  ok('the charge time is printed nowhere',
-    r.chargeTimeLeaks.length === 0, r.chargeTimeLeaks.join(' | '));
+  ok('the charge cost is printed nowhere',
+    r.chargeCostLeaks.length === 0, r.chargeCostLeaks.join(' | '));
 
   // ---- the merged pool ----
-  ok('every converted mutation is rollable',
+  ok('every converted passive item is rollable',
     r.convertedUnreachable.length === 0, r.convertedUnreachable.join(', '));
-  ok('the dropped mutations are gone', r.droppedGone);
+  ok('the dropped passive items are gone', r.droppedGone);
 
   // ---- the whole pool, fired and expired ----
   ok('every item fires without throwing', m.threw.length === 0, m.threw.join(' | '));
@@ -1245,11 +1260,21 @@ try {
   ok('aegis holds', m.invulnHolds);
   ok('aegis ends', m.invulnEnds);
   ok('blink drive moves you', m.dashArmed && m.dashMoved);
-  ok('the dash needs no mutation behind it', m.dashNeedsNoMutation);
-  ok('the cooldowns are 20 / 10 / 20 / 20 / 3',
-    m.cooldowns.itemHeal === 20 && m.cooldowns.itemFreeze === 10
-    && m.cooldowns.itemRage === 20 && m.cooldowns.itemGuard === 20
-    && m.cooldowns.itemDash === 3, JSON.stringify(m.cooldowns));
+  ok('the dash needs no passive item behind it', m.dashNeedsNoPassive);
+  // THE RULE, not a snapshot of it. This used to name five costs as literals,
+  // which tested that nobody had tuned the table rather than that the table is
+  // usable - and it failed the moment anybody did. What has to hold is that
+  // every item in the pool the BROWSER loaded states a real cost: a missing or
+  // zero one is an item that arrives permanently ready, which nothing else
+  // here would catch.
+  {
+    const badCost = Object.entries(m.chargeCosts)
+      .filter(([, c]) => !Number.isFinite(c) || c <= 0)
+      .map(([k, c]) => k + '=' + c);
+    ok('every item states a real charge cost',
+      badCost.length === 0 && Object.keys(m.chargeCosts).length > 0,
+      badCost.join(', '));
+  }
 
   // ---- the eleven ----
   ok('dark power: +20% damage', m.darkPower === 120);

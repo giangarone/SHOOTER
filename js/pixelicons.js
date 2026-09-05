@@ -1,5 +1,5 @@
-// Pixel-art mutation icons: one 24x24 drawing per offer, given a thin slab of
-// thickness behind it and hung in the totem's column of light.
+// Pixel-art passive item icons: one 24x24 drawing per offer, given a thin slab
+// of thickness behind it and hung in the totem's column of light.
 //
 // WHAT THIS IS
 //   Every icon is FLAT art - no volume, no perspective, no sculpting - with a
@@ -50,8 +50,8 @@ const DEPTH = 3 * PX;
 //   0  outline    2  structure    4  pale accent
 //
 // Every tone but the pale accent is derived from the offer's THEME colour, so
-// one drawing works for any mutation and the game's "colour tells you what it
-// does" language stays load-bearing. The steps are further apart than they
+// one drawing works for any passive item and the game's "colour tells you what
+// it does" language stays load-bearing. The steps are further apart than they
 // look: the game tone-maps with ACES (main.js), which pulls flat unlit colour
 // toward the middle, so an authored ramp has to start wide to survive it.
 export function pixelPalette(color) {

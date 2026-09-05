@@ -51,7 +51,7 @@ const MAX_ORBS_PER_DROP = 5;
 // (1.2) because the magnet below is what actually does the collecting - this
 // is just the last step of it.
 const COLLECT_RADIUS = 0.7;
-// Pulled in from inside this, before any mutation widens it. Generous on
+// Pulled in from inside this, before any passive item widens it. Generous on
 // purpose: at half this the player had to walk over each orb almost exactly,
 // which turned collecting a wave's money into tidying up rather than into
 // moving through the room.
@@ -383,7 +383,7 @@ export class MoneyOrbs {
   /**
    * @param {number} dt
    * @param {THREE.Vector3} playerPos  feet position
-   * @param {number} magnetR           collection radius, mutations included
+   * @param {number} magnetR           collection radius, passive items included
    * @param {function(number):void} onCollect  called with the orb's value
    * @returns {number} orbs collected this frame
    */

@@ -72,7 +72,7 @@ export class UI {
     this.invulnFrame = $('invuln-frame');
     this.crosshair = $('crosshair');
     this.statsPanel = $('stats-panel');
-    this.statsMuts = $('stats-muts');
+    this.statsPassives = $('stats-passives');
     this.statsActive = $('stats-active');
     this.statsItemSec = $('stats-item-sec');
     this._c = {};        // last value written per HUD field
@@ -249,10 +249,10 @@ export class UI {
   }
 
   // BRASS ECHO. One flare on the reserve number when a round comes back - the
-  // only thing on the HUD that says the mutation paid. The class is removed
-  // and forced to reflow before it goes back on, so two refunds in quick
-  // succession play twice instead of the second one being swallowed by the
-  // animation the first is still running.
+  // only thing on the HUD that says the passive item paid. The class is
+  // removed and forced to reflow before it goes back on, so two refunds in
+  // quick succession play twice instead of the second one being swallowed by
+  // the animation the first is still running.
   flashReserve() {
     this.ammoRes.classList.remove('refund');
     void this.ammoRes.offsetWidth;
@@ -268,9 +268,6 @@ export class UI {
    * @param {?string} id    item id, or null when nothing is carried
    * @param {?object} def   its ACTIVE_ITEMS entry
    * @param {number} frac   0..1 of the way to charged
-   * @param {boolean} held  true at the wave break, when the bar is frozen -
-   *   said explicitly rather than inferred, because a bar that has simply
-   *   stopped moving looks like a fault and this is a rule worth showing.
    */
   setItem(id, def, frac) {
     if (this._c.itemId !== id) {
@@ -319,13 +316,11 @@ export class UI {
       this._c.itemReady = ready;
       this.itemBox.classList.toggle('ready', ready);
     }
-    // THE BAR DOES NOT CHANGE COLOUR IN THE SHOP, and this function is no
-    // longer told whether it is in one. It used to grey out while the charge
-    // was frozen at a wave break, on the reasoning that a bar which has simply
-    // stopped moving looks like a fault. In practice nobody is watching the
-    // meter during a shopping trip, and a second bar state to learn buys less
-    // than it costs: the charge coming back is something the player finds out
-    // by the wave starting, which is the moment they care about it.
+    // THE BAR HAS TWO STATES AND NO THIRD. Filling and full, and this
+    // function is not told where in the run it is being drawn: the charge is
+    // bought with kills, so the meter means the same thing wherever the player
+    // is standing, and a bar state that only ever appeared in the shop would be
+    // a rule to learn for nothing.
   }
 
   // The item just finished charging. One flash, restarted the way
@@ -399,8 +394,9 @@ export class UI {
   //
   // OPENING SALVO rides here rather than in the status strip: a status wears
   // the hostile frame, and free ammunition is not something being done to the
-  // player. It draws the MUTATION'S OWN icon - one shape per mutation holds
-  // whether the shape is standing on a totem or counting down on the HUD.
+  // player. It draws the PASSIVE ITEM'S OWN icon - one shape per passive item
+  // holds whether the shape is standing on a totem or counting down on the
+  // HUD.
   setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0, salvo = 0) {
     this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost, '', false, 0);
     this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost, '', false, 1);
@@ -775,7 +771,7 @@ export class UI {
   // WHAT YOU ARE CARRYING, and nothing else. This used to be a RUN SUMMARY -
   // wave, kills, accuracy, damage taken, a dozen live counters - and every one
   // of those numbers was either already on the HUD or was trivia. What it never
-  // showed was the one thing a build sheet is for: what the mutations the
+  // showed was the one thing a build sheet is for: what the passive items the
   // player has been walking into all run actually DO. A player six upgrades
   // deep could not find out what any of them was without dying.
   //
@@ -806,15 +802,15 @@ export class UI {
     // Dropped rather than kept: the next open is a different build, and a
     // stale key would silently suppress the rebuild that would fix it.
     this._statsKey = '';
-    this.statsMuts.textContent = '';
+    this.statsPassives.textContent = '';
     this.statsActive.textContent = '';
   }
 
   /**
    * One entry: the icon, the name, and the effect lines under it.
    *
-   * The icon is drawn in the item's or mutation's own THEME COLOUR, which is
-   * the same colour the totem or the box card carried when it was offered -
+   * The icon is drawn in the item's or passive item's own THEME COLOUR, which
+   * is the same colour the totem or the box card carried when it was offered -
    * that is the whole reason it is worth the 576 cells, because the shape and
    * the colour together are how the player recognises a thing they took twenty
    * minutes ago. The NAME stays white: several themes - Berserker's near-black
@@ -832,15 +828,15 @@ export class UI {
     name.className = 'inv-name';
     name.textContent = def.name;
     // A tier is only shown where there is one to show: printing "x1" on every
-    // single-tier mutation would make the stacking ones invisible.
+    // single-tier passive item would make the stacking ones invisible.
     if (def.tier > 1) {
       const tier = document.createElement('em');
       tier.textContent = 'x' + def.tier;
       name.appendChild(tier);
     }
     body.appendChild(name);
-    // Array.isArray, not a truthiness check: a mutation's `effects` can be a
-    // FUNCTION of the stack count - see effectLines() - and a function is
+    // Array.isArray, not a truthiness check: a passive item's `effects` can be
+    // a FUNCTION of the stack count - see effectLines() - and a function is
     // truthy and not iterable, which is how this threw the moment a player
     // opened the sheet owning a tiered upgrade. main.js resolves them before
     // they get here; this is the net under that.
@@ -859,7 +855,7 @@ export class UI {
 
   // THE WHOLE SECTION GOES when nothing is carried, heading and all. A labelled
   // box reading EMPTY HANDED is a question about a system the player may not
-  // have met yet, and it costs the mutations above it a strip of the card.
+  // have met yet, and it costs the passive items above it a strip of the card.
   _buildActive(active) {
     this.statsActive.textContent = '';
     this.statsItemSec.classList.toggle('hidden', !active);
@@ -868,15 +864,15 @@ export class UI {
   }
 
   _buildPassives(passives) {
-    this.statsMuts.textContent = '';
+    this.statsPassives.textContent = '';
     if (!passives.length) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
       empty.textContent = 'NONE YET';
-      this.statsMuts.appendChild(empty);
+      this.statsPassives.appendChild(empty);
       return;
     }
-    for (const m of passives) this.statsMuts.appendChild(this._entry(m));
+    for (const m of passives) this.statsPassives.appendChild(this._entry(m));
   }
 
   // Called on a new game: forces every setter to repaint on the next frame and

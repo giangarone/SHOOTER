@@ -40,8 +40,8 @@ const DEFAULT_MODS = {
   // free trickle meant every wave break healed the run back to full on its
   // own, which is exactly the cost the health economy is supposed to charge.
   // Zero here, and the regen branch in update() is skipped entirely until a
-  // mutation raises it.
-  regenRate: 0,         // health per second once regenerating (mutations only)
+  // passive item raises it.
+  regenRate: 0,         // health per second regenerating (passive items only)
   killHealChance: 0,    // Vampiric Rounds: chance a kill heals 1 HP
   ammoRegen: 0,         // reserve rounds per second
   ammoRefund: 0,        // Brass Echo: chance a shot that HIT is paid back
@@ -55,9 +55,9 @@ const DEFAULT_MODS = {
   spreadAdd: 0,         // Hair Trigger: flat NDC added to every shot cone
   staminaDrain: 1,      // Second Wind: multiplier on sprint and slide drain
   staminaRegen: 1,      // Second Wind: multiplier on the refill rate
-  // The two per-wave max-HP mutations. Both bank into `hpBanked` on the player
-  // rather than into a mod, for the same reason noHitStacks does: mods are
-  // replayed from scratch on every draft pick, so anything an EVENT writes
+  // The two per-wave max-HP passive items. Both bank into `hpBanked` on the
+  // player rather than into a mod, for the same reason noHitStacks does: mods
+  // are replayed from scratch on every draft pick, so anything an EVENT writes
   // there is refunded by the next totem the player walks into.
   hpPerWave: 0,         // Scar Tissue: max HP banked at every wave clear
   hpPerCleanWave: 0,    // Untouched: max HP banked at a wave cleared unhurt
@@ -74,9 +74,9 @@ const DEFAULT_MODS = {
   shockwaveRadius: 0,
   steady: 0,            // extra damage fraction while standing still
 
-  // MUTATION FIELDS. These are the single-tier picks - each is set by exactly
-  // one upgrade with max: 1, so they are flags and rates rather than
-  // multipliers that stack. Zero means the mutation is not owned, which is
+  // PASSIVE ITEM FIELDS. These are the single-tier picks - each is set by
+  // exactly one upgrade with max: 1, so they are flags and rates rather than
+  // multipliers that stack. Zero means the passive item is not owned, which is
   // what every hook in main.js tests.
   poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of one of
                         // the player's own shots - see Player.dotHit
@@ -152,10 +152,10 @@ const DEFAULT_MODS = {
                         // else here it accumulates across the run - see
                         // noHitStacks, NO_HIT_CAP and rebuildMods().
 
-  // THE OLD DEVIL DEALS. These were sold for max health at a second row that
-  // no longer exists; they are ordinary mutations now (see the note above
-  // their block in upgrades.js) and always were ordinary mods - set by an
-  // apply() and replayed by rebuildMods() like everything above. Only
+  // THE ELEVEN CONVERTED PICKS. These were sold for max health at a second
+  // row that no longer exists; they are ordinary passive items now (see the
+  // note above their block in upgrades.js) and always were ordinary mods - set
+  // by an apply() and replayed by rebuildMods() like everything above. Only
   // Executioner still charges health, through maxHpFlat below.
   carnageStep: 0,       // Carnage: damage gained per kill, lost on any hit
   carnageMax: 0,        // and the ceiling it climbs to
@@ -187,7 +187,7 @@ const DEFAULT_MODS = {
 // rather than a decision, so the walk is gone and this is what everyone gets.
 const BASE_SPEED = 10;
 // Reserve ammo capacity before Ammo Hoarder. Read through the maxReserve
-// getter, never stored, so the mutation cannot be lost by a reset().
+// getter, never stored, so the passive item cannot be lost by a reset().
 const BASE_RESERVE = 300;
 // Jump impulse against the 22 m/s^2 gravity in update(). The AIR jump is
 // deliberately the stronger of the two: a second hop that only matched the
@@ -196,8 +196,8 @@ const BASE_RESERVE = 300;
 // in the pool.
 const JUMP_V = 9;
 const AIR_JUMP_V = 11;
-// BLINK DRIVE: how long a dash lasts and its PEAK speed. The cooldown is the
-// item's, not the dash's - see js/items.js.
+// BLINK DRIVE: how long a dash lasts and its PEAK speed. What it costs to
+// fire again is the item's charge, not the dash's - see js/items.js.
 //
 // THE ENVELOPE IS THE WHOLE FEATURE. The first version held a flat 26 m/s for
 // 0.18s and then dropped the player back to a walk on a single frame, which is
@@ -244,8 +244,8 @@ function dashShape(u) {
   const t = 1 - (u - DASH_IN) / (1 - DASH_IN);
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
-// The ceiling on No-Hit Bonus, as a fraction. The mutation pays 8% a wave, so
-// this is reached after five clean waves and never moves again. Exported
+// The ceiling on No-Hit Bonus, as a fraction. The passive item pays 8% a wave,
+// so this is reached after five clean waves and never moves again. Exported
 // because main.js says the current total on the clear banner and has to agree
 // with rebuildMods about where it stops.
 export const NO_HIT_CAP = 0.4;
@@ -878,7 +878,7 @@ export class Player {
     // pipeline, the damage sinks and the pickup hooks. DELIBERATELY NOT IN
     // `mods`: rebuildMods() replays the owned upgrade list from fresh defaults
     // after every totem pick, so anything an item wrote there would be handed
-    // back by the next mutation the player walked into.
+    // back by the next passive item the player walked into.
     //
     // They are also separate from damageMult / fireRateMult rather than folded
     // into them. Those two are the RAGE pickup's fields and carry its expiry;
@@ -928,7 +928,7 @@ export class Player {
     this.wardReady = false;
     this.livesUsed = 0;
     // No-Hit Bonus: waves cleared without taking a point of damage since the
-    // mutation was picked up. It lives on the PLAYER rather than in mods
+    // passive item was picked up. It lives on the PLAYER rather than in mods
     // because mods are rebuilt from the upgrade list on every draft pick, and
     // anything written into them by an event would be wiped by the next one.
     this.noHitStacks = 0;
@@ -940,9 +940,9 @@ export class Player {
     // closes at. A deadline, so it is rebased across a versus handoff - see
     // PLAYER_CLOCKS in versus.js.
     //
-    // A NEGATIVE SENTINEL, not 0, and the window is tested against the
-    // mutation as well as the clock. Game time is a float that starts at 0 and
-    // a frame served a backwards timestamp can push it below that, at which
+    // A NEGATIVE SENTINEL, not 0, and the window is tested against the passive
+    // item as well as the clock. Game time is a float that starts at 0 and a
+    // frame served a backwards timestamp can push it below that, at which
     // point a closed window written as 0 compares as OPEN and every shot in
     // the run is free. "Not armed" must not be a number the clock can walk
     // past.
@@ -955,8 +955,8 @@ export class Player {
     this.streak = 0;
     // Double Jump state; `jumpsLeft` refills on landing. The DASH kept its
     // motion but lost its bookkeeping: it is an active item now (BLINK DRIVE,
-    // js/items.js) and the item's charge bar IS its cooldown, so nothing here
-    // counts charges any more. That bar fills on wave progress, not on time.
+    // js/items.js) and the item's charge bar IS the gate on firing it again,
+    // so nothing here counts charges any more. That bar is filled by kills.
     this.jumpsLeft = 0;
     this.dashStart = 0;
     this.dashEnd = 0;
@@ -1037,8 +1037,8 @@ export class Player {
     this.magBaseY = this.magPart ? this.magPart.position.y : 0;
   }
 
-  // Lights one plate on the receiver per owned mutation that changes what a
-  // bullet does, in that upgrade's totem colour (the `mark` flag in
+  // Lights one plate on the receiver per owned passive item that changes what
+  // a bullet does, in that upgrade's totem colour (the `mark` flag in
   // upgrades.js). Called whenever the owned list changes, never per frame.
   refreshGunMarks() {
     const colors = [];
@@ -1104,7 +1104,7 @@ export class Player {
   // Hot Streak. Called once per SHOT with whether that shot connected - the
   // same boolean the hitmarker is drawn from, so the bonus can never disagree
   // with what the player just saw. A no-op for a run that has not picked the
-  // mutation up, which is why the caller does not have to test for it.
+  // passive item up, which is why the caller does not have to test for it.
   bumpStreak(hit) {
     const m = this.mods;
     if (m.streakStep <= 0) return;
@@ -1113,8 +1113,8 @@ export class Player {
   }
 
   // BLINK DRIVE's motion. Fired by the item (js/items.js) rather than by a
-  // mutation, so there is no charge to check here any more - the caller has
-  // already spent the item's charge by the time this runs.
+  // passive item, so there is no charge to check here any more - the caller
+  // has already spent the item's charge by the time this runs.
   //
   // FORWARD ONLY. It used to dash whichever way the tapped key walked, which
   // made a back-tap the safest button in the game: the dash's whole cost is
@@ -1131,9 +1131,10 @@ export class Player {
   }
 
   // One more flawless wave. Returns the new stack count so the caller can say
-  // so on screen; a run that has not picked the mutation up never calls this.
-  // Stops counting once the stacks on the board already reach NO_HIT_CAP, so
-  // the number on the HUD never climbs past what it is actually paying.
+  // so on screen; a run that has not picked the passive item up never calls
+  // this. Stops counting once the stacks on the board already reach
+  // NO_HIT_CAP, so the number on the HUD never climbs past what it is actually
+  // paying.
   addNoHitStack() {
     if (this.mods.noHitBonus * this.noHitStacks >= NO_HIT_CAP) return this.noHitStacks;
     this.noHitStacks++;
@@ -1398,9 +1399,9 @@ export class Player {
   // flat rates, which made them real numbers on wave 3 and rounding errors on
   // wave 30 - the two statuses in the pool that got weaker the longer a run
   // went on. Charged as one of the player's SHOTS, they are worth exactly what
-  // the gun is worth at the moment they are applied, and every damage mutation
-  // in the build feeds them. Malady still multiplies on top, which is what
-  // keeps that trade honest on both statuses.
+  // the gun is worth at the moment they are applied, and every damage passive
+  // item in the build feeds them. Malady still multiplies on top, which is
+  // what keeps that trade honest on both statuses.
   //
   // Snapshotted by the caller into the enemy's own _dot, so a burn already
   // running is not retroactively rescaled by a totem claimed after it started.
@@ -1426,9 +1427,9 @@ export class Player {
   // UNTOUCHED and SCAR TISSUE, paid at a wave clear. `clean` is the same
   // flawless flag the clear bonus and No-Hit Bonus read, so the three can
   // never disagree about what an untouched wave is. Returns the HP actually
-  // banked - 0 when neither mutation is owned or the bank is full - and grants
-  // the CURRENT health with it, or the bar grows behind a number that did not
-  // move and the reward reads as nothing having happened.
+  // banked - 0 when neither passive item is owned or the bank is full - and
+  // grants the CURRENT health with it, or the bar grows behind a number that
+  // did not move and the reward reads as nothing having happened.
   bankWaveHealth(clean) {
     const m = this.mods;
     let gain = m.hpPerWave + (clean ? m.hpPerCleanWave : 0);
@@ -1589,8 +1590,8 @@ export class Player {
   // per second paid infinitely there: standing in the shop until the bar came
   // back was strictly better than playing, and it was the most boring correct
   // move in the game. Regeneration is a reason to break contact mid-fight, not
-  // a vending machine. The active item's charge is gated on it too - see the
-  // note at that branch.
+  // a vending machine. The active item's charge needs no such gate: it is paid
+  // for in kills, and a shop has none - see addItemCharge above.
   update(dt, input, obstacles, time, combat = true) {
     // Published for getEffectiveDamage(), which has no clock of its own and is
     // called from several places that have none to give it.
@@ -1869,9 +1870,9 @@ export class Player {
     // DIG IN. The planted clock: it only runs while the player is genuinely
     // stopped and has not been hit since it started, and any of movement, a
     // hit or the end of the wave puts it back to zero. `stillness` is the same
-    // ramp Steady Aim reads, so the two mutations agree about what standing
-    // still is - and the near-1 test means a player being shoved by a Maw's
-    // well is not standing still, whatever the keys say.
+    // ramp Steady Aim reads, so the two passive items agree about what
+    // standing still is - and the near-1 test means a player being shoved by a
+    // Maw's well is not standing still, whatever the keys say.
     if (this.mods.plantRegen > 0) {
       const planted = combat && this.stillness > 0.98 && time - this.lastHurt > 0.2;
       this._planted = planted ? this._planted + dt : 0;
@@ -1880,7 +1881,7 @@ export class Player {
       }
     }
 
-    // Regeneration, once a mutation has granted any (regenRate is 0 by
+    // Regeneration, once a passive item has granted any (regenRate is 0 by
     // default - see the mods block). Combat only: see the note on update().
     // The second branch bleeds off overheal (health above max, from a health
     // pickup) back down to max, and is NOT gated - overheal draining away is a
@@ -2484,10 +2485,10 @@ export class Player {
   // Both multipliers, because both are literally more bullets leaving the gun:
   // Triple Tap puts three rounds into one shot, and Twenty/Twenty fires the
   // whole pellet pattern a second time. Twenty/Twenty used to bill one round
-  // for two volleys, which made it the only damage mutation in the pool that
-  // was free - +20% damage AND double the rounds on target for nothing. The
-  // drawback on the card was never meant to be "none": a shot that fires twice
-  // pays twice, and a build that wants both pays six.
+  // for two volleys, which made it the only damage passive item in the pool
+  // that was free - +20% damage AND double the rounds on target for nothing.
+  // The drawback on the card was never meant to be "none": a shot that fires
+  // twice pays twice, and a build that wants both pays six.
   get shotCost() {
     return this.mods.ammoPerShot * this.mods.volley;
   }
@@ -2627,7 +2628,7 @@ export class Player {
     // and everything at one. Read live rather than cached: it has to move with
     // the health bar, including upward as Vampiric heals you back out of it.
     // Hot Streak's live bonus. Signed: a player who has been missing is dealing
-    // LESS than base here, which is the whole trade the mutation offers.
+    // LESS than base here, which is the whole trade the passive item offers.
     if (this.streak !== 0) d *= 1 + this.streak;
     if (this.mods.berserk > 0) {
       d *= 1 + this.mods.berserk * (1 - this.health / this.maxHealth);

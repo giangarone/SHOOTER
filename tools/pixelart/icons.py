@@ -1,4 +1,4 @@
-"""What each mutation DOES, drawn at 24x24.
+"""What each passive item DOES, drawn at 24x24.
 
 Nothing here looks at the 3D catalogue. Every shape was chosen from the
 upgrade's own effect text, which is why several of them are nothing like the
@@ -8,7 +8,8 @@ is what carries it.
 
 Two rules hold across the whole set:
   * the light is always upper-left, applied by Canvas.shade() and never by hand
-  * STRUCTURE is the object, ENERGY is what the mutation does to it - so the
+  * STRUCTURE is the object, ENERGY is what the passive item does to it - so
+  * the
     lit part of an icon is always the part that names the upgrade
 """
 import math
@@ -508,7 +509,7 @@ def _(c):
 def _(c):
     # A STAIR that keeps climbing, with the health it banks lit on top of it.
     # Nothing else in the set is a staircase, and the shape says the two things
-    # the mutation is: it goes up, and every step it took is still there.
+    # the passive item is: it goes up, and every step it took is still there.
     for i, h in enumerate((9.0, 13.5, 18.0)):
         x0 = 2.0 + i * 6.8
         c.rect(x0, 23.0 - h, x0 + 6.2, 22.5, S)
@@ -531,7 +532,7 @@ def _(c):
 def _(c):
     # AN EYE, most of it swallowed. The bands are the room and the eye is what
     # is left of the room you can read; drawn in that order so the haze passes
-    # in FRONT, which is the whole point of the mutation.
+    # in FRONT, which is the whole point of the passive item.
     ellipse(c, 12, 12, 10.6, 7.0, E)
     c.disc(12, 12, 3.6, DEEP)
     for y in (2.5, 9.0, 15.5):
@@ -540,9 +541,9 @@ def _(c):
 
 @icon('digIn')              # stand still and the health comes back
 def _(c):
-    # AN ANCHOR. Planted is the whole mutation, and the crossbar through the
-    # shank gives it the cross the health family is read by without borrowing
-    # NANOWEAVE's weave or WATERLINE's heart.
+    # AN ANCHOR. Planted is the whole passive item, and the crossbar through
+    # the shank gives it the cross the health family is read by without
+    # borrowing NANOWEAVE's weave or WATERLINE's heart.
     c.rect(10.6, 3.0, 13.4, 20.0, E)                 # shank
     c.rect(4.0, 7.0, 20.0, 9.6, E)                   # crossbar
     c.ring(12, 3.4, 3.2, 1.6, S)                     # the ring at the head
@@ -910,10 +911,11 @@ def _(c):
 # ---- the pickups ----------------------------------------------------------
 #
 # The six things that fall out of a dead enemy. These are the only icons drawn
-# for objects the player picks UP rather than for something a mutation does, so
-# they share a rule of their own: each is ONE object filling the frame, with no
-# secondary marks, because they are read at a glance while something is trying
-# to kill you - and, unlike a totem's icon, from any distance and any angle.
+# for objects the player picks UP rather than for something a passive item
+# does, so they share a rule of their own: each is ONE object filling the
+# frame, with no secondary marks, because they are read at a glance while
+# something is trying to kill you - and, unlike a totem's icon, from any
+# distance and any angle.
 
 
 @icon('pickAmmo')           # the ammo drop
@@ -976,7 +978,7 @@ def _(c):
 @icon('pickMagnet')         # sweeps every money orb on the floor to you
 def _(c):
     # A horseshoe magnet, and the ONE place in the set where that shape is
-    # allowed: SCAVENGER draws a magnet too, but it is a mutation icon on a
+    # allowed: SCAVENGER draws a magnet too, but it is a passive item icon on a
     # totem and this is an object on the floor, so the two are never read side
     # by side. The poles are the lit part - the pull is what it does.
     c.arc(12, 13.5, 8.4, 3.6, 180, 360, S)
@@ -1092,11 +1094,11 @@ def _(c):
 # ---- ACTIVE ITEMS ---------------------------------------------------------
 #
 # The five things that go in the slot. They are drawn as OBJECTS - a case, a
-# projector, a governor, a dome, a drive - where a mutation is drawn as an
-# effect, because an item is a thing the player is carrying and a mutation is
-# something that has happened to them. That distinction has to survive being
+# projector, a governor, a dome, a drive - where a passive item is drawn as an
+# effect, because an item is a thing the player is carrying and a passive item
+# is something that has happened to them. That distinction has to survive being
 # seen at 24 pixels in the corner of the screen, so each one leans on a hard
-# outer silhouette that no mutation in the catalogue has.
+# outer silhouette that no passive item in the catalogue has.
 #
 # Each also has to clear the pickup it is nearest to: TRAUMA KIT is a case and
 # pickHealth is a bare cross, AEGIS is a dome and pickShield is a carried
@@ -1160,8 +1162,8 @@ def _(c):
 
 @icon('itemDash')           # BLINK DRIVE - dash forward
 def _(c):
-    # THE DASH KEPT ITS DRAWING LANGUAGE from when it was a mutation: chevrons
-    # travelling right out of their own after-image.
+    # THE DASH KEPT ITS DRAWING LANGUAGE from when it was a passive item:
+    # chevrons travelling right out of their own after-image.
     #
     # The after-image is THREE SHORT DASHES, not three long bars. Full-width
     # rules behind the arrows read as a barcode and take the eye left, which is
@@ -1544,9 +1546,10 @@ def _(c):
 @icon('itemHoming')         # BIRD DOG - your shots find their mark
 def _(c):
     # Against SEEKER, which is the same idea. SEEKER is a round bending around
-    # a post; this is the same bend ARRIVING - the mutation says "it curves",
-    # the item says "it lands" - so the thing it is drawn against is the ring
-    # target, and the round is at the end of the curve rather than the start.
+    # a post; this is the same bend ARRIVING - the passive item says "it
+    # curves", the item says "it lands" - so the thing it is drawn against is
+    # the ring target, and the round is at the end of the curve rather than the
+    # start.
     c.ring(16.5, 8.5, 7.0, 2.4, S)
     c.disc(16.5, 8.5, 2.6, E)
     # The curve as three straight segments. A real arc at this size is one

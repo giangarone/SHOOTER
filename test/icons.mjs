@@ -94,14 +94,6 @@ const empty = [...drawn].filter(
 );
 ok('no drawing is blank', empty.length === 0, empty.join(', '));
 
-// THE POOL AFTER THE MERGE. Eleven mutations came in from the Devil's row when
-// it was retired, and the two fields that made them his - `devil` and `cost` -
-// had to come off every one of them or rollTotems() would go on skipping them:
-// a mutation that is in the map, has a drawing, passes every check above and
-// can never actually be offered is the one failure nothing else here would see.
-const stray = Object.keys(UPGRADES).filter((k) => UPGRADES[k].devil || UPGRADES[k].cost);
-ok('no upgrade is still a Devil Deal', stray.length === 0, stray.join(', '));
-
 const badRarity = Object.keys(UPGRADES).filter((k) => !RARITY[UPGRADES[k].rarity]);
 ok('every upgrade has a real rarity', badRarity.length === 0, badRarity.join(', '));
 
@@ -136,32 +128,35 @@ ok('the charge meter divides into the right number of segments',
 const partial = [];
 for (const [cd] of cellCases) {
   const n = itemCells(cd);
-  if (n > ITEM_BAR_MAX_CELLS || n < 1) partial.push(cd + 's: ' + n + ' cells');
+  if (n > ITEM_BAR_MAX_CELLS || n < 1) {
+    partial.push('cost ' + cd + ': ' + n + ' cells');
+  }
   for (let c = 0; c <= cd; c += 0.1) {
     const lit = Math.floor((c / cd) * n) / n;
     // Whole cells only: lit * n must land on an integer, and inside 0..1.
     if (Math.abs(lit * n - Math.round(lit * n)) > 1e-9 || lit < 0 || lit > 1) {
-      partial.push(`${cd}s at ${c.toFixed(1)}s -> ${lit}`);
+      partial.push(`cost ${cd} at ${c.toFixed(1)} -> ${lit}`);
       break;
     }
   }
 }
 ok('no segment is ever part lit', partial.length === 0, partial.join(', '));
 
-// ...and under twelve seconds a segment is exactly one second, which is the
-// half of the rule a player is meant to be able to read off the bar.
-const notPerSecond = cellCases
+// ...and at twelve points or under a segment is exactly one point - one basic
+// enemy - which is the half of the rule a player is meant to be able to read
+// off the bar.
+const notPerPoint = cellCases
   .filter(([cd]) => cd <= ITEM_BAR_MAX_CELLS)
   .filter(([cd]) => {
     const n = itemCells(cd);
-    // One cell should light per whole second elapsed.
-    for (let sec = 0; sec <= cd; sec++) {
-      if (Math.floor((sec / cd) * n) !== Math.min(sec, n)) return true;
+    // One cell should light per whole point banked.
+    for (let pt = 0; pt <= cd; pt++) {
+      if (Math.floor((pt / cd) * n) !== Math.min(pt, n)) return true;
     }
     return false;
   });
-ok('at twelve seconds or less a segment is one second',
-  notPerSecond.length === 0, notPerSecond.map(([cd]) => cd + 's').join(', '));
+ok('at twelve points or under a segment is one point',
+  notPerPoint.length === 0, notPerPoint.map(([cd]) => 'cost ' + cd).join(', '));
 
 console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +

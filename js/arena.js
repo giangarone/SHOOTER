@@ -83,8 +83,8 @@ const BOX = new THREE.BoxGeometry(1, 1, 1);
 // icons had no grid to belong to.
 //
 // One texel is 0.25 METRES - the same cell the creep field is built on, and
-// the same size the mutation icons work out to at arm's length. That is the
-// entire point of the number: a texel of floor and a cell of creep are the
+// the same size the passive item icons work out to at arm's length. That is
+// the entire point of the number: a texel of floor and a cell of creep are the
 // same square, so a patch of ash sits ON the grid rather than over it.
 const TILE_M = 8;           // metres covered by one repeat
 const TILE_TEXEL = 0.25;    // metres per texel

@@ -23,10 +23,10 @@ Open http://localhost:8123
 | Right click | Aim down the sights (hold) |
 | V | Melee — one swing of the gun, one enemy, double the reward |
 | R | Reload |
-| Space | Jump. Press again in midair, with the Double Jump mutation |
+| Space | Jump. Press again in midair, with the Double Jump passive item |
 | Q | Use the active item |
 | E | Buy ammo / reroll at a station |
-| Tab | Hold for the run summary: mutations owned, and the numbers behind the score |
+| Tab | Hold for the run summary: passive items owned, and the numbers behind the score |
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
 
@@ -203,10 +203,10 @@ screen is one the player is actually holding.
 | L2 | Aim down the sights (hold) |
 | R1 | Use the active item |
 | R3 | Melee — one swing of the gun, one enemy, double the reward |
-| Cross | Jump. Press again in midair, with the Double Jump mutation |
+| Cross | Jump. Press again in midair, with the Double Jump passive item |
 | Square | Reload |
 | Circle | Crouch (toggle). At a sprint it SLIDES instead |
-| Triangle | Take a mutation or an item, buy, reroll |
+| Triangle | Take a passive item or an item, buy, reroll |
 | Touch pad | Hold for the run summary |
 | Options | Pause, resume, and start a run from the menu |
 | D-pad | Walk the menus; Cross confirms |
@@ -362,18 +362,18 @@ context. The start screen says so, and one click anywhere fixes it.
 - Escalating waves with per-wave HP / speed / damage scaling
 - **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
   to it, so a run's identity comes from the build rather than from the weapon.
-- **The gun shows its build.** Each mutation that changes what a bullet does -
-  Venom, Incendiary, Piercing Shot, Breach Round and fifteen others - sets a
-  small block into the top of the receiver in that mutation's totem colour, in
-  two rows down the barrel. Stat upgrades like Extended Mag do not, so the row
-  of gems reads as exactly what your shots now do to what they hit. Twenty
-  sockets, filled front to back; an empty socket is never drawn.
+- **The gun shows its build.** Each passive item that changes what a bullet
+  does - Venom, Incendiary, Piercing Shot, Breach Round and fifteen others -
+  sets a small block into the top of the receiver in that passive item's totem
+  colour, in two rows down the barrel. Stat upgrades like Extended Mag do not,
+  so the row of gems reads as exactly what your shots now do to what they hit.
+  Twenty sockets, filled front to back; an empty socket is never drawn.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
 - Reloading shows twice over: the gun drops out of frame and rolls through the
   reload, and a ring sweeps round the crosshair as it completes
 - WebAudio synth SFX (no audio assets)
 - Looping soundtrack that ducks behind a lowpass filter whenever you are not
-  fighting - picking a mutation at the totems, paused, dead, or on the menu.
+  fighting - picking a passive item at the totems, paused, dead, or on the menu.
   The cutoff sweeps over 0.7s rather than switching, so combat opening back up
   is something you hear. Mute toggle on the start and pause screens, remembered
   between sessions.
@@ -397,7 +397,8 @@ context. The start screen says so, and one click anywhere fixes it.
   fog and beams, two heads tracking it, the fog pulled in tight, and a red
   alarm strobe while it is enraged.
 - Clearing a wave brings the house lights up: strobing stops, everything goes
-  warm and slow while you pick a mutation, and combat starting again is the drop.
+  warm and slow while you pick a passive item, and combat starting again is the
+  drop.
 - Optional verticality: speaker stack to wall ledge to catwalk, each hop inside
   the jump arc. The decks are suspended above head height, so enemies walk
   underneath them and enemy fire passes straight through - the high ground buys
@@ -452,18 +453,19 @@ resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
 The pool is 67 upgrades: 14 commons, 40 rares and 13 cursed. A specific rare
-mutation turns up in roughly 4-5% of totem sets, so a run sees a slice of the
-pool rather than all of it - that is the point, but it means a new upgrade only
-matters if it is worth taking on sight, without a partner card.
+passive item turns up in roughly 4-5% of totem sets, so a run sees a slice of
+the pool rather than all of it - that is the point, but it means a new upgrade
+only matters if it is worth taking on sight, without a partner card.
 
 Eleven of those came in from a feature that no longer exists. A second row used
-to stand on the far side of the arena selling mutations for MAX HEALTH - a price
-that could never be earned back - and it is now the active item row. Its stock
-was folded into this pool and re-rated by whether each one already carried a
-drawback: `cursed` where it does, `rare` where the effect stands on its own.
-Only EXECUTIONER still charges health, and it charges it as `mods.maxHpFlat`
-rather than as a payment, because `rebuildMods()` replays the owned list from
-fresh defaults after every pick and a price paid once could not survive that.
+to stand on the far side of the arena selling passive items for MAX HEALTH - a
+price that could never be earned back - and it is now the active item row. Its
+stock was folded into this pool and re-rated by whether each one already
+carried a drawback: `cursed` where it does, `rare` where the effect stands on
+its own. Only EXECUTIONER still charges health, and it charges it as
+`mods.maxHpFlat` rather than as a payment, because `rebuildMods()` replays the
+owned list from fresh defaults after every pick and a price paid once could not
+survive that.
 
 ### Active items
 
@@ -595,32 +597,37 @@ can also end its own window early by setting `s.done` in its `tick`:
 HAEMOPHAGE is ten hits inside twenty seconds, and once the tenth lands the
 effect is gone whatever the clock says.
 
-**The charge is paid in wave time.** `Player.update` fills the bar only while a
-wave is running, gated on the same `combat` flag that stops ammo regeneration
-being farmed at the break. It can still be FIRED in the shop - gating the use as
-well would be a rule the player only ever meets as an unexplained silence. The
-bar does not change colour there: nobody is watching the meter during a shopping
-trip, and the charge coming back is something the player finds out by the wave
-starting, which is the moment they care about it.
+**The charge is bought with dead enemies.** An item's `charge` is a cost in
+enemies, not in seconds: each kill is worth `value * CHARGE_PER_VALUE` points,
+banked as it dies and paid into the meter as its orbs are collected, so one
+basic chaser is worth exactly one point and a 20-point item costs twenty of
+them. Standing still pays nothing anywhere - there is no clock to wait out, and
+kiting the last enemy of a wave, which used to be the cheapest way to refill the
+dearest item in the pool, now refills nothing at all. The rate is flat rather
+than a share of the wave, so the same chaser is worth the same on wave 1 and
+wave 26, and it is read off `value` rather than off the money actually
+collected, which is what keeps Midas and the flawless streak from turning into
+cooldown reduction. A boss wave's adds are the one thing with a ceiling on them,
+because they are the one cast that never stops arriving.
 
-**The charge time is printed nowhere.** Not on the pedestal, not in the prompt,
+**The charge cost is printed nowhere.** Not on the pedestal, not in the prompt,
 not on the build sheet. The meter already says it, in the only unit it is ever
-thought about in: at twelve seconds or under, one segment is one second, so a
-glance at the slot says "three wide blocks" or "ten narrow ones" and the answer
-arrives from having carried the thing rather than from having read it. Past
-twelve the bar caps at twelve segments worth `cooldown / 12` seconds each - the
-one rule in `itemCells()` covers both, and it needs no cooldown to divide evenly
-into anything, which is why 13s, 25s or 40s all work. **A segment is always
+thought about in: at twelve points or under, one segment is one point - one
+basic enemy - so a glance at the slot says "three wide blocks" or "ten narrow
+ones" and the answer arrives from having carried the thing rather than from
+having read it. Past twelve the bar caps at twelve segments worth `charge / 12`
+each - the one rule in `itemCells()` covers both, and it needs no cost to divide
+evenly into anything, which is why 13, 25 or 40 all work. **A segment is always
 whole or empty**: the fill is floored onto a cell boundary, and floored rather
 than rounded, because a cell is a unit of charge and rounding would light the
 last one before the item could actually be fired.
 
-**The dash used to be a mutation.** DOUBLE DASH held two charges on a 2.5s timer
-and was reached by double-tapping W, a binding that existed because the game had
-no spare finger - and an active item slot IS a spare finger. So it moved here
-whole: the envelope, the distance and the forward-only commitment are untouched
-(see `DASH_TIME` in `player.js`). What changed is that it now competes with a
-heal and a panic button for the same slot. Double-tapping W still works, and
+**The dash used to be a passive item.** DOUBLE DASH held two charges on a 2.5s
+timer and was reached by double-tapping W, a binding that existed because the
+game had no spare finger - and an active item slot IS a spare finger. So it
+moved here whole: the envelope, the distance and the forward-only commitment
+are untouched (see `DASH_TIME` in `player.js`). What changed is that it now
+competes with a heal and a panic button for the same slot. Double-tapping W still works, and
 does nothing unless BLINK DRIVE is what is carried.
 
 **None of the five is a new system.** The heal is the health pickup's sum, the
@@ -642,13 +649,13 @@ at one break does not walk the counter forward three places.
 
 **One offer, not three.** With a single slot to put it in, a row of three would
 ask the player to compare three things they can only have one of, at a wave
-break, having already picked a mutation - and the second and third would exist
-only to be walked past. The pedestal is a `Totem` with `kind: 'item'`, which
-changes exactly two things: an ACTIVE ITEM line above the name, and a second
-counter-spinning ring on the floor mark. Everything else about picking it up -
-the rise, the arm delay, the orbiting icon, the single invisible claim box - is
-the totem's, because the two are picked up identically and the pillar should not
-have to be relearned.
+break, having already picked a passive item - and the second and third would
+exist only to be walked past. The pedestal is a `Totem` with `kind: 'item'`,
+which changes exactly two things: an ACTIVE ITEM line above the name, and a
+second counter-spinning ring on the floor mark. Everything else about picking
+it up - the rise, the arm delay, the orbiting icon, the single invisible claim
+box - is the totem's, because the two are picked up identically and the pillar
+should not have to be relearned.
 
 Where a new upgrade's hook goes, by what it reacts to:
 
@@ -687,16 +694,16 @@ bug. The floating label panel above is deliberately outside the box: it hangs
 wide and high over the arena, and a stray shot up there stays a miss.
 
 Each offer's icon is a 24x24 pixel-art plate from `js/pixelicons.js`, looked up
-by the upgrade's own id - entries do not name an icon, so two mutations cannot
-end up wearing one shape however the pool is edited. The art is flat and 2D; the
-object is not, carrying three pixels of extrusion behind the face so it reads as
-a thick cutout turning in the light rather than a sticker. Each plate is one
-merged, vertex-coloured, unlit mesh with the interior faces omitted, so it is a
-single draw call and takes no light - the shading is painted into the tones.
-Four of the five tones are derived from the offer's `theme`, so one drawing
-works for any colour. A totem builds an icon the first time it shows one and
-keeps it hidden afterwards, which bounds the count by the size of the upgrade
-pool rather than by how many waves have passed.
+by the upgrade's own id - entries do not name an icon, so two passive items
+cannot end up wearing one shape however the pool is edited. The art is flat and
+2D; the object is not, carrying three pixels of extrusion behind the face so it
+reads as a thick cutout turning in the light rather than a sticker. Each plate
+is one merged, vertex-coloured, unlit mesh with the interior faces omitted, so
+it is a single draw call and takes no light - the shading is painted into the
+tones. Four of the five tones are derived from the offer's `theme`, so one
+drawing works for any colour. A totem builds an icon the first time it shows
+one and keeps it hidden afterwards, which bounds the count by the size of the
+upgrade pool rather than by how many waves have passed.
 
 The drawings themselves live in `tools/pixelart/`, not in the JS: shapes in
 `icons.py`, a shared lighting pass in `canvas.py`, and `build.py` to regenerate
@@ -755,7 +762,7 @@ per equip would allocate geometry for the whole session.
 
 The receiver carries twenty sockets, each a block standing on a plinth, built
 hidden with the model. `setGunMarks(model, colors)` fills one per owned
-mutation flagged `mark: true` in `UPGRADES`, in that upgrade's theme colour;
+passive item flagged `mark: true` in `UPGRADES`, in that upgrade's theme colour;
 `Player.refreshGunMarks()` calls it on every draft pick and on reset. Sockets
 are toggled, never created per pick - a rebuild per draft would leak a material
 each time.
@@ -798,59 +805,58 @@ the game into each boss wave in turn and checks the fight resolves, the adds
 stay capped, telegraph handles are returned to their pool, and — the one boss
 bug that every functional test sails straight through — that the Colossus's
 armour, its shutters and its core's glow all agree about whether the weak point
-is open. `test:drops`
-checks a wave can never yield more loot than its budget, that it yields close
-to all of it, and that need actually decides the type. `test:money` checks the
-two properties that keep the orb economy honest — that a kill's orbs add up to
-exactly what the kill was worth, and that the 250-orb cap merges rather than
-discards — along with the wave-clear sweep emptying the floor from anywhere in
-the arena and Lodestone actually widening the radius. `test:pad` stands a synthetic
-DualSense behind `navigator.getGamepads` and plays the game with it: it asserts
-the pad is recognised and a non-Sony one is not, that CROSS on the start screen
-starts the run without the same held press also reading as a jump, that the
-left stick is analogue, that L2 slows the view, that aim assist works inside
-its cone and not outside it, and that a controller unplugged mid-run pauses
-instead of leaving the player standing. `test:aim` covers the sights: that the
-right button raises the gun over several frames rather than in one, that the
-zoom, the centred viewmodel and the tightened cone all land and all go back,
-that the crosshair's gap is exactly the cone in pixels on both sides of the
-blend, that movement opens it from either pose and costs less down the sights —
-and, as a regression test, that the hit marker clears itself. It used to be an
-`opacity: 1` class that nothing ever removed, so the first bullet that
-connected pinned it over the crosshair for the rest of the run. `test:sprint`
-covers the second gear: that it is faster, that the bar drains and holds and
-refills, that emptying it locks the sprint until a third is back and a held key
-cannot sprint on fumes, that a trigger and a standstill both refuse it, that
-running takes the gun out of the sights and hands it back afterwards, and that
-the sprint's accuracy penalty outlives the run and then settles. `test:pad`
-covers the L3 latch and the settings rows: that one click starts a run and a
-standstill ends it, that it does not resume on its own, and that left and right
-on a sensitivity row move the value while the selection stays on the row.
-`test:accuracy` covers the cone the gun fires through: that a held trigger
-opens it round by round and opens the crosshair with it, that it saturates
-rather than climbing forever, that it settles all the way back the moment the
-trigger comes up, that the same fire also kicks the pitch without either
-penalty moving where the player is aiming, and that Hair Trigger charges for
-its rate in both currencies. `test:active` covers the whole active item system and the pool merge that came
-with it: that the row rises on the third shop and no other, that a reroll is not
-a new shop, that an item arrives fully charged and that a second one replaces the
-first, that the pedestal never offers what is already carried, that the bar fills
-during a wave and not in the shop while the button still works in both, that each
-of the five effects actually lands, that both consoles charge what they say, and
-that all eleven converted mutations are reachable on a free totem - which is the
-one thing a leftover `devil: true` would break in silence, leaving a mutation
-that is in the map, has a drawing, passes every other check and can never be
-offered. `test:crouch` covers the third movement gear and
-the swing: that the button
-latches a crouch and a second press releases it, that the same button at a
-sprint slides instead and that letting go does NOT end the slide, that a slide
-is faster than the run it came out of and ends standing rather than crouched,
-that a jump out of one keeps its speed to the frame, that the button pressed in
-mid-air does not crouch there but lands as a slide — held or tapped, and with
-the sprint key already released — and, for the melee, that
-the swing lands on a delay rather than on the button, hits exactly one of three
-bodies standing in front of the player, draws no ring on the floor, and scores
-double what the same body is worth shot.
+is open. `test:drops` checks a wave can never yield more loot than its budget,
+that it yields close to all of it, and that need actually decides the type.
+`test:money` checks the two properties that keep the orb economy honest — that
+a kill's orbs add up to exactly what the kill was worth, and that the 250-orb
+cap merges rather than discards — along with the wave-clear sweep emptying the
+floor from anywhere in the arena and Lodestone actually widening the radius.
+`test:pad` stands a synthetic DualSense behind `navigator.getGamepads` and
+plays the game with it: it asserts the pad is recognised and a non-Sony one is
+not, that CROSS on the start screen starts the run without the same held press
+also reading as a jump, that the left stick is analogue, that L2 slows the
+view, that aim assist works inside its cone and not outside it, and that a
+controller unplugged mid-run pauses instead of leaving the player standing.
+`test:aim` covers the sights: that the right button raises the gun over several
+frames rather than in one, that the zoom, the centred viewmodel and the
+tightened cone all land and all go back, that the crosshair's gap is exactly
+the cone in pixels on both sides of the blend, that movement opens it from
+either pose and costs less down the sights — and, as a regression test, that
+the hit marker clears itself. It used to be an `opacity: 1` class that nothing
+ever removed, so the first bullet that connected pinned it over the crosshair
+for the rest of the run. `test:sprint` covers the second gear: that it is
+faster, that the bar drains and holds and refills, that emptying it locks the
+sprint until a third is back and a held key cannot sprint on fumes, that a
+trigger and a standstill both refuse it, that running takes the gun out of the
+sights and hands it back afterwards, and that the sprint's accuracy penalty
+outlives the run and then settles. `test:pad` covers the L3 latch and the
+settings rows: that one click starts a run and a standstill ends it, that it
+does not resume on its own, and that left and right on a sensitivity row move
+the value while the selection stays on the row. `test:accuracy` covers the cone
+the gun fires through: that a held trigger opens it round by round and opens
+the crosshair with it, that it saturates rather than climbing forever, that it
+settles all the way back the moment the trigger comes up, that the same fire
+also kicks the pitch without either penalty moving where the player is aiming,
+and that Hair Trigger charges for its rate in both currencies. `test:active`
+covers the whole active item system and the pool merge that came with it: that
+the row rises on the third shop and no other, that a reroll is not a new shop,
+that an item arrives fully charged and that a second one replaces the first,
+that the pedestal never offers what is already carried, that kills fill the bar
+and neither wave time nor the shop fills anything while the button still works
+in both, that each of the five effects actually lands, that both consoles
+charge what they say, and that all eleven converted passive items are reachable
+on a free totem - a pick that is in the map, has a drawing, passes every other
+check and can still never be offered is the one failure nothing else would
+see. `test:crouch` covers the third movement gear
+and the swing: that the button latches a crouch and a second press releases it,
+that the same button at a sprint slides instead and that letting go does NOT
+end the slide, that a slide is faster than the run it came out of and ends
+standing rather than crouched, that a jump out of one keeps its speed to the
+frame, that the button pressed in mid-air does not crouch there but lands as a
+slide — held or tapped, and with the sprint key already released — and, for the
+melee, that the swing lands on a delay rather than on the button, hits exactly
+one of three bodies standing in front of the player, draws no ring on the
+floor, and scores double what the same body is worth shot.
 
 ## Structure
 

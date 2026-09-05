@@ -72,7 +72,7 @@ try {
     // point, facing the totem row - and because this loop empties the arena on
     // every frame, each wave completes instantly and raises a fresh set of
     // totems into the line of fire. The player was picking up two or three
-    // mutations per trigger pull, at random, DURING the measurement: the
+    // passive items per trigger pull, at random, DURING the measurement: the
     // resting cone was read off a clean gun and the bloomed cone off whatever
     // the totems happened to be offering. A Hollow Point broke the cone
     // assertions, a Bloodlust or a Detonator broke the fire-rate one (both take
@@ -203,7 +203,7 @@ try {
 
     // ---- 5. HAIR TRIGGER ---------------------------------------------------
     // One trigger pull of a fixed length, measured before and after the card,
-    // so the two readings differ by the mutation and by nothing else.
+    // so the two readings differ by the passive item and by nothing else.
     const trial = async () => {
       await rest();
       const idle = g._shotSpread();

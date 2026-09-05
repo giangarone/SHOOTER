@@ -695,10 +695,10 @@ const BODY_FLASH_INTENSITY = 0.9;
 const BODY_BASE_INTENSITY = 0.18;
 
 // ---- status effects ------------------------------------------------------
-// Applied by the single-tier mutations in upgrades.js. A hit REFRESHES a
-// status, it never stacks one: mutations have no second level, so there is no
-// stronger poison to express. Duration is seconds remaining, counted down in
-// update().
+// Applied by the single-tier passive items in upgrades.js. A hit REFRESHES a
+// status, it never stacks one: passive items have no second level, so there
+// is no stronger poison to express. Duration is seconds remaining, counted
+// down in update().
 //
 // STATUS_ORDER is tint priority. An enemy can carry several statuses at once,
 // but it can only wear one colour, so the first active entry wins and the body
@@ -3733,7 +3733,7 @@ export class Enemy {
   //   ward    a warden is protecting this enemy: it cannot be damaged, and it
   //           goes stone grey in the COLOUR channel as well as the emissive,
   //           so it stops looking like a thing worth shooting at all
-  //   status  poison, fire, ice - the tint the mutations put on it
+  //   status  poison, fire, ice - the tint the passive items put on it
   //   base    its own colour
   //
   // `_look` is what is currently on the material, so a frame that changes
@@ -3788,7 +3788,8 @@ export class Enemy {
     if (this.statusMul < 1) {
       // A boss that can be stopped outright is not a fight - a three second
       // Petrify would be a free damage window on every magazine. Freeze
-      // becomes a heavy slow instead, so the mutation still does something.
+      // becomes a heavy slow instead, so the passive item still does
+      // something.
       if (kind === 'freeze' && ENEMY_TYPES[this.type].freezeSlow) {
         kind = 'slow';
         dur *= 0.6;
@@ -3865,7 +3866,7 @@ export class Enemy {
     // hold rather than a refresh, so it can never apply a status the player
     // did not put there.
     // Entropy stops the timers below a health threshold, which on a normal
-    // enemy is the whole point of the mutation and on a boss would mean a
+    // enemy is the whole point of the passive item and on a boss would mean a
     // permanent lock for the back third of the fight. Resistant types opt out.
     // ETERNAL AFFLICTION rides the same branch. It is Entropy with the health
     // threshold removed - everything, from full - so it reuses the hold rather

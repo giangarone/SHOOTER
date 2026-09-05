@@ -97,7 +97,7 @@ try {
     // at three. A renamed field or a cap that drifted fails here.
     ['flawless multiplier matches the streak',
       rep.flawlessMult === Math.min(3, 1 + 0.25 * rep.flawlessStreak)],
-    // One lit plate on the receiver per owned bullet mutation. Covers
+    // One lit plate on the receiver per owned bullet passive item. Covers
     // refreshGunMarks() being called on every draft pick, not just the first.
     ['gun marks match build', rep.gunMarks === rep.markedUpgrades],
     ['loadout intact', typeof rep.weapon === 'string'],
@@ -178,8 +178,8 @@ try {
     // uploaded in every run that reaches a shop at all. Fewer textures on
     // paper, one more of them actually realised.
     //
-    // The cap had come down from sixteen when the Devil's row was retired: his
-    // three deal cards became one item pedestal. It had gone from twelve to
+    // The cap had come down from sixteen when the paid row was retired: its
+    // three offer cards became one item pedestal. It had gone from twelve to
     // thirteen for the pixel-art pass: glow split into a soft texture for LIGHT
     // and a stepped one for the sparks, which are matter, and the creep stopped
     // being thirty meshes and became one field on one texture. It moved from

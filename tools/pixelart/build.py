@@ -8,7 +8,7 @@ import icons as A
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 TARGET = os.path.join(ROOT, 'js', 'pixelicons.js')
 
-# One line per icon saying what the mutation does, so the table reads as a
+# One line per icon saying what the passive item does, so the table reads as a
 # design document rather than as 1,560 characters of noise.
 NOTE = {
     'overclock': 'OVERCLOCK - fire rate. A dial with the needle past the stop.',

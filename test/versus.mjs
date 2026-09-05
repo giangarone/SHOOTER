@@ -5,10 +5,10 @@
 // run is written over another while the gun is out of frame, and a countdown
 // hands the arena to the other player. Nothing about that seam is visible in a
 // single frame, and both bugs it has produced so far were states rather than
-// exceptions - a match that asked the winner to pick a mutation, and a handoff
-// whose countdown re-armed itself every frame. Neither throws. Neither shows up
-// in any other test. So they are asserted here as STATES, several seconds
-// apart, exactly as a player would meet them.
+// exceptions - a match that asked the winner to pick a passive item, and a
+// handoff whose countdown re-armed itself every frame. Neither throws. Neither
+// shows up in any other test. So they are asserted here as STATES, several
+// seconds apart, exactly as a player would meet them.
 //
 // WHAT IS ASSERTED
 //   1. A match starts on Player 1 with both snapshot slots already seeded, so
@@ -20,8 +20,9 @@
 //   4. THE COUNTDOWN ACTUALLY RUNS. interT has to fall, and the pass has to end
 //      in a live wave - a handoff that never completes is the mode's worst
 //      failure and its quietest.
-//   5. Clearing a challenge WINS ON THE WAVE, with no mutation set raised. The
-//      match is already decided; a pick there is a choice spent being told so.
+//   5. Clearing a challenge WINS ON THE WAVE, with no passive item set
+//      raised. The match is already decided; a pick there is a choice spent
+//      being told so.
 //   6. The pass cannot be wedged. Forced into the one state that used to pin
 //      the countdown at three seconds, it still finishes.
 //   7. Nothing damages either player during a pass. Both death paths already
@@ -194,7 +195,7 @@ try {
       'state=' + g.state + ' waveState=' + g.waveState);
     t('THE WIN IS IMMEDIATE', g.state === 'gameover' && g.match.winner === 0,
       'state=' + g.state + ' winner=' + g.match.winner);
-    t('no mutation set was raised for it', !g.totemArea.active,
+    t('no passive item set was raised for it', !g.totemArea.active,
       g.totemArea.active ? 'RAISED' : 'none');
     t('the caption is down on the win screen', !caption());
 

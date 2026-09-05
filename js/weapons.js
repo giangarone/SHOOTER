@@ -77,10 +77,10 @@ function buildPulseRifle() {
   return g;
 }
 
-// MUTATION MARKS. Small faceted gems set into the TOP of the receiver, one lit
-// per mutation the gun is carrying, in that mutation's totem colour. It is the
-// only readout of a build that does not require opening anything: the gun
-// visibly accumulates as the run goes on.
+// PASSIVE ITEM MARKS. Small faceted gems set into the TOP of the receiver, one
+// lit per passive item the gun is carrying, in that passive item's totem
+// colour. It is the only readout of a build that does not require opening
+// anything: the gun visibly accumulates as the run goes on.
 //
 // They sit on the top deck rather than the flank because the top is the face
 // that stays visible through the whole idle sway and the reload dip, and
@@ -181,9 +181,9 @@ const TAG_L = 0.17;
 function buildPlayerTag() {
   const g = new THREE.Group();
   g.name = 'ptag';
-  // Two materials for the same reason a mutation mark carries two: the narrow
-  // edges falling darker than the face is what stops a lit rectangle reading
-  // as a decal printed on the side of the gun.
+  // Two materials for the same reason a passive item mark carries two: the
+  // narrow edges falling darker than the face is what stops a lit rectangle
+  // reading as a decal printed on the side of the gun.
   const face = new THREE.MeshStandardMaterial({
     color: 0x0b0e14, emissive: 0xffffff, emissiveIntensity: 1.6,
     roughness: 0.25, metalness: 0.5,

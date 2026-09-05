@@ -1,7 +1,8 @@
 // Seeker (homing) test.
 //
-// The mutation's whole promise is that it rescues MISSES and touches nothing
-// else, and every part of that is invisible to the smoke test. Checked here:
+// The passive item's whole promise is that it rescues MISSES and touches
+// nothing else, and every part of that is invisible to the smoke test. Checked
+// here:
 //
 //   a near miss lands           an off-aim shot inside the cone finds a target
 //   a wide miss still misses    outside the cone nothing happens
@@ -116,7 +117,7 @@ try {
 
   // Enemy 0.9m to the right at 10m out - about 5 degrees off, inside the 6
   // degree cone, and still clear of the 0.5m hitbox so it is a genuine miss
-  // without Seeker. The gap between those two bounds is what the mutation
+  // without Seeker. The gap between those two bounds is what the passive item
   // lives in, and halving the cone narrowed it: at the old 1.5m the shot is
   // now outside the cone and this reads as a wide miss.
   const nearMissOff = await run({ from: [6, 4], enemies: [[6.9, -6]], seeker: false, aimDist: 10 });

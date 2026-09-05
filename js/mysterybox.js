@@ -46,10 +46,11 @@ import { ACTIVE_ITEMS, ACTIVE_ITEM_KEYS } from './items.js';
 import { makeGlowTexture } from './effects.js';
 import { buildPixelIcon } from './pixelicons.js';
 
-// Where the pedestal stood. The walk is the point: the mutation totems are on
-// the near side at ROW_Z, and going to the far side is a choice to spend the
-// wave break on something other than the pick that ends it. The arena furniture
-// was already moved out of the way here - see the platform list in arena.js.
+// Where the pedestal stood. The walk is the point: the passive item totems are
+// on the near side at ROW_Z, and going to the far side is a choice to spend
+// the wave break on something other than the pick that ends it. The arena
+// furniture was already moved out of the way here - see the platform list in
+// arena.js.
 export const BOX_Z = -ROW_Z + 4.5; //  9.5
 
 // ---------------------------------------------------------------------------

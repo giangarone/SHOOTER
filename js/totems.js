@@ -590,10 +590,11 @@ export class Totem {
     // Per-instance because each mark wears its own upgrade's theme.
     this.mark = makeMark(this.group);
     // NO SECOND RING. A totem used to be able to stand an ACTIVE ITEM as well
-    // as a mutation, and wore a doubled rim when it did. Active items come out
-    // of the mystery box now (js/mysterybox.js) and nothing ever asks a totem
-    // for one, so the extra mark - four more meshes on every totem in the row,
-    // permanently invisible - went with the offer kind it was drawn for.
+    // as a passive item, and wore a doubled rim when it did. Active items come
+    // out of the mystery box now (js/mysterybox.js) and nothing ever asks a
+    // totem for one, so the extra mark - four more meshes on every totem in
+    // the row, permanently invisible - went with the offer kind it was drawn
+    // for.
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
@@ -827,9 +828,9 @@ const STATION_LOOK = {
   reroll: { color: 0x4ef3ff, icon: 'gear' },
 };
 
-// A small console beside a row of offers. Two exist, both beside the mutation
-// totems: ammo and reroll. Both are bought by shooting them or by pressing E in
-// range, and neither disturbs the row it stands in.
+// A small console beside a row of offers. Two exist, both beside the passive
+// item totems: ammo and reroll. Both are bought by shooting them or by
+// pressing E in range, and neither disturbs the row it stands in.
 //
 // THE FAR SIDE OF THE ARENA HAS NO CONSOLES ANY MORE. It used to carry two - a
 // MAX HEALTH counter and a second REROLL - flanking the active item pedestal.

@@ -423,8 +423,8 @@ const MAX_FROST = 12;
 // effects.js), the PULSE second - hostile patches breathe, the player's are
 // still. Colour is the third signal and no longer the deciding one, which is
 // what frees ash to be the colour it should always have been: it is the ash of
-// a fire mutation, so it is warm. It used to be cyan, which read as ice or as
-// a pickup and never as the thing Incendiary left behind.
+// a fire passive item, so it is warm. It used to be cyan, which read as ice or
+// as a pickup and never as the thing Incendiary left behind.
 //
 // Ash is amber and lava is a deeper red so the two stay apart at distance
 // while both staying in the fire family; the blight's toxic green is a
@@ -819,9 +819,9 @@ class Game {
     // Counts down to the frame the swing connects; see MELEE_SWING.
     this._meleeSwing = 0;
     // Enemies already touched by the shot in flight. A scattergun sends eight
-    // pellets through _firePellet, and every mutation effect is per-shot, not
-    // per-pellet: without this a point-blank shell would roll Petrify eight
-    // times and shove its target twelve metres.
+    // pellets through _firePellet, and every passive item effect is per-shot,
+    // not per-pellet: without this a point-blank shell would roll Petrify
+    // eight times and shove its target twelve metres.
     this._shotHits = new Set();
     this._blastAt = new THREE.Vector3();
     // Lightning Wizard's strike point. Its OWN scratch and not _blastAt: a
@@ -1491,10 +1491,10 @@ class Game {
   // the moment a player ran in a straight line. Only a fresh press is timed.
   //
   // A SECOND WAY TO FIRE ONE ITEM, not a second binding. Double-tapping W is
-  // how the dash was reached for the whole time it was a mutation, and a player
-  // who learned it should not have to unlearn it - so it routes through
-  // tryItem() like Q does, and therefore does nothing at all unless BLINK DRIVE
-  // is what is in the slot.
+  // how the dash was reached for the whole time it was a passive item, and a
+  // player who learned it should not have to unlearn it - so it routes through
+  // tryItem() like Q does, and therefore does nothing at all unless BLINK
+  // DRIVE is what is in the slot.
   _tapMove(code, held) {
     if (held) return;
     const last = this._tapT[code];
@@ -2336,8 +2336,9 @@ class Game {
 
   // True when the music should sound muffled: anything that is not live
   // combat. Combat is the ONLY clean state - intermission (walking the totems
-  // to pick a mutation), the menu, pause and the death screen are all behind
-  // the filter, which makes "the music opened up" mean "you are fighting".
+  // to pick a passive item), the menu, pause and the death screen are all
+  // behind the filter, which makes "the music opened up" mean "you are
+  // fighting".
   _musicMuffled() {
     return this.state !== 'playing' || this.waveState !== 'active';
   }
@@ -2460,10 +2461,11 @@ class Game {
 
   // ---- versus: the hot seat ------------------------------------------------
   //
-  // A TURN IS ONE WAVE. It ends the moment the player claims their mutation -
-  // the last thing they do with the controller - or the moment they die, and
-  // either way the pad goes across the room. Everything that makes the swap
-  // safe is in these four methods; the rules themselves are in versus.js.
+  // A TURN IS ONE WAVE. It ends the moment the player claims their passive
+  // item - the last thing they do with the controller - or the moment they
+  // die, and either way the pad goes across the room. Everything that makes
+  // the swap safe is in these four methods; the rules themselves are in
+  // versus.js.
 
   /** The active player has died. Not an ending - see gameOver. */
   _playerFell() {
@@ -2620,10 +2622,10 @@ class Game {
   // tryReload() and tryUse() have, so the two devices cannot drift apart on
   // what the button means.
   //
-  // USABLE IN THE SHOP, unlike the charge that pays for it (see the note in
-  // Player.update). Nothing is gained by firing a heal at a wave break, but
-  // refusing the button there would be a rule the player only ever meets as an
-  // unexplained silence.
+  // USABLE IN THE SHOP, where the charge that pays for it cannot be earned -
+  // there is nothing to kill (see addItemCharge in player.js). Nothing is
+  // gained by firing a heal at a wave break, but refusing the button there
+  // would be a rule the player only ever meets as an unexplained silence.
   //
   // An empty slot is silent. A slot that is simply not full is not: a player
   // pressing the button in a fight has decided to spend it, and a press that
@@ -3394,8 +3396,8 @@ class Game {
   // projectile has no owner by the time it lands, so the nearest enemy to the
   // impact takes it instead. That is not a compromise - the thing that shot
   // you is usually the thing standing closest to where the round hit you, and
-  // a mutation that silently did nothing against half the roster would read as
-  // broken long before anyone worked out why.
+  // a passive item that silently did nothing against half the roster would
+  // read as broken long before anyone worked out why.
   _thorns(d, pos, source) {
     const frac = this.player.mods.thorns;
     if (frac <= 0 || d <= 0) return;
@@ -3467,8 +3469,9 @@ class Game {
   // The splash goes through _blast with the struck enemy skipped, because
   // _blast already owns radial falloff and the enemy list, and a second copy
   // of that arithmetic here would be one more place for the two to disagree.
-  // It cannot hurt the player: the bolt is the player's, and a mutation that
-  // rolled itself 5% of the time and occasionally killed you would be a curse.
+  // It cannot hurt the player: the bolt is the player's, and a passive item
+  // that rolled itself 5% of the time and occasionally killed you would be a
+  // curse.
   _lightning(en) {
     const m = this.player.mods;
     this._boltAt.set(en.pos.x, 0, en.pos.z);
@@ -3570,12 +3573,12 @@ class Game {
    *
    * THE WIDER OF THE TWO WINS, they do not add. A player who owns Seeker gets
    * nothing from the item, which is the honest behaviour: two cones summed
-   * would let one press turn a mutation the game balances at three tiers into
-   * something that hits everything behind the player.
+   * would let one press turn a passive item the game balances at three tiers
+   * into something that hits everything behind the player.
    *
    * BIRD DOG's own figure is Seeker at full rank (see upgrades.js: 0.105 per
-   * tier, three tiers), so the item shows the mutation at its best rather than
-   * at some fourth number nobody can compare it to.
+   * tier, three tiers), so the item shows the passive item at its best rather
+   * than at some fourth number nobody can compare it to.
    */
   _homingAngle() {
     return Math.max(this.player.mods.homingAngle, this.player.itemHoming ? 0.315 : 0);
@@ -3687,7 +3690,7 @@ class Game {
     if (m.lightningChance && Math.random() < m.lightningChance) {
       this._lightning(en);
     }
-    // FOUR HUMOURS. Sits with the mutation statuses because it IS one of
+    // FOUR HUMOURS. Sits with the passive item statuses because it IS one of
     // them, four at a time - and it advances here, in the per-SHOT half of
     // _landShot (below the _shotHits guard), so one trigger pull is one
     // element however many pellets were in it. The same rule Hot Streak and
@@ -3842,8 +3845,8 @@ class Game {
     hits.length = 0;
 
     // SEEKER. Only ever runs on a pellet that touched no enemy, which is what
-    // makes the mutation purely additive: a shot already on target is never
-    // moved, so it cannot drag a round off a Colossus weak point or a
+    // makes the passive item purely additive: a shot already on target is
+    // never moved, so it cannot drag a round off a Colossus weak point or a
     // Bulwark's flank that the player deliberately lined up.
     if (!damaged && !hitProp && this._homingAngle() > 0
       && this._homeShot(ray, muzzle, w, dmgMult, burst, crit)) {
@@ -4115,7 +4118,7 @@ class Game {
     // Thorns pays out on the hit that was ATTEMPTED, which is why it sits
     // above the dodge and the ward: something reached the player either way,
     // and an attacker that got away with it because the ward happened to be up
-    // is the one case where the mutation would read as broken.
+    // is the one case where the passive item would read as broken.
     this._thorns(d, pos, source);
     // Evasion, rolled before the ward: a dodge is free and the ward is a
     // limited charge, so spending the charge on a hit that was going to miss
@@ -4142,7 +4145,7 @@ class Game {
     // Blood Pact, and RED MIST's half of its own bargain. Applied after the
     // ward and the dodge, because those are about whether a hit lands at all
     // and this is about how much it costs. The item's multiplier is separate
-    // from the mutation's so the two stack instead of one overwriting the
+    // from the passive item's so the two stack instead of one overwriting the
     // other - which is what a player holding both would expect, and is also
     // the only reading under which the item's own text stays true.
     d *= this.player.mods.damageTakenMult * this.player.itemTakenMult;
@@ -4586,7 +4589,8 @@ class Game {
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
         if (this._cfg.boss) this._payBossBonus();
-        // THE CHALLENGE CLEAR ENDS THE MATCH HERE, not after a mutation pick.
+        // THE CHALLENGE CLEAR ENDS THE MATCH HERE, not after a passive item
+        // pick.
         //
         // Clearing a wave the other player died on IS the win (see
         // VersusMatch.advance), so the shop that normally follows a clear is a
@@ -4612,8 +4616,8 @@ class Game {
       // an exhausted pool can never wedge the run.
       if (!this.totemArea.active || this.totemArea.claimed) {
         // VERSUS ENDS THE TURN ON THE PICK, not on the wave that follows it.
-        // The mutation is the last decision the player makes, so the handoff
-        // lands on a choice rather than halfway through the walk back.
+        // The passive item is the last decision the player makes, so the
+        // handoff lands on a choice rather than halfway through the walk back.
         if (this.match) { this._endTurn(true); return; }
         this.waveState = 'idle';
         this.interT = 0.4;
@@ -5035,9 +5039,9 @@ class Game {
     return null;
   }
 
-  // E. Takes whatever _useTarget() says is nearest - a mutation, a roll of the
-  // box, the item the box is holding, a reroll or an ammo refill - so the key
-  // always does the thing the prompt on screen just said it would.
+  // E. Takes whatever _useTarget() says is nearest - a passive item, a roll of
+  // the box, the item the box is holding, a reroll or an ammo refill - so the
+  // key always does the thing the prompt on screen just said it would.
   tryUse() {
     if (this.state !== 'playing') return;
     const use = this._useTarget();
@@ -5714,9 +5718,9 @@ class Game {
         if (dx * dx + dz * dz > f.radius * f.radius) continue;
         // IT SETS FIRE. It used to deal its own damage-per-second, which made
         // the trail a third fire system with its own rate, unrelated to the
-        // burn the same mutation's bullets apply and unrelated to the music.
-        // Now standing in it burns you, on the beat, like every other fire in
-        // the game - one system, one number, one rhythm.
+        // burn the same passive item's bullets apply and unrelated to the
+        // music. Now standing in it burns you, on the beat, like every other
+        // fire in the game - one system, one number, one rhythm.
         //
         // Re-applied every frame an enemy is inside: applyStatus refreshes
         // rather than stacking, so this tops the timer up for as long as they
@@ -5849,7 +5853,7 @@ class Game {
   }
 
   // An enemy puts a status on the player. The one door for it, so anything
-  // that should ever be able to refuse one - a mutation, a boss phase, a
+  // that should ever be able to refuse one - a passive item, a boss phase, a
   // difficulty setting - has exactly one place to go.
   //
   // NOT gated on the dodge or the ward. Those two are about a BLOW landing,
@@ -6286,8 +6290,8 @@ class Game {
         // Resolved against n - 1 rather than n: step() prints "what you have
         // now -> what the next pick gives", and on a sheet of what is already
         // owned the interesting end is the one being stood on. At n - 1 a
-        // single-stack mutation prints its value flat, and a stacked one prints
-        // the rung below it and then the rung it is on.
+        // single-stack passive item prints its value flat, and a stacked one
+        // prints the rung below it and then the rung it is on.
         effects: effectLines(def, Math.max(0, n - 1)),
         theme: def.theme,
         tier: n,

@@ -26,8 +26,8 @@ import { BOUND } from './arena.js';
 //   smaller than the rest has to be its own Points. Which is cheap: it is one
 //   extra draw call, and both pools run the same simulation.
 //
-//   `sparks` is the showpiece: kills, explosions, mutation flourishes. It is
-//   unchanged, and it is what burst() still writes to.
+//   `sparks` is the showpiece: kills, explosions, passive item
+//   flourishes. It is unchanged, and it is what burst() still writes to.
 //
 //   `impacts` is every bullet landing - on an enemy, a wall, the floor or a
 //   prop - which is by far the most FREQUENT particle in the game and the one
@@ -1542,8 +1542,8 @@ export class Effects {
   /**
    * A bolt of lightning onto (x, z). Lightning Wizard's whole tell: the strike
    * has to be unmistakably a strike, and it has to say how far the splash
-   * reached, because that is the part of the mutation a player cannot infer
-   * from the damage numbers.
+   * reached, because that is the part of the passive item a player cannot
+   * infer from the damage numbers.
    *
    * The bolt is one polyline from well above the arena down to the floor,
    * jittered sideways at every joint. Straight would read as a laser.
@@ -1583,8 +1583,8 @@ export class Effects {
     }
     // The strike point gets a ring at exactly the splash radius and a column
     // of sparks: the ring is the only thing that says how far the extra damage
-    // reached, which is the part of the mutation a player cannot infer from
-    // watching one enemy die.
+    // reached, which is the part of the passive item a player cannot infer
+    // from watching one enemy die.
     this._boltAt.set(x, 0.05, z);
     this.shockwave(this._boltAt, 0xfff17a, radius, 0.45);
     this._boltAt.y = 0.5;

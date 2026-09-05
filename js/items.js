@@ -1,10 +1,10 @@
 // ACTIVE ITEMS: the one thing in the run with a button on it.
 //
-// Everything else the player collects is a mutation - a number folded into the
-// stat block that then applies itself forever, without being asked. An active
-// item is the opposite: it does nothing at all until it is fired, and firing it
-// is a decision made at a particular second of a particular fight. One slot,
-// one button, no menu.
+// Everything else the player collects is a passive item - a number folded into
+// the stat block that then applies itself forever, without being asked. An
+// active item is the opposite: it does nothing at all until it is fired, and
+// firing it is a decision made at a particular second of a particular fight.
+// One slot, one button, no menu.
 //
 // THE SLOT IS ONE DEEP, AND THAT IS THE FEATURE. Taking a second item throws
 // the first away. A run therefore carries an answer to ONE problem - the health
@@ -13,11 +13,14 @@
 // no stash, for the same reason there is no upgrade menu: nothing in this game
 // opens.
 //
-// THE CHARGE IS PAID IN WAVE TIME. `Player.update` fills the bar only while a
-// wave is actually running (see the note at that branch), so an item cannot be
-// topped up by standing still in the shop. It can still be FIRED in the shop -
-// gating the use as well would be a rule the player has to discover by being
-// punished for it, and there is nothing in the shop worth firing at anyway.
+// THE CHARGE IS BOUGHT WITH DEAD ENEMIES. Every kill is worth charge points
+// at a flat rate on its own value, banked as it dies and paid into the meter
+// as its orbs are collected (see CHARGE_PER_VALUE at the bottom of this file),
+// so an item's `charge` below is a COST IN ENEMIES and nothing at all fills it
+// but killing. Standing still pays nothing, in the shop or anywhere else. It
+// can still be FIRED in the shop - gating the use as well would be a rule the
+// player has to discover by being punished for it, and there is nothing in the
+// shop worth firing at anyway.
 //
 // HOW THEY ARE OBTAINED IS NOT IN THIS FILE. This is the catalogue and the
 // runtime; the mystery box that hands them out lives in js/mysterybox.js, and
@@ -215,18 +218,18 @@ export const ACTIVE_ITEMS = {
     name: 'BLINK DRIVE',
     charge: 3,
     theme: THEME.surge,
-    // THE DASH USED TO BE A MUTATION. Double Dash held two charges on a 2.5s
-    // timer and was fired by double-tapping W, which is a binding that exists
-    // because the game had no spare finger - and an active item slot IS a spare
-    // finger. So it moved here whole: the envelope, the distance and the
-    // forward-only commitment are untouched (see DASH_TIME in player.js), and
-    // what changed is that it is now competing with a heal and a panic button
-    // for the same slot rather than sitting in the pool for free.
+    // THE DASH USED TO BE A PASSIVE ITEM. Double Dash held two charges on a
+    // 2.5s timer and was fired by double-tapping W, which is a binding that
+    // exists because the game had no spare finger - and an active item slot IS
+    // a spare finger. So it moved here whole: the envelope, the distance and
+    // the forward-only commitment are untouched (see DASH_TIME in player.js),
+    // and what changed is that it is now competing with a heal and a panic
+    // button for the same slot rather than sitting in the pool for free.
     //
-    // Three seconds, against Double Dash's two charges at 2.5s. A single charge
-    // that comes back fast reads as mobility; two charges that come back slowly
-    // read as an escape saved for the worst moment, and the four items above
-    // already cover the worst moment.
+    // Three points - three basic enemies - against Double Dash's two charges
+    // on a 2.5s timer. A single charge that comes back fast reads as mobility;
+    // two charges that come back slowly read as an escape saved for the worst
+    // moment, and the four items above already cover the worst moment.
     effects: [['DASH FORWARD', GOOD]],
     use: (game) => {
       game.player.dash(game.time);
@@ -282,8 +285,8 @@ export const ACTIVE_ITEMS = {
     theme: THEME.fire,
     // A FIXED RATE, not the player's own burn. Incendiary may not be owned -
     // most runs it is not - and an item that did nothing at all until you
-    // happened to draft an unrelated mutation would be the only item in the
-    // pool whose text is a lie on the card it is read from.
+    // happened to draft an unrelated passive item would be the only item in
+    // the pool whose text is a lie on the card it is read from.
     //
     // Three seconds is short and the rate is high, which is the shape fire has
     // everywhere else in this game (see status.js): it is a reason to press
@@ -588,10 +591,10 @@ export const ACTIVE_ITEMS = {
     charge: 24,
     theme: THEME.affliction,
     // EVERY ELEMENT IN THE GAME, ONE ROUND AT A TIME. The point is not the
-    // damage - each of the four is weaker than the mutation that owns it - it
-    // is that a crowd caught by eight seconds of this is burning AND poisoned
-    // AND frozen AND arcing, and no draft the player could actually assemble
-    // ever does all four at once.
+    // damage - each of the four is weaker than the passive item that owns it -
+    // it is that a crowd caught by eight seconds of this is burning AND
+    // poisoned AND frozen AND arcing, and no draft the player could actually
+    // assemble ever does all four at once.
     //
     // It cycles per SHOT and not per pellet, so one trigger pull is one
     // element however many pellets were in it - the same rule Hot Streak and
@@ -610,14 +613,15 @@ export const ACTIVE_ITEMS = {
     name: 'BIRD DOG',
     charge: 14,
     theme: THEME.precision,
-    // SEEKER, ON A CLOCK. It reads the same _homeShot path the mutation does -
-    // the same cone, the same line-of-sight check, the same bent tracer - so a
-    // player who has carried Seeker already knows exactly what this does, and
-    // a player who has not gets shown the mechanic for five seconds.
+    // SEEKER, ON A CLOCK. It reads the same _homeShot path the passive item
+    // does - the same cone, the same line-of-sight check, the same bent tracer
+    // - so a player who has carried Seeker already knows exactly what this
+    // does, and a player who has not gets shown the mechanic for five seconds.
     //
-    // It does not stack with the mutation and it does not need to: the shot
-    // path takes the wider of the two cones, so owning Seeker makes this item
-    // a dead press rather than a double one, which is the honest behaviour.
+    // It does not stack with the passive item and it does not need to: the
+    // shot path takes the wider of the two cones, so owning Seeker makes this
+    // item a dead press rather than a double one, which is the honest
+    // behaviour.
     effects: [['YOUR SHOTS FIND THEIR MARK', GOOD], ['FOR 5s', NOTE]],
     duration: 5,
     use: (game) => {
@@ -875,9 +879,9 @@ export const ACTIVE_ITEMS = {
     // believable - and it is priced as FOUR OF THE PLAYER'S OWN BULLETS rather
     // than as a flat number, which is what a flat 45 stopped being worth by
     // wave ten. Read live off the gun through getEffectiveDamage, so every
-    // damage mutation in the build feeds it exactly the way it feeds a shot,
-    // and it is still four rounds' worth at wave twenty - big enough to matter
-    // under a crowd, nowhere near enough to press this for the damage.
+    // damage passive item in the build feeds it exactly the way it feeds a
+    // shot, and it is still four rounds' worth at wave twenty - big enough to
+    // matter under a crowd, nowhere near enough to press this for the damage.
     //
     // Thirty seconds. An escape that is not there when you need it
     // is not an escape, and this one commits the player to an arc they cannot
@@ -1017,7 +1021,7 @@ export const ACTIVE_ITEMS = {
     // straight line, which is why it costs the ammunition rather than being
     // free: the item is not extra damage, it is the SHAPE of damage the pulse
     // rifle cannot make - everything standing between you and the wall, in one
-    // frame, through cover the pierce mutation would have stopped at.
+    // frame, through cover the pierce passive item would have stopped at.
     //
     // IT REFUSES WHEN THE ROUNDS ARE NOT THERE, out loud. A press that spent
     // the charge and fired nothing would be the worst failure in the pool, and
@@ -1242,14 +1246,14 @@ export const ACTIVE_ITEMS = {
     // in main.js. What the player is buying is the escalating price they are
     // not paying.
     //
-    // A charge that fills in wave time and spends in the shop is also the one
-    // item whose timing is trivially correct, which is a fair trade for it
+    // A charge that is earned in the fight and spent in the shop is also the
+    // one item whose timing is trivially correct, which is a fair trade for it
     // being useless the other ninety percent of the time.
     effects: [['REROLLS SHOP ON USE', GOOD], ['FREE OF CHARGE', NOTE]],
     // REFUSED WHERE THERE IS NOTHING TO REROLL - between waves the totems are
-    // down, and a press that spent a fifty-second charge on an empty room
-    // would be the worst failure in the pool. Same voice an uncharged press
-    // gets, and the same voice the console gives for NOTHING TO REROLL.
+    // down, and a press that spent fifty enemies' worth of charge on an empty
+    // room would be the worst failure in the pool. Same voice an uncharged
+    // press gets, and the same voice the console gives for NOTHING TO REROLL.
     ready: (game) => game.totemArea.active && !game.totemArea.claimed,
     use: (game) => {
       game._itemReroll();
@@ -1267,9 +1271,9 @@ export const ACTIVE_ITEM_KEYS = Object.keys(ACTIVE_ITEMS);
 // keeps the item's whole definition in one file, and the shot path only has to
 // know that there IS a cycle, not what is in it.
 //
-// The four are deliberately WEAKER than the mutations that own them - Venom's
-// poison is longer, Cryo's slow is longer, Incendiary burns harder. What the
-// item sells is having all four at once, which no draft can assemble.
+// The four are deliberately WEAKER than the passive items that own them -
+// Venom's poison is longer, Cryo's slow is longer, Incendiary burns harder.
+// What the item sells is having all four at once, which no draft can assemble.
 export const HUMOURS = [
   { status: 'burn', dur: 2.5, power: 9, color: 0xff5a00 },
   { status: 'slow', dur: 1.6, power: 0, color: 0x7fe3ff },

@@ -22,11 +22,11 @@
 //   Add an entry here with a unique key, a `rarity` from RARITY, a `max` stack
 //   count and an apply(), and draw its icon in tools/pixelart/icons.py under
 //   THE SAME KEY. Entries do not name an icon: the key IS the icon key, which
-//   is what makes "one shape per mutation" a fact about the data rather than a
-//   rule a test has to police. `npm run test:icons` fails the moment a key here
-//   has no drawing. If it needs a stat that does not exist yet, add the
-//   field to DEFAULT_MODS in player.js and read it wherever it applies. If it
-//   needs to react to an event (a kill, a hit taken) rather than change a
+//   is what makes "one shape per passive item" a fact about the data rather
+//   than a rule a test has to police. `npm run test:icons` fails the moment a
+//   key here has no drawing. If it needs a stat that does not exist yet, add
+//   the field to DEFAULT_MODS in player.js and read it wherever it applies. If
+//   it needs to react to an event (a kill, a hit taken) rather than change a
 //   stat, add the mod field here and the hook in main.js.
 //
 //   Because upgrades are granted at random, every entry must be worth getting
@@ -41,10 +41,10 @@ export const RARITY = {
 
 // THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
 // the totem can be read before any text is: gold means ammo, orange means rate
-// of fire, cyan means armour, and the mutations each wear the colour of the
-// thing they inflict - green poison, orange fire, pale blue ice. The icons are
-// drawn in one neutral ramp and tinted with this colour at build time, so a
-// theme change here recolours the icon along with everything else.
+// of fire, cyan means armour, and the passive items each wear the colour of
+// the thing they inflict - green poison, orange fire, pale blue ice. The icons
+// are drawn in one neutral ramp and tinted with this colour at build time, so
+// a theme change here recolours the icon along with everything else.
 //
 // Entries are grouped into families and shaded apart inside one, so two
 // upgrades never share a colour outright: the family is what makes the palette
@@ -110,13 +110,14 @@ export const THEME = {
   ice: 0x7fe3ff,
   fear: 0x9d4edd,
   stone: 0x9aa5b1,
-  // The eleven that came in from the old Devil row. They kept the colours they
-  // were drawn in, because those already followed the rule above - Antidote is
-  // green because it is about poison, Absolute Zero pale blue because it is
-  // about ice - and they are folded into the families here rather than left in
-  // a map of their own now that there is no second row to shade them apart
-  // from. Two of them DID move: hellfire and gamble were drawn in the exact
-  // values `damage` and `shrapnel` already hold, which the rule above forbids.
+  // The eleven that came in from the old max-health row. They kept the colours
+  // they were drawn in, because those already followed the rule above -
+  // Antidote is green because it is about poison, Absolute Zero pale blue
+  // because it is about ice - and they are folded into the families here
+  // rather than left in a map of their own now that there is no second row to
+  // shade them apart from. Two of them DID move: hellfire and gamble were
+  // drawn in the exact values `damage` and `shrapnel` already hold, which the
+  // rule above forbids.
   carnage: 0xff1744,
   pact: 0xb71c1c,
   hellfire: 0xdd2c00,
@@ -169,8 +170,8 @@ const pctDown = (r) => (k) => '-' + Math.round((1 - Math.pow(r, k)) * 100) + '%'
 const secs = (v) => (Math.round(v * 10) / 10) + 's';
 
 /**
- * The effect lines to draw for a player who owns `owned` stacks of `def`.
- * A static array is used as-is - that is every max-1 mutation, which has no
+ * The effect lines to draw for a player who owns `owned` stacks of `def`. A
+ * static array is used as-is - that is every max-1 passive item, which has no
  * tiers to compare. A function is a tiered readout; see step().
  */
 export function effectLines(def, owned = 0) {
@@ -286,7 +287,7 @@ export const UPGRADES = {
       ['MONEY COMES TO YOU', NOTE],
     ],
     // +50% a tier and not more, because the radius it multiplies is already
-    // five metres: at the tier the arena is 44 across, and a mutation that
+    // five metres: at the tier the arena is 44 across, and a passive item that
     // empties half the room from a standstill stops being a way of moving and
     // starts being a way of not having to.
     apply: (mods, n) => {
@@ -372,8 +373,8 @@ export const UPGRADES = {
   // RATE IS BOUGHT WITH HANDLING, and it has to be bought at a price the
   // player can feel or the card is a free upgrade with a warning label on it.
   // It was: +70% recoil on a weapon whose kick decays inside a third of a
-  // second read as almost nothing, and a mutation whose downside nobody can
-  // name is not a trade.
+  // second read as almost nothing, and a passive item whose downside nobody
+  // can name is not a trade.
   //
   // So it charges twice, in the two currencies a gun has. RECOIL walks the
   // muzzle up the wall and the player answers it with the stick. BLOOM opens
@@ -423,11 +424,11 @@ export const UPGRADES = {
       mods.staminaRegen *= 1 + n;
     },
   },
-  // ---- MUTATIONS ---------------------------------------------------------
+  // ---- PASSIVE ITEMS -------------------------------------------------------
   // Single-tier picks: max 1, no levels, one distinct behaviour each. Where
   // every upgrade above answers "how much", these answer "what happens" - the
-  // player should be able to name what a mutation does from watching one shot
-  // land, without reading the totem twice.
+  // player should be able to name what a passive item does from watching one
+  // shot land, without reading the totem twice.
   //
   // The ones that afflict an enemy all have to SAY SO ON THE ENEMY. A status
   // the player cannot see is a stat increase with extra steps, so each drives
@@ -997,19 +998,19 @@ export const UPGRADES = {
       mods.plantDelay = 3;
     },
   },
-  // ---- THE OLD DEVIL DEALS ------------------------------------------------
+  // ---- THE ELEVEN CONVERTED PICKS -----------------------------------------
   //
   // These eleven were sold, not given: a second row at the wave break charged
   // MAX HEALTH for them, permanently. That row is gone (it sells active items
-  // now - see js/items.js), and they are ordinary mutations, rolled onto free
-  // totems like everything above.
+  // now - see js/items.js), and they are ordinary passive items, rolled onto
+  // free totems like everything above.
   //
-  // WHAT CHANGED WHEN THE PRICE DID. A deal did not need a drawback, because
-  // the price WAS the drawback and it was the same price for every build. Free,
-  // each one has to weigh itself, so the rarity is assigned by whether it
-  // already carried a real cost - `cursed` where it does, `rare` where the
-  // effect stands on its own. Only EXECUTIONER still charges health, and it
-  // charges it as a mod rather than as a payment: see mods.maxHpFlat.
+  // WHAT CHANGED WHEN THE PRICE DID. A paid pick did not need a drawback,
+  // because the price WAS the drawback and it was the same price for every
+  // build. Free, each one has to weigh itself, so the rarity is assigned by
+  // whether it already carried a real cost - `cursed` where it does, `rare`
+  // where the effect stands on its own. Only EXECUTIONER still charges health,
+  // and it charges it as a mod rather than as a payment: see mods.maxHpFlat.
 
   carnage: {
     name: 'CARNAGE',
@@ -1105,11 +1106,11 @@ export const UPGRADES = {
     rarity: 'cursed',
     max: 1,
     theme: THEME.executioner,
-    // THE ONE MUTATION THAT STILL COSTS MAX HEALTH. It was the most expensive
-    // thing the Devil sold at 50, and it keeps that price now that nothing else
-    // does - halving a boss is worth a permanent third of the bar, and without
-    // the price it would be a free answer to the only fight in the game that is
-    // meant to be a wall.
+    // THE ONE PASSIVE ITEM THAT STILL COSTS MAX HEALTH. It was the most
+    // expensive pick on that row at 50, and it keeps that price now that
+    // nothing else does - halving a boss is worth a permanent third of the
+    // bar, and without the price it would be a free answer to the only fight
+    // in the game that is meant to be a wall.
     //
     // Charged through mods.maxHpFlat rather than as a payment, because
     // rebuildMods() replays the owned list from fresh defaults after every pick:
@@ -1145,9 +1146,10 @@ export const UPGRADES = {
     // rolled their own coin would average out to nothing, and the whole point
     // is that a shot is either a windfall or a waste.
     //
-    // The name outlived the Devil. It is a coin toss with the odds barely in
-    // your favour, which is what the phrase means - and renaming a mutation
-    // players already know would cost more than the reference does.
+    // THE NAME IS THE MECHANIC, not a leftover: it is a coin toss with the
+    // odds barely in your favour, which is exactly what the phrase means.
+    // Renaming a passive item players already know would cost more than it
+    // could possibly buy.
     effects: [['51% OF SHOTS: 2x DMG', GOOD], ['49% OF SHOTS: HALF', BAD]],
     apply: (mods, n) => { mods.gamble = n; },
   },
@@ -1164,10 +1166,10 @@ export const UPGRADES = {
     rarity: 'rare',
     max: 1,
     theme: THEME.power,
-    // The plainest entry in the pool: damage, no drawback, no condition. It was
-    // five max HP when the Devil sold it, and free it is still UNDER Hollow
-    // Point - a common, at +30% a stack for a smaller magazine - so it needs no
-    // rebalance to sit here. Not everything has to be a decision.
+    // The plainest entry in the pool: damage, no drawback, no condition. It
+    // cost five max HP on the old paid row, and free it is still UNDER Hollow
+    // Point - a common, at +30% a stack for a smaller magazine - so it needs
+    // no rebalance to sit here. Not everything has to be a decision.
     effects: [['+20% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; },
   },
@@ -1184,9 +1186,9 @@ function rarityWeight(rarity, wave) {
   const base = RARITY[rarity].weight;
   // Rares get commoner as the run goes on; commons never fall out of the pool
   // because low-rarity stat stacking is what a build is made of. The ramp is
-  // deliberately shallow and capped: the mutations are all rare or cursed, so
-  // the rare half of the pool is now three times the size it was, and the old
-  // +0.05 climb to 1.0 would have crowded stat stacking out of a long run
+  // deliberately shallow and capped: the passive items are all rare or cursed,
+  // so the rare half of the pool is now three times the size it was, and the
+  // old +0.05 climb to 1.0 would have crowded stat stacking out of a long run
   // entirely rather than merely making it less certain.
   if (rarity === 'rare') return Math.min(0.7, base + wave * 0.02);
   return base;

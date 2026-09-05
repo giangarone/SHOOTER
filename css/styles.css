@@ -478,10 +478,6 @@ html, body {
   0%   { transform: scale(1.22); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
   100% { transform: none; }
 }
-/* The bar used to grey out at the wave break, where the charge is frozen (see
-   the note in Player.update). It does not any more - the rule is in Ui.setItem,
-   and the reason is there. The class is no longer applied by anything. */
-
 /* AEGIS - THE SHIELD. Both damage sinks return in silence while the window is
    open, so without something around the screen five seconds of invulnerability
    look exactly like five seconds of not being shot at.
@@ -1450,9 +1446,9 @@ html, body {
 
 /* =========================================================================
    HELD-TAB INVENTORY SHEET
-   What the player is CARRYING - the held item and every mutation - each with
-   its icon, its name and the same effect lines its totem printed when the
-   offer was made. Held, not toggled, and the game keeps RUNNING underneath:
+   What the player is CARRYING - the held item and every passive item - each
+   with its icon, its name and the same effect lines its totem printed when
+   the offer was made. Held, not toggled, and the game keeps RUNNING underneath:
    a panel that paused the arena would be a free timeout on demand, so this is
    a glance the player pays for. Deliberately not an `.overlay`: it never takes
    the cursor and never covers the crosshair's own row.
@@ -1487,17 +1483,18 @@ html, body {
   padding-bottom: calc(var(--u) * 2);
   box-shadow: inset 0 -2px 0 rgba(43, 51, 72, 0.9);
 }
-/* THE MUTATIONS SECTION IS THE ONE THAT CAN OVERFLOW - a long run owns twenty
-   picks - so it takes the leftover height and scrolls inside itself rather
-   than growing the card off the screen. The item below it is one entry and is
-   never allowed to shrink. */
-.stats-sec.muts { min-height: 0; display: flex; flex-direction: column; }
-.stats-sec.muts .inv-grid { overflow-y: auto; min-height: 0; }
+/* THE PASSIVE ITEMS SECTION IS THE ONE THAT CAN OVERFLOW - a long run owns
+   twenty picks - so it takes the leftover height and scrolls inside itself
+   rather than growing the card off the screen. The item below it is one entry
+   and is never allowed to shrink. */
+.stats-sec.passives { min-height: 0; display: flex; flex-direction: column; }
+.stats-sec.passives .inv-grid { overflow-y: auto; min-height: 0; }
 .stats-sec.item { flex: none; }
 
-/* A COLUMN GRID, NOT A LIST. Twenty mutations down one column is a page the
-   player has to scroll while a fight runs; three columns of seven is a sheet
-   they can take in at a glance, which is the only thing this panel is for.
+/* A COLUMN GRID, NOT A LIST. Twenty passive items down one column is a page
+   the player has to scroll while a fight runs; three columns of seven is a
+   sheet they can take in at a glance, which is the only thing this panel is
+   for.
    auto-fill rather than a fixed count, so the same rule gives a narrow window
    two columns and a wide one three without a second breakpoint. */
 .inv-grid {

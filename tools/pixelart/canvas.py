@@ -1,4 +1,4 @@
-"""24x24 authoring canvas for the pixel mutation icons.
+"""24x24 authoring canvas for the pixel passive item icons.
 
 Icons are DRAWN, not typed: a shape gets laid down in a base tone and then a
 single shared pass puts the shadow on its lower-right edge and the highlight on
