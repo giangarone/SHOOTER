@@ -1725,3 +1725,134 @@ body.pad-mode #game canvas { cursor: none; }
 @media (prefers-reduced-motion: reduce) {
   #audio-hint { animation: none; }
 }
+
+
+/* =========================================================================
+   THE DEBUG PANEL  (9)
+   -------------------------------------------------------------------------
+   A CHEAT SCREEN, AND IT IS DRAWN LIKE ONE. It borrows the plate, the chamfer
+   and the type off the rest of the sheet so it does not look like a different
+   program, and then stops: no animation, no arrival, no hover flourish. The
+   thing it is optimised for is a hand that already knows where the tile is.
+
+   OWNED IS THE ONLY STATE A TILE HAS, and it is drawn as COLOUR vs GREY
+   rather than as a border, a tick or a label. A grid of a hundred tiles has
+   no room for a second signal and does not need one - the question being
+   asked of it is "have I got this", and saturation answers that from across
+   the room without being read.
+   ========================================================================= */
+
+#debug-panel {
+  position: fixed; inset: 0; z-index: 11;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--u) * 4);
+  /* The same dither every other layered surface uses. The arena is still
+     being rendered underneath - the run is frozen, not torn down - and this
+     is the one screen where seeing what you are about to drop into matters. */
+  background:
+    radial-gradient(ellipse at center, rgba(10, 12, 18, 0.6) 0 40%, rgba(5, 7, 11, 0.9) 100%),
+    var(--dither);
+  background-size: auto, 4px 4px;
+  cursor: default;
+}
+#debug-card {
+  width: 1240px; max-width: 98vw; height: 92vh;
+  display: flex; flex-direction: column;
+  --surface: var(--fill-lo);
+  --edge: var(--gold);
+}
+#debug-head {
+  flex: none;
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: calc(var(--u) * 4);
+  padding: calc(var(--u) * 4) calc(var(--u) * 5);
+  border-bottom: 2px solid var(--line);
+  font-size: 12px; color: var(--gold);
+}
+#debug-hint { font-size: 8px; color: var(--dim); }
+
+/* ONE SCROLLER, NOT THREE. Three panes that each scroll is three places to
+   lose your position in; the whole sheet moving means a click and a scroll
+   are the same gesture they are everywhere else. */
+#debug-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: calc(var(--u) * 4) calc(var(--u) * 5) calc(var(--u) * 6);
+}
+.debug-sec + .debug-sec { margin-top: calc(var(--u) * 6); }
+.debug-sec h3 {
+  font-size: 10px; font-weight: 400; color: var(--cyan);
+  margin-bottom: calc(var(--u) * 3);
+  display: flex; align-items: baseline; gap: calc(var(--u) * 3);
+}
+.debug-sec h3 em { font-style: normal; font-size: 8px; color: var(--dim); }
+
+/* ---- the wave row ------------------------------------------------------ */
+
+#debug-wave-row {
+  display: flex; align-items: stretch; gap: calc(var(--u) * 2);
+  margin-bottom: calc(var(--u) * 3);
+}
+#debug-wave-input {
+  width: calc(var(--u) * 28);
+  font: inherit; font-size: 10px; text-align: center;
+  color: var(--text); background: var(--fill);
+  border: 2px solid var(--line); padding: calc(var(--u) * 2);
+}
+#debug-wave-input:focus { outline: none; border-color: var(--cyan); }
+.debug-go {
+  font: inherit; font-size: 10px; cursor: pointer;
+  color: var(--ink); background: var(--gold);
+  border: none; clip-path: var(--cut-sm);
+  padding: calc(var(--u) * 2) calc(var(--u) * 5);
+}
+.debug-go:hover { background: #fff; }
+
+/* Forty buttons on one line-wrapping row. Boss waves wear the red, because
+   "put me in a boss fight" is the single most common reason this screen is
+   open and counting to a multiple of five is not a thing to ask of anybody. */
+#debug-waves {
+  display: grid; gap: var(--u);
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 11), 1fr));
+}
+.dwave {
+  font: inherit; font-size: 8px; cursor: pointer;
+  color: var(--text); background: var(--fill);
+  border: 2px solid var(--line);
+  padding: calc(var(--u) * 1.5) 0;
+}
+.dwave:hover { border-color: var(--cyan); color: var(--cyan); }
+.dwave.boss { color: var(--red); border-color: #4a2020; }
+.dwave.boss:hover { border-color: var(--red); }
+/* The wave you are actually in. It is the one tile on the screen whose state
+   is not "have I got this", so it is the one that gets a fill. */
+.dwave.now { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+
+/* ---- the item grids ---------------------------------------------------- */
+
+#debug-actives, #debug-passives {
+  display: grid; gap: var(--u);
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 24), 1fr));
+}
+.dtile {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--u);
+  font: inherit; cursor: pointer; text-align: center;
+  color: var(--dim); background: var(--fill);
+  border: 2px solid var(--line);
+  padding: calc(var(--u) * 2) var(--u);
+}
+.dtile:hover { border-color: var(--line-hi); }
+/* THE WHOLE STATE, in one property. Unowned is the drawing with the colour
+   taken out of it and dimmed; owned is simply the drawing. */
+.dtile-art {
+  width: calc(var(--u) * 12); height: calc(var(--u) * 12);
+  image-rendering: pixelated;
+  filter: grayscale(1) brightness(0.55);
+}
+.dtile-name {
+  font-size: 7px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.dtile-tier { font-size: 7px; color: var(--gold); min-height: 10px; }
+.dtile.on { color: var(--text); border-color: var(--cyan); }
+.dtile.on .dtile-art { filter: none; }

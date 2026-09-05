@@ -157,6 +157,44 @@
     </div>
   </div>
 
+  <!-- THE DEBUG PANEL. Opened with 9 over a live run, and it is a CHEAT that
+       ships - the same call the $1,000 key makes about itself, for the same
+       reason: it is here on purpose, it is one screen, and it says so in two
+       places (see _openDebug in js/main.js).
+
+       Three sections, in the order a test actually uses them: the wave you
+       want to be in, the one active item you can carry, and the sixty-six
+       passives. Every tile is a button carrying its own icon - the same
+       pixelicons.js drawing the totem and the build sheet use - and OWNED is
+       the only state it has: colour for carried, grey for not. That is the
+       whole readout, so there is nothing to read. -->
+  <div id="debug-panel" class="hidden">
+    <div id="debug-card" class="plate">
+      <div id="debug-head">
+        <span>DEBUG</span>
+        <span id="debug-hint">9 OR ESC TO CLOSE</span>
+      </div>
+      <div id="debug-body">
+        <section class="debug-sec">
+          <h3>WAVE <em id="debug-wave-now">1</em></h3>
+          <div id="debug-wave-row">
+            <input id="debug-wave-input" type="number" min="1" max="999" value="1">
+            <button id="debug-wave-go" class="debug-go">JUMP</button>
+          </div>
+          <div id="debug-waves"></div>
+        </section>
+        <section class="debug-sec">
+          <h3>ACTIVE ITEM <em>ONE SLOT - PICKING SWAPS</em></h3>
+          <div id="debug-actives" class="debug-grid"></div>
+        </section>
+        <section class="debug-sec">
+          <h3>PASSIVE ITEMS <em>CLICK ADDS A TIER - RIGHT-CLICK REMOVES</em></h3>
+          <div id="debug-passives" class="debug-grid"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div id="overlay-start" class="overlay">
     <div class="marquee plate">
       <h1>VOID ARENA</h1>

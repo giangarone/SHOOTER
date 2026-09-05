@@ -75,6 +75,17 @@ export class UI {
     this.statsPassives = $('stats-passives');
     this.statsActive = $('stats-active');
     this.statsItemSec = $('stats-item-sec');
+    // The debug panel. Built once on the first open and refreshed in place -
+    // see buildDebug.
+    this.debugPanel = $('debug-panel');
+    this.debugPassives = $('debug-passives');
+    this.debugActives = $('debug-actives');
+    this.debugWaves = $('debug-waves');
+    this.debugWaveNow = $('debug-wave-now');
+    this.debugWaveInput = $('debug-wave-input');
+    this.debugWaveGo = $('debug-wave-go');
+    this._debugTiles = null;
+    this._debugWaveEls = null;
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
     // Which active-item chips were drawn last frame - see setItemBuffs. The
@@ -805,6 +816,113 @@ export class UI {
     this.statsPassives.textContent = '';
     this.statsActive.textContent = '';
   }
+
+  // =========================================================================
+  // THE DEBUG PANEL
+  // =========================================================================
+  //
+  // The build sheet's shameless twin. That one reports what a run EARNED and
+  // is read while it is running; this one hands anything out at all, and the
+  // run is frozen behind it. They share the icon catalogue and nothing else.
+  //
+  // BUILT ONCE. A hundred and three tiles is a hundred and three
+  // pixelIconCanvas calls at 576 cells each, and the panel is opened and shut
+  // over and over inside one session - so the DOM is made on the first open
+  // and every open after it only rewrites the `on` class and the tier count.
+  //
+  // `passives` and `actives` are [{ id, name, theme, max }]; `on` carries the
+  // four things a click can mean. Nothing here knows what a wave or an upgrade
+  // IS - main.js owns all of that, and this owns which pixel was clicked.
+  buildDebug(passives, actives, on) {
+    if (this._debugTiles) return;
+    this._debugTiles = {};
+    this._debugWaveEls = [];
+    for (const def of passives) {
+      this.debugPassives.appendChild(this._debugTile(def, on.passive, on.dropPassive));
+    }
+    for (const def of actives) {
+      this.debugActives.appendChild(this._debugTile(def, on.active, null));
+    }
+    // Forty buttons, which covers the whole boss rotation twice and every
+    // enemy unlock in the game. Anything past it goes in the box beside them.
+    for (let n = 1; n <= 40; n++) {
+      const b = document.createElement('button');
+      b.className = n % 5 === 0 ? 'dwave boss' : 'dwave';
+      b.textContent = n;
+      b.addEventListener('click', () => on.wave(n));
+      this.debugWaves.appendChild(b);
+      this._debugWaveEls.push(b);
+    }
+    const jump = () => {
+      const n = Math.max(1, Math.min(999, Math.floor(+this.debugWaveInput.value || 1)));
+      on.wave(n);
+    };
+    this.debugWaveGo.addEventListener('click', jump);
+    // Enter in the box is the same button. The window's keydown handler skips
+    // anything typed into an input (see _typing in main.js), so the digits
+    // never reach the movement keys and this never has to stop propagation.
+    this.debugWaveInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') jump();
+    });
+  }
+
+  // One tile: the icon, the name, and the tier count under it. `give` runs on
+  // a click and `drop` - passives only - on a right-click, which is the whole
+  // reason the tile is a <button> and the panel needs no other controls.
+  _debugTile(def, give, drop) {
+    const el = document.createElement('button');
+    el.className = 'dtile';
+    el.title = def.name;
+    const art = pixelIconCanvas(def.id, def.theme, 2);
+    art.className = 'dtile-art';
+    const name = document.createElement('span');
+    name.className = 'dtile-name';
+    name.textContent = def.name;
+    const tier = document.createElement('span');
+    tier.className = 'dtile-tier';
+    el.append(art, name, tier);
+    el.addEventListener('click', () => give(def.id));
+    if (drop) {
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        drop(def.id);
+      });
+    }
+    this._debugTiles[def.id] = { el, tier };
+    return el;
+  }
+
+  /**
+   * What the panel is showing, rewritten after every click.
+   *
+   * @param {object} owned  { [passive id]: stacks } - the player's own map
+   * @param {string|null} item  the carried active item's id
+   * @param {number} wave   the wave the run is currently in
+   */
+  refreshDebug(owned, item, wave) {
+    if (!this._debugTiles) return;
+    for (const [id, t] of Object.entries(this._debugTiles)) {
+      const n = id === item ? 1 : (owned[id] || 0);
+      t.el.classList.toggle('on', n > 0);
+      // A tier is printed only where there is one to read. "x1" on every
+      // single-tier passive would make the stacking ones invisible, which is
+      // the same rule the build sheet follows.
+      t.tier.textContent = n > 1 ? 'x' + n : '';
+    }
+    // Floored at one, because `wave` is 0 for the moment between a run
+    // beginning and its first wave opening - and "WAVE 0" is a number the
+    // player cannot jump to and would have to be told to ignore.
+    const w = Math.max(1, wave);
+    this.debugWaveNow.textContent = w;
+    this.debugWaveInput.value = w;
+    for (let i = 0; i < this._debugWaveEls.length; i++) {
+      this._debugWaveEls[i].classList.toggle('now', i + 1 === w);
+    }
+  }
+
+  showDebug() { this.debugPanel.classList.remove('hidden'); }
+
+  hideDebug() { this.debugPanel.classList.add('hidden'); }
 
   /**
    * One entry: the icon, the name, and the effect lines under it.

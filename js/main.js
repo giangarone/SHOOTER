@@ -783,6 +783,10 @@ class Game {
     // be released by keyup AND by blur - alt-tabbing away with it down would
     // otherwise leave it stuck over the fight on the way back.
     this._statsHeld = false;
+    // Whether the debug panel is up. It parks the run in the PAUSED state -
+    // see _openDebug - so this is also what stops the pause screen and the
+    // pointer-lock handler from arguing with it about who owns that state.
+    this._debugOpen = false;
     this.emptyClickCd = 0;
 
     // Refilled and handed to the rig every frame. One object for the life of
@@ -1153,7 +1157,10 @@ class Game {
         // pointer lock and fullscreen, which is exactly why it is only ever
         // read here as "close the screen on top" - it can never reach into a
         // live run and change anything.
-        case 'Escape': if (this._subScreenOpen()) this._closeSubScreen(); break;
+        case 'Escape':
+          if (this._debugOpen) this._closeDebug();
+          else if (this._subScreenOpen()) this._closeSubScreen();
+          break;
         // ---- DEBUG ------------------------------------------------------
         // $1,000, for testing the shop and the box without playing a run up to
         // the money first. Digit0 and not Numpad0, so it is the key above the
@@ -1163,6 +1170,9 @@ class Game {
         // it is here on purpose - see _debugCredits - but it is the kind of
         // thing that gets forgotten, so it says so in two places.
         case 'Digit0': this._debugCredits(); break;
+        // THE DEBUG PANEL. Next key along from the credits cheat, and it says
+        // the same thing about itself - see _openDebug.
+        case 'Digit9': this._toggleDebug(); break;
       }
     });
     addEventListener('keyup', (e) => {
@@ -1239,7 +1249,7 @@ class Game {
         if (this.state === 'playing' && !this.autoTest && this.inputMode !== 'pad') {
           this.pause();
         }
-      } else if (this.state === 'paused') {
+      } else if (this.state === 'paused' && !this._debugOpen) {
         this.state = 'playing';
         this.ui.hidePause();
       }
@@ -2466,7 +2476,10 @@ class Game {
   // them owe the same tidying up, which is why none of them writes `state`
   // themselves any more.
   pause() {
-    if (this.state !== 'playing') return;
+    // The debug panel already holds the run in `paused`, and it is not the
+    // pause SCREEN - anything that would ordinarily raise that screen is a
+    // no-op while the panel is the thing on top.
+    if (this.state !== 'playing' || this._debugOpen) return;
     this.state = 'paused';
     this._clearInput();
     this._closeStats();
@@ -2477,7 +2490,7 @@ class Game {
   }
 
   resume() {
-    if (this.state !== 'paused') return;
+    if (this.state !== 'paused' || this._debugOpen) return;
     this.state = 'playing';
     this.ui.hidePause();
     if (!this.autoTest) this._lock();
@@ -5303,6 +5316,156 @@ class Game {
     this._creditsDirty = true;
     this.sfx.coin();
     this.ui.banner('DEBUG  +$1,000');
+  }
+
+  /**
+   * THE DEBUG PANEL, on 9. Give yourself anything; drop into any wave.
+   *
+   * A SECOND CHEAT THAT SHIPS, on the same terms as the credits key above and
+   * for the same reason: the thing it exists to shorten is a round trip
+   * through a real run. Tuning one active item used to mean playing until a
+   * box happened to offer it; checking what a passive does at wave thirty
+   * meant reaching wave thirty. Both are now two clicks, and the run being
+   * tested is a real run rather than a test harness - which is the whole
+   * point, because a harness cannot show you how the thing FEELS.
+   *
+   * Delete _toggleDebug, _openDebug, _closeDebug, the four handlers below,
+   * the Digit9 case, the Escape branch and #debug-panel to remove it. Nothing
+   * else in the game refers to any of them.
+   *
+   * IT PARKS THE RUN IN `paused` RATHER THAN RUNNING UNDERNEATH. The build
+   * sheet deliberately does not stop the arena - reading it costs the player
+   * the seconds it takes - and that argument is exactly backwards here: this
+   * screen is read with a mouse, so it has to give the pointer back, and a
+   * live arena the player cannot see or steer while they click through a
+   * hundred tiles is a screen that kills them. `paused` is the state the game
+   * already has for "frozen, still drawn", so this borrows it rather than
+   * inventing a third one; `_debugOpen` is what keeps the pause SCREEN from
+   * being raised over the top of it (see pause, resume and pointerlockchange).
+   */
+  _toggleDebug() {
+    if (this._debugOpen) this._closeDebug();
+    else this._openDebug();
+  }
+
+  _openDebug() {
+    if (this.state !== 'playing') return;
+    this._debugOpen = true;
+    // Set BEFORE the pointer is released: the pointerlockchange handler reads
+    // `state` to decide whether losing the pointer was a pause, and at
+    // 'playing' it would raise the pause screen over this one.
+    this.state = 'paused';
+    this._clearInput();
+    this._closeStats();
+    this.pad.stopRumble();
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    this.ui.buildDebug(this._debugPassiveDefs(), this._debugActiveDefs(), {
+      passive: (id) => this._debugGivePassive(id),
+      dropPassive: (id) => this._debugDropPassive(id),
+      active: (id) => this._debugGiveActive(id),
+      wave: (n) => this._debugJumpToWave(n),
+    });
+    this._debugRefresh();
+    this.ui.showDebug();
+  }
+
+  _closeDebug() {
+    if (!this._debugOpen) return;
+    this._debugOpen = false;
+    this.ui.hideDebug();
+    // Back to 'playing' before the re-lock, for the mirror of the reason it
+    // was set before the release: the handler's other branch would otherwise
+    // take the panel's paused state as the pause screen's and hide that.
+    this.state = 'playing';
+    if (!this.autoTest) this._lock();
+  }
+
+  // The two catalogues, as the flat shape the panel draws. The id is also the
+  // icon key in both pools - see the note at the head of ACTIVE_ITEMS - so
+  // there is nothing to map.
+  _debugPassiveDefs() {
+    return Object.entries(UPGRADES).map(([id, def]) => ({
+      id, name: def.name, theme: def.theme,
+    }));
+  }
+
+  _debugActiveDefs() {
+    return Object.entries(ACTIVE_ITEMS).map(([id, def]) => ({
+      id, name: def.name, theme: def.theme,
+    }));
+  }
+
+  _debugRefresh() {
+    this.ui.refreshDebug(this.player.upgrades, this.player.item, this.wave);
+  }
+
+  // A TIER AT A TIME, through the player's own takeUpgrade - so a stacking
+  // passive stacks, a maxed one refuses, and every clamp that comes with an
+  // upgrade (the health cap, the magazine, the gun marks) is applied exactly
+  // as it is when a totem is walked into.
+  _debugGivePassive(id) {
+    if (!this.player.takeUpgrade(id)) return;
+    this._debugRefresh();
+    this.sfx.menuMove();
+  }
+
+  // ...and off again, which is the half a real run has no way to do. Dropping
+  // to zero deletes the key rather than leaving a 0 behind: rebuildMods walks
+  // this map, and an entry meaning "none" is a case every reader would have to
+  // know about.
+  _debugDropPassive(id) {
+    const n = this.player.upgrades[id] || 0;
+    if (n <= 0) return;
+    if (n > 1) this.player.upgrades[id] = n - 1;
+    else delete this.player.upgrades[id];
+    this.player.rebuildMods();
+    this.player.health = Math.min(this.player.health, this.player.maxHealth);
+    this.player.mag = Math.min(this.player.mag, this.player.magSize);
+    this.player.refreshGunMarks();
+    this._debugRefresh();
+    this.sfx.menuBack();
+  }
+
+  // ONE SLOT, so picking a second item throws the first away - which is the
+  // rule the whole active-item system is built on, and giveItem is where it
+  // lives. The panel does not get its own version of it.
+  _debugGiveActive(id) {
+    this.player.giveItem(id);
+    this._debugRefresh();
+    this.sfx.itemReady();
+  }
+
+  /**
+   * DROP INTO WAVE N, NOW.
+   *
+   * It does not call startWave() directly. The wave the player lands in has to
+   * open on a built arena, and the ONE place that is guaranteed is the idle
+   * branch of _updateWave, which raises the terrain and holds the countdown
+   * open until it has finished coming up. So this tears the current fight
+   * down, sets the counter one short of where it is going - startWave() does
+   * the ++ , the same trick the versus handover uses - and hands the run back
+   * to the state machine with the clock already at zero.
+   *
+   * The panel closes itself on the way, because a wave starting behind a
+   * screen the player is still clicking through is a wave they have already
+   * lost.
+   */
+  _debugJumpToWave(n) {
+    const wave = Math.max(1, Math.floor(n));
+    this._closeDebug();
+    this._clearEntities();
+    this._clearDeployed();
+    this.running.clear(this);
+    this.queue.length = 0;
+    this._pendingBuffs.length = 0;
+    this.totemArea.dismiss();
+    this.mysteryBox.dismiss();
+    this.ui.setPrompt(null, false);
+    this.player.health = this.player.maxHealth;
+    this.wave = wave - 1;
+    this.waveState = 'idle';
+    this.interT = 0;
+    this.ui.banner('DEBUG  WAVE ' + wave);
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
