@@ -124,12 +124,14 @@ try {
     g.money.vacuum();
     // The vacuum has to finish inside the orb lifetime, from anywhere in the
     // arena - that is the property, not just that it eventually empties.
-    const deadline = Date.now() + 8000;
-    await new Promise((done) => {
-      const t = setInterval(() => {
-        if (g.money.count === 0 || Date.now() > deadline) { clearInterval(t); done(); }
-      }, 50);
-    });
+    //
+    // MEASURED ON THE GAME CLOCK, not on the wall. The orb lifetime is eight
+    // seconds of SIMULATION, and the flight that has to fit inside it is
+    // integrated per frame - so on a loaded machine, where the loop clamps dt
+    // at 0.05 and renders a handful of frames a second, eight wall seconds is
+    // a second or two of game and half the orbs are still in the air. That was
+    // this check failing on a build with nothing wrong with it.
+    await window.__simWait(8, () => g.money.count === 0);
     const out = { dropped, left: g.money.count, paid: +paid.toFixed(2), gained: +(g.credits - before).toFixed(2) };
     g._dropMoney = origDrop;
     return out;
@@ -176,16 +178,19 @@ try {
         g.money.pos[i * 3 + 2] = g.player.pos.z;
       }
     };
-    const settle = async (ms) => {
-      await new Promise((r) => setTimeout(r, ms));
+    // Seconds of GAME, for the reason the sweep above gives: the magnet pulls
+    // an orb a distance per frame, so a wall-clock wait measures the host and
+    // not the radius.
+    const settle = async (seconds) => {
+      await window.__simWait(seconds);
       return g.money.count;
     };
     const just_outside = BASE_MAGNET_RADIUS + 1.2;
     drop(just_outside);
-    const ignored = await settle(900);
+    const ignored = await settle(0.9);
     UPGRADES.lodestone.apply(g.player.mods, 1);
     drop(just_outside);
-    const taken = await settle(1500);
+    const taken = await settle(1.5);
     g.player.mods.magnetMult = 1;
     g.money.clear();
     g._dropMoney = origDrop;
@@ -219,15 +224,14 @@ try {
     g.waveState = 'idle';
     g.interT = 0.05;
     const alive = setInterval(() => { g.player.health = g.player.maxHealth; }, 40);
-    const deadline = Date.now() + 15000;
-    await new Promise((done) => {
-      const t = setInterval(() => {
-        for (const e of g.enemies) e.takeDamage(1e6, true, 0, 1);
-        if ((g.waveState !== 'active' && g.wave === 3) || Date.now() > deadline) {
-          clearInterval(t); done();
-        }
-      }, 100);
-    });
+    // The killing has to keep happening WHILE the wait runs - the wave only
+    // ends once everything it spawned is dead - so it stays on its own real
+    // interval and the finish line is the one on the game clock.
+    const sweep = setInterval(() => {
+      for (const e of g.enemies) e.takeDamage(1e6, true, 0, 1);
+    }, 100);
+    await window.__simWait(15, () => g.waveState !== 'active' && g.wave === 3);
+    clearInterval(sweep);
     clearInterval(alive);
     g._dropMoney = orig;
     return { dropped: +dropped.toFixed(2), duringWave: +(g.credits - before).toFixed(2) };

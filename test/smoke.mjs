@@ -44,8 +44,28 @@ try {
   // than thirty: the bot walks to a totem every wave, which costs it time, and
   // it has to reach wave 4 before the upgrade assertions below stop being
   // vacuous. A longer run also gives the leak canaries more to work with.
+  //
+  // SIXTY SECONDS OF GAME, NOT SIXTY SECONDS OF STANDING HERE. This used to
+  // sleep for sixty wall seconds and assert on whatever the bot had managed in
+  // them, which made every check below a measurement of how busy the machine
+  // was. The loop clamps dt at 0.05 (see _loop), so a host rendering at five
+  // frames a second advances 0.25s of game per second of wall time - the bot
+  // got a fifteen-second run, never cleared a wave, and 'landed hits' and
+  // 'earned credits' failed on a build with nothing wrong with it.
+  //
+  // The sampling cadence is still one second of WALL time, because the leak
+  // canaries are watching real allocation over real time. Only the finish line
+  // moved: the run ends when the SIMULATION has had its minute.
+  //
+  // The wall ceiling is the backstop, and it is not the assertion - it is what
+  // stops a genuinely wedged build from hanging the suite forever. A run that
+  // hits it reports what it got and the checks below judge that.
+  const SIM_SECONDS = 60;
+  const MIN_SAMPLES = 60;
+  const WALL_CEILING_MS = 5 * 60 * 1000;
   const samples = [];
-  for (let i = 0; i < 60; i++) {
+  const startedAt = Date.now();
+  for (;;) {
     await sleep(1000);
     const r = await report();
     samples.push(r);
@@ -55,7 +75,13 @@ try {
     peak.geometries = Math.max(peak.geometries, r.geometries);
     peak.programs = Math.max(peak.programs, r.programs);
     peak.textures = Math.max(peak.textures, r.textures);
+    const enough = r.simTime >= SIM_SECONDS && samples.length >= MIN_SAMPLES;
+    if (enough || Date.now() - startedAt > WALL_CEILING_MS) break;
   }
+  const last = samples[samples.length - 1];
+  console.log('SIM SECONDS', last.simTime.toFixed(1),
+    'over', ((Date.now() - startedAt) / 1000).toFixed(1), 'wall seconds',
+    'in', samples.length, 'samples');
 
   console.log('GEOMETRY SERIES', samples.map((r) => r.geometries).join(','));
   console.log('LIGHT SERIES', samples.map((r) => r.lights).join(','));

@@ -55,7 +55,9 @@ export class UI {
     this.handoffStake = $('handoff-stake');
     this.handoffCount = $('handoff-count');
     this.handoffIcon = $('handoff-icon');
-    this.creditLabel = $('credit-label');
+    // No handle on #credit-label: it reads CREDITS in every mode now. It used
+    // to be rewritten to VERSUS - see setVersus.
+    this.versusTag = $('versus-tag');
     this.overStats = $('over-stats');
     this.overHero = $('over-hero');
     this.overHeroLabel = $('over-hero-label');
@@ -101,8 +103,8 @@ export class UI {
     // not torn down and redrawn every frame the key is held - pixelIconCanvas
     // walks 576 cells per icon and this panel can be showing a dozen.
     this._statsKey = '';
-    // Whose turn it is in versus, 1 or 2, or null in solo. It takes over the
-    // credits readout - see setVersus.
+    // Whose turn it is in versus, 1 or 2, or null in solo. It sits ABOVE the
+    // credits readout rather than replacing it - see setVersus.
     this._versus = null;
   }
 
@@ -159,25 +161,29 @@ export class UI {
   }
 
   /**
-   * Hands the credits box over to versus, or takes it back.
+   * Says whose turn it is, or takes the line away.
    *
-   * The cells are reused rather than a fifth box added to a crowded frame:
-   * whose turn it is is exactly the kind of thing the top-right readout is
-   * for, and a balance neither player is spending is not.
+   * IT USED TO REPLACE THE BALANCE. The credits box's own cells were rewritten
+   * - the label to 'VERSUS' and the figure to 'P1' - on the reasoning that
+   * whose turn it is is exactly the kind of thing the top-right readout is for
+   * and a balance neither player is spending is not. The second half of that
+   * was simply wrong: the bank in a match is SHARED, both players spend out of
+   * it at the same shops, and it was the one mode in the game where the money
+   * mattered most and the only mode that never showed it.
+   *
+   * So the turn gets a line of its own above the label, and the balance keeps
+   * its cells in every mode.
    *
    * @param {?number} n 1 or 2, or null for solo.
    */
   setVersus(n) {
     this._versus = n;
-    this.creditLabel.textContent = n ? 'VERSUS' : 'CREDITS';
+    this.versusTag.classList.toggle('hidden', !n);
+    if (!n) return;
+    this.versusTag.textContent = 'P' + n;
     // The same two colours the gun's flank strip carries, so the readout that
     // NAMES the player and the band that marks their weapon teach each other.
-    this.creditNum.style.color = n ? PLAYER_INK[n - 1] : '';
-    // Written straight out both ways rather than left to the next frame's
-    // setCredits: leaving solo puts the menu up, and the menu does not tick the
-    // HUD, so a deferred repaint left 'P1' sitting in the readout.
-    this.creditNum.textContent = n ? 'P' + n : '$0';
-    this._c.credits = undefined;
+    this.versusTag.style.color = PLAYER_INK[n - 1];
   }
   setHealth(h, max) {
     // Keyed off the displayed number, not the clamped bar width, so overheal
@@ -367,8 +373,6 @@ export class UI {
   // one. Right-aligned in the markup, so a wide `$12,345` grows leftward into
   // empty frame and cannot push anything.
   setCredits(n) {
-    // Nothing writes over the turn readout during a versus match.
-    if (this._versus) return;
     if (this._c.credits !== n) {
       this._c.credits = n;
       this.creditNum.textContent = '$' + n.toLocaleString();
@@ -823,16 +827,28 @@ export class UI {
   //
   // The build sheet's shameless twin. That one reports what a run EARNED and
   // is read while it is running; this one hands anything out at all, and the
-  // run is frozen behind it. They share the icon catalogue and nothing else.
+  // run is frozen behind it. They draw the same card - icon, name, what it
+  // does - because a passive item the tester is picking off a grid is the same
+  // object the player reads off a totem, and two descriptions of one thing is
+  // one description that will go stale.
+  //
+  // OWNERSHIP IS NOT DRAWN BY DESATURATING THE ART. It was, and it made the
+  // grid unreadable: the icons are told apart by their COLOUR as much as by
+  // their shape - that is the whole reason they carry a theme - so a hundred
+  // grey drawings is a hundred drawings the eye has to inspect one at a time.
+  // The art is always in its own colour now, and OWNED is carried by the
+  // things around it: the card lights up in the item's theme, its border and
+  // name come up with it, and an owned tile is the only one that is not flat.
   //
   // BUILT ONCE. A hundred and three tiles is a hundred and three
   // pixelIconCanvas calls at 576 cells each, and the panel is opened and shut
   // over and over inside one session - so the DOM is made on the first open
   // and every open after it only rewrites the `on` class and the tier count.
   //
-  // `passives` and `actives` are [{ id, name, theme, max }]; `on` carries the
-  // four things a click can mean. Nothing here knows what a wave or an upgrade
-  // IS - main.js owns all of that, and this owns which pixel was clicked.
+  // `passives` and `actives` are [{ id, name, theme, effects }]; `on` carries
+  // the four things a click can mean. Nothing here knows what a wave or an
+  // upgrade IS - main.js owns all of that, and this owns which pixel was
+  // clicked.
   buildDebug(passives, actives, on) {
     if (this._debugTiles) return;
     this._debugTiles = {};
@@ -866,21 +882,44 @@ export class UI {
     });
   }
 
-  // One tile: the icon, the name, and the tier count under it. `give` runs on
-  // a click and `drop` - passives only - on a right-click, which is the whole
-  // reason the tile is a <button> and the panel needs no other controls.
+  /**
+   * One card: the icon, the name and the effect lines, in the item's own
+   * theme colour.
+   *
+   * `give` runs on a click and `drop` - passives only - on a right-click,
+   * which is the whole reason the tile is a <button> and the panel needs no
+   * other controls. Being a button is also what makes the pad work: the menu
+   * driver walks buttons geometrically and has no idea what this screen is.
+   */
   _debugTile(def, give, drop) {
     const el = document.createElement('button');
     el.className = 'dtile';
-    el.title = def.name;
+    // The theme, handed to the stylesheet rather than written into it. The
+    // owned state is drawn ENTIRELY from this one custom property - border,
+    // wash and name - so there is one colour per item and no second copy of
+    // the palette in CSS.
+    el.style.setProperty('--tint', '#' + def.theme.toString(16).padStart(6, '0'));
     const art = pixelIconCanvas(def.id, def.theme, 2);
     art.className = 'dtile-art';
+    const body = document.createElement('span');
+    body.className = 'dtile-body';
     const name = document.createElement('span');
     name.className = 'dtile-name';
     name.textContent = def.name;
-    const tier = document.createElement('span');
+    const tier = document.createElement('em');
     tier.className = 'dtile-tier';
-    el.append(art, name, tier);
+    name.appendChild(tier);
+    body.appendChild(name);
+    // WHAT IT DOES, in the pool's own words. A cost keeps its red - the same
+    // rule the build sheet follows in _entry below - because a drawback read
+    // as a benefit is the one way this list can mislead the person reading it.
+    for (const [text, sign] of Array.isArray(def.effects) ? def.effects : []) {
+      const line = document.createElement('span');
+      line.className = sign < 0 ? 'dtile-line bad' : 'dtile-line';
+      line.textContent = text;
+      body.appendChild(line);
+    }
+    el.append(art, body);
     el.addEventListener('click', () => give(def.id));
     if (drop) {
       el.addEventListener('contextmenu', (e) => {

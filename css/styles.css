@@ -192,9 +192,15 @@ html, body {
    armour theme, the reload dial and half the consoles - and the wave number is
    not an accent, it is the one fact on screen that says where the run is. White
    is what the round count beneath it already uses for the same reason. */
+/* NO BLOOM ON THE FIGURE. It carried a 16px white halo, which is the one
+   effect on this sheet that fights the rule the whole interface is built on:
+   the panels are hard pixels on a grid, and a glow is by definition the
+   opposite - it is soft, it is off-grid, and at 32px it smeared the counters
+   of the glyphs it was meant to lift. The 2px ink shadow is what actually
+   holds these numbers against a lit arena, and it does it without blur. */
 #wave-num {
   font-size: 32px; color: #fff;
-  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 255, 255, 0.35);
+  text-shadow: 2px 2px 0 var(--ink);
   line-height: 1;
 }
 /* The enemy count reads as a status line under the wave, with a square pip
@@ -217,9 +223,24 @@ html, body {
    is currently true, and the same weight the score readout had here before. */
 #credit-num {
   font-size: 24px; color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink), 0 0 16px rgba(255, 233, 94, 0.45);
+  text-shadow: 2px 2px 0 var(--ink);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+/* WHOSE TURN IT IS, above the balance in versus. Sized as a label rather than
+   as a figure: it names the player at the sticks, it does not measure
+   anything, and the money underneath is the number on this side of the frame.
+
+   ITS COLOUR IS WRITTEN INLINE - the two player inks live in ui.js beside the
+   code that lights the gun with them - so all this owns is the shape. The ink
+   shadow and NOTHING else: a glow here inherited the gold one off the balance
+   and painted a yellow halo around a cyan or a red tag, which read as a third
+   colour that means nothing. */
+#versus-tag {
+  font-size: 10px; letter-spacing: 0.2em;
+  text-shadow: 1px 1px 0 var(--ink);
+  line-height: 1;
 }
 
 /* ---- crosshair -----------------------------------------------------------
@@ -1728,18 +1749,21 @@ body.pad-mode #game canvas { cursor: none; }
 
 
 /* =========================================================================
-   THE DEBUG PANEL  (9)
+   THE DEBUG PANEL  (9, or CREATE on the pad)
    -------------------------------------------------------------------------
    A CHEAT SCREEN, AND IT IS DRAWN LIKE ONE. It borrows the plate, the chamfer
    and the type off the rest of the sheet so it does not look like a different
    program, and then stops: no animation, no arrival, no hover flourish. The
    thing it is optimised for is a hand that already knows where the tile is.
 
-   OWNED IS THE ONLY STATE A TILE HAS, and it is drawn as COLOUR vs GREY
-   rather than as a border, a tick or a label. A grid of a hundred tiles has
-   no room for a second signal and does not need one - the question being
-   asked of it is "have I got this", and saturation answers that from across
-   the room without being read.
+   OWNED IS NOT DRAWN BY TAKING THE COLOUR OUT OF THE ART. It was - unowned
+   tiles were greyscaled - and it failed at the one job the grid has: these
+   icons are told apart by HUE as much as by shape, because each one carries
+   its theme, so a hundred grey drawings is a hundred drawings that have to be
+   read one at a time. Every card keeps its colour now, and ownership is
+   carried by the CARD: an owned one lights up in the item's own theme through
+   --tint, and an unowned one is simply flat. Flat vs lit is a difference the
+   eye reads across the whole grid at once, which greyscale never was.
    ========================================================================= */
 
 #debug-panel {
@@ -1773,16 +1797,20 @@ body.pad-mode #game canvas { cursor: none; }
 
 /* ONE SCROLLER, NOT THREE. Three panes that each scroll is three places to
    lose your position in; the whole sheet moving means a click and a scroll
-   are the same gesture they are everywhere else. */
+   are the same gesture they are everywhere else - and it means the pad's
+   focus() can scroll the selection into view without knowing which pane it
+   landed in. */
 #debug-body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: calc(var(--u) * 4) calc(var(--u) * 5) calc(var(--u) * 6);
+  scroll-padding: calc(var(--u) * 12);
 }
 .debug-sec + .debug-sec { margin-top: calc(var(--u) * 6); }
 .debug-sec h3 {
   font-size: 10px; font-weight: 400; color: var(--cyan);
   margin-bottom: calc(var(--u) * 3);
   display: flex; align-items: baseline; gap: calc(var(--u) * 3);
+  flex-wrap: wrap;
 }
 .debug-sec h3 em { font-style: normal; font-size: 8px; color: var(--dim); }
 
@@ -1827,32 +1855,74 @@ body.pad-mode #game canvas { cursor: none; }
    is not "have I got this", so it is the one that gets a fill. */
 .dwave.now { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 
-/* ---- the item grids ---------------------------------------------------- */
+/* ---- the item cards ---------------------------------------------------- */
 
+/* WIDE ENOUGH FOR THE WORDS. The tiles used to be icon-and-name squares
+   packed twelve to a row, which fits a hundred items on one screen and tells
+   you nothing about any of them - the names alone do not say what SCAVENGER
+   or MALADY do, and this screen exists to be able to try them. A card is the
+   icon, the name and the pool's own effect lines, at the width those lines
+   need; three or four to a row is the honest density. */
 #debug-actives, #debug-passives {
-  display: grid; gap: var(--u);
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 24), 1fr));
+  display: grid; gap: calc(var(--u) * 2);
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
 }
 .dtile {
-  display: flex; flex-direction: column; align-items: center;
-  gap: var(--u);
-  font: inherit; cursor: pointer; text-align: center;
-  color: var(--dim); background: var(--fill);
+  display: flex; align-items: flex-start; gap: calc(var(--u) * 3);
+  font: inherit; cursor: pointer; text-align: left;
+  background: var(--fill-lo);
   border: 2px solid var(--line);
-  padding: calc(var(--u) * 2) var(--u);
+  padding: calc(var(--u) * 2.5);
 }
-.dtile:hover { border-color: var(--line-hi); }
-/* THE WHOLE STATE, in one property. Unowned is the drawing with the colour
-   taken out of it and dimmed; owned is simply the drawing. */
+.dtile:hover { border-color: var(--line-hi); background: var(--fill); }
+/* ALWAYS ITS OWN COLOUR. See the header: the hue is half of what tells one
+   icon from another, and an unowned card is dimmed as a WHOLE rather than
+   drained - the drawing stays legible, it is just quieter. */
 .dtile-art {
   width: calc(var(--u) * 12); height: calc(var(--u) * 12);
-  image-rendering: pixelated;
-  filter: grayscale(1) brightness(0.55);
+  flex: none; image-rendering: pixelated;
+  opacity: 0.62;
 }
+.dtile-body { min-width: 0; display: flex; flex-direction: column; }
 .dtile-name {
-  font-size: 7px; line-height: 1.4;
+  font-size: 8px; line-height: 1.5; color: var(--dim);
+  display: flex; align-items: baseline; gap: calc(var(--u) * 2);
+  overflow-wrap: anywhere;
+  margin-bottom: var(--u);
+}
+.dtile-tier { font-style: normal; color: var(--gold); }
+.dtile-line {
+  font-size: 7px; line-height: 1.6; color: #5f6b88;
   overflow-wrap: anywhere;
 }
-.dtile-tier { font-size: 7px; color: var(--gold); min-height: 10px; }
-.dtile.on { color: var(--text); border-color: var(--cyan); }
-.dtile.on .dtile-art { filter: none; }
+/* A COST KEEPS ITS RED even unowned. It is the one line on a card that can
+   mislead the person reading it, and this screen is read to decide what to
+   try next. */
+.dtile-line.bad { color: #8e3b3b; }
+
+/* OWNED. Every one of these is the item's own theme through --tint, so the
+   card that lights up is recognisably the same object as the totem it comes
+   from and the chip it wears on the HUD. */
+.dtile.on {
+  border-color: var(--tint);
+  background:
+    linear-gradient(0deg, color-mix(in srgb, var(--tint) 12%, transparent), transparent),
+    var(--fill);
+}
+.dtile.on .dtile-art { opacity: 1; }
+.dtile.on .dtile-name { color: var(--tint); }
+.dtile.on .dtile-line { color: #93a0be; }
+.dtile.on .dtile-line.bad { color: var(--red); }
+
+/* ---- the pad ----------------------------------------------------------- */
+
+/* The selection, on the one screen in the game that is a GRID of a hundred
+   identical controls. It is a gold ring rather than a colour change because
+   the cards already spend colour on ownership, and a second meaning laid over
+   that one would make both unreadable. Drawn OUTSIDE the border with an
+   offset, so it never covers the theme edge it is sitting on. */
+#debug-panel .pad-focus {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+  position: relative; z-index: 1;
+}

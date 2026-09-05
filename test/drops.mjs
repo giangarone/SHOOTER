@@ -163,7 +163,10 @@ try {
     // Walk the boss down through every threshold.
     for (const f of [0.8, 0.7, 0.55, 0.45, 0.3, 0.2]) {
       b.hp = b.maxHp * f;
-      await new Promise((r) => setTimeout(r, 260));
+      // Game seconds, not wall seconds - see __simWait in js/main.js. The
+      // bleed is checked on a frame, and on a loaded host a quarter of a wall
+      // second is a couple of frames.
+      await window.__simWait(0.26);
       seen.push({ f, bled });
     }
     g._placeDrop = orig;
@@ -183,7 +186,7 @@ try {
     g.queue.length = 0;
     g.totemArea.dismiss();
     g.waveState = 'idle'; g.interT = 0.05;
-    await new Promise((r) => setTimeout(r, 900));
+    await window.__simWait(3, () => g.waveState === 'active');
     g.powerups.forEach((p) => p.destroy());
     g.powerups.length = 0;
     // maxHealth is a GETTER off mods, so it cannot be assigned; starve the
@@ -195,7 +198,7 @@ try {
     }, 30);
     g._reliefT = 0.05;
     const before = g.powerups.length;
-    await new Promise((r) => setTimeout(r, 2000));
+    await window.__simWait(4, () => g.powerups.length > before);
     clearInterval(hold);
     const kinds = g.powerups.map((p) => p.typeKey);
     return { before, after: g.powerups.length, kinds, waveState: g.waveState };
@@ -231,7 +234,8 @@ try {
     for (let i = 0; i < 10; i++) g._addAsh({ x: -8 + i * 1.7, z: 4 });
     for (let i = 0; i < 6; i++) g._addHazard(-6 + i * 2.4, 9, 3, 1.2, 9);
     const peak = g.effects.creep.filter((c) => c.used).length;
-    await new Promise((r) => setTimeout(r, 4000));
+    await window.__simWait(4, () => g._ash.length + g._hazard.length === 0
+      && g.effects.creep.every((c) => !c.used));
     return {
       peak,
       held: g.effects.creep.filter((c) => c.used).length,

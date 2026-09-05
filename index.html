@@ -27,6 +27,12 @@
            it reached - that readout is on the left - so the one number worth
            the top right is the one the player can actually spend. -->
       <div id="credit-box">
+        <!-- WHOSE TURN IT IS, in versus. Its own cell above the balance rather
+             than the balance's cells reused: the turn readout used to REPLACE
+             the money, which meant the one mode where two people are competing
+             over a shared bank was the one mode that never showed it. Hidden
+             outright in solo - a permanent blank line is not information. -->
+        <span id="versus-tag" class="hidden">P1</span>
         <span id="credit-label">CREDITS</span>
         <span id="credit-num">$0</span>
         <!-- The flawless streak's multiplier. UNDER the balance rather than
@@ -172,13 +178,13 @@
     <div id="debug-card" class="plate">
       <div id="debug-head">
         <span>DEBUG</span>
-        <span id="debug-hint">9 OR ESC TO CLOSE</span>
+        <span id="debug-hint">9 / ESC &nbsp;-&nbsp; PAD: CREATE OR CIRCLE</span>
       </div>
       <div id="debug-body">
         <section class="debug-sec">
           <h3>WAVE <em id="debug-wave-now">1</em></h3>
           <div id="debug-wave-row">
-            <input id="debug-wave-input" type="number" min="1" max="999" value="1">
+            <input id="debug-wave-input" type="number" min="1" max="999" value="1" data-pad-skip>
             <button id="debug-wave-go" class="debug-go">JUMP</button>
           </div>
           <div id="debug-waves"></div>

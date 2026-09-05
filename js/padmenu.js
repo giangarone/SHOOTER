@@ -180,6 +180,11 @@ export class MenuDriver {
       // a thing the selection can land on.
       (e) => e.offsetParent !== null && !e.closest('.hidden')
         && !(e.tagName === 'BUTTON' && e.closest('.stepper'))
+        // A CONTROL THAT IS ONLY FOR THE MOUSE opts out. There is exactly one
+        // - the debug panel's wave box, which is typed into - and a selection
+        // that could land on it would give CROSS a control it cannot press,
+        // which reads as the pad having stopped working.
+        && !e.hasAttribute('data-pad-skip')
     );
   }
 

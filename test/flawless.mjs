@@ -147,12 +147,21 @@ try {
   // later they are still lying there.
   const shower = await page.evaluate(async () => {
     const g = window.__game;
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     g.money.clear();
     // The wave-clear path exactly: dropped at the player, held, then swept.
     g._dropMoney(g.player.pos, 300, 8, 5.5, 0.5);
     const spawned = g.money.count;
-    await sleep(250);
+    // A QUARTER-SECOND OF GAME, not of wall time - see __simWait in
+    // js/main.js. Both halves of this trial are frame-driven: the hold is
+    // counted down per frame and the magnet pulls per frame, so on a loaded
+    // host a quarter of a real second is one or two frames. The held drop
+    // passed for the wrong reason (nothing had moved yet) and the UNHELD one
+    // failed outright, which is what made this the suite's flakiest check.
+    //
+    // The full quarter-second is waited out rather than short-circuited: what
+    // is being asserted is where the orbs are AT that moment, so stopping
+    // early would be measuring a different moment.
+    await window.__simWait(0.25);
     const midArc = g.money.count;
     // Airborne, and none of it has been claimed - state 2 is HOME.
     let pulled = 0;
@@ -160,7 +169,7 @@ try {
     g.money.clear();
     // AND THE SAME DROP WITHOUT THE HOLD, which is what this used to be.
     g._dropMoney(g.player.pos, 300, 8, 5.5);
-    await sleep(250);
+    await window.__simWait(0.25);
     const unheld = g.money.count;
     g.money.clear();
     return { spawned, midArc, pulled, unheld };

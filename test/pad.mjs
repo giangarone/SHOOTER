@@ -336,6 +336,20 @@ try {
 
     // ---- 5. aim assist -----------------------------------------------------
     clearField();
+    // THE ARENA IS TAKEN OUT OF THE WAY, not just the player pinned.
+    //
+    // Every check below measures an ANGLE and a RANGE, but _assistTarget also
+    // runs a line-of-sight test against the arena's cover - and the layout is
+    // generated fresh every wave, so whether a crate happens to stand on the
+    // 14m line being measured is a property of which wave the bot reached.
+    // That is why this trial failed on a loaded machine and passed on an idle
+    // one with the same build: the run got further, the layout was different,
+    // and 'assist finds a target in the cone' found a pillar instead.
+    //
+    // Line of sight is not what these three assertions are for, and pinning
+    // the player - which they already did - only fixed one end of the line.
+    const arenaCover = g.arena.obstacles;
+    g.arena.obstacles = [];
     g.player.pos.set(0, 0, 0);
     g.player.yaw = 0;
     g.player.pitch = 0;
@@ -346,6 +360,14 @@ try {
     g.player.moveVZ = 0;
     g.spawnEnemy('chaser');
     const e = g.enemies[g.enemies.length - 1];
+    // AND IT IS NAILED DOWN. place() below re-pins the enemy at the top of
+    // every test iteration, but the game's own frame runs AFTER that - so a
+    // chaser doing what a chaser does walked out from under the angle being
+    // measured, and the magnetism trial was pulling toward wherever it had got
+    // to rather than toward the 5 degrees it was set at. It closed the gap or
+    // it did not depending on how many frames the host managed, which is the
+    // same defect as every wall-clock wait in this suite, wearing a hat.
+    e.speed = 0;
     // Placed RELATIVE TO THE PLAYER and re-placed every frame: what is being
     // measured is an angle, and an enemy pinned to the world would drift out
     // of the cone the moment the player moved a metre.
@@ -394,6 +416,7 @@ try {
     const withOff = await closeIn(false);
     const withOn = await closeIn(true);
     g._aimAssist = true;
+    g.arena.obstacles = arenaCover;
     t('assist off never moves the view', Math.abs(withOff - start) < 1e-6,
       withOff.toFixed(4));
     t('magnetism closes the gap', withOn < withOff * 0.95,

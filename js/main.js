@@ -1048,8 +1048,45 @@ class Game {
       this.__poolForTest = shuffledPool;
       // The Enemy class, so a test can stand one up without a wave.
       this.__EnemyForTest = Enemy;
+      /**
+       * WAIT ON THE GAME CLOCK, not on the wall clock. For test/*.mjs.
+       *
+       * Every timed thing in this game - an orb's flight, a relief drop's
+       * cooldown, a zone's life, a wave's spawn interval - is integrated per
+       * frame against a dt the loop CLAMPS at 0.05. So a host rendering at
+       * five frames a second advances a quarter-second of game per second of
+       * wall time, and a test that slept for two real seconds got half a
+       * second of game and asserted on a fight that had barely started. That
+       * is not a flaky test, it is a test measuring the wrong clock: it fails
+       * on a loaded machine and passes on an idle one with the same build.
+       *
+       * `until` is polled and short-circuits the wait the moment it is true,
+       * so a healthy run is no slower than the sleep it replaces - the seconds
+       * are the CEILING, exactly as the old wall deadlines were meant to be.
+       *
+       * @param {number} seconds  of game time, the most this will wait
+       * @param {Function} [until]  polled; resolves early when it returns true
+       * @returns {Promise<void>}
+       */
+      window.__simWait = (seconds, until) => new Promise((done) => {
+        const deadline = this.time + seconds;
+        const t = setInterval(() => {
+          if ((until && until()) || this.time >= deadline) {
+            clearInterval(t);
+            done();
+          }
+        }, 30);
+      });
       window.__report = () => ({
         state: this.state,
+        // THE SIMULATION'S OWN CLOCK, so a test can wait on how much GAME has
+        // happened rather than on how long it has been standing there. The two
+        // are the same number on an idle machine and nothing like each other
+        // on a loaded one - the loop clamps dt at 0.05, so a host rendering at
+        // five frames a second advances a quarter of a second of game per
+        // second of wall time, and every fixed-duration wait in the suite
+        // silently became a quarter as long. See test/smoke.mjs.
+        simTime: this.time,
         wave: this.wave,
         kills: this.kills,
         credits: this.credits,
@@ -1923,6 +1960,17 @@ class Game {
     // the one that can afford the button furthest from the sticks.
     if (pad.down(BTN.TOUCHPAD)) this._openStats();
     else this._closeStats();
+    // THE DEBUG PANEL, on CREATE - the pad's other flat button, and the only
+    // one nothing in the game uses. Pressed rather than held, because unlike
+    // the build sheet this screen is worked in rather than glanced at.
+    //
+    // BELOW the touch pad's else, and not between the two: that if/else is one
+    // statement, and splitting it left the build sheet with no branch that
+    // ever closed it.
+    if (pad.pressed(BTN.CREATE)) {
+      pad.consume(BTN.CREATE);
+      this._toggleDebug();
+    }
     if (pad.pressed(BTN.OPTIONS)) {
       pad.consume(BTN.OPTIONS);
       this.pause();
@@ -2180,15 +2228,22 @@ class Game {
       // screen rather than pressing anything on it - so it is also the one
       // that has to make its own noise. See _wireMenuSounds for why every
       // other press does not.
-      if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
+      if (this._debugOpen) { this._closeDebug(); this.sfx.menuBack(); }
+      else if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
       else if (this.state === 'paused') { this.resume(); this.sfx.menuBack(); }
+    }
+    if (pad.pressed(BTN.CREATE)) {
+      pad.consume(BTN.CREATE);
+      // The key that opened it closes it, which is the rule 9 already follows.
+      if (this._debugOpen) { this._closeDebug(); this.sfx.menuBack(); }
     }
     if (pad.pressed(BTN.OPTIONS)) {
       pad.consume(BTN.OPTIONS);
       // START, in the arcade sense: it starts and it un-pauses, and it does
       // nothing at all on a screen that is layered over one of those.
       this._audioGesture();
-      if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
+      if (this._debugOpen) { this._closeDebug(); this.sfx.menuBack(); }
+      else if (this._subScreenOpen()) { this._closeSubScreen(); this.sfx.menuBack(); }
       else if (this.state === 'paused') { this.resume(); this.sfx.menuBack(); }
       else if (this.state === 'menu') { this.sfx.menuSelect(); this.beginGame(); }
       else if (this.state === 'gameover') { this.sfx.menuSelect(); this._restartFromOver(); }
@@ -2221,6 +2276,10 @@ class Game {
   // is on screen. The sub-screens are checked first because they sit OVER the
   // menu that opened them and that menu is still in the document.
   _menuRoot() {
+    // FIRST, because it is layered over the paused state rather than being it -
+    // the pause screen is not up, and the branch below would otherwise point
+    // the driver at a screen nobody can see.
+    if (this._debugOpen) return this.ui.debugPanel;
     if (!this.ui.confirmOv.classList.contains('hidden')) return this.ui.confirmOv;
     if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
     if (this.state === 'menu') return this.ui.startOv;
@@ -5373,6 +5432,12 @@ class Game {
     if (!this._debugOpen) return;
     this._debugOpen = false;
     this.ui.hideDebug();
+    // The driver is re-pointed by _padMenu on the next frame, but only if it
+    // notices the root changed - and it cannot notice while the old root is
+    // still what `_padRoot` says. Dropped here so the selection does not come
+    // back on a screen the player has left.
+    this._padRoot = null;
+    this.menu.clear();
     // Back to 'playing' before the re-lock, for the mirror of the reason it
     // was set before the release: the handler's other branch would otherwise
     // take the panel's paused state as the pause screen's and hide that.
@@ -5383,15 +5448,22 @@ class Game {
   // The two catalogues, as the flat shape the panel draws. The id is also the
   // icon key in both pools - see the note at the head of ACTIVE_ITEMS - so
   // there is nothing to map.
+  //
+  // THE EFFECT LINES COME FROM THE POOL, not from a second table written for
+  // this screen. A tiered passive's `effects` is a FUNCTION of the stack count
+  // (see effectLines in upgrades.js), and it is resolved at ONE stack here -
+  // what taking it once does, which is the question the card is answering. A
+  // readout that tracked the tier owned would be a second thing the panel had
+  // to rebuild on every click, to say something the tier badge already says.
   _debugPassiveDefs() {
     return Object.entries(UPGRADES).map(([id, def]) => ({
-      id, name: def.name, theme: def.theme,
+      id, name: def.name, theme: def.theme, effects: effectLines(def, 0),
     }));
   }
 
   _debugActiveDefs() {
     return Object.entries(ACTIVE_ITEMS).map(([id, def]) => ({
-      id, name: def.name, theme: def.theme,
+      id, name: def.name, theme: def.theme, effects: def.effects,
     }));
   }
 
