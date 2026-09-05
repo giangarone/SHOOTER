@@ -582,7 +582,24 @@ class Game {
     this.crt.setSize(innerWidth, innerHeight);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.1, 200);
+    // THE NEAR PLANE IS SMALL ON PURPOSE, and 0.05 rather than 0.1 is a fix
+    // rather than a preference.
+    //
+    // A near plane is a RECTANGLE, not a point: at 75 degrees its far corner
+    // sits `near * 2.23` from the camera, so at 0.1 the frustum reached 0.22m
+    // ahead of the eye. Anything closer than that is clipped away and, because
+    // every surface in the game is front-faced, what the player sees through
+    // the hole is the inside of the room. The tightest gap the game can put a
+    // camera in is the 0.1m between the eye at 1.7 and the head at 1.8 - so at
+    // 0.1 the near plane comfortably reached through the underside of any deck
+    // the player jumped under, and the walkway vanished.
+    //
+    // Halving it takes the corner to 0.11 and, together with the camera
+    // clearance the jump now keeps (see the ceiling block in player.js), puts
+    // the whole frustum inside the space collision guarantees. It costs
+    // nothing but depth precision, and this scene is 200m deep with a
+    // logarithmic-free default that has plenty to spare.
+    this.camera = new THREE.PerspectiveCamera(75, viewportAspect(), 0.05, 200);
 
     this.arena = buildArena(this.scene);
     // The lighting show that plays over the arena. Built here, before anything

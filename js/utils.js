@@ -64,6 +64,7 @@ export function resolveCircle(pos, radius, obstacles, height = AGENT_HEIGHT) {
   for (let pass = 0; pass < RESOLVE_PASSES; pass++) {
     if (!resolvePass(pos, radius, obstacles, height)) break;
   }
+  escape(pos, radius, obstacles, height);
 }
 
 // One push-out sweep. Returns true if anything moved, so the loop above can
@@ -71,21 +72,18 @@ export function resolveCircle(pos, radius, obstacles, height = AGENT_HEIGHT) {
 function resolvePass(pos, radius, obstacles, height) {
   let moved = false;
   for (const b of obstacles) {
-    // Standing on top of the box: the player is supported, not intersecting,
-    // so pushing sideways here would shove them off every ledge.
+    // Standing on top of the box: the mover is supported, not intersecting, so
+    // pushing sideways here would shove them off every ledge.
     if (pos.y >= b.max.y - 0.06) continue;
-    // The mirror image of the test above: a deck suspended above head height is
-    // something you walk UNDER, not into. Without this every raised walkway
-    // would carve an invisible pillar all the way down to the floor, for
-    // enemies as well as the player.
+    // The mirror image: a deck suspended above head height is something you
+    // walk UNDER, not into. Without this every raised walkway would carve an
+    // invisible pillar all the way down to the floor.
     //
     // THE EPSILON IS LOAD-BEARING, and it pairs this test with the player's
     // ceiling check. That check stops a jump with the head EXACTLY on a deck's
-    // underside - which is the one position where a strict `>` here decides the
-    // mover is no longer underneath, and shoves them sideways out from under
-    // the deck. The symptom was a player standing in a covered passage being
-    // slid out of it for no visible reason. Touching the underside is being
-    // under it.
+    // underside - the one position where a strict `>` here decides the mover
+    // is no longer underneath, and shoves them sideways out from under the
+    // deck. Touching the underside is being under it.
     if (b.min.y >= pos.y + height - 0.03) continue;
     const minX = b.min.x - radius;
     const maxX = b.max.x + radius;
@@ -106,6 +104,69 @@ function resolvePass(pos, radius, obstacles, height) {
     }
   }
   return moved;
+}
+
+// How far the escape below will look for open ground, and in what steps. Eight
+// metres covers the widest solid mass the piece library can build - a
+// staircase run plus the deck it leads to - and a quarter of a metre is finer
+// than any gap a mover could stand in anyway.
+const ESCAPE_REACH = 8;
+const ESCAPE_STEP = 0.25;
+
+// ---- getting OUT of solid geometry ---------------------------------------
+//
+// The push-out above assumes the mover is TOUCHING a box - overlapping its
+// edge, on the way past. It has no answer for a mover fully inside a mass of
+// them, and worse, it oscillates: leaving one tread of a staircase puts you in
+// the next, whose own nearest face sends you straight back. The mover ends the
+// frame exactly where it started, standing inside solid geometry - which is
+// precisely where a camera sees through the world.
+//
+// That is not hypothetical here. A staircase is four or five treads standing
+// edge to edge, and anything that MOVES A MOVER WITHOUT WALKING IT - a Maw's
+// pull, a knockback, a spawn, a run starting - can drop one into the middle of
+// it.
+//
+// So this does not push, it SEARCHES: step outward along each of the four axes
+// until a position is found that overlaps nothing, and take the nearest. It
+// cannot oscillate, because it never moves anywhere it has not already checked
+// is clear. It runs only for a mover that is genuinely embedded - the common
+// case pays one overlap scan that finds nothing and returns.
+function escape(pos, radius, obstacles, height) {
+  if (!overlapsAny(pos.x, pos.z, pos.y, radius, obstacles, height)) return;
+  let bestX = pos.x;
+  let bestZ = pos.z;
+  let bestD = Infinity;
+  for (let d = ESCAPE_STEP; d <= ESCAPE_REACH; d += ESCAPE_STEP) {
+    // Nearest first, so the first distance that yields anything wins and the
+    // mover leaves by the shortest route out.
+    for (let k = 0; k < 4; k++) {
+      const x = pos.x + (k === 0 ? d : k === 1 ? -d : 0);
+      const z = pos.z + (k === 2 ? d : k === 3 ? -d : 0);
+      if (overlapsAny(x, z, pos.y, radius, obstacles, height)) continue;
+      if (d < bestD) {
+        bestD = d;
+        bestX = x;
+        bestZ = z;
+      }
+    }
+    if (bestD < Infinity) break;
+  }
+  pos.x = bestX;
+  pos.z = bestZ;
+}
+
+// Does a circle at (x, z) on this mover's level overlap anything solid? Same
+// two skips resolveCircle uses, so the two can never disagree about what
+// counts as being inside something.
+function overlapsAny(x, z, y, radius, obstacles, height) {
+  for (const b of obstacles) {
+    if (y >= b.max.y - 0.06) continue;
+    if (b.min.y >= y + height - 0.03) continue;
+    if (x > b.min.x - radius && x < b.max.x + radius &&
+        z > b.min.z - radius && z < b.max.z + radius) return true;
+  }
+  return false;
 }
 
 /**

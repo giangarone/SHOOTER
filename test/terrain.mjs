@@ -122,6 +122,31 @@ for (let run = 0; run < RUNS; run++) {
         layout.cost + ' > ' + costBudget(wave));
     }
 
+    // 3b. THE MESH AND ITS AABB MUST DESCRIBE THE SAME BOX. Collision reads
+    //     w/d and ignores yaw; the renderer scales by w/d AND applies yaw. So
+    //     any prim whose yaw turns its footprint off the world axes is a box
+    //     you can see in one place and collide with in another - which is
+    //     exactly what a quarter-turn added to yaw on top of the w/d swap did
+    //     to every rotated wall: a visible slab running along x with its
+    //     collider running along z, walked straight through.
+    //
+    //     `pad` is what a prim is allowed to buy itself an off-axis mesh with
+    //     (a yawed crate), so the test is that the yawed footprint fits the
+    //     padded AABB rather than that yaw is zero.
+    for (const p of layout.prims) {
+      if (!p.solid) continue;
+      const c = Math.abs(Math.cos(p.yaw || 0));
+      const sn = Math.abs(Math.sin(p.yaw || 0));
+      const ex = (p.w * c + p.d * sn) / 2;
+      const ez = (p.w * sn + p.d * c) / 2;
+      const pad = (p.pad || 0) / 2;
+      check('wave ' + wave + ' mesh matches its collider',
+        ex <= p.w / 2 + pad + 1e-6 && ez <= p.d / 2 + pad + 1e-6,
+        p.mat + ' ' + p.w.toFixed(2) + 'x' + p.d.toFixed(2) +
+        ' yaw ' + (p.yaw || 0).toFixed(2) +
+        ' -> ' + ex.toFixed(2) + 'x' + ez.toFixed(2));
+    }
+
     // 4. Nothing may stand where the player is, or outside the room.
     const aabbs = primsToAabbs(layout.prims);
     for (const b of aabbs) {
@@ -358,6 +383,41 @@ check('grid spans the interior', cellCentre(0) === -18 && cellCentre(9) === 18);
   }
   check('obstacles are solid from every bearing', leaked === 0,
     leaked + '/120 walked into the geometry');
+
+  // AND A MOVER THAT IS ALREADY INSIDE ONE GETS OUT. The push-out alone
+  // cannot do this: leaving one tread of a staircase puts you in the next,
+  // whose own nearest face sends you back, and the mover sits there
+  // oscillating - standing in solid geometry, which is exactly where a camera
+  // sees through the world. Nothing WALKS into that position, but a Maw's
+  // pull, a knockback or a spawn can put one there.
+  //
+  // Tested on a real generated staircase rather than a contrived box, because
+  // the contiguous-treads shape is the whole difficulty.
+  {
+    const L = generateLayout(6, {
+      seed: 523645, bound: BOUND, spawnPoints: SPAWNS, reserved: [],
+    });
+    const solids = primsToAabbs(L.prims);
+    const inside = (q) => solids.some((b) =>
+      q.x > b.min.x - 0.4 && q.x < b.max.x + 0.4 &&
+      q.z > b.min.z - 0.4 && q.z < b.max.z + 0.4 &&
+      q.y < b.max.y - 0.06 && b.min.y < q.y + 1.77);
+    let embedded = 0;
+    let freed = 0;
+    // Drop a mover on a lattice over the whole floor; every one that lands
+    // inside something has to be able to walk away from where it ends up.
+    for (let x = -20; x <= 20; x += 1) {
+      for (let z = -20; z <= 20; z += 1) {
+        const q = { x, y: 0, z };
+        if (!inside(q)) continue;
+        embedded++;
+        resolveCircle(q, 0.4, solids, 1.8);
+        if (!inside(q)) freed++;
+      }
+    }
+    check('a mover embedded in geometry escapes it', embedded > 0 && freed === embedded,
+      freed + '/' + embedded + ' freed');
+  }
 }
 
 console.log('layouts generated: ' + total

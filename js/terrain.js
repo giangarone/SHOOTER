@@ -171,7 +171,10 @@ const PIECES = [
   {
     key: 'crate_cluster', cells: [1, 1], cost: 1, minWave: 1, tall: false,
     // The speaker cabinets the arena has always used. The AABB is padded
-    // because the mesh gets a random yaw an axis-aligned box cannot follow.
+    // because the mesh gets a random yaw an axis-aligned box cannot follow:
+    // a 0.95 cube turned by up to 0.3rad reaches 0.594 from its centre, so
+    // the pad has to be at least 0.24 or the corners of the cabinet you can
+    // see stand outside the box you collide with.
     build(emit, rng) {
       const n = 2 + (rng() < 0.5 ? 1 : 0);
       const spots = [[-0.9, -0.7], [0.9, 0.6], [0, 1.2], [-1.1, 1.0]];
@@ -179,7 +182,7 @@ const PIECES = [
       for (let i = 0; i < n; i++) {
         const [x, z] = spots[i];
         emit({ kind: 'box', mat: 'speaker', x, y: 0.475, z, w: 0.95, h: 0.95, d: 0.95,
-               solid: true, shoot: true, pad: 0.2, yaw: rng() * 0.6 - 0.3 });
+               solid: true, shoot: true, pad: 0.26, yaw: rng() * 0.6 - 0.3 });
         emit({ kind: 'box', mat: 'cone', x, y: 0.6, z: z + 0.5, w: 0.62, h: 0.62, d: 0.04 });
       }
     },
@@ -496,6 +499,21 @@ function shuffle(arr, rng) {
 // Rotates a primitive by k quarter-turns about the piece's own centre. Both
 // the offset and the footprint turn; rotating one without the other is how a
 // piece ends up inside out.
+//
+// THE QUARTER-TURN GOES INTO w/d AND NOWHERE ELSE. `yaw` carries only the
+// primitive's OWN rotation - the random tilt a crate is emitted with - and is
+// deliberately not advanced by k here, because for a box the two are the same
+// operation: R(90) applied to a box of (w, d) is a box of (d, w), so doing
+// both rotates the mesh twice while collision, which reads w/d and ignores
+// yaw, rotates once. That is how a long_wall or an alcove ended up with a
+// visible slab running one way and its AABB running the other - the player
+// walked through the wall they could see and stopped against nothing.
+//
+// Keeping the turn in w/d is the side that has to win: the AABB in collect()
+// is axis-aligned and has no way to represent a yawed box, whereas the mesh
+// renders the swapped extents identically. A prim with its own yaw still
+// composes correctly for the same reason - R(theta) on the swapped box equals
+// R(theta + 90) on the original.
 function rotatePrim(p, k) {
   let { x, z, w, d } = p;
   for (let i = 0; i < k; i++) {
@@ -503,7 +521,7 @@ function rotatePrim(p, k) {
     x = nx; z = nz;
     const nw = d; d = w; w = nw;
   }
-  return { ...p, x, z, w, d, yaw: (p.yaw || 0) + k * Math.PI / 2 };
+  return { ...p, x, z, w, d, yaw: p.yaw || 0 };
 }
 
 // ---- placement ------------------------------------------------------------

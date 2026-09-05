@@ -465,6 +465,15 @@ const SPRINT_FOV_TIME = 0.2;
 // Short: this is smoothing, not an animation, and anything longer reads as the
 // camera being dragged up rather than as the player climbing.
 const _STEP_EASE = 0.11;
+// How much room the camera keeps under anything it passes beneath.
+//
+// A near plane is a rectangle: at this game's 75 degree field of view its far
+// corner sits about 2.2x the near distance from the eye, which at near = 0.05
+// is 0.11m. Anything nearer than that is clipped away, and since every surface
+// here is front-faced the hole shows the inside of the room rather than the
+// wall. 0.25 covers that corner at any aspect ratio a monitor is likely to
+// have, with room to spare for the frame the collision is resolved on.
+const CAM_CLEARANCE = 0.25;
 const STAND_EYE = 1.7;
 const CROUCH_EYE = 1.05;
 // Lower than the crouch, and deliberately: the slide is the one moment the
@@ -1862,14 +1871,23 @@ export class Player {
     // The same +-0.2 window the landing test uses, deliberately, so the two
     // agree about what counts as being under a box. Wider - the full collision
     // radius - and jumping alongside a platform would clip your head on air.
+    //
+    // WHAT STOPS IS THE CAMERA, NOT THE SKULL. The body is 1.8 tall and the eye
+    // sits at 1.7, so stopping a jump the instant the head touched a deck left
+    // the camera ten centimetres under it - and a near plane reaches further
+    // than that, so the walkway the player had just jumped under disappeared
+    // and they saw through it. The stop is taken at whichever is lower: the
+    // top of the head, or the eye plus enough room for the whole frustum.
+    // Crouching and sliding drop the eye, so they get the headroom back.
+    const stopH = Math.max(PLAYER_HEIGHT, this.eyeH + CAM_CLEARANCE);
     if (this.vel.y > 0) {
-      const headPrev = prevY + PLAYER_HEIGHT;
-      const headNow = this.pos.y + PLAYER_HEIGHT;
+      const headPrev = prevY + stopH;
+      const headNow = this.pos.y + stopH;
       for (const b of obstacles) {
         if (this.pos.x <= b.min.x - 0.2 || this.pos.x >= b.max.x + 0.2) continue;
         if (this.pos.z <= b.min.z - 0.2 || this.pos.z >= b.max.z + 0.2) continue;
         if (headPrev <= b.min.y + 0.01 && headNow > b.min.y) {
-          this.pos.y = b.min.y - PLAYER_HEIGHT;
+          this.pos.y = b.min.y - stopH;
           this.vel.y = 0;
           break;
         }
