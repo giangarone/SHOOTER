@@ -137,11 +137,11 @@ const NOTE = 0;
 export const ACTIVE_ITEMS = {
   itemHeal: {
     name: 'TRAUMA KIT',
-    charge: 20,
+    charge: 40,
     theme: THEME.vitality,
     // NO OVERHEAL, unlike the health pickup, which goes 25 over the cap. A
     // pickup has to be walked to across a live arena and this is a button, so
-    // the button is the weaker of the two at the thing they both do. Twenty
+    // the button is the weaker of the two at the thing they both do. Forty
     // seconds is most of a wave: it is one recovery per fight, not a tap.
     effects: [['HEAL 25 HP', GOOD]],
     use: (game) => {
@@ -152,20 +152,20 @@ export const ACTIVE_ITEMS = {
   },
   itemFreeze: {
     name: 'CRYO PULSE',
-    charge: 10,
+    charge: 20,
     theme: THEME.ice,
     // The whole floor at once, through the same per-enemy status a cryo round
     // applies - which means bosses downgrade it to a slow through the
     // resistance block they already carry (see freezeSlow in enemy.js). That is
     // the correct answer and not a special case: an item that could stop a boss
-    // dead for two seconds every ten would be the only boss strategy there is.
+    // dead for five seconds every twenty would be the only boss strategy there is.
     //
     // The cheapest item in the pool because it does no damage. It buys
     // distance, and distance is what the player then has to use - and the
     // player finds that out by carrying it, not by reading it.
-    effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 2s', NOTE]],
+    effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 5s', NOTE]],
     use: (game) => {
-      for (const e of game.enemies) e.applyStatus('freeze', 2);
+      for (const e of game.enemies) e.applyStatus('freeze', 5);
       game.effects.shockwave(game.player.pos, THEME.ice, 26, 0.9);
     },
   },
@@ -694,13 +694,13 @@ export const ACTIVE_ITEMS = {
 
   itemLastStand: {
     name: 'WATERLINE',
-    charge: 10,
+    charge: 40,
     theme: THEME.vitality,
     // A FLOOR, NOT A HEAL, and it is worth less than TRAUMA KIT at every
     // health total above twenty-five missing - which is most of them. What it
     // buys is the bottom of the bar: at eight health it is a fifty-point heal
-    // on a ten-second timer, and that is the only place it is the best item in
-    // the pool. Ten seconds, because an item that is dead weight two thirds of
+    // on a forty-second timer, and that is the only place it is the best item in
+    // the pool. Forty seconds, because an item that is dead weight two thirds of
     // the time has to be there when the third arrives.
     effects: [['HEAL UP TO HALF HEALTH', GOOD], ['NOTHING ABOVE IT', NOTE]],
     use: (game) => {
@@ -753,14 +753,14 @@ export const ACTIVE_ITEMS = {
 
   itemDonate: {
     name: 'OPEN VEIN',
-    charge: 30,
+    charge: 50,
     theme: THEME.blood,
     // HEALTH INTO AMMUNITION, at a rate that only looks bad. A full reserve is
     // three hundred rounds and there is no other way to buy them mid-wave: the
     // ammo pickup is a drop the player does not control, and running dry in a
     // fight is the one failure that cannot be played around.
     //
-    // Thirty seconds, not forty-eight. Fifty health is already the price -
+    // Fifty seconds. Fifty health is already the price -
     // charging the slot for almost a whole wave on top of it means the item is
     // never the right press, which is the same as not shipping it.
     effects: [['REFILL YOUR RESERVE', GOOD], ['COSTS 50 HP', NOTE]],
@@ -863,7 +863,7 @@ export const ACTIVE_ITEMS = {
 
   itemBoot: {
     name: 'BOOTSTRAP',
-    charge: 10,
+    charge: 30,
     theme: THEME.leap,
     // STRAIGHT UP, AND THAT IS THE WHOLE DESIGN. BLINK DRIVE goes forward,
     // which is useless when what is wrong is that you are surrounded; this
@@ -879,7 +879,7 @@ export const ACTIVE_ITEMS = {
     // and it is still four rounds' worth at wave twenty - big enough to matter
     // under a crowd, nowhere near enough to press this for the damage.
     //
-    // Ten seconds, not sixteen. An escape that is not there when you need it
+    // Thirty seconds. An escape that is not there when you need it
     // is not an escape, and this one commits the player to an arc they cannot
     // steer out of, which is its own price.
     effects: [['LAUNCH YOURSELF SKYWARD', GOOD], ['AND SCORCH THE GROUND', GOOD]],
@@ -1011,7 +1011,7 @@ export const ACTIVE_ITEMS = {
 
   itemLance: {
     name: 'LANCE',
-    charge: 8,
+    charge: 20,
     theme: THEME.pierce,
     // THIRTY ROUNDS AT ONCE, AS ONE ROUND. It is the magazine spent in a
     // straight line, which is why it costs the ammunition rather than being
@@ -1042,7 +1042,7 @@ export const ACTIVE_ITEMS = {
 
   itemTurret: {
     name: 'LITTLE BROTHER',
-    charge: 20,
+    charge: 40,
     theme: THEME.feed,
     // FIRE FROM SOMEWHERE THE PLAYER IS NOT. That is the only thing in this
     // game a second gun can buy, and it is worth a slot: a turret behind the
@@ -1071,7 +1071,7 @@ export const ACTIVE_ITEMS = {
 
   itemMine: {
     name: 'WELCOME MAT',
-    charge: 8,
+    charge: 30,
     theme: THEME.shrapnel,
     // THE PLAYER CANNOT SET IT OFF AND CAN STILL BE KILLED BY IT. Both halves
     // were asked for and both are right: the trigger belongs to the enemy, and
@@ -1084,7 +1084,7 @@ export const ACTIVE_ITEMS = {
     // pool hands out, and it should be: it has to be aimed, it has to be
     // waited for, and the thing it kills has to walk onto it.
     //
-    // Eight seconds, so the player can lay a line of them across the way in
+    // Thirty seconds, so the player can lay a line of them across the way in
     // during a lull - which is the item, and it is a completely different item
     // from pressing it once when something is already on top of you.
     effects: [['THROW A PROXIMITY MINE', GOOD], ['THE BLAST DOES NOT KNOW YOU', NOTE]],
@@ -1202,7 +1202,7 @@ export const ACTIVE_ITEMS = {
 
   itemLodestar: {
     name: 'LODESTAR',
-    charge: 16,
+    charge: 30,
     theme: THEME.lodestone,
     // THE WAVE-CLEAR SWEEP, ON DEMAND. Every orb and every pickup in the arena
     // comes in at once - the same sweep a cleared wave already does for free,
@@ -1210,8 +1210,8 @@ export const ACTIVE_ITEMS = {
     // pickups, they are buying them EARLY, in the middle of a fight where
     // walking across the room to a health drop is what would have killed them.
     //
-    // Sixteen seconds, not twenty-four. It pays nothing on a clean floor, so
-    // it has to be there on the frame the floor is covered.
+    // Thirty seconds. It pays nothing on a clean floor, so it has to be there
+    // on the frame the floor is covered.
     effects: [['PULL IN EVERY ORB', GOOD], ['AND EVERY PICKUP', GOOD]],
     use: (game) => {
       game.money.vacuum();
@@ -1229,7 +1229,7 @@ export const ACTIVE_ITEMS = {
 
   itemReroll: {
     name: 'SECOND OPINION',
-    charge: 40,
+    charge: 50,
     theme: THEME.charge,
     // THE ONLY ITEM IN THE POOL THAT DOES NOTHING IN A FIGHT, and it IS the
     // reroll rather than a token that buys one. It used to hand out two free
@@ -1247,7 +1247,7 @@ export const ACTIVE_ITEMS = {
     // being useless the other ninety percent of the time.
     effects: [['REROLLS SHOP ON USE', GOOD], ['FREE OF CHARGE', NOTE]],
     // REFUSED WHERE THERE IS NOTHING TO REROLL - between waves the totems are
-    // down, and a press that spent a forty-second charge on an empty room
+    // down, and a press that spent a fifty-second charge on an empty room
     // would be the worst failure in the pool. Same voice an uncharged press
     // gets, and the same voice the console gives for NOTHING TO REROLL.
     ready: (game) => game.totemArea.active && !game.totemArea.claimed,
