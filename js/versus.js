@@ -27,37 +27,72 @@
  * versus can be reasoned about (and tested) as a state machine over three
  * values: which wave, whose turn, and what is at stake on it.
  *
- * THE THREE KINDS OF TURN:
+ * TWO MODES OF PLAY, and the second is an interruption of the first.
  *
- *   normal    - an ordinary alternating turn. Clear it and the match moves on
- *               to the next wave with the other player up.
- *   challenge - the other player just failed this wave. Clearing it WINS THE
- *               MATCH; this is the only ending the mode has.
- *   retry     - both players have now failed this wave, so the slate is wiped.
- *               Clearing it just advances the match, and the other player does
- *               NOT get the wave again - they already had their attempt at it.
+ *   THE LADDER is ordinary play. The wave counter is shared and goes up on
+ *   EVERY clear, so the players climb alternating rungs of one ladder - with
+ *   four of them your own curve steps four waves a turn, which is intended.
  *
- * The loop that falls out of this is the point of the mode: a wave one player
- * cannot pass becomes an offer to the other, and it stays an offer until one
- * of them takes it.
+ *   THE CONTEST is what a failure opens. The ladder stops, and every other
+ *   player still alive attempts THAT WAVE, once each. The player who failed it
+ *   has already had their attempt. When the last of them has played:
+ *
+ *     - somebody cleared it -> everyone who failed it, the original failer
+ *       included, is ELIMINATED, and the survivors resume the ladder above it.
+ *     - nobody cleared it   -> AMNESTY. Nobody is eliminated and the ladder
+ *       resumes ON it, with the wave back in the hands of whoever failed first.
+ *     - one player left     -> they win. Still the only ending the mode has.
+ *
+ * THE WAVE IS PINNED for the length of a contest. "Up on every clear" is the
+ * LADDER's rule; a contest exists precisely to put everyone on the same wave,
+ * so clearing your contest turn keeps you alive and moves nothing.
+ *
+ * TWO PLAYERS ARE THE SPECIAL CASE OF THIS, NOT A SEPARATE RULESET. A contest
+ * with one contestant IS the old `challenge` - clear it and you are the last
+ * one standing, which is the win. Both failing IS the old `retry`: the amnesty
+ * hands the wave back to the first failer, and clearing it advances, so the
+ * other player does not get that wave again. Nothing about a two-player match
+ * plays differently than it did when this class could only count to two.
  */
 export class VersusMatch {
-  constructor() {
+  constructor(count = 2) {
+    this.count = count;
     // The wave about to be played. Shared - there is only ever one.
     this.wave = 1;
-    this.turn = 'normal';
-    // Whose turn it is, as an index into `slots`. Player 1 is 0.
-    this.active = 0;
-    // The benched player's run, and the active player's last committed one.
-    // Both are filled at the match start so a handoff never has to special-case
-    // the first one.
-    this.slots = [null, null];
+    // Every player's run. Indexed by PLAYER NUMBER, not by seat, so an
+    // elimination never renumbers anybody: player 3 is slot 2 for the whole
+    // match whether or not players 1 and 2 are still in it.
+    this.slots = new Array(count).fill(null);
+    // The survivors, IN TURN ORDER. Eliminating a player is a splice out of
+    // this, which is what makes the seat after them fall to the next player
+    // still in rather than to a gap.
+    this.alive = Array.from({ length: count }, (_, i) => i);
+    // Whose turn it is, as an index into `alive`.
+    this.cursor = 0;
+    // The open contest, or null during ordinary ladder play. `order` is who
+    // was asked, in the order they were asked; `owed` is who has yet to play.
+    this.contest = null;
+    // Who went out as the last contest closed, for the caption. Cleared at the
+    // start of the next turn that is not the one announcing them.
+    this.eliminated = [];
+    // True on the ladder turn that FOLLOWS an amnesty, so the caption can say
+    // the wave beat everybody. One turn only.
+    this.amnesty = false;
     // The winning index once there is one, or -1. Nothing else ends a match.
     this.winner = -1;
   }
 
-  get other() {
-    return 1 - this.active;
+  /** Whose turn it is, as a player number. */
+  get active() { return this.alive[this.cursor]; }
+
+  /**
+   * THE OLD THREE-WAY TURN KIND, derived rather than stored. Kept because it
+   * is the vocabulary the mode was documented and tested in, and because for
+   * two players it still says exactly what it always said.
+   */
+  get turn() {
+    if (!this.contest) return this.amnesty ? 'retry' : 'normal';
+    return this.contest.cleared.length ? 'normal' : 'challenge';
   }
 
   /** 1-based, for anything the player reads. */
@@ -66,29 +101,106 @@ export class VersusMatch {
   }
 
   /**
+   * True when clearing the turn NOW IN PROGRESS ends the match: the last
+   * contestant, with every other survivor already failed. The wave is won on
+   * itself in that case and no passive item set is raised for it - a choice
+   * spent being told you have won is a choice wasted.
+   *
+   * For two players this is precisely the old `turn === 'challenge'`.
+   */
+  wouldWin() {
+    const c = this.contest;
+    return !!c && c.owed.length === 1 && c.cleared.length === 0
+      && this.alive.length > 1;
+  }
+
+  /**
    * Books the result of the turn that just ended and works out the next one.
-   * Returns nothing - read `winner`, `active`, `wave` and `turn` after it.
+   * Returns nothing - read `winner`, `active`, `wave`, `contest` and
+   * `eliminated` after it.
    */
   advance(cleared) {
-    const kind = this.turn;
-    if (cleared) {
-      // The one ending. Checked before the wave is advanced so `wave` still
-      // names the wave that was won on.
-      if (kind === 'challenge') {
-        this.winner = this.active;
+    const me = this.active;
+    this.amnesty = false;
+
+    if (this.contest) {
+      const c = this.contest;
+      (cleared ? c.cleared : c.failed).push(me);
+      c.owed.shift();
+      if (c.owed.length) {
+        this.cursor = this.alive.indexOf(c.owed[0]);
         return;
       }
-      // A normal clear, or the clear that closes out a wave both players
-      // failed. Either way the match moves on and the failure ledger is spent.
-      this.wave++;
-      this.turn = 'normal';
-    } else {
-      // A first failure puts the wave up as a challenge; a second one - the
-      // other player failing the challenge - wipes the slate instead of ending
-      // anything, and the wave goes back to whoever failed it first.
-      this.turn = kind === 'challenge' ? 'retry' : 'challenge';
+      this._closeContest();
+      return;
     }
-    this.active = this.other;
+
+    if (cleared) {
+      // The ladder. One rung per clear, and the seat moves on.
+      this.eliminated = [];
+      this.wave++;
+      this.cursor = (this.cursor + 1) % this.alive.length;
+      return;
+    }
+    this._openContest(me);
+  }
+
+  /** A failure stops the ladder and puts the wave to everybody else. */
+  _openContest(failer) {
+    const at = this.alive.indexOf(failer);
+    const owed = [];
+    for (let i = 1; i < this.alive.length; i++) {
+      owed.push(this.alive[(at + i) % this.alive.length]);
+    }
+    this.eliminated = [];
+    this.contest = {
+      wave: this.wave,
+      cleared: [],
+      failed: [failer],
+      owed,
+      order: [failer, ...owed],
+    };
+    // Cannot happen while the match is live - one survivor is a winner, and a
+    // winner is booked before anybody plays again - but a contest nobody is
+    // owed would otherwise sit open forever.
+    if (!owed.length) { this._closeContest(); return; }
+    this.cursor = this.alive.indexOf(owed[0]);
+  }
+
+  /** Every contestant has played. Settle it. */
+  _closeContest() {
+    const c = this.contest;
+    // Taken BEFORE anybody is cut, because the seat the ladder resumes from is
+    // a position in the order the contest was played in, not in what is left.
+    const seats = this.alive.slice();
+    const last = c.order[c.order.length - 1];
+
+    if (c.cleared.length) {
+      this.eliminated = c.failed.slice();
+      this.alive = this.alive.filter((i) => !c.failed.includes(i));
+      if (this.alive.length === 1) {
+        this.winner = this.alive[0];
+        this.contest = null;
+        return;
+      }
+      // The ladder resumes ABOVE the wave the contest was fought on.
+      this.wave++;
+    } else {
+      // AMNESTY. A wave that beat the whole field eliminates nobody, and the
+      // ladder resumes ON it - which hands it back to whoever failed it first,
+      // because they are the seat that follows the last contestant.
+      this.eliminated = [];
+      this.amnesty = true;
+    }
+    this.contest = null;
+
+    // The first seat after the last contestant that is still in the match.
+    const at = seats.indexOf(last);
+    for (let i = 1; i <= seats.length; i++) {
+      const idx = this.alive.indexOf(seats[(at + i) % seats.length]);
+      if (idx >= 0) { this.cursor = idx; return; }
+    }
+    this.cursor = 0;
   }
 
   /**
@@ -97,11 +209,36 @@ export class VersusMatch {
    * and the person reading it has just been handed a controller.
    */
   stake() {
-    if (this.turn === 'challenge') return 'CLEAR WAVE ' + this.wave + ' TO WIN';
-    if (this.turn === 'retry') {
-      return 'BOTH FAILED WAVE ' + this.wave + '  ·  SECOND ATTEMPT';
+    const c = this.contest;
+    let line;
+    if (this.wouldWin()) {
+      line = 'CLEAR WAVE ' + this.wave + ' TO WIN';
+    } else if (c && c.cleared.length) {
+      // Somebody has already passed it, so failing it is now an exit.
+      line = 'CLEAR WAVE ' + this.wave + ' OR YOU ARE OUT';
+    } else if (c) {
+      // Named while there is one name to say, counted after that. Kept short:
+      // the wave is on the second half of the line, so the first half does not
+      // need it too.
+      const n = c.failed.length;
+      line = (n === 1 ? this.label(c.failed[0]) : n + ' PLAYERS')
+        + ' FELL  ·  CLEAR WAVE ' + this.wave + ' TO KNOCK '
+        + (n === 1 ? 'THEM' : 'THEM ALL') + ' OUT';
+    } else if (this.amnesty) {
+      // 'BOTH' while there are two of them, which is the wording this line had
+      // before it had to be able to count higher.
+      line = (this.alive.length === 2 ? 'BOTH FAILED WAVE ' : 'NOBODY CLEARED WAVE ')
+        + this.wave + '  ·  SECOND ATTEMPT';
+    } else {
+      line = 'WAVE ' + this.wave;
     }
-    return 'WAVE ' + this.wave;
+    // HOW MANY ARE LEFT, once there is a field rather than an opponent. With
+    // four players nothing else on screen says how much of it is still in, and
+    // the people reading it are mostly spectators.
+    if (this.count > 2 && this.winner < 0) {
+      line += '  ·  ' + this.alive.length + ' LEFT';
+    }
+    return line;
   }
 }
 

@@ -1165,9 +1165,12 @@ html, body {
    and this is the caption over that - so it sits ABOVE the banner (7) and
    below the real menus (10), and never takes the cursor.
 
-   --pc is the player's colour, set by a class from UI.setVersus. Everything
-   tinted on this caption reads it, so the two players are told apart by one
-   custom property rather than by four rules that could drift apart. */
+   --pc is the player's colour, WRITTEN INLINE by UI.showHandoff from
+   PLAYER_INK. Everything tinted on this caption reads it, so the players are
+   told apart by one custom property rather than by four rules that could drift
+   apart - and by one that does not need a new stylesheet rule per seat. The
+   cyan below is only the fallback for a caption raised before anything has
+   written the property. */
 #handoff {
   position: fixed; inset: 0; z-index: 8;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1175,13 +1178,6 @@ html, body {
   text-align: center; pointer-events: none;
   --pc: var(--cyan);
 }
-#handoff.p1 { --pc: var(--cyan); }
-/* Player two's red is the CSS red the cabinet already uses for the death
-   marquee and the low-health bar, not a new hue - the palette is four colours
-   and a fifth would be the one thing on screen that came from somewhere
-   else. */
-#handoff.p2 { --pc: #ff3b30; }
-
 #handoff-lead {
   font-size: 10px; letter-spacing: 0.28em; color: var(--dim);
   text-shadow: 2px 2px 0 var(--ink);

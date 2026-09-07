@@ -11,10 +11,15 @@ import { itemCells } from './items.js';
 import { controllerGlyph } from './padmenu.js';
 
 // The two player colours, as CSS. The world-space pair lives in main.js beside
-// the code that lights the gun; these are the same two hues written the way
-// the document needs them, and #handoff.p1 / .p2 in the stylesheet is the
-// third copy. Three because they are three different rendering systems.
-const PLAYER_INK = ['#4ef3ff', '#ff3b30'];
+// the code that lights the gun; these are the same hues written the way the
+// document needs them. TWO copies now, not three: the stylesheet used to carry
+// a #handoff.p1 / .p2 pair and it does not any more, because a palette that
+// has to be extended in a fourth place every time a seat is added is a palette
+// that will be wrong in one of them. The caption's --pc is written from here.
+//
+// READ IN STEP WITH PLAYER_COLOR in main.js, by index. Same length, same
+// order.
+const PLAYER_INK = ['#4ef3ff', '#ff3b30', '#00e676', '#ffb300'];
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 export class UI {
@@ -47,6 +52,10 @@ export class UI {
     // than replacing it, so the one behind is left exactly as it was and BACK
     // is a single class change.
     this.settingsOv = $('overlay-settings');
+    // HOW MANY ARE PLAYING. A sub-screen on exactly the terms of the other
+    // two, which is the whole reason it is one: BACK, CIRCLE, Escape and the
+    // click-through guard all already know how to close one of these.
+    this.playersOv = $('overlay-players');
     // The pass-the-controller screen. Not a sub-screen: it is layered over a
     // live match rather than over a menu, and nothing takes it down but its
     // own countdown.
@@ -168,26 +177,27 @@ export class UI {
    * - the label to 'VERSUS' and the figure to 'P1' - on the reasoning that
    * whose turn it is is exactly the kind of thing the top-right readout is for
    * and a balance neither player is spending is not. The second half of that
-   * was simply wrong: the bank in a match is SHARED, both players spend out of
-   * it at the same shops, and it was the one mode in the game where the money
-   * mattered most and the only mode that never showed it.
+   * was simply wrong. EVERY PLAYER HAS THEIR OWN BANK - `credits` rides in the
+   * snapshot like any other run state, see GAME_FIELDS in versus.js - so the
+   * figure on screen is the active player's own money, and a match was the one
+   * mode in the game where the money mattered most and the only mode that
+   * never showed it.
    *
    * So the turn gets a line of its own and the balance keeps its cells in
    * every mode. That line sits OVER THE VITALS, at the size of a figure: the
    * health bar is the readout that describes the body on screen, and whose
-   * body it is belongs with it rather than beside a bank both players spend
-   * out of.
+   * body it is belongs with it.
    *
-   * @param {?number} n 1 or 2, or null for solo.
+   * @param {?number} n the player number, 1-based, or null for solo.
    */
   setVersus(n) {
     this._versus = n;
     this.versusTag.classList.toggle('hidden', !n);
     if (!n) return;
     this.versusTag.textContent = 'P' + n;
-    // The same two colours the gun's flank strip carries, so the readout that
+    // The same colours the gun's flank strip carries, so the readout that
     // NAMES the player and the band that marks their weapon teach each other.
-    this.versusTag.style.color = PLAYER_INK[n - 1];
+    this.versusTag.style.color = PLAYER_INK[(n - 1) % PLAYER_INK.length];
   }
   setHealth(h, max) {
     // Keyed off the displayed number, not the clamped bar width, so overheal
@@ -689,6 +699,10 @@ export class UI {
   hideSubScreens() {
     this.settingsOv.classList.add('hidden');
     this.confirmOv.classList.add('hidden');
+    this.playersOv.classList.add('hidden');
+  }
+  showPlayerCount() {
+    this.playersOv.classList.remove('hidden');
   }
   showSettings() {
     this.settingsOv.classList.remove('hidden');
@@ -718,8 +732,12 @@ export class UI {
     this.handoffStake.textContent = stake;
     this.handoffCount.textContent = String(n);
     this._c.handoffCount = n;
-    this.handoffOv.classList.remove('hidden', 'p1', 'p2');
-    this.handoffOv.classList.add('p' + p);
+    this.handoffOv.classList.remove('hidden');
+    // WRITTEN, NOT CLASSED. A class per player needs a stylesheet rule per
+    // player, and the palette already lives in two places that have to agree.
+    this.handoffOv.style.setProperty(
+      '--pc', PLAYER_INK[(p - 1) % PLAYER_INK.length]
+    );
     // The instruments leave with the player who was reading them. NOT hidden:
     // they slide, and the slide is the half of this that says the readouts
     // belong to a person rather than to the room.

@@ -359,8 +359,14 @@ const HANDOFF_TIME = 3;
 // caption holds between the two, so the pass reads as out - read - in rather
 // than as one continuous slide.
 const HANDOFF_SWAP = 0.55;
-// The two players, in the world. See PLAYER_INK in ui.js for the DOM's copy.
-const PLAYER_COLOR = [0x4ef3ff, 0xff3b30];
+// The players, in the world. See PLAYER_INK in ui.js for the DOM's copy - the
+// two lists are read in step by index and must stay the same length.
+//
+// FOUR, AND IN THIS ORDER. The first two are the pair the mode shipped with,
+// so a two-player match still looks exactly as it did; the green and the amber
+// are picked to survive the CRT filter, which eats anything close to the
+// arena's own blue-grey - see crt.js.
+const PLAYER_COLOR = [0x4ef3ff, 0xff3b30, 0x00e676, 0xffb300];
 // Double Dash: how close together two presses of the SAME movement key have to
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
@@ -1388,13 +1394,32 @@ class Game {
       e.stopPropagation();
       onStart();
     });
-    // The second mode. stopPropagation for the same reason every other button
-    // on this overlay has it: #overlay-start is click-to-continue, and without
-    // it this would start a solo run underneath the versus one.
+    // The second mode. It ASKS HOW MANY FIRST rather than starting: two,
+    // three and four are different games and the count cannot be changed once
+    // the first snapshot is taken.
+    //
+    // stopPropagation for the same reason every other button on this overlay
+    // has it: #overlay-start is click-to-continue, and without it this would
+    // start a solo run underneath the sub-screen.
     document.getElementById('btn-versus').addEventListener('click', (e) => {
       e.stopPropagation();
       this._audioGesture();
-      if (this.state === 'menu') this.beginGame('versus');
+      if (this.state === 'menu') this.ui.showPlayerCount();
+    });
+    // One handler per count, off the button's own data-count, so adding a
+    // fifth seat one day is markup and a colour and nothing here.
+    for (const btn of document.querySelectorAll('#overlay-players [data-count]')) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._audioGesture();
+        if (this.state !== 'menu') return;
+        this._closeSubScreen();
+        this.beginGame('versus', Number(btn.dataset.count));
+      });
+    }
+    document.getElementById('btn-players-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._closeSubScreen();
     });
     document.getElementById('btn-restart').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1597,7 +1622,7 @@ class Game {
     // pointer-events: none, so a click during a handoff falls through to the
     // canvas, where every handler already refuses a state that is not
     // 'playing'. Swallowing it here would be a listener that can never fire.
-    for (const ov of [this.ui.settingsOv, this.ui.confirmOv]) {
+    for (const ov of [this.ui.settingsOv, this.ui.confirmOv, this.ui.playersOv]) {
       ov.addEventListener('click', (e) => e.stopPropagation());
     }
 
@@ -1888,7 +1913,8 @@ class Game {
   // and still listening, so anything that acts on a menu click has to ask.
   _subScreenOpen() {
     return !this.ui.settingsOv.classList.contains('hidden')
-      || !this.ui.confirmOv.classList.contains('hidden');
+      || !this.ui.confirmOv.classList.contains('hidden')
+      || !this.ui.playersOv.classList.contains('hidden');
   }
 
 
@@ -2375,6 +2401,7 @@ class Game {
     if (this._debugOpen) return this.ui.debugPanel;
     if (!this.ui.confirmOv.classList.contains('hidden')) return this.ui.confirmOv;
     if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
+    if (!this.ui.playersOv.classList.contains('hidden')) return this.ui.playersOv;
     if (this.state === 'menu') return this.ui.startOv;
     if (this.state === 'paused') return this.ui.pauseOv;
     if (this.state === 'gameover') return this.ui.overOv;
@@ -2570,13 +2597,13 @@ class Game {
   // Starts a fresh run from the menu or the game-over screen. Anything that
   // changes during play must be reset here, including the spawn timers -
   // leftover state used to carry into the next run.
-  beginGame(mode = 'solo') {
+  beginGame(mode = 'solo', count = 2) {
     this._audioGesture();
     this.mode = mode;
     // VERSUS IS A MATCH, NOT A RUN. The wave counter below is still the one
     // the arena reads; the match owns whose wave it is and what is riding on
     // it, and both players' saved runs hang off it.
-    this.match = mode === 'versus' ? new VersusMatch() : null;
+    this.match = mode === 'versus' ? new VersusMatch(count) : null;
     this.player.reset();
     this._clearEntities();
     // A previous run's arena, if there is one still standing.
@@ -2611,8 +2638,9 @@ class Game {
       // Both slots seeded off the same freshly reset player, so the first
       // handoff restores a snapshot exactly like every later one does rather
       // than being a special case that nothing else exercises.
-      this.match.slots[0] = captureRun(this);
-      this.match.slots[1] = captureRun(this);
+      for (let i = 0; i < this.match.count; i++) {
+        this.match.slots[i] = captureRun(this);
+      }
       this.ui.setVersus(this.match.active + 1);
       this.player.setPlayerTag(PLAYER_COLOR[this.match.active]);
     } else {
@@ -2767,6 +2795,17 @@ class Game {
     // ordinary path for free: the banner, the rig cue, the boss spawn and the
     // pending-buff clocks all run exactly as they do in solo.
     this.wave = m.wave - 1;
+    // WHO WENT OUT. Elimination is the most consequential thing that happens
+    // in a match and nothing else on screen would say it had: the caption
+    // names the incoming player, and the player who just left the field is
+    // not in the room's line of sight any more. Ahead of the caption, so the
+    // two read in the order they happened.
+    if (m.eliminated.length) {
+      this.ui.banner(
+        m.eliminated.map((i) => m.label(i)).join('  ·  ')
+        + (m.eliminated.length > 1 ? ' ARE OUT' : ' IS OUT')
+      );
+    }
     this.queue.length = 0;
     this._pass = true;
     this._swapped = false;
@@ -3455,7 +3494,12 @@ class Game {
     // Through _dropMoney like every other payout, so Midas and the flawless
     // streak are applied in one place. Thrown from where the boss died, which
     // is why this one needs no hold: it lands well outside the magnet.
-    this._dropMoney(at, bonus, BOSS_ORBS, 7.5);
+    //
+    // NOT SPLIT. The boss is the one payout that already reaches every player
+    // in the match - the mirror below hands a whole bounty to each of them -
+    // so it is paid at face value here and the player multiplier would be
+    // counting the same distribution twice.
+    this._dropMoney(at, bonus, BOSS_ORBS, 7.5, undefined, false);
     // AND THEN THEY COME TO YOU. The wave-clear vacuum has already run by the
     // time this is called, so without a second sweep the boss's own payout was
     // the one drop in the game left lying on the floor - forty orbs thrown
@@ -3472,9 +3516,17 @@ class Game {
     // this player's, which is why the snapshot caches both multipliers: a
     // benched build is plain data, and neither number can be recomputed from
     // it once the live Player belongs to somebody else.
+    // EVERY benched survivor, not just "the other one". With four players the
+    // boss is one turn in four, and a bounty that followed the controller
+    // would make the run's largest single payout a matter of whose turn wave
+    // ten happened to be - three times over. An eliminated slot is skipped
+    // because it is never restored: paying it is paying nobody.
     if (this.match) {
-      const s = this.match.slots[this.match.other];
-      s.game.credits += bonus * s.creditMult * s.flawlessMult;
+      for (const i of this.match.alive) {
+        if (i === this.match.active) continue;
+        const s = this.match.slots[i];
+        s.game.credits += bonus * s.creditMult * s.flawlessMult;
+      }
     }
     this.effects.shockwave(this.player.pos, 0x00e676, 6, 0.6);
     this.ui.banner('BOSS DOWN  +$'
@@ -3686,10 +3738,52 @@ class Game {
   // drops more money, which is the whole point of taking it - and so a mid-run
   // pick, or a hit taken while the orbs are still lying there, can never
   // retroactively revalue money that has already been dropped.
-  _dropMoney(pos, amount, maxOrbs, spread, hold) {
+  /**
+   * HOW MANY WAYS THE WAVES ARE SPLIT. One in solo; in a match, the number of
+   * players still in it.
+   *
+   * WHY MONEY SCALES WITH IT. The wave counter goes up on every clear, so a
+   * player in a four-handed match plays roughly one wave in four - but the
+   * shop's prices are keyed to the WAVE, not to how many of them they fought
+   * (see blockPrice in upgrades.js). Left alone they would meet wave-twenty
+   * prices on a quarter of a run's income, and the box would simply be out of
+   * reach for the whole match. Paying each of them N times per kill puts a
+   * full run's income against a full run's prices.
+   *
+   * IT FALLS AS PLAYERS GO OUT, and that is the same rule and not a second
+   * one: two survivors take every other wave, so two is exactly what their
+   * income needs multiplying by. `alive` is only spliced when a CONTEST CLOSES
+   * (see versus.js), never mid-contest, so every contestant on a given wave
+   * earns at the same rate - which is what makes a contest a fair test.
+   */
+  _playerMult() {
+    return this.match ? this.match.alive.length : 1;
+  }
+
+  /**
+   * @param {boolean} split whether the player multiplier applies. TRUE for
+   *   everything a player earns for themselves; FALSE for a payout that is
+   *   ALREADY shared out to every player by hand, which is the boss bounty and
+   *   only the boss bounty - see _payBossBonus. Paying that one N times to the
+   *   player holding the pad AND once to each of the others would be N + N - 1
+   *   bounties for one boss.
+   */
+  _dropMoney(pos, amount, maxOrbs, spread, hold, split = true) {
     if (amount <= 0) return 0;
     const paid = amount * this.player.mods.creditMult * this.flawlessMult();
-    this.money.spawn(pos, paid, maxOrbs, spread, hold);
+    // THE TWO FIGURES ARE DIFFERENT ON PURPOSE, and collapsing them back into
+    // one is the mistake this comment exists to stop.
+    //
+    // What is SPAWNED takes the player split, because credits are banked
+    // across turns and the split is restoring a run's worth of them.
+    //
+    // What is RETURNED does not, because it is the item charge (see
+    // _collectOrb), and charge is earned and spent inside a single fight.
+    // Multiplying it would not be compensating a four-handed player for the
+    // waves they never played - it would hand them four times the active-item
+    // uptime in the wave they are actually in, which is just being stronger.
+    this.money.spawn(pos, split ? paid * this._playerMult() : paid,
+      maxOrbs, spread, hold);
     // The figure paid comes back out for the item charge, which is handed over
     // as those orbs are collected and in proportion to what each one is worth -
     // see _collectOrb. Nothing about the MONEY itself needs it.
@@ -5230,7 +5324,7 @@ class Game {
         // PICK because the pick is the last thing a player does with the
         // controller; when there is no next turn there is nothing to hand
         // over, so the turn is booked on the wave instead.
-        if (this.match && this.match.turn === 'challenge') {
+        if (this.match && this.match.wouldWin()) {
           this._endTurn(true);
           return;
         }
@@ -5947,6 +6041,18 @@ class Game {
     this.mysteryBox.dismiss();
     this.ui.setPrompt(null, false);
     this.player.health = this.player.maxHealth;
+    // THE MATCH'S COUNTER MOVES WITH THE ARENA'S. `wave` is what the arena
+    // reads and `match.wave` is what the rules read, and a jump that moved
+    // only the first left the two disagreeing for the rest of the match - the
+    // next handoff would set the arena straight back to where the match still
+    // thought it was. Any open contest is dropped: it was fought on a wave
+    // nobody is on any more.
+    if (this.match) {
+      this.match.wave = wave;
+      this.match.contest = null;
+      this.match.amnesty = false;
+      this.match.eliminated = [];
+    }
     this.wave = wave - 1;
     this.waveState = 'idle';
     this.interT = 0;

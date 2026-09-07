@@ -265,6 +265,203 @@ try {
     t('THE FRAME LOOP SURVIVED THE DEATH', frames > framesBefore + 5,
       'frames ' + framesBefore + ' -> ' + frames);
 
+    // ---- 9. FOUR PLAYERS --------------------------------------------------
+    //
+    // The whole scenario table, walked as states. Everything above is the SEAM
+    // - one run written over another - and holds whatever the player count is.
+    // What is asserted here is the RULE: the ladder goes up on every clear,
+    // a failure PINS the wave while everybody else attempts it, and who is
+    // left afterwards.
+    //
+    // Driven through the real game rather than through VersusMatch on its own,
+    // because the bug this is most likely to catch is not in the arithmetic -
+    // it is main.js and the match disagreeing about which wave the arena is
+    // building.
+    const clearTurn = async () => {
+      await until(() => g.waveState === 'intermission' || g.state === 'gameover');
+      if (g.state === 'gameover') return;
+      g.totemArea.dismiss();
+      await until(() => g._pass || g.state === 'gameover');
+      if (g.state === 'gameover') return;
+      await until(() => !g._pass && g.waveState === 'active');
+    };
+    // NOTHING HERE CLEARS THE FIELD, and that is the whole of why it is
+    // written out rather than reusing `until`.
+    //
+    // `until` empties the arena on every frame it waits, and an empty arena is
+    // a CLEARED WAVE. For most turns that is harmless - the clear stops at the
+    // totem pick and the death books first - but on the last contestant's turn
+    // a clear is a WIN, taken by _updateWave before the death check at the end
+    // of the frame ever runs. A fail helper that cleared the field would
+    // therefore hand the match to the player it was asked to kill, on exactly
+    // the turn that decides the match, and every assertion after it would be
+    // measuring a different game. So this one waits on raw frames and leaves
+    // the wave with something in it.
+    const rawUntil = async (f, n = 400) => {
+      for (let i = 0; i < n; i++) { if (f()) return i; await step(); }
+      return f() ? n : -1;
+    };
+    const failTurn = async () => {
+      await rawUntil(() => g.waveState === 'active');
+      g.player.health = 0;
+      await rawUntil(() => g._pass || g.state === 'gameover');
+      if (g.state === 'gameover') return;
+      await rawUntil(() => !g._pass && g.waveState === 'active');
+      g.player.maxHealth = 9999; g.player.health = 9999;
+    };
+    // Starts a four-handed match parked on wave 7, which is where the scenario
+    // table is written. The debug jump is used deliberately: it is the path a
+    // person testing this will take, so a jump that desynced the arena counter
+    // from the match counter would fail here rather than in someone's hands.
+    const four = async () => {
+      g.beginGame('versus', 4);
+      g.player.maxHealth = 9999; g.player.health = 9999;
+      g._debugJumpToWave(7);
+      g.match.wave = 7;
+      // Raw, for the reason in failTurn: this leaves a wave with a queue in it
+      // rather than one that is already clear.
+      await rawUntil(() => g.waveState === 'active');
+      g.player.maxHealth = 9999; g.player.health = 9999;
+    };
+
+    g.beginGame('versus', 4);
+    t('4P: four slots are seeded', g.match.slots.filter(Boolean).length === 4,
+      String(g.match.slots.filter(Boolean).length));
+    t('4P: everyone is in, P1 up', g.match.alive.join() === '0,1,2,3'
+      && g.match.active === 0, 'alive=' + g.match.alive);
+
+    // THE LADDER. One rung per clear, and the seat moves on.
+    g.player.maxHealth = 9999; g.player.health = 9999;
+    await until(() => g.waveState === 'active');
+    await clearTurn();
+    t('4P: a clear advances the wave and passes to P2',
+      g.wave === 2 && g.match.wave === 2 && g.match.active === 1,
+      'wave=' + g.wave + '/' + g.match.wave + ' active=' + g.match.active);
+    await clearTurn();
+    await clearTurn();
+    await clearTurn();
+    t('4P: four rungs later it is P1 again, on wave 5',
+      g.match.active === 0 && g.wave === 5 && g.match.wave === 5,
+      'active=' + g.match.active + ' wave=' + g.wave + '/' + g.match.wave);
+
+    // A FAILURE PINS THE WAVE. This is the assertion the mode's whole shape
+    // rests on: the contest exists to put every survivor on the SAME wave, so
+    // a clear inside one must not move the counter.
+    await four();
+    t('4P: the debug jump moved BOTH counters',
+      g.wave === 7 && g.match.wave === 7, 'wave=' + g.wave + '/' + g.match.wave);
+    await failTurn();                       // P1 falls on wave 7
+    t('4P: a failure opens a contest, P2 up, wave pinned',
+      g.match.active === 1 && g.wave === 7 && g.match.wave === 7 && !!g.match.contest,
+      'active=' + g.match.active + ' wave=' + g.wave + '/' + g.match.wave);
+    t('4P: nobody is out yet', g.match.alive.length === 4, String(g.match.alive.length));
+    await clearTurn();
+    t('4P: a CLEAR INSIDE A CONTEST does not move the wave',
+      g.wave === 7 && g.match.wave === 7 && g.match.alive.length === 4,
+      'wave=' + g.wave + '/' + g.match.wave);
+    await clearTurn();                      // P3 clears
+    await clearTurn();                      // P4 clears - contest closes
+    t('4P: three clear, one fails -> the failer alone is out',
+      g.match.alive.join() === '1,2,3' && g.match.winner === -1,
+      'alive=' + g.match.alive);
+    t('4P: the ladder resumes ABOVE the contest wave',
+      g.match.wave === 8 && g.wave === 8, 'wave=' + g.wave + '/' + g.match.wave);
+
+    // TWO OUT AT ONCE, and the endgame of a four-handed match is a two-handed
+    // one playing by the same rules.
+    await four();
+    await failTurn();                       // P1 falls
+    await clearTurn();                      // P2 clears
+    await failTurn();                       // P3 falls
+    await clearTurn();                      // P4 clears - closes
+    t('4P: two clear, two fail -> a 2P match at wave 8',
+      g.match.alive.join() === '1,3' && g.match.wave === 8 && g.match.winner === -1,
+      'alive=' + g.match.alive + ' wave=' + g.match.wave);
+
+    // THE AMNESTY. A wave that beats the whole field eliminates nobody, and it
+    // goes back to whoever failed it first - which is the four-handed shape of
+    // the `retry` the two-player rules already had.
+    await four();
+    await failTurn();
+    await failTurn();
+    await failTurn();
+    await failTurn();
+    t('4P: everybody fails -> NOBODY is out',
+      g.match.alive.length === 4 && g.match.winner === -1, 'alive=' + g.match.alive);
+    t('4P: the wave is still 7, and back with the first failer',
+      g.match.wave === 7 && g.wave === 7 && g.match.active === 0
+      && g.match.turn === 'retry',
+      'wave=' + g.wave + '/' + g.match.wave + ' active=' + g.match.active
+      + ' turn=' + g.match.turn);
+
+    // THE WIN, and the choice that is not spent being told about it.
+    await four();
+    await failTurn();                       // P1 falls
+    await failTurn();                       // P2 falls
+    await failTurn();                       // P3 falls
+    t('4P: the last contestant is up to win', g.match.wouldWin() && g.match.active === 3,
+      'active=' + g.match.active);
+    await until(() => g.state === 'gameover' || g.waveState === 'intermission');
+    t('4P: clearing it wins outright', g.state === 'gameover' && g.match.winner === 3,
+      'state=' + g.state + ' winner=' + g.match.winner);
+    t('4P: no passive item set was raised for the win', !g.totemArea.active,
+      g.totemArea.active ? 'RAISED' : 'none');
+
+    // ---- 10. THE CREDIT SPLIT ---------------------------------------------
+    //
+    // Money scales with how many players are still in, because the wave
+    // counter climbs on every clear and each of them therefore fights about a
+    // quarter of a four-handed run while paying its prices.
+    g.beginGame('solo');
+    t('$: solo pays once', g._playerMult() === 1, String(g._playerMult()));
+    g.beginGame('versus', 4);
+    t('$: four players pay four times', g._playerMult() === 4, String(g._playerMult()));
+    g.match.alive = [0, 1];
+    t('$: and TWO after two are eliminated', g._playerMult() === 2, String(g._playerMult()));
+
+    // THE ITEM-CHARGE GUARD. _dropMoney spawns the split figure and RETURNS
+    // the unsplit one, because the return value is what becomes active-item
+    // charge in _collectOrb - and charge is spent inside the wave it is earned
+    // in, so multiplying it is not compensation, it is four times the uptime.
+    // This is the assertion that catches the two being collapsed back into one.
+    const spawn = g.money.spawn.bind(g.money);
+    let spawned = 0;
+    g.money.spawn = (pos, amt, ...rest) => { spawned = amt; return spawn(pos, amt, ...rest); };
+    g.beginGame('solo');
+    g.player.rebuildMods();
+    const soloRet = g._dropMoney(g.player.pos, 100, 4, 2);
+    const soloSpawn = spawned;
+    g.beginGame('versus', 4);
+    g.player.rebuildMods();
+    const fourRet = g._dropMoney(g.player.pos, 100, 4, 2);
+    const fourSpawn = spawned;
+    t('$: four players see 4x the money on the floor',
+      Math.abs(fourSpawn - soloSpawn * 4) < 1e-6, soloSpawn + ' -> ' + fourSpawn);
+    t('$: but the ITEM CHARGE figure is unchanged',
+      Math.abs(fourRet - soloRet) < 1e-6, soloRet + ' vs ' + fourRet);
+    // AND THE BOSS IS OUT OF IT, because it is already handed to everyone.
+    g._dropMoney(g.player.pos, 100, 4, 2, undefined, false);
+    t('$: an unsplit payout is paid at face value',
+      Math.abs(spawned - soloSpawn) < 1e-6, soloSpawn + ' vs ' + spawned);
+    g.money.spawn = spawn;
+
+    // THE BOSS MIRROR REACHES ALL THREE. Whoever draws the boss turn is not
+    // supposed to walk off with the run's largest single payout while three
+    // people watch.
+    g.beginGame('versus', 4);
+    const before$ = g.match.slots.map((s) => s.game.credits);
+    g._bossDeathPos = g.player.pos.clone();
+    g._payBossBonus();
+    const after$ = g.match.slots.map((s) => s.game.credits);
+    const paid = g.match.alive
+      .filter((i) => i !== g.match.active)
+      .every((i) => after$[i] > before$[i]);
+    t('$: every benched player is paid the boss bounty', paid,
+      before$.join() + ' -> ' + after$.join());
+    t('$: the player who fought it is not paid twice',
+      after$[g.match.active] === before$[g.match.active],
+      String(after$[g.match.active]));
+
     return out;
   });
 

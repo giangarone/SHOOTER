@@ -64,10 +64,12 @@
         <!-- WHOSE TURN IT IS, in versus. It sits OVER THE VITALS rather than
              over the balance, at the size of a figure rather than of a label:
              it names the person holding the pad, which is the same question
-             the health bar under it answers about the body on screen, and the
-             money in the far corner is a shared bank that says nothing about
-             whose turn it is. Hidden outright in solo - a permanent blank line
-             is not information. -->
+             the health bar under it answers about the body on screen. The
+             money in the far corner is the ACTIVE player's own bank - credits
+             ride in the snapshot like any other run state, see GAME_FIELDS in
+             versus.js - so it changes hands with everything else and cannot
+             stand in for whose turn it is. Hidden outright in solo: a
+             permanent blank line is not information. -->
         <span id="versus-tag" class="hidden">P1</span>
         <div id="hp-head">
           <span>VITALS</span>
@@ -237,7 +239,7 @@
          beside it: PRESS START is the cabinet's one big control and a pair of
          equal buttons would make the player choose before they know there is
          anything to choose between. -->
-    <div class="opt-row"><button id="btn-versus" class="opt-btn">2 PLAYER VERSUS</button></div>
+    <div class="opt-row"><button id="btn-versus" class="opt-btn">MULTIPLAYER VERSUS</button></div>
     <!-- Shown only when the sound is still locked and the pad is what is being
          played on: a controller press is not a "user gesture" as far as the
          browser is concerned, so no amount of pressing X will start the audio
@@ -314,6 +316,32 @@
     <div class="primary-row"><button id="btn-exit-no">KEEP PLAYING</button></div>
     <div class="opt-row">
       <button id="btn-exit-yes" class="opt-btn danger">EXIT TO MENU</button>
+    </div>
+  </div>
+
+  <!-- HOW MANY ARE PLAYING. A sub-screen like SETTINGS and ARE YOU SURE -
+       layered over the start menu rather than swapping with it, so BACK is one
+       class change and CIRCLE, Escape and the click-through guard already know
+       what to do with it.
+
+       THREE EQUAL BUTTONS AND NO DEFAULT. Two, three and four are different
+       games rather than a setting with a usual answer, and the count cannot be
+       changed once the match has taken its first snapshot - so this is the one
+       screen in the game where making the player choose is the point. The
+       count rides on data-count; main.js reads it off the button. -->
+  <div id="overlay-players" class="overlay hidden">
+    <div class="marquee plate">
+      <h1>HOW MANY?</h1>
+      <div class="rule"></div>
+      <p class="sub">ONE CONTROLLER  &middot;  ONE WAVE EACH  &middot;  LAST ONE STANDING</p>
+    </div>
+    <div class="opt-row">
+      <button class="opt-btn" data-count="2">2 PLAYERS</button>
+      <button class="opt-btn" data-count="3">3 PLAYERS</button>
+      <button class="opt-btn" data-count="4">4 PLAYERS</button>
+    </div>
+    <div class="opt-row">
+      <button id="btn-players-back" class="opt-btn">BACK</button>
     </div>
   </div>
 
