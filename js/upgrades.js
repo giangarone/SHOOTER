@@ -1539,7 +1539,22 @@ export const UPGRADES = {
     // THE TACTICAL RELOAD, PAID FOR. Every shooter teaches the habit of
     // topping up between fights and no shooter has ever paid for it; here the
     // rounds you did not fire are the bomb, so a magazine dropped at twenty is
-    // a hundred damage and one dropped empty is nothing at all.
+    // four hundred damage and one dropped empty is nothing at all.
+    //
+    // THE ROUNDS ARE GONE, and that is the price. An ordinary reload TOPS the
+    // magazine up - what is in it is kept and only the difference comes off
+    // the reserve - and this one cannot, because the magazine is no longer
+    // there. So a fresh one is filled from empty and a tactical reload costs
+    // the whole thing. Without that the pick was free damage: fire one round,
+    // reload, and twenty-nine went downrange for one round off the reserve.
+    //
+    // TWENTY A ROUND, NOT FIVE. At five a full-ish magazine was 145 damage -
+    // less than SHORT FUSE, which is an active item costing thirty charge -
+    // and the pick read as a decoration on a reload. At twenty the same throw
+    // is 580, which is the biggest single number a passive item puts on the
+    // board, and it is paid for twice: the whole magazine off the reserve, and
+    // the four-metre radius, which is half SHORT FUSE's and means it only pays
+    // when a crowd is already close enough to be a problem.
     //
     // IT CANNOT HURT THE PLAYER, unlike SHORT FUSE, which is the item the
     // blast is otherwise borrowed from. A thrown mag is not aimed - it goes
@@ -1548,10 +1563,10 @@ export const UPGRADES = {
     // would be a passive item nobody could take.
     effects: [
       ['RELOADING THROWS THE MAG', GOOD],
-      ['5 DAMAGE PER ROUND LEFT', GOOD],
-      ['NOTHING FROM AN EMPTY ONE', NOTE],
+      ['20 DAMAGE PER ROUND LEFT', GOOD],
+      ['THOSE ROUNDS ARE SPENT', BAD],
     ],
-    apply: (mods, n) => { mods.primedMag = 5 * n; },
+    apply: (mods, n) => { mods.primedMag = 20 * n; },
   },
 
   bailiff: {

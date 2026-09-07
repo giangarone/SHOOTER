@@ -1928,9 +1928,20 @@ export class Player {
       this.reloading -= dt;
       if (this.reloading <= 0) {
         this.reloading = 0;
-        const needed = this.magSize - this.mag;
-        const take = Math.min(needed, this.reserveAmmo);
-        this.mag += take;
+        // A RELOAD TOPS THE MAGAZINE UP. The rounds already in it are kept and
+        // only the difference comes off the reserve, so reloading at 20/30
+        // costs ten rounds and wastes nothing.
+        //
+        // PRIMED MAG IS THE ONE BUILD THAT WASTES THEM, and it has to be: the
+        // magazine was THROWN (see _throwSpentMag in main.js), so what was
+        // left in it is gone and the fresh one is filled from empty. Without
+        // this the passive item was free damage on a tap - fire one round,
+        // reload, and a 29-round magazine went downrange for 580 damage at a
+        // cost of ONE round off the reserve, three hundred times a run.
+        // Paying the full magazine is what makes the bomb a trade.
+        const keep = this.mods.primedMag > 0 ? 0 : this.mag;
+        const take = Math.min(this.magSize - keep, this.reserveAmmo);
+        this.mag = keep + take;
         this.reserveAmmo -= take;
         reloadFinished = true;
         this.breachReady = true;
@@ -2881,7 +2892,7 @@ export class Player {
     // the reload lands, because that is where the magazine is topped up: by
     // then `mag` is the count of the FRESH one, and a passive item that read it
     // there would throw a full magazine every time. A tactical reload at
-    // twenty is a hundred damage; a gun run dry is nothing, which is the whole
+    // twenty is four hundred damage; a gun run dry is nothing, which is the whole
     // decision the pick offers.
     this.magOnReload = this.mag;
     this.reloading = this.reloadTime;

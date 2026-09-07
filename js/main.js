@@ -7019,7 +7019,7 @@ class Game {
   /**
    * PRIMED MAG. The magazine the reload just discarded, thrown underarm.
    *
-   * WHAT IT IS WORTH IS WHAT WAS LEFT IN IT - five damage a round, off the
+   * WHAT IT IS WORTH IS WHAT WAS LEFT IN IT - twenty damage a round, off the
    * count taken when the reload STARTED (see Player.startReload). A gun run dry
    * throws nothing at all, which is the pick: it pays for the tactical reload
    * every shooter teaches and none of them has ever rewarded.

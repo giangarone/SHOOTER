@@ -583,7 +583,7 @@ totem and the fight is arithmetic.
 | Upgrade | Effect |
 | --- | --- |
 | FATAL RESERVE | The last 5 rounds of every magazine always crit |
-| PRIMED MAG | Reloading throws the spent magazine as a grenade: 5 damage per round left in it |
+| PRIMED MAG | Reloading throws the spent magazine as a grenade: 20 damage per round left in it, and those rounds are spent |
 | BAILIFF | Using an active item refunds 20% of its charge cost |
 | PACE CAR | At full health, +10% fire rate and +10% move speed |
 | CERAMIC INSERT | No single hit can take more than 25% of your max HP |
@@ -599,6 +599,16 @@ nothing, which is the whole decision: it pays for the tactical reload every
 shooter teaches and none of them has ever rewarded. The bomb cannot hurt the
 player, unlike SHORT FUSE's, because a reload is a button pressed for a
 different reason.
+
+**It is the one build whose reload wastes ammunition, and that is the price.**
+An ordinary reload TOPS the magazine up - the rounds in it are kept and only the
+difference comes off the reserve, so 20/30 costs ten. A thrown magazine is not
+there to be topped up, so the fresh one fills from empty and the same reload
+costs thirty. Without that the pick was free damage: fire one round, reload, and
+twenty-nine rounds went downrange for 580 damage at a cost of ONE round off the
+reserve, three hundred times a run. Paying the full magazine makes the bomb a
+trade, and it puts PRIMED MAG in direct tension with FATAL RESERVE - one wants
+you to reload early and fat, the other to fire down to the last five.
 
 CERAMIC INSERT is a ceiling, not a reduction, and the difference is the pick:
 damage reduction is worth the same against a chaser's scratch as against a
