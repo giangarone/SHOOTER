@@ -2122,3 +2122,298 @@ def _(c):
     # The wind-up key, over the shoulder, which is the one mark that says TOY.
     c.ring(19.6, 3.6, 2.6, 1.1, E)
     c.line(17.4, 5.4, 15.4, 7.0, E, 1.4)
+
+
+# ---- the posture and magazine picks ---------------------------------------
+
+
+@icon('fatalReserve')       # the last 5 rounds of every magazine crit
+def _(c):
+    # A MAGAZINE WITH ONLY THE BOTTOM OF IT LOADED. The pick is a POSITION in
+    # the magazine, not a quantity, so the drawing has to be a magazine with a
+    # part of it singled out - and the part that is lit is the part that crits.
+    # Five rounds, countable, at the bottom where they actually sit.
+    #
+    # AGAINST EXTENDED MAG, which is the same object: that one is FULL, seen
+    # from the side, and reads as capacity. This one is mostly empty, which is
+    # the whole difference and is legible at a glance because the dark window
+    # is over half the shape.
+    c.rect(6.0, 2.0, 17.0, 22.0, S)            # the body
+    c.rect(5.0, 1.0, 18.0, 3.2, S)             # the feed lips
+    c.rect(7.4, 3.6, 15.6, 20.6, DEEP)         # the window
+    # THE FIVE SIT IN THE BOTTOM THIRD AND NOWHERE NEAR THE LIPS. Spread over
+    # the whole window they filled it, and a full magazine is EXTENDED MAG -
+    # the empty space above the stack is the entire subject of this drawing, so
+    # it has to be most of the shape.
+    # COUNTABLE, AND ON WHOLE ROWS. Canvas.rect fills ceil(y0)..floor(y1), so a
+    # gap written as a sub-pixel band between two rounds lands on no row at all
+    # and five rounds come back as one block - the number is the whole card
+    # here, so the pitch is integer and the dark window IS the gap.
+    for row in (19, 16, 13, 10, 7):
+        c.rect(7.4, row, 15.6, row + 1, E)
+    # The floorplate, so the stack clearly sits ON something rather than
+    # floating in the bottom of a box.
+    c.rect(5.6, 21.4, 17.4, 23.0, S)
+
+
+@icon('primedMag')          # the reload throws the spent magazine
+def _(c):
+    # A MAGAZINE WITH A GRENADE'S PIN PULLED OUT OF IT, which is the entire
+    # joke of the passive item drawn as one object. The ring is the only thing
+    # here that is not ammunition, and it is what stops this reading as a third
+    # entry in the magazine family.
+    #
+    # IT LIES OVER, not upright, because it is a magazine that has been THROWN.
+    # Every other magazine in the set stands square, so the tilt alone
+    # separates this from FATAL RESERVE across the arena.
+    #
+    # THE ROUNDS ARE ONE BLOCK, NOT FIVE STRIPES. Stripes drawn along a
+    # diagonal come out of the rasteriser as a herringbone and the object stops
+    # being an object; the count is FATAL RESERVE's subject, not this one's,
+    # and all this has to say is "there is something still in it".
+    c.poly([(0.6, 15.0), (12.4, 7.2), (17.4, 14.8), (5.6, 22.6)], S)
+    c.poly([(3.0, 15.2), (11.4, 9.6), (14.6, 14.4), (6.2, 20.0)], DEEP)
+    # Two rounds seated in it, across the tilt: without them the shape is a
+    # tapered box and the ring above is doing all the work.
+    c.line(4.4, 16.6, 12.6, 11.2, E, 2.2)
+    c.line(6.2, 19.0, 14.2, 13.6, E, 2.2)
+    # The feed lips, across the leading corner, so which end is the mouth is
+    # never in question.
+    c.line(11.8, 6.2, 18.2, 15.8, S, 2.8)
+    # THE PIN, out and away: a fat ring on a short stem off the mouth.
+    # THE PIN, small and off the shoulder. It was drawn big on the first pass
+    # and the icon read as a key: the ring is the one detail that says GRENADE,
+    # and a detail that outweighs its subject stops being a detail.
+    c.ring(19.6, 4.2, 3.0, 1.8, E)
+    c.line(17.4, 6.4, 15.0, 8.0, E, 1.8)
+
+
+@icon('bailiff')            # using an item refunds 20% of its charge
+def _(c):
+    # A CELL INSIDE AN ARROW THAT COMES BACK ROUND TO IT. Charge is a battery
+    # everywhere in this set - see TWIN CELL - so the object is already settled
+    # and the only thing this drawing has to add is RETURNS.
+    #
+    # THE LOOP IS A RING WITH A BITE OUT OF IT, not an arc: an arc thin enough
+    # to leave room for the cell inside comes out of the shading pass as a
+    # dotted line. A fat ring, cut, is one unbroken stroke - and the cut has to
+    # be WIDE, or the head lands on the tail and the loop reads as a full
+    # circle with a lump on it.
+    c.ring(12.0, 13.0, 10.6, 2.8, S)
+    c.erase(lambda px, py: py < 9.0 and px > 8.0)
+    # The head, clear of the cut end and pointing back into the loop.
+    c.poly([(9.6, 0.8), (9.6, 9.6), (17.6, 5.2)], E)
+    # The cell it all comes back to, upright in the middle.
+    c.rect(8.6, 9.4, 15.4, 20.4, S)
+    c.rect(10.6, 7.8, 13.4, 9.4, S)
+    c.rect(9.8, 10.6, 14.2, 19.2, DEEP)
+    # A FIFTH OF IT, filled from the bottom. The number on the card is 20%, and
+    # this is the one place the drawing can say it without a digit.
+    c.rect(9.8, 17.4, 14.2, 19.2, E)
+
+
+# The classic pixel heart, seven wide. Drawn as a stamp rather than as two
+# discs and a triangle: at seven pixels across, three overlapping primitives
+# come out of the shading pass as one lump, and a heart that is not instantly a
+# heart is not worth the seven pixels.
+HEART = [
+    '.44.44.',
+    '4444444',
+    '4444444',
+    '.44444.',
+    '..444..',
+    '...4...',
+]
+
+
+@icon('paceCar')            # +10% fire rate and speed at full health
+def _(c):
+    # A CHEQUERED FLAG. Nothing else in the catalogue is a flag, the chequer is
+    # unmistakable at this size, and the pace car is the one thing in a race
+    # that is only ahead while everything is going well - which is the pick.
+    #
+    # THE HEART IS THE CONDITION, at the foot of the pole. Without it this is a
+    # movement passive item and nothing more; with it the drawing says "while
+    # whole". It is the only two-part icon in this group and it has to be: the
+    # pick genuinely is two things, and neither is worth anything alone.
+    c.line(3.2, 1.0, 3.2, 23.0, S, 2.4)         # the pole
+    for gy in range(3):
+        for gx in range(3):
+            x = 5.2 + gx * 4.8
+            y = 2.0 + gy * 4.8
+            c.rect(x, y, x + 4.4, y + 4.4, E if (gx + gy) % 2 == 0 else DEEP)
+    c.blit(HEART, 14, 17)
+
+
+@icon('ceramicInsert')      # no hit takes more than 25% of max HP
+def _(c):
+    # A PLATE WITH A ROUND STOPPED DEAD ON ITS FACE. The pick is a CEILING, and
+    # a ceiling is a thing that stops something - so the drawing is the moment
+    # of stopping, with the round still there, flattened, and the crater around
+    # it going no further.
+    #
+    # AGAINST REACTIVE PLATING, which is the other armour plate in the set:
+    # that one is throwing a shockwave OUT. This one is absorbing, so everything
+    # in it points inward and nothing leaves the silhouette.
+    c.poly([(3.4, 4.0), (20.6, 4.0), (18.6, 21.4), (5.4, 21.4)], S)
+    c.poly([(5.6, 6.0), (18.4, 6.0), (16.9, 19.4), (7.1, 19.4)], D)
+    # The strike face: a shallow crater, lit, with the round embedded in it.
+    ellipse(c, 12.0, 12.4, 6.4, 5.6, E)
+    ering(c, 12.0, 12.4, 6.4, 5.6, 0.42, DEEP)
+    # The round itself, seen nose-on and squashed - it did not get through.
+    c.disc(12.0, 12.4, 2.6, P)
+    c.disc(12.0, 12.4, 1.2, DEEP)
+
+
+@icon('overdraw')           # overhealing becomes item charge
+def _(c):
+    # A CROSS SPILLING INTO A CELL. Two objects the set has already taught -
+    # the health cross and the battery - with the overflow drawn between them,
+    # which is the only way to say CONVERSION without an arrow. Nothing else in
+    # the catalogue puts two established icons in one frame, and this is the one
+    # passive item that genuinely is a pipe from one to the other.
+    #
+    # THE CROSS IS STRUCTURE AND THE SPILL IS ENERGY, on this set's rule: the
+    # health was already there, and what the passive item DOES is the falling
+    # part. A cross drawn in the pale tone came out of the shading pass flat,
+    # with no rim at all, and read as a hole rather than as an object.
+    c.rect(6.0, 1.0, 11.0, 13.0, S)             # the cross, brim full
+    c.rect(1.6, 4.4, 15.4, 9.4, S)
+    c.rect(6.6, 1.6, 9.4, 3.0, P)               # one lit facet, not a slab
+    # The spill: three drops on their way down and to the right, shrinking.
+    c.disc(9.6, 15.6, 2.0, E)
+    c.disc(11.4, 18.4, 1.5, E)
+    c.disc(13.0, 20.6, 1.0, E)
+    # The cell catching it, bottom right. Deliberately the smaller of the two
+    # objects: the health is the subject and the charge is where it ends up.
+    c.rect(14.0, 13.6, 22.0, 23.0, S)
+    c.rect(16.6, 11.8, 19.4, 13.6, S)
+    c.rect(15.2, 14.8, 20.8, 21.8, DEEP)
+    c.rect(15.2, 18.4, 20.8, 21.8, E)
+
+
+@icon('leadBalloon')        # +25% damage, and you cannot jump
+def _(c):
+    # A BALLOON WITH A LEAD WEIGHT ON THE STRING, which is the name drawn
+    # literally, and it earns the literalism: "went down like a lead balloon"
+    # is the whole pick, both halves of it, in one object. The balloon is the
+    # jump you no longer have and the block is what you were given for it.
+    #
+    # THE WEIGHT IS THE LIT PART, not the balloon. The rule for this set is
+    # that the energy tone goes on what the passive item DOES, and what this
+    # one does is make you heavy.
+    ellipse(c, 8.4, 6.4, 6.4, 6.0, S)           # the balloon
+    c.poly([(7.0, 11.8), (9.8, 11.8), (8.4, 14.0)], S)   # the knot
+    c.line(8.4, 13.6, 12.6, 16.0, S, 1.2)       # the string, slack
+    # The block, hanging off it and heavy enough to be the reason the string is
+    # slack. It sits clear of the bottom edge, so the icon has a floor.
+    c.rect(10.4, 15.6, 21.0, 22.4, E)
+    c.rect(10.4, 15.6, 21.0, 17.0, P)           # the top face catching the light
+    c.line(12.6, 19.6, 18.8, 19.6, DEEP, 1.2)   # a cast seam, so it reads solid
+
+
+@icon('cheekweld')          # take 20% less damage while aiming
+def _(c):
+    # A STOCK IN PROFILE WITH THE CHEEKPIECE RAISED ON TOP OF IT - the one part
+    # of a weapon this set has never drawn, and the one the passive item is
+    # named after. The riser is the lit part, because the riser IS the passive
+    # item: it is the thing your face is against.
+    #
+    # NOT A SCOPE AND NOT BRACKETS. STEADY AIM, MARKSMAN, DEADEYE and
+    # TWENTY/TWENTY all already live in the sights-and-reticles corner of the
+    # catalogue, and a fifth set of crosshairs would be unreadable beside them.
+    #
+    # IT IS DRAWN AS A LINE, NOT AS A MASS. The first pass stacked three solid
+    # blocks and they fused into one grey slab filling three quarters of the
+    # grid: at this size a weapon has to be a THIN thing with a couple of
+    # cutouts, because the silhouette is doing all of the work and a silhouette
+    # needs air around it.
+    c.poly([(1.0, 13.6), (7.6, 10.4), (7.6, 16.6), (2.4, 19.6)], S)  # the butt
+    c.rect(7.0, 10.4, 17.4, 13.8, S)            # the comb, running forward
+    c.line(17.0, 11.8, 23.2, 11.8, S, 2.2)      # the barrel leaving the frame
+    # THE CHEEKPIECE, raised clear of the comb and lit - the only thing in the
+    # drawing above the weapon's own line, which is what makes it the subject.
+    c.rect(6.4, 6.0, 15.6, 10.4, E)
+    c.rect(6.4, 6.0, 15.6, 7.2, P)
+    # The grip, and NOTHING ELSE below the line. A trigger guard was drawn
+    # here for two passes and it never survived: a ring of stroke 1.4 hanging
+    # off the underside of a bar comes back from the shading pass as four
+    # unrelated pixels, and the weapon reads as debris. One solid raked block
+    # is all the lower half needs to say which way the thing is pointing.
+    c.poly([(9.4, 13.4), (14.2, 13.4), (12.2, 21.4), (7.4, 21.4)], S)
+    c.line(10.4, 15.4, 12.4, 15.4, DEEP, 1.2)
+
+
+@icon('groundhog')          # crouched: less damage taken, faster reload
+def _(c):
+    # A HEAD OUT OF A HOLE IN A MOUND. Crouching already has a drawing in this
+    # set - CROUCHFIRE is a body under a ceiling - and a second body under a
+    # second ceiling would be unreadable beside it. This is the same idea from
+    # the other side: not a person made small, but a thing that LIVES down
+    # there and is safe because of it.
+    #
+    # THE MOUND IS ONE THIRD OF THE FRAME AND NO MORE. The first pass gave it
+    # half the grid and the animal was swallowed - at this size the subject has
+    # to be the biggest thing in the drawing, and the subject is the groundhog.
+    ellipse(c, 12.0, 25.0, 13.0, 8.6, E)        # the mound
+    c.erase(lambda px, py: py > 23.6)
+    ellipse(c, 12.0, 18.4, 5.2, 2.6, DEEP)      # the burrow mouth, cut into it
+    # The animal. Smaller than the first pass and sitting DOWN in the hole, so
+    # the lit mound still shows either side of it: the pick is the hole, and an
+    # animal that covered its own burrow said nothing about being down there.
+    c.disc(12.0, 11.6, 5.0, S)
+    c.disc(8.4, 7.6, 2.2, S)
+    c.disc(15.6, 7.6, 2.2, S)
+    c.disc(10.2, 11.0, 1.3, DEEP)               # the eyes
+    c.disc(13.8, 11.0, 1.3, DEEP)
+    c.disc(12.0, 14.4, 2.0, P)                  # the muzzle
+    c.disc(12.0, 14.0, 0.9, DEEP)               # and the nose in it
+
+
+@icon('itemLockpick')       # LOCKPICK - a free mystery box roll
+def _(c):
+    # A PADLOCK WITH A PICK COMING IN AT THE KEYWAY. The mystery box is the
+    # only locked thing in the game, so a lock is unambiguous here - and the
+    # pick approaching the keyhole is what separates this from a lock that is
+    # merely shut.
+    #
+    # THE LOCK IS OFF-CENTRE, LEFT, and the pick has the whole upper right to
+    # itself. Three passes were lost running the shaft ACROSS the body, on the
+    # reasoning that a pick in a lock is a pick inside it: a pale line over a
+    # mid-tone block at this size is not a tool in a lock, it is a scratch on a
+    # box, and it took the keyway with it. Two objects with air between them
+    # read as two objects.
+    c.ring(8.4, 10.0, 5.4, 3.0, S)              # the shackle
+    c.erase(lambda px, py: py > 10.0 and 3.5 < px < 13.5)
+    c.rect(2.6, 8.4, 5.0, 12.4, S)              # its near leg, seated
+    c.rect(11.8, 5.4, 14.2, 12.4, S)            # and its far leg, lifted clear
+    c.rect(1.6, 11.8, 15.2, 22.6, S)            # the body
+    # THE KEYWAY, lit rather than dark: it is the way in, which is the whole
+    # subject, and a black slot inside a black-outlined body is a smudge.
+    c.disc(8.4, 15.8, 3.0, E)
+    c.poly([(6.8, 15.8), (10.0, 15.8), (11.0, 20.8), (5.8, 20.8)], E)
+    c.disc(8.4, 15.8, 1.3, DEEP)
+    # The pick, in from the open corner: a shaft with a hooked tip, its point
+    # ON the keyway and the rest of it out in clear air.
+    c.line(11.0, 15.4, 22.4, 5.6, P, 2.0)
+    c.line(11.0, 15.4, 9.6, 13.6, P, 2.0)
+
+
+@icon('itemPayToWin')       # PAY TO WIN - $1,000 for 2x damage to everything
+def _(c):
+    # A TROPHY WITH A DOLLAR STRUCK ON THE CUP. Nothing else in the catalogue
+    # is a trophy, the shape is legible at any size, and the two objects
+    # together are the item's whole argument - the win, and what it cost.
+    #
+    # THE DOLLAR IS THE LIT PART, because what the item actually does is spend.
+    c.poly([(5.0, 2.0), (19.0, 2.0), (17.4, 13.0), (6.6, 13.0)], S)  # the cup
+    c.arc(5.2, 6.0, 3.6, 1.4, 60, 300, S)      # the handles
+    c.arc(18.8, 6.0, 3.6, 1.4, 240, 120, S)
+    c.rect(10.6, 13.0, 13.4, 17.4, S)          # the stem
+    c.rect(6.6, 17.4, 17.4, 20.0, S)           # the plinth
+    c.rect(4.6, 20.0, 19.4, 23.0, S)           # the base
+    # The dollar: an S over a bar, both drawn, because at this size an S alone
+    # is a squiggle and a bar alone is a stroke.
+    c.arc(12.0, 5.6, 2.9, 1.5, 20, 200, E)
+    c.arc(12.0, 9.4, 2.9, 1.5, 200, 20, E)
+    c.line(12.0, 1.8, 12.0, 12.6, E, 1.3)

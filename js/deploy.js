@@ -331,11 +331,26 @@ export class Mine {
 // item that could be dropped at your own feet for free would never be thrown
 // anywhere else.
 export class Bomb {
-  constructor(game, x, y, z, dirX, dirZ) {
+  /**
+   * @param {number} damage  at the centre of the blast
+   * @param {number} radius  metres it reaches
+   * @param {boolean} hurtsPlayer  whether the player is inside their own
+   *   blast. TRUE for SHORT FUSE, which is a thing the player aimed and threw:
+   *   a grenade you can outrun is not a grenade. FALSE for PRIMED MAG, which
+   *   goes out on a RELOAD - a button pressed for an entirely different reason
+   *   - and a passive item that killed the player for reloading in a corridor
+   *   would be one nobody could take.
+   * @param {number} fuse  seconds before it goes off
+   */
+  constructor(game, x, y, z, dirX, dirZ,
+    damage = 180, radius = 8, hurtsPlayer = true, fuse = 3) {
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3(dirX, 0, dirZ).normalize().multiplyScalar(11);
     this.vel.y = 6.5;
-    this.fuse = 3;
+    this.damage = damage;
+    this.radius = radius;
+    this.hurtsPlayer = hurtsPlayer;
+    this.fuse = fuse;
     this.dead = false;
     this.spin = new THREE.Vector3(Math.random(), Math.random(), Math.random());
 
@@ -387,11 +402,16 @@ export class Bomb {
 
   explode(ctx) {
     _v.set(this.pos.x, 0, this.pos.z);
-    ctx.onBlast(_v, 180, 8, null, true);
-    ctx.effects.burst(this.pos, 0xffe9a8, 30, 12, 5, 0.55);
-    ctx.effects.burst(this.pos, 0xff6f00, 42, 8, 7, 0.8);
-    ctx.effects.shockwave(this.pos, 0xff6f00, 8, 0.6);
-    ctx.effects.addShake(0.5);
+    ctx.onBlast(_v, this.damage, this.radius, null, this.hurtsPlayer);
+    // The spectacle is scaled off the RADIUS, so a thrown magazine reads as
+    // the small bang it is and SHORT FUSE keeps the one it always had. A blast
+    // that looked the same size whatever it reached would be the game lying
+    // about where it is safe to stand.
+    const k = this.radius / 8;
+    ctx.effects.burst(this.pos, 0xffe9a8, 30, 12 * k, 5 * k, 0.55);
+    ctx.effects.burst(this.pos, 0xff6f00, 42, 8 * k, 7 * k, 0.8);
+    ctx.effects.shockwave(this.pos, 0xff6f00, this.radius, 0.6);
+    ctx.effects.addShake(0.5 * Math.min(1, k));
     ctx.sfx.itemBlast();
   }
 

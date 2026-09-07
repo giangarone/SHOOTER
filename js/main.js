@@ -84,6 +84,10 @@ import {
   ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS,
   CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
 } from './items.js';
+// PRIMED MAG throws one of these on a reload - see _throwSpentMag. It is the
+// only deployable main.js builds itself; every other one is an item's, and
+// items.js makes those.
+import { Bomb } from './deploy.js';
 import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
 import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './terrain.js';
@@ -1092,6 +1096,8 @@ class Game {
       hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
       onOrb: this._onOrb,
       pulse: 0,
+      // The leech bites once a beat, not twice - see Lamprey.update.
+      pulseWhole: true,
       time: 0,
     };
 
@@ -2874,6 +2880,13 @@ class Game {
       return;
     }
     this.player.spendItem();
+    // BAILIFF, and it is a REFUND rather than a discount: the meter empties
+    // exactly as it always did and then a fifth of the cost lands back in it,
+    // so what the player sees is the item fire and the bar jump. A free item -
+    // PAY TO WIN's charge is zero - refunds a fifth of nothing, which needs no
+    // special case.
+    const back = this.player.mods.bailiff * def.charge;
+    if (back > 0) this.player.addItemCharge(back);
     // Through the running list rather than straight to use(), so an item with
     // a window is ticked and, above all, ENDED. An item with no duration is
     // fired and forgotten by start() on the same frame.
@@ -3007,6 +3020,7 @@ class Game {
     if (!this._companions[0] && !this._companions[1]) return;
     const ctx = this._compCtx;
     ctx.pulse = this.music.pulse;
+    ctx.pulseWhole = this.music.pulseWhole;
     ctx.time = this.time;
     for (const c of this._companions) if (c) c.update(dt, ctx);
   }
@@ -3076,7 +3090,11 @@ class Game {
       // ONE ROLL, RESOLVED PER BODY. The lance is a single shot, so the die is
       // thrown once - but ASSASSIN, TELLTALE and the range passive items are
       // per-target, and a beam through six enemies asks each of them separately.
-      const hot = this._resolveHit(en, crit);
+      //
+      // NOT A TRIGGER PULL, so FATAL RESERVE stays out of it: the lance takes
+      // its thirty rounds off the magazine in one go rather than firing them,
+      // and `magAtShot` is still whatever the last actual shot saw.
+      const hot = this._resolveHit(en, crit, false);
       this._landShot(
         en, h.point, ray.ray.direction, base * this._hitMult(en, hot), 8, hot
       );
@@ -3742,9 +3760,11 @@ class Game {
     // healing by the value would make a boss shower a full heal several times
     // over. What the player can see on the floor is a number of lights, and
     // that is what this pays out on.
-    if (this.time < this.player.orbHealEnd && this.player.health < this.player.maxHealth) {
-      this.player.health = Math.min(this.player.maxHealth, this.player.health + 1);
-    }
+    // NO FULL-HEALTH GUARD. It used to skip the heal outright at a full bar,
+    // which is the same shortcut every heal in the game used to take and the
+    // same one OVERDRAW made wrong: a point that does not fit is now a point
+    // of item charge rather than a point thrown away. heal() decides.
+    if (this.time < this.player.orbHealEnd) this.player.heal(1);
   }
 
   // Extends the kill chain. Called once per enemy death. Nothing is paid for
@@ -4069,8 +4089,14 @@ class Game {
    *
    * @param {Enemy} en
    * @param {boolean} rolled  what rollCrit() said for this trigger pull
+   * @param {boolean} [fromShot]  whether this hit is a ROUND out of the
+   *   magazine. False for the melee swing and for LANCE, which are the two
+   *   ways to land a hit without pulling the trigger - and FATAL RESERVE is
+   *   about the magazine, so a butt-stroke thrown while the gun happens to be
+   *   nearly empty is not one of its five rounds. Everything else here is a
+   *   question about the BODY and applies whatever landed on it.
    */
-  _resolveHit(en, rolled) {
+  _resolveHit(en, rolled, fromShot = true) {
     const cached = this._shotCrit.get(en);
     if (cached !== undefined) return cached;
     const m = this.player.mods;
@@ -4080,6 +4106,15 @@ class Game {
     // than replacing it, which is why it is a deadline on the player and not a
     // write into `mods` - see itemCrit in js/items.js.
     let crit = rolled || this.time < this.player.itemCritEnd;
+    // FATAL RESERVE. The bottom of the magazine, read off the count the
+    // TRIGGER saw rather than off the live one: `mag` has already been billed
+    // by the time a pellet lands, and by a cost that is three rounds under
+    // TRIPLE TAP and none at all under OPENING SALVO, so the live number
+    // cannot answer "was this one of the last five" for every build. See
+    // Player.magAtShot.
+    if (fromShot && m.fatalReserve > 0 && this.player.magAtShot <= m.fatalReserve) {
+      crit = true;
+    }
     // ASSASSIN. The first hit this body has ever taken, and there is no second
     // first: `everHit` is set below and dies with the enemy.
     if (m.assassin > 0 && !en.everHit) crit = true;
@@ -4473,7 +4508,7 @@ class Game {
     // player has to shoot well to cash in.
     if (hitAny && this.player.leechShots > 0) {
       this.player.leechShots--;
-      this.player.health = Math.min(this.player.maxHealth, this.player.health + 1);
+      this.player.heal(1);
       this.effects.impact(this.player.eyeInto(this._killPos), 0xff2d6f, 6, 3, 2, 0.3);
     }
     if (hitAny) {
@@ -4570,7 +4605,7 @@ class Game {
 
     const d = Math.hypot(bestDX, bestDZ) || 1;
     this._shotCrit.clear();
-    const hot = this._resolveHit(target, crit);
+    const hot = this._resolveHit(target, crit, false);
     const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE)
       * this._hitMult(target, hot);
     this._shotCrit.clear();
@@ -4653,7 +4688,7 @@ class Game {
     // from the passive item's so the two stack instead of one overwriting the
     // other - which is what a player holding both would expect, and is also
     // the only reading under which the item's own text stays true.
-    d *= this.player.mods.damageTakenMult * this.player.itemTakenMult;
+    d *= this.player.incomingMult * this.player.itemTakenMult;
     // Carnage resets on any hit that actually lands, and Absolute Zero's
     // drawback plants the player for a second. Both are the price of the deal.
     this.player.clearCarnage();
@@ -5233,12 +5268,19 @@ class Game {
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
+    const area = this.totemArea;
+    // A FRESH SHOP FORGETS. `shopSeen` is what a reroll is drawn AGAINST - see
+    // TotemArea - so it is emptied here rather than inside present(), which
+    // could only clear it after this set had already been rolled from it.
+    if (!isReroll) area.shopSeen.clear();
+    const offers = this._buildOffers(area.shopSeen);
+    for (const o of offers) area.shopSeen.add(o.id);
     // A totem claim is what starts the next wave, and the mystery box now
     // stands in every one of them - so the LONGER arm delay is simply what a
     // totem always gets. Ending the shopping trip with a pellet that was
     // already in the air when the wave ended is a mistake the player cannot
     // undo, and there is always a second thing out there worth walking to.
-    this.totemArea.present(this._buildOffers(), !isReroll, ARM_TIME_ITEM);
+    area.present(offers, !isReroll, ARM_TIME_ITEM);
     this._refreshStations();
   }
 
@@ -5258,9 +5300,15 @@ class Game {
     this.sfx.boxRise();
   }
 
-  // Puts each rolled upgrade into the shape a totem can draw.
-  _buildOffers() {
-    const ids = rollTotems(this.player.upgrades, this.wave, TOTEM_COUNT);
+  /**
+   * Puts each rolled upgrade into the shape a totem can draw.
+   *
+   * @param {?Set<string>} seen  what this shop has already offered, excluded.
+   *   Null - the default - is a roll against the whole pool, which is what the
+   *   tests and any future caller with no shop behind it want.
+   */
+  _buildOffers(seen = null) {
+    const ids = rollTotems(this.player.upgrades, TOTEM_COUNT, seen);
     return ids.map((id) => {
       const def = UPGRADES[id];
       const owned = this.player.upgrades[id] || 0;
@@ -5434,6 +5482,33 @@ class Game {
     // reel - not merely fail to win. In versus this is automatically the ACTIVE
     // player's item: there is one Player instance and each run's slot is
     // snapshotted across the handoff. See shuffledPool in items.js.
+    box.roll(shuffledPool(this.player.item));
+    this._refreshBox();
+    this.sfx.boxOpen();
+    this.pad.rumble(0.35, 0.5, 180, 2);
+    this.effects.burst(box.pos, 0xb388ff, 18, 5, 2.5, 0.5);
+  }
+
+  /**
+   * LOCKPICK, pressed. One spin of the mystery box that nobody paid for.
+   *
+   * It does NOT advance `totemArea.boxRolls`, which is the box's price ladder,
+   * for exactly the reason _itemReroll leaves the reroll ladder alone: that
+   * number is how many rolls have been BOUGHT at this shop, and an item that
+   * made the next paid roll cost double would be charging the player for
+   * having carried it. The item is the roll it gives, and nothing else about
+   * the visit changes.
+   *
+   * The guard is the item's own `ready` - see ACTIVE_ITEMS.itemLockpick - so a
+   * press with the box down, mid-spin, or with an item already hanging there is
+   * refused before the charge is spent.
+   */
+  _freeBoxRoll() {
+    const box = this.mysteryBox;
+    if (!box.canBuy) return;
+    // The carried item is excluded from the reel, which at this instant is the
+    // LOCKPICK itself - so the one thing a free roll can never hand back is
+    // the thing that paid for it. See shuffledPool in items.js.
     box.roll(shuffledPool(this.player.item));
     this._refreshBox();
     this.sfx.boxOpen();
@@ -6150,7 +6225,10 @@ class Game {
   // truncating per frame would pay out nothing at all.
   _poisonLeech(dt) {
     const rate = this.player.mods.poisonLeech;
-    if (rate <= 0 || this.player.health >= this.player.maxHealth) return;
+    // The full-health test that used to sit here is gone: see the note at
+    // BLOOD FROM STONE above. What does not fit is OVERDRAW's, and heal() is
+    // where that is decided.
+    if (rate <= 0) return;
     let poisoned = 0;
     for (const e of this.enemies) {
       if (!e.dead && e.status.poison > 0) poisoned++;
@@ -6160,7 +6238,7 @@ class Game {
     if (this._leechAcc < 1) return;
     const whole = Math.floor(this._leechAcc);
     this._leechAcc -= whole;
-    this.player.health = Math.min(this.player.maxHealth, this.player.health + whole);
+    this.player.heal(whole);
   }
 
   // Splitter death: three weaker, faster, smaller chasers worth nothing, but
@@ -6273,11 +6351,8 @@ class Game {
       // Only ever a heal - a swing that took the body down at full health pays
       // nothing, which is correct: what it is buying back is the hit the player
       // took walking into reach.
-      if (e.meleeKill && this.player.mods.meleeHeal > 0
-        && this.player.health < this.player.maxHealth) {
-        this.player.health = Math.min(
-          this.player.maxHealth, this.player.health + this.player.mods.meleeHeal
-        );
+      if (e.meleeKill && this.player.mods.meleeHeal > 0) {
+        this.player.heal(this.player.mods.meleeHeal);
         this.effects.shockwave(this.player.pos, 0xc62828, 2.8, 0.35);
         this.effects.impact(e.pos, 0xff2d6f, 10, 4, 2.5, 0.4);
       }
@@ -6789,7 +6864,7 @@ class Game {
     if (this._pass) return;
     // Eternal Affliction's drawback and Blood Pact's, in that order. Neither
     // touches the ward or Evasion, for the reason in the comment above.
-    d *= this.player.mods.hazardMult * this.player.mods.damageTakenMult
+    d *= this.player.mods.hazardMult * this.player.incomingMult
       * this.player.itemTakenMult;
     // A pool bleeds a point at a time several times a second, so it is a slow
     // and completely reliable way to lose a Carnage chain. That is correct:
@@ -6939,6 +7014,35 @@ class Game {
     }
     this.effects.shockwave(this.player.pos, 0xff7043, 2.5, 0.35);
     this.effects.addShake(0.08);
+  }
+
+  /**
+   * PRIMED MAG. The magazine the reload just discarded, thrown underarm.
+   *
+   * WHAT IT IS WORTH IS WHAT WAS LEFT IN IT - five damage a round, off the
+   * count taken when the reload STARTED (see Player.startReload). A gun run dry
+   * throws nothing at all, which is the pick: it pays for the tactical reload
+   * every shooter teaches and none of them has ever rewarded.
+   *
+   * IT CANNOT HURT THE PLAYER. A reload is a button pressed for a different
+   * reason - see the Bomb constructor.
+   *
+   * THE RADIUS IS FIXED AT FOUR, half SHORT FUSE's. Only the damage rides the
+   * count, so a full magazine is a harder bang rather than a bigger one: a
+   * blast whose REACH grew with the rounds left would make the safe distance a
+   * thing the player had to compute off their own ammo counter.
+   */
+  _throwSpentMag() {
+    const left = this.player.magOnReload;
+    const per = this.player.mods.primedMag;
+    if (per <= 0 || left <= 0) return;
+    this.player.muzzleInto(this._killPos);
+    const yaw = this.player.yaw;
+    this.deploy(new Bomb(
+      this, this._killPos.x, this._killPos.y, this._killPos.z,
+      -Math.sin(yaw), -Math.cos(yaw), left * per, 4, false, 1.6
+    ));
+    this.sfx.itemMonkeyThrow();
   }
 
   // Moves projectiles and reacts to what they hit. Grenades handle their own
@@ -7189,6 +7293,9 @@ class Game {
           this._fireLastZ = this.player.pos.z;
           this._addFire(this.player.pos.x, this.player.pos.z);
         }
+        // PRIMED MAG, on the same one-frame signal, so a build holding all
+        // three gets all three off one magazine.
+        this._throwSpentMag();
       }
       // Double Jump and Double Dash raise one-shot flags rather than calling
       // effects themselves: player.js has no effects reference, and the same

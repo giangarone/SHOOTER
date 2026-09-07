@@ -172,8 +172,11 @@ export class UI {
    * it at the same shops, and it was the one mode in the game where the money
    * mattered most and the only mode that never showed it.
    *
-   * So the turn gets a line of its own above the label, and the balance keeps
-   * its cells in every mode.
+   * So the turn gets a line of its own and the balance keeps its cells in
+   * every mode. That line sits OVER THE VITALS, at the size of a figure: the
+   * health bar is the readout that describes the body on screen, and whose
+   * body it is belongs with it rather than beside a bank both players spend
+   * out of.
    *
    * @param {?number} n 1 or 2, or null for solo.
    */
@@ -310,6 +313,12 @@ export class UI {
         // element it is applied to, and a declaration on the element beats a
         // value inherited from an ancestor - so setting this on #item-box would
         // be silently overridden by the class's own default of twenty.
+        // A FREE ITEM HAS NO METER. PAY TO WIN costs credits and not enemies,
+        // so there is nothing for a bar to count up to - and an empty frame
+        // that never moves is worse than no frame, because the player spends
+        // the run waiting for it. Tested on the COST rather than on the id, so
+        // any future free item gets the same slot without a second rule.
+        this.itemBox.classList.toggle('nometer', !(def.charge > 0));
         const cells = itemCells(def.charge);
         this.itemBarBg.style.setProperty('--cells', String(cells));
         // The gap has to come down with the cell count or it eats the cells: at

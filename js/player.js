@@ -209,6 +209,30 @@ const DEFAULT_MODS = {
                         // waiting for someone to read the wrong one.
   magpie: 0,            // Magpie: the bird that collects orbs
   lamprey: 0,           // Lamprey: the leech that guards the player
+
+  // ---- THE POSTURE AND MAGAZINE PICKS -------------------------------------
+  //
+  // Nine fields for nine max-1 passive items, and what they have in common is
+  // that not one of them is read unconditionally: every one is gated on
+  // something the player is DOING at that instant - how many rounds are left,
+  // whether the trigger finger is on a full health bar, whether the sights are
+  // up, whether they are crouched. Zero means the passive item is not owned,
+  // which is what every reader tests.
+  fatalReserve: 0,      // Fatal Reserve: rounds at the BOTTOM of the magazine
+                        // that always crit. Read by Game._resolveHit against
+                        // Player.magAtShot, never against the live count.
+  primedMag: 0,         // Primed Mag: damage per round left in a magazine that
+                        // is dropped, thrown as a grenade on the reload
+  bailiff: 0,           // Bailiff: fraction of an item's charge cost handed
+                        // back the moment it is spent
+  pace: 0,              // Pace Car: fire rate AND move speed gained, but only
+                        // while the health bar is completely full
+  hitCap: 0,            // Ceramic Insert: the most of max HP one hit may take
+  overdraw: 0,          // Overdraw: HP of OVERHEAL that buys one item charge
+  noJump: 0,            // Lead Balloon: the jump button does nothing
+  aimGuard: 0,          // Cheekweld: damage taken reduced while aiming
+  crouchGuard: 0,       // Groundhog: damage taken reduced while crouched
+  crouchReload: 0,      // and the reload it shortens, on the same posture
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -760,6 +784,9 @@ export class Player {
     // wave is worth.
     this.item = null;
     this.itemCharge = 0;
+    // OVERDRAW's remainder, in HP, between whole points of item charge. See
+    // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
+    this._overdrawAcc = 0;
     // One-shot, read and cleared by main.js on the frame the bar fills - the
     // same split jumpFx and dashFx use, and for the same reason: player.js has
     // no audio to reach for.
@@ -783,6 +810,12 @@ export class Player {
     this.moveVX = 0;
     this.moveVZ = 0;
     this.reloading = 0;
+    // The magazine count the LAST trigger pull saw, before that pull was
+    // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
+    this.magAtShot = 0;
+    // Rounds left in the magazine the reload now running is discarding. See
+    // startReload, and PRIMED MAG in js/upgrades.js.
+    this.magOnReload = 0;
     // AIMING. `_aimRaw` is the linear 0..1 timer and `aimT` the eased curve
     // everything else reads - see the ADS block above. `aiming` is what the
     // player is ASKING for, which is not the same thing: the gun is still on
@@ -1137,8 +1170,23 @@ export class Player {
   get magSize() {
     return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
   }
+  /**
+   * How long a reload takes, right now.
+   *
+   * GROUNDHOG IS READ AT THE START AND NEVER AGAIN, because that is where this
+   * getter is read: startReload() takes one number and counts it down. Standing
+   * up halfway through does not lengthen the reload that is already running,
+   * and dropping into a crouch halfway through does not shorten it - the
+   * posture the magazine came out in is the posture that seats it. Anything
+   * else would be a bar that changed speed while the player watched it.
+   *
+   * A slide is not a crouch here, on the same terms effectiveFireRate draws
+   * the line for Crouchfire.
+   */
   get reloadTime() {
-    return this.weapon.reloadTime * this.mods.reloadMult;
+    const crouch = this.mods.crouchReload > 0 && this.crouching && !this.sliding
+      ? 1 - this.mods.crouchReload : 1;
+    return this.weapon.reloadTime * this.mods.reloadMult * crouch;
   }
   get fireRate() {
     return this.weapon.fireRate;
@@ -1165,7 +1213,50 @@ export class Player {
     const crouch = this.mods.crouchRate > 0 && this.crouching && !this.sliding
       ? 1 + this.mods.crouchRate : 1;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
-      * this.mods.fireRate * crouch;
+      * this.mods.fireRate * crouch * this.paceMult;
+  }
+
+  /**
+   * PACE CAR, on both stats it touches. One getter rather than the expression
+   * written twice, because the two halves of the pick must switch off on the
+   * SAME frame - a build where the gun slowed down a frame before the legs did
+   * would be the kind of thing nobody could ever report.
+   *
+   * FULL MEANS FULL. Not "nearly", not a band: the moment anything at all
+   * lands, both halves are gone until the bar is back at the top, which is
+   * what makes the pick a thing the player protects rather than a number they
+   * carry. Health is a float and the cap is a float built from the same
+   * arithmetic, so this is a `>=` against maxHealth rather than an equality -
+   * a hundredth of a point of regen short is full as far as anyone can see.
+   */
+  get paceMult() {
+    if (!(this.mods.pace > 0)) return 1;
+    return this.health >= this.maxHealth ? 1 + this.mods.pace : 1;
+  }
+
+  /**
+   * The multiplier on everything that damages the player, from the build.
+   *
+   * ONE PLACE, TWO SINKS. Game._hurtPlayer bills a hit and _hazardTick bills a
+   * pool, and both used to write out `mods.damageTakenMult` by hand - so a
+   * posture pick added to one of them would have been armour that fire simply
+   * ignored. Neither sink knows what is in it now; they ask.
+   *
+   * WHAT IS NOT HERE: the item multiplier (`itemTakenMult`, which the two
+   * sinks still apply themselves so a window and a build stack rather than one
+   * overwriting the other), and Ceramic Insert's ceiling, which is not a
+   * multiplier at all and belongs at the very end - see takeDamage.
+   */
+  get incomingMult() {
+    let k = this.mods.damageTakenMult;
+    // CHEEKWELD, off the aim flag rather than off the raise animation: the
+    // player is protected by the decision, not by the weapon arriving.
+    if (this.mods.aimGuard > 0 && this.aiming) k *= 1 - this.mods.aimGuard;
+    // GROUNDHOG. A slide is not a stance - see reloadTime.
+    if (this.mods.crouchGuard > 0 && this.crouching && !this.sliding) {
+      k *= 1 - this.mods.crouchGuard;
+    }
+    return k;
   }
   // Ammo Hoarder. A getter rather than a field so the cap can never go stale
   // against the build: everything else in the game only ever READS maxReserve.
@@ -1310,10 +1401,21 @@ export class Player {
     return ACTIVE_ITEMS[this.item].charge * Math.max(1, this.mods.itemChargeCap);
   }
 
-  // Whole charges banked: 0, or 1, or - with Twin Cell - 2.
+  /**
+   * Whole charges banked: 0, or 1, or - with Twin Cell - 2.
+   *
+   * AN ITEM THAT COSTS NOTHING IS ALWAYS AT ONE. PAY TO WIN's charge is zero -
+   * it is paid for in credits instead - and every reading below divides by the
+   * cost, so the zero has to be answered once, here and in itemChargeFrac,
+   * rather than by every caller checking. One rather than infinity because
+   * `itemCharges` is a count the HUD and the chime both read, and a free item
+   * has exactly one press available at all times.
+   */
   get itemCharges() {
     if (!this.item) return 0;
-    return Math.floor(this.itemCharge / ACTIVE_ITEMS[this.item].charge);
+    const one = ACTIVE_ITEMS[this.item].charge;
+    if (one <= 0) return 1;
+    return Math.floor(this.itemCharge / one);
   }
 
   /**
@@ -1329,6 +1431,10 @@ export class Player {
   itemChargeFrac(n = 0) {
     if (!this.item) return 0;
     const one = ACTIVE_ITEMS[this.item].charge;
+    // A free item's meter is full and stays full - see itemCharges. The HUD
+    // does not draw the bar at all in that case, but `frac >= 1` is also what
+    // lights the slot's ready state, and a free item is always ready.
+    if (one <= 0) return n === 0 ? 1 : 0;
     return Math.max(0, Math.min(1, (this.itemCharge - one * n) / one));
   }
 
@@ -1506,14 +1612,12 @@ export class Player {
   // more, the credit multiplier included.
   onKill(time) {
     if (this.mods.killHealChance > 0 && Math.random() < this.mods.killHealChance) {
-      this.health = Math.min(this.maxHealth, this.health + 1);
+      this.heal(1);
     }
     // Blood Pact. A certainty rather than a chance, and worth three times as
     // much as Vampiric's tick - it is paid for in max HP and in taking a
     // quarter more damage from everything, so it has to be felt.
-    if (this.mods.killHeal > 0) {
-      this.health = Math.min(this.maxHealth, this.health + this.mods.killHeal);
-    }
+    if (this.mods.killHeal > 0) this.heal(this.mods.killHeal);
     this.bumpCarnage();
   }
 
@@ -1594,7 +1698,11 @@ export class Player {
     gain = Math.min(gain, m.hpBankCap - this.hpBanked);
     if (gain <= 0) return 0;
     this.hpBanked += gain;
-    this.health = Math.min(this.maxHealth, this.health + gain);
+    // maxHealth has already grown by `gain` on the line above, so this can
+    // never spill - it goes through heal() anyway because every other rise in
+    // the game does, and a second copy of the clamp is a second thing to
+    // remember when the rules change.
+    this.heal(gain);
     return gain;
   }
 
@@ -1638,6 +1746,9 @@ export class Player {
     this.frozenUntil = 0;
     this.item = null;
     this.itemCharge = 0;
+    // OVERDRAW's remainder, in HP, between whole points of item charge. See
+    // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
+    this._overdrawAcc = 0;
     this.itemReadyFx = false;
     // The active-item runtime, back to neutral. main.js clears the RUNNING
     // list separately; these are the marks it leaves on the player, and a new
@@ -1705,6 +1816,12 @@ export class Player {
     this.reserveAmmo = 90;
     this.fireCd = 0;
     this.reloading = 0;
+    // The magazine count the LAST trigger pull saw, before that pull was
+    // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
+    this.magAtShot = 0;
+    // Rounds left in the magazine the reload now running is discarding. See
+    // startReload, and PRIMED MAG in js/upgrades.js.
+    this.magOnReload = 0;
     this.onGround = false;
     this.lastHurt = -99;
     this.kick = 0;
@@ -1867,6 +1984,10 @@ export class Player {
       // stacks multiplicatively with it, because both are short windows the
       // player earned and neither should quietly swallow the other.
       const speed = BASE_SPEED * this.mods.moveMult * this.rageSpeedMult
+        // PACE CAR's other half, on the same one getter the trigger reads, so
+        // the legs and the gun can never disagree about whether the bar is
+        // full. See paceMult.
+        * this.paceMult
         * this.statusSpeedMult()
         * (time < this.dodgeEnd ? DODGE_SPEED : 1)
         // The second gear. A multiplier on the whole stack rather than an
@@ -1969,7 +2090,15 @@ export class Player {
     // held space would spend every charge on the frame after takeoff.
     const jumpEdge = input.jump && !this._prevJump;
     this._prevJump = input.jump;
-    if (input.jump && this.onGround) {
+    // LEAD BALLOON. The button is dead - both the ground jump and the air one,
+    // so a run carrying DOUBLE JUMP as well does not keep half a verb. The
+    // edge is still tracked above, because the slide's own buffer reads it.
+    //
+    // NOTHING ELSE IS TOUCHED. The dash, the slide and stepping onto a box all
+    // still work: the pick is meant to change how the room is crossed, not to
+    // nail the player to the floor.
+    const canJump = !this.mods.noJump;
+    if (canJump && input.jump && this.onGround) {
       this.vel.y = JUMP_V;
       this.onGround = false;
       // A JUMP IS ALWAYS AVAILABLE OUT OF A SLIDE, and it takes the slide's
@@ -1985,7 +2114,7 @@ export class Player {
       // Standing up to jump. A player who jumps out of a crouch and lands
       // still crouched would have pressed a button and got half of it.
       this.crouching = false;
-    } else if (jumpEdge && this.jumpsLeft > 0) {
+    } else if (canJump && jumpEdge && this.jumpsLeft > 0) {
       this.jumpsLeft--;
       this.vel.y = AIR_JUMP_V;
       this.jumpFx = true;
@@ -2142,8 +2271,11 @@ export class Player {
     if (this.mods.plantRegen > 0) {
       const planted = combat && this.stillness > 0.98 && time - this.lastHurt > 0.2;
       this._planted = planted ? this._planted + dt : 0;
-      if (this._planted > this.mods.plantDelay && this.health < this.maxHealth) {
-        this.health = Math.min(this.maxHealth, this.health + this.mods.plantRegen * dt);
+      // `<=`, not `<`: at exactly full the trickle still goes through heal(),
+      // which is what lets OVERDRAW bank it. Above full there is nothing to
+      // regenerate and the crate's overheal is decaying anyway.
+      if (this._planted > this.mods.plantDelay && this.health <= this.maxHealth) {
+        this.heal(this.mods.plantRegen * dt);
       }
     }
 
@@ -2152,9 +2284,12 @@ export class Player {
     // The second branch bleeds off overheal (health above max, from a health
     // pickup) back down to max, and is NOT gated - overheal draining away is a
     // cost, and a cost that pauses in the shop would let the player bank it.
+    // `<=`, not `<`, for the reason the plant tick above gives: at exactly full
+    // the trickle is OVERDRAW's. The branch below still owns everything ABOVE
+    // the cap, so a crate's overheal decays as it always did.
     if (combat && this.mods.regenRate > 0
-      && time - this.lastHurt > this.mods.regenDelay && this.health < this.maxHealth) {
-      this.health = Math.min(this.maxHealth, this.health + this.mods.regenRate * dt);
+      && time - this.lastHurt > this.mods.regenDelay && this.health <= this.maxHealth) {
+      this.heal(this.mods.regenRate * dt);
     } else if (this.health > this.maxHealth) {
       this.health = Math.max(this.maxHealth, this.health - 5 * dt);
     }
@@ -2742,6 +2877,13 @@ export class Player {
   // no reserve), so callers can skip the sound.
   startReload() {
     if (this.reloading > 0 || this.mag === this.magSize || this.reserveAmmo <= 0) return false;
+    // WHAT IS BEING THROWN AWAY, for PRIMED MAG. Taken here rather than when
+    // the reload lands, because that is where the magazine is topped up: by
+    // then `mag` is the count of the FRESH one, and a passive item that read it
+    // there would throw a full magazine every time. A tactical reload at
+    // twenty is a hundred damage; a gun run dry is nothing, which is the whole
+    // decision the pick offers.
+    this.magOnReload = this.mag;
     this.reloading = this.reloadTime;
     return true;
   }
@@ -2784,6 +2926,9 @@ export class Player {
     // must not quietly take its round off the reserve instead.
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
       this.lastShotCost = 0;
+      // The magazine is never touched by a free shot, so what the trigger saw
+      // is simply what is in it - see magAtShot.
+      this.magAtShot = this.mag;
       this.fireCd = 1 / this.effectiveFireRate;
       this.kick = w.kick;
       this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
@@ -2801,6 +2946,13 @@ export class Player {
     // stand through. The trigger's full cost comes out of whichever pool pays.
     const cost = this.shotCost;
     this.lastShotCost = cost;
+    // WHAT THE TRIGGER SAW, snapshotted before anything is billed. FATAL
+    // RESERVE asks whether the round leaving the barrel was one of the last
+    // five in the magazine, and by the time the pellet lands the count has
+    // already moved - by one, or by three under TRIPLE TAP, or by nothing at
+    // all when BELT FEED took it off the reserve instead. This is the only
+    // number that answers the question the same way for every build.
+    this.magAtShot = this.mag;
     if (this.mods.beltFeed > 0 && this.reserveAmmo >= cost
       && Math.random() < this.mods.beltFeed) {
       this.reserveAmmo -= cost;
@@ -2851,6 +3003,51 @@ export class Player {
     return true;
   }
 
+  /**
+   * THE ONE PLACE HEALTH GOES UP, and the reason it had to become one place.
+   *
+   * There were fourteen copies of `health = Math.min(maxHealth, health + x)`
+   * scattered across five files - the regen tick, the plant tick, Vampiric,
+   * Blood Pact, the leech's kill, the crate, four items, the versus refill -
+   * and every one of them silently threw away whatever did not fit. That was
+   * fine while nothing wanted the remainder. OVERDRAW wants the remainder, and
+   * adding it to fourteen call sites would have meant a passive item that
+   * worked for some heals and not others, with no way for the player to tell
+   * which.
+   *
+   * @param {number} amount  HP offered. Zero and negatives are no-ops, so a
+   *   per-frame trickle can call this without guarding.
+   * @param {number} [cap]   the ceiling this particular heal stops at. Almost
+   *   always maxHealth; the health CRATE passes maxHealth + 25, because a
+   *   pickup walked to across a live arena is allowed to overfill the bar and
+   *   always has been.
+   * @returns {number} what actually landed, for a caller that wants to know
+   *   whether it was worth anything.
+   */
+  heal(amount, cap = this.maxHealth) {
+    if (!(amount > 0)) return 0;
+    const before = this.health;
+    this.health = Math.min(Math.max(cap, before), before + amount);
+    const landed = this.health - before;
+    // OVERDRAW. What did not fit, banked at five health to the point.
+    //
+    // AN ACCUMULATOR, because most healing in this game arrives in fractions
+    // of a point per frame - Nanoweave's trickle at a full bar would otherwise
+    // round to nothing forever and the passive item would appear broken to the
+    // one build most likely to own it. Whole points only ever leave here, so
+    // the item meter still moves in the units it is drawn in.
+    const spilled = amount - landed;
+    if (this.mods.overdraw > 0 && spilled > 0) {
+      this._overdrawAcc += spilled;
+      if (this._overdrawAcc >= this.mods.overdraw) {
+        const points = Math.floor(this._overdrawAcc / this.mods.overdraw);
+        this._overdrawAcc -= points * this.mods.overdraw;
+        this.addItemCharge(points);
+      }
+    }
+    return landed;
+  }
+
   // Shield soaks damage first and fully - a hit that breaks the shield does
   // not carry the remainder through to health. Returns remaining health.
   takeDamage(d, time) {
@@ -2863,6 +3060,13 @@ export class Player {
     // what actually landed, and reading its own pre-curse figure would leave
     // the summary quietly understating every cursed hit of the run.
     d *= this.statusTakenMult();
+    // CERAMIC INSERT, and it is the LAST word on what a hit costs - after
+    // curse, after the build's own multipliers, after an item window's. A cap
+    // applied any earlier could be multiplied back over by whatever came next,
+    // which is the one way a ceiling can fail to be a ceiling. Above the
+    // shield for the same reason curse is: a shield point is as much a thing
+    // the player has to spend as a health point.
+    if (this.mods.hitCap > 0) d = Math.min(d, this.maxHealth * this.mods.hitCap);
     this.lastDamageTaken = d;
     if (this.shield > 0) {
       this.shield = Math.max(0, this.shield - d);

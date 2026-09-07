@@ -27,12 +27,6 @@
            it reached - that readout is on the left - so the one number worth
            the top right is the one the player can actually spend. -->
       <div id="credit-box">
-        <!-- WHOSE TURN IT IS, in versus. Its own cell above the balance rather
-             than the balance's cells reused: the turn readout used to REPLACE
-             the money, which meant the one mode where two people are competing
-             over a shared bank was the one mode that never showed it. Hidden
-             outright in solo - a permanent blank line is not information. -->
-        <span id="versus-tag" class="hidden">P1</span>
         <span id="credit-label">CREDITS</span>
         <span id="credit-num">$0</span>
         <!-- The flawless streak's multiplier. UNDER the balance rather than
@@ -67,6 +61,14 @@
 
     <div id="hud-bottom">
       <div id="hp-box">
+        <!-- WHOSE TURN IT IS, in versus. It sits OVER THE VITALS rather than
+             over the balance, at the size of a figure rather than of a label:
+             it names the person holding the pad, which is the same question
+             the health bar under it answers about the body on screen, and the
+             money in the far corner is a shared bank that says nothing about
+             whose turn it is. Hidden outright in solo - a permanent blank line
+             is not information. -->
+        <span id="versus-tag" class="hidden">P1</span>
         <div id="hp-head">
           <span>VITALS</span>
           <span id="hp-text">100 / 100</span>

@@ -33,7 +33,10 @@ export const POWERUP_TYPES = {
     emissive: 0x00e676,
     amount: 25,
     apply: (player) => {
-      player.health = Math.min(player.maxHealth + 25, player.health + 25);
+      // TWENTY-FIVE OVER THE CAP, which is the crate's own rule and the reason
+      // it takes a `cap` at all - see Player.heal. Anything past even that
+      // ceiling is OVERDRAW's, if the run owns it.
+      player.heal(25, player.maxHealth + 25);
     },
     chance: 0.04,
     needy: 0.04,

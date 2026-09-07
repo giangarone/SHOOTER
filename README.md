@@ -452,10 +452,21 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 82 upgrades: 19 commons, 49 rares and 14 cursed. A specific rare
-passive item turns up in roughly 3-4% of totem sets, so a run sees a slice of
-the pool rather than all of it - that is the point, but it means a new upgrade
-only matters if it is worth taking on sight, without a partner card.
+The pool is 91 upgrades and **the draw is flat** - every one of them has exactly
+the same chance of appearing. It used to be weighted three ways, with rares
+locked out before wave 2 and cursed before wave 3, and two things were wrong
+with that: the player could not see it (the totem stopped printing a rarity line
+long ago), and the labels had stopped describing the pool anyway, because nearly
+every passive item added since the pool doubled got filed `rare` or `cursed` on
+feel. A specific upgrade turns up in roughly 3% of totem sets, so a run sees a
+slice of the pool rather than all of it - that is the point, but it means a new
+upgrade only matters if it is worth taking on sight, without a partner card.
+
+**A reroll never shows you the same upgrade twice.** `TotemArea.shopSeen` holds
+everything the current shop has offered across all of its sets, and `rollTotems`
+draws around it; it is emptied when a fresh shop opens, not when a set is
+rerolled. Paying an escalating price for the answer the console already gave is
+the moment a reroll stops feeling like a purchase.
 
 ### The critical hit, as a build
 
@@ -464,14 +475,22 @@ Every run has had a crit since its first magazine - 5% for 1.5x, in
 player has already seen by the time anything offers to change it. Six entries
 now take it somewhere, and no two of them are the same pick:
 
-| Upgrade | Effect | Rarity |
-| --- | --- | --- |
-| DEADEYE | +15% crit chance | common |
-| MARKSMAN | +25% crit chance | rare |
-| DEAD CENTER | Crits deal 3x, crit chance halved | cursed |
-| ASSASSIN | The first hit on any enemy always crits | rare |
-| TELLTALE | Every 3rd hit on one enemy crits | rare |
-| SWEET SPOT | *(active item)* every shot crits for 8s | 60 charge |
+| Upgrade | Effect |
+| --- | --- |
+| DEADEYE | +15% crit chance |
+| MARKSMAN | +25% crit chance |
+| DEAD CENTER | Crits deal 3x, crit chance halved |
+| ASSASSIN | The first hit on any enemy always crits |
+| TELLTALE | Every 3rd hit on one enemy crits |
+| FATAL RESERVE | The last 5 rounds of every magazine always crit |
+| SWEET SPOT | *(active item)* every shot crits for 8s, 60 charge |
+
+FATAL RESERVE is the only one of them that is not a probability: the other five
+change the odds, and this names five rounds and guarantees them. It reads
+`Player.magAtShot` - the count the TRIGGER saw, snapshotted before the pull was
+billed - rather than the live magazine, because by the time a pellet lands the
+count has already moved, by three under TRIPLE TAP and by nothing at all when
+BELT FEED took the round off the reserve instead.
 
 DEADEYE and MARKSMAN raise the dice. DEAD CENTER trades the dice for the payout,
 which is the same expected damage on paper and a completely different feel in
@@ -528,27 +547,77 @@ a wider magnet: LODESTONE already grows the circle around the player, and being
 somewhere else is the only thing a bird can offer that a bigger circle cannot.
 
 LAMPREY holds station about 2.5m from the player and goes for whatever comes
-close, biting for 10 on every `Music.pulse` and healing 2 HP when it lands the
-last hit. It **parks** rather than orbiting: the station is a point in the world
+close, biting for 10 **on the downbeat** and healing 2 HP when it lands the last
+hit. `Music.pulse` is a half-beat edge - it is what the sentry guns and every
+fire tick ride - so the leech gates on `pulseWhole` as well, the same way
+poison's one-tick-a-beat does: it chews on the kick drum, at a rate you can
+count without reading a damage number. It **parks** rather than orbiting: the station is a point in the world
 and it is only re-picked once the player has walked out of the band it is
 comfortable in, because something circling continuously in the near periphery is
 exactly what the eye keeps looking at, and the player has a fight to watch.
 
 ### The rest
 
-| Upgrade | Effect | Rarity |
-| --- | --- | --- |
-| BLOOD MONEY | $2 per point of damage taken, per stack | common |
-| RABBIT'S FOOT | +15% on every drop chance, per stack | common |
-| CROUCHFIRE | +20% fire rate while crouched, per stack | common |
-| LONGSHOT | Up to +30% damage, ramped to 40m | rare |
-| POINT BLANK | +30% damage within 5m | rare |
-| ADRENALINE | +4% damage per hit taken, to +40%, per wave | rare |
-| BLOODSPORT | Melee kills heal 3 HP, per stack | rare |
-| WAR CHEST | +1 damage per $1,000 on the balance | rare |
-| TWIN CELL | Hold 2 active-item charges | rare |
-| MAGPIE | A bird that collects credits | common |
-| LAMPREY | A leech that guards you | rare |
+| Upgrade | Effect |
+| --- | --- |
+| BLOOD MONEY | $2 per point of damage taken, per stack |
+| RABBIT'S FOOT | +15% on every drop chance, per stack |
+| CROUCHFIRE | +20% fire rate while crouched, per stack |
+| LONGSHOT | Up to +30% damage, ramped to 40m |
+| POINT BLANK | +30% damage within 5m |
+| ADRENALINE | +4% damage per hit taken, to +40%, per wave |
+| BLOODSPORT | Melee kills heal 3 HP, per stack |
+| WAR CHEST | +1 damage per $1,000 on the balance |
+| TWIN CELL | Hold 2 active-item charges |
+| MAGPIE | A bird that collects credits |
+| LAMPREY | A leech that guards you |
+
+### Posture, and the bottom of the magazine
+
+Nine entries that are never simply true. Every one asks the player to be doing
+something particular at that instant - holding a nearly empty magazine,
+reloading a nearly full one, aiming, crouched, unhurt - and pays only then. A
+pool made entirely of flat multipliers is one where the build is decided at the
+totem and the fight is arithmetic.
+
+| Upgrade | Effect |
+| --- | --- |
+| FATAL RESERVE | The last 5 rounds of every magazine always crit |
+| PRIMED MAG | Reloading throws the spent magazine as a grenade: 5 damage per round left in it |
+| BAILIFF | Using an active item refunds 20% of its charge cost |
+| PACE CAR | At full health, +10% fire rate and +10% move speed |
+| CERAMIC INSERT | No single hit can take more than 25% of your max HP |
+| OVERDRAW | Healing past max HP becomes item charge, 1 per 5 HP spilled |
+| LEAD BALLOON | +25% damage, and you cannot jump |
+| CHEEKWELD | Take 20% less damage while aiming |
+| GROUNDHOG | While crouched, take 20% less damage and reload 20% faster |
+
+PRIMED MAG reads the count taken when the reload STARTED
+(`Player.magOnReload`), not when it lands - by then the magazine has been topped
+up and the passive item would throw a full one every time. A gun run dry throws
+nothing, which is the whole decision: it pays for the tactical reload every
+shooter teaches and none of them has ever rewarded. The bomb cannot hurt the
+player, unlike SHORT FUSE's, because a reload is a button pressed for a
+different reason.
+
+CERAMIC INSERT is a ceiling, not a reduction, and the difference is the pick:
+damage reduction is worth the same against a chaser's scratch as against a
+boss's slam, and a cap is worth nothing against the scratch and everything
+against the slam. It sits at the end of `Player.takeDamage`, after curse and
+before the shield, so everything that multiplies incoming damage has already had
+its say and none of it can push a hit past the cap.
+
+OVERDRAW is why `Player.heal()` exists at all. There were fourteen copies of
+`health = Math.min(maxHealth, health + x)` across five files and every one of
+them silently threw the remainder away; that was fine until something wanted the
+remainder. Healing is one sink now, and the crate is the one caller that passes
+a different ceiling (`maxHealth + 25`) because a pickup walked to across a live
+arena has always been allowed to overfill the bar.
+
+PACE CAR is BERSERKER's exact opposite - one pays on health missing and is worth
+nothing until the run is going badly, the other is gone the instant anything at
+all lands. Both halves come off one getter (`Player.paceMult`), so the gun and
+the legs can never disagree about whether the bar is full.
 
 TWIN CELL is a second charge, not a second slot - the slot is still one deep and
 the item in it is still the run's answer to one problem. It is one number with a
@@ -560,9 +629,9 @@ the HUD's second bar is a second reading of the same number
 Eleven other entries came in from a feature that no longer exists. A second row used
 to stand on the far side of the arena selling passive items for MAX HEALTH - a
 price that could never be earned back - and it is now the active item row. Its
-stock was folded into this pool and re-rated by whether each one already
-carried a drawback: `cursed` where it does, `rare` where the effect stands on
-its own. Only EXECUTIONER still charges health, and it charges it as
+stock was folded into this pool, and the ones that did not already carry a real
+cost were given one, because a free pick has to weigh itself. Only EXECUTIONER
+still charges health, and it charges it as
 `mods.maxHpFlat` rather than as a payment, because `rebuildMods()` replays the
 owned list from fresh defaults after every pick and a price paid once could not
 survive that.
@@ -641,6 +710,23 @@ Forty of them, in five groups by what they actually reach for.
 | LODESTAR | Pull in every orb and pickup on the floor | 60 |
 | ORGAN GRINDER | A cymbal monkey. Every enemy walks to it and ignores you; after 5s it goes off for 8x bullet damage over 9m | 50 |
 | SECOND OPINION | Rerolls the shop on use, free | 50 |
+| LOCKPICK | A free Mystery Box roll, started on use | 120 |
+| PAY TO WIN | $1,000 for 2x your damage to every enemy in the arena | 0 |
+
+LOCKPICK is the most expensive item in the pool and has to be: what it buys is
+the thing every other item here is bought with. It throws itself away - there is
+one slot, and taking what the box hands over is what replaces it - so it is a
+single free roll rather than a machine to operate twice at one shop. Like SECOND
+OPINION it leaves the console's price ladder alone (`TotemArea.boxRolls`),
+because that number is how many rolls have been BOUGHT.
+
+PAY TO WIN is the only item not paid for in dead enemies, so its meter is not
+drawn at all: `UI.setItem` hides the bar for any item whose charge is zero, and
+the credits readout in the top corner is the charge bar. A player standing on a
+pile of credits can press it until the pile is gone - that is the joke, and it
+is safe because the pile is finite and there is no way to earn money without
+killing, so every press is a wave's takings not spent on a reroll, a refill or a
+box roll.
 
 ORGAN GRINDER is the only item in the game that takes the player out of the
 fight without moving them. Every other answer to being surrounded is about where
@@ -801,9 +887,6 @@ Where a new upgrade's hook goes, by what it reacts to:
 
 Deaths are recorded and played AFTER the sweep, never inline: a corpse effect
 that ran mid-sweep would read the enemy list while it is half-compacted.
-
-Rarity gates when an upgrade can appear: rares from wave 2, cursed from wave 3,
-with rares getting commoner as the run goes on.
 
 **A totem cannot be taken the instant it arrives.** Totems come up wherever the
 player happens to be standing, into whatever is already in the air, so there are

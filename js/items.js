@@ -72,8 +72,13 @@ function facing(game, out = _dir) {
 
 // Heals without ever going over the cap. Six items do this and the seventh
 // would have been the one that forgot.
+//
+// A PASSTHROUGH NOW, and worth keeping as one: the clamp moved onto the player
+// when OVERDRAW needed a single place to see what did not fit (see
+// Player.heal), and the six call sites below read better asking to heal a
+// player than reaching into one.
 function heal(player, amount) {
-  player.health = Math.min(player.maxHealth, player.health + amount);
+  player.heal(amount);
 }
 
 // Takes health as a PRICE rather than as damage: it does not go through the
@@ -151,7 +156,7 @@ export const ACTIVE_ITEMS = {
     effects: [['HEAL 25 HP', GOOD]],
     use: (game) => {
       const p = game.player;
-      p.health = Math.min(p.maxHealth, p.health + 25);
+      p.heal(25);
       game.effects.shockwave(p.pos, THEME.vitality, 5, 0.5);
     },
   },
@@ -1418,7 +1423,93 @@ export const ACTIVE_ITEMS = {
       game.sfx.reroll();
     },
   },
+
+  itemLockpick: {
+    name: 'LOCKPICK',
+    charge: 120,
+    theme: THEME.lockpick,
+    // THE MOST EXPENSIVE ITEM IN THE POOL, and it has to be: what it buys is
+    // the thing every other item in this file is bought WITH. A hundred and
+    // twenty dead chasers is most of two waves, and what comes back is one
+    // roll of a box that would otherwise have cost a thousand dollars and
+    // doubled from there.
+    //
+    // IT THROWS ITSELF AWAY. There is one slot, the box hands over what it
+    // rolls, and taking that item is what replaces the lockpick - so this is
+    // not a machine the player operates twice at one shop. It is a single
+    // free roll, and the item it hands back is what the run carries out.
+    // Refusing the swap is allowed and costs the roll, exactly as a paid roll
+    // left to sink does; the charge is spent either way.
+    //
+    // SECOND OPINION'S SIBLING, priced the other way up. That one is a shop
+    // press too, and it is cheap because a reroll is three cards; this is dear
+    // because a box roll is the whole item catalogue.
+    effects: [['A FREE MYSTERY BOX ROLL', GOOD], ['USED AT THE SHOP', NOTE]],
+    // REFUSED WHERE THERE IS NO BOX TO PICK, on exactly the terms SECOND
+    // OPINION is refused with no totems standing - and on the box's own
+    // `canBuy`, so a press mid-spin or with an item already hanging there is
+    // refused for the same reason a paid roll would be.
+    ready: (game) => game.mysteryBox.canBuy,
+    use: (game) => {
+      game._freeBoxRoll();
+      game.effects.shockwave(game.player.pos, THEME.lockpick, 6, 0.5);
+      game.ui.banner('PICKED');
+    },
+  },
+
+  itemPayToWin: {
+    name: 'PAY TO WIN',
+    charge: 0,
+    theme: THEME.payToWin,
+    // THE ONLY ITEM IN THE GAME THAT IS NOT PAID FOR IN ENEMIES. Its meter is
+    // never drawn, because there is nothing to draw - the cost is a thousand
+    // dollars, every press, and the credits readout in the top corner is the
+    // charge bar. See UI.setItem, which hides the meter for any zero-charge
+    // item rather than for this one by name.
+    //
+    // THE EXPLOIT IS THE FEATURE, AND IT IS BOUNDED. A player standing on a
+    // pile of credits can press this until the pile is gone - that is the
+    // whole joke, and it is safe because the pile is finite and because every
+    // thousand spent here is a reroll, an ammo refill or a box roll that does
+    // not happen. What it cannot become is free: there is no way to earn money
+    // without killing, so pressing it is always spending a wave's takings.
+    //
+    // TWICE THE BASE SHOT, TO EVERYTHING. Read through getEffectiveDamage like
+    // every other item's payload, so it scales with the build rather than
+    // being a flat number that is enormous on wave three and nothing on wave
+    // thirty. Against a crowd that is real money well spent; against one boss
+    // it is two shots for a thousand dollars, which is the bad buy the name
+    // promises.
+    effects: [['$1,000 PER USE', NOTE], ['2x YOUR DAMAGE TO EVERY', GOOD], ['ENEMY IN THE ARENA', GOOD]],
+    // The one item refused for want of MONEY rather than charge. Same voice an
+    // uncharged press gets, because it is the same message - not now.
+    ready: (game) => game.credits >= PAY_TO_WIN_COST,
+    use: (game) => {
+      const p = game.player;
+      game.credits -= PAY_TO_WIN_COST;
+      const dmg = p.getEffectiveDamage(p.weapon.damage) * 2;
+      // A copy of the list, because hurtEnemy can kill and the sweep that
+      // compacts `enemies` runs later in the frame - but a splitter's children
+      // are pushed onto it the moment the parent dies, and paying the bonus to
+      // something that was not on the floor when the button was pressed is the
+      // one way this could hit the same enemy twice.
+      const list = game.enemies.slice();
+      for (const e of list) {
+        if (!e.dead) game.hurtEnemy(e, dmg);
+      }
+      game.effects.shockwave(p.pos, THEME.payToWin, 30, 0.9);
+      game.ui.banner('PAID');
+      game.sfx.buy();
+    },
+  },
 };
+
+// What one press of PAY TO WIN takes out of the bank. A FLAT thousand, not a
+// price that climbs with the wave like the two consoles' do (see blockPrice in
+// upgrades.js): those two are things the player buys once or twice a shop, and
+// this is a thing they may press eight times in a row. A doubling cost would
+// turn the joke into a sum.
+export const PAY_TO_WIN_COST = 1000;
 
 export const ACTIVE_ITEM_KEYS = Object.keys(ACTIVE_ITEMS);
 

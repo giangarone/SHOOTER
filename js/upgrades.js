@@ -19,8 +19,8 @@
 //   draft pick, not per frame.
 //
 // ADDING AN UPGRADE
-//   Add an entry here with a unique key, a `rarity` from RARITY, a `max` stack
-//   count and an apply(), and draw its icon in tools/pixelart/icons.py under
+//   Add an entry here with a unique key, a `max` stack count and an apply(),
+//   and draw its icon in tools/pixelart/icons.py under
 //   THE SAME KEY. Entries do not name an icon: the key IS the icon key, which
 //   is what makes "one shape per passive item" a fact about the data rather
 //   than a rule a test has to police. `npm run test:icons` fails the moment a
@@ -32,12 +32,6 @@
 //   Because upgrades are granted at random, every entry must be worth getting
 //   unprompted. An upgrade that is only useful alongside one specific other
 //   upgrade does not belong in this pool.
-
-export const RARITY = {
-  common: { label: 'COMMON', color: '#9fb4d8', weight: 1 },
-  rare: { label: 'RARE', color: '#4ef3ff', weight: 0.42 },
-  cursed: { label: 'CURSED', color: '#ff3d00', weight: 0.3 },
-};
 
 // THEME COLOURS. An upgrade's colour is what it DOES, not how rare it is, so
 // the totem can be read before any text is: gold means ammo, orange means rate
@@ -164,6 +158,25 @@ export const THEME = {
   magpie: 0x78909c,       // the bird
   adrenaline: 0xe64a19,   // the ramp a hit pays for
   lamprey: 0x00897b,      // the leech
+
+  // ---- THE NINE THAT CAME IN WITH THE POSTURES ----------------------------
+  //
+  // Each into the family it belongs to, on the rule at the top of this block:
+  // the colour is what the pick DOES, and a pick that changes what a familiar
+  // number does gets a shade of that family rather than a hue of its own.
+  reserve: 0xd81b60,      // Fatal Reserve: the crit family, at the magazine's end
+  primed: 0xff8f00,       // Primed Mag: ammunition, thrown
+  bailiff: 0x90a4ae,      // Bailiff: beside `charge` and `cell`, the item greys
+  pace: 0x448aff,         // Pace Car: the movement blues
+  ceramic: 0x80deea,      // Ceramic Insert: a pale shade of `armor`
+  overdraw: 0x69f0ae,     // Overdraw: vitality, spilling over
+  ballast: 0x6d4c41,      // Lead Balloon: heavier than `entrench`'s brown
+  cheekweld: 0x00acc1,    // Cheekweld: armour, but only down the sights
+  groundhog: 0x795548,    // Groundhog: the brown Dig In and Crouchfire share
+
+  // The two new active items, into the families their payloads belong to.
+  lockpick: 0xb388ff,     // LOCKPICK: the mystery box's own violet
+  payToWin: 0xffd54f,     // PAY TO WIN: money, which is what it spends
 };
 
 
@@ -216,7 +229,6 @@ export function effectLines(def, owned = 0) {
 export const UPGRADES = {
   overclock: {
     name: 'OVERCLOCK',
-    rarity: 'common',
     max: 5,
     theme: THEME.rate,
     effects: (n) => [['FIRE RATE ' + step(n, pctUp(20)), GOOD]],
@@ -224,7 +236,6 @@ export const UPGRADES = {
   },
   extendedMag: {
     name: 'EXTENDED MAG',
-    rarity: 'common',
     max: 3,
     theme: THEME.ammo,
     effects: (n) => [['MAGAZINE ' + step(n, pctUp(50)), GOOD]],
@@ -232,7 +243,6 @@ export const UPGRADES = {
   },
   speedLoader: {
     name: 'SPEED LOADER',
-    rarity: 'common',
     max: 3,
     theme: THEME.brass,
     effects: (n) => [['RELOAD ' + step(n, pctDown(0.7)), GOOD]],
@@ -240,7 +250,6 @@ export const UPGRADES = {
   },
   hollowPoint: {
     name: 'HOLLOW POINT',
-    rarity: 'common',
     max: 3,
     theme: THEME.damage,
     effects: (n) => [
@@ -254,7 +263,6 @@ export const UPGRADES = {
   },
   nanoweave: {
     name: 'NANOWEAVE',
-    rarity: 'common',
     max: 2,
     theme: THEME.vitality,
     // THE ONLY SOURCE OF REGENERATION IN THE GAME besides Antidote's leech -
@@ -275,7 +283,6 @@ export const UPGRADES = {
   },
   bulwark: {
     name: 'BULWARK',
-    rarity: 'common',
     max: 3,
     theme: THEME.armor,
     effects: (n) => [
@@ -289,7 +296,6 @@ export const UPGRADES = {
   },
   scavenger: {
     name: 'SCAVENGER',
-    rarity: 'common',
     max: 3,
     theme: THEME.salvage,
     effects: (n) => [
@@ -314,7 +320,6 @@ export const UPGRADES = {
   // pool does.
   lodestone: {
     name: 'LODESTONE',
-    rarity: 'common',
     max: 3,
     theme: THEME.lodestone,
     effects: (n) => [
@@ -331,7 +336,6 @@ export const UPGRADES = {
   },
   combatStims: {
     name: 'COMBAT STIMS',
-    rarity: 'common',
     max: 2,
     theme: THEME.mobility,
     effects: (n) => [['MOVE SPEED ' + step(n, pctUp(30)), GOOD]],
@@ -339,7 +343,6 @@ export const UPGRADES = {
   },
   vampiric: {
     name: 'VAMPIRIC ROUNDS',
-    rarity: 'rare',
     max: 3,
     theme: THEME.blood,
     effects: (n) => [
@@ -351,7 +354,6 @@ export const UPGRADES = {
   },
   reactivePlating: {
     name: 'REACTIVE PLATING',
-    rarity: 'rare',
     max: 3,
     theme: THEME.shock,
     effects: (n) => [
@@ -366,7 +368,6 @@ export const UPGRADES = {
   },
   ammoFab: {
     name: 'AMMO FABRICATOR',
-    rarity: 'rare',
     max: 3,
     theme: THEME.fabricate,
     // Combat only, like Nanoweave: the wave break has no clock on it, and a
@@ -379,7 +380,6 @@ export const UPGRADES = {
   },
   steadyAim: {
     name: 'STEADY AIM',
-    rarity: 'rare',
     max: 2,
     theme: THEME.poise,
     effects: (n) => [
@@ -396,7 +396,6 @@ export const UPGRADES = {
   // the trigger pull was.
   brassEcho: {
     name: 'BRASS ECHO',
-    rarity: 'common',
     max: 3,
     theme: THEME.echo,
     effects: (n) => [
@@ -422,7 +421,6 @@ export const UPGRADES = {
   // answer, and now sprays wider than the room.
   hairTrigger: {
     name: 'HAIR TRIGGER',
-    rarity: 'common',
     max: 2,
     theme: THEME.hair,
     effects: (n) => [
@@ -450,7 +448,6 @@ export const UPGRADES = {
   // sprint build is paying, not the run.
   secondWind: {
     name: 'SECOND WIND',
-    rarity: 'common',
     max: 1,
     theme: THEME.wind,
     effects: [['SPRINT TWICE AS LONG', GOOD], ['STAMINA BACK 2x FAST', GOOD]],
@@ -479,7 +476,6 @@ export const UPGRADES = {
   venom: {
     mark: true,
     name: 'VENOM ROUNDS',
-    rarity: 'rare',
     max: 1,
     theme: THEME.poison,
     // THE POISON IS AS STRONG AS THE GUN, and it ticks on the beat - once a
@@ -496,7 +492,6 @@ export const UPGRADES = {
   incendiary: {
     mark: true,
     name: 'INCENDIARY',
-    rarity: 'rare',
     max: 1,
     theme: THEME.fire,
     // Twice a beat where poison is once: fire is the fierce, short one and
@@ -511,7 +506,6 @@ export const UPGRADES = {
   cryo: {
     mark: true,
     name: 'CRYO ROUNDS',
-    rarity: 'rare',
     max: 1,
     theme: THEME.ice,
     effects: [['HITS SLOW BY HALF', GOOD], ['THEIR SHOTS TOO, 3s', NOTE]],
@@ -520,7 +514,6 @@ export const UPGRADES = {
   terror: {
     mark: true,
     name: 'TERROR',
-    rarity: 'rare',
     max: 1,
     theme: THEME.fear,
     effects: [['HIT ENEMIES FLEE', GOOD], ['2s, CANNOT ATTACK', NOTE]],
@@ -529,7 +522,6 @@ export const UPGRADES = {
   petrify: {
     mark: true,
     name: 'PETRIFY',
-    rarity: 'rare',
     max: 1,
     theme: THEME.stone,
     effects: [['12% TO FREEZE 1.5s', GOOD], ['FROZEN TAKE +50%', GOOD]],
@@ -541,7 +533,6 @@ export const UPGRADES = {
   arcRounds: {
     mark: true,
     name: 'ARC ROUNDS',
-    rarity: 'rare',
     max: 1,
     theme: THEME.electric,
     effects: [['CHAINS TO 1 ENEMY', GOOD], ['CHAIN HITS FOR 40%', NOTE]],
@@ -553,7 +544,6 @@ export const UPGRADES = {
   knockout: {
     mark: true,
     name: 'KNOCKOUT DROPS',
-    rarity: 'rare',
     max: 1,
     theme: THEME.impact,
     effects: [['HITS SHOVE ENEMIES', GOOD], ['1.5 METRES BACK', NOTE]],
@@ -561,7 +551,6 @@ export const UPGRADES = {
   },
   midas: {
     name: 'MIDAS TOUCH',
-    rarity: 'rare',
     max: 1,
     theme: THEME.gold,
     effects: [['2x CREDITS', GOOD], ['THE HIT TURN GOLD', NOTE]],
@@ -573,7 +562,6 @@ export const UPGRADES = {
   detonator: {
     mark: true,
     name: 'DETONATOR',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.blast,
     effects: [['HITS EXPLODE', GOOD], ['30 DMG IN 2.5m', NOTE], ['-25% FIRE RATE', BAD]],
@@ -586,7 +574,6 @@ export const UPGRADES = {
   blastCorpse: {
     mark: true,
     name: 'BLAST CORPSE',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.ember,
     effects: [['THE DEAD EXPLODE', GOOD], ['45 DMG IN 4m', NOTE], ['IT CAN HIT YOU', BAD]],
@@ -598,7 +585,6 @@ export const UPGRADES = {
   twentyTwenty: {
     mark: true,
     name: 'TWENTY/TWENTY',
-    rarity: 'rare',
     max: 1,
     theme: THEME.precision,
     // The ammo line is the honest half of the deal and has to be on the card:
@@ -618,7 +604,6 @@ export const UPGRADES = {
   },
   holyMantle: {
     name: 'HOLY MANTLE',
-    rarity: 'rare',
     max: 1,
     theme: THEME.holy,
     effects: [['1st HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
@@ -626,7 +611,6 @@ export const UPGRADES = {
   },
   deadCat: {
     name: 'DEAD CAT',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.ninelives,
     effects: [['REVIVE ONCE AT 1 HP', GOOD], ['-40% MAX HEALTH', BAD]],
@@ -637,7 +621,6 @@ export const UPGRADES = {
   },
   glassCannon: {
     name: 'GLASS CANNON',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.glass,
     effects: [['+70% DAMAGE', GOOD], ['-50% MAX HEALTH', BAD]],
@@ -648,7 +631,6 @@ export const UPGRADES = {
   },
   piercingShot: {
     name: 'PIERCING SHOT',
-    rarity: 'rare',
     max: 3,
     mark: true,
     theme: THEME.pierce,
@@ -664,7 +646,6 @@ export const UPGRADES = {
   },
   gravityRounds: {
     name: 'GRAVITY ROUNDS',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.gravity,
@@ -676,7 +657,6 @@ export const UPGRADES = {
   },
   berserker: {
     name: 'BERSERKER',
-    rarity: 'rare',
     max: 2,
     theme: THEME.rage,
     // Deliberately no numbers: the shape of the deal is the whole pick, and a
@@ -690,7 +670,6 @@ export const UPGRADES = {
   },
   tripleTap: {
     name: 'TRIPLE TAP',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.burden,
     effects: [['+70% DAMAGE', GOOD], ['3 AMMO PER SHOT', BAD]],
@@ -701,7 +680,6 @@ export const UPGRADES = {
   },
   cursedAmmo: {
     name: 'CURSED AMMO',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.hex,
     // The floor is the whole reason this is playable: without it a held
@@ -714,7 +692,6 @@ export const UPGRADES = {
   },
   beltFeed: {
     name: 'BELT FEED',
-    rarity: 'common',
     max: 3,
     theme: THEME.feed,
     effects: (n) => [
@@ -726,7 +703,6 @@ export const UPGRADES = {
   },
   evasion: {
     name: 'EVASION',
-    rarity: 'rare',
     max: 3,
     theme: THEME.evade,
     effects: (n) => [
@@ -738,7 +714,6 @@ export const UPGRADES = {
   },
   reloadBurst: {
     name: 'RELOAD BURST',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.shrapnel,
@@ -750,7 +725,6 @@ export const UPGRADES = {
   },
   crystallize: {
     name: 'CRYSTALLIZE',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.ice,
@@ -762,7 +736,6 @@ export const UPGRADES = {
   },
   ashen: {
     name: 'ASHEN',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.ember,
@@ -786,7 +759,6 @@ export const UPGRADES = {
   },
   neurotoxin: {
     name: 'NEUROTOXIN',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.poison,
@@ -798,7 +770,6 @@ export const UPGRADES = {
   },
   entropy: {
     name: 'ENTROPY',
-    rarity: 'common',
     max: 1,
     mark: true,
     theme: THEME.stone,
@@ -807,7 +778,6 @@ export const UPGRADES = {
   },
   malady: {
     name: 'MALADY',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.fire,
@@ -828,7 +798,6 @@ export const UPGRADES = {
   },
   breachRound: {
     name: 'BREACH ROUND',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.charge,
@@ -842,7 +811,6 @@ export const UPGRADES = {
   },
   seeker: {
     name: 'SEEKER',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.precision,
@@ -864,7 +832,6 @@ export const UPGRADES = {
   },
   lightningWizard: {
     name: 'LIGHTNING WIZARD',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.storm,
@@ -882,7 +849,6 @@ export const UPGRADES = {
   },
   noHitBonus: {
     name: 'NO-HIT BONUS',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.flawless,
@@ -903,7 +869,6 @@ export const UPGRADES = {
   },
   ammoHoarder: {
     name: 'AMMO HOARDER',
-    rarity: 'rare',
     max: 1,
     theme: THEME.hoard,
     // Unmarked: the receiver plates say what a BULLET does, and this changes
@@ -915,7 +880,6 @@ export const UPGRADES = {
   },
   hotStreak: {
     name: 'HOT STREAK',
-    rarity: 'rare',
     max: 1,
     theme: THEME.streak,
     // The floor is REAL: miss enough and this deals less than no upgrade at
@@ -932,7 +896,6 @@ export const UPGRADES = {
   },
   doubleJump: {
     name: 'DOUBLE JUMP',
-    rarity: 'rare',
     max: 1,
     theme: THEME.leap,
     // The air jump is deliberately STRONGER than the ground one (11 vs 9
@@ -951,7 +914,6 @@ export const UPGRADES = {
   // outgrow the arena - twenty flawless waves is the target.
   untouched: {
     name: 'UNTOUCHED',
-    rarity: 'rare',
     max: 1,
     theme: THEME.temper,
     effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+3 MAX HP, KEPT', GOOD], ['UP TO +60', NOTE]],
@@ -967,7 +929,6 @@ export const UPGRADES = {
   // slow common.
   scarTissue: {
     name: 'SCAR TISSUE',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.scar,
     effects: [['+2 MAX HP EVERY WAVE', GOOD], ['UP TO +80', NOTE], ['TAKE +25% DAMAGE', BAD]],
@@ -984,8 +945,15 @@ export const UPGRADES = {
   // Driven through rig.js, which owns the fog and breathes it with the music,
   // so this is one multiplier on the target rather than a second writer.
   //
-  // 3.2x, NOT 1.9x. At 1.9 the far wall was slightly greyer and fifty-five
-  // health was free: the fog is exponential-squared (FogExp2), so at the base
+  // TWENTY-FIVE HEALTH, NOT FIFTY-FIVE. At fifty-five this was the biggest
+  // single block of health in the pool and the haze was something a player
+  // simply learned to play through inside one wave - a drawback you adapt to
+  // is a drawback you stop paying, and the health never stopped paying. A
+  // quarter of a starting bar is still worth taking and no longer worth taking
+  // blind.
+  //
+  // 3.2x, NOT 1.9x. At 1.9 the far wall was slightly greyer and the health
+  // was free: the fog is exponential-squared (FogExp2), so at the base
   // 0.013 the haze does not start EATING anything until well past the far side
   // of a 43m room, and doubling a number that small doubles nothing the player
   // can see. The curve has to be moved to where the fight actually happens.
@@ -995,12 +963,11 @@ export const UPGRADES = {
   // That is the drawback the card has always claimed and never charged.
   blackout: {
     name: 'BLACKOUT',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.murk,
-    effects: [['+55 MAX HEALTH', GOOD], ['THE HAZE CLOSES RIGHT IN', BAD], ['YOU SEE VERY LITTLE', BAD]],
+    effects: [['+25 MAX HEALTH', GOOD], ['THE HAZE CLOSES RIGHT IN', BAD], ['YOU SEE VERY LITTLE', BAD]],
     apply: (mods, n) => {
-      mods.maxHpBonus += 55 * n;
+      mods.maxHpBonus += 25 * n;
       mods.fogMult *= 1 + 2.2 * n;
     },
   },
@@ -1015,7 +982,6 @@ export const UPGRADES = {
   // game - see setBuffs in ui.js.
   openingSalvo: {
     name: 'OPENING SALVO',
-    rarity: 'rare',
     max: 1,
     theme: THEME.salvo,
     effects: [['FIRST 10s OF A WAVE:', NOTE], ['SHOTS COST NO AMMO', GOOD], ['-5% DAMAGE', BAD]],
@@ -1034,7 +1000,6 @@ export const UPGRADES = {
   // health bar you reached by standing in the shop.
   digIn: {
     name: 'DIG IN',
-    rarity: 'rare',
     max: 1,
     theme: THEME.entrench,
     effects: [['STAND STILL 3s:', NOTE], ['REGEN 3 HP/s', GOOD], ['ANY HIT RESETS IT', BAD]],
@@ -1052,14 +1017,13 @@ export const UPGRADES = {
   //
   // WHAT CHANGED WHEN THE PRICE DID. A paid pick did not need a drawback,
   // because the price WAS the drawback and it was the same price for every
-  // build. Free, each one has to weigh itself, so the rarity is assigned by
-  // whether it already carried a real cost - `cursed` where it does, `rare`
-  // where the effect stands on its own. Only EXECUTIONER still charges health,
-  // and it charges it as a mod rather than as a payment: see mods.maxHpFlat.
+  // build. Free, each one has to weigh itself, which is why the ones that did
+  // not already carry a real cost were given one. Only EXECUTIONER still
+  // charges health, and it charges it as a mod rather than as a payment: see
+  // mods.maxHpFlat.
 
   carnage: {
     name: 'CARNAGE',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.carnage,
@@ -1076,7 +1040,6 @@ export const UPGRADES = {
   },
   bloodPact: {
     name: 'BLOOD PACT',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.pact,
     effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE +25% DAMAGE', BAD]],
@@ -1087,7 +1050,6 @@ export const UPGRADES = {
   },
   hellfire: {
     name: 'HELLFIRE',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.hellfire,
@@ -1103,7 +1065,6 @@ export const UPGRADES = {
   },
   eternalAffliction: {
     name: 'ETERNAL AFFLICTION',
-    rarity: 'cursed',
     max: 1,
     mark: true,
     theme: THEME.affliction,
@@ -1119,7 +1080,6 @@ export const UPGRADES = {
   },
   absoluteZero: {
     name: 'ABSOLUTE ZERO',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.zero,
     // 30% off everything hostile - bodies and their shots alike - against half
@@ -1135,7 +1095,6 @@ export const UPGRADES = {
   },
   overload: {
     name: 'OVERLOAD',
-    rarity: 'rare',
     max: 1,
     mark: true,
     theme: THEME.overload,
@@ -1148,7 +1107,6 @@ export const UPGRADES = {
   },
   executioner: {
     name: 'EXECUTIONER',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.executioner,
     // THE ONE PASSIVE ITEM THAT STILL COSTS MAX HEALTH. It was the most
@@ -1172,7 +1130,6 @@ export const UPGRADES = {
   },
   antidote: {
     name: 'ANTIDOTE',
-    rarity: 'rare',
     max: 1,
     theme: THEME.antidote,
     effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY', NOTE]],
@@ -1183,7 +1140,6 @@ export const UPGRADES = {
   },
   devilsGamble: {
     name: "DEVIL'S GAMBLE",
-    rarity: 'cursed',
     max: 1,
     mark: true,
     theme: THEME.gamble,
@@ -1200,7 +1156,6 @@ export const UPGRADES = {
   },
   thorns: {
     name: 'THORNS',
-    rarity: 'rare',
     max: 1,
     theme: THEME.thorns,
     effects: [['ATTACKERS TAKE BACK', NOTE], ['50% OF THEIR DAMAGE', GOOD]],
@@ -1208,7 +1163,6 @@ export const UPGRADES = {
   },
   darkPower: {
     name: 'DARK POWER',
-    rarity: 'rare',
     max: 1,
     theme: THEME.power,
     // The plainest entry in the pool: damage, no drawback, no condition. It
@@ -1243,7 +1197,6 @@ export const UPGRADES = {
   // there - it is the one place all six meet.
   deadeye: {
     name: 'DEADEYE',
-    rarity: 'common',
     max: 1,
     theme: THEME.deadeye,
     // Common, and the smaller of the two plain chances, because it is the
@@ -1256,10 +1209,9 @@ export const UPGRADES = {
   marksman: {
     mark: true,
     name: 'MARKSMAN',
-    rarity: 'rare',
     max: 1,
     theme: THEME.marksman,
-    // The same pick, bigger, one rarity up. Two entries rather than one that
+    // The same pick, bigger. Two entries rather than one that
     // stacks because the crit chance is a number with a CEILING that matters -
     // past about half, a crit stops reading as a crit and starts reading as
     // the damage number flickering - and a stacking entry would walk into that
@@ -1270,7 +1222,6 @@ export const UPGRADES = {
   deadCenter: {
     mark: true,
     name: 'DEAD CENTER',
-    rarity: 'cursed',
     max: 1,
     theme: THEME.deadcenter,
     // TWICE THE PAYOUT FOR HALF THE DICE. On a bare 5% that is 1.5x on one
@@ -1294,7 +1245,6 @@ export const UPGRADES = {
   assassin: {
     mark: true,
     name: 'ASSASSIN',
-    rarity: 'rare',
     max: 1,
     theme: THEME.assassin,
     // THE FIRST HIT ON A FRESH BODY, and once a body has been touched it is
@@ -1313,7 +1263,6 @@ export const UPGRADES = {
   telltale: {
     mark: true,
     name: 'TELLTALE',
-    rarity: 'rare',
     max: 1,
     theme: THEME.telltale,
     // EVERY THIRD HIT ON THE SAME BODY. The count lives on the enemy and dies
@@ -1338,7 +1287,6 @@ export const UPGRADES = {
   longshot: {
     mark: true,
     name: 'LONGSHOT',
-    rarity: 'rare',
     max: 1,
     theme: THEME.distance,
     // A RAMP, NOT A THRESHOLD. A flat "+30% past 20 metres" would be a cliff
@@ -1353,7 +1301,6 @@ export const UPGRADES = {
   pointBlank: {
     mark: true,
     name: 'POINT BLANK',
-    rarity: 'rare',
     max: 1,
     theme: THEME.muzzle,
     // FIVE METRES IS INSIDE THE ARM'S REACH OF HALF THE ROSTER. That is the
@@ -1381,7 +1328,6 @@ export const UPGRADES = {
   // player actually lost, never what was thrown at them.
   bloodMoney: {
     name: 'BLOOD MONEY',
-    rarity: 'common',
     max: 3,
     theme: THEME.tithe,
     // COMPENSATION, NOT AN INCENTIVE. Two credits a point at the first tier is
@@ -1401,7 +1347,6 @@ export const UPGRADES = {
   },
   adrenaline: {
     name: 'ADRENALINE',
-    rarity: 'rare',
     max: 1,
     theme: THEME.adrenaline,
     // CARNAGE, RUN BACKWARDS. Carnage climbs on kills and is lost the instant
@@ -1429,7 +1374,6 @@ export const UPGRADES = {
 
   rabbitsFoot: {
     name: "RABBIT'S FOOT",
-    rarity: 'common',
     max: 2,
     theme: THEME.charm,
     // A MULTIPLIER ON EVERY CATEGORY'S CHANCE, applied inside rollDrop where
@@ -1443,7 +1387,6 @@ export const UPGRADES = {
   },
   crouchfire: {
     name: 'CROUCHFIRE',
-    rarity: 'common',
     max: 2,
     theme: THEME.hunker,
     // THE CROUCH ALREADY COSTS HALF THE PLAYER'S SPEED and until now bought
@@ -1459,7 +1402,6 @@ export const UPGRADES = {
   },
   bloodsport: {
     name: 'BLOODSPORT',
-    rarity: 'rare',
     max: 2,
     theme: THEME.bloodsport,
     // THE MELEE ALREADY PAYS DOUBLE CREDITS and has always been the most
@@ -1476,7 +1418,6 @@ export const UPGRADES = {
   },
   warChest: {
     name: 'WAR CHEST',
-    rarity: 'rare',
     max: 1,
     theme: THEME.warchest,
     // THE MONEY YOU DID NOT SPEND IS THE STAT. One point of damage per
@@ -1496,7 +1437,6 @@ export const UPGRADES = {
   },
   twinCell: {
     name: 'TWIN CELL',
-    rarity: 'rare',
     max: 1,
     theme: THEME.cell,
     // A SECOND CHARGE, NOT A SECOND SLOT. The slot is still one deep and the
@@ -1527,7 +1467,6 @@ export const UPGRADES = {
   // re-summoned every wave would be a pet the player buries once a minute.
   magpie: {
     name: 'MAGPIE',
-    rarity: 'common',
     max: 1,
     theme: THEME.magpie,
     // IT DOES NOT EARN MONEY, IT SAVES IT. Every orb it walks onto is one the
@@ -1544,11 +1483,16 @@ export const UPGRADES = {
   },
   lamprey: {
     name: 'LAMPREY',
-    rarity: 'rare',
     max: 1,
     theme: THEME.lamprey,
-    // TEN DAMAGE A BEAT is a bee's rate and a bee's damage, and that is the
-    // benchmark it was written against - except this one never expires and
+    // TEN DAMAGE ON THE DOWNBEAT - once a beat, not twice. It used to bite on
+    // every pulse, which is the half-beat edge the sentry guns and every fire
+    // tick ride, and at ten a bite that made a free permanent companion worth
+    // two bees. One bite a WHOLE beat is the rate the card always claimed and
+    // it is the rate you can hear: the leech chews on the kick drum, so what
+    // it is doing is legible without a damage number.
+    //
+    // The benchmark is still a bee's damage - except this one never expires and
     // never has to be paid for again. What balances that is REACH: a bee flies
     // forty metres at whatever it likes, and the lamprey will not leave the
     // player's side for more than LAMPREY_RANGE. It is a bodyguard, so it is
@@ -1556,63 +1500,271 @@ export const UPGRADES = {
     //
     // ON THE BEAT, like the turret, the sentry and every fire tick in the game.
     // Nothing rhythmic in this game runs on a private timer - see Music.pulse.
-    effects: [['A LEECH GUARDS YOU', NOTE], ['10 DAMAGE A BEAT, HEALS 2', GOOD]],
+    effects: [['A LEECH GUARDS YOU', NOTE], ['10 PER DOWNBEAT, HEALS 2', GOOD]],
     apply: (mods, n) => { mods.lamprey = n; },
+  },
+
+  // ---- THE NINE POSTURE AND MAGAZINE PICKS --------------------------------
+  //
+  // What these have in common is that none of them is a number that is simply
+  // TRUE. Every one asks the player to be doing something particular - to be
+  // holding a nearly empty magazine, to be reloading a nearly full one, to be
+  // aiming, to be crouched, to be unhurt - and pays only then. A pool made
+  // entirely of flat multipliers is a pool where the build is decided at the
+  // totem and the fight is arithmetic; these are decided in the fight.
+
+  fatalReserve: {
+    name: 'FATAL RESERVE',
+    max: 1,
+    theme: THEME.reserve,
+    // THE BOTTOM OF THE MAGAZINE IS THE WORST PART OF IT, always has been: the
+    // rounds you fire knowing a reload is coming, usually while backing away.
+    // This pays for staying on the trigger through them, and it is the only
+    // crit passive item in the pool that is not a probability - the other five
+    // change the odds, and this one names five rounds and guarantees them.
+    //
+    // FIVE OF THIRTY is a sixth of a magazine, so on paper it is worth rather
+    // less than DEADEYE's flat +15%. What it is actually worth is that the
+    // player knows WHICH five, which no amount of chance can buy: a boss with
+    // a sliver left is a reason to burn down to the last five rather than to
+    // reload, and that decision is the pick.
+    effects: [['THE LAST 5 ROUNDS OF', NOTE], ['EVERY MAGAZINE ALWAYS CRIT', GOOD]],
+    apply: (mods, n) => { mods.fatalReserve = Math.max(mods.fatalReserve, 5 * n); },
+  },
+
+  primedMag: {
+    name: 'PRIMED MAG',
+    max: 1,
+    theme: THEME.primed,
+    // THE TACTICAL RELOAD, PAID FOR. Every shooter teaches the habit of
+    // topping up between fights and no shooter has ever paid for it; here the
+    // rounds you did not fire are the bomb, so a magazine dropped at twenty is
+    // a hundred damage and one dropped empty is nothing at all.
+    //
+    // IT CANNOT HURT THE PLAYER, unlike SHORT FUSE, which is the item the
+    // blast is otherwise borrowed from. A thrown mag is not aimed - it goes
+    // out on the reload, which is a button pressed for a different reason -
+    // and a passive item that killed the player for reloading in a corridor
+    // would be a passive item nobody could take.
+    effects: [
+      ['RELOADING THROWS THE MAG', GOOD],
+      ['5 DAMAGE PER ROUND LEFT', GOOD],
+      ['NOTHING FROM AN EMPTY ONE', NOTE],
+    ],
+    apply: (mods, n) => { mods.primedMag = 5 * n; },
+  },
+
+  bailiff: {
+    name: 'BAILIFF',
+    max: 1,
+    theme: THEME.bailiff,
+    // A FIFTH OF EVERY PRESS BACK. It is the only passive item in the pool
+    // that reaches the active-item slot at all besides TWIN CELL, and the two
+    // are opposites worth owning together: Twin Cell lets the player BANK a
+    // second charge, this makes each one cost four fifths of what it did.
+    //
+    // A REFUND AND NOT A DISCOUNT, which is why it is written as charge handed
+    // back after the spend rather than as a cheaper cost: the meter empties
+    // when the button is pressed, exactly as it always has, and then a fifth
+    // of it comes back. The player sees the item fire and the bar jump.
+    effects: [['USING AN ITEM REFUNDS', NOTE], ['20% OF ITS CHARGE', GOOD]],
+    apply: (mods, n) => { mods.bailiff = Math.min(0.9, 0.2 * n); },
+  },
+
+  paceCar: {
+    name: 'PACE CAR',
+    max: 1,
+    theme: THEME.pace,
+    // BERSERKER'S EXACT OPPOSITE, and it belongs in the same pool for that
+    // reason. Berserker pays on health missing and is worth nothing until the
+    // run is going badly; this is worth something for as long as the run is
+    // going well and is gone the instant it is not - one graze, from anything,
+    // and both halves switch off until the player has healed all the way back.
+    //
+    // TEN AND TEN, on the two stats a player FEELS rather than reads. It is a
+    // small number twice on purpose: the pick is not the multiplier, it is
+    // that being at full health has become a thing worth protecting.
+    effects: [['AT FULL HEALTH:', NOTE], ['+10% FIRE RATE', GOOD], ['+10% MOVE SPEED', GOOD]],
+    apply: (mods, n) => { mods.pace = 0.1 * n; },
+  },
+
+  ceramicInsert: {
+    name: 'CERAMIC INSERT',
+    max: 1,
+    theme: THEME.ceramic,
+    // A CEILING, NOT A REDUCTION, and the difference is the whole pick. Damage
+    // reduction is worth the same against a chaser's scratch as against a
+    // boss's slam; a cap is worth NOTHING against the scratch and everything
+    // against the slam. What it buys is that no single thing in the game can
+    // take more than a quarter of the bar, so four hits is the fewest the run
+    // can ever end in, whatever wave it is.
+    //
+    // IT SITS INSIDE Player.takeDamage, after curse and before the shield, so
+    // it is the last word on what a hit costs: everything that multiplies
+    // incoming damage - BLOOD PACT, RED MIST, a curse, a hazard - has already
+    // had its say by then and none of them can push a hit past the cap.
+    effects: [['NO SINGLE HIT TAKES MORE', NOTE], ['THAN 25% OF YOUR MAX HP', GOOD]],
+    apply: (mods, n) => { mods.hitCap = 0.25 / n; },
+  },
+
+  overdraw: {
+    name: 'OVERDRAW',
+    max: 1,
+    theme: THEME.overdraw,
+    // THE HEALTH ECONOMY'S ONLY LEAK, PLUGGED. A health crate walked over at
+    // 98/100 used to be two points and a shrug, and every heal in the game -
+    // Nanoweave's trickle, Vampiric's drip, the leech's two - quietly stopped
+    // paying the moment the bar was full. Nothing is wasted now: the overflow
+    // goes into the one meter that is never full for long.
+    //
+    // FIVE HP TO ONE POINT is deliberately a poor rate. One point of charge is
+    // one dead chaser (see CHARGE_PER_VALUE in items.js), and five health is
+    // worth a great deal more than one chaser to a player who is hurt - which
+    // is exactly the trade: this is worth something only when the player is
+    // ALREADY topped up, so it can never be a reason to stand in a fire.
+    //
+    // THE EXPLOIT, NAMED. Paired with a REGENERATING source - NANOWEAVE's 2
+    // HP/s, or DIG IN's plant tick - this is the one thing in the game that
+    // fills the item meter without killing anything, which is the rule
+    // CHARGE_PER_VALUE exists to hold. The optimal play is to keep one slow
+    // enemy alive at the far end of the arena and stand at full health, and it
+    // pays 0.4 points a second for it - about a chaser every two and a half
+    // seconds, for doing nothing.
+    //
+    // WHAT ALREADY BOUNDS IT: regen is gated on `combat` (see Player.update),
+    // so none of it ticks at a wave break or in the shop - the wave has to be
+    // running, which means something has to be alive and coming for you. The
+    // rate is also the floor of what a wave pays anyway. It is left as it is
+    // because the pairing costs TWO of the run's picks to assemble and one of
+    // them is a heal the player then cannot spend, and because a player who
+    // has worked that out has earned it. If it ever needs cutting, cut the
+    // RATE here rather than adding a condition: a passive item that pays for
+    // some heals and not others is the thing this was built to avoid.
+    effects: [['HEALING PAST YOUR MAX HP', NOTE], ['BECOMES ITEM CHARGE', GOOD], ['1 PER 5 HP SPILLED', NOTE]],
+    apply: (mods, n) => { mods.overdraw = 5 / n; },
+  },
+
+  leadBalloon: {
+    name: 'LEAD BALLOON',
+    max: 1,
+    theme: THEME.ballast,
+    // TWENTY-FIVE PERCENT IS A LOT, and the jump is a lot to give up. The
+    // arena has catwalks, the boxes are cover you get ON as often as behind,
+    // and half the enemies in the pool are answered by not being where they
+    // are looking. This is the cursed pick that takes away a VERB rather than
+    // a number, which is the only kind of drawback a player cannot stat their
+    // way out of later in the run.
+    //
+    // IT DOES NOT TOUCH THE DASH, THE SLIDE OR A LEDGE. Everything the player
+    // has for getting out of a corner still works, and one of them - the slide
+    // - is the thing they will end up using instead. Taking the jump is meant
+    // to change how the room is crossed, not to nail the player to the floor.
+    effects: [['+25% DAMAGE', GOOD], ['YOU CANNOT JUMP', BAD]],
+    apply: (mods, n) => {
+      mods.damage *= 1 + 0.25 * n;
+      mods.noJump = 1;
+    },
+  },
+
+  cheekweld: {
+    name: 'CHEEKWELD',
+    max: 1,
+    theme: THEME.cheekweld,
+    // ARMOUR ON A POSTURE THAT USED TO BE ALL COST. Aiming already trades
+    // movement for accuracy, which in a game about crowds is a trade the
+    // player mostly declines - so the sights are the one thing in the control
+    // scheme a build could ignore entirely. A fifth off every hit taken while
+    // they are up is a reason to be standing there.
+    //
+    // READ LIVE OFF `aiming`, the same flag the gun's own raise rides, so it
+    // arrives on the frame the button lands rather than at the end of the
+    // half-second the weapon takes to come up. The player is protected by the
+    // DECISION, not by the animation finishing.
+    effects: [['TAKE 20% LESS DAMAGE', GOOD], ['WHILE AIMING DOWN SIGHTS', NOTE]],
+    apply: (mods, n) => { mods.aimGuard = Math.min(0.9, 0.2 * n); },
+  },
+
+  groundhog: {
+    name: 'GROUNDHOG',
+    max: 1,
+    theme: THEME.groundhog,
+    // THE THIRD THING CROUCHING IS FOR. It already buys a smaller target and,
+    // with CROUCHFIRE, a faster trigger; this makes it the posture you reload
+    // in as well, which is the one moment in a fight the player is doing
+    // nothing else anyway. Down behind a box, magazine out, taking a fifth
+    // less from whatever is still shooting at you - that is a whole way of
+    // playing a wave, assembled out of three picks that each read as small.
+    //
+    // A SLIDE IS NOT A CROUCH, on the same terms Crouchfire draws the line: a
+    // slide is a way of MOVING, it is entered out of a sprint and it ends
+    // itself, and a slide that also took a fifth less damage would be the best
+    // way to cross a room under fire. The stance is what is being paid for.
+    effects: [['WHILE CROUCHED:', NOTE], ['TAKE 20% LESS DAMAGE', GOOD], ['RELOAD 20% FASTER', GOOD]],
+    apply: (mods, n) => {
+      mods.crouchGuard = Math.min(0.9, 0.2 * n);
+      mods.crouchReload = Math.min(0.9, 0.2 * n);
+    },
   },
 };
 
 export const UPGRADE_KEYS = Object.keys(UPGRADES);
 
-// Rarity gate: keeps the first few picks as plain foundations, then opens up.
-// Returns the roll weight for a rarity on a given wave, or 0 if it is not
-// available yet.
-function rarityWeight(rarity, wave) {
-  if (rarity === 'rare' && wave < 2) return 0;
-  if (rarity === 'cursed' && wave < 3) return 0;
-  const base = RARITY[rarity].weight;
-  // Rares get commoner as the run goes on; commons never fall out of the pool
-  // because low-rarity stat stacking is what a build is made of. The ramp is
-  // deliberately shallow and capped: the passive items are all rare or cursed,
-  // so the rare half of the pool is now three times the size it was, and the
-  // old +0.05 climb to 1.0 would have crowded stat stacking out of a long run
-  // entirely rather than merely making it less certain.
-  if (rarity === 'rare') return Math.min(0.7, base + wave * 0.02);
-  return base;
-}
-
 /**
  * Rolls the three upgrades offered on a totem set.
  *
- * Drawn WITHOUT replacement, so one upgrade can never fill two totems of the
+ * FLAT. Every upgrade in the pool has exactly the same chance of appearing.
+ *
+ * IT USED TO BE WEIGHTED, three ways: commons at 1, rares at 0.42 climbing to
+ * 0.7 with the wave, cursed at 0.3, with rares locked out before wave 2 and
+ * cursed before wave 3. Two things were wrong with that. The player could not
+ * see it - the totem stopped printing a rarity line long ago, so the weight
+ * was a number that changed what they were offered and was never once stated -
+ * and the labels had stopped describing the pool anyway: nearly every passive
+ * item added since the pool doubled was filed 'rare' or 'cursed' because that
+ * is what a passive item felt like, which left 'common' meaning "one of the
+ * nine stat multipliers" rather than "likely". A flat draw says the one thing
+ * the totems have always actually promised: here are three of them, taken from
+ * everything there is.
+ *
+ * Drawn WITHOUT REPLACEMENT, so one upgrade can never fill two totems of the
  * same set. Upgrades already at their stack cap drop out of the pool, which is
  * what stops a long run from offering a maxed common forever.
  *
  * @param {Object<string, number>} owned  stack count per upgrade id
- * @param {number} wave  the wave just cleared; gates rarity
  * @param {number} count how many totems to fill
+ * @param {?Set<string>} seen  ids ALREADY OFFERED at this shop, excluded. A
+ *   reroll is the player saying "not these"; showing one of them back is the
+ *   console charging for the answer it already gave. Null on a fresh set.
  * @returns {string[]} upgrade ids. Shorter than `count` - possibly empty -
  *   once the pool runs dry, and the caller must cope with that.
  */
-export function rollTotems(owned, wave, count = 3) {
-  const pool = [];
+export function rollTotems(owned, count = 3, seen = null) {
+  const open = [];
   for (const key of UPGRADE_KEYS) {
     if ((owned[key] || 0) >= UPGRADES[key].max) continue;
-    const w = rarityWeight(UPGRADES[key].rarity, wave);
-    if (w > 0) pool.push([key, w]);
+    open.push(key);
   }
+  // THE EXCLUSION IS A PREFERENCE, NOT A GATE. If a shop has somehow shown
+  // everything the player can still take, the next reroll offers the pool over
+  // again rather than nothing: a set that fails to rise sinks the shop and
+  // forfeits the pick, which is a run wedged by a rule that was only ever
+  // meant to stop a reroll repeating itself. It takes about thirty rerolls at
+  // one shop to get here and the thirtieth costs two thousand doubled
+  // twenty-nine times, so nobody will - which is exactly why it must not be
+  // the one path that breaks.
+  let pool = seen ? open.filter((k) => !seen.has(k)) : open;
+  if (!pool.length) pool = open.slice();
 
+  // Fisher-Yates over the head of the list, which is a draw without
+  // replacement and needs no weights to be one.
   const picked = [];
-  while (picked.length < count && pool.length) {
-    let total = 0;
-    for (const [, w] of pool) total += w;
-    let r = Math.random() * total;
-    let idx = pool.length - 1;
-    for (let i = 0; i < pool.length; i++) {
-      r -= pool[i][1];
-      if (r <= 0) { idx = i; break; }
-    }
-    picked.push(pool[idx][0]);
-    pool.splice(idx, 1);
+  const n = Math.min(count, pool.length);
+  for (let i = 0; i < n; i++) {
+    const j = i + ((Math.random() * (pool.length - i)) | 0);
+    const t = pool[i];
+    pool[i] = pool[j];
+    pool[j] = t;
+    picked.push(pool[i]);
   }
   return picked;
 }

@@ -304,8 +304,10 @@ const MAGPIE_SPRINT = 15;
 // makes it the only offensive passive item in the pool that is worth MORE the
 // worse the fight is going.
 //
-// TEN DAMAGE A BEAT is a Bee's rate and a Bee's damage, and that is what it was
-// written against - except a bee expires and this never does. What pays for
+// TEN DAMAGE ON THE DOWNBEAT - once a beat, where everything else rhythmic in
+// the game fires on the half-beat pulse. That is a Bee's damage at half a Bee's
+// rate, and it is what it was written against - except a bee expires and this
+// never does. What pays for
 // that is reach: a bee will cross forty metres at anything it likes, and the
 // lamprey will not leave the player by more than LAMPREY_RANGE.
 //
@@ -532,15 +534,18 @@ export class Lamprey {
 
     // ---- the bite --------------------------------------------------------
     //
-    // ON THE BEAT, like the turret, the sentry and every fire tick in the game.
-    // Nothing rhythmic here runs on a private timer - see Music.pulse - and a
-    // leech chewing in time with the track is one more voice in the machine the
-    // arena already sounds like.
+    // ON THE DOWNBEAT, and on the downbeat ONLY. `pulse` is the half-beat edge
+    // the sentry guns and every fire tick ride; `pulseWhole` says the pulse now
+    // standing is a WHOLE beat, which is the same gate poison's one-tick-a-beat
+    // already uses. Nothing rhythmic here runs on a private timer - see
+    // Music.pulse - and a leech chewing on the kick drum is one more voice in
+    // the machine the arena already sounds like, as well as being the one rate
+    // a player can count without reading a damage number.
     //
     // IT HAS TO BE ON THE BODY. A bite delivered from wherever it happens to be
     // would make the reach the enemy list rather than the animation, and the
     // player would watch it eat something a metre away.
-    if (this.target && ctx.pulse !== this._lastPulse) {
+    if (this.target && ctx.pulse !== this._lastPulse && ctx.pulseWhole) {
       this._lastPulse = ctx.pulse;
       const t = this.target;
       const near = Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z)
@@ -632,9 +637,10 @@ export class Lamprey {
     this.kills++;
     this.target = null;
     const p = this.player;
-    if (p.health < p.maxHealth) {
-      p.health = Math.min(p.maxHealth, p.health + LAMPREY_HEAL);
-    }
+    // Unconditional now, where it used to be guarded on being hurt: OVERDRAW
+    // turns the part that does not fit into item charge, so a leech biting for
+    // a player at full health is no longer doing nothing. See Player.heal.
+    p.heal(LAMPREY_HEAL);
     // The heal has to be legible or a leech that killed something looks exactly
     // like a leech that did not: a green pulse at the player, in the vitality
     // colour every other heal in the game uses.
@@ -653,10 +659,12 @@ export class Lamprey {
 
 const LAMPREY_SEGS = 7;
 // How far from the PLAYER it will go for a target, what one bite is worth, and
-// what a kill it finished heals. The bite is a Bee's, twice a beat; the range
+// what a kill it finished heals. The bite is a Bee's, once a beat; the range
 // is deliberately short, because a bodyguard that ranged out to twenty metres
 // would be a turret that follows you.
 const LAMPREY_RANGE = 11;
+// Ten a DOWNBEAT - see the bite block above for why it is a whole beat and not
+// the half-beat pulse everything else rhythmic in the game fires on.
 const LAMPREY_BITE = 10;
 const LAMPREY_HEAL = 2;
 // Fast enough to keep station on a dashing player and slow enough to visibly

@@ -19,7 +19,7 @@
 //
 // Pure data - no browser, no renderer - so it runs in milliseconds and can be
 // the thing that fails first.
-import { UPGRADES, RARITY } from '../js/upgrades.js';
+import { UPGRADES } from '../js/upgrades.js';
 import { ACTIVE_ITEMS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
@@ -94,13 +94,18 @@ const empty = [...drawn].filter(
 );
 ok('no drawing is blank', empty.length === 0, empty.join(', '));
 
-const badRarity = Object.keys(UPGRADES).filter((k) => !RARITY[UPGRADES[k].rarity]);
-ok('every upgrade has a real rarity', badRarity.length === 0, badRarity.join(', '));
+// THE RARITY CHECK IS GONE ALONG WITH RARITY. The pool is drawn flat - see
+// rollTotems in js/upgrades.js - so there is no longer a field here that a
+// typo could put out of range.
 
 // An item with no `use` is a button that does nothing, which the game has no
 // way to notice: tryItem() would spend the charge and call undefined.
+//
+// THE COST MAY BE ZERO. It used to have to be positive, and PAY TO WIN is the
+// one item that is paid for in CREDITS rather than in dead enemies - so what
+// this can still insist on is that the number exists and is not negative.
 const badItems = Object.keys(ACTIVE_ITEMS).filter(
-  (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].charge > 0)
+  (k) => typeof ACTIVE_ITEMS[k].use !== 'function' || !(ACTIVE_ITEMS[k].charge >= 0)
 );
 ok('every active item has a use and a charge cost', badItems.length === 0, badItems.join(', '));
 

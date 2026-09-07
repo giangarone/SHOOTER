@@ -669,8 +669,8 @@ export class Totem {
     this.icon = icon;
   }
 
-  // Renders the whole readout in one pass: rarity, name, then one line per
-  // effect coloured by its sign. Called once when a set rises, never per frame.
+  // Renders the whole readout in one pass: name, then one line per effect
+  // coloured by its sign. Called once when a set rises, never per frame.
   _draw(offer) {
     const c = this.panel.canvas.getContext('2d');
     const theme = hex(offer.theme);
@@ -695,11 +695,14 @@ export class Totem {
     // by every line of text below, which is exactly what this card is not.
     c.shadowBlur = 0;
 
-    // NO RARITY LINE. It used to sit above the name, and it was the one thing
-    // on the card that changed nothing about the decision in front of the
-    // player: a common that fits the build beats a rare that does not, and
-    // printing COMMON over it only ever argued the other way. The theme bar
-    // above and the effect lines below are what the pick is actually made on.
+    // NO RARITY LINE, AND NOW NO RARITY. It used to sit above the name, and it
+    // was the one thing on the card that changed nothing about the decision in
+    // front of the player: a common that fits the build beats a rare that does
+    // not, and printing COMMON over it only ever argued the other way. The
+    // field itself is gone as of the flat draw - see rollTotems in
+    // js/upgrades.js - so the card and the roll now agree that every pick is
+    // as likely as every other. The theme bar above and the effect lines below
+    // are what the pick is actually made on.
     c.textAlign = 'center';
     // NO GLOW ON THE WORDS. The first pass at this card drew every line twice,
     // a wide soft halo under solid glyphs, on the theory that light-coloured
@@ -1049,6 +1052,18 @@ export class TotemArea {
     // and a box roll are different purchases, and alternating between them
     // should not price either out - see boxCost in upgrades.js.
     this.boxRolls = 0;
+    // EVERY UPGRADE THIS SHOP HAS ALREADY SHOWN, over all its sets. A reroll is
+    // the player saying "not these three", and a set that hands one of them
+    // back is the console charging an escalating price for the answer it has
+    // already given - which is exactly the moment a paid reroll stops feeling
+    // like a purchase. Cleared with the two counters, at the same boundary, so
+    // "this shop" means one thing in both places.
+    //
+    // MAIN.JS OWNS BOTH THE FILLING AND THE CLEARING, unlike the two counters
+    // above, and it has to: the roll that needs this set is the argument to
+    // present(), so it has already happened by the time present() could clear
+    // it. See _presentTotems.
+    this.shopSeen = new Set();
   }
 
   // True while any totem is still standing, claimed or not.

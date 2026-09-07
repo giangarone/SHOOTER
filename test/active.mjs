@@ -565,10 +565,10 @@ try {
       'carnage', 'bloodPact', 'hellfire', 'eternalAffliction', 'absoluteZero',
       'overload', 'executioner', 'antidote', 'devilsGamble', 'thorns', 'darkPower',
     ]);
-    // AT A WAVE WHERE EVERY RARITY IS OPEN. rollTotems gates rares at wave 2
-    // and cursed at wave 3, and all eleven of these are one or the other - at
-    // the wave 1 the reroll block above left behind, none of them can roll and
-    // this would fail for a reason that has nothing to do with the merge.
+    // THERE IS NO LONGER A WAVE GATE. rollTotems used to hold rares back until
+    // wave 2 and cursed until wave 3, and all eleven of these were one or the
+    // other; the draw is flat now, so the wave this runs at cannot change the
+    // answer. It is still set, because the block below reads it for prices.
     g.wave = 10;
     const rolledUp = new Set();
     for (let i = 0; i < 4000; i++) {
@@ -696,6 +696,12 @@ try {
     // ---- and the charge costs are what the pool says ----
     out.chargeCosts = Object.fromEntries(
       Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.charge])
+    );
+    // Whether each item can refuse itself. Read alongside the cost because the
+    // two together are the rule below: an item is either bought with enemies
+    // or it gates itself on something else.
+    out.hasReady = Object.fromEntries(
+      Object.entries(g.__itemsForTest).map(([k, d]) => [k, typeof d.ready === 'function'])
     );
 
     // ======================================================================
@@ -1286,14 +1292,19 @@ try {
   // THE RULE, not a snapshot of it. This used to name five costs as literals,
   // which tested that nobody had tuned the table rather than that the table is
   // usable - and it failed the moment anybody did. What has to hold is that
-  // every item in the pool the BROWSER loaded states a real cost: a missing or
-  // zero one is an item that arrives permanently ready, which nothing else
-  // here would catch.
+  // every item in the pool the BROWSER loaded states a cost that is a real,
+  // non-negative number.
+  //
+  // ZERO IS ALLOWED, AND ONLY WITH A GATE. PAY TO WIN is paid for in CREDITS
+  // rather than in dead enemies, so its meter cost is nothing and its meter is
+  // not drawn - see UI.setItem. What would be a defect is a free item with no
+  // way to refuse itself, because that is a button with no cost of any kind
+  // anywhere, and this is the only place that would catch it.
   {
     const badCost = Object.entries(m.chargeCosts)
-      .filter(([, c]) => !Number.isFinite(c) || c <= 0)
+      .filter(([k, c]) => !Number.isFinite(c) || c < 0 || (c === 0 && !m.hasReady[k]))
       .map(([k, c]) => k + '=' + c);
-    ok('every item states a real charge cost',
+    ok('every item states a real charge cost, or gates itself instead',
       badCost.length === 0 && Object.keys(m.chargeCosts).length > 0,
       badCost.join(', '));
   }

@@ -148,6 +148,17 @@ NOTE = {
     'itemCrit': 'SWEET SPOT - every shot crits. A crosshair on a spark.',
     'itemAmmo': 'BANDOLIER - +30 rounds. A belt, where the family has drums.',
     'itemMonkey': 'ORGAN GRINDER - a cymbal monkey. The key says TOY.',
+    'fatalReserve': 'FATAL RESERVE - the last five rounds, and only those.',
+    'primedMag': 'PRIMED MAG - a magazine with a grenade pin in it.',
+    'bailiff': 'BAILIFF - a cell with the arrow coming back into it.',
+    'paceCar': 'PACE CAR - a chequered flag, and a full heart at the pole.',
+    'ceramicInsert': 'CERAMIC INSERT - a plate with a round stopped dead on it.',
+    'overdraw': 'OVERDRAW - a full cross spilling into a cell.',
+    'leadBalloon': 'LEAD BALLOON - the name, drawn. A weight on a dead balloon.',
+    'cheekweld': 'CHEEKWELD - a stock in profile, the cheekpiece raised.',
+    'groundhog': 'GROUNDHOG - a head out of a hole. Safe because it is down there.',
+    'itemLockpick': 'LOCKPICK - a padlock with a pick in the keyway.',
+    'itemPayToWin': 'PAY TO WIN - a trophy with a dollar struck on the cup.',
 }
 
 
