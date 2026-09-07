@@ -71,6 +71,7 @@ export class UI {
     this.itemName = $('item-name');
     this.itemBarBg = $('item-bar-bg');
     this.itemBar = $('item-bar');
+    this.itemBar2 = $('item-bar2');
     this.invulnFrame = $('invuln-frame');
     this.crosshair = $('crosshair');
     this.statsPanel = $('stats-panel');
@@ -286,7 +287,17 @@ export class UI {
    * @param {?object} def   its ACTIVE_ITEMS entry
    * @param {number} frac   0..1 of the way to charged
    */
-  setItem(id, def, frac) {
+  /**
+   * The active-item slot.
+   *
+   * @param {string|null} id
+   * @param {object|null} def
+   * @param {number} frac   how full the FIRST charge is, 0..1
+   * @param {number} frac2  how full TWIN CELL's second charge is, 0..1. Zero -
+   *   and the overlay bar is simply never lit - for every run that has not
+   *   taken the passive item, so nothing here has to know whether it is owned.
+   */
+  setItem(id, def, frac, frac2 = 0) {
     if (this._c.itemId !== id) {
       this._c.itemId = id;
       this.itemBox.classList.toggle('hidden', !id);
@@ -328,10 +339,25 @@ export class UI {
       this._c.itemFrac = lit;
       this.itemBar.style.transform = 'scaleX(' + lit + ')';
     }
+    // TWIN CELL'S OVERLAY, quantised into the SAME cells as the bar under it -
+    // which is the whole reason the second charge is measured against one
+    // charge's cost rather than against the doubled ceiling. Both fills step
+    // through the same twelve segments, so the spare reads as the bar filling
+    // a second time rather than as a bar of some other length.
+    const lit2 = Math.floor(frac2 * n) / n;
+    if (this._c.itemFrac2 !== lit2) {
+      this._c.itemFrac2 = lit2;
+      this.itemBar2.style.transform = 'scaleX(' + lit2 + ')';
+    }
     const ready = frac >= 1;
     if (this._c.itemReady !== ready) {
       this._c.itemReady = ready;
       this.itemBox.classList.toggle('ready', ready);
+    }
+    const spare = frac2 >= 1;
+    if (this._c.itemSpare !== spare) {
+      this._c.itemSpare = spare;
+      this.itemBox.classList.toggle('spare', spare);
     }
     // THE BAR HAS TWO STATES AND NO THIRD. Filling and full, and this
     // function is not told where in the run it is being drawn: the charge is

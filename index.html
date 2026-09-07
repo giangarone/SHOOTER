@@ -102,7 +102,17 @@
         <div id="item-box" class="hidden">
           <div id="item-info">
             <div id="item-name">TRAUMA KIT</div>
-            <div id="item-bar-bg" class="seg"><i id="item-bar"></i></div>
+            <!-- TWO FILLS IN ONE FRAME, and they are two readings of one
+                 number rather than two numbers - see Player.itemChargeFrac.
+                 The second is TWIN CELL's, drawn over the first once the first
+                 is full, in a colour of its own so a glance says "there is a
+                 spare" without anything having to be read. It is stacked
+                 absolutely on top rather than placed after, because the
+                 segmenting mask belongs to the frame and both fills have to
+                 land in the same cells. -->
+            <div id="item-bar-bg" class="seg">
+              <i id="item-bar"></i><i id="item-bar2"></i>
+            </div>
           </div>
           <canvas id="item-art" width="96" height="96"></canvas>
         </div>

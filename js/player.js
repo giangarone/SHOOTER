@@ -180,6 +180,35 @@ const DEFAULT_MODS = {
   poisonLeech: 0,       // and each poisoned enemy heals this much per second
   gamble: 0,            // Devil's Gamble: 51% double damage, 49% half, per shot
   thorns: 0,            // Thorns: fraction of a hit reflected onto the attacker
+
+  // ---- THE CRITICAL-HIT FAMILY --------------------------------------------
+  //
+  // critChance and critMult are above, with the non-zero defaults every run
+  // starts on. These four are the picks that make a crit something other than
+  // a die roll, and all four are read in ONE place - Game._resolveHit, at the
+  // moment a pellet lands on a body - because every one of them is a question
+  // about WHICH body, and the trigger does not know that yet.
+  assassin: 0,          // Assassin: the first hit on an untouched enemy crits
+  telltale: 0,          // Telltale: every Nth hit on one enemy crits (N, not a
+                        // fraction - zero is off, three is the pick)
+  // ---- RANGE ---------------------------------------------------------------
+  longshot: 0,          // Longshot: damage gained at LONGSHOT_RANGE, ramped
+  pointBlank: 0,        // Point Blank: damage gained inside POINT_BLANK_RANGE
+  // ---- THE REST OF THE NEW POOL -------------------------------------------
+  bloodMoney: 0,        // Blood Money: credits per point of damage TAKEN
+  adrenalineStep: 0,    // Adrenaline: damage gained per hit taken this wave
+  adrenalineMax: 0,     // and the ceiling it stops at
+  dropLuck: 1,          // Rabbit's Foot: multiplier on every drop chance
+  crouchRate: 0,        // Crouchfire: fire rate gained while crouched
+  meleeHeal: 0,         // Bloodsport: HP healed per melee KILL
+  warChest: 0,          // War Chest: flat damage per $1,000 of balance
+  itemChargeCap: 1,     // Twin Cell: active-item charges the slot may BANK.
+                        // Deliberately not `itemCharges`, which is the Player
+                        // getter for how many are banked right now - a cap and
+                        // a count sharing a name across two files is a bug
+                        // waiting for someone to read the wrong one.
+  magpie: 0,            // Magpie: the bird that collects orbs
+  lamprey: 0,           // Lamprey: the leech that guards the player
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -912,6 +941,19 @@ export class Player {
     this.elementCycle = -1;    // FOUR HUMOURS: -1 off, else the next element
     this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
     this.statusLockEnd = 0;    // WHITE CELL: applyStatus refuses until this
+    this.itemCritEnd = 0;      // SWEET SPOT: every shot crits until this time
+    // ADRENALINE's stacks. On the PLAYER and not in `mods`, for the reason
+    // noHitStacks and carnageStacks are: rebuildMods() replays the owned list
+    // from fresh defaults after every draft pick, so a counter an EVENT wrote
+    // into mods would be handed back by the next totem walked into. Read live
+    // by getEffectiveDamage; zeroed by main.js at every wave start.
+    this.adrenalineStacks = 0;
+    // WAR CHEST reads the run's BALANCE, which lives on Game and not here.
+    // Mirrored across once a frame rather than reached for, because
+    // getEffectiveDamage runs several times per trigger pull inside the shot
+    // path and has no business holding a reference to the game. Zero until the
+    // first frame writes it, which is exactly what a run with no money means.
+    this.balance = 0;
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1101,6 +1143,30 @@ export class Player {
   get fireRate() {
     return this.weapon.fireRate;
   }
+  /**
+   * Shots per second the trigger will actually run at, right now.
+   *
+   * ONE EXPRESSION, TWO CALLERS. Both branches of tryShoot() - the paid round
+   * and Opening Salvo's free one - used to carry their own copy of this line,
+   * which is a duplicated multiplier chain that CROUCHFIRE would have had to be
+   * added to twice. A free shot fires at exactly the rate a paid one does.
+   *
+   * CROUCHFIRE IS READ LIVE OFF THE POSTURE, not off a key, for the same
+   * reason Steady Aim reads live speed: `crouching` is a latched state the
+   * player is in or is not, so the bonus arrives on the frame the button lands
+   * and leaves on the frame it is let go, with nothing to expire.
+   *
+   * SLIDING IS NOT CROUCHING HERE, though it shares the low camera. A slide is
+   * a way of MOVING - it is entered out of a sprint and it ends itself - and a
+   * slide that also fired 20% faster would be the best way to cross a room.
+   * The stance is the thing being paid for, and a slide is not a stance.
+   */
+  get effectiveFireRate() {
+    const crouch = this.mods.crouchRate > 0 && this.crouching && !this.sliding
+      ? 1 + this.mods.crouchRate : 1;
+    return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
+      * this.mods.fireRate * crouch;
+  }
   // Ammo Hoarder. A getter rather than a field so the cap can never go stale
   // against the build: everything else in the game only ever READS maxReserve.
   get maxReserve() {
@@ -1223,10 +1289,58 @@ export class Player {
     return !!this.item && this.itemCharge >= ACTIVE_ITEMS[this.item].charge;
   }
 
-  // Spends the charge. The EFFECT is not here - it lives on the item's own
+  /**
+   * THE CHARGE METER IS ONE NUMBER, AND TWIN CELL IS ITS CEILING.
+   *
+   * It would have been the obvious thing to give the second charge a field of
+   * its own - `itemCharge2`, filled once the first is full - and it is wrong
+   * in three places at once: two fields have to agree about which one is being
+   * spent, the HUD has to be told about both, and every reset, snapshot and
+   * clamp in the game becomes two lines that can drift. There is one meter,
+   * and the passive item makes it twice as deep. Everything else falls out:
+   * `itemReady` is unchanged because one charge is still one charge, spending
+   * SUBTRACTS a charge instead of zeroing, and the second bar the HUD draws is
+   * a second reading of the same number rather than a second number.
+   *
+   * `charges` and `chargeFrac` below are the two readings, and they are the
+   * only thing ui.js is ever handed.
+   */
+  get itemChargeMax() {
+    if (!this.item) return 0;
+    return ACTIVE_ITEMS[this.item].charge * Math.max(1, this.mods.itemChargeCap);
+  }
+
+  // Whole charges banked: 0, or 1, or - with Twin Cell - 2.
+  get itemCharges() {
+    if (!this.item) return 0;
+    return Math.floor(this.itemCharge / ACTIVE_ITEMS[this.item].charge);
+  }
+
+  /**
+   * How full the nth charge is, 0..1. n = 0 is the bar the meter has always
+   * drawn; n = 1 is Twin Cell's overlay on top of it.
+   *
+   * Each one is measured against ONE charge's cost rather than against the
+   * doubled ceiling, which is what makes the overlay read correctly: the
+   * second bar starts empty at the exact moment the first reads full and fills
+   * at the same rate the first did, so a player who has taken Twin Cell sees
+   * the same bar speed they had before it - twice.
+   */
+  itemChargeFrac(n = 0) {
+    if (!this.item) return 0;
+    const one = ACTIVE_ITEMS[this.item].charge;
+    return Math.max(0, Math.min(1, (this.itemCharge - one * n) / one));
+  }
+
+  // Spends ONE charge. The EFFECT is not here - it lives on the item's own
   // entry in items.js, which needs the game and not the player.
+  //
+  // Subtracts rather than zeroing, which is the whole of Twin Cell at the
+  // spending end: a player holding two charges fires one and is still ready,
+  // and one holding a full charge and a part-filled second keeps the part.
   spendItem() {
-    this.itemCharge = 0;
+    if (!this.item) return;
+    this.itemCharge = Math.max(0, this.itemCharge - ACTIVE_ITEMS[this.item].charge);
     this.itemReadyFx = false;
   }
 
@@ -1240,11 +1354,13 @@ export class Player {
   // the alternative is a hidden overflow that makes the next charge instant.
   addItemCharge(points) {
     if (!this.item || !(points > 0)) return;
-    const was = this.itemReady;
-    this.itemCharge = Math.min(
-      ACTIVE_ITEMS[this.item].charge, this.itemCharge + points
-    );
-    if (!was && this.itemReady) this.itemReadyFx = true;
+    // COUNTED, not merely tested. Without Twin Cell this is the same boolean
+    // edge it always was; with it, the chime has to fire on the SECOND charge
+    // arriving as well, and a `was ? : ` on `itemReady` would be true either
+    // side of that and say nothing.
+    const was = this.itemCharges;
+    this.itemCharge = Math.min(this.itemChargeMax, this.itemCharge + points);
+    if (this.itemCharges > was) this.itemReadyFx = true;
   }
 
 
@@ -1534,6 +1650,9 @@ export class Player {
     this.elementCycle = -1;
     this.orbHealEnd = 0;
     this.statusLockEnd = 0;
+    this.itemCritEnd = 0;
+    this.adrenalineStacks = 0;
+    this.balance = 0;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);
@@ -2665,9 +2784,7 @@ export class Player {
     // must not quietly take its round off the reserve instead.
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
       this.lastShotCost = 0;
-      const effRate =
-        w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate;
-      this.fireCd = 1 / effRate;
+      this.fireCd = 1 / this.effectiveFireRate;
       this.kick = w.kick;
       this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
       this.recoilPitch +=
@@ -2692,9 +2809,7 @@ export class Player {
       // magazine; refusing it would jam the gun on one leftover round.
       this.mag = Math.max(0, this.mag - cost);
     }
-    const effectiveFireRate =
-      w.fireRate * this.fireRateMult * this.itemRateMult * this.mods.fireRate;
-    this.fireCd = 1 / effectiveFireRate;
+    this.fireCd = 1 / this.effectiveFireRate;
     this.kick = w.kick;
     // A round fired is a commitment to being somewhere: it walks the player
     // out of a sprint and keeps them out of it long enough that tapping a
@@ -2766,6 +2881,16 @@ export class Player {
   // speed, so the bonus fades in as the player settles and drops the moment
   // they move - it is not a key check, and there is no key to check.
   getEffectiveDamage(base) {
+    // WAR CHEST, and it is the only thing in this method that touches the BASE
+    // rather than multiplying the result. That is the pick: a point of damage
+    // per thousand banked is worth whatever the build's own multipliers make
+    // of it, so it is a small flat number on a fresh run and a real one on a
+    // build that has stacked Hollow Point three times. Floored at the thousand
+    // - a balance of $1,999 is one point, not one and a bit - because the
+    // player reads their balance as a number of purchases.
+    if (this.mods.warChest > 0) {
+      base += this.mods.warChest * Math.floor(this.balance / 1000);
+    }
     let d = base * this.damageMult * this.mods.damage * this.statusDamageMult()
       * this.itemDamageMult;
     if (this.mods.steady > 0) {
@@ -2786,6 +2911,15 @@ export class Player {
     // the one they were playing at zero, and they know exactly what it costs.
     if (this.carnageStacks > 0) {
       d *= 1 + Math.min(this.mods.carnageMax, this.mods.carnageStep * this.carnageStacks);
+    }
+    // ADRENALINE. Carnage's mirror image, and read exactly the way Carnage is -
+    // live, off a counter on the player, capped by the mods that granted it.
+    // The cap is the difference between the two: Carnage is uncapped and lost
+    // to a single hit, this stops at +40% and is only lost to the wave ending.
+    if (this.adrenalineStacks > 0) {
+      d *= 1 + Math.min(
+        this.mods.adrenalineMax, this.mods.adrenalineStep * this.adrenalineStacks
+      );
     }
     // Demonic Dodge's window, read off the frame clock published in update().
     return d;

@@ -19,6 +19,7 @@
     "test:versus": "node test/versus.mjs",
     "test:seeker": "node test/seeker.mjs",
     "test:active": "node test/active.mjs",
+    "test:newpool": "node test/newpool.mjs",
     "test:charge": "node test/charge.mjs",
     "test:money": "node test/money.mjs",
     "test:flawless": "node test/flawless.mjs",

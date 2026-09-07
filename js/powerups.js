@@ -215,7 +215,7 @@ function needScale(frac) {
  * @returns {string|null} a spawnable type key, or null for nothing at all -
  *   which is what most kills return.
  */
-export function rollDrop(hpFrac, ammoFrac, allowAmmo = true) {
+export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1) {
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
     if (key === 'health' && hpFrac >= 1) continue;
@@ -224,7 +224,11 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true) {
     if (def.needy) {
       p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
     }
-    if (Math.random() < p) return key;
+    // RABBIT'S FOOT. A multiplier, applied AFTER the need term, so it lifts the
+    // odds a desperate player already has by the same proportion it lifts a
+    // healthy one's. A flat addition would have been worth several times more
+    // to the player who needed it least, which is backwards for a luck charm.
+    if (Math.random() < p * luck) return key;
   }
   return null;
 }
@@ -234,7 +238,7 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true) {
  * Exact rather than a sum: the categories are independent rolls, so this is
  * one minus the chance every one of them misses.
  */
-export function dropChance(hpFrac, ammoFrac, allowAmmo = true) {
+export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1) {
   let miss = 1;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
@@ -244,7 +248,7 @@ export function dropChance(hpFrac, ammoFrac, allowAmmo = true) {
     if (def.needy) {
       p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
     }
-    miss *= 1 - p;
+    miss *= 1 - p * luck;
   }
   return 1 - miss;
 }

@@ -3571,6 +3571,16 @@ export class Enemy {
     // read once by the death sweep in main.js - see MELEE_KILL_MULT. It lives
     // here rather than in a set on the game so that it dies with the enemy.
     this.meleeKill = false;
+    // THE CRIT FAMILY'S PER-BODY HISTORY. ASSASSIN pays on the first hit this
+    // body has ever taken and TELLTALE on every third; both are questions about
+    // THIS enemy, so both are answered here rather than on the player - and
+    // both die with the body, which is exactly right. An enemy is never fresh
+    // twice, and a tally cannot be inherited by whatever spawns next.
+    //
+    // Written by Game._resolveHit, once per TRIGGER PULL rather than per
+    // pellet - see the _shotHits guard there.
+    this.everHit = false;
+    this.hitTally = 0;
     // Collision size, independent of the model's `scale`. Everything that
     // treats an enemy as a circle reads this: obstacle resolution, crowd
     // separation, the arena clamp, melee reach and the player's shards.

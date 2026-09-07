@@ -350,6 +350,92 @@ export class MoneyOrbs {
   }
 
   /**
+   * The nearest collectable orb to a point, for the MAGPIE.
+   *
+   * @param {number} x
+   * @param {number} z       where the bird is standing
+   * @param {number} maxD    how far it is willing to walk
+   * @param {number} leash   and how far from `home` the orb may be
+   * @param {THREE.Vector3} home  the player, which is what the leash is measured
+   *                              from - see MAGPIE_LEASH in companions.js
+   * @returns {{x: number, z: number}|null} a POSITION, never an index
+   *
+   * A POSITION AND NOT AN INDEX, deliberately. Orbs are swap-removed (see
+   * _remove), so index 40 is a different orb the moment anything ahead of it is
+   * collected - and a bird holding an index would be walking to whichever orb
+   * happened to fall into the hole. The position is stale in the harmless
+   * direction instead: the orb it was walking to has already been picked up by
+   * someone, and it arrives to find nothing and picks again a third of a second
+   * later.
+   *
+   * ORBS STILL IN THE AIR ARE FAIR GAME, and held ones are not. A spawn arc is
+   * where the money IS - refusing to head for it would leave the bird standing
+   * still for the second after every kill, which is the second it should be
+   * setting off - but an orb under a hold is one the game has deliberately
+   * frozen (a boss shower landing), and walking onto it would do nothing.
+   */
+  nearestOrb(x, z, maxD, leash, home) {
+    let bestX = 0;
+    let bestZ = 0;
+    let bestD = maxD * maxD;
+    let found = false;
+    const leash2 = leash * leash;
+    for (let i = 0; i < this.count; i++) {
+      if (this.delay[i] > 0) continue;
+      // Already flying to the player. Chasing one would be the bird racing the
+      // magnet for money the player has definitionally already claimed.
+      if (this.state[i] === HOME) continue;
+      const ox = this.pos[i * 3];
+      const oz = this.pos[i * 3 + 2];
+      const hx = ox - home.x;
+      const hz = oz - home.z;
+      if (hx * hx + hz * hz > leash2) continue;
+      const dx = ox - x;
+      const dz = oz - z;
+      const d = dx * dx + dz * dz;
+      if (d >= bestD) continue;
+      bestD = d;
+      bestX = ox;
+      bestZ = oz;
+      found = true;
+    }
+    return found ? { x: bestX, z: bestZ } : null;
+  }
+
+  /**
+   * Collects every orb standing within `radius` of a point that is not the
+   * player. The MAGPIE's whole take, and the only other mouth in the game.
+   *
+   * IT PAYS THROUGH THE SAME onCollect THE PLAYER DOES, which is what makes the
+   * bird free of every other rule in this file: the credits, the item charge
+   * slice and BLOOD FROM STONE's heal all happen in Game._collectOrb, once,
+   * whoever walked onto the orb. A second payout path here would be a second
+   * place for the charge arithmetic to drift.
+   *
+   * @returns {number} credits collected, for the bird's own tally
+   */
+  collectAt(x, z, radius, onCollect) {
+    if (this.count === 0) return 0;
+    const r2 = radius * radius;
+    let value = 0;
+    for (let i = 0; i < this.count; i++) {
+      if (this.delay[i] > 0) continue;
+      // NOT ONE ALREADY FLYING TO THE PLAYER. It is money the magnet has
+      // claimed and it is about to arrive; snatching it mid-flight would look
+      // exactly like the bird stealing from the player, which is the one thing
+      // a pet must never appear to do.
+      if (this.state[i] === HOME) continue;
+      const dx = this.pos[i * 3] - x;
+      const dz = this.pos[i * 3 + 2] - z;
+      if (dx * dx + dz * dz > r2) continue;
+      value += this.value[i];
+      onCollect(this.value[i]);
+      this._remove(i--);
+    }
+    return value;
+  }
+
+  /**
    * Pulls every orb on the floor toward the player, whatever the distance.
    * Called at a wave clear so nothing is left behind to time out during the
    * shopping trip. The per-orb delay is what makes it arrive as a stream.

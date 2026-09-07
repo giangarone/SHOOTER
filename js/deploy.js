@@ -404,6 +404,366 @@ export class Bomb {
 }
 
 // ---------------------------------------------------------------------------
+// ORGAN GRINDER - the monkey
+// ---------------------------------------------------------------------------
+//
+// THE ONLY THING IN THE GAME THAT TAKES THE PLAYER OUT OF THE FIGHT WITHOUT
+// MOVING THEM. Every other answer to being surrounded is about where the
+// PLAYER is - the dash, the shove, the wall, the invulnerability window. This
+// one is about where the enemies are looking, and for five seconds the answer
+// is: not at you. A player standing perfectly still in the middle of a crowd
+// while the crowd walks past them is a thing this game could not previously
+// show, and it is worth a whole item on its own.
+//
+// IT CANNOT BE DAMAGED, AND THAT IS NOT AN OVERSIGHT. A decoy with health is a
+// decoy whose duration is decided by the wave rather than by the item: on wave
+// three it would outlive its fuse and on wave thirty it would be gone in half a
+// second, and the player would have no way to tell which run they were in. Five
+// seconds is five seconds. It is also not an enemy, not on the enemy list, and
+// not shootable by the player - there is nothing here to raycast against.
+//
+// THE FUSE IS THE FEATURE, exactly as it is for SHORT FUSE. The difference is
+// which way round the decision goes: a bomb is thrown where the fight is GOING
+// to be, and a monkey is thrown where the player WANTS it to be, because the
+// fight comes to it. Five seconds is long enough to walk somewhere else and
+// short enough that the crowd it gathered is still gathered when it goes off.
+//
+// WHO IT PULLS is not decided here. main.js swaps one field on the enemy
+// context while a monkey is on the floor - see the LURE block in
+// _updateEnemies - so no enemy type, ai() or boss needs to know this exists.
+export class Monkey {
+  /**
+   * @param {object} game
+   * @param {THREE.Vector3} from   the muzzle, so it leaves the gun
+   * @param {THREE.Vector3} dir    flattened facing
+   * @param {number} damage        the blast, snapshotted at the throw
+   */
+  constructor(game, from, dir, damage) {
+    this.pos = new THREE.Vector3(from.x, from.y, from.z);
+    this.vel = new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar(11);
+    this.vel.y = 6.5;
+    this.damage = damage;
+    this.dead = false;
+    // THE FUSE DOES NOT START UNTIL IT LANDS. A monkey thrown across the room
+    // spends most of a second in the air, and a five-second item that spent a
+    // fifth of itself in flight would be a four-second item that reads as
+    // broken at long range. `armed` is also what main.js tests for the lure -
+    // a monkey still tumbling is not yet something to walk toward.
+    this.armed = false;
+    this.fuse = MONKEY_FUSE;
+    this.spin = Math.random() * 6;
+    // ---- WHAT THE ENEMIES ARE HANDED INSTEAD OF THE PLAYER ----------------
+    //
+    // A DUCK, AND IT HAS TO BE A COMPLETE ONE. main.js swaps this in for
+    // `ctx.player` on the enemy context (see the LURE block in
+    // _updateEnemies), which is how forty behaviours, four bosses and every
+    // projectile in the game come to be aimed at a toy without one of them
+    // being told the item exists. The price of that trick is that EVERY member
+    // enemy.js reads off the player has to be here.
+    //
+    // THE FIRST VERSION CARRIED TWO - `pos` and `eyeInto` - because a grep for
+    // `ctx.player.` found only those, and a wraith blinking behind the player
+    // reads it through a local alias (`const p = ctx.player; p.forwardInto(…)`)
+    // that the grep never saw. It threw inside the enemy sweep, which is inside
+    // rAF, which never reschedules: the game stopped dead. So the list below is
+    // deliberately the player's whole movement-facing surface rather than the
+    // members something happens to use today, and anything added to it should
+    // stay that way.
+    //
+    //   pos          where it is. The one thing everything reads.
+    //   vel          zero, always. A monkey does not move, so a siege leading
+    //                its mortars onto the decoy leads them nowhere - which is
+    //                the correct answer and not a stub.
+    //   yaw          which way it landed facing, from land().
+    //   forwardInto  the same expression Player's is, off that yaw, so a wraith
+    //                blinks BEHIND the monkey.
+    //   eyeInto      what a shooter aims at. MONKEY_EYE rather than the
+    //                monkey's own centre: a shooter aiming at a knee-high
+    //                object fires into the floor in front of it, and rounds
+    //                skipping off the ground read as the enemies missing rather
+    //                than as them being fooled.
+    //   eyeH         for anything that reconstructs an eye from feet + height.
+    const self = this;
+    this.decoy = {
+      pos: this.pos,
+      vel: new THREE.Vector3(),
+      get yaw() { return self._yaw; },
+      eyeH: MONKEY_EYE,
+      eyeInto: (v) => v.copy(self.pos).setY(MONKEY_EYE),
+      forwardInto: (v) => v.set(-Math.sin(self._yaw), 0, -Math.cos(self._yaw)),
+    };
+    this.lure = true;
+
+    this.group = new THREE.Group();
+    this.geos = [];
+    this.mats = [];
+    const own = (m) => { this.mats.push(m); return m; };
+    const fur = own(new THREE.MeshStandardMaterial({
+      color: 0x4a3b52, roughness: 0.85, metalness: 0.05,
+    }));
+    const skin = own(new THREE.MeshStandardMaterial({
+      color: 0xc9a3b4, roughness: 0.7, metalness: 0.05,
+    }));
+    // BRASS, AND IT IS THE ONLY BRIGHT THING ON THE MODEL. The cymbals are what
+    // the item IS - the clash is the noise the crowd is walking toward - so
+    // they are emissive and everything else is matte. A monkey lit all over
+    // would read as another glowing deployable; this one reads as an object
+    // holding two lights.
+    this.brass = own(new THREE.MeshStandardMaterial({
+      color: 0xffc65c, emissive: 0xffa000, emissiveIntensity: 1.6,
+      roughness: 0.32, metalness: 0.85,
+    }));
+    this.eyeMat = own(new THREE.MeshStandardMaterial({
+      color: 0xff3b30, emissive: 0xff2d2d, emissiveIntensity: 2.2,
+      roughness: 0.4, metalness: 0.1,
+    }));
+    const mesh = (geo, mat) => {
+      this.geos.push(geo);
+      return new THREE.Mesh(geo, mat);
+    };
+
+    // THE BODY. A seated toy: a squat torso, a head most of its own size, and
+    // limbs short enough that the whole thing reads as a WIND-UP rather than as
+    // an animal. Proportions matter more than detail at the distance this is
+    // thrown - it is 0.6m tall in a room 44 across.
+    const torso = mesh(new THREE.CapsuleGeometry(0.15, 0.14, 3, 8), fur);
+    torso.position.y = 0.26;
+    const belly = mesh(new THREE.SphereGeometry(0.115, 8, 6), skin);
+    belly.position.set(0, 0.24, 0.075);
+    belly.scale.set(1, 1.05, 0.6);
+    const head = mesh(new THREE.SphereGeometry(0.165, 10, 8), fur);
+    head.position.y = 0.5;
+    const face = mesh(new THREE.SphereGeometry(0.105, 8, 6), skin);
+    face.position.set(0, 0.475, 0.105);
+    face.scale.set(1, 0.85, 0.62);
+    const muzzle = mesh(new THREE.SphereGeometry(0.052, 6, 5), skin);
+    muzzle.position.set(0, 0.45, 0.155);
+    muzzle.scale.set(1.15, 0.7, 0.8);
+    this.group.add(torso, belly, head, face, muzzle);
+
+    // Ears, eyes, legs and feet - mirrored, so one loop draws each pair and the
+    // two halves cannot drift apart the way two hand-placed meshes would.
+    const earGeo = new THREE.SphereGeometry(0.062, 6, 5);
+    const eyeGeo = new THREE.SphereGeometry(0.031, 6, 5);
+    const legGeo = new THREE.CapsuleGeometry(0.048, 0.09, 2, 6);
+    const footGeo = new THREE.SphereGeometry(0.055, 6, 5);
+    this.geos.push(earGeo, eyeGeo, legGeo, footGeo);
+    this.eyes = [];
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(earGeo, skin);
+      ear.position.set(sx * 0.16, 0.505, -0.005);
+      ear.scale.set(0.55, 1, 0.95);
+      const eye = new THREE.Mesh(eyeGeo, this.eyeMat);
+      eye.position.set(sx * 0.052, 0.515, 0.185);
+      this.eyes.push(eye);
+      const leg = new THREE.Mesh(legGeo, fur);
+      leg.position.set(sx * 0.085, 0.115, 0.055);
+      leg.rotation.x = -0.55;
+      const foot = new THREE.Mesh(footGeo, skin);
+      foot.position.set(sx * 0.085, 0.05, 0.15);
+      foot.scale.set(0.9, 0.6, 1.25);
+      this.group.add(ear, eye, leg, foot);
+    }
+
+    // THE ARMS AND THE CYMBALS. Each arm is its own pivot at the shoulder so
+    // the clash is a ROTATION of the whole limb rather than two discs sliding
+    // toward each other - a toy monkey swings from the shoulder, and the
+    // difference is the entire read.
+    this.arms = [];
+    const armGeo = new THREE.CapsuleGeometry(0.045, 0.16, 2, 6);
+    const cymGeo = new THREE.CylinderGeometry(0.135, 0.135, 0.016, 14);
+    const bossGeo = new THREE.SphereGeometry(0.036, 6, 5);
+    this.geos.push(armGeo, cymGeo, bossGeo);
+    for (const sx of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(sx * 0.155, 0.33, 0.02);
+      const arm = new THREE.Mesh(armGeo, fur);
+      arm.position.set(0, -0.055, 0.075);
+      arm.rotation.x = -1.1;
+      const cym = new THREE.Mesh(cymGeo, this.brass);
+      cym.position.set(0, -0.085, 0.185);
+      // Face-on to each other across the monkey's centre line, which is what
+      // makes the gap between them read as a gap that is about to close.
+      cym.rotation.set(Math.PI / 2, 0, sx * 0.12);
+      // The dome at the middle of a cymbal. Two pixels at range and the reason
+      // the disc reads as a cymbal rather than as a coin.
+      const bossPin = new THREE.Mesh(bossGeo, this.brass);
+      bossPin.position.set(-sx * 0.012, -0.085, 0.185);
+      pivot.add(arm, cym, bossPin);
+      this.group.add(pivot);
+      this.arms.push({ pivot, sx, cym });
+    }
+
+    // The wind-up key, on the back. It does nothing and it is the single most
+    // important 2cm on the model: it is what says the thing is a TOY, which is
+    // what makes an enemy walking toward it funny rather than confusing.
+    const keyStem = mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.07, 6), this.brass);
+    keyStem.position.set(0, 0.31, -0.155);
+    keyStem.rotation.x = Math.PI / 2;
+    const keyRing = mesh(new THREE.TorusGeometry(0.055, 0.016, 5, 10), this.brass);
+    keyRing.position.set(0, 0.31, -0.2);
+    keyRing.rotation.y = Math.PI / 2;
+    this.key = new THREE.Group();
+    this.key.add(keyStem, keyRing);
+    this.group.add(this.key);
+
+    // The halo, so it is findable across the arena the way a turret is - and in
+    // the cymbals' own brass rather than in the item's purple, because what the
+    // player is looking for on the floor is the noise.
+    this.halo = glow(game.effects.glowTex, 0xffb347, 1.05, 0.5);
+    this.halo.position.y = 0.34;
+    this.group.add(this.halo);
+    this.mats.push(this.halo.material);
+
+    this.group.position.copy(this.pos);
+    game.scene.add(this.group);
+    this.effects = game.effects;
+    // The ring under it, taken only once it has landed - a telegraph on a
+    // tumbling object is a mark that will not be where the object stops.
+    this.mark = -1;
+    this._lastPulse = -1;
+    this._clash = 0;
+    this._yaw = 0;
+  }
+
+  update(dt, ctx) {
+    if (!this.armed) return this._fly(dt, ctx);
+
+    this.fuse -= dt;
+    const t = Math.max(0, this.fuse) / MONKEY_FUSE;
+    // THE RING IS THE COUNTDOWN, and it is the same one a meteor's telegraph
+    // uses so a player who has learnt one has learnt the other: it fills as the
+    // clock runs out. Sized to the blast, so what it draws is the ground that
+    // is about to be dangerous rather than "something is here".
+    if (this.mark >= 0) {
+      this.effects.markSet(
+        this.mark, this.pos.x, this.pos.z, MONKEY_RADIUS,
+        0xb388ff, 1 - t, 1, 0, 0.5
+      );
+    }
+    if (this.fuse <= 0) {
+      this.explode(ctx);
+      return 'dead';
+    }
+
+    // ---- the clash -------------------------------------------------------
+    //
+    // ON THE BEAT, like the turret and the sentry, because everything rhythmic
+    // in this game hangs off Music.pulse - and here it earns more than
+    // consistency: the monkey is a musical instrument, so a clash landing on
+    // the track is the one animation in the game that is literally in time with
+    // what the player is hearing.
+    //
+    // IT SPEEDS UP AS THE FUSE RUNS DOWN by adding a clash between the beats
+    // over the last two seconds. The pulse is already the half-beat edge, so
+    // the extra one lands on the quarter, and the crowd hears the toy winding
+    // itself into a panic without the tempo ever leaving the music.
+    if (ctx.pulse !== this._lastPulse) {
+      this._lastPulse = ctx.pulse;
+      this._clash = 1;
+      ctx.sfx.monkey(1 - t);
+      // A puff of brass off the rims, so the clash is visible from behind and
+      // from across the room - the arms themselves are 4cm wide at range.
+      _v.set(this.pos.x, 0.42, this.pos.z);
+      this.effects.impact(_v, 0xffc65c, 4, 2.6, 1.4, 0.22);
+    }
+    this._clash = Math.max(0, this._clash - dt * (7 + (1 - t) * 7));
+
+    // The swing: arms wide open between clashes, shut on one. Squared, so the
+    // limb is at rest for most of the cycle and snaps closed - a linear ease
+    // reads as waving.
+    const open = this._clash * this._clash;
+    for (const a of this.arms) {
+      a.pivot.rotation.z = a.sx * (MONKEY_ARM_SHUT + MONKEY_ARM_OPEN * open);
+      a.pivot.rotation.y = a.sx * -0.35 * open;
+    }
+    // The whole body recoils a hair into each clash and the head nods out of
+    // it, which is what stops the arms reading as detached from the toy.
+    this.group.position.y = this.pos.y + open * 0.035;
+    this.group.rotation.y = this._yaw + Math.sin(ctx.time * 2.4) * 0.16;
+    this.key.rotation.z += dt * (2.2 + (1 - t) * 9);
+    // The eyes and the halo come UP as the fuse runs down - the one signal that
+    // is a level rather than a rhythm, so the player can read how long is left
+    // from a glance without counting clashes.
+    const heat = (1 - t) * (1 - t);
+    this.eyeMat.emissiveIntensity = 2.2 + heat * 7 + open * 2;
+    this.brass.emissiveIntensity = 1.6 + open * 2.4 + heat * 1.2;
+    this.halo.material.opacity = 0.4 + open * 0.3 + heat * 0.4;
+    this.halo.scale.setScalar(1.05 + open * 0.5 + heat * 0.9);
+    return 'alive';
+  }
+
+  // The throw. The Bomb's arc and the Bomb's bounce, for the reason given at
+  // the top of Lob: a fourth trajectory in this game would read as different
+  // physics rather than as a different payload.
+  _fly(dt, ctx) {
+    this.vel.y -= 22 * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    this.spin += dt * 14;
+    this.group.rotation.set(this.spin, this.spin * 0.6, 0);
+    if (pointInObstacle(this.pos, ctx.obstacles)) {
+      this.pos.addScaledVector(this.vel, -dt);
+      this.land();
+    } else if (this.pos.y <= 0) {
+      this.pos.y = 0;
+      this.land();
+    }
+    this.group.position.copy(this.pos);
+    return 'alive';
+  }
+
+  land() {
+    this.pos.x = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.x));
+    this.pos.z = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.z));
+    this.pos.y = Math.max(0, this.pos.y);
+    this.armed = true;
+    // FACING THE WAY IT CAME FROM, so a monkey thrown across the room is
+    // looking back at the player who threw it. Nothing reads this but the eye,
+    // and the eye is the whole joke.
+    this._yaw = Math.atan2(-this.vel.x, -this.vel.z);
+    this.group.rotation.set(0, this._yaw, 0);
+    this.group.position.copy(this.pos);
+    this.mark = this.effects.markAcquire();
+    this.effects.impact(this.pos, 0xffc65c, 10, 3.5, 1.6, 0.35);
+  }
+
+  explode(ctx) {
+    _v.set(this.pos.x, 0, this.pos.z);
+    // hitPlayer FALSE. The monkey is the one deployable in the pool that is
+    // pure crowd control, and the whole reason it is worth pressing is that the
+    // player is standing somewhere the crowd is not - which is often exactly
+    // where the monkey is, because they were standing there when they threw it.
+    // A blast that punished the player for having been surrounded would undo
+    // the item's entire purpose. SHORT FUSE and WELCOME MAT are the two that
+    // do not know you; this one does.
+    ctx.onBlast(_v, this.damage, MONKEY_RADIUS, null, false);
+    this.effects.burst(this.pos, 0xffe9a8, 34, 13, 6, 0.6);
+    this.effects.burst(this.pos, 0xb388ff, 44, 9, 7, 0.85);
+    this.effects.shockwave(this.pos, 0xb388ff, MONKEY_RADIUS, 0.65);
+    this.effects.addShake(0.55);
+    ctx.sfx.itemBlast();
+  }
+
+  destroy() {
+    if (this.mark >= 0) this.effects.markRelease(this.mark);
+    this.mark = -1;
+    this.group.parent?.remove(this.group);
+    for (const g of this.geos) g.dispose();
+    for (const m of this.mats) m.dispose();
+  }
+}
+
+// Seconds on the floor before it goes off, the blast it leaves and where an
+// enemy aims at it. Exported so items.js can print the fuse on the box's card
+// without the two ever disagreeing.
+export const MONKEY_FUSE = 5;
+export const MONKEY_RADIUS = 9;
+const MONKEY_EYE = 0.55;
+// The arms at rest and how far the clash opens them, in radians.
+const MONKEY_ARM_SHUT = 0.16;
+const MONKEY_ARM_OPEN = 0.85;
+
+// ---------------------------------------------------------------------------
 // FIREBREAK - the wall
 // ---------------------------------------------------------------------------
 //

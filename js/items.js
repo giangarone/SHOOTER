@@ -35,7 +35,9 @@
 
 import * as THREE from 'three';
 import { THEME } from './upgrades.js';
-import { Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob } from './deploy.js';
+import {
+  Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE,
+} from './deploy.js';
 import { BOUND } from './arena.js';
 
 // Scratch vectors. Every one of these functions runs at most once per button
@@ -1266,6 +1268,122 @@ export const ACTIVE_ITEMS = {
       game.effects.shockwave(game.player.pos, THEME.lodestone, 12, 0.7);
       game.sfx.pickupMagnet();
       game.sfx.itemSurge();
+    },
+  },
+
+  itemCrit: {
+    name: 'SWEET SPOT',
+    charge: 60,
+    theme: THEME.deadeye,
+    // EIGHT SECONDS OF THE THING THE PLAYER HAS BEEN ROLLING FOR. Every run has
+    // seen the yellow number since its first magazine - critChance is 5% in
+    // DEFAULT_MODS precisely so that it has - so this item does not have to
+    // teach anything. It hands over a number the player already wants more of.
+    //
+    // IT DOES NOT SET critChance TO 1, and the difference matters at both ends.
+    // A window written into `mods` would be handed straight back by the next
+    // totem walked into (rebuildMods replays the owned list from defaults), and
+    // it would also OVERWRITE a DEAD CENTER run's halved chance rather than
+    // sitting on top of it. `itemCritEnd` is a deadline on the player, read at
+    // the moment a pellet lands (Game._resolveHit), which means the crit
+    // MULTIPLIER is still whatever the build says it is: a run carrying DEAD
+    // CENTER presses this and gets eight seconds of triple damage.
+    //
+    // Sixty - the pool's top price, beside AEGIS and OVERDRIVE. It is a damage
+    // window like OVERDRIVE and it is worth slightly less on a bare build
+    // (1.5x against 2x) and a great deal more on one that has drafted for it,
+    // which is exactly the shape an item that rewards a build should have.
+    effects: [['EVERY SHOT CRITS', GOOD], ['FOR 8s', NOTE]],
+    duration: 8,
+    hud: true,
+    use: (game) => {
+      const p = game.player;
+      p.itemCritEnd = Math.max(p.itemCritEnd, game.time + 8);
+      game.effects.shockwave(p.pos, THEME.deadeye, 6, 0.55);
+      game.effects.burst(p.eyeInto(_v), 0xffe95e, 22, 5, 3, 0.6);
+      game.sfx.itemSurge();
+    },
+    // Written back to zero rather than trusted to expire, for the same reason
+    // every other window in this file has an end(): a wave boundary, a death or
+    // a versus handover clears the running list, and a deadline that outlived
+    // its chip would be eight seconds nobody was granted.
+    end: (game) => { game.player.itemCritEnd = 0; },
+  },
+
+  itemAmmo: {
+    name: 'BANDOLIER',
+    charge: 40,
+    theme: THEME.brass,
+    // THE ONLY ITEM IN THE POOL THAT ANSWERS THE RESERVE. Ammo is the one
+    // resource with no button on it: health has the TRAUMA KIT, the crowd has
+    // six answers, and running dry has always meant walking to a station or to
+    // a crate on the floor. Thirty rounds is a station's worth in the middle of
+    // a fight, at the moment the player cannot afford to cross the room.
+    //
+    // CLAMPED AT THE CAP, and the press is still allowed at a full reserve -
+    // refusing it would be a rule the player discovers by being denied, and the
+    // pool already has exactly one refusal in it (LANCE) for a reason that does
+    // not apply here.
+    //
+    // TRIPLE TAP AND AMMO HOARDER BOTH TOUCH IT and neither is special-cased:
+    // thirty rounds is thirty ROUNDS, so a build spending three per shot gets
+    // ten shots out of this, and a build with a doubled reserve has more room
+    // to put them in. That is the honest reading of the card.
+    effects: [['+30 RESERVE ROUNDS', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      const before = p.reserveAmmo;
+      p.reserveAmmo = Math.min(p.maxReserve, p.reserveAmmo + 30);
+      game.effects.shockwave(p.pos, THEME.brass, 5, 0.45);
+      // Brass off the gun rather than a wash over the player: the thing that
+      // changed is what is in the weapon, so the tell is at the weapon.
+      game.effects.burst(p.muzzleInto(_v), 0xffb300, 18, 4, 2.4, 0.5);
+      // The number in the corner is where a player actually reads their
+      // ammunition - the puff at the muzzle is lost in a firefight. Same flare
+      // BRASS ECHO's refund uses, for the same reason.
+      if (p.reserveAmmo > before) game.ui.flashReserve();
+      game.sfx.itemAmmo();
+    },
+  },
+
+  itemMonkey: {
+    name: 'ORGAN GRINDER',
+    charge: 50,
+    theme: THEME.hex,
+    // THE ONLY ITEM IN THE GAME THAT TAKES THE PLAYER OUT OF THE FIGHT WITHOUT
+    // MOVING THEM. Every other answer to being surrounded is about where the
+    // PLAYER ends up - the dash, TECTONIC's shove, FIREBREAK's line, AEGIS's
+    // window. This one changes where the enemies are LOOKING, and for five
+    // seconds the answer is: not at you.
+    //
+    // IT CANNOT BE KILLED, and that is the whole reason the number on the card
+    // is a number of seconds. A decoy with health would last as long as the
+    // wave decided - forever on wave three, half a second on wave thirty - and
+    // the player would have no way to know which run they were in.
+    //
+    // EIGHT OF THE PLAYER'S OWN SHOTS, snapshotted at the throw the way the
+    // turret's and the mine's are: the monkey was wound up out of the gun that
+    // was being held, and one that quietly got stronger because a totem was
+    // claimed while it sat there would be a bomb nobody aimed. It is the
+    // biggest single blast in the pool and it should be - it takes five
+    // seconds, it has to be thrown somewhere useful, and the thing that makes
+    // it worth eight shots is that the crowd walks INTO it.
+    //
+    // THE BLAST DOES NOT KNOW THE PLAYER, unlike SHORT FUSE's and WELCOME MAT's.
+    // Those two are aimed at ground; this one is aimed at a crowd that is by
+    // construction somewhere the player is not, and punishing them for having
+    // been surrounded when they threw it would undo the item outright.
+    effects: [
+      ['THROW A CYMBAL MONKEY', GOOD],
+      ['ENEMIES IGNORE YOU FOR IT', GOOD],
+      ['IT GOES OFF AFTER ' + MONKEY_FUSE + 's', NOTE],
+    ],
+    use: (game) => {
+      const p = game.player;
+      p.muzzleInto(_v);
+      facing(game);
+      game.deploy(new Monkey(game, _v, _dir, p.getEffectiveDamage(p.weapon.damage) * 8));
+      game.sfx.itemMonkeyThrow();
     },
   },
 

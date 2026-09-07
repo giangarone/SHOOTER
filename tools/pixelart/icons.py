@@ -354,17 +354,6 @@ def _(c):
     star(c, 12, 14, 6.2, 2.6, 5, E)
 
 
-@icon('bloodlust')          # fire rate ramps with every kill in a combo
-def _(c):
-    # A maw opening wider. It is the only icon in the pool that is a mouth.
-    c.arc(12, 12, 10.4, 3.2, 15, 165, S)
-    c.arc(12, 12, 10.4, 3.2, 195, 345, S)
-    for i in range(4):
-        x = 5.5 + i * 4.4
-        c.poly([(x - 1.6, 5.4), (x + 1.6, 5.4), (x, 9.4)], E)
-        c.poly([(x - 1.6, 18.6), (x + 1.6, 18.6), (x, 14.6)], E)
-
-
 @icon('cursedAmmo')         # 20% of shots hit twice as hard and cost 1 HP
 def _(c):
     # The same cartridge as VENOM ROUNDS on purpose - the ammo family should
@@ -1727,3 +1716,409 @@ def _(c):
     c.line(11.0, 9.0, 8.4, 13.0, DEEP, 1.8)
     c.line(8.4, 13.0, 11.5, 18.0, DEEP, 2.2)
     drop(c, 16.5, 13.0, 2.8, E)
+
+
+# ---- the critical hit, as a family ---------------------------------------
+#
+# SIX DRAWINGS THAT MUST NOT COLLAPSE INTO EACH OTHER. They all mean "the shot
+# hit harder", they are all in one hue, and at 24 pixels the obvious drawing for
+# every one of them is a target with something in the middle of it. So the
+# family is split by SHAPE rather than by decoration, and each one owns exactly
+# one silhouette nothing else in the set has:
+#
+#   DEADEYE      an eye. The only eye in the catalogue.
+#   MARKSMAN     a reticle - four brackets round a gap, no ring at all.
+#   DEAD CENTER  a ring target with the bullseye punched out and enormous.
+#   ASSASSIN     a dagger. Nothing else in the pool is a blade.
+#   TELLTALE     three tally strokes, the third struck through.
+#   SWEET SPOT   a crosshair over a struck spark.
+
+
+@icon('deadeye')            # +15% critical hit chance
+def _(c):
+    # AN EYE, and it is the only one in the set. The lens is a lid shape - two
+    # arcs meeting at points - because a disc alone reads as a coin and a disc
+    # inside a ring reads as MIDAS. The pupil is the energy tone: what the
+    # passive item does is SEE.
+    c.poly([(1.5, 12.0), (7.0, 6.0), (12.0, 4.6), (17.0, 6.0), (22.5, 12.0),
+            (17.0, 18.0), (12.0, 19.4), (7.0, 18.0)], S)
+    c.disc(12, 12, 5.4, DEEP)
+    c.disc(12, 12, 4.0, E)
+    c.disc(12, 12, 1.7, DEEP)
+    # The catchlight. Two pixels, upper left, where every other icon's highlight
+    # is - which is what keeps the eye lit by the same lamp as the rest of them.
+    c.disc(10.4, 10.4, 0.9, P)
+
+
+@icon('marksman')           # +25% critical hit chance
+def _(c):
+    # A RETICLE MADE OF FOUR CORNER BRACKETS and nothing else - no ring, no
+    # crosshair through the middle. Negative space in the centre is what tells
+    # it apart from DEAD CENTER's solid bullseye, and the L-shaped corner is a
+    # form the whole catalogue is otherwise free of.
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            x = 12 + sx * 8.5
+            y = 12 + sy * 8.5
+            c.line(x, y, x - sx * 5.5, y, S, 2.6)
+            c.line(x, y, x, y - sy * 5.5, S, 2.6)
+    # The pip they are all pointing at. Bigger than a dot and smaller than a
+    # bullseye: this passive item is about how OFTEN a crit lands, not how hard,
+    # so the middle of the target is deliberately not the loudest thing here.
+    star(c, 12, 12, 4.4, 1.6, 4, E)
+
+
+@icon('deadCenter')         # crits do 3x, crit chance halved
+def _(c):
+    # A TARGET WHOSE MIDDLE IS THE WHOLE ICON. Concentric rings drawn thin and
+    # dark so the bullseye is what the eye lands on - the passive item trades
+    # the outside of the target away for the middle of it, and the drawing says
+    # exactly that. It cannot be mistaken for MARKSMAN, which has no rings at
+    # all, or for DEADEYE, whose outline is a lid rather than a circle.
+    c.disc(12, 12, 11.0, S)
+    c.ring(12, 12, 11.0, 1.6, D)
+    c.ring(12, 12, 8.0, 1.6, DEEP)
+    c.ring(12, 12, 5.0, 1.6, DEEP)
+    c.disc(12, 12, 3.6, E)
+    # The round already in it, off centre, so the target reads as SHOT rather
+    # than as printed.
+    c.disc(11.0, 11.0, 1.2, P)
+
+
+@icon('assassin')           # the first hit on an enemy always crits
+def _(c):
+    # A DAGGER, POINT DOWN, and nothing else in the catalogue is a blade -
+    # EXECUTIONER is an axe on a haft and BONESAW is a serrated wedge, both of
+    # which are wide. This is the narrowest silhouette in the set.
+    #
+    # THE BLADE IS STRUCTURE AND THE EDGE IS ENERGY. Drawn the other way round
+    # it came out almost entirely pale: the shading pass lights the upper-left
+    # rim of a shape, and a four-pixel blade is nearly all rim.
+    c.poly([(12.0, 1.0), (15.6, 7.0), (15.6, 14.5), (12.0, 18.5),
+            (8.4, 14.5), (8.4, 7.0)], S)
+    c.poly([(12.0, 2.5), (14.0, 7.4), (14.0, 14.0), (12.0, 16.6)], E)
+    c.rect(4.5, 15.0, 19.5, 17.4, S)          # the guard
+    c.rect(10.4, 17.4, 13.6, 22.0, S)         # the grip
+    c.disc(12.0, 22.4, 2.2, S)                # the pommel
+
+
+@icon('telltale')           # every 3rd hit on one enemy crits
+def _(c):
+    # A TALLY, AND THE STRIKE IS THE LIT PART. Three strokes and a diagonal
+    # through the third - the one drawing in the world that means "every
+    # third", and it is legible at three pixels a stroke. BODY COUNT is a
+    # five-bar gate of five strokes; this is three, and the diagonal crosses
+    # only the last of them, so the two can never read as each other.
+    #
+    # THE STROKES ARE ALL STRUCTURE AND ONLY THE STRIKE IS ENERGY. Lighting the
+    # third stroke as well merged it with the diagonal into one bright blob -
+    # the shading pass has nothing to separate two touching shapes of the same
+    # tone with, and the whole reading is that the third mark is CROSSED.
+    for x in (5.0, 10.5, 16.0):
+        c.line(x, 4.5, x, 19.5, S, 3.0)
+    c.line(12.5, 21.0, 20.0, 3.5, E, 2.8)
+
+
+@icon('itemCrit')           # SWEET SPOT - every shot crits for 8s
+def _(c):
+    # A CROSSHAIR LANDING ON A SPARK. The four arms are a form the reticle
+    # family has (MARKSMAN's brackets are corners, not arms) and the burst under
+    # them is what makes it an EVENT rather than a sight: the item is eight
+    # seconds of hits, not a way of aiming.
+    star(c, 12, 12, 10.5, 3.4, 4, E)
+    star(c, 12, 12, 7.4, 2.4, 4, P, phase=45)
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        c.line(12 + dx * 10.5, 12 + dy * 10.5, 12 + dx * 4.4, 12 + dy * 4.4, S, 2.2)
+    c.disc(12, 12, 3.0, DEEP)
+    c.disc(12, 12, 1.6, P)
+
+
+# ---- range ----------------------------------------------------------------
+
+
+@icon('longshot')           # more damage the further the target
+def _(c):
+    # THREE CHEVRONS, GROWING, AND THE FAR ONE IS LIT. The drawing says "the
+    # further it travels, the harder it lands" without a number - the size IS
+    # the number - and it is the only place in the catalogue where a repeated
+    # shape changes scale.
+    #
+    # TWO EARLIER PASSES FAILED IN THE SAME WAY and both are worth recording.
+    # A pair of target rings at two scales did not survive the shading: a ring
+    # under two pixels thick is entirely rim, so the lit far target came back as
+    # structure. Then the same chevrons over a trajectory LINE merged with it
+    # into one solid wedge. What works is separation: no connecting line at all,
+    # and the gaps are what let the eye read three of anything.
+    for x, y, size, w, tone in (
+        (4.0, 19.5, 2.4, 2.0, D),
+        (10.5, 12.5, 3.4, 2.6, S),
+        (17.5, 6.0, 4.4, 3.4, E),
+    ):
+        c.line(x - size, y + size, x + size, y, tone, w)
+        c.line(x - size, y - size, x + size, y, tone, w)
+
+
+@icon('pointBlank')         # +30% damage within 5 metres
+def _(c):
+    # A MUZZLE FIRED INTO SOMETHING THAT IS TOUCHING IT. Longshot is a taper
+    # going away; this is a wall of flash filling the frame with no travel in it
+    # at all - the two are opposites and the drawings have to be opposites.
+    c.rect(0.5, 9.5, 8.5, 14.5, S)            # the barrel, edge on
+    c.rect(0.5, 9.5, 2.2, 14.5, D)
+    c.rect(6.5, 8.6, 8.5, 15.4, S)            # and its crown
+    # The star of flash, enormous, taking most of the grid. One star and not
+    # two: the second only ever filled in the notches of the first.
+    star(c, 14.5, 12.0, 10.0, 3.4, 6, E, phase=0)
+    c.disc(14.5, 12.0, 3.0, P)
+
+
+# ---- what a hit taken is worth --------------------------------------------
+
+
+@icon('bloodMoney')         # credits for damage taken
+def _(c):
+    # A COIN WITH A DROP FALLING OFF IT. Against MIDAS, which is a coin with a
+    # ring and a bullseye and two stars: this one has no ring and no stars, and
+    # what it has instead is the drop - the one shape the money family does not
+    # own anywhere and the blood family owns everywhere.
+    c.disc(10.0, 9.0, 8.0, S)
+    c.ring(10.0, 9.0, 8.0, 1.2, D)
+    # The mark on the face. A bar through it, not a currency glyph: text at this
+    # size is four unreadable pixels.
+    c.rect(8.9, 3.0, 11.1, 15.0, DEEP)
+    c.rect(6.0, 6.6, 14.0, 8.0, DEEP)
+    c.rect(6.0, 10.0, 14.0, 11.4, DEEP)
+    # Clear of the coin, so the drop reads as having FALLEN rather than as a
+    # nick out of the rim.
+    drop(c, 18.5, 19.0, 3.4, E)
+
+
+@icon('adrenaline')         # +4% damage per hit taken, resets each wave
+def _(c):
+    # A SYRINGE, WHICH THE CATALOGUE DOES NOT HAVE. COMBAT STIMS is a boot and a
+    # chevron; the medical family is a cross (pickHealth) and a case (itemHeal).
+    #
+    # UPRIGHT, AND NARROW. Drawn on the diagonal - which was the first two
+    # passes - the barrel, the flange and the plunger all touch at 24 pixels and
+    # come back as one wedge. Upright they separate, and what stops it reading
+    # as a MAGAZINE is the proportion: a magazine is a wide box, and this is a
+    # four-pixel tube under a ten-pixel crossbar with a spike under it. Nothing
+    # in the ammunition family has a T on top.
+    c.rect(6.5, 1.0, 17.5, 3.2, S)            # the finger flange
+    c.rect(10.6, 3.2, 13.4, 5.4, S)           # the plunger rod, thin
+    c.rect(8.4, 6.4, 15.6, 18.0, S)           # the barrel
+    c.rect(9.6, 8.6, 14.4, 17.2, E)           # the dose standing in it
+    c.poly([(9.4, 18.0), (14.6, 18.0), (12.0, 20.4)], S)   # the shoulder
+    c.rect(11.2, 20.0, 12.8, 23.0, S)         # the needle
+
+
+# ---- the rest --------------------------------------------------------------
+
+
+@icon('rabbitsFoot')        # +15% drop chance
+def _(c):
+    # A PAW, and it has to be unmistakably a paw or the charm reads as a generic
+    # lucky token. A pad with four toes ABOVE AND CLEAR OF IT is the only shape
+    # that does that at this size. Nothing else in the catalogue is organic.
+    #
+    # THE GAPS BETWEEN THE TOES ARE THE DRAWING. Two passes were lost to this:
+    # at r=2.2 the shading pass ate every toe into a hollow ring, and at r=3.0
+    # they touched and came back as one bar across the top. Two and a half, set
+    # a clear pixel apart, is the one size that is both solid and separate.
+    ellipse(c, 10.5, 17.5, 6.4, 4.6, S)
+    for x, y in ((2.6, 10.0), (7.6, 6.2), (13.6, 6.4), (18.6, 9.8)):
+        c.disc(x, y, 2.4, S)
+    # The charm it hangs on: a ring off the ankle, which is what makes it a
+    # keepsake rather than an animal - and it is the lit part, because the LUCK
+    # is the upgrade and the foot is only where it is kept.
+    c.line(15.6, 20.4, 18.6, 18.0, E, 2.2)
+    c.ring(20.0, 15.0, 3.4, 2.2, E)
+
+
+@icon('crouchfire')         # +20% fire rate while crouching
+def _(c):
+    # A FIGURE DOWN ON ONE KNEE, ON A FLOOR, WITH THE RATE COMING OFF ITS GUN.
+    # DIG IN is a planted stake and a shield; this is a BODY, which the
+    # catalogue has exactly one other of (MARTYR) and that one is standing
+    # inside a blast.
+    #
+    # THE FLOOR LINE IS WHAT MAKES IT A CROUCH. Two passes were lost without
+    # one: masses alone read as a hammer, because a head on a stalk over a
+    # horizontal bar IS a hammer. With ground under it the same shape is a
+    # person kneeling on it, and the reading is not ambiguous any more.
+    c.rect(1.0, 20.6, 23.0, 22.4, D)               # the floor
+    c.disc(6.6, 5.4, 3.4, S)                       # the head
+    c.rect(3.6, 9.0, 10.4, 17.0, S)                # the torso, a block
+    c.rect(3.6, 17.0, 15.0, 20.6, S)               # the leg, folded forward
+    c.rect(11.6, 13.4, 15.0, 20.6, S)              # and the shin under the knee
+    c.rect(10.6, 10.4, 19.0, 13.0, S)              # the gun, held level
+    c.rect(10.6, 10.4, 19.0, 11.2, D)
+    # The rate, as three bars stepping off the muzzle. The same vocabulary
+    # OVERCLOCK's needle and HAIR TRIGGER use for speed, at the one place on
+    # this drawing it can be read: out in front, against empty grid.
+    for i in range(3):
+        c.rect(19.6, 4.6 + i * 3.2, 23.0 - i * 1.6, 6.2 + i * 3.2, E)
+
+
+@icon('bloodsport')         # melee kills heal
+def _(c):
+    # BRASS KNUCKLES, with a drop coming off them. A FIST was the obvious
+    # drawing and it does not survive the size: the RAGE pickup is already a
+    # fist, and two fists at 24 pixels are one shape. A bar with four holes
+    # punched through it is a silhouette nothing else in the catalogue has, it
+    # is unmistakably a melee weapon, and the holes are the generated outline's
+    # best case - they are enclosed by lit pixels on every side.
+    c.poly([(2.5, 8.0), (21.5, 8.0), (21.5, 14.5), (18.0, 18.0),
+            (6.0, 18.0), (2.5, 14.5)], S)
+    for i in range(4):
+        c.disc(5.4 + i * 4.4, 11.6, 1.9, DEEP)
+    # The grip bar under the holes, so the thing reads as held rather than as a
+    # plate with holes in it.
+    c.rect(4.0, 15.0, 20.0, 16.6, D)
+    # And what it buys: the drop, clear of the metal.
+    drop(c, 19.0, 21.0, 2.8, E)
+
+
+@icon('warChest')           # +1 damage per $1,000 banked
+def _(c):
+    # A STACK OF MONEY WITH A ROUND STANDING IN IT. That is the entire pick -
+    # the balance you did NOT spend, standing there as damage - and it is the
+    # one drawing that says both halves at once.
+    #
+    # A CHEST WAS THE FIRST IDEA AND IT DOES NOT SURVIVE THE SIZE. A wide box
+    # with a rim across it and a hasp down the middle is a shopfront: two
+    # passes at it read as a building, because at 24 pixels a rectangle with a
+    # horizontal band and a vertical divider is a facade whatever it was drawn
+    # as. A stack is unambiguous, and it is distinct from the coin family -
+    # MIDAS and BLOOD MONEY are each ONE disc, face on, and this is several
+    # seen edge on.
+    for i, y in enumerate((21.0, 18.2, 15.4)):
+        ellipse(c, 11.0, y, 8.6 - i * 0.6, 2.3, S)
+        # A dark seam under each disc, so a stack of three reads as three
+        # rather than as one tall cylinder.
+        ellipse(c, 11.0, y + 1.1, 8.6 - i * 0.6, 1.0, D)
+    # The round standing in the top of it, big, and the only lit thing here.
+    bullet(c, 8.0, 1.5, 6.0, 12.0, E, P)
+
+
+@icon('twinCell')           # hold two active-item charges
+def _(c):
+    # TWO CELLS SIDE BY SIDE, one full and one filling. Against the single
+    # battery nothing else in the set draws: the COUNT is the passive item, so
+    # the icon is a pair, and the difference in fill between the two says which
+    # one is the spare without a word.
+    for i, (x, fill) in enumerate(((2.5, 1.0), (13.0, 0.45))):
+        c.rect(x, 5.0, x + 8.5, 20.5, S)          # the case
+        c.rect(x + 3.0, 3.2, x + 5.5, 5.0, S)     # the terminal
+        c.rect(x + 1.4, 6.4, x + 7.1, 19.1, DEEP) # the window
+        top = 19.1 - 12.7 * fill
+        c.rect(x + 1.4, top, x + 7.1, 19.1, E)    # the charge in it
+    # And the bolt across both, so the pair reads as CHARGE rather than as two
+    # tins - the same mark the fire-rate pickup uses, small.
+    c.poly([(13.0, 10.0), (10.0, 13.4), (11.8, 13.4), (9.6, 16.4),
+            (13.4, 12.6), (11.6, 12.6)], P)
+
+
+@icon('magpie')             # a bird that collects credits
+def _(c):
+    # A BIRD IN PROFILE WITH A COIN IN ITS BEAK. Nothing else in the catalogue
+    # is an animal at all, so the silhouette is free - what it has to get right
+    # is the LONG TAIL, which is the only thing that makes it a magpie rather
+    # than a generic bird, and the coin, which is the only thing that says what
+    # it is for.
+    #
+    # IT IS PIED, AND THAT IS WHAT MAKES IT LEGIBLE. Three passes were lost
+    # drawing the whole animal in one tone with a small pale wing on it: the
+    # shading pass lights the edges of the SILHOUETTE, so where the tail meets
+    # the body there is no edge to light and the two fuse into a lump whatever
+    # size they are drawn at. The bird is a WHITE BELLY with a dark head, wing
+    # and tail instead - which is both the real marking and the only internal
+    # contrast a 24-pixel animal can have.
+    c.poly([(8.6, 15.0), (1.0, 20.6), (3.6, 23.0), (11.2, 17.6)], S)   # the tail
+    ellipse(c, 11.6, 12.6, 5.6, 4.8, P)                                # the white body
+    # The dark half: the folded wing over the back, meeting the head. Drawn as
+    # a wedge rather than as a second ellipse so the join between the two tones
+    # is a hard diagonal - a curve against a curve reads as a smudge.
+    c.poly([(6.4, 13.4), (9.2, 8.4), (15.4, 8.8), (12.4, 13.4), (8.2, 14.6)], S)
+    c.disc(16.6, 6.8, 3.5, S)                                          # the head
+    c.poly([(19.6, 5.8), (23.5, 7.6), (19.6, 9.4)], E)                 # the beak
+    c.disc(17.6, 6.0, 1.0, DEEP)                                       # the eye
+    c.line(10.6, 16.8, 10.6, 20.4, S, 1.4)                             # the legs
+    c.line(13.6, 16.4, 13.6, 20.0, S, 1.4)
+    # The take, held clear of the beak so it is not lost in the head.
+    c.disc(20.4, 13.8, 3.0, E)
+    c.ring(20.4, 13.8, 3.0, 1.0, S)
+
+
+@icon('lamprey')            # a leech that guards you
+def _(c):
+    # A RING OF TEETH ON A COILED BODY. HAEMOPHAGE (the active item) is a leech
+    # wrapped round a CARTRIDGE - the round is the subject there. This one has
+    # no cartridge: the mouth is the subject, drawn face on, because what the
+    # passive item is is a thing that bites.
+    #
+    # THE BODY IS HALF THE DRAWING. The first pass gave it three short strokes
+    # behind the head and the animal read as a doughnut with a stub; it curls
+    # right across the grid now, tapering, so the head is clearly the FRONT of
+    # something long. It curls to one side rather than coiling symmetrically -
+    # a symmetric coil at this size is a spiral, and EVENT HORIZON owns that.
+    c.line(11.0, 13.0, 5.0, 16.0, S, 5.6)
+    c.line(5.0, 16.0, 4.0, 21.0, S, 4.4)
+    c.line(4.0, 21.0, 10.0, 23.0, S, 3.2)
+    c.line(10.0, 23.0, 15.5, 21.5, S, 2.0)
+    c.disc(13.5, 9.0, 7.4, S)                     # the head
+    c.ring(13.5, 9.0, 6.8, 1.8, E)                # the tooth ring
+    c.disc(13.5, 9.0, 4.2, DEEP)                  # the funnel
+    c.disc(13.5, 9.0, 2.4, E)                     # the lit throat
+    # The teeth themselves, eight spokes into the funnel. Without them the head
+    # is a doughnut; with them it is a mouth.
+    spikes(c, 13.5, 9.0, 6.4, 4.0, 8, 1.2, E)
+    # The gill row down the side, which is the one detail that makes it a
+    # lamprey and not a worm.
+    for i in range(3):
+        c.disc(8.0 - i * 0.8, 15.0 + i * 2.2, 1.1, E)
+
+
+@icon('itemAmmo')           # BANDOLIER - +30 reserve rounds
+def _(c):
+    # A BELT OF ROUNDS ACROSS THE FRAME. The ammo family is full of magazines
+    # and drums - all of them upright containers - and a diagonal STRAP with
+    # rounds seated in it is the one ammunition shape none of them is. It also
+    # says QUANTITY in a way a magazine cannot: the rounds are visible and there
+    # are six of them.
+    c.line(1.0, 19.5, 22.5, 5.5, S, 6.4)
+    c.line(1.0, 21.6, 22.5, 7.6, D, 1.4)
+    for i in range(6):
+        t = (i + 0.5) / 6.0
+        x = 1.5 + t * 20.5
+        y = 19.2 - t * 13.6
+        # Seated across the strap, so each one reads as being IN a loop rather
+        # than lying on top of it.
+        c.line(x - 1.5, y - 2.4, x + 1.1, y + 1.8, E, 2.2)
+        c.disc(x - 1.7, y - 2.8, 1.1, P)
+
+
+@icon('itemMonkey')         # ORGAN GRINDER - the cymbal monkey
+def _(c):
+    # A MONKEY HOLDING TWO CYMBALS, and the whole job of this drawing is that
+    # the player recognises the OBJECT - a wind-up toy - because that is what
+    # makes an arena full of enemies walking toward it read as a joke rather
+    # than as a bug. So the cymbals are enormous, the head is round, the ears
+    # stick out, and there is a key in the back.
+    c.disc(12.0, 9.0, 5.4, S)                      # the head
+    c.disc(6.6, 8.4, 2.4, S)                       # the ears
+    c.disc(17.4, 8.4, 2.4, S)
+    c.disc(12.0, 10.6, 3.2, DEEP)                  # the face, dark
+    c.disc(10.2, 8.2, 1.0, E)                      # and two lit eyes in it
+    c.disc(13.8, 8.2, 1.0, E)
+    c.rect(9.4, 14.0, 14.6, 20.0, S)               # the body
+    # THE CYMBALS. Drawn edge-on as two vertical discs about to meet, which is
+    # the only reading that says they are ABOUT to clash rather than lying flat.
+    for sx in (-1, 1):
+        x = 12.0 + sx * 6.4
+        c.line(x, 12.6, x, 20.4, E, 3.0)           # the disc, edge on
+        c.disc(x, 16.5, 1.6, P)                    # the dome in the middle
+        c.line(12.0 + sx * 3.6, 15.0, x, 16.5, S, 1.8)   # the arm
+    # The wind-up key, over the shoulder, which is the one mark that says TOY.
+    c.ring(19.6, 3.6, 2.6, 1.1, E)
+    c.line(17.4, 5.4, 15.4, 7.0, E, 1.4)

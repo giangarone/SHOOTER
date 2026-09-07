@@ -452,12 +452,112 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 67 upgrades: 14 commons, 40 rares and 13 cursed. A specific rare
-passive item turns up in roughly 4-5% of totem sets, so a run sees a slice of
+The pool is 82 upgrades: 19 commons, 49 rares and 14 cursed. A specific rare
+passive item turns up in roughly 3-4% of totem sets, so a run sees a slice of
 the pool rather than all of it - that is the point, but it means a new upgrade
 only matters if it is worth taking on sight, without a partner card.
 
-Eleven of those came in from a feature that no longer exists. A second row used
+### The critical hit, as a build
+
+Every run has had a crit since its first magazine - 5% for 1.5x, in
+`DEFAULT_MODS`, non-zero on purpose so the yellow damage number is something the
+player has already seen by the time anything offers to change it. Six entries
+now take it somewhere, and no two of them are the same pick:
+
+| Upgrade | Effect | Rarity |
+| --- | --- | --- |
+| DEADEYE | +15% crit chance | common |
+| MARKSMAN | +25% crit chance | rare |
+| DEAD CENTER | Crits deal 3x, crit chance halved | cursed |
+| ASSASSIN | The first hit on any enemy always crits | rare |
+| TELLTALE | Every 3rd hit on one enemy crits | rare |
+| SWEET SPOT | *(active item)* every shot crits for 8s | 60 charge |
+
+DEADEYE and MARKSMAN raise the dice. DEAD CENTER trades the dice for the payout,
+which is the same expected damage on paper and a completely different feel in
+the hand. ASSASSIN and TELLTALE do not touch the dice at all - they make a crit
+something the player can PLAN, off the target's own history.
+
+**They are resolved at the hit, not at the trigger.** `Player.rollCrit()` still
+throws one die per trigger pull beside Cursed Ammo and Devil's Gamble, exactly
+as it always did - but ASSASSIN and TELLTALE ask about the BODY, and at the
+moment the trigger is pulled there is no body yet. The roll is carried down to
+the landing site and `Game._resolveHit` turns it into a per-enemy answer;
+`Game._hitMult` then folds the multiplier in beside the two range passive items.
+The per-enemy history (`everHit`, `hitTally`) lives on the Enemy and dies with
+it, so nothing has to be cleaned up.
+
+The one thing that is easy to get wrong and hard to see is a **shotgun**. Nine
+pellets into one chest is ONE hit as far as the tally and the freshness are
+concerned, so `_resolveHit` caches its answer per trigger pull in `_shotCrit`
+beside the `_shotHits` set `_landShot` already keeps. Without it a scattergun
+ticks the counter eight times a shell and TELLTALE reads as a permanent crit -
+which looks like good luck, not like a bug, for a long time.
+
+### Range, and what a hit taken is worth
+
+LONGSHOT ramps damage to +30% at 40m (a ramp, not a threshold: a cliff the
+player cannot see would show up as the damage number jumping as they backed over
+an invisible line) and POINT BLANK pays a flat +30% inside 5m, which is a hard
+edge because it is a LINE the player either stepped over or did not - and five
+metres is the distance every melee reach in the game has already taught them.
+
+BLOOD MONEY pays credits per point of damage TAKEN and ADRENALINE gives +4%
+damage a hit up to +40%, reset at every wave boundary. Both hook `_noteDamage`,
+which is the only place that sees what actually LANDED - after the dodge, the
+ward, curse and every multiplier - so they cover the hazard path for free and
+neither is farmable: the rate is a fraction of what the same seconds spent
+killing would pay, and the ramp is bounded by a wave the player does not choose.
+
+### The two companions
+
+Nothing else the player owns is alive. A turret is furniture with a cooldown and
+the bees are a cloud on a timer; MAGPIE and LAMPREY are around for the whole run,
+they decide where to go by themselves, and the player will watch them. They live
+in `js/companions.js` and they are **not deployables** - `_clearHazards` sweeps
+that list at every wave end, and a pet the player had to bury once a minute
+would be a different item. They are created and destroyed off `mods` rather than
+off a pick (`Game._syncCompanions`), which is what makes them work in versus for
+nothing: a handover replays the incoming player's build, so the frame after a
+swap the pets swap with it.
+
+MAGPIE walks the floor picking up credit orbs, through the same `onCollect` the
+player's own magnet pays through - so the credits, the item-charge slice and
+BLOOD FROM STONE all still happen once, in `_collectOrb`. It is deliberately not
+a wider magnet: LODESTONE already grows the circle around the player, and being
+somewhere else is the only thing a bird can offer that a bigger circle cannot.
+
+LAMPREY holds station about 2.5m from the player and goes for whatever comes
+close, biting for 10 on every `Music.pulse` and healing 2 HP when it lands the
+last hit. It **parks** rather than orbiting: the station is a point in the world
+and it is only re-picked once the player has walked out of the band it is
+comfortable in, because something circling continuously in the near periphery is
+exactly what the eye keeps looking at, and the player has a fight to watch.
+
+### The rest
+
+| Upgrade | Effect | Rarity |
+| --- | --- | --- |
+| BLOOD MONEY | $2 per point of damage taken, per stack | common |
+| RABBIT'S FOOT | +15% on every drop chance, per stack | common |
+| CROUCHFIRE | +20% fire rate while crouched, per stack | common |
+| LONGSHOT | Up to +30% damage, ramped to 40m | rare |
+| POINT BLANK | +30% damage within 5m | rare |
+| ADRENALINE | +4% damage per hit taken, to +40%, per wave | rare |
+| BLOODSPORT | Melee kills heal 3 HP, per stack | rare |
+| WAR CHEST | +1 damage per $1,000 on the balance | rare |
+| TWIN CELL | Hold 2 active-item charges | rare |
+| MAGPIE | A bird that collects credits | common |
+| LAMPREY | A leech that guards you | rare |
+
+TWIN CELL is a second charge, not a second slot - the slot is still one deep and
+the item in it is still the run's answer to one problem. It is one number with a
+doubled ceiling rather than a second field: `itemReady` is unchanged because one
+charge is still one charge, spending SUBTRACTS a charge instead of zeroing, and
+the HUD's second bar is a second reading of the same number
+(`Player.itemChargeFrac(0)` and `(1)`) drawn as a pale overlay in the same cells.
+
+Eleven other entries came in from a feature that no longer exists. A second row used
 to stand on the far side of the arena selling passive items for MAX HEALTH - a
 price that could never be earned back - and it is now the active item row. Its
 stock was folded into this pool and re-rated by whether each one already
@@ -475,7 +575,7 @@ An active item does nothing until it is fired, and firing it is a decision made
 at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
 pad.
 
-Thirty-seven of them, in five groups by what they actually reach for.
+Forty of them, in five groups by what they actually reach for.
 
 **Instant, on the room:**
 
@@ -505,6 +605,7 @@ Thirty-seven of them, in five groups by what they actually reach for.
 | BIRD DOG | Seeker's homing for 10s | 40 |
 | HAEMOPHAGE | The next 20 hits heal 1 HP each, no time limit | 60 |
 | BLOOD FROM STONE | Credit orbs also heal 1 HP for 8s | 30 |
+| SWEET SPOT | Every shot crits for 8s | 60 |
 
 **The health bar:**
 
@@ -515,6 +616,7 @@ Thirty-seven of them, in five groups by what they actually reach for.
 | OPEN VEIN | 50 HP for a full ammo reserve | 50 |
 | SIX CHAMBERS | 50/50: full health, or one | 36 |
 | GRAFT | +3 max health, permanently | 60 |
+| BANDOLIER | +30 reserve rounds | 40 |
 
 **Getting out of somewhere:**
 
@@ -537,7 +639,33 @@ Thirty-seven of them, in five groups by what they actually reach for.
 | APIARY | Five hunting bees, for 24s | 45 |
 | EVENT HORIZON | A thrown singularity. 14m reach, 2x bullet damage a beat, 5s | 60 |
 | LODESTAR | Pull in every orb and pickup on the floor | 60 |
+| ORGAN GRINDER | A cymbal monkey. Every enemy walks to it and ignores you; after 5s it goes off for 8x bullet damage over 9m | 50 |
 | SECOND OPINION | Rerolls the shop on use, free | 50 |
+
+ORGAN GRINDER is the only item in the game that takes the player out of the
+fight without moving them. Every other answer to being surrounded is about where
+the PLAYER ends up - the dash, TECTONIC's shove, FIREBREAK's line, AEGIS's
+window. This one changes where the enemies are *looking*.
+
+It cannot be damaged, and that is why the number on the card is a number of
+seconds: a decoy with health would last as long as the wave decided - forever on
+wave three, half a second on wave thirty - and the player would have no way to
+know which run they were in.
+
+Not one enemy type, `ai()`, boss or projectile was told the item exists. The
+monkey carries a `decoy` object with the player's whole movement-facing surface
+(`pos`, `vel`, `yaw`, `eyeInto`, `forwardInto`, `eyeH`) and `_updateEnemies`
+swaps it in for `ctx.player` while one is armed, along with the three hooks an
+enemy uses to reach the player and the nav grid, which is flooded from the
+player's position and would otherwise route the crowd politely around every
+pillar on their way to where the player is standing.
+
+That surface has to be COMPLETE. The first version carried `pos` and `eyeInto`,
+because a grep for `ctx.player.` found only those - and a wraith reads the
+player through a local alias (`const p = ctx.player; p.forwardInto(...)`) that
+the grep never saw. It threw inside the enemy sweep, which is inside `rAF`,
+which never reschedules: the game stopped dead on the frame the item was
+pressed. `test/newpool.mjs` asserts the whole surface.
 
 **Three of them hurt you, and that is deliberate.** WELCOME MAT's blast does not
 know who laid it, SHORT FUSE's does not know who threw it, and MARTYR's is the
@@ -797,6 +925,7 @@ npm run test:aim
 npm run test:sprint
 npm run test:crouch
 npm run test:active
+npm run test:newpool
 ```
 
 Two targeted suites, because the smoke test's bot rarely survives past the
@@ -880,7 +1009,9 @@ js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
-js/items.js         the five active items, and the pedestal row that offers them
+js/items.js         the active items, and the mystery box that offers them
+js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
+js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
 js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
@@ -893,11 +1024,13 @@ test/icons.mjs      every offer has a drawing and every drawing an offer
 test/pad.mjs        controller support, driven by a synthetic DualSense
 test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
+test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
+                    items, the two companions, the lure - and all of it in 2P
 test/aim.mjs        the sights, the crosshair that reads the cone, the marker
 test/accuracy.mjs   the held trigger blooms, caps, recovers - and is not recoil
 test/crouch.mjs     the crouch, the slide, the dive out of a jump, the swing
 test/sprint.mjs     the second gear and the stamina that pays for it
-pixel-icon-sheet.html    all 66 icons at once, at full size and at arena range
+pixel-icon-sheet.html    every icon at once, at full size and at arena range
 pixel-icon-viewer.html   one icon at a time, in a mock column
 enemy-viewer.html        the enemy roster as flat silhouettes
 tools/pixelart/          the icon drawings + the shared lighting pass

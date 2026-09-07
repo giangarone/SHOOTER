@@ -633,6 +633,62 @@ export class SFX {
     this.tone({ f: 784, t: 0.5, type: 'triangle', v: 0.18, delay: 0.2 });
   }
 
+  // BANDOLIER. Rounds going INTO something: a short rattle of brass with a
+  // seated clunk under it. Deliberately the reload's vocabulary rather than the
+  // pickup chime's - what the player just did is load the gun, not find a box.
+  itemAmmo() {
+    for (let i = 0; i < 4; i++) {
+      this.noise({ t: 0.03, v: 0.16, f: 5200, mode: 'highpass', delay: i * 0.035 });
+    }
+    this.tone({ f: 300, f2: 210, t: 0.14, type: 'square', v: 0.2, delay: 0.05 });
+    this.tone({ f: 150, t: 0.16, type: 'sine', v: 0.18, delay: 0.06 });
+  }
+
+  // ORGAN GRINDER, thrown. A wind-up: a ratchet made of six quick clicks over a
+  // rising body, so the thing is audibly WOUND before it lands and starts
+  // playing. Nothing else in the set ratchets, which is what makes it findable
+  // by ear in a crowded frame.
+  itemMonkeyThrow() {
+    for (let i = 0; i < 6; i++) {
+      this.tone({
+        f: 2200 + i * 180, t: 0.02, type: 'square', v: 0.1, delay: i * 0.038,
+      });
+    }
+    this.tone({ f: 140, f2: 260, t: 0.3, type: 'triangle', v: 0.2 });
+  }
+
+  /**
+   * ONE CLASH OF THE CYMBALS, and the only sound in the game that is a MUSICAL
+   * INSTRUMENT rather than a machine or a body. That is the whole brief: it
+   * lands on Music.pulse, so it arrives in time with the track, and it has to
+   * be recognisable as a thing playing along rather than as another explosion
+   * happening off screen.
+   *
+   * Two bandpassed noise bursts a hair apart is a crash cymbal - the beat
+   * between the two filters is what gives it the shimmer a single burst has
+   * no way to fake - with a short metallic partial on top for the strike.
+   *
+   * @param {number} urgency  0 at the throw, 1 as the fuse runs out. It opens
+   *   the filter and lifts the level, so the toy audibly panics: the player can
+   *   tell how long is left with their back turned.
+   */
+  monkey(urgency = 0) {
+    const u = Math.max(0, Math.min(1, urgency));
+    const v = 0.14 + u * 0.16;
+    this.noise({ t: 0.26 + u * 0.1, v, f: 3600 + u * 2600, mode: 'bandpass', q: 1.1 });
+    this.noise({ t: 0.2, v: v * 0.7, f: 5200 + u * 2600, mode: 'bandpass', q: 0.8 });
+    this.tone({ f: 1720, f2: 1450, t: 0.09, type: 'square', v: 0.07 + u * 0.06 });
+  }
+
+  // THE LAMPREY FINISHING SOMETHING. Wet and small - it is a 30cm animal, and a
+  // pet whose kill sounded like the player's gun would be a pet stealing the
+  // frame. The rise on the tail is the heal; nothing hostile in this game
+  // resolves upward.
+  lamprey() {
+    this.noise({ t: 0.09, v: 0.16, f: 900, f2: 260, mode: 'lowpass' });
+    this.tone({ f: 260, f2: 520, t: 0.16, type: 'sine', v: 0.18, delay: 0.03 });
+  }
+
   // LITTLE BROTHER'S shot. Deliberately thinner and higher than the player's
   // own gun: two guns firing in one room have to be tellable apart, and the
   // one the player is not holding is the one that gives way.

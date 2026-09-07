@@ -71,6 +71,7 @@ import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
+import { Magpie, Lamprey } from './companions.js';
 import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
@@ -227,6 +228,35 @@ const BLOOM_AIM = 0.55;
 // The crosshair's arms never close all the way onto the dot: a reticle with no
 // gap in it is a blob, and the aimed cone is small enough to be one.
 const CROSS_MIN_GAP = 4;
+
+// LONGSHOT and POINT BLANK, the two passive items that make damage care where
+// the player is standing. See Game._hitMult.
+//
+// FORTY METRES IS THE ARENA'S LONG SHOT AND NOT ITS DIAGONAL. BOUND is 22, so
+// corner to corner is over sixty - but a corner-to-corner shot is a shot at
+// something that has not noticed you yet, and a bonus that only maxed out
+// there would be a bonus nobody ever collected. Forty is about the longest
+// distance a live fight actually happens over in this room, which makes the
+// top of the ramp somewhere the player can reach by backing off rather than by
+// leaving.
+const LONGSHOT_RANGE = 40;
+// And its opposite. Five metres is inside the arm's reach of half the roster,
+// which is the whole deal: the bonus is only ever collected somewhere that is
+// about to cost health.
+const POINT_BLANK_RANGE = 5;
+
+// WHAT AN ENEMY IS ALLOWED TO DO TO THE PLAYER WHILE A LURE IS OUT: nothing.
+//
+// Three no-ops rather than three `if (lure) return` guards inside the real
+// hooks, because those hooks are shared: _hurtPlayer is also how a lava pool,
+// a projectile already in the air and a mine the player set off themselves
+// reach the health bar, and none of those are being fooled by a toy monkey.
+// Swapping the ENEMY context's copies is the only edit that means exactly what
+// ORGAN GRINDER's card says and nothing more. See the LURE block in
+// _updateEnemies.
+const NO_HIT = () => {};
+const NO_STATUS = () => {};
+const NO_PULL = () => {};
 
 const MELEE_RANGE = 3.6;
 // NARROWER THAN THE OLD SWEEP, because the swing hits exactly one thing now
@@ -865,6 +895,12 @@ class Game {
     // not per-pellet: without this a point-blank shell would roll Petrify
     // eight times and shove its target twelve metres.
     this._shotHits = new Set();
+    // WHETHER EACH ENEMY THIS SHOT TOUCHED CRITTED. Beside _shotHits and
+    // cleared with it, for the same reason it exists: the crit is decided per
+    // TRIGGER PULL per BODY, so nine pellets into one chest all crit or none
+    // of them do, and a shotgun cannot tick Telltale's counter eight times off
+    // one shell. See _resolveHit.
+    this._shotCrit = new Map();
     this._blastAt = new THREE.Vector3();
     // Lightning Wizard's strike point. Its OWN scratch and not _blastAt: a
     // bolt is rolled inside _landShot, before Detonator has fired, and sharing
@@ -930,6 +966,13 @@ class Game {
     // Live enemies wide enough to need the big-agent nav grid. Counted during
     // the sweep so the grid is only flooded on the waves that have one.
     this._bigAlive = 0;
+    // The three things an enemy is allowed to do TO the player, as stable
+    // functions rather than as closures rebuilt at each use. ORGAN GRINDER
+    // swaps them for no-ops and back; everything else in the game holds the
+    // originals for the life of the session.
+    this._onHitPlayer = (d, pos, source) => this._hurtPlayer(d, pos, source);
+    this._onPlayerStatus = (kind, secs) => this._afflictPlayer(kind, secs);
+    this._onPullPlayer = (dx, dz, strength) => this._pullPlayer(dx, dz, strength);
     this._enemyCtx = {
       player: this.player,
       enemies: this.enemies,
@@ -944,7 +987,12 @@ class Game {
       // `source` is the enemy that landed the hit, where there is one. Only
       // Thorns reads it, and it falls back to whatever is standing closest to
       // the impact - a projectile has no owner to name.
-      onHitPlayer: (d, pos, source) => this._hurtPlayer(d, pos, source),
+      // HELD AS FIELDS AS WELL AS INSTALLED HERE, because ORGAN GRINDER swaps
+      // all three out for no-ops while its monkey is on the floor and has to be
+      // able to put the real ones back - see the LURE block in _updateEnemies.
+      // A closure rebuilt every frame would allocate three functions per frame
+      // for the whole run to serve five seconds of one item.
+      onHitPlayer: this._onHitPlayer,
       addProjectile: (x, y, z, type, speedScale, spreadRad) =>
         this._spawnProjectile(x, y, z, type, speedScale, spreadRad),
       addGrenade: (x, y, z, damage) => this._spawnGrenade(x, y, z, damage),
@@ -953,14 +1001,14 @@ class Game {
       // called on the player directly for the same reason onHitPlayer is: the
       // enemy has no business knowing about Holy Mantle, Evasion or the
       // difficulty of the wave, and this is where any of that would go.
-      applyPlayerStatus: (kind, secs) => this._afflictPlayer(kind, secs),
+      applyPlayerStatus: this._onPlayerStatus,
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
       addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
       // Colossus throwing one of its turrets. It is a real enemy, spawned
       // mid-air with its flight already set - see _spawnTurret.
       addTurret: (fx, fy, fz, tx, tz) => this._spawnTurret(fx, fy, fz, tx, tz),
-      pullPlayer: (dx, dz, strength) => this._pullPlayer(dx, dz, strength),
+      pullPlayer: this._onPullPlayer,
       bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
       // `mods` is deliberately absent here: rebuildMods() swaps the object on
       // every draft pick, so anything captured at construction goes stale on
@@ -998,6 +1046,13 @@ class Game {
     // between a mine and a meteor - the mine's blast does not know who set it
     // and the meteor's cannot touch the player who called it. Neither of them
     // owns a copy of the falloff arithmetic.
+    // ORGAN GRINDER'S MONKEY, while one is on the floor and armed. Recomputed
+    // once a frame in _updateDeployed and read in exactly two places - the LURE
+    // block in _updateEnemies, and nowhere else.
+    this._lure = null;
+    // The pets, one fixed slot per species: 0 is the MAGPIE, 1 the LAMPREY.
+    // See _syncCompanions.
+    this._companions = [null, null];
     this._deployCtx = {
       obstacles: this.arena.ground,
       enemies: this.enemies,
@@ -1013,6 +1068,31 @@ class Game {
       // _updateDeployed alongside the enemy context's copy - see Music.pulse.
       pulse: 0,
       pulseWhole: true,
+      time: 0,
+    };
+    // WHAT A COMPANION IS ALLOWED TO REACH FOR. Narrower than the deployables'
+    // context in one direction and wider in another, which is exactly the
+    // difference between the two kinds of thing:
+    //
+    //   * arena.obstacles, not arena.ground. A turret is a fixed point and a
+    //     projectile's ctx deliberately ignores the decks so a shot can reach a
+    //     catwalk - but the magpie WALKS, and a bird that strolled through a
+    //     crate would be the least convincing thing in the room.
+    //   * onOrb, which nothing else in the game is given. It is the same
+    //     callback the player's own magnet pays through, so the credits, the
+    //     item charge slice and BLOOD FROM STONE all happen once, in
+    //     _collectOrb, whoever picked the orb up.
+    //   * no onBlast, no deploy, no addHazard. A pet cannot put anything in the
+    //     arena and cannot hurt the player.
+    this._compCtx = {
+      obstacles: this.arena.obstacles,
+      enemies: this.enemies,
+      effects: this.effects,
+      sfx: this.sfx,
+      hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
+      onOrb: this._onOrb,
+      pulse: 0,
+      time: 0,
     };
 
     // EVERY NUMBER IN THE GAME COMES OUT OF HERE. Enemy.takeDamage is the one
@@ -1628,6 +1708,13 @@ class Game {
     // Corpses outlive the enemies that own them, so the roster being torn down
     // is not enough to take them with it.
     this.effects.clearCorpses();
+    // THE PETS GO WITH THE ENTITIES AND NOT WITH THE HAZARDS, which is the one
+    // line that makes them companions rather than deployables: _clearHazards
+    // runs at every wave end, and this runs at a run reset, a death and a
+    // versus handover. So a magpie survives the shop and never survives a
+    // change of owner. _syncCompanions stands the incoming player's back up on
+    // the next frame, out of THEIR build.
+    this._clearCompanions();
     this._clearHazards();
     for (const a of this._ash) this.effects.creepRelease(a.creep);
     this._ash.length = 0;
@@ -2832,11 +2919,106 @@ class Game {
     // Sentry guns fire on this edge, twice a beat - see Turret.update.
     ctx.pulse = this.music.pulse;
     ctx.pulseWhole = this.music.pulseWhole;
+    ctx.time = this.time;
     for (let i = this._deployed.length - 1; i >= 0; i--) {
       const d = this._deployed[i];
       if (d.update(dt, ctx) === 'alive') continue;
       d.destroy();
       this._deployed.splice(i, 1);
+    }
+  }
+
+  /**
+   * ORGAN GRINDER's monkey, if one is on the floor and armed.
+   *
+   * RECOMPUTED RATHER THAN REMEMBERED. The monkey sets `lure` on itself and
+   * `armed` once it has landed; this is the whole of how main.js finds it, and
+   * it costs one walk over a list that is never more than a few dozen long. A
+   * field written at the throw would have to be cleared at the explosion, at
+   * the wave end, at a death and at a handover - four places to forget, against
+   * a scan that cannot go stale.
+   *
+   * ASKED FROM _updateEnemies AND NOT FROM _updateDeployed, which is where it
+   * started: the deployed list is ticked AFTER the enemies (see the frame
+   * loop), so a lure found there is a frame behind, and the frame it is behind
+   * on is the one the monkey lands in - the exact frame the crowd should turn.
+   *
+   * THE NEWEST WINS. Two monkeys is a thing MAX_DEPLOYED permits and TWIN CELL
+   * makes likely, and the crowd has to be walking toward ONE of them: splitting
+   * a wave between two decoys would leave both halves alive when each went off.
+   * The most recent throw is the one the player is thinking about.
+   */
+  _findLure() {
+    for (let i = this._deployed.length - 1; i >= 0; i--) {
+      const d = this._deployed[i];
+      if (d.lure && d.armed) return d;
+    }
+    return null;
+  }
+
+  // ---- the two companions --------------------------------------------------
+  //
+  /**
+   * Stands up whichever pets the build owns, and takes down whichever it does
+   * not. Called every frame, and it does nothing at all on nearly all of them.
+   *
+   * DRIVEN OFF `mods` RATHER THAN OFF THE PICK, and that is what makes versus
+   * work for free: a handover replays the incoming player's upgrade list into
+   * mods (see restoreRun), so the frame after a swap this reads a different
+   * build and swaps the pets with it. Player one's magpie is removed and player
+   * two's is created without either turn knowing the other exists.
+   *
+   * They are NOT deployables. _clearHazards sweeps that list at every wave end;
+   * a pet the player had to bury once a minute would be a different item.
+   */
+  _syncCompanions() {
+    const m = this.player.mods;
+    // A RUN THAT IS NOT BEING PLAYED HAS NO PETS STANDING IN THE ARENA. There
+    // is no separate shop state - the wave break IS the playing state with the
+    // totems up - so `state` covers the menu, the pause and the death screen in
+    // one test.
+    //
+    // AND NOT DURING A VERSUS PASS. The state is still 'playing' through the
+    // handover, and the body belongs to nobody for those few seconds - for the
+    // first half it carries the outgoing player's zeroed run and for the second
+    // the incoming player's, who has not been handed the pad yet. Standing a
+    // magpie up off a build that is mid-swap would build and destroy one every
+    // frame of the caption. It comes back with the wave, out of whoever's build
+    // is loaded by then, which is the same rule _clearEntities already follows.
+    const live = this.state === 'playing' && !this._pass;
+    this._companion(0, live && m.magpie > 0, Magpie);
+    this._companion(1, live && m.lamprey > 0, Lamprey);
+  }
+
+  // One slot of the companion list. A fixed index per species rather than a
+  // push/splice, so "is the bird out" is a question with one answer and the
+  // update loop below never has to ask what kind of thing it is holding.
+  _companion(slot, want, Cls) {
+    const have = this._companions[slot];
+    if (want === !!have) return;
+    if (want) this._companions[slot] = new Cls(this);
+    else {
+      have.destroy();
+      this._companions[slot] = null;
+    }
+  }
+
+  _updateCompanions(dt) {
+    if (!this._companions[0] && !this._companions[1]) return;
+    const ctx = this._compCtx;
+    ctx.pulse = this.music.pulse;
+    ctx.time = this.time;
+    for (const c of this._companions) if (c) c.update(dt, ctx);
+  }
+
+  // Both pets down. Goes with _clearEntities rather than with _clearHazards -
+  // see the note at the top of js/companions.js - so they survive a wave
+  // boundary and never survive a run, a death or a versus handover.
+  _clearCompanions() {
+    for (let i = 0; i < this._companions.length; i++) {
+      if (!this._companions[i]) continue;
+      this._companions[i].destroy();
+      this._companions[i] = null;
     }
   }
 
@@ -2877,9 +3059,9 @@ class Game {
     // ONE ROLL PER BEAM. The lance is a single shot that happens to pass
     // through everything in the room, so it crits like one.
     const crit = this.player.rollCrit();
-    const dealt = this.player.getEffectiveDamage(w.damage) * mult
-      * (crit ? this.player.mods.critMult : 1);
+    const base = this.player.getEffectiveDamage(w.damage) * mult;
     this._shotHits.clear();
+    this._shotCrit.clear();
     this._blastHit = false;
     let last = null;
     let hitAny = false;
@@ -2891,10 +3073,17 @@ class Game {
       // the beam is drawn to somewhere real.
       last = h.point;
       if (!en || en.dead) continue;
-      this._landShot(en, h.point, ray.ray.direction, dealt, 8, crit);
+      // ONE ROLL, RESOLVED PER BODY. The lance is a single shot, so the die is
+      // thrown once - but ASSASSIN, TELLTALE and the range passive items are
+      // per-target, and a beam through six enemies asks each of them separately.
+      const hot = this._resolveHit(en, crit);
+      this._landShot(
+        en, h.point, ray.ray.direction, base * this._hitMult(en, hot), 8, hot
+      );
       hitAny = true;
     }
     this._shotHits.clear();
+    this._shotCrit.clear();
     this.player.bumpStreak(hitAny);
     if (hitAny) {
       this.stats.hits++;
@@ -2938,6 +3127,11 @@ class Game {
       this.ui.hideHandoff();
     }
     this.wave++;
+    // ADRENALINE. The stacks are what the LAST wave did to the player, and a
+    // ramp that survived into a fresh fight would be a bonus the new wave never
+    // charged for - see the note on its entry in upgrades.js for why the reset
+    // is a wave boundary rather than a clock.
+    this.player.adrenalineStacks = 0;
     this._cfg = waveConfig(this.wave);
     this.queue = this._cfg.queue;
     this._startWaveCharge();
@@ -3419,6 +3613,41 @@ class Game {
     if (d <= 0) return;
     this.stats.damaged += d;
     this.waveDamageTaken += d;
+    // BLOOD MONEY and ADRENALINE, the two picks that make a hit taken pay. Both
+    // are here rather than in _hurtPlayer for one reason: this is the only
+    // place that sees what ACTUALLY LANDED. A dodge, the ward and Aegis never
+    // reach it at all, and everything that does has already been through curse,
+    // Blood Pact and RED MIST - so a cursed hit pays 25% more, which is the
+    // honest reading of "scales with the damage taken". It also means the
+    // hazard path (_hurtPlayerDot) is covered for free, because that calls this
+    // too: a player standing in lava is being hurt, and being hurt is the
+    // trigger.
+    const m = this.player.mods;
+    if (m.bloodMoney > 0) {
+      // STRAIGHT INTO THE BALANCE, not onto the floor as orbs. It is
+      // compensation and not loot: the player is being paid for something that
+      // happened TO them, usually while they are in no position to walk
+      // anywhere, and orbs they cannot collect would be an insult. It also
+      // keeps it clear of _dropMoney's two multipliers - Midas and the flawless
+      // streak - and the second of those is about to be zeroed by the very hit
+      // that paid this out.
+      const paid = d * m.bloodMoney;
+      this.credits += paid;
+      this._creditsDirty = true;
+      this.effects.burst(
+        this.player.eyeInto(this._killPos), 0xc79a3a, 8, 3.5, 2, 0.45
+      );
+    }
+    if (m.adrenalineStep > 0) {
+      // Capped at the stack that reaches adrenalineMax rather than left to run
+      // and clamped at read time, so the number the HUD and the build sheet
+      // report is the number that is actually being paid.
+      const cap = Math.ceil(m.adrenalineMax / m.adrenalineStep);
+      if (this.player.adrenalineStacks < cap) {
+        this.player.adrenalineStacks++;
+        this.effects.shockwave(this.player.pos, 0xe64a19, 2.4, 0.3);
+      }
+    }
     // IMMEDIATELY, not at the wave clear. The rest of this wave is paid at 1x,
     // and the player feels the multiplier go the instant they are hit rather
     // than finding out about it in a banner thirty seconds later.
@@ -3792,8 +4021,10 @@ class Game {
       hits.length = 0;
       this._homeRay.intersectObjects(this._targets, false, hits);
       if (hits.length && hits[0].object.userData.enemy === best) {
-        const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage) * dmgMult;
-        this._landShot(best, hits[0].point, this._homeDir, dealt, burst, crit);
+        const hot = this._resolveHit(best, crit);
+        const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
+          * dmgMult * this._hitMult(best, hot);
+        this._landShot(best, hits[0].point, this._homeDir, dealt, burst, hot);
         this._lastImpact.copy(hits[0].point);
         this.effects.arc(muzzle, hits[0].point, aim);
         // A second burst in Seeker's own colour on top of the ordinary hit
@@ -3810,6 +4041,94 @@ class Game {
 
     skip.length = 0;
     return landed;
+  }
+
+  /**
+   * DOES THIS PARTICULAR PELLET, ON THIS PARTICULAR BODY, CRIT?
+   *
+   * THE ONE PLACE THE WHOLE CRIT FAMILY MEETS, and it exists because four of
+   * the six passive items in that family ask a question the TRIGGER cannot
+   * answer. rollCrit() is a die, rolled once per trigger pull beside Cursed
+   * Ammo and Devil's Gamble, and it always was - but ASSASSIN wants to know
+   * whether this body has ever been hit and TELLTALE wants to know how many
+   * times, and at the moment the trigger is pulled there is no body yet. So the
+   * roll comes in as `rolled` and the ANSWER is decided here, where there is
+   * one.
+   *
+   * ONCE PER TRIGGER PULL PER ENEMY, NEVER PER PELLET. `_shotHits` is the
+   * per-shot dedup set _landShot already keeps for exactly this class of
+   * effect, and the cached answer is what a scattergun needs: nine pellets into
+   * one chest is ONE hit as far as Telltale's count is concerned, and all nine
+   * of them crit or none of them do. Without the cache a shotgun would tick the
+   * tally eight times a shell and Telltale would read as a permanent crit.
+   *
+   * THE MULTIPLIER IS NOT APPLIED HERE. This returns a boolean; the caller
+   * folds mods.critMult in beside the range multiplier, so DEAD CENTER's 3x and
+   * SWEET SPOT's window compose with everything else rather than any of them
+   * being a special case. See _hitMult.
+   *
+   * @param {Enemy} en
+   * @param {boolean} rolled  what rollCrit() said for this trigger pull
+   */
+  _resolveHit(en, rolled) {
+    const cached = this._shotCrit.get(en);
+    if (cached !== undefined) return cached;
+    const m = this.player.mods;
+    // SWEET SPOT, first, because it is unconditional: an item window is the
+    // player having spent a charge, and nothing in a build should be able to
+    // argue with it. It sits on top of a DEAD CENTER run's halved chance rather
+    // than replacing it, which is why it is a deadline on the player and not a
+    // write into `mods` - see itemCrit in js/items.js.
+    let crit = rolled || this.time < this.player.itemCritEnd;
+    // ASSASSIN. The first hit this body has ever taken, and there is no second
+    // first: `everHit` is set below and dies with the enemy.
+    if (m.assassin > 0 && !en.everHit) crit = true;
+    // TELLTALE. Counted whether or not the hit was already going to crit, so
+    // the rhythm stays a rhythm - a lucky roll on the second hit must not push
+    // the guaranteed one out to the fourth.
+    if (m.telltale > 0) {
+      en.hitTally++;
+      if (en.hitTally % m.telltale === 0) crit = true;
+    }
+    en.everHit = true;
+    this._shotCrit.set(en, crit);
+    return crit;
+  }
+
+  /**
+   * Everything that scales a landed hit by WHO and WHERE it landed on: the crit
+   * multiplier, and the two range passive items.
+   *
+   * IT IS A MULTIPLIER AND NOT A DAMAGE FIGURE because the callers already hold
+   * one. Three shot paths compute `dealt` their own way - the pellet with its
+   * pierce falloff, Seeker's homed round without it, and LANCE with its own
+   * multiple - and each of them folds this in at the end. What must not happen
+   * is a fourth copy of the crit arithmetic.
+   *
+   * @param {Enemy} en
+   * @param {boolean} crit  the answer _resolveHit already gave
+   */
+  _hitMult(en, crit) {
+    const m = this.player.mods;
+    let k = crit ? m.critMult : 1;
+    if (m.longshot > 0 || m.pointBlank > 0) {
+      const p = this.player.pos;
+      // ON THE FLOOR, like every other distance in this game. A flier five
+      // metres up is not "further away" for the purpose of a range bonus - the
+      // player is being asked to stand somewhere, and where they stand is an
+      // XZ position.
+      const d = Math.hypot(en.pos.x - p.x, en.pos.z - p.z);
+      // LONGSHOT ramps the whole way rather than switching on at a threshold.
+      // A cliff the player cannot see would show up as the damage number
+      // jumping as they backed over an invisible line; a ramp is continuous, so
+      // a player who never read the card still learns that backing off pays.
+      if (m.longshot > 0) k *= 1 + m.longshot * Math.min(1, d / LONGSHOT_RANGE);
+      // POINT BLANK is the hard edge, on purpose - it is a LINE the player
+      // either stepped over or did not, and five metres is the distance every
+      // melee reach in the game has already taught them.
+      if (m.pointBlank > 0 && d <= POINT_BLANK_RANGE) k *= 1 + m.pointBlank;
+    }
+    return k;
   }
 
   // Everything one pellet does to the enemy it landed on.
@@ -3998,9 +4317,13 @@ class Game {
         this.effects.impact(end, 0x9fb4d8, w.pellets > 1 ? 2 : 4, 2.5, 1, 0.26);
         break;
       }
+      // The crit and the two range passive items are resolved HERE and not at
+      // the trigger, because all three of them are questions about the body the
+      // pellet just found. See _resolveHit.
+      const hot = this._resolveHit(en, crit);
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
-        * Math.pow(falloff, pierced) * dmgMult;
-      this._landShot(en, h.point, ray.ray.direction, dealt, burst, crit);
+        * Math.pow(falloff, pierced) * dmgMult * this._hitMult(en, hot);
+      this._landShot(en, h.point, ray.ray.direction, dealt, burst, hot);
       damaged = true;
       pierced++;
       if (pierced > pierceCap) {
@@ -4065,11 +4388,16 @@ class Game {
       this.effects.burst(this.player.eyeInto(this._killPos), 0x6a1b9a, 10, 4, 2, 0.35);
     }
 
-    // THE CRIT, rolled once per trigger pull, beside the other two rolls that
-    // work the same way and fold into the same multiplier. Per SHOT and not
-    // per pellet for the reason spelled out under Devil's Gamble below.
+    // THE CRIT'S DICE, rolled once per trigger pull beside the other two rolls
+    // that work the same way. Per SHOT and not per pellet for the reason
+    // spelled out under Devil's Gamble below.
+    //
+    // IT IS NOT FOLDED INTO dmgMult ANY MORE, and that is what makes the whole
+    // crit family possible. A multiplier applied here is applied to a shot with
+    // no target: ASSASSIN and TELLTALE both ask about the BODY, so the roll is
+    // carried down to the landing site and turned into an answer there. See
+    // _resolveHit, which is the only reader of this boolean.
     const crit = this.player.rollCrit();
-    if (crit) dmgMult *= mods.critMult;
 
     // DEVIL'S GAMBLE, rolled once per trigger pull and applied to every pellet
     // in it. Per SHOT and not per pellet on purpose: nine pellets each tossing
@@ -4105,6 +4433,7 @@ class Game {
     const spread = this._shotSpread();
     let hitAny = false;
     this._shotHits.clear();
+    this._shotCrit.clear();
     this._blastHit = false;
     // Twenty/Twenty fires the whole pellet pattern twice off one round. The
     // dedup set is NOT cleared between volleys - both barrels are one trigger
@@ -4124,6 +4453,7 @@ class Game {
       this.effects.addShake(0.2);
     }
     this._shotHits.clear();
+    this._shotCrit.clear();
 
     // Hot Streak rides the SHOT, not the pellet: one trigger pull is one step
     // up or one step down however many pellets were in it, and it reads the
@@ -4194,10 +4524,13 @@ class Game {
   _meleeStrike() {
     if (this.state !== 'playing') return;
     const forward = this.player.forwardInto(this._meleeDir);
-    // ONE ROLL PER SWING, the same rule the trigger pull follows.
+    // ONE ROLL PER SWING, the same rule the trigger pull follows. The DAMAGE
+    // waits for a target, because the crit family and the range passive items
+    // all ask which body - see _resolveHit. POINT BLANK is always paid on a
+    // melee, which is correct and not an accident: the swing's reach is well
+    // inside its five metres, and a passive item that rewards being close ought
+    // to reward the one attack that requires it.
     const crit = this.player.rollCrit();
-    const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE)
-      * (crit ? this.player.mods.critMult : 1);
     const cosArc = Math.cos(MELEE_ARC);
     let target = null;
     let bestD = Infinity;
@@ -4236,9 +4569,14 @@ class Game {
     }
 
     const d = Math.hypot(bestDX, bestDZ) || 1;
+    this._shotCrit.clear();
+    const hot = this._resolveHit(target, crit);
+    const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE)
+      * this._hitMult(target, hot);
+    this._shotCrit.clear();
     // A swing travels from the player toward the enemy, which is what tells
     // a shield or a weak point whether it was struck.
-    target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, crit);
+    target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, hot);
     // TAGGED, NOT PAID. The reward is worked out in one place - the death
     // sweep in _updateEnemies - and this only records how the body died, so
     // the combo multiplier and the double still compose there.
@@ -5595,10 +5933,14 @@ class Game {
   // and no memory; see the note above rollDrop in powerups.js.
   _rollDrop(pos) {
     if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
+    // RABBIT'S FOOT rides in as a multiplier on every category's chance, so it
+    // lifts the need-adjusted odds in proportion rather than adding a flat
+    // fifteen points - see the note on its entry in upgrades.js.
     const kind = rollDrop(
       this.player.health / this.player.maxHealth,
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
-      this._ammoActive() < MAX_ACTIVE_AMMO
+      this._ammoActive() < MAX_ACTIVE_AMMO,
+      this.player.mods.dropLuck
     );
     if (kind) this._placeDrop(kind, pos);
   }
@@ -5857,10 +6199,47 @@ class Game {
     // mods object on each draft pick, so a reference taken once would be the
     // pre-upgrade block for the rest of the run.
     ctx.mods = this.player.mods;
+
+    // ---- THE LURE ---------------------------------------------------------
+    //
+    // ORGAN GRINDER, and this block is the entire implementation of it as far
+    // as the roster is concerned. Not one enemy type, ai(), boss or projectile
+    // was told the item exists: enemy.js reads exactly two things off
+    // `ctx.player` - a position and an eye to aim at - so handing it a monkey
+    // that has both makes forty behaviours walk toward a toy, shoot at a toy
+    // and swing at a toy, correctly, for free. See Monkey.decoy in js/deploy.js.
+    //
+    // THE THREE PLAYER HOOKS GO WITH IT. Swapping the position alone would have
+    // the crowd gather round the monkey and then land its melee on the player
+    // standing thirty metres away, because reach is measured against
+    // `ctx.player` and damage is dealt through a callback that never asked.
+    // "Completely ignoring the player" has to mean all four.
+    //
+    // ENEMY ROUNDS ALREADY IN THE AIR ARE NOT RECALLED, deliberately. They were
+    // fired at the monkey and they fly to the monkey; a player who wanders
+    // through one is hit by it, because a bullet does not know who it was for.
+    // That is the one way the lure can still cost you, and it is a fair one.
+    //
+    // THE NAV GRID IS DROPPED FOR THE DURATION. It is flooded from the PLAYER's
+    // position, so steering off it would route the crowd politely around every
+    // pillar on their way to where the player is standing. Straight-line
+    // heading instead - the Bee's rule, for the Bee's reason - and the obstacle
+    // resolve still slides them along whatever they walk into.
+    const lure = this._findLure();
+    this._lure = lure;
+    ctx.player = lure ? lure.decoy : this.player;
+    ctx.onHitPlayer = lure ? NO_HIT : this._onHitPlayer;
+    ctx.applyPlayerStatus = lure ? NO_STATUS : this._onPlayerStatus;
+    ctx.pullPlayer = lure ? NO_PULL : this._onPullPlayer;
+    ctx.nav = lure ? null : this.nav;
+    ctx.navBig = lure ? null : this.navBig;
+
     // Refresh the route to the player once for the whole list, before anyone
     // reads it. The grid throttles itself; this call is cheap on most frames.
-    this.nav.update(dt, this.player.pos.x, this.player.pos.z);
-    if (this._bigAlive > 0) this.navBig.update(dt, this.player.pos.x, this.player.pos.z);
+    if (!lure) {
+      this.nav.update(dt, this.player.pos.x, this.player.pos.z);
+      if (this._bigAlive > 0) this.navBig.update(dt, this.player.pos.x, this.player.pos.z);
+    }
 
     // Update everything first, then compact. Doing both in one pass would let
     // an enemy read half-compacted neighbours and feel the same one twice
@@ -5889,6 +6268,19 @@ class Game {
       // worth the chain AND the double, which is the whole reason to walk into
       // something rather than shoot it.
       const meleeMult = e.meleeKill ? MELEE_KILL_MULT : 1;
+      // BLOODSPORT. Beside the credit double and off the same flag, so the two
+      // rewards for the same act can never disagree about what a melee kill is.
+      // Only ever a heal - a swing that took the body down at full health pays
+      // nothing, which is correct: what it is buying back is the hit the player
+      // took walking into reach.
+      if (e.meleeKill && this.player.mods.meleeHeal > 0
+        && this.player.health < this.player.maxHealth) {
+        this.player.health = Math.min(
+          this.player.maxHealth, this.player.health + this.player.mods.meleeHeal
+        );
+        this.effects.shockwave(this.player.pos, 0xc62828, 2.8, 0.35);
+        this.effects.impact(e.pos, 0xff2d6f, 10, 4, 2.5, 0.4);
+      }
       // MONEY IS NOT AWARDED HERE ANY MORE. The kill drops orbs where it died
       // and the balance moves when the player picks them up - see _collectOrb.
       // THE KILL CHAIN IS NOT IN THIS LINE. It used to multiply the bounty by
@@ -6603,6 +6995,13 @@ class Game {
     // payout - so it is floored for display and for the run summary. Nothing
     // is lost: the fraction is still in the balance and still spends.
     this.ui.setCredits(Math.floor(this.credits));
+    // WAR CHEST reads the balance and lives on the Player, which does not have
+    // one - `credits` is Game state (see GAME_FIELDS in versus.js). Mirrored
+    // across once a frame rather than reached for, because getEffectiveDamage
+    // runs several times per trigger pull deep in the shot path and has no
+    // business holding a reference to the game. One assignment, and the passive
+    // item is worth what the corner of the screen says it is.
+    this.player.balance = this.credits;
     // Beside the balance, because it is a fact about the balance: it is the
     // rate everything on the floor is being paid at. Hidden at 1x - a "x1"
     // sitting there permanently is not information.
@@ -6647,9 +7046,12 @@ class Game {
     // frame in the corner is a permanent question about a system the player has
     // not met yet.
     const item = this.player.item ? ACTIVE_ITEMS[this.player.item] : null;
+    // TWO FRACTIONS, ONE METER. Both come off the same number - see
+    // Player.itemChargeFrac - so a run without TWIN CELL simply passes a
+    // second zero and the HUD has no idea the passive item exists.
     this.ui.setItem(
       this.player.item, item,
-      item ? Math.min(1, this.player.itemCharge / item.charge) : 0
+      this.player.itemChargeFrac(0), this.player.itemChargeFrac(1)
     );
     // AEGIS holds its frame for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest
@@ -6888,6 +7290,12 @@ class Game {
       // left on the roster for a frame. It is collected next frame instead,
       // which is one frame later than a bullet's and invisible.
       this._updateDeployed(dt);
+      // The pets, after the deployables and for the same reason: the LAMPREY's
+      // bite can kill, and a kill made before the enemy sweep would be a body
+      // the sweep collects on the frame it happened rather than a frame later.
+      // One frame is invisible; walking a half-compacted roster is not.
+      this._syncCompanions();
+      this._updateCompanions(dt);
       this._updateProjectiles(dt);
 
       // The roll carries the same intensity setting as the offset - they are

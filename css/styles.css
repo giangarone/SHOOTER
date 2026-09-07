@@ -482,6 +482,24 @@ html, body {
    see UI.setItem for how the count is chosen. */
 #item-bar-bg { width: 100%; height: 8px; }
 #item-bar { background: var(--item); }
+/* TWIN CELL'S SECOND CHARGE. Same geometry as the first fill - `.seg > i` puts
+   both at the left edge and both are driven by scaleX - so it climbs through
+   exactly the same cells, over the top of a bar that is already full.
+
+   A PALE WASH, NOT A SECOND HUE. The slot's colour is the ITEM's and it is
+   load-bearing everywhere else in the HUD; a second charge in some unrelated
+   colour would read as a different item rather than as more of this one. Near
+   white at three quarters opacity over the item's own full bar reads as the
+   same bar, brighter - which is what a spare charge is. */
+#item-bar2 {
+  /* STACKED, NOT FLOWED. `.seg > i` is a block at 100% height, so a second one
+     placed after the first would sit BELOW it and double the frame's content
+     height. Taken out of flow so the two fills occupy the same eight pixels. */
+  position: absolute; inset: 0;
+  background: #ffffff;
+  opacity: 0.82;
+  mix-blend-mode: screen;
+}
 
 /* CHARGED. The bar takes its glow, the name comes up to white and the icon to
    full - legible in peripheral vision without reading a word, which is the
@@ -489,6 +507,11 @@ html, body {
 #item-box:not(.ready) #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(0.72); }
 #item-box.ready #item-name { color: #fff; }
 #item-box.ready #item-bar { box-shadow: 0 0 8px var(--item); }
+/* BOTH CHARGES BANKED. The whole slot goes to white rather than the second bar
+   glowing on its own: a player holding two presses should be able to see it
+   from the corner of their eye without resolving a bar. */
+#item-box.spare #item-bar2 { box-shadow: 0 0 10px #fff; }
+#item-box.spare #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(1.18); }
 
 /* The moment it fills, once. Restarted from JS by removing and re-adding the
    class - the same trick #ammo-res.refund uses, and for the same reason: a

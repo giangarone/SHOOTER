@@ -129,6 +129,41 @@ export const THEME = {
   gamble: 0xff5252,
   thorns: 0xd84315,
   power: 0xe53935,
+
+  // ---- THE CRITICAL-HIT FAMILY -------------------------------------------
+  //
+  // Six passive items now touch the crit, and they are ONE family wearing one
+  // hue shaded five ways, for exactly the reason the note at the top of this
+  // block gives: a player who has learnt that magenta means "the shot itself
+  // hit harder" can read a totem across the arena before its icon resolves,
+  // and can tell WHICH of the six it is once it does. Kept clear of
+  // `precision` (Twenty/Twenty) and `streak` (Hot Streak), which were already
+  // living in this corner of the wheel.
+  deadeye: 0xff80ab,      // the plain chance
+  marksman: 0xf50057,     // the bigger plain chance
+  assassin: 0x9c27b0,     // the first hit on a body
+  deadcenter: 0xad1457,   // harder crits, half as many
+  telltale: 0xe91e63,     // every third hit on a body
+
+  // ---- RANGE ---------------------------------------------------------------
+  //
+  // Two picks that read the same number - how far away the thing you shot is -
+  // and disagree about which end of it pays. They are deliberately NOT
+  // shaded apart in one family: they are opposites, so they get opposite
+  // temperatures, cold for the far shot and hot for the near one.
+  distance: 0x0288d1,
+  muzzle: 0xf4511e,
+
+  // The rest of the new pool, each into the family it belongs to.
+  tithe: 0xc79a3a,        // Blood Money: the economy family, gone dark
+  charm: 0x7cb342,        // Rabbit's Foot
+  hunker: 0xa1887f,       // Crouchfire, a shade off Dig In's brown
+  cell: 0xb0bec5,         // Twin Cell, beside `charge`'s neutral grey
+  bloodsport: 0xc62828,   // Bloodsport
+  warchest: 0xf57f17,     // War Chest
+  magpie: 0x78909c,       // the bird
+  adrenaline: 0xe64a19,   // the ramp a hit pays for
+  lamprey: 0x00897b,      // the leech
 };
 
 
@@ -1182,6 +1217,347 @@ export const UPGRADES = {
     // no rebalance to sit here. Not everything has to be a decision.
     effects: [['+20% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; },
+  },
+  // =========================================================================
+  // THE CRITICAL HIT, AS A BUILD
+  // =========================================================================
+  //
+  // The crit has been in the game since the first magazine of the first run -
+  // 5% for 1.5x, in DEFAULT_MODS, deliberately non-zero so the yellow number
+  // is a thing the player has already seen by the time anything here offers to
+  // change it. What was missing was anywhere to take it. These six are that,
+  // and they are built so that no two of them are the same pick:
+  //
+  //   DEADEYE and MARKSMAN raise the DICE. More of them, unconditionally.
+  //   DEAD CENTER trades the dice for the PAYOUT, which is the same expected
+  //     damage on paper and a completely different feel in the hand.
+  //   ASSASSIN and TELLTALE do not touch the dice at all - they make a crit a
+  //     thing you can PLAN, off the target's own history rather than a roll.
+  //   SWEET SPOT, the active item, is eight seconds of all of it at once.
+  //
+  // WHERE THEY ARE RESOLVED. Not here and not in rollCrit(): a crit that
+  // depends on WHICH BODY was hit cannot be decided at the trigger, because at
+  // the trigger there is no body yet. rollCrit() still does the dice once per
+  // trigger pull, exactly as it always did, and Game._resolveHit turns that
+  // roll into a per-enemy answer at the moment a pellet lands. See the note
+  // there - it is the one place all six meet.
+  deadeye: {
+    name: 'DEADEYE',
+    rarity: 'common',
+    max: 1,
+    theme: THEME.deadeye,
+    // Common, and the smaller of the two plain chances, because it is the
+    // entry point to the whole family: 5% to 20% is the pick where the yellow
+    // numbers stop being a curiosity and start being something the player can
+    // feel. Everything else here is worth more once this has been taken.
+    effects: [['+15% CRITICAL CHANCE', GOOD]],
+    apply: (mods, n) => { mods.critChance += 0.15 * n; },
+  },
+  marksman: {
+    mark: true,
+    name: 'MARKSMAN',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.marksman,
+    // The same pick, bigger, one rarity up. Two entries rather than one that
+    // stacks because the crit chance is a number with a CEILING that matters -
+    // past about half, a crit stops reading as a crit and starts reading as
+    // the damage number flickering - and a stacking entry would walk into that
+    // on its own. 5 + 15 + 25 is 45%, which is as far as the pool goes.
+    effects: [['+25% CRITICAL CHANCE', GOOD]],
+    apply: (mods, n) => { mods.critChance += 0.25 * n; },
+  },
+  deadCenter: {
+    mark: true,
+    name: 'DEAD CENTER',
+    rarity: 'cursed',
+    max: 1,
+    theme: THEME.deadcenter,
+    // TWICE THE PAYOUT FOR HALF THE DICE. On a bare 5% that is 1.5x on one
+    // shot in twenty against 3x on one in forty - almost exactly the same
+    // damage per magazine, and nothing like the same magazine. It is cursed
+    // because the variance is the drawback: a run carrying this hits a wall
+    // of chaff at ordinary damage for ten seconds and then removes a tank in
+    // two rounds, and the player does not get to choose when.
+    //
+    // IT MULTIPLIES THE HALVING RATHER THAN SUBTRACTING, so it composes with
+    // whatever the build has stacked: half of 45% is 22.5%, half of the bare
+    // 5% is 2.5%, and neither can be driven to zero. Order does not matter -
+    // rebuildMods replays the whole list from defaults, and a multiply and an
+    // add on the same field commute for every combination the pool can offer.
+    effects: [['CRITS DEAL 3x DAMAGE', GOOD], ['CRIT CHANCE HALVED', BAD]],
+    apply: (mods, n) => {
+      mods.critMult = 3;
+      mods.critChance *= Math.pow(0.5, n);
+    },
+  },
+  assassin: {
+    mark: true,
+    name: 'ASSASSIN',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.assassin,
+    // THE FIRST HIT ON A FRESH BODY, and once a body has been touched it is
+    // never fresh again - not by healing, not by a wave boundary, because the
+    // body itself does not survive either. So this pays exactly once per enemy
+    // in the run, which is what makes it a CROWD pick rather than a boss one:
+    // it is worth the most in the wave with thirty chasers in it and worth a
+    // single opening round against a boss.
+    //
+    // It is also the only thing in the pool that rewards SPREADING fire, which
+    // is the opposite of everything else a player has been taught - and that
+    // is the pick.
+    effects: [['FIRST HIT ON AN ENEMY', NOTE], ['IS ALWAYS A CRIT', GOOD]],
+    apply: (mods, n) => { mods.assassin = n; },
+  },
+  telltale: {
+    mark: true,
+    name: 'TELLTALE',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.telltale,
+    // EVERY THIRD HIT ON THE SAME BODY. The count lives on the enemy and dies
+    // with it, so it is the exact opposite of Assassin: this one pays for
+    // STAYING on a target, and the two together are a build that has an answer
+    // whichever way the player prefers to shoot.
+    //
+    // Counted per TRIGGER PULL and not per pellet - see the _shotHits guard in
+    // _resolveHit - or a scattergun would tick the counter eight times a shell
+    // and this would read as a permanent crit rather than as a rhythm.
+    effects: [['EVERY 3rd HIT ON AN ENEMY', NOTE], ['IS ALWAYS A CRIT', GOOD]],
+    apply: (mods, n) => { mods.telltale = 3; },
+  },
+
+  // =========================================================================
+  // RANGE, WHICH THE GAME HAD NEVER CHARGED FOR
+  // =========================================================================
+  //
+  // Damage has never cared how far away the thing was. These two make it care,
+  // in opposite directions, and they are a matched pair on purpose: whichever
+  // one a run draws, it is being told to stand somewhere.
+  longshot: {
+    mark: true,
+    name: 'LONGSHOT',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.distance,
+    // A RAMP, NOT A THRESHOLD. A flat "+30% past 20 metres" would be a cliff
+    // the player cannot see, and the tell would be the damage number jumping
+    // as they backed over an invisible line. It climbs the whole way instead -
+    // nothing at the muzzle, the full thirty at LONGSHOT_RANGE - so the
+    // feedback is continuous and a player who has never read the card still
+    // learns that backing off pays.
+    effects: [['UP TO +30% DAMAGE', GOOD], ['THE FURTHER THE TARGET', NOTE]],
+    apply: (mods, n) => { mods.longshot = 0.3 * n; },
+  },
+  pointBlank: {
+    mark: true,
+    name: 'POINT BLANK',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.muzzle,
+    // FIVE METRES IS INSIDE THE ARM'S REACH OF HALF THE ROSTER. That is the
+    // whole deal: the bonus is only ever collected somewhere that is about to
+    // cost health, which is what stops a flat +30% from being strictly better
+    // than DARK POWER's +20% for free.
+    //
+    // A HARD EDGE HERE, where Longshot ramps, and the two are right for
+    // opposite reasons. Longshot is about a slope the player rides; this is
+    // about a LINE they either stepped over or did not, and the same five
+    // metres is the number every melee reach in the game is already built
+    // around - so it is a distance the player has learnt by being bitten at it.
+    effects: [['+30% DAMAGE WITHIN 5m', GOOD]],
+    apply: (mods, n) => { mods.pointBlank = 0.3 * n; },
+  },
+
+  // =========================================================================
+  // WHAT A HIT TAKEN IS WORTH
+  // =========================================================================
+  //
+  // Two picks that turn the health bar into a resource that pays out, and they
+  // pay in different currencies so a run can hold both without either being
+  // redundant. Both are hooked at ONE place - Game._hurtPlayer, after the
+  // dodge, the ward and every multiplier - so what they read is what the
+  // player actually lost, never what was thrown at them.
+  bloodMoney: {
+    name: 'BLOOD MONEY',
+    rarity: 'common',
+    max: 3,
+    theme: THEME.tithe,
+    // COMPENSATION, NOT AN INCENTIVE. Two credits a point at the first tier is
+    // a fraction of what the same seconds spent killing would have paid, so
+    // standing in a fire to farm it is strictly worse than not - which is the
+    // only way a "get paid for being hurt" pick can be written without
+    // becoming the optimal way to play. See the note above THORNS: the same
+    // rule, one file over.
+    //
+    // It scales with the DAMAGE and not with the hit, so a tank's slam pays
+    // like a tank's slam and a poison tick pays like a poison tick.
+    effects: (n) => [
+      ['CREDITS WHEN HURT ' + step(n, (k) => '$' + 2 * k + '/HP'), GOOD],
+      ['PAID ON DAMAGE TAKEN', NOTE],
+    ],
+    apply: (mods, n) => { mods.bloodMoney += 2 * n; },
+  },
+  adrenaline: {
+    name: 'ADRENALINE',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.adrenaline,
+    // CARNAGE, RUN BACKWARDS. Carnage climbs on kills and is lost the instant
+    // anything touches you; this climbs on being touched and is lost at the
+    // end of the wave. A run holding both has a damage number that never sits
+    // still, and neither of them can be farmed: one is capped by the wave, the
+    // other by the health bar.
+    //
+    // THE RESET IS THE WAVE AND NOT A CLOCK. A timer would make the pick about
+    // stringing hits together, which is a thing the player would then try to
+    // DO - and a passive item that pays the player for walking into a rusher
+    // is the failure this whole entry is written around. A wave boundary is a
+    // moment they do not control, so the ten stacks are something a bad wave
+    // gave them rather than something a good one is farmed for.
+    effects: [['+4% DAMAGE PER HIT TAKEN', GOOD], ['UP TO +40%, RESETS EACH WAVE', NOTE]],
+    apply: (mods, n) => {
+      mods.adrenalineStep = 0.04 * n;
+      mods.adrenalineMax = 0.4;
+    },
+  },
+
+  // =========================================================================
+  // THE REST
+  // =========================================================================
+
+  rabbitsFoot: {
+    name: "RABBIT'S FOOT",
+    rarity: 'common',
+    max: 2,
+    theme: THEME.charm,
+    // A MULTIPLIER ON EVERY CATEGORY'S CHANCE, applied inside rollDrop where
+    // the need term has already been added - so it lifts the floor for a
+    // player who is fine and lifts the already-raised chance for a player who
+    // is not, in the same proportion. Adding a flat 15 points instead would
+    // have been worth four times as much to a full-health player as to a
+    // desperate one, which is backwards for a luck charm.
+    effects: (n) => [['DROP CHANCE ' + step(n, pctUp(15)), GOOD], ['FROM EVERY KILL', NOTE]],
+    apply: (mods, n) => { mods.dropLuck *= 1 + 0.15 * n; },
+  },
+  crouchfire: {
+    name: 'CROUCHFIRE',
+    rarity: 'common',
+    max: 2,
+    theme: THEME.hunker,
+    // THE CROUCH ALREADY COSTS HALF THE PLAYER'S SPEED and until now bought
+    // nothing but a lower head. This is the pick that makes it a stance: the
+    // rate is read live off `crouching`, so it arrives the frame the button
+    // lands and leaves the frame it is let go, and the player finds that out
+    // by holding a trigger through a crouch rather than by reading it.
+    //
+    // Sliding does NOT count. A slide is a movement, not a stance, and one
+    // that fired 20% faster would be the best way to cross a room shooting.
+    effects: (n) => [['FIRE RATE ' + step(n, pctUp(20)), GOOD], ['WHILE CROUCHING', NOTE]],
+    apply: (mods, n) => { mods.crouchRate += 0.2 * n; },
+  },
+  bloodsport: {
+    name: 'BLOODSPORT',
+    rarity: 'rare',
+    max: 2,
+    theme: THEME.bloodsport,
+    // THE MELEE ALREADY PAYS DOUBLE CREDITS and has always been the most
+    // dangerous way to finish anything - you have to be inside its reach to
+    // use it. This is the second half of that bargain: a swing that connects
+    // is now a swing that pays for the hit you took getting there.
+    //
+    // ON THE KILL, NOT ON THE SWING. Healing per hit would make a held melee
+    // button a health regen with a windup; the body has to actually go down.
+    // It reads `meleeKill`, the same flag the credit double is decided on, in
+    // the same sweep - so the two can never disagree about what a melee kill is.
+    effects: (n) => [['MELEE KILLS HEAL ' + step(n, (k) => 3 * k + ' HP'), GOOD]],
+    apply: (mods, n) => { mods.meleeHeal += 3 * n; },
+  },
+  warChest: {
+    name: 'WAR CHEST',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.warchest,
+    // THE MONEY YOU DID NOT SPEND IS THE STAT. One point of damage per
+    // thousand banked, read live off the balance, so it climbs as the wave
+    // pays out and DROPS the moment the player buys anything - which is the
+    // entire pick. Everything else in the game wants the money spent; this is
+    // the one voice arguing for the hoard, and it has to lose that argument
+    // often enough to stay interesting.
+    //
+    // FLAT, AND ADDED TO THE WEAPON'S OWN DAMAGE BEFORE EVERY MULTIPLIER, so
+    // it is worth the most to a build that has already stacked Hollow Point -
+    // and worth exactly a thousand dollars a point to one that has not. A
+    // thousand is the mystery box's own opening price, which is the only
+    // number in this game a player already reads as "one purchase".
+    effects: [['+1 DAMAGE PER $1,000', GOOD], ['ON YOUR BALANCE', NOTE]],
+    apply: (mods, n) => { mods.warChest = n; },
+  },
+  twinCell: {
+    name: 'TWIN CELL',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.cell,
+    // A SECOND CHARGE, NOT A SECOND SLOT. The slot is still one deep and the
+    // item in it is still the run's answer to one problem - what changes is
+    // that the answer can be given twice in a row, which is a different thing
+    // entirely from carrying two answers. Everything the file's opening note
+    // says about the slot survives this word for word.
+    //
+    // The second charge begins filling the instant the first is full, out of
+    // the same kills, so what the player is really buying is the right to bank
+    // charge they would otherwise have thrown away - see the clamp in
+    // Player.addItemCharge, which used to drop the overflow on the floor.
+    effects: [['HOLD 2 ITEM CHARGES', GOOD], ['THE SECOND FILLS AFTER', NOTE]],
+    apply: (mods, n) => { mods.itemChargeCap = 1 + n; },
+  },
+
+  // ---- THE TWO COMPANIONS --------------------------------------------------
+  //
+  // Nothing else the player owns is ALIVE. A turret is furniture with a
+  // cooldown and the bees are a cloud on a timer; these two are around for the
+  // whole run, they move on their own account, and the player will watch them.
+  // That is the whole reason they are worth the geometry: a passive item you
+  // can see doing its job is a different kind of ownership from a number in a
+  // stat block, and the pool had none of it.
+  //
+  // Both live in js/companions.js, and NEITHER is a deployable - a deployable
+  // is swept at every wave end (see _clearHazards), and a pet that had to be
+  // re-summoned every wave would be a pet the player buries once a minute.
+  magpie: {
+    name: 'MAGPIE',
+    rarity: 'common',
+    max: 1,
+    theme: THEME.magpie,
+    // IT DOES NOT EARN MONEY, IT SAVES IT. Every orb it walks onto is one the
+    // player was going to collect anyway or was going to lose to ORB_LIFETIME,
+    // and it is only ever worth something in the second case - so the pick is
+    // "the corner of the room you did not have time to go back for", which is
+    // a real thing that happens in every wave and which nothing else answers.
+    //
+    // Deliberately NOT a magnet upgrade. Lodestone already widens the radius
+    // around the player; the bird is somewhere else, which is the only thing
+    // it can offer that a bigger circle cannot.
+    effects: [['A BIRD COLLECTS CREDITS', GOOD], ['FROM ACROSS THE ARENA', NOTE]],
+    apply: (mods, n) => { mods.magpie = n; },
+  },
+  lamprey: {
+    name: 'LAMPREY',
+    rarity: 'rare',
+    max: 1,
+    theme: THEME.lamprey,
+    // TEN DAMAGE A BEAT is a bee's rate and a bee's damage, and that is the
+    // benchmark it was written against - except this one never expires and
+    // never has to be paid for again. What balances that is REACH: a bee flies
+    // forty metres at whatever it likes, and the lamprey will not leave the
+    // player's side for more than LAMPREY_RANGE. It is a bodyguard, so it is
+    // only ever worth anything to a player who is already in trouble.
+    //
+    // ON THE BEAT, like the turret, the sentry and every fire tick in the game.
+    // Nothing rhythmic in this game runs on a private timer - see Music.pulse.
+    effects: [['A LEECH GUARDS YOU', NOTE], ['10 DAMAGE A BEAT, HEALS 2', GOOD]],
+    apply: (mods, n) => { mods.lamprey = n; },
   },
 };
 
