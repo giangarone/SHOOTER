@@ -806,6 +806,10 @@ class Game {
     // boss - one for most of them, several once Schism has split.
     this.bossFight = null;
     this.waveState = 'idle';
+    // True between the passive-item pick and the wave it opens: the caption
+    // has been shown and the music has come out from behind the filter while
+    // the arena is still rising. startWave() clears it.
+    this._waveCued = false;
     this.interT = 1.2;
     this.time = 0;
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
@@ -2590,8 +2594,23 @@ class Game {
   // to pick a passive item), the menu, pause and the death screen are all
   // behind the filter, which makes "the music opened up" mean "you are
   // fighting".
+  // Opens the wave EARLY - on the pick rather than on the finished arena. The
+  // caption and the music are the two things that tell the player the fight is
+  // on, and both used to wait for the last pillar to land. Only the announce
+  // moves: spawning, the wave counter and the rig's blackout hit still belong
+  // to startWave().
+  //
+  // Solo only. In versus the pick hands the controller over, and a wave
+  // caption over a "pass the controller" screen would be announcing a fight
+  // the next player has not started.
+  _cueWaveOpen() {
+    if (this._waveCued || this.match) return;
+    this._waveCued = true;
+    this.ui.banner('WAVE ' + (this.wave + 1));
+  }
+
   _musicMuffled() {
-    return this.state !== 'playing' || this.waveState !== 'active';
+    return this.state !== 'playing' || (this.waveState !== 'active' && !this._waveCued);
   }
 
   // Starts a fresh run from the menu or the game-over screen. Anything that
@@ -2622,6 +2641,7 @@ class Game {
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
+    this._waveCued = false;
     this.interT = 1.2;
     this.spawnTimer = 0;
     this._reliefT = RELIEF_INTERVAL;
@@ -2711,6 +2731,7 @@ class Game {
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
+    this._waveCued = false;
     this.totemArea.dismiss();
     this.mysteryBox.dismiss();
     this.ui.setPrompt(null, false);
@@ -3200,9 +3221,14 @@ class Game {
     // seconds long and then gone; the wave after it can run for minutes, and a
     // player picking a controller back up needs the answer at the moment the
     // fight starts rather than only before it.
-    this.ui.banner(this.match
-      ? this.match.label() + '  \u00b7  WAVE ' + this.wave
-      : 'WAVE ' + this.wave);
+    // Already said at the pick in solo (see _cueWaveOpen); a second identical
+    // caption on the same wave would just replay the animation for nothing.
+    if (!this._waveCued) {
+      this.ui.banner(this.match
+        ? this.match.label() + '  \u00b7  WAVE ' + this.wave
+        : 'WAVE ' + this.wave);
+    }
+    this._waveCued = false;
     // Blackout, then the whole rig hits at once. The dark beat before it is
     // what makes the hit land - a bright room just getting brighter reads as
     // nothing at all.
@@ -5345,6 +5371,13 @@ class Game {
         if (this.match) { this._endTurn(true); return; }
         this.waveState = 'idle';
         this.interT = 0.4;
+        // THE WAVE IS ANNOUNCED ON THE PICK, not on the build. Taking a
+        // passive item is the last thing the player does in a break, so that
+        // is the moment the fight starts as far as they are concerned - the
+        // arena rising afterwards is scenery. Holding the caption and the
+        // filter until the last pillar landed made the seconds after the pick
+        // read as dead air.
+        this._cueWaveOpen();
       }
     } else if (this.waveState === 'idle') {
       this._ensureTerrain();
@@ -6055,6 +6088,7 @@ class Game {
     }
     this.wave = wave - 1;
     this.waveState = 'idle';
+    this._waveCued = false;
     this.interT = 0;
     this.ui.banner('DEBUG  WAVE ' + wave);
   }
