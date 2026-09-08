@@ -449,6 +449,54 @@ check('grid spans the interior', cellCentre(0) === -18 && cellCentre(9) === 18);
   check('a boss is not routed up anything',
     big.blocked[cell(big, 0, 1.4)] === 1 && big.blocked[cell(big, 0, -5)] === 1);
 
+  // ---- COVER YOU CANNOT STEP ONTO --------------------------------------
+  //
+  // The gap between the two numbers: a 0.95m speaker cabinet is over
+  // STEP_HEIGHT, so nothing walks onto it, and under MAX_STAND, so it is not a
+  // wall either. It is the commonest object in the arena and it used to be
+  // invisible to steering - the straight-line test only knew about walls, so
+  // an enemy with a crate between it and the player was told the way was clear
+  // and spent the wave pushing into the side of it.
+  //
+  // Walked, not asserted on a single frame: the failure was never one bad
+  // heading, it was a body that never arrived.
+  {
+    const crate = [box(0, 0.475, 0, 1.5, 0.95, 1.5)];
+    const cnav = new NavGrid(crate, 22, 0.5);
+    cnav.update(1, 4, 0, 0);
+    const out = { x: 0, z: 0 };
+    check('a crate breaks the straight line',
+      !cnav._sight(-4, 0, 4, 0, 0));
+    check('and does not break it for something standing level with its top',
+      cnav._sight(-4, 0, 4, 0, 0.95));
+
+    const p = { x: -4, z: 0 };
+    let steps = 0;
+    for (; steps < 400; steps++) {
+      if (Math.hypot(4 - p.x, -p.z) < 1) break;
+      if (!cnav.steer(p.x, p.z, out, 0)) break;
+      p.x += out.x * 0.08;
+      p.z += out.z * 0.08;
+      resolveCircle(p, 0.5, crate, AGENT_HEIGHT);
+    }
+    check('and an enemy walks round it rather than into it',
+      Math.hypot(4 - p.x, -p.z) < 1, steps + ' steps, ended at '
+        + p.x.toFixed(2) + ',' + p.z.toFixed(2));
+  }
+
+  // A CRATE THE PLAYER IS STANDING ON is a target no route can end at, and the
+  // flood has to notice: seeded there it fills the crate's own four cells and
+  // leaves the rest of the arena at Infinity, which is every enemy in the room
+  // falling back to walking straight at the player through the scenery.
+  {
+    const crate = [box(6, 0.475, 0, 1.5, 0.95, 1.5)];
+    const cnav = new NavGrid(crate, 22, 0.5);
+    cnav.update(1, 6, 0, 0.95);
+    check('a target nothing can climb to still floods the arena',
+      cnav.dist[cell(cnav, -8, 0)] !== Infinity,
+      'dist=' + cnav.dist[cell(cnav, -8, 0)]);
+  }
+
   // A wall stays a wall to both, or the whole distinction is worthless.
   const walled = [box(0, 1.5, 0, 44, 3.0, 0.8)];
   const wnav = new NavGrid(walled, 22, 0.5);

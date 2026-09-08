@@ -835,6 +835,10 @@ const _hexTo = new THREE.Vector3();
 // Scratch for the navigation heading. Module-level and consumed immediately:
 // every enemy asks for one every frame.
 const _steer = { x: 0, z: 0 };
+// Time constant of the walking-heading blend, in seconds. Short enough that a
+// corner is still taken at full speed; long enough that a single disagreeing
+// frame cannot turn a body around.
+const NAV_TURN = 0.1;
 // Petrify's reward: a frozen enemy cannot act, and takes half again as much.
 const FREEZE_VULN = 1.5;
 
@@ -3632,6 +3636,14 @@ export class Enemy {
     // took a step up. Eased to zero every frame - see the ground block in
     // update().
     this._stepLag = 0;
+    // LAST FRAME'S WALKING HEADING, and zero until there has been one. The
+    // grid answers per frame with no memory of what it said last frame, and
+    // at the edge of a stair tread - where the surface underfoot flickers
+    // between two treads as a body straddles them - two frames in a row can
+    // get opposite answers. Unsmoothed that is a body vibrating on the spot
+    // instead of climbing. See the blend in update().
+    this._navX = 0;
+    this._navZ = 0;
     this.attackCd = 0.8 + Math.random();
     this.windup = 0;
     // Seconds left on a swing that has already been thrown - see _meleeCycle.
@@ -4110,10 +4122,35 @@ export class Enemy {
     // route around, so a heading borrowed from it would send something at five
     // metres on a detour around a crate.
     const nav = this.flying ? null : this.radius > 0.8 ? (ctx.navBig || ctx.nav) : ctx.nav;
-    if (nav && nav.steer(this.pos.x, this.pos.z, _steer)) {
+    // `pos.y` is the surface underfoot (see the ground block in update), and
+    // the grid needs it: without it an enemy pressed against a crate is read as
+    // standing ON the crate, and the route it gets back is the one a thing on
+    // top of the crate would want.
+    if (nav && nav.steer(this.pos.x, this.pos.z, _steer, this.pos.y)) {
       px = _steer.x;
       pz = _steer.z;
     }
+    // TURN, RATHER THAN SNAP. The heading above is recomputed from scratch
+    // every frame, and around the corner of a stair or a crate two consecutive
+    // frames can disagree by most of a half-turn; taken literally that is an
+    // enemy shaking in place. A short blend - about a tenth of a second, and
+    // frame-rate independent - is enough to damp the flicker while still
+    // turning fast enough that nothing overshoots a corner. Fliers and the
+    // straight-line fallback go through it too, so a body's heading changes at
+    // one rate whatever produced it.
+    if (this._navX !== 0 || this._navZ !== 0) {
+      const k = 1 - Math.exp(-dt / NAV_TURN);
+      px = this._navX + (px - this._navX) * k;
+      pz = this._navZ + (pz - this._navZ) * k;
+      const m = Math.hypot(px, pz);
+      // A blend between two near-opposite headings can cancel out. There is no
+      // meaningful direction left in that, so the fresh one wins outright
+      // rather than leaving the body pointing nowhere.
+      if (m < 1e-3) { px = _steer.x || nx; pz = _steer.z || nz; }
+      else { px /= m; pz /= m; }
+    }
+    this._navX = px;
+    this._navZ = pz;
 
     let vx = 0;
     let vz = 0;

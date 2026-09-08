@@ -6455,8 +6455,13 @@ class Game {
     // Refresh the route to the player once for the whole list, before anyone
     // reads it. The grid throttles itself; this call is cheap on most frames.
     if (!lure) {
-      this.nav.update(dt, this.player.pos.x, this.player.pos.z);
-      if (this._bigAlive > 0) this.navBig.update(dt, this.player.pos.x, this.player.pos.z);
+      // Feet, not eyes - player.pos.y is the surface being stood on. The
+      // flood is seeded from the player's cell and a cell picked at the wrong
+      // height is a cell nothing can reach, which empties the whole field.
+      this.nav.update(dt, this.player.pos.x, this.player.pos.z, this.player.pos.y);
+      if (this._bigAlive > 0) {
+        this.navBig.update(dt, this.player.pos.x, this.player.pos.z, this.player.pos.y);
+      }
     }
 
     // Update everything first, then compact. Doing both in one pass would let
