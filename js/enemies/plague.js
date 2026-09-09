@@ -461,6 +461,7 @@ export function aiSchism(e, a) {
 
 const TYPES = {
   splitter: {
+    head: { r: 0.3, y: 1.12 },
     hp: 30, speed: 3.0, damage: 10, value: 120, color: SPLITTER_BODY, eye: SPLITTER_EYE,
     scale: 1.0, radius: 0.5, mass: 1,
     melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.0 },
@@ -493,6 +494,7 @@ const TYPES = {
   // lesion writes a wall of poison across the arc you strafed through, and the
   // way out is to kill it or to break the angle rather than to keep moving.
   lesion: {
+    head: { r: 0.3, y: 1.12 },
     hp: 26, speed: 2.3, damage: 8, value: 270, color: 0xb3327a, eye: 0xffb0e8,
     scale: 1.0, radius: 0.48, mass: 1,
     orbit: { dist: 12, band: 2.5, out: 0.8, in: -0.65, strafe: 0.45, flip: 1.8, flipVar: 2 },
@@ -516,6 +518,7 @@ const TYPES = {
   // the only answer is to find it first - which is the same answer as always,
   // arrived at from the opposite direction.
   carrion: {
+    head: { r: 0.3, y: 1.6 },
     hp: 66, speed: 2.0, damage: 0, value: 350, color: 0x8f2f68, eye: 0xffb0e8,
     scale: 1.2, radius: 0.52, mass: 1,
     orbit: { dist: 13, band: 2.5, out: 0.8, in: -0.6, strafe: 0.3, flip: 2, flipVar: 2 },
@@ -531,6 +534,7 @@ const TYPES = {
   // bursts where the player was standing two seconds ago. Between them the
   // theme charges for both standing still and for having stood still.
   bloatfly: {
+    head: { r: 0.3, y: 0.9 },
     hp: 60, speed: 3.2, damage: 0, value: 300, color: 0x9c3a86, eye: 0xffb0e8,
     scale: 1.15, radius: 0.5, mass: 1,
     fly: { height: 3.4 },
@@ -556,6 +560,7 @@ const TYPES = {
   // a brute invites you to stand and shoot, and this is the one that charges
   // you for it. Killing it at range, or moving after it dies, costs nothing.
   husk: {
+    head: { r: 0.32, y: 1.6 },
     hp: 130, speed: 1.5, damage: 14, value: 300, color: 0xa03a72, eye: 0xffb0e8,
     scale: 1.4, radius: 0.6, mass: 2,
     melee: { windup: 0.8, start: 2.8, hit: 3.4, cd: 2.4 },
@@ -577,6 +582,7 @@ const TYPES = {
   // It does no direct damage at all, exactly like the blight: what it throws
   // is the entire enemy.
   vitriol: {
+    head: { r: 0.3, y: 0.56 },
     hp: 46, speed: 1.9, damage: 0, value: 260, color: 0x9c3a86, eye: 0xffb0e8,
     scale: 1.12, radius: 0.55, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -593,6 +599,7 @@ const TYPES = {
   // first split, 0.5H for the second and a full H to finish the four, so
   // clearing it costs 2x this number. See the sanity check in waves.js.
   schism: {
+    head: { r: 0.42, y: 1.3 },
     hp: 1550, speed: 3.0, damage: 18, value: 6000, color: 0xd500f9, eye: 0xffb0ff,
     scale: 2.2, radius: 1.3, mass: 5, boss: true,
     hitbox: { r: 0.7, y: 0.8 },

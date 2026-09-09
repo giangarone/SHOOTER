@@ -623,11 +623,19 @@ export function aiAshwing(e, a) {
 // ---- VERDANT ---------------------------------------------------------------
 
 // ---- the Forge-Tyrant -------------------------------------------------------
-// How fast the bar fills, and what each third of it buys. Tuned so a player
-// doing reasonable damage sees three or four vents in a fight: fewer and the
-// windows are too scarce to build a fight around, more and the escalation
-// never gets far enough up the ladder to show the ring.
-export const FORGE_HEAT_RATE = 1 / 15;
+// How fast the bar fills, and what each third of it buys.
+//
+// EIGHT AND A HALF SECONDS, not fifteen. Fifteen was the fill time alone, and
+// the real gap between windows was that plus the special cooldown the vent
+// resets on its way out - better than twenty seconds of a fight whose entire
+// point is the window. The core was open for four seconds in every twenty-five,
+// which is not "the whole reward," it is a rumour.
+//
+// Both thirds of the ladder are FRACTIONS of the bar (see FORGE_SWEEP_AT and
+// FORGE_RING_AT below), so filling it faster keeps the escalation in the same
+// order - sweep, then ring, then the core - just with less standing around
+// between the rungs.
+export const FORGE_HEAT_RATE = 1 / 8.5;
 
 export const FORGE_SWEEP_AT = 0.34;
 
@@ -660,6 +668,13 @@ export const FORGE_RING_N = 18;
 export const FORGE_RING_GAP = 3;      // consecutive slots left open
 
 export const FORGE_SPECIAL_CD = 6.5;
+
+// What it takes off the clock when it CLOSES the core, as opposed to after an
+// ordinary special. Much shorter than FORGE_SPECIAL_CD: the boss has just spent
+// four seconds standing still with its chest open, so the beat after that wants
+// to be the fight resuming rather than another walk. It is not zero, because a
+// vent that flowed straight into a ring would give the player nowhere to stand.
+export const FORGE_VENT_CD = 2.2;
 
 export const FORGE_PATCH_RADIUS = 1.8;
 
@@ -742,7 +757,7 @@ export function aiForge(e, a) {
       bs.state = 'walk';
       bs.venting = false;
       bs.heat = 0;
-      bs.cd = FORGE_SPECIAL_CD;
+      bs.cd = FORGE_VENT_CD;
       e.weakOpen = false;
       ctx.bossEvent('vent', e);
     }
@@ -880,6 +895,7 @@ const TYPES = {
   // damage in the LOWER half of the band, because the fire it leaves is the
   // rest of the payment (see the afflictor rule further down).
   magma: {
+    head: { r: 0.32, y: 1.46 },
     hp: 150, speed: 1.8, damage: 16, value: 300, color: 0xff5a1f, eye: 0xffd166,
     scale: 1.35, radius: 0.58, mass: 2,
     melee: { windup: 0.75, start: 2.8, hit: 3.5, cd: 2.3 },
@@ -916,6 +932,7 @@ const TYPES = {
   // moved off rather than dodged on reflex - and the answer is always to move
   // ACROSS it, which is the habit this whole theme is trying to build.
   flare: {
+    head: { r: 0.3, y: 1.62 },
     hp: 30, speed: 2.4, damage: 9, value: 220, color: 0xff7a18, eye: 0xffd166,
     scale: 1.05, radius: 0.48, mass: 1,
     orbit: { dist: 11, band: 2, out: 0.7, in: -0.5, strafe: 0.4, flip: 2.2, flipVar: 2 },
@@ -936,6 +953,7 @@ const TYPES = {
   // No damage of its own, exactly like the blight and the vitriol it stands
   // beside in the artillery role. What it throws IS the enemy.
   kiln: {
+    head: { r: 0.3, y: 0.86 },
     hp: 46, speed: 1.8, damage: 0, value: 290, color: 0xd2691e, eye: 0xffb347,
     scale: 1.15, radius: 0.56, mass: 2,
     build: buildKiln, ai: aiKiln,
@@ -955,6 +973,7 @@ const TYPES = {
   // Short burn on purpose. It has to be a reason to shoot the bellows, not a
   // reason to stop playing the wave.
   bellows: {
+    head: { r: 0.3, y: 1.48 },
     hp: 62, speed: 2.1, damage: 0, value: 340, color: 0xe2683a, eye: 0xffd166,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 9, band: 2, out: 0.7, in: -0.6, strafe: 0.35, flip: 2.4, flipVar: 2 },
@@ -976,6 +995,7 @@ const TYPES = {
   // once it is running it cannot steer, so the whole enemy is answered by
   // being somewhere else by the time it arrives.
   ashwing: {
+    head: { r: 0.28, y: 0.14 },
     hp: 52, speed: 3.6, damage: 0, value: 300, color: 0xff6a2a, eye: 0xffd166,
     scale: 1.0, radius: 0.5, mass: 1,
     fly: { height: 4.6 },
@@ -1018,6 +1038,7 @@ const TYPES = {
   // Refusable by not being touched, which is the most basic answer in the game
   // and the right one to teach a status with.
   cinder: {
+    head: { r: 0.3, y: 1.46 },
     hp: 30, speed: 3.9, damage: 5, value: 200, color: 0xff7a18, eye: 0xffd166,
     scale: 0.95, radius: 0.46, mass: 1,
     melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.2 },
@@ -1051,6 +1072,7 @@ const TYPES = {
   //                   in it, so being at the wrong distance is now a mistake
   //   full            it must vent, and the fight resets to the top
   forge: {
+    head: { r: 0.42, y: 1.76 },
     hp: 3400, speed: 2.3, damage: 30, value: 5500, color: 0xff5a1f, eye: 0xffd166,
     scale: 3.0, radius: 1.8, mass: 8, boss: true,
     hitbox: { r: 0.74, y: 0.8 },

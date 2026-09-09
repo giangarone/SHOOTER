@@ -1057,27 +1057,33 @@ def _(c):
 
 @icon('statusSlowness')     # you move at a fraction of your pace
 def _(c):
-    # A BOOT FROZEN INTO A BLOCK OF ICE. Two earlier passes were wrong in the
-    # same way: a ball and chain says "held" without saying by what, and an
-    # hourglass says "time" when every chip in the HUD already carries a timer
-    # bar. This one names the effect AND its cause, which is the thing the
-    # player has to connect - the frost on the floor is where it came from.
+    # AN ICICLE HANGING OFF A LEDGE. The chip used to be a boot frozen into a
+    # block of ice, which named the effect and its cause in one picture and was
+    # the right idea - but at 24 pixels the boot inside the block was a dark
+    # smudge, and the block read as a rock about as often as as ice.
     #
-    # CRYO already owns the snowflake. This is a chunk, not a crystal, so the
-    # two never read as the same idea at chip size.
-    c.poly([(11.0, 1.5), (19.5, 5.0), (22.0, 13.5), (18.0, 21.5),
-            (7.5, 22.0), (2.0, 15.0), (3.5, 6.0)], S)
-    # The boot, punched THROUGH the ice rather than drawn on it: a near-black
-    # hole inside a lit block survives at any size, and a mid-tone boot on a
-    # mid-tone chunk does not.
-    c.rect(8.5, 6.5, 11.8, 13.5, DEEP)         # the shin
-    c.rect(8.5, 13.5, 15.5, 16.6, DEEP)        # the foot, toe forward
-    c.rect(7.4, 16.6, 15.5, 18.0, DEEP)        # the sole, wider than the foot
-    # Facets. The lit edges of the block, and the only ENERGY in the icon, so
-    # the eye lands on the ice rather than on the boot inside it.
-    c.line(4.6, 8.0, 9.0, 3.6, E, 1.8)
-    c.line(19.6, 8.6, 21.0, 14.6, E, 1.8)
-    c.line(13.6, 3.4, 17.6, 5.2, E, 1.6)
+    # ONE BIG SPIKE, not three even ones. Three read as a comb, and a comb is
+    # what every attempt at this shape turns into once the taper eats the width:
+    # a 24-pixel icon has room for exactly one thing with a point on it. The two
+    # stubs either side are there so the ledge is not carrying a single spike -
+    # they are texture, and they are deliberately different lengths.
+    #
+    # NOTHING ELSE IN THE CATALOGUE OWNS A SPIKE POINTING DOWN. CRYO PULSE is a
+    # flake inside a shockwave and ABSOLUTE ZERO is the hexagon, so this cannot
+    # be mistaken for either - and DOWN is the whole reading: everything in the
+    # icon points at the floor, which is where a slow puts you.
+    c.rect(1.5, 2.0, 22.5, 5.6, S)
+    # The underside of the ledge, so the ice grows out of shadow rather than out
+    # of a lit edge - which is what stops the bar reading as a shelf.
+    c.rect(1.5, 4.8, 22.5, 5.6, D)
+    c.poly([(6.0, 5.0), (18.0, 5.0), (12.2, 22.4)], S)
+    # The lit front face, offset to the light and stopping short of the point:
+    # this is the ENERGY, so the eye lands on the ice and not on what holds it.
+    c.poly([(8.0, 5.4), (12.2, 5.4), (12.2, 20.0)], E)
+    c.poly([(2.2, 5.0), (5.6, 5.0), (4.0, 10.6)], S)
+    c.poly([(18.4, 5.0), (21.8, 5.0), (20.0, 9.4)], S)
+    c.poly([(2.9, 5.4), (4.0, 5.4), (4.0, 9.2)], E)
+    c.poly([(19.1, 5.4), (20.0, 5.4), (20.0, 8.2)], E)
 
 
 # ---- ACTIVE ITEMS ---------------------------------------------------------

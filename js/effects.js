@@ -71,6 +71,8 @@ const CORPSE_SLOTS = 12;
 // sixteen parts plus eyes, so this clears it with room to spare; anything
 // past it is left on the group and simply goes when the corpse does.
 const CORPSE_PIECES = 28;
+// Scratch list for corpse(), reused so a death allocates nothing.
+const _corpsePieces = [];
 // Seconds a corpse lasts, and the last fraction of that spent shrinking away.
 // Short: this is the punctuation on a kill, not a body on the floor, and in a
 // crowd it has to be gone before the player stops reading it as feedback.
@@ -518,6 +520,13 @@ const DMG_WHITE = new THREE.Color(0xffffff);
 // The interface's own gold, the colour it uses everywhere for the thing that
 // is currently true.
 const DMG_CRIT = new THREE.Color(0xffe95e);
+// A HEADSHOT IS A DIFFERENT COLOUR FROM A CRIT, and it has to be: a crit is
+// the die and a headshot is the aim, and a player who cannot tell them apart
+// cannot learn which of the two they are actually doing. Cyan against the
+// crit's gold, so the pair reads at a glance and neither is mistaken for the
+// white of an ordinary hit. A headshot that ALSO crit shows this colour - the
+// aim is the part the player did on purpose.
+const DMG_HEAD = new THREE.Color(0x6fe8ff);
 
 // The ten digits in a strip, in the HUD's face, each with the hard black drop
 // shadow every other piece of text in this interface wears - see `.overlay h1`
@@ -1042,7 +1051,15 @@ export class Effects {
     slot.life = CORPSE_LIFE;
 
     let n = 0;
-    for (const m of group.children) {
+    // EVERY MESH IN THE BODY, not just the group's own children. Most models
+    // hang their parts straight off the group, but a model may nest them - the
+    // scree's roll needs a pivot between the group and its parts (see
+    // buildScree) - and a flat pass over `children` would have thrown that
+    // pivot as ONE piece and left the rock dying as a single tumbling lump.
+    const pieces = _corpsePieces;
+    pieces.length = 0;
+    group.traverse((o) => { if (o.isMesh) pieces.push(o); });
+    for (const m of pieces) {
       if (n >= CORPSE_PIECES) break;
       if (m.userData && m.userData.noCorpse) continue;
       const i3 = n * 3;
@@ -1898,8 +1915,10 @@ export class Effects {
    * @param {number} amount      damage dealt, before the body's remaining
    *                             health is taken into account
    * @param {boolean} crit
+   * @param {boolean} [head]  landed on the head. Sizes and colours like a crit
+   *   but in its own colour, because it is its own thing.
    */
-  damageNumber(pos, amount, crit = false) {
+  damageNumber(pos, amount, crit = false, head = false) {
     // Sub-1 damage rounds to 1 rather than to 0: a tick that did something has
     // to say so, and "0" floating off a body reads as a bug.
     const n = Math.max(1, Math.min(99999, Math.round(amount)));
@@ -1919,9 +1938,10 @@ export class Effects {
 
     const t = Math.log10(1 + n / DMG_REF) / Math.log10(1 + 40);
     const h = DMG_MIN_H + (DMG_MAX_H - DMG_MIN_H) * Math.min(1, t);
-    slot.scale = h * (crit ? 1.25 : 1) * (0.92 + Math.random() * 0.16);
+    const big = crit || head;
+    slot.scale = h * (big ? 1.25 : 1) * (0.92 + Math.random() * 0.16);
 
-    const col = crit ? DMG_CRIT : DMG_WHITE;
+    const col = head ? DMG_HEAD : (crit ? DMG_CRIT : DMG_WHITE);
     slot.r = col.r;
     slot.g = col.g;
     slot.b = col.b;
@@ -1938,7 +1958,7 @@ export class Effects {
     const drift = 0.18 + Math.random() * 0.28;
     slot.dx = Math.cos(ang) * drift;
     slot.dz = Math.sin(ang) * drift;
-    slot.climb = DMG_CLIMB * (0.85 + Math.random() * 0.3) * (crit ? 1.15 : 1);
+    slot.climb = DMG_CLIMB * (0.85 + Math.random() * 0.3) * (big ? 1.15 : 1);
     slot.rise = DMG_RISE * (0.9 + Math.random() * 0.2);
     slot.hold = DMG_HOLD * (0.85 + Math.random() * 0.3);
     slot.out = DMG_OUT * (0.9 + Math.random() * 0.2);

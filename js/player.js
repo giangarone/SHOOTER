@@ -346,6 +346,19 @@ const DASH_SPEED = 42;
 // still has to answer a slam the frame it is pressed, so almost all of the
 // curve is the exit.
 const DASH_IN = 0.15;
+// THE MOST UPWARD VELOCITY A DASH MAY PRODUCE, in m/s, whatever the boost.
+//
+// The dash used to take its vertical straight from sin(pitch) times the full
+// 42 m/s envelope, which meant a BLINK DRIVE fired while looking straight up
+// launched the player at 42 m/s - four and a half times an air jump, and past
+// the arena's ceiling, which is a raycast target and not an obstacle (see
+// arena.js) so there is nothing up there to stop them. What came back down was
+// a player who had left the room.
+//
+// Twelve is just over AIR_JUMP_V, so a dash taken looking up is the best climb
+// in the game and still a climb rather than a launch. Only the UP is capped:
+// the downward dash is bounded by the floor already, and the slam is real.
+const DASH_RISE_MAX = 12;
 
 // The dash's speed envelope at `u` (0..1 through the window), 0..1.
 //
@@ -744,6 +757,40 @@ const SLIDE_GUN_Z = 0.1;
 const SLIDE_GUN_RX = 0.28;
 const SLIDE_GUN_RY = 0.35;
 const SLIDE_GUN_RZ = -0.6;
+
+// THE SLIDE'S OWN MOVEMENT, which is what was missing.
+//
+// Everything above is a POSTURE: the gun eases to one place and sits there for
+// the three quarters of a second the slide lasts. On the screen that reads as
+// the weapon simply being somewhere slightly different - and since the camera
+// has also dropped and the floor is rushing past, players reported not being
+// able to tell they were sliding at all. A posture is not an animation.
+//
+// So the pose gets a shape over the slide's own clock: a KICK as the player goes
+// down, a SCRAPE while they are travelling, and the pose draining back out as
+// the slide expires. All three are additive terms on the same offsets, scaled by
+// the same (1 - aimT) as the posture, so the sights still override the lot.
+//
+// THE KICK is the launch: the gun is thrown in and up and rolls hard as the
+// player commits, then settles into the carry over the first fifth of the slide.
+// Sharp because the launch is - it is one shove against the floor.
+const SLIDE_KICK_FRAC = 0.2;
+const SLIDE_KICK_Y = 0.075;
+const SLIDE_KICK_Z = 0.055;
+const SLIDE_KICK_RX = -0.24;
+const SLIDE_KICK_RZ = -0.3;
+// THE SCRAPE: the body is being dragged across a floor, so the gun shakes with
+// it. Two and a half cycles over the slide, dying away as the slide slows -
+// deliberately small, because this is texture and not recoil.
+const SLIDE_SHAKE_CYCLES = 2.5;
+const SLIDE_SHAKE_X = 0.012;
+const SLIDE_SHAKE_RZ = 0.05;
+// And the RECOVER: the muzzle comes up as the player stands out of it, over the
+// last stretch of the slide, which is what makes the exit read as getting up
+// rather than as the pose being switched off.
+const SLIDE_RECOVER_FRAC = 0.35;
+const SLIDE_RECOVER_RX = 0.16;
+const SLIDE_RECOVER_Y = 0.03;
 
 // ---- the melee swing -------------------------------------------------------
 //
@@ -1427,10 +1474,18 @@ export class Player {
   //                        speed and not the shared envelope
   // @param {number} pitch  radians, positive looking up; 0 is the flat dash
   dash(time, boost = 1, pitch = 0) {
-    const c = Math.cos(pitch);
+    // CLAMPED, AND THE CLIPPED PART IS SPENT FORWARD instead of thrown away.
+    // The direction stays a unit vector, so what a steeply-upward dash loses in
+    // climb it gains in distance: looking at the ceiling still gets the player
+    // up onto the platform, and it no longer gets them over the roof. See
+    // DASH_RISE_MAX.
+    let dy = Math.sin(pitch);
+    const cap = DASH_RISE_MAX / (DASH_SPEED * boost);
+    if (dy > cap) dy = cap;
+    const c = Math.sqrt(Math.max(0, 1 - dy * dy));
     this.dashDX = -Math.sin(this.yaw) * c;
     this.dashDZ = -Math.cos(this.yaw) * c;
-    this.dashDY = Math.sin(pitch);
+    this.dashDY = dy;
     this.dashBoost = boost;
     this.dashStart = time;
     this.dashEnd = time + DASH_TIME;
@@ -2671,18 +2726,39 @@ export class Player {
     const duck = this._crouchPose * (1 - this.aimT);
     const slide = this._slidePose * (1 - this.aimT);
 
+    // WHERE IN THE SLIDE WE ARE: 0 the frame it launches, 1 as it expires. Held
+    // at 1 once the slide is over, which is what makes the kick and the scrape
+    // vanish on their own while the posture blend drains at its own pace - no
+    // term has to be switched off anywhere. See SLIDE_KICK_FRAC.
+    const su = this.sliding
+      ? 1 - Math.max(0, Math.min(1, this.slideT / SLIDE_TIME))
+      : 1;
+    // Squared, so the launch is a snap rather than a ramp.
+    const k0 = Math.max(0, 1 - su / SLIDE_KICK_FRAC);
+    const kick = k0 * k0 * slide;
+    // Fades with the slide's own speed, so the shake is loudest where the
+    // player is actually travelling fastest.
+    const shake = Math.sin(su * Math.PI * 2 * SLIDE_SHAKE_CYCLES) * (1 - su) * slide;
+    // The last stretch only, eased in.
+    const up = Math.max(0, (su - (1 - SLIDE_RECOVER_FRAC)) / SLIDE_RECOVER_FRAC) * slide;
+
     this._gunOffX = sw * BOB_X * amp + SPRINT_GUN_X * carry
-      + CROUCH_GUN_X * duck + SLIDE_GUN_X * slide;
+      + CROUCH_GUN_X * duck + SLIDE_GUN_X * slide
+      + SLIDE_SHAKE_X * shake;
     this._gunOffY = dip * BOB_Y * amp + SPRINT_GUN_Y * carry
-      + CROUCH_GUN_Y * duck + SLIDE_GUN_Y * slide;
-    this._gunOffZ = SPRINT_GUN_Z * carry + CROUCH_GUN_Z * duck + SLIDE_GUN_Z * slide;
+      + CROUCH_GUN_Y * duck + SLIDE_GUN_Y * slide
+      - SLIDE_KICK_Y * kick + SLIDE_RECOVER_Y * up;
+    this._gunOffZ = SPRINT_GUN_Z * carry + CROUCH_GUN_Z * duck + SLIDE_GUN_Z * slide
+      + SLIDE_KICK_Z * kick;
     this._gunOffRX = dip * BOB_PITCH * amp + SPRINT_GUN_RX * carry
-      + CROUCH_GUN_RX * duck + SLIDE_GUN_RX * slide;
+      + CROUCH_GUN_RX * duck + SLIDE_GUN_RX * slide
+      + SLIDE_KICK_RX * kick + SLIDE_RECOVER_RX * up;
     this._gunOffRY = SPRINT_GUN_RY * carry + SLIDE_GUN_RY * slide;
     // Rolls INTO the sway - the weapon leans the way it is travelling, which
     // is what turns two straight-line offsets into an arc.
     this._gunOffRZ = -sw * BOB_ROLL * amp + SPRINT_GUN_RZ * carry
-      + SLIDE_GUN_RZ * slide;
+      + SLIDE_GUN_RZ * slide
+      + SLIDE_KICK_RZ * kick + SLIDE_SHAKE_RZ * shake;
   }
 
   /**

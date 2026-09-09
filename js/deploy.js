@@ -31,7 +31,7 @@
 // that is the difference between the two items, not an oversight in one.
 
 import * as THREE from 'three';
-import { pointInObstacle, segmentClear } from './utils.js';
+import { pointInObstacle, segmentClear, groundSurface } from './utils.js';
 import { BOUND } from './arena.js';
 
 const _v = new THREE.Vector3();
@@ -64,7 +64,7 @@ function emissive(color, intensity = 1.4) {
  * flies, and a bee that refused to go round a crate would sit still next to
  * one for twelve seconds.
  */
-function nearest(enemies, x, z, maxD, obstacles = null) {
+function nearest(enemies, x, z, maxD, obstacles = null, standY = -Infinity) {
   let best = null;
   let bestD = maxD * maxD;
   for (const e of enemies) {
@@ -73,11 +73,31 @@ function nearest(enemies, x, z, maxD, obstacles = null) {
     const dz = e.pos.z - z;
     const d2 = dx * dx + dz * dz;
     if (d2 >= bestD) continue;
-    if (obstacles && !segmentClear(x, z, e.pos.x, e.pos.z, 0.2, obstacles)) continue;
+    // `standY` is what stops a gun placed ON the arena's geometry from being
+    // blind: see the note on segmentClear.
+    if (obstacles && !segmentClear(x, z, e.pos.x, e.pos.z, 0.2, obstacles, standY)) continue;
     bestD = d2;
     best = e;
   }
   return best;
+}
+
+// WHAT A DEPLOYED THING IS STANDING ON.
+//
+// Everything in this file used to be placed at world y ZERO, on the assumption
+// that the arena has one floor. It does not: it has platforms, ramps and stairs
+// that the player fights on all the time. A turret thrown onto a platform was
+// built three metres underneath it - buried, usually invisible, and unable to
+// shoot, because target acquisition is an XZ line test (see `nearest`) and a
+// gun inside a stair reads every line out of it as blocked by that stair.
+//
+// `fromY` is where the thing that placed it was: the lob at the top of its
+// fall, or the player's own feet. Asked from a little above that, with a
+// generous step, so a throw that lands on a tread settles onto the tread.
+function standOn(game, x, z, fromY = 0) {
+  const obstacles = game.arena && game.arena.obstacles;
+  if (!obstacles) return 0;
+  return groundSurface({ x, y: fromY + 0.4, z }, 0.4, obstacles, 1.2);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,8 +112,8 @@ function nearest(enemies, x, z, maxD, obstacles = null) {
 // IT DOES NOT LEAD ITS TARGET. A turret that predicted movement would out-aim
 // the player, and the player is the one holding the interesting gun.
 export class Turret {
-  constructor(game, x, z, damage) {
-    this.pos = new THREE.Vector3(x, 0, z);
+  constructor(game, x, z, damage, fromY = 0) {
+    this.pos = new THREE.Vector3(x, standOn(game, x, z, fromY), z);
     // ONE OF THE PLAYER'S OWN SHOTS PER ROUND, snapshotted when the turret is
     // set down rather than read live: the thing was built out of the gun the
     // player was holding at the time, and a turret that quietly got stronger
@@ -162,7 +182,7 @@ export class Turret {
   update(dt, ctx) {
     this.life -= dt;
     if (this.life <= 0) return 'dead';
-    const target = nearest(ctx.enemies, this.pos.x, this.pos.z, 26, ctx.obstacles);
+    const target = nearest(ctx.enemies, this.pos.x, this.pos.z, 26, ctx.obstacles, this.pos.y);
     if (target) {
       // Snaps rather than eases onto a new target. The eye is the only tell
       // the player has that it has seen something, and a turret that swung
@@ -187,9 +207,10 @@ export class Turret {
     if (!target || first) return 'alive';
     this.since = 0;
     this.muzzle.set(
-      this.pos.x - Math.sin(this.yaw) * 0.5, 0.68, this.pos.z - Math.cos(this.yaw) * 0.5
+      this.pos.x - Math.sin(this.yaw) * 0.5, this.pos.y + 0.68,
+      this.pos.z - Math.cos(this.yaw) * 0.5
     );
-    _v.copy(target.pos).setY(0.9);
+    _v.copy(target.pos).setY(target.pos.y + 0.9);
     ctx.effects.tracer(this.muzzle, _v);
     ctx.effects.flash(this.muzzle);
     ctx.hurtEnemy(target, this.damage);
@@ -224,8 +245,8 @@ export class Turret {
 // be lobbed into a body at contact range, and a mine armed on frame one would
 // make that a suicide button.
 export class Mine {
-  constructor(game, x, z, damage) {
-    this.pos = new THREE.Vector3(x, 0.06, z);
+  constructor(game, x, z, damage, fromY = 0) {
+    this.pos = new THREE.Vector3(x, standOn(game, x, z, fromY) + 0.06, z);
     // FIVE OF THE PLAYER'S OWN SHOTS, snapshotted when it is thrown for the
     // same reason the turret's is: it was built out of the gun in hand.
     this.damage = damage;
@@ -1197,10 +1218,12 @@ export class Lob {
     // its turret up somewhere the fight can reach.
     const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.x));
     const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.z));
+    // The throw already tracked a real height through its arc and used to drop
+    // it here, which is how a turret landing on a platform ended up under one.
     ctx.deploy(this.kind === 'mine'
-      ? new Mine(this.game, x, z, this.damage)
-      : new Turret(this.game, x, z, this.damage));
-    _v.set(x, 0.1, z);
+      ? new Mine(this.game, x, z, this.damage, this.pos.y)
+      : new Turret(this.game, x, z, this.damage, this.pos.y));
+    _v.set(x, this.pos.y + 0.1, z);
     ctx.effects.impact(_v, this.kind === 'mine' ? 0xff7043 : 0xffab40, 8, 3, 1, 0.3);
   }
 

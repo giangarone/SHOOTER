@@ -252,10 +252,18 @@ export function makeAabb(x, y, z, w, h, d) {
 // Slab test per box: clip the segment's [0,1] parameter range against the x
 // and z spans in turn. If a range survives both, the segment is inside that
 // box somewhere along its length.
-export function segmentClear(ax, az, bx, bz, radius, obstacles) {
+// `standY` is the height the LINE is being fired from, and boxes whose tops are
+// at or below it are skipped. It exists for one case: a turret standing on a
+// platform is inside that platform's XZ footprint, and a test with no Y at all
+// answers "blocked" for every line out of it - so a gun placed on top of the
+// arena's own geometry could never see anything. Left at -Infinity by default,
+// so every existing caller behaves exactly as it did: a knee-high crate still
+// stops a shot from a gun on the floor beside it.
+export function segmentClear(ax, az, bx, bz, radius, obstacles, standY = -Infinity) {
   const dx = bx - ax;
   const dz = bz - az;
   for (const o of obstacles) {
+    if (o.max.y <= standY + 0.06) continue;
     const minX = o.min.x - radius;
     const maxX = o.max.x + radius;
     const minZ = o.min.z - radius;

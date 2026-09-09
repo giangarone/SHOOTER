@@ -700,6 +700,7 @@ const TYPES = {
   // answer everything else, so the enemy laying it has to be the thing you are
   // trying to walk away from.
   rime: {
+    head: { r: 0.3, y: 1.32 },
     hp: 58, speed: 2.5, damage: 8, value: 220, color: 0x63b3ff, eye: 0xd8f0ff,
     scale: 1.05, radius: 0.52, mass: 1,
     melee: { windup: 0.55, start: 1.5, hit: 2.2, cd: 1.4 },
@@ -735,6 +736,7 @@ const TYPES = {
   // gunner in the game and a shard standing behind a hailer is the reason you
   // do not walk through the ring.
   shard: {
+    head: { r: 0.3, y: 1.52 },
     hp: 26, speed: 2.3, damage: 8, value: 230, color: 0x8fd4ff, eye: 0xe8f7ff,
     scale: 0.95, radius: 0.46, mass: 1,
     orbit: { dist: 14, band: 2, out: 0.8, in: -0.6, strafe: 0.45, flip: 2, flipVar: 2.5 },
@@ -756,6 +758,7 @@ const TYPES = {
   // this way rather than as a flat health bar: the player can see the event
   // coming and choose where to be for it.
   glacier: {
+    head: { r: 0.32, y: 1.26 },
     hp: 165, speed: 1.5, damage: 15, value: 330, color: 0x5aa8e8, eye: 0xd8f0ff,
     scale: 1.4, radius: 0.6, mass: 2,
     melee: { windup: 0.8, start: 2.9, hit: 3.5, cd: 2.5 },
@@ -780,6 +783,7 @@ const TYPES = {
   // No direct damage, exactly like the blight and the vitriol it stands beside
   // in the role. The frost does none either - what it costs is your legs.
   hailer: {
+    head: { r: 0.3, y: 1.04 },
     hp: 44, speed: 1.9, damage: 0, value: 270, color: 0x7ec8f0, eye: 0xd8f0ff,
     scale: 1.1, radius: 0.54, mass: 1,
     orbit: { dist: 13, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -799,6 +803,7 @@ const TYPES = {
   // WEAKNESS was in status.js from the day the status system shipped and
   // nothing in the game had ever applied it. This is what it was for.
   hoarfrost: {
+    head: { r: 0.3, y: 1.12 },
     hp: 66, speed: 2.0, damage: 0, value: 350, color: 0xa9d8ef, eye: 0xe8f7ff,
     scale: 1.2, radius: 0.52, mass: 1,
     orbit: { dist: 11, band: 2, out: 0.7, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
@@ -815,6 +820,7 @@ const TYPES = {
   // two air roles ask the two opposite questions, "be somewhere else by the
   // time it arrives" and "do not stop".
   sleet: {
+    head: { r: 0.28, y: 0.08 },
     hp: 50, speed: 3.4, damage: 0, value: 300, color: 0xbfe6ff, eye: 0xe8f7ff,
     scale: 0.95, radius: 0.48, mass: 1,
     fly: { height: 5.0 },
@@ -860,6 +866,7 @@ const TYPES = {
   // each with the arena a little more frozen than the last. While shelled it
   // still walks and still swings, so hiding from it is not a plan.
   palecrown: {
+    head: { r: 0.42, y: 1.74 },
     hp: 3300, speed: 2.5, damage: 24, value: 6000, color: 0x8fd4ff, eye: 0xe8f7ff,
     scale: 2.8, radius: 1.7, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.82 },

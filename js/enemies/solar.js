@@ -511,6 +511,7 @@ export function aiHerald(e, a) {
 
 const TYPES = {
   sniper: {
+    head: { r: 0.3, y: 1.47 },
     hp: 18, speed: 2.2, damage: 15, value: 200, color: 0xffd54f, eye: 0xfff3c4,
     scale: 0.9, radius: 0.5, mass: 1,
     orbit: { dist: 22, band: 2, out: 0.8, in: -0.5, strafe: 0.4, flip: 2, flipVar: 3 },
@@ -549,6 +550,7 @@ const TYPES = {
   // a shotgun. Weak in the hit for the afflictor's reason: what it does after
   // it dies is where its cost lives.
   zealot: {
+    head: { r: 0.3, y: 1.18 },
     hp: 30, speed: 4.1, damage: 8, value: 230, color: 0xffd54f, eye: 0xfff3c4,
     scale: 0.95, radius: 0.46, mass: 1,
     melee: { windup: 0.32, start: 1.4, hit: 2.0, cd: 1.0 },
@@ -582,6 +584,7 @@ const TYPES = {
   // the plate wears it down, so a player who commits does get through; they
   // simply pay the front of their own gun for it.
   aegis: {
+    head: { r: 0.32, y: 1.22 },
     hp: 172, speed: 1.5, damage: 21, value: 360, color: 0xe0b93c, eye: 0xfff3c4,
     scale: 1.4, radius: 0.64, mass: 3,
     melee: { windup: 0.75, start: 2.8, hit: 3.4, cd: 2.2 },
@@ -606,6 +609,7 @@ const TYPES = {
   // in a SOLAR wave the lens is the reason to keep moving and the halo is the
   // reason that is hard.
   lens: {
+    head: { r: 0.3, y: 0.86 },
     hp: 42, speed: 1.75, damage: 0, value: 300, color: 0xf0c94a, eye: 0xfff3c4,
     scale: 1.15, radius: 0.55, mass: 1,
     orbit: { dist: 18, band: 3, out: 0.6, in: -0.5, strafe: 0.25, flip: 3, flipVar: 2 },
@@ -623,6 +627,7 @@ const TYPES = {
   // radius it works at, the way the hoarfrost's is, because a HUD that
   // silently stopped working with no visible cause would read as a bug.
   halo: {
+    head: { r: 0.3, y: 1.32 },
     hp: 64, speed: 2.2, damage: 0, value: 350, color: 0xffe9a8, eye: 0xfff3c4,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 10, band: 2, out: 0.8, in: -0.6, strafe: 0.35, flip: 2, flipVar: 2 },
@@ -641,6 +646,7 @@ const TYPES = {
   // shrikes at once being an unavoidable hit: they both aim at a spot, and
   // moving beats both of them.
   shrike: {
+    head: { r: 0.28, y: 1.08 },
     hp: 54, speed: 4.4, damage: 20, value: 300, color: 0xeef2ff, eye: 0xff5c7a,
     scale: 1.15, radius: 0.45, mass: 1,
     hitbox: { r: 0.55, y: 1.0 },
@@ -654,6 +660,7 @@ const TYPES = {
   // is nearly dead, so the last third is the hardest part of the fight rather
   // than the easiest.
   herald: {
+    head: { r: 0.42, y: 1.52 },
     hp: 3400, speed: 2.8, damage: 20, value: 9000, color: 0xffd54f, eye: 0xfff8e1,
     scale: 2.6, radius: 1.5, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },

@@ -981,8 +981,31 @@ body.hudblind #hitmarker { opacity: 0 !important; }
     rgb(168, 168, 168) 2px 3px
   );
 }
+/* MENUS ARE FOR READING, and a 1px line on a 3px pitch eats about a third of
+   small caps at the weight the menus are set in. `body.reading` goes on
+   whenever any overlay is up (see Ui._syncReading) and takes the grid down to a
+   fifth of its strength - visible if you look for it, invisible while you are
+   reading a settings label.
+
+   NOT DISPLAY:NONE, and the shader pass is not touched at all: the curvature,
+   the phosphor glow and the bezel below all stay exactly as they are, so a menu
+   is still on a tube. What changes is the beam, while nothing is moving on it.
+
+   The transition is what stops the pause key reading as a resolution change. */
+#scanlines {
+  transition: opacity 140ms linear;
+}
+body.reading #scanlines {
+  opacity: 0.2;
+}
+/* The corner falloff crushes small text in the same way the lines do, so it
+   comes down with them - not away, just enough that a menu's edges are legible. */
+body.reading #crt::after {
+  opacity: 0.55;
+}
 #crt::after {
   content: ""; position: absolute; inset: 0;
+  transition: opacity 140ms linear;
   background:
     /* The corner falloff of curved glass. Lighter than it was: the pass
        already blacks out and feathers the tube's own edge, and doubling the

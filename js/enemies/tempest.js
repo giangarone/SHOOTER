@@ -850,6 +850,7 @@ const TYPES = {
   // is to kill ONE, which cuts the line, and the mistake is to fight the crowd
   // in the order it arrives.
   arcling: {
+    head: { r: 0.28, y: 1.06 },
     hp: 30, speed: 4.0, damage: 7, value: 210, color: 0x4ef3ff, eye: 0xd6feff,
     scale: 0.9, radius: 0.44, mass: 1,
     melee: { windup: 0.32, start: 1.4, hit: 2.0, cd: 1.0 },
@@ -871,6 +872,7 @@ const TYPES = {
   // punish standing still. TEMPEST asks the player to keep choosing between
   // them.
   coil: {
+    head: { r: 0.3, y: 1.16 },
     hp: 24, speed: 2.2, damage: 14, value: 270, color: 0x2fd8e8, eye: 0xd6feff,
     scale: 1.0, radius: 0.48, mass: 1,
     orbit: { dist: 13, band: 2.5, out: 0.85, in: -0.7, strafe: 0.4, flip: 2, flipVar: 2 },
@@ -894,6 +896,7 @@ const TYPES = {
   // its bar scales with the wave and a flat hundred would discharge four times
   // a second at wave forty.
   dynamo: {
+    head: { r: 0.32, y: 0.68 },
     hp: 165, speed: 1.5, damage: 20, value: 340, color: 0x1fb6c9, eye: 0xd6feff,
     scale: 1.4, radius: 0.62, mass: 3,
     melee: { windup: 0.7, start: 2.6, hit: 3.2, cd: 2.1 },
@@ -910,6 +913,7 @@ const TYPES = {
   // stepping out and stepping straight back in; this one is answered by
   // giving the position up.
   stormcaller: {
+    head: { r: 0.3, y: 1.3 },
     hp: 44, speed: 1.9, damage: 0, value: 300, color: 0x38c6ff, eye: 0xd6feff,
     scale: 1.15, radius: 0.55, mass: 1,
     orbit: { dist: 15, band: 2.5, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -943,6 +947,7 @@ const TYPES = {
   // in different themes on purpose: a well takes the ground the player was
   // leaving and a squall takes the ground they were standing on.
   squall: {
+    head: { r: 0.28, y: 0.62 },
     hp: 52, speed: 4.2, damage: 0, value: 300, color: 0x8fe8ff, eye: 0xd6feff,
     scale: 1.05, radius: 0.5, mass: 1,
     fly: { height: 3.6 },
@@ -983,6 +988,7 @@ const TYPES = {
   // the Overgrowth all gate their damage, so the fourth new boss gates the
   // PLAYER'S POSITION instead and leaves the health bar alone.
   conductor: {
+    head: { r: 0.42, y: 1.76 },
     hp: 3400, speed: 2.4, damage: 26, value: 6000, color: 0x4ef3ff, eye: 0xd6feff,
     scale: 2.9, radius: 1.75, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.84 },

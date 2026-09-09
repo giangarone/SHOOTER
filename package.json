@@ -10,6 +10,7 @@
     "test:terrain": "node test/terrain.mjs",
     "test:boss": "node test/boss.mjs",
     "test:drops": "node test/drops.mjs",
+    "test:headshot": "node test/headshot.mjs",
     "test:melee": "node test/melee.mjs",
     "test:aim": "node test/aim.mjs",
     "test:accuracy": "node test/accuracy.mjs",

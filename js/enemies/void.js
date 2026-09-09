@@ -693,6 +693,7 @@ const TYPES = {
   // who has locked onto the crowd in front loses health to something they
   // never saw. Cheap in HP because it is meant to die the moment it is noticed.
   wraith: {
+    head: { r: 0.3, y: 1.05 },
     hp: 26, speed: 4.2, damage: 11, value: 190, color: 0x6f5bff, eye: 0xd0c4ff,
     scale: 0.95, radius: 0.45, mass: 1,
     melee: { windup: 0.35, start: 1.4, hit: 2.0, cd: 0.9 },
@@ -727,6 +728,7 @@ const TYPES = {
   // is not unfair, it is a different question - the player is reading a point
   // in space rather than a line, and stepping off the point.
   warp: {
+    head: { r: 0.3, y: 1.8 },
     hp: 27, speed: 2.5, damage: 8, value: 250, color: 0x8b7bff, eye: 0xd0c4ff,
     scale: 1.0, radius: 0.46, mass: 1,
     orbit: { dist: 12, band: 2.5, out: 0.8, in: -0.7, strafe: 0.5, flip: 1.8, flipVar: 2 },
@@ -750,6 +752,7 @@ const TYPES = {
   // Immovable. A slab this size being shoved by a shockwave would be the
   // silliest thing in the game.
   monolith: {
+    head: { r: 0.3, y: 1.86 },
     hp: 175, speed: 1.45, damage: 22, value: 350, color: 0x5a4fd0, eye: 0xd0c4ff,
     scale: 1.5, radius: 0.62, mass: 5,
     melee: { windup: 0.9, start: 3.0, hit: 3.6, cd: 2.6 },
@@ -766,6 +769,7 @@ const TYPES = {
   // work, which is the artillery role's job done in the only currency VOID
   // spends.
   singularity: {
+    head: { r: 0.3, y: 1.6 },
     hp: 42, speed: 1.85, damage: 0, value: 290, color: 0x7c4dff, eye: 0xd0c4ff,
     scale: 1.1, radius: 0.54, mass: 1,
     orbit: { dist: 14, band: 2.5, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -782,6 +786,7 @@ const TYPES = {
   // the tether is what says so, drawn from it to you and impossible to lose in
   // a crowd. Kill it, or break the range, and the channel is wasted.
   hexer: {
+    head: { r: 0.3, y: 1.52 },
     hp: 58, speed: 2.2, damage: 0, value: 380, color: 0xff2d6f, eye: 0xffd6e4,
     scale: 1.15, radius: 0.5, mass: 1,
     orbit: { dist: 14, band: 2.5, out: 0.8, in: -0.6, strafe: 0.3, flip: 2.2, flipVar: 2 },
@@ -798,6 +803,7 @@ const TYPES = {
   // roster because on its own it barely does anything, which is exactly the
   // enemy it is meant to be.
   shade: {
+    head: { r: 0.3, y: 1.04 },
     hp: 46, speed: 4.6, damage: 6, value: 320, color: 0xb06bff, eye: 0xf0d6ff,
     scale: 1.1, radius: 0.45, mass: 1,
     hitbox: { r: 0.55, y: 1.0 },

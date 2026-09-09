@@ -631,6 +631,7 @@ const TYPES = {
   // are standing cost health, so the answer is always to give up the position.
   // Does no direct damage: the ground it leaves behind is the whole threat.
   blight: {
+    head: { r: 0.3, y: 0.62 },
     hp: 48, speed: 1.9, damage: 0, value: 240, color: 0x7ac943, eye: 0xd6ff8a,
     scale: 1.15, radius: 0.55, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -667,6 +668,7 @@ const TYPES = {
   // would be a brute. What it costs is the ground you were standing on when
   // it committed - which is exactly the theme's bargain, one second early.
   thornling: {
+    head: { r: 0.3, y: 0.94 },
     hp: 40, speed: 3.2, damage: 11, value: 210, color: 0x7ea63c, eye: 0xd6ff8a,
     scale: 1.0, radius: 0.5, mass: 1,
     melee: { windup: 0.4, start: 1.5, hit: 2.1, cd: 1.2 },
@@ -683,6 +685,7 @@ const TYPES = {
   // problem for a player who is being pushed onto it by something else - so it
   // is the type that makes the rest of the theme's crowd matter.
   sporegun: {
+    head: { r: 0.3, y: 1.44 },
     hp: 28, speed: 2.2, damage: 7, value: 230, color: 0x9fbf4a, eye: 0xd6ff8a,
     scale: 1.05, radius: 0.48, mass: 1,
     orbit: { dist: 12, band: 2, out: 0.7, in: -0.5, strafe: 0.4, flip: 2.3, flipVar: 2 },
@@ -699,6 +702,7 @@ const TYPES = {
   // deals for free and the rule is that a type is charged for what it does
   // without being asked.
   bramblehide: {
+    head: { r: 0.32, y: 1.18 },
     hp: 150, speed: 1.6, damage: 14, value: 320, color: 0x6b8f3a, eye: 0xd6ff8a,
     scale: 1.45, radius: 0.62, mass: 2,
     melee: { windup: 0.8, start: 2.9, hit: 3.5, cd: 2.4 },
@@ -715,6 +719,7 @@ const TYPES = {
   // is not losing, they are simply not winning, and working out why is the
   // whole puzzle.
   heartwood: {
+    head: { r: 0.3, y: 1.3 },
     hp: 74, speed: 1.9, damage: 0, value: 380, color: 0x8fbf4a, eye: 0xd6ff8a,
     scale: 1.25, radius: 0.55, mass: 2,
     orbit: { dist: 12, band: 2.5, out: 0.6, in: -0.7, strafe: 0.25, flip: 2.6, flipVar: 2 },
@@ -731,6 +736,7 @@ const TYPES = {
   // else is, and the mistake it punishes is treating the air as a separate
   // problem from the floor.
   mothcap: {
+    head: { r: 0.28, y: -0.28 },
     hp: 44, speed: 3.1, damage: 0, value: 290, color: 0xa8c93a, eye: 0xd6ff8a,
     scale: 1.0, radius: 0.5, mass: 1,
     fly: { height: 2.4 },
@@ -753,6 +759,7 @@ const TYPES = {
   // where the player stands - and inside eight metres is exactly where the
   // rings land. The whole fight is that one trade, priced in seconds.
   overgrowth: {
+    head: { r: 0.42, y: 1.5 },
     hp: 3500, speed: 0, damage: 26, value: 6500, color: 0x7ea63c, eye: 0xd6ff8a,
     scale: 3.1, radius: 2.0, mass: 10, boss: true,
     hitbox: { r: 0.76, y: 0.8 },

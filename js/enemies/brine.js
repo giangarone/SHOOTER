@@ -852,6 +852,7 @@ const TYPES = {
   // Weak in the bite for the afflictor's reason: what it does after the hit is
   // where its cost lives.
   gulper: {
+    head: { r: 0.3, y: 0.86 },
     hp: 34, speed: 3.9, damage: 6, value: 220, color: 0x1f8a8a, eye: 0x8ff0e0,
     scale: 0.95, radius: 0.46, mass: 1,
     melee: { windup: 0.3, start: 1.4, hit: 2.0, cd: 1.0 },
@@ -868,6 +869,7 @@ const TYPES = {
   // the enemy that rewards trigger discipline and punishes a magazine already
   // dumped into the crowd.
   angler: {
+    head: { r: 0.3, y: 1.26 },
     hp: 22, speed: 2.1, damage: 10, value: 280, color: 0x17706f, eye: 0xa8ffe8,
     scale: 1.05, radius: 0.48, mass: 1,
     // FURTHER OUT than any gunner but the sniper. The bubble is slow and the
@@ -896,6 +898,7 @@ const TYPES = {
   // pull by putting something solid between you - the only brute in the game
   // that cover is the counter to.
   barnacle: {
+    head: { r: 0.32, y: 1 },
     hp: 178, speed: 1.45, damage: 22, value: 350, color: 0x14615f, eye: 0x8ff0e0,
     scale: 1.4, radius: 0.64, mass: 4,
     melee: { windup: 0.75, start: 2.8, hit: 3.4, cd: 2.2 },
@@ -913,6 +916,7 @@ const TYPES = {
   // helping you. Which of the two it is depends entirely on where the player
   // was standing, and that is the enemy.
   vent: {
+    head: { r: 0.3, y: 0.86 },
     hp: 46, speed: 1.8, damage: 0, value: 310, color: 0x2a9d8f, eye: 0xa8ffe8,
     scale: 1.15, radius: 0.55, mass: 1,
     orbit: { dist: 16, band: 2.5, out: 0.7, in: -0.5, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -928,6 +932,7 @@ const TYPES = {
   // deliberately: the curtain comes down from above and across, so it cannot
   // be shot off the floor and the answer is to move out from under it.
   drifter: {
+    head: { r: 0.28, y: 0.62 },
     hp: 58, speed: 3.1, damage: 0, value: 300, color: 0x0f4c4c, eye: 0x8ff0e0,
     scale: 1.1, radius: 0.5, mass: 1,
     fly: { height: 4.2 },
@@ -947,6 +952,7 @@ const TYPES = {
   // already drawn for you. Standing in it and shooting the howler first is the
   // other answer, and it is the better one.
   howler: {
+    head: { r: 0.32, y: 1.44 },
     // RE-THEMED FOR BRINE, palette only - the scream is unchanged. Teal
     // rather than the fear status's violet, because an enemy wears its
     // THEME and a status wears its own colour: the chip in the HUD and the
@@ -976,6 +982,7 @@ const TYPES = {
   // and the column - so the fight is BRINE's own roster with one bar over it.
   // It ends as a single body, enraged.
   choir: {
+    head: { r: 0.42, y: 2.02 },
     hp: 3450, speed: 2.6, damage: 24, value: 6000, color: 0x1f8a8a, eye: 0xa8ffe8,
     scale: 2.5, radius: 1.5, mass: 7, boss: true,
     hitbox: { r: 0.7, y: 0.8 },

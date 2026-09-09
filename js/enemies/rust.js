@@ -939,7 +939,15 @@ export function aiColossus(e, a) {
 }
 
 const TYPES = {
+  // `head` IS WHERE THE FACE IS, and it is taken from where the model's eyes
+  // are rather than from the top of the silhouette - a Stormcaller's antenna
+  // and a Pylon's mast are the tallest things on them and neither is a head.
+  // Unit space times `scale`, exactly like `hitbox`, and optional: a type that
+  // names none gets a sphere on top of its body sphere (see defaultHead in
+  // enemy.js), which is the right answer for everything in the roster that has
+  // no head to speak of.
   chaser: {
+    head: { r: 0.3, y: 1.3 },
     hp: 42, speed: 3.4, damage: 12, value: 100, color: 0xff3b30, eye: 0xffe08a,
     scale: 1, radius: 0.5, mass: 1,
     melee: { windup: 0.45, start: 1.5, hit: 2.2, cd: 1.1 },
@@ -947,6 +955,7 @@ const TYPES = {
   },
 
   shooter: {
+    head: { r: 0.28, y: 1.58 },
     hp: 28, speed: 2.7, damage: 8, value: 150, color: 0xb14aed, eye: 0x4ef3ff,
     scale: 1.08, radius: 0.5, mass: 1,
     orbit: { dist: 7.5, band: 1.5, out: 1, in: -0.7, strafe: 0.5, flip: 1, flipVar: 2 },
@@ -962,6 +971,7 @@ const TYPES = {
   },
 
   tank: {
+    head: { r: 0.32, y: 1.21 },
     hp: 180, speed: 1.8, damage: 25, value: 300, color: 0xff6b00, eye: 0xffaa00,
     scale: 1.5, radius: 0.5, mass: 1,
     melee: { windup: 0.8, start: 3.5, hit: 4.0, cd: 3.0 },
@@ -969,6 +979,7 @@ const TYPES = {
   },
 
   bomber: {
+    head: { r: 0.3, y: 1.38 },
     hp: 35, speed: 2.0, damage: 18, value: 180, color: 0xff4400, eye: 0xff8844,
     scale: 1.1, radius: 0.5, mass: 1,
     orbit: { dist: 10, band: 2, out: 0.6, in: -0.3, strafe: 0.3, flip: 2.5, flipVar: 2 },
@@ -1012,6 +1023,7 @@ const TYPES = {
   // in the roster whose window belongs to the PLAYER's patience rather than
   // its own timer.
   harrier: {
+    head: { r: 0.3, y: 1.08 },
     hp: 62, speed: 3.2, damage: 0, value: 340, color: 0x27c4ff, eye: 0xd7f4ff,
     // Oversized against its collision circle, and deliberately: it is fought
     // at five metres up and fifteen out, where a body sized like a chaser's is
@@ -1095,6 +1107,7 @@ const TYPES = {
   },
 
   colossus: {
+    head: { r: 0.42, y: 1.18 },
     hp: 3600, speed: 2.0, damage: 34, value: 4000, color: 0x8c5a2b, eye: 0xffb300,
     scale: 3.2, radius: 2.0, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },

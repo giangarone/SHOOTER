@@ -116,6 +116,32 @@ export function setShareHook(fn) {
 // owned), and this is what the flag is worth.
 const MARK_MULT = 1.5;
 
+// THE DEFAULT HEAD, for every type that does not name one.
+//
+// A small sphere straddling the TOP of the body sphere. For a humanoid that
+// lands on the neck and jaw, and for the third of the roster that has no head
+// at all - a Conduit, a Monolith, a rolling Scree, the Choir's three bodies -
+// it is "the top of the thing," which is the only honest answer and is also
+// what the player will aim at anyway. No type is required to opt in, so a new
+// enemy is never silently headshot-proof.
+//
+// 0.78 rather than 1.0 so the sphere OVERLAPS the body instead of balancing on
+// it: a head with a seam under it would let a round slip between the two.
+function defaultHead(hb) {
+  const r = hb ? hb.r : 0.6;
+  const y = hb ? hb.y : 0.8;
+  return { r: r * 0.5, y: y + r * 0.78 };
+}
+
+// The highest a head may sit and still touch the body sphere. Their radii less
+// a little, so they genuinely intersect rather than meeting at a single point -
+// two spheres tangent to each other still have a seam.
+function headSeam(hb, hd) {
+  const r = hb ? hb.r : 0.6;
+  const y = hb ? hb.y : 0.8;
+  return y + (r + hd.r) * 0.9;
+}
+
 // The one AI frame object, filled and handed to an ai() per enemy per frame.
 // Reused rather than allocated: thirty enemies at 60fps is 1800 objects a
 // second, which is exactly the kind of churn the geometry and material caches
@@ -366,6 +392,37 @@ export class Enemy {
     this.hitbox.scale.setScalar(s);
     this.hitbox.userData.enemy = this;
     this.group.add(this.hitbox);
+
+    // THE HEAD, and it is a SECOND SPHERE rather than a band across the top of
+    // the first one. Two reasons, and the second is the important one:
+    //
+    //   1. A band is a fraction of a sphere that was never drawn to fit a head.
+    //   2. Half the roster's heads sit ABOVE the body sphere entirely - the
+    //      Shooter's is at 1.56 and its sphere stops at 1.4 - so before this
+    //      existed, a round placed squarely on a visible face MISSED. The head
+    //      is not just worth double now; it is somewhere you can hit at all.
+    //
+    // Same contract as the body sphere: unit space times `s`, geometry cached
+    // per type, invisible, and it carries `userData.enemy` so every raycast
+    // that already understood a hitbox understands this too. `userData.head` is
+    // the only new thing the shot path reads.
+    const hd = def.head || defaultHead(hb);
+    this.head = new THREE.Mesh(
+      geo('head:' + type, () => new THREE.SphereGeometry(hd.r, 8, 8)),
+      SHARED_MATS.hitbox
+    );
+    // PULLED DOWN UNTIL THE TWO SPHERES MEET, if the authored height leaves a
+    // seam between them. A head is taken from where the model's EYES are, and a
+    // handful of types wear their face well above a hit sphere that only covers
+    // their base - a Monolith, a Warp, and the Choir's three bodies sharing one
+    // sphere. A floating head is a band of air between the chin and the chest
+    // that a round can pass through without touching either, which the player
+    // would read as the game refusing a hit that visibly landed.
+    this.head.position.y = Math.min(hd.y, headSeam(hb, hd)) * s;
+    this.head.scale.setScalar(s);
+    this.head.userData.enemy = this;
+    this.head.userData.head = true;
+    this.group.add(this.head);
     this.group.updateMatrixWorld(true);
   }
 
@@ -1044,7 +1101,10 @@ export class Enemy {
   // one. Only a type whose armour is a PLACE on the body rather than a facing
   // needs it - see the Bulwark, whose small shield is tested against the spot
   // that was actually struck.
-  takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null, crit = false) {
+  // `head` is carried for the damage number alone - the doubling is already in
+  // `d` by the time it gets here (see _hitMult in main.js), because a headshot
+  // has to be read by armour like any other multiplier on the round.
+  takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null, crit = false, head = false) {
     if (this.dead) return false;
     // SHARED PAIN, and it is the FIRST thing that happens to a blow because it
     // is not a modifier on this hit - it is a decision that this hit is not
@@ -1115,7 +1175,7 @@ export class Enemy {
     // reads 40, because 40 is what the player's gun does; clamping it to 5
     // would make every killing blow in the game report a small number and turn
     // the one hit worth celebrating into the weakest-looking one on screen.
-    if (damageSink) damageSink(this.pos, d, crit);
+    if (damageSink) damageSink(this.pos, d, crit, head);
     if (!silent) this.flash = 0.12;
     if (this.hp <= 0) {
       this.hp = 0;
@@ -1142,6 +1202,7 @@ export class Enemy {
     const def = ENEMY_TYPES[this.type];
     if (def.cleanup) def.cleanup(this);
     this.hitbox.userData.enemy = null;
+    this.head.userData.enemy = null;
   }
 
   /**

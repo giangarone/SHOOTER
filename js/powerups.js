@@ -26,6 +26,7 @@
 import * as THREE from 'three';
 import { buildPixelIcon } from './pixelicons.js';
 import { BOUND } from './arena.js';
+import { groundSurface } from './utils.js';
 
 export const POWERUP_TYPES = {
   health: {
@@ -139,6 +140,12 @@ export const PICKUP_BLINK_TIME = 5;
 // Blinks per second during that window. Fast enough to read as urgent from
 // across the arena without strobing.
 const BLINK_RATE = 5;
+
+// How far the plate and its glow float above whatever the pickup is resting
+// ON. Two numbers rather than one because the glow sits a little higher than
+// the plate, which is what stops the sprite reading as a shadow under it.
+const HOVER = 0.62;
+const GLOW_HOVER = 0.7;
 
 // WAVE-CLEAR ABSORPTION - see Powerup.absorb() below.
 //
@@ -325,13 +332,23 @@ export class Powerup {
     this.absorbing = false;
     this.homeDelay = 0;
     this.homeSpeed = 0;
-    // The flight's own height. `pos` stays flat (y is 0 and every collection
-    // test in the game compares against the player's feet), so the vertical
-    // half of the arc is tracked here.
-    this.flyY = 0.62;
+    // WHAT IT IS RESTING ON. `pos.y` is the floor under the pickup, not a
+    // height the pickup floats at - the plate and the glow add their own hover
+    // and bob on top of it, and the collection test compares the player's FEET
+    // against it.
+    //
+    // It used to be a flat zero for every pickup in the game, which is why an
+    // enemy killed on a platform dropped its ammo INSIDE the platform: the
+    // crate was at world zero, three metres under the floor the kill happened
+    // on, unreachable and usually invisible. The caller resolves the surface
+    // (see spawnDropAt) because only the caller knows which body died where.
+    this.groundY = this.pos.y;
+    // The flight's own height, tracked separately because the absorb arc leaves
+    // the resting height behind entirely.
+    this.flyY = this.groundY + HOVER;
 
     this.core = pickupIcon(typeKey, this.type);
-    this.core.position.set(this.pos.x, 0.62, this.pos.z);
+    this.core.position.set(this.pos.x, this.groundY + HOVER, this.pos.z);
     scene.add(this.core);
 
     // An additive sprite instead of a PointLight: a real light would change the
@@ -339,7 +356,7 @@ export class Powerup {
     // recompile every material in the scene and stalls the frame.
     this.glow = new THREE.Sprite(glowMaterial(typeKey, this.type, glowTex));
     this.glow.scale.setScalar(1.15);
-    this.glow.position.set(this.pos.x, 0.7, this.pos.z);
+    this.glow.position.set(this.pos.x, this.groundY + GLOW_HOVER, this.pos.z);
     scene.add(this.glow);
   }
 
@@ -367,7 +384,7 @@ export class Powerup {
     }
 
     const bob = Math.sin(time * 2 + this.bobOffset) * 0.15;
-    this.core.position.y = 0.62 + bob;
+    this.core.position.y = this.groundY + HOVER + bob;
     // Turned to the player, not spun. A flat plate on a spin is edge-on twice
     // a revolution, and a pickup that disappears for a third of every second
     // in a firefight is worse than one that never moves at all. The tilt is
@@ -376,27 +393,46 @@ export class Powerup {
       this.core.rotation.y = Math.atan2(facing.x - this.pos.x, facing.z - this.pos.z);
     }
     this.core.rotation.z = Math.sin(time * 1.6 + this.bobOffset) * 0.09;
-    this.glow.position.y = 0.7 + bob;
+    this.glow.position.y = this.groundY + GLOW_HOVER + bob;
     this.glow.scale.setScalar(1.15 + Math.sin(time * 5 + this.bobOffset) * 0.18);
   }
 
   // Proximity collection. Compares against the player's FEET position, so the
   // radius is generous enough to catch a player running over it.
+  //
+  // FLAT RADIUS PLUS A VERTICAL BAND, rather than one sphere. Now that a pickup
+  // can be resting three metres up on a platform, a plain 3D distance would let
+  // a player walking underneath collect it through the floor - and would also
+  // refuse a crate the player is standing right on top of the moment the crate
+  // is a little below their feet. The band is generous upward (a pickup on the
+  // step above is still worth catching) and tight downward.
   tryPickup(playerPos) {
-    return playerPos.distanceTo(this.pos) < 1.2;
+    const dx = playerPos.x - this.pos.x;
+    const dz = playerPos.z - this.pos.z;
+    if (dx * dx + dz * dz >= 1.2 * 1.2) return false;
+    const dy = playerPos.y - this.groundY;
+    return dy > -1.2 && dy < 2.0;
   }
 
   // Dragged toward the player by the same magnet that collects money orbs -
   // see _magnetPickups in main.js. Every mesh has to be moved, not just `pos`:
   // the x and z of the plate and its glow are written once at construction
   // and only their y is touched per frame.
-  moveTo(x, z) {
+  moveTo(x, z, groundY = null) {
     this.pos.x = x;
     this.pos.z = z;
     this.core.position.x = x;
     this.core.position.z = z;
     this.glow.position.x = x;
     this.glow.position.z = z;
+    // The magnet pulls a pickup TO the player, so it comes down off the
+    // platform as it travels rather than sliding through the air at the height
+    // it was dropped at. Eased rather than snapped: a crate that teleported
+    // down a stairwell would read as a glitch.
+    if (groundY !== null && groundY !== this.groundY) {
+      this.groundY += (groundY - this.groundY) * 0.25;
+      this.pos.y = this.groundY;
+    }
   }
 
   /**
@@ -514,16 +550,36 @@ function randomSpawnPos(arena) {
   return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
 }
 
-// A pickup left exactly where something died. The position comes from an enemy
-// whose own collision has already pushed it clear of obstacles, so there is
-// nothing to resolve here - it only needs clamping inside the arena bound in
-// case the kill happened against a wall.
-export function spawnDropAt(typeKey, pos, scene, glowTex, time) {
+// A pickup left exactly where something died. The XZ comes from an enemy whose
+// own collision has already pushed it clear of obstacles, so there is nothing to
+// resolve there - it only needs clamping inside the arena bound in case the kill
+// happened against a wall.
+//
+// THE HEIGHT DOES have to be resolved, and this is why the function takes the
+// obstacle list. A body killed on a platform or halfway up a stair used to drop
+// its crate at world zero - under the floor it died on, unreachable, and often
+// not even visible. groundSurface() is the same query a ground enemy uses to
+// find the tread it is standing on, asked from the dead body's own height, so
+// the answer is the surface that body was ON and not the tallest thing that
+// happens to share its footprint.
+export function spawnDropAt(typeKey, pos, scene, glowTex, time, obstacles = null) {
   const B = SPAWN_BOUND;
   const at = new THREE.Vector3(
     Math.max(-B, Math.min(B, pos.x)), 0, Math.max(-B, Math.min(B, pos.z))
   );
+  at.y = surfaceUnder(at, pos.y || 0, obstacles);
   return new Powerup(typeKey, at, scene, glowTex, time, defFor(typeKey));
+}
+
+// The walkable surface under a spawn point, or the floor when there is nothing
+// to stand on. `fromY` is where the thing that dropped it was, which is what
+// lets a stair be told apart from the platform above it - see groundSurface.
+function surfaceUnder(at, fromY, obstacles) {
+  if (!obstacles) return 0;
+  // A generous step, because this is not a walk: the drop is allowed to settle
+  // onto the tread it was killed on even when the body was mid-stride and its
+  // feet were a little above it.
+  return groundSurface({ x: at.x, y: fromY + 0.4, z: at.z }, PICKUP_CLEARANCE, obstacles, 1.2);
 }
 
 // The safety-net spawn. Placed in a ring around the player rather than
@@ -538,7 +594,13 @@ export function spawnRelief(typeKey, arena, near, scene, glowTex, time) {
     const z = near.z + Math.sin(ang) * rad;
     if (Math.abs(x) > SPAWN_BOUND || Math.abs(z) > SPAWN_BOUND) continue;
     if (blocked(x, z, arena.obstacles)) continue;
-    return new Powerup(typeKey, new THREE.Vector3(x, 0, z), scene, glowTex, time, defFor(typeKey));
+    // `blocked` already rejected anything inside an obstacle footprint, so the
+    // surface here is the floor - but the query is asked anyway rather than
+    // assumed, because the relief net is the one spawner that aims at the
+    // player and the player may well be standing on a platform.
+    const at = new THREE.Vector3(x, 0, z);
+    at.y = surfaceUnder(at, near.y || 0, arena.obstacles);
+    return new Powerup(typeKey, at, scene, glowTex, time, defFor(typeKey));
   }
   // Nowhere clear nearby - fall back to open floor anywhere rather than
   // withholding the one pickup meant to stop a death spiral.

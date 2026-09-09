@@ -182,8 +182,41 @@ export function buildBulwark(e, g, s) {
 
 // A boulder that has not curled up yet: a hunched slab of a body over a low
 // plate, so the shape it becomes is legible before it becomes it.
+// WHERE THE BOULDER ROLLS ABOUT, and how far it has to ride up to do it.
+//
+// Both measured off the model rather than guessed. The parts occupy y 0 to 1.01
+// in unit space, and the smallest sphere that contains all of them is centred at
+// 0.489 with a radius of 0.634 - so a roll about that centre sweeps its farthest
+// vertex 0.634 out, and the centre has to sit 0.634 up for that vertex to just
+// graze the floor instead of going through it. The difference is the lift, plus
+// a centimetre of margin measured off the real model through a full turn.
+//
+// The bug this replaces: the roll turned e.group.rotation.x, and the group's
+// origin is the enemy's FEET (see enemy.js, which positions it at pos.y). So
+// the rock was pivoting about its own contact point, which swings everything
+// above that point through an arc that dips below the floor once per turn -
+// visibly, every revolution, which is exactly what was reported.
+const SCREE_PIVOT_Y = 0.489;
+const SCREE_ROLL_LIFT = 0.158;
+// How fast the lift eases in and out, so the rock rises onto its curve rather
+// than popping up 15cm on the frame the roll starts.
+const SCREE_LIFT_K = 9;
+
 export function buildScree(e, g, s) {
-  const P = partsFor(e, g, s);
+  // A PIVOT AT THE BALL'S CENTRE. `pivot` is what the roll turns; `inner`
+  // cancels the pivot's offset so every part below can keep the coordinates it
+  // was authored in, measured from the feet like every other model in the game.
+  const pivot = new THREE.Group();
+  pivot.position.y = SCREE_PIVOT_Y * s;
+  const inner = new THREE.Group();
+  inner.position.y = -SCREE_PIVOT_Y * s;
+  pivot.add(inner);
+  g.add(pivot);
+  e.rollPivot = pivot;
+  e.rollPivotY = SCREE_PIVOT_Y * s;
+  e.rollLift = SCREE_ROLL_LIFT * s;
+  e.rollUp = 0;
+  const P = partsFor(e, inner, s);
   // The shell it rolls on: a wide low six-sided plate, the widest part of the
   // silhouette and the part that reads as "this is going to roll".
   P('screeShell', prism(0.5, 0.44, 0.44, 6), { y: 0.36, rx: 0.12 });
@@ -362,10 +395,38 @@ export function buildSiege(e, g, s) {
 // Winds up, curls, and rolls - and where it goes after the first wall is not
 // aimed at anybody. Three bounces, so a scree let loose in an open room is
 // crossing it for a good while afterwards.
+// Turns the pivot and eases the lift. Called with `rolling` false on the frame
+// the roll ends so the rock settles back down instead of dropping.
+function _screeRoll(e, dt, rolling) {
+  const pivot = e.rollPivot;
+  if (!pivot) return;
+  const k = Math.min(1, dt * SCREE_LIFT_K);
+  e.rollUp += ((rolling ? 1 : 0) - e.rollUp) * k;
+  pivot.position.y = e.rollPivotY + e.rollLift * e.rollUp;
+  if (rolling) {
+    pivot.rotation.x -= dt * 7;
+    return;
+  }
+  // UNWOUND TO THE NEAREST WHOLE TURN, not snapped to zero. A rock that
+  // levelled itself on the frame the roll ended read as a puppet being set
+  // down; taking the short way to upright over the same easing the lift uses
+  // makes it look like it came to a stop. The legs do have to end up under it,
+  // which is why it does not simply stay where it stopped.
+  const turn = Math.PI * 2;
+  let r = pivot.rotation.x % turn;
+  if (r > Math.PI) r -= turn;
+  if (r < -Math.PI) r += turn;
+  pivot.rotation.x = Math.abs(r) < 0.01 ? 0 : r * (1 - k);
+}
+
 export function aiScree(e, a) {
   if (!e.sc) e.sc = { state: 'walk', t: 0, hx: 0, hz: 1, left: 0 };
   const sc = e.sc;
   sc.t -= a.dt;
+  // The pivot is eased EVERY frame, in every state, so the rock settles back
+  // down out of the roll instead of staying up on its curve for the rest of the
+  // fight. See _screeRoll.
+  _screeRoll(e, a.dt, sc.state === 'roll');
 
   if (sc.state === 'roll') {
   // RAISING THE VELOCITY IS NOT ENOUGH. Enemy.update clamps how far a body may
@@ -378,8 +439,6 @@ export function aiScree(e, a) {
     const sp = e._effSpeed() * SCREE_ROLL_MUL;
     a.vx = sc.hx * sp;
     a.vz = sc.hz * sp;
-    // Rolls visibly, about the axis across its own heading.
-    e.group.rotation.x -= a.dt * 7;
 
     // THE WALLS TURN IT. Reflected off the arena's own half-width rather than
     // off obstacles: a wall is axis-aligned and has a normal to hand, and an
@@ -426,7 +485,10 @@ export function aiScree(e, a) {
       sc.state = 'walk';
       sc.t = SCREE_CD * e.rate;
       e.rollHit = false;
-      e.group.rotation.x = 0;
+      // The spin stops where it stopped rather than snapping upright: the rock
+      // has come to rest at whatever angle it came to rest at, and a boulder
+      // that levelled itself on the last frame of a roll read as a puppet.
+      // Only the LIFT comes back down, and _screeRoll eases that from here on.
       e._setEyeAlert(false);
     }
     return;
@@ -809,6 +871,7 @@ const TYPES = {
   // unchanged: Venom and Incendiary should still have an enemy they are
   // obviously right for.
   bulwark: {
+    head: { r: 0.32, y: 1.12 },
     hp: 110, speed: 1.6, damage: 18, value: 280, color: 0x8d9db6, eye: 0xffd54f,
     scale: 1.35, radius: 0.62, mass: 2,
     melee: { windup: 0.7, start: 2.6, hit: 3.2, cd: 2.2 },
@@ -868,6 +931,7 @@ const TYPES = {
   // hitting hard: what a scree costs is position, at the moment position is
   // the only thing that matters.
   scree: {
+    head: { r: 0.3, y: 0.86 },
     hp: 46, speed: 2.6, damage: 9, value: 220, color: 0x9aa5b1, eye: 0xdfe6ef,
     scale: 1.05, radius: 0.52, mass: 2,
     melee: { windup: 0.5, start: 1.6, hit: 2.2, cd: 1.4 },
@@ -882,6 +946,7 @@ const TYPES = {
   // the player has to be able to look at the line, look at the wall behind
   // them, and know where it comes out.
   slinger: {
+    head: { r: 0.3, y: 1.46 },
     hp: 30, speed: 2.4, damage: 9, value: 240, color: 0x8b96a3, eye: 0xdfe6ef,
     scale: 1.0, radius: 0.48, mass: 1,
     orbit: { dist: 13, band: 2, out: 0.8, in: -0.6, strafe: 0.4, flip: 2.2, flipVar: 2 },
@@ -907,6 +972,7 @@ const TYPES = {
   //
   // No direct damage of its own, like every other artillery in the game.
   geode: {
+    head: { r: 0.3, y: 0.5 },
     hp: 48, speed: 1.8, damage: 0, value: 280, color: 0x7d8894, eye: 0xffd166,
     scale: 1.15, radius: 0.56, mass: 2,
     orbit: { dist: 15, band: 2.5, out: 0.6, in: -0.5, strafe: 0.25, flip: 2.6, flipVar: 2 },
@@ -924,6 +990,7 @@ const TYPES = {
   // way back up. The whole enemy is that one trade - the ceiling is safe for
   // it and the floor is not, and the player decides which one it is on.
   gargoyle: {
+    head: { r: 0.28, y: 0.3 },
     hp: 58, speed: 3.0, damage: 18, value: 320, color: 0x6f7a86, eye: 0xffd166,
     scale: 1.1, radius: 0.52, mass: 2,
     fly: { height: 6.2 },
@@ -970,6 +1037,7 @@ const TYPES = {
   // they should always have been - the reason you cannot simply back away
   // from the thing walking at you.
   siege: {
+    head: { r: 0.42, y: 1 },
     hp: 3200, speed: 2.9, damage: 22, value: 5000, color: 0x455a64, eye: 0xff5533,
     scale: 2.6, radius: 1.6, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },

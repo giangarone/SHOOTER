@@ -458,7 +458,11 @@ export class UI {
   // player. It draws the PASSIVE ITEM'S OWN icon - one shape per passive item
   // holds whether the shape is standing on a totem or counting down on the
   // HUD.
-  setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0, salvo = 0) {
+  // BOTTOM FEEDER rides here for the same reason Opening Salvo does: it is a
+  // window the player OPENED, by reloading from empty on purpose, and a window
+  // you earned is not a status being done to you. It takes slot 4 rather than
+  // squeezing into the pickup band, which is full.
+  setBuffs(damageBoost, fireRateBoost, shield, shieldPoints = 0, salvo = 0, bottomFeed = 0) {
     this._setBuff('damageBoost', 'pickDamage', 0xff3d00, damageBoost, '', false, 0);
     this._setBuff('fireRateBoost', 'pickRate', 0x2979ff, fireRateBoost, '', false, 1);
     this._setBuff(
@@ -466,6 +470,7 @@ export class UI {
       shield > 0 ? String(Math.ceil(shieldPoints)) : '', false, 2
     );
     this._setBuff('salvo', 'openingSalvo', 0xffd180, salvo, '', false, 3);
+    this._setBuff('bottomFeed', 'bottomFeeder', 0xc0ca33, bottomFeed, '', false, 4);
   }
 
   /**
@@ -699,6 +704,7 @@ export class UI {
     this.hud.classList.add('hidden');
     this.hud.classList.remove('swap');
     this.hideSubScreens();
+    this._syncReading();
   }
   showHud() {
     this.hud.classList.remove('hidden');
@@ -710,9 +716,34 @@ export class UI {
     // instruments into the next run.
     this.hud.classList.remove('swap');
     this.hideSubScreens();
+    this._syncReading();
   }
   showPause() {
     this.pauseOv.classList.remove('hidden');
+    this._syncReading();
+  }
+
+  /**
+   * SOFTENS THE SCANLINES WHILE THERE IS TEXT TO READ.
+   *
+   * The scanline layer covers the whole document on purpose - the HUD has to
+   * sit under the same grid as the arena or the tube is only skin deep - and for
+   * the HUD that is right: it is four or five big numbers in the corners of the
+   * screen, and a line across a number that size costs nothing. A MENU is not
+   * that. It is paragraphs of small caps at a weight the 1px-in-3px grid eats
+   * about a third of, and players were reading settings labels through it.
+   *
+   * FADED, NOT SWITCHED OFF, and the pass is untouched: the curvature, the
+   * glow and the bezel all stay, so the menu is still on a tube - it is just a
+   * tube with the beam turned down while nothing is moving on it. Driven off a
+   * class on <body> rather than a state flag in main.js, because the thing that
+   * decides is which overlay is up, and this module is the only one that knows.
+   */
+  _syncReading() {
+    const up = [this.startOv, this.overOv, this.pauseOv, this.settingsOv,
+      this.confirmOv, this.playersOv]
+      .some((o) => o && !o.classList.contains('hidden'));
+    document.body.classList.toggle('reading', up);
   }
   hidePause() {
     this.pauseOv.classList.add('hidden');
@@ -724,12 +755,15 @@ export class UI {
     this.settingsOv.classList.add('hidden');
     this.confirmOv.classList.add('hidden');
     this.playersOv.classList.add('hidden');
+    this._syncReading();
   }
   showPlayerCount() {
     this.playersOv.classList.remove('hidden');
+    this._syncReading();
   }
   showSettings() {
     this.settingsOv.classList.remove('hidden');
+    this._syncReading();
   }
   // The EXIT confirmation. A sub-screen on exactly the same terms as the other
   // two - layered over the pause menu, taken down by hideSubScreens - so BACK,
@@ -737,6 +771,7 @@ export class UI {
   // learn a fourth way to close a screen.
   showConfirmExit() {
     this.confirmOv.classList.remove('hidden');
+    this._syncReading();
   }
   // ---- the hot seat --------------------------------------------------------
 
@@ -800,6 +835,7 @@ export class UI {
     this.overHero.textContent = String(wave);
     this.overStats.textContent = '';
     this.overOv.classList.remove('hidden');
+    this._syncReading();
     this.hud.classList.add('hidden');
   }
 
@@ -839,6 +875,7 @@ export class UI {
       this.overStats.appendChild(cell);
     }
     this.overOv.classList.remove('hidden');
+    this._syncReading();
     this.hud.classList.add('hidden');
   }
 

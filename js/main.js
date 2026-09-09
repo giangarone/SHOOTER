@@ -305,6 +305,19 @@ const LONGSHOT_RANGE = 40;
 // about to cost health.
 const POINT_BLANK_RANGE = 5;
 
+// WHAT A HEAD IS WORTH. Double, and it is a flat double on purpose: the payoff
+// for aiming somewhere smaller has to be a number the player can do in their
+// head from the damage popup, or the mechanic is invisible on a roster where
+// no two enemies have the same health.
+//
+// It is a MULTIPLIER on the round rather than a separate hit, so it composes
+// with the crit family and is then read by armour like anything else - see
+// _hitMult. Only the two RAYCAST paths can earn it: the pellet and the lance.
+// The melee swing is an XZ cone with no impact point at all, blasts have no
+// point either, and damage over time has no aim to reward - a headshot on any
+// of those would be a free double the player did not do anything for.
+const HEADSHOT_MULT = 2;
+
 // WHAT AN ENEMY IS ALLOWED TO DO TO THE PLAYER WHILE A LURE IS OUT: nothing.
 //
 // Three no-ops rather than three `if (lure) return` guards inside the real
@@ -1138,6 +1151,9 @@ class Game {
     // which quietly ignored the group transform the hitbox is parented to -
     // the crowd bob, the sway and a flier's altitude ease all live there.
     this._assistAt = new THREE.Vector3();
+    // And the same enemy's head sphere, for the one thing the assist uses it
+    // for: knowing when to stop pulling down. See _assistTarget.
+    this._assistHead = new THREE.Vector3();
     // Where a swept-up pickup lands on the player - see _updateAbsorbing.
     this._absorbAt = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
@@ -1157,6 +1173,19 @@ class Game {
     // not per-pellet: without this a point-blank shell would roll Petrify
     // eight times and shove its target twelve metres.
     this._shotHits = new Set();
+    // WHICH BODIES THIS ONE PELLET HAS ALREADY PAID FOR. Not the same set as
+    // _shotHits above, which is per TRIGGER PULL and exists so a shotgun's
+    // nine pellets only tick a once-per-shot effect once. This one is per
+    // PELLET, and it exists because every enemy is two overlapping spheres - a
+    // body and a head - so a single round can intersect the same enemy twice.
+    // A shotgun still deals damage nine times to one chest, which is the whole
+    // point of a shotgun; what it must not do is deal it eighteen.
+    this._hitOnce = new Set();
+    // And which of them this round went through the HEAD of. A separate set
+    // because it is answered in a pass BEFORE the damage loop: the two spheres
+    // overlap, so the head is often not the first thing the round met. See
+    // _firePellet.
+    this._hitHead = new Set();
     // WHETHER EACH ENEMY THIS SHOT TOUCHED CRITTED. Beside _shotHits and
     // cleared with it, for the same reason it exists: the crit is decided per
     // TRIGGER PULL per BODY, so nine pellets into one chest all crit or none
@@ -1411,8 +1440,8 @@ class Game {
     // place hp is ever reduced, so installing the sink once covers bullets,
     // melee, fire, poison, mines, sentries, thorns, blasts and every item at
     // the same time - see setDamageSink in enemy.js.
-    setDamageSink((pos, dealt, crit) => {
-      if (dealt > 0) this.effects.damageNumber(pos, dealt, crit);
+    setDamageSink((pos, dealt, crit, head) => {
+      if (dealt > 0) this.effects.damageNumber(pos, dealt, crit, head);
     });
     // A capacitor's plate coming off. A ring rather than a number, because
     // nothing was dealt - the shot was spent, and what the player needs to
@@ -2518,6 +2547,11 @@ class Game {
       const flat = Math.hypot(dx, dz);
       if (flat > ASSIST_RANGE || flat < 0.001) continue;
       const dy = at.y - eye.y;
+      // The head sphere, as an angle from the eye and an angular RADIUS.
+      // Collected here, used at the bottom: the assist keeps aiming at the
+      // body, and this is only how it knows when to stop pulling down.
+      const headDy = e.head.getWorldPosition(this._assistHead).y - eye.y;
+      const headR = e.head.geometry.parameters.radius * e.head.scale.x;
       // Forward is (-sin yaw, -cos yaw) - see player.forwardInto - so this is
       // the yaw that would point straight at the target.
       let dYaw = Math.atan2(-dx, -dz) - p.yaw;
@@ -2533,7 +2567,25 @@ class Game {
       best = best || { t: 0, dYaw: 0, dPitch: 0 };
       best.t = err / ASSIST_CONE;
       best.dYaw = dYaw;
-      best.dPitch = dPitch;
+      // THE ASSIST MUST NOT PULL A PLAYER OFF A HEAD THEY ARE ALREADY ON.
+      //
+      // The pull is toward the CENTRE of the body, which is right - a magnet
+      // that sought heads would be the game taking the harder shot for the
+      // player, and controller headshots would stop being something anyone
+      // aimed at. But a player holding the reticle on a face is above that
+      // centre by construction, so the vertical half of the pull was dragging
+      // them down off it, every frame, harder the closer they got.
+      //
+      // So the pitch pull is dropped once the aim is at or above the head, and
+      // the yaw pull is kept: sideways help never moves a shot off a head, and
+      // tracking a strafing enemy is most of what assist is for.
+      // Suppressed once the aim is INSIDE the head's own angular radius, not
+      // only once it is above the head: a player lining up a face is somewhere
+      // on it, not exactly on its centre, and a pull that only let go at the
+      // very top would still be fighting them for most of the target.
+      const headPitch = Math.atan2(headDy, flat) - aimPitch;
+      const headAng = headR / flat;
+      best.dPitch = (dPitch < 0 && headPitch <= headAng) ? 0 : dPitch;
     }
     return best;
   }
@@ -3456,7 +3508,7 @@ class Game {
     const targets = this._targets;
     targets.length = 0;
     for (const m of this.arena.meshList) targets.push(m);
-    for (const e of this.enemies) targets.push(e.hitbox);
+    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
 
     const ray = this._shotRay;
     this._screen.set(0, 0);
@@ -3473,6 +3525,18 @@ class Game {
     this._shotHits.clear();
     this._shotCrit.clear();
     this._blastHit = false;
+    // The lance is ONE round through everything, so a body it passes through
+    // pays once however many of its spheres the beam clipped - and it earns the
+    // head on the same terms a pellet does. See _hitOnce.
+    const seen = this._hitOnce;
+    seen.clear();
+    const headed = this._hitHead;
+    headed.clear();
+    for (const h of hits) {
+      if (h.object.userData.head !== true) continue;
+      const en = h.object.userData.enemy;
+      if (en && !en.dead) headed.add(en);
+    }
     let last = null;
     let hitAny = false;
     for (const h of hits) {
@@ -3490,9 +3554,12 @@ class Game {
       // NOT A TRIGGER PULL, so FATAL RESERVE stays out of it: the lance takes
       // its thirty rounds off the magazine in one go rather than firing them,
       // and `magAtShot` is still whatever the last actual shot saw.
+      if (seen.has(en)) continue;
+      seen.add(en);
       const hot = this._resolveHit(en, crit, false);
+      const head = headed.has(en);
       this._landShot(
-        en, h.point, ray.ray.direction, base * this._hitMult(en, hot), 8, hot
+        en, h.point, ray.ray.direction, base * this._hitMult(en, hot, head), 8, hot, head
       );
       hitAny = true;
     }
@@ -4697,7 +4764,10 @@ class Game {
     const a = Math.random() * Math.PI * 2;
     const t = new Turret(
       this, p.x + Math.cos(a) * 1.5, p.z + Math.sin(a) * 1.5,
-      this.player.getEffectiveDamage(this.player.weapon.damage)
+      this.player.getEffectiveDamage(this.player.weapon.damage),
+      // The player's own feet, so a panic turret dropped on a platform stands
+      // on the platform beside them rather than on the floor below it.
+      p.y
     );
     t.panic = true;
     t.life = m.panicLife;
@@ -4997,6 +5067,10 @@ class Game {
       this._homeRay.intersectObjects(this._targets, false, hits);
       if (hits.length && hits[0].object.userData.enemy === best) {
         const hot = this._resolveHit(best, crit);
+        // NO HEADSHOT ON A HOMED ROUND, even when the curve happens to land on
+        // the head sphere. Seeker rescues a shot that MISSED; the aim it is
+        // standing in for was at the body centre, and paying a headshot for it
+        // would make the passive item that fires itself the best way to get one.
         const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
           * dmgMult * this._hitMult(best, hot);
         this._landShot(best, hits[0].point, this._homeDir, dealt, burst, hot);
@@ -5112,10 +5186,24 @@ class Game {
    *
    * @param {Enemy} en
    * @param {boolean} crit  the answer _resolveHit already gave
+   * @param {boolean} [head]  whether the round landed on the head sphere
    */
-  _hitMult(en, crit) {
+  _hitMult(en, crit, head = false) {
     const m = this.player.mods;
     let k = crit ? m.critMult : 1;
+    // THE HEADSHOT, and it belongs here rather than anywhere nearer the body
+    // for one reason: it is a question about WHERE the round landed, which is
+    // the only kind of question this function answers. It multiplies with the
+    // crit instead of replacing it - a crit is about the shot and a headshot is
+    // about the aim, and a player who lines up a Dead Center round on a face
+    // has earned both.
+    //
+    // It is applied BEFORE takeDamage, so armour, WEAK POINT and the freeze
+    // bonus all still have their say: a Colossus's plating resists a headshot
+    // exactly as hard as it resists everything else, which is what keeps the
+    // one enemy built around a weak point from being trivially answered by
+    // aiming slightly higher.
+    if (head) k *= HEADSHOT_MULT;
     if (m.longshot > 0 || m.pointBlank > 0) {
       const p = this.player.pos;
       // ON THE FLOOR, like every other distance in this game. A flier five
@@ -5142,7 +5230,9 @@ class Game {
   // drift: status, chaining, knockback and Detonator have to behave the same
   // whether the player's aim was on target or the round curved onto it.
   // `dir` is the direction the shot ARRIVED from, which is what armour reads.
-  _landShot(en, point, dir, dealt, burst, crit = false) {
+  // `head` is carried only so the damage number can say so - the doubling is
+  // already inside `dealt` (see _hitMult).
+  _landShot(en, point, dir, dealt, burst, crit = false, head = false) {
     const m = this.player.mods;
     // A warded enemy eats the shot whole (see Enemy.takeDamage). It gets the
     // stone-grey spark rather than the ordinary yellow one, so a player
@@ -5168,7 +5258,7 @@ class Game {
       // takeDamage keeps no remainder: the pellet is worth what it is worth,
       // and what did not fit is what walks to the next body.
       const before = en.hp;
-      en.takeDamage(dealt, false, dir.x, dir.z, point, crit);
+      en.takeDamage(dealt, false, dir.x, dir.z, point, crit, head);
       if (m.overkill > 0 && en.dead && dealt > before) {
         this._carryOver(en, dealt - before);
       }
@@ -5280,6 +5370,29 @@ class Game {
     const hits = this._hits;
     hits.length = 0;
     ray.intersectObjects(targets, false, hits);
+    // ONE BODY, ONE HIT, wherever on it the round landed - and if the round
+    // passed through the HEAD at all, that is what it landed on.
+    //
+    // Both of those need saying because the two spheres OVERLAP, and on the
+    // heavier types the head sits inside the body sphere entirely: a tank's
+    // body sphere reaches 2.1m and its head is a small sphere at 1.8m, well
+    // within it. So a round placed squarely on the face enters the body's front
+    // surface FIRST and the nearest-hit-wins rule would have called every
+    // headshot in the game a body shot - which is exactly what it did.
+    //
+    // The pass below therefore asks a different question: did this round go
+    // through the head sphere anywhere along its length. A straight line that
+    // crosses a head has crossed the head, whichever surface it met first, and
+    // a line that misses it never touches it however close it came to the chin.
+    const seen = this._hitOnce;
+    seen.clear();
+    const headed = this._hitHead;
+    headed.clear();
+    for (const h of hits) {
+      if (h.object.userData.head !== true) continue;
+      const en = h.object.userData.enemy;
+      if (en && !en.dead) headed.add(en);
+    }
 
     // Multi-pellet weapons fire eight of these per shot, so their per-impact
     // particle bursts have to be much smaller or a single shell drains the
@@ -5377,13 +5490,19 @@ class Game {
         this.effects.impact(end, 0x9fb4d8, w.pellets > 1 ? 2 : 4, 2.5, 1, 0.26);
         break;
       }
+      // The other sphere of a body this pellet already paid for. Skipped
+      // rather than stopping the round, and it does NOT spend a pierce: the
+      // pellet did not find anything new.
+      if (seen.has(en)) continue;
+      seen.add(en);
       // The crit and the two range passive items are resolved HERE and not at
       // the trigger, because all three of them are questions about the body the
       // pellet just found. See _resolveHit.
       const hot = this._resolveHit(en, crit);
+      const head = headed.has(en);
       const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
-        * Math.pow(falloff, pierced) * dmgMult * this._hitMult(en, hot);
-      this._landShot(en, h.point, ray.ray.direction, dealt, burst, hot);
+        * Math.pow(falloff, pierced) * dmgMult * this._hitMult(en, hot, head);
+      this._landShot(en, h.point, ray.ray.direction, dealt, burst, hot, head);
       damaged = true;
       pierced++;
       if (pierced > pierceCap) {
@@ -5514,7 +5633,7 @@ class Game {
     const targets = this._targets;
     targets.length = 0;
     for (const m of this.arena.meshList) targets.push(m);
-    for (const e of this.enemies) targets.push(e.hitbox);
+    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
     // BRINE's angler bubble, and nothing else in the game. Added to the same
     // list the enemies are on rather than raycast separately, so a bubble
     // drifting in front of an enemy is cover for it exactly the way a crate
@@ -6451,7 +6570,10 @@ class Game {
     // Affordable to a HIGH STAKES run whatever the balance is - the coin pays,
     // not the wallet. See _gambleTill.
     const stakes = this.player.mods.highStakes > 0;
-    box.setPrice('$' + cost, stakes || this.credits >= cost);
+    // Through _priceLabel like every other price in the room. It used to build
+    // its own '$' + cost here, which is why the box was the one console that
+    // could never say FREE at all - not even at a cost of zero.
+    box.setPrice(this._priceLabel(cost), stakes || this.credits >= cost);
   }
 
   // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
@@ -6479,7 +6601,19 @@ class Game {
 
   // A console's price as the player reads it. FREE rather than $0, because a
   // price of zero is the one number on a console that is not a price.
+  //
+  // AND FREE UNDER HIGH STAKES, because for that run the price is not what
+  // decides - the coin is (see _gambleTill: the till waives the charge nine
+  // times in ten and takes a bite out of the player the tenth). The card used
+  // to keep printing $2000 while the wallet was never touched, which read as
+  // the run being about to be charged and made the one upgrade whose whole text
+  // is "REROLLS & BOXES ARE FREE" look like it was not working.
+  //
+  // The COST is still what it was and still doubles underneath - nothing about
+  // the ladder changes, and a player who loses the pick mid-run finds the real
+  // number waiting for them.
   _priceLabel(cost) {
+    if (this.player.mods.highStakes > 0) return 'FREE';
     return cost > 0 ? '$' + cost : 'FREE';
   }
 
@@ -7245,10 +7379,10 @@ class Game {
   // what they want; only a kill has to roll for it.
   _placeDrop(kind, pos) {
     this.powerups.push(
-      spawnDropAt(kind, pos, this.scene, this.effects.glowTex, this.time)
+      spawnDropAt(kind, pos, this.scene, this.effects.glowTex, this.time, this.arena.obstacles)
     );
     // The drop has to be findable in a fight it landed in the middle of.
-    this.effects.burst(this._killPos.set(pos.x, 0.9, pos.z), 0xffe95e, 10, 3, 2, 0.5);
+    this.effects.burst(this._killPos.set(pos.x, (pos.y || 0) + 0.9, pos.z), 0xffe95e, 10, 3, 2, 0.5);
   }
 
   // A boss sheds a pickup as it crosses each health threshold. Without this a
@@ -7334,7 +7468,7 @@ class Game {
       // toward the player from across the room.
       const pull = PICKUP_PULL_SPEED * (1 - d / r) * dt;
       const k = Math.min(1, pull / d);
-      q.moveTo(q.pos.x + dx * k, q.pos.z + dz * k);
+      q.moveTo(q.pos.x + dx * k, q.pos.z + dz * k, p.y);
     }
   }
 
@@ -7723,6 +7857,7 @@ class Game {
   _corpse(e) {
     e.release();
     e.group.remove(e.hitbox);
+    e.group.remove(e.head);
     // Sized to the body doing it - the type's model scale, which is not kept
     // on the instance. SUB-LINEAR AND CAPPED, though: a colossus is 3.2 times
     // a chaser, and throwing its parts 3.2 times as hard would leave them
@@ -7972,7 +8107,7 @@ class Game {
       }
     }
     this._hazard.push({
-      x, z, radius, life, maxLife: life, dps, kind, acc: 0, drip: 0, tick: 0,
+      x, z, radius, life, maxLife: life, dps, kind, acc: 0, tick: 0,
       // Hostile, always: everything in this list is something the player has
       // to get out of, and the jagged shape family is what says so before any
       // colour is read.
@@ -8109,7 +8244,11 @@ class Game {
         // longer free.
         let dps = h.dps;
         if (k.status) {
-          this.player.applyStatus(k.status, k.secs);
+          // THROUGH THE FRONT DOOR, not straight onto the player. _afflictPlayer
+          // is where `invulnEnd` is checked, and applying the status directly
+          // here meant a player could be set alight mid-AEGIS by standing in
+          // lava - the one thing the item exists to prevent.
+          this._afflictPlayer(k.status, k.secs);
           if (k.carve) dps = Math.max(0, dps - PLAYER_STATUS[k.status].dps);
         }
         h.acc += dps * dt;
@@ -8121,22 +8260,15 @@ class Game {
           this._hurtPlayerDot(whole);
         }
       }
-      // One emission per drip rather than the ash cloud's two: four pools
-      // running at once is already 77 particles standing in the buffer, and
-      // unlike ash these are always on screen, right where the player is
-      // looking. A trail patch drips a third as often again, because there can
-      // be two dozen of those and at the pool's rate one magma would stand a
-      // couple of hundred particles up in the shared buffer on its own.
-      h.drip -= dt;
-      if (h.drip <= 0) {
-        h.drip = h.kind === 'lava' ? 0.42 : 0.14;
-        const ang = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * h.radius;
-        this.effects.burst(
-          this._ashAt.set(h.x + Math.cos(ang) * r, 0.3, h.z + Math.sin(ang) * r),
-          h.kind === 'lava' ? 0xff8c1a : 0x7ac943, 3, 1.2, 1.4, 0.8
-        );
-      }
+      // NO DRIP. Ground creep used to throw flecks up out of itself every
+      // seventh of a second, and it was wrong twice over: the colour was a
+      // hardcoded green for every kind but lava, so a patch of ICE spat green
+      // sparks - and even with the colour fixed, the patch does not need them.
+      // The stain, the cloud on the kinds that have one, and the burst when it
+      // lands already say a hazard is there, and a dozen patches all breathing
+      // particles at once was noise standing directly between the player and
+      // the floor they are reading. Anything that must be seen from across the
+      // room is a decal or a cloud, not a fleck.
     }
   }
 
@@ -8150,6 +8282,17 @@ class Game {
   // flawless bonus and still ends the run.
   _hurtPlayerDot(d) {
     if (this.state !== 'playing') return;
+    // BUT INVINCIBILITY IS NOT THE WARD. The paragraph above is about Holy
+    // Mantle's charge - a once-a-wave ward that must not be spent on a single
+    // point of pool damage - and it never meant that AEGIS should be ignored
+    // too. `invulnEnd` is not a resource being spent; it is a window in which
+    // nothing is supposed to be able to hurt the player, and an item whose card
+    // reads INVINCIBLE while a burn keeps eating health is simply broken.
+    //
+    // The status TIMERS keep running underneath, which is the honest behaviour:
+    // Aegis does not put the fire out, it means the fire cannot reach you while
+    // it is up. Walk out of the window still burning and the burn resumes.
+    if (this.time < this.player.invulnEnd) return;
     // Same rule as _hurtPlayer: a handoff belongs to neither player, and a
     // burn carried into one must not tick against the body while it is
     // changing hands. The statuses themselves are part of the snapshot, so the
@@ -8456,7 +8599,14 @@ class Game {
       this.player.shieldEnd > this.time ? this.player.shield / 50 : 0,
       this.player.shield,
       this.player.salvoEnd > this.time && this.player.mods.salvoTime > 0
-        ? (this.player.salvoEnd - this.time) / this.player.mods.salvoTime : 0
+        ? (this.player.salvoEnd - this.time) / this.player.mods.salvoTime : 0,
+      // BOTTOM FEEDER. Exactly Opening Salvo's shape - a deadline on the player
+      // and a duration on the mods - and until now the only timed damage window
+      // in the game with nothing on screen: the player reloaded from empty,
+      // deliberately, and then had to guess how much of their five seconds was
+      // left.
+      this.player.bottomEnd > this.time && this.player.mods.bottomTime > 0
+        ? (this.player.bottomEnd - this.time) / this.player.mods.bottomTime : 0
     );
     this.ui.setItemBuffs(this.running.chips(this._itemChips));
     this.ui.setStatuses(this.player);
