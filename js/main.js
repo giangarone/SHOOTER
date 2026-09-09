@@ -5282,7 +5282,7 @@ class Game {
       t.x = x + dx * c - dz * sn;
       t.z = z + dx * sn + dz * c;
     }
-    // Speed and damage come off the type's own `proj` block (enemy.js), so a
+    // Speed and damage come off the type's own `proj` block (js/enemies/), so a
     // new ranged enemy is a row on its stat block rather than a branch here.
     const { speed, dmg } = projStats(type, this.wave);
     // Absolute Zero applied HERE and nowhere else, so every enemy round in the

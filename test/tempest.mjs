@@ -101,6 +101,15 @@ try {
       g.arena.obstacles.length = 0;
       g.arena.ground.length = 0;
       p.clearStatuses();
+      g.input.forward = false;
+      g.input.back = false;
+      g.input.left = false;
+      g.input.right = false;
+      g.input.jump = false;
+      g.input.sprint = false;
+      g.input.crouch = false;
+      g.input.moveF = 0;
+      g.input.moveS = 0;
       pinned = true;
       god = true;
       p.health = p.maxHealth;

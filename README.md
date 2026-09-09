@@ -1284,7 +1284,14 @@ css/styles.css      HUD / overlay styling
 js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
-js/enemy.js         enemy AI (chaser / shooter) + projectiles
+js/enemy.js         the Enemy class, the four projectile kinds, the damage sinks
+js/enemies/         the sixty types, one file per theme
+  shared.js         what more than one theme (or the class) needs: the geometry
+                    and material caches, the faceted primitives, the status
+                    tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
+  index.js          imports the ten themes, which is what registers them
+  rust.js  void.js  ember.js  rime.js  verdant.js
+  strata.js  tempest.js  brine.js  plague.js  solar.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
 js/effects.js       particle pool, tracers, muzzle flash, shake
@@ -1370,6 +1377,21 @@ tools/analyze_beats.py   offline beat analysis -> soundtrack.beats.json
 tools/verify_beats.py    renders an excerpt with a click on every mapped beat
 assets/audio/soundtrack.beats.json   the beat map (generated, committed)
 ```
+**Why `js/enemies/` is split the way it is.** The rule is mechanical rather than
+editorial: a symbol lives in `shared.js` if MORE THAN ONE theme uses it, or if
+the `Enemy` class uses it as well as a theme. Everything else lives in the one
+theme file that uses it. The consequence is the point - **no theme file imports
+another**, so there is no cycle to reason about and any one of the ten can be
+read on its own. Where a theme genuinely borrows from another (VOID's shade
+flies the shrike's dive, BRINE's barnacle uses TEMPEST's line-of-sight test),
+what it borrows is in `shared.js` and both read it from there.
+
+A theme registers its own entries into `ENEMY_TYPES` at the bottom of its own
+file, so `index.js` is a list of imports rather than a table that has to be kept
+in step with ten others - and adding a theme is one line. `js/enemy.js` still
+exports `ENEMY_TYPES` alongside the class, so `main.js`, the tests and
+`enemy-viewer.html` import exactly what they always did.
+
 
 ## Beats
 

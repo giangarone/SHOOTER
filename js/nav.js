@@ -175,7 +175,7 @@ export class NavGrid {
   // through gaps the collision resolver would actually let an enemy walk.
   _bake(bound) {
     const grow = this.radius * 0.9;
-    // Enemies clamp themselves to 21.6 in enemy.js; cells past that are
+    // Enemies clamp themselves to 21.6 in enemy.js (ARENA_HALF, enemies/shared.js); cells past that are
     // unreachable, and leaving them open lets a route hug a wall it will then
     // be shoved off.
     const edge = bound - 0.6;

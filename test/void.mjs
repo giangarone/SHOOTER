@@ -92,7 +92,33 @@ try {
       g._clearHazards();
       g._mortars.forEach((m) => g.effects.markRelease(m.mark));
       g._mortars.length = 0;
+      // AND THE BOXES, which every later theme suite clears and this one did
+      // not. The monolith block pushes a solid box across the middle of the
+      // arena and nothing took it back out, so the well block below was
+      // dropping its well INSIDE that box and measuring a player being pulled
+      // into a wall and ejected out of it - which came out as +3.6m most runs
+      // and as a flight to the far wall on the ones where the resolver threw
+      // them the other way. Intermittent, and nothing to do with the well.
+      g.arena.obstacles.length = 0;
+      g.arena.ground.length = 0;
       p.clearStatuses();
+      // AND THE MOVEMENT KEYS. `autoTest = false` stops the bot from WRITING
+      // the input every frame, it does not clear what the bot was already
+      // holding - so the player kept walking in whatever direction it happened
+      // to be going when the suite took over. Harmless in every block that
+      // pins the player, and the entire explanation for the well block:
+      // measuring a two-and-a-half metres-per-second pull against a walk
+      // that never stopped gave +3.6m, +21.6m, -21.6m and 0.06m on four runs
+      // of identical code.
+      g.input.forward = false;
+      g.input.back = false;
+      g.input.left = false;
+      g.input.right = false;
+      g.input.jump = false;
+      g.input.sprint = false;
+      g.input.crouch = false;
+      g.input.moveF = 0;
+      g.input.moveS = 0;
       pinned = true;
       god = true;
       p.health = p.maxHealth;
@@ -218,14 +244,46 @@ try {
       p.pos.set(0, 0, 0);
       p.health = p.maxHealth;
       const hp0 = p.health;
-      const x0 = p.pos.x;
-      await steps(70);
-      res.wellMoved = +(p.pos.x - x0).toFixed(2);
+      const d0 = Math.hypot(p.pos.x - 5, p.pos.z);
+      // MEASURED AS A DIRECTION AND STOPPED THE MOMENT IT IS PROVEN, not as a
+      // displacement over a fixed number of frames.
+      //
+      // The pull is per-frame and the well is seven metres across, so a fixed
+      // frame count measures TIME on a machine whose frames are not all the
+      // same length: on a loaded one the player crosses the centre inside the
+      // window, the pull reverses behind them, and they leave the well
+      // entirely - which came out as +3.6m, +21.6m and -21.6m on three runs of
+      // the same code. None of that is the well being wrong; all of it is the
+      // question being asked over the wrong interval.
+      // AND THE WELL IS RE-LAID WHEN IT LAPSES. It lives 2.2 seconds, which is
+      // fewer frames than this loop has whenever the machine is loaded - so
+      // the other half of the flake was the opposite of the first: a window
+      // that ran out before the player had been moved at all, reported as
+      // 0.06m. Between the re-lay and the early break the measurement now
+      // depends on neither the frame rate nor the clock. The bar is 0.4m and
+      // not a metre for the same reason: what is under test is the DIRECTION
+      // the well moves somebody, and how far it gets to move them inside one
+      // window is a fact about the machine.
+      let closest = d0;
+      let pulled = false;
+      for (let i = 0; i < 400; i++) {
+        await step();
+        if (!g._hazard.some((h) => h.kind === 'well')) {
+          g._addHazard(5, 0, 7.0, 2.2, 0, 'well');
+        }
+        const d = Math.hypot(p.pos.x - 5, p.pos.z);
+        closest = Math.min(closest, d);
+        if (d < d0 - 0.4) {
+          pulled = true;
+          break;
+        }
+      }
+      res.wellMoved = +(d0 - closest).toFixed(2);
       res.wellCost = +(hp0 - p.health).toFixed(2);
       pinned = true;
       god = true;
       // It pulls TOWARD itself, so the player ends up nearer than they began.
-      res.wellPulledIn = p.pos.x > x0 + 0.3;
+      res.wellPulledIn = pulled;
       clean();
     }
 
@@ -252,7 +310,7 @@ try {
     out.tankBlocked, `tank reached x=${out.tankMinX}`);
 
   ok('a well is laid on the floor', out.wellPlaced > 0);
-  ok('it drags the player toward it', out.wellPulledIn, `moved ${out.wellMoved}m`);
+  ok('it drags the player toward it', out.wellPulledIn, `closed ${out.wellMoved}m`);
   ok('and costs no health at all', out.wellCost === 0, `lost=${out.wellCost}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));

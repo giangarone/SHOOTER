@@ -98,7 +98,7 @@ export const THEME = {
   evade: 0x18ffff,
   shrapnel: 0xff7043,
   charge: 0xe0e0e0,
-  // status effects, matched to STATUS_TINT in enemy.js
+  // status effects, matched to STATUS_TINT in enemies/shared.js
   poison: 0x39d353,
   fire: 0xff5a00,
   ice: 0x7fe3ff,
@@ -464,7 +464,7 @@ export const UPGRADES = {
   //
   // The ones that afflict an enemy all have to SAY SO ON THE ENEMY. A status
   // the player cannot see is a stat increase with extra steps, so each drives
-  // a body tint and a particle drip (see STATUS_TINT in enemy.js) and the
+  // a body tint and a particle drip (see STATUS_TINT in enemies/shared.js) and the
   // colours are held distinct from each other and from the hit flash.
   //
   // `mark: true` also puts a plate in the theme colour on the gun's receiver

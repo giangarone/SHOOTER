@@ -45,7 +45,7 @@ const IMPACT_SIZE = 0.05;
 
 // CORPSES - the come-apart death.
 //
-// An enemy is never one mesh. partsFor() in enemy.js builds every type out of
+// An enemy is never one mesh. partsFor() in enemies/shared.js builds every type out of
 // separate rigid pieces hung on one group - torso, neck, skull, jaw, spines,
 // thighs, shins - so a death does not need a new effect invented for it. It
 // needs the body the enemy already has, taken apart.
@@ -95,7 +95,7 @@ const CORPSE_BOUNCE = 0.22;
 // anything: a rifle lands thirty flashes on a body and misses the thirty-first.
 // MELEE one-shots most of what it touches, so for melee it was every swing.
 //
-// Matching BODY_FLASH_HEX and BODY_FLASH_INTENSITY in enemy.js, and the same
+// Matching BODY_FLASH_HEX and BODY_FLASH_INTENSITY in enemies/shared.js, and the same
 // tenth of a second, because it is the same flash - it just happens to be
 // playing on a body that is already in pieces.
 const CORPSE_FLASH = 0.12;

@@ -166,7 +166,8 @@ export const ACTIVE_ITEMS = {
     theme: THEME.ice,
     // The whole floor at once, through the same per-enemy status a cryo round
     // applies - which means bosses downgrade it to a slow through the
-    // resistance block they already carry (see freezeSlow in enemy.js). That is
+    // resistance block they already carry (see freezeSlow on a boss's stat block in
+    // js/enemies/). That is
     // the correct answer and not a special case: an item that could stop a boss
     // dead for five seconds every twenty would be the only boss strategy there is.
     //

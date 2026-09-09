@@ -1,7 +1,7 @@
 // STATUS EFFECTS ON THE PLAYER.
 //
 // The enemy has carried statuses since Venom and Incendiary shipped (see
-// applyStatus and STATUS_ORDER in enemy.js). This is the same idea pointed the
+// applyStatus in enemy.js and STATUS_ORDER in enemies/shared.js). This is the same idea pointed the
 // other way: something in the arena does it to YOU, and it costs you damage,
 // speed, or the trigger itself for a few seconds.
 //
@@ -18,7 +18,7 @@
 //
 // COLOURS ARE BORROWED, NOT INVENTED. Fire, poison, fear and the cold use the
 // same four values enemies wear for the same four things (STATUS_TINT in
-// enemy.js), so orange means burning whoever is burning. Weakness and curse
+// enemies/shared.js), so orange means burning whoever is burning. Weakness and curse
 // are new because no enemy carries them: weakness is a drained steel with
 // almost no saturation - the one icon in the game that is deliberately dull -
 // and curse takes the game's danger pink.
