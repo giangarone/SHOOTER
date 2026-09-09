@@ -516,7 +516,7 @@ export class Rig {
     // wave landing, a stagger - and never on the beat. The two are separated
     // here rather than at the DOM end because muting the strobe entirely
     // would take the damage feedback with it, and that one is information.
-    this.beatFlash = true;
+    this.beatFlash = false;
     // One-shot cue timers. All count DOWN in seconds.
     this._waveT = 0;
     this._dmgT = 0;

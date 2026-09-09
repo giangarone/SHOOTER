@@ -906,7 +906,7 @@ class Game {
     // Same treatment as the mute above, and read before the first frame: the
     // beat strobe is a photosensitivity setting, so someone who turned it off
     // must never see it fire once on the way back in.
-    try { this.rig.beatFlash = localStorage.getItem('va-beat-flash') !== '0'; } catch {}
+    try { this.rig.beatFlash = localStorage.getItem('va-beat-flash') === '1'; } catch {}
     // Screenshake, read before the first frame for the same reason: it is a
     // motion-comfort setting, and someone who turned it off must not be
     // shaken once on the way back in. Anything stored that is not a finite

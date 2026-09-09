@@ -793,7 +793,7 @@ export class Effects {
     // shake is CONSUMED rather than where it is added, so the cap in
     // addShake() keeps meaning what it says and a mid-run change to the
     // setting takes effect on the very next frame instead of on the next hit.
-    this.shakeScale = 1;
+    this.shakeScale = 1.5;
   }
 
   // The two pools. See the note on SPARK_MAX at the top of the file for why

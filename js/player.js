@@ -922,7 +922,7 @@ export class Player {
     // It scales AIM, not only the picture: at zero the gun stops climbing
     // altogether. That is what the player asked for when they turned the dial
     // down, and it is the same trade every game offering this setting makes.
-    this.shakeScale = 1;
+    this.shakeScale = 1.5;
     this.meleeCd = 0;
     this.meleeActive = 0;
     // The swing's own clock, separate from meleeActive: the animation outlives
