@@ -7,10 +7,10 @@
   <link rel="icon" href="data:,"/>
   <!-- Preloaded, not just declared: every panel in the game is sized by this
        face, and a first paint in a fallback would relayout the entire HUD. -->
-  <link rel="preload" href="/assets/fonts/PressStart2P-Regular.ttf" as="font" type="font/ttf" crossorigin/>
-  <link rel="stylesheet" href="/css/styles.css"/>
+  <link rel="preload" href="assets/fonts/PressStart2P-Regular.ttf" as="font" type="font/ttf" crossorigin/>
+  <link rel="stylesheet" href="css/styles.css"/>
   <script type="importmap">
-    { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+    { "imports": { "three": "./js/vendor/three.module.js" } }
   </script>
 </head>
 <body>
@@ -452,6 +452,6 @@
   <div id="scanlines"></div>
   <div id="crt"></div>
 
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

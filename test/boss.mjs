@@ -73,7 +73,7 @@ try {
       // Colossus is RUST's boss. Pin the theme or the deck decides which fight
       // this block gets, and it is specifically Colossus's core being checked.
       window.__game.setTheme('rust');
-      const { Enemy, ENEMY_TYPES } = await import('/js/enemy.js');
+      const { Enemy, ENEMY_TYPES } = await import('./js/enemy.js');
       const b = new Enemy('colossus', new THREE.Vector3(0, 0, 0), 1, 1, 1);
       const out = [];
       const sample = (label) => {
@@ -231,7 +231,7 @@ try {
   // then a theme is covered through the fight it borrows.
   const themeKeys = THEMES_UNDER_TEST.length
     ? THEMES_UNDER_TEST
-    : await page.evaluate(async () => Object.keys((await import('/js/themes.js')).THEMES));
+    : await page.evaluate(async () => Object.keys((await import('./js/themes.js')).THEMES));
 
   for (let ti = 0; ti < themeKeys.length; ti++) {
     const themeKey = themeKeys[ti];

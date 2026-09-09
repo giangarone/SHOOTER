@@ -189,7 +189,7 @@ try {
   // without anyone having to remember to name it. This is that guarantee.
   const vs = await page.evaluate(async () => {
     const g = window.__game;
-    const mod = await import('/js/versus.js');
+    const mod = await import('./js/versus.js');
     g.player.flawlessStreak = 4;
     const snap = mod.captureRun(g);
     // Somebody else's turn, on a streak of their own.

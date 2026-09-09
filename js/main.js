@@ -899,7 +899,7 @@ class Game {
     // setTheme() below, which is on the game object the console and the test
     // harness already reach for.
     this._forcedTheme = null;
-    this.music = new Music('/assets/audio/soundtrack.m4a');
+    this.music = new Music('assets/audio/soundtrack.m4a');
     // Read before the first gesture builds the graph, so a muted player never
     // hears the opening bar leak out before the setting is applied.
     try { this.music.muted = localStorage.getItem('va-music-muted') === '1'; } catch {}

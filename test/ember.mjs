@@ -332,7 +332,7 @@ try {
       // asserting on bs.venting instead would still pass if those two had come
       // apart, and that gap is exactly the bug worth catching here. An Enemy
       // holds no reference to its own type block, so it comes off the module.
-      const TYPES = (await import('/js/enemy.js')).ENEMY_TYPES;
+      const TYPES = (await import('./js/enemy.js')).ENEMY_TYPES;
       const armorNow = () => {
         const A = TYPES.forge.armor;
         return A ? A(f) : -1;

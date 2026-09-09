@@ -77,7 +77,7 @@ try {
 
   // ---- the cap merges rather than drops ----
   const cap = await page.evaluate(async () => {
-    const { MAX_ORBS } = await import('/js/money.js');
+    const { MAX_ORBS } = await import('./js/money.js');
     const g = window.__game;
     g.money.clear();
     let paid = 0;
@@ -143,8 +143,8 @@ try {
 
   // ---- the magnet radius is a stat Lodestone moves ----
   const magnet = await page.evaluate(async () => {
-    const { BASE_MAGNET_RADIUS } = await import('/js/money.js');
-    const { UPGRADES } = await import('/js/upgrades.js');
+    const { BASE_MAGNET_RADIUS } = await import('./js/money.js');
+    const { UPGRADES } = await import('./js/upgrades.js');
     const g = window.__game;
     const origDrop = g._dropMoney;
     g._dropMoney = () => {};

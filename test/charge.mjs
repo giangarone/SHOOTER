@@ -65,8 +65,8 @@ try {
 
   // A wave, played through the real kill and pickup path.
   const playWave = `async (wave) => {
-    const { waveConfig } = await import('/js/waves.js');
-    const { ENEMY_TYPES } = await import('/js/enemy.js');
+    const { waveConfig } = await import('./js/waves.js');
+    const { ENEMY_TYPES } = await import('./js/enemy.js');
     const g = window.__game;
     g.wave = wave;
     g._cfg = waveConfig(wave);
@@ -127,8 +127,8 @@ try {
 
   // ---- the money multipliers do not reach it ----
   const rich = await page.evaluate(async () => {
-    const { waveConfig } = await import('/js/waves.js');
-    const { ENEMY_TYPES } = await import('/js/enemy.js');
+    const { waveConfig } = await import('./js/waves.js');
+    const { ENEMY_TYPES } = await import('./js/enemy.js');
     const g = window.__game;
     // ONE cast, run twice. waveConfig picks its members at random inside each
     // role, so calling it per run would compare two different waves.
@@ -226,10 +226,10 @@ try {
 
   // ---- a boss wave's trickle is capped, not just paced ----
   const boss = await page.evaluate(async () => {
-    const { BOSS_ADD_CHARGE_CAP } = await import('/js/items.js');
+    const { BOSS_ADD_CHARGE_CAP } = await import('./js/items.js');
     const g = window.__game;
     g.wave = 10;
-    g._cfg = (await import('/js/waves.js')).waveConfig(10);
+    g._cfg = (await import('./js/waves.js')).waveConfig(10);
     g._startWaveCharge();
     g.money.clear();
     g.player.giveItem('itemHeal');
@@ -258,7 +258,7 @@ try {
 
   // ---- the boss itself pays as its health falls ----
   const drain = await page.evaluate(async () => {
-    const { ENEMY_TYPES } = await import('/js/enemy.js');
+    const { ENEMY_TYPES } = await import('./js/enemy.js');
     const g = window.__game;
     g._startWaveCharge();
     g.player.giveItem('itemHeal');

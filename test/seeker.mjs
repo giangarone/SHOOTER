@@ -45,7 +45,7 @@ try {
   // spread, so a hit or a miss is a fact about the mechanic rather than a roll.
   const rig = await page.evaluate(async () => {
     const THREE = await import('three');
-    const { Enemy } = await import('/js/enemy.js');
+    const { Enemy } = await import('./js/enemy.js');
     const g = window.__game;
     // THE ARENA IS PROCEDURAL NOW, so this rig cannot assume a lane is clear
     // or that a particular pillar is standing. Every run wipes the generated

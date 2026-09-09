@@ -54,7 +54,7 @@ try {
   const out = await page.evaluate(async (STRATA_TYPES) => {
     const g = window.__game;
     const p = g.player;
-    const ENEMY = await import('/js/enemy.js');
+    const ENEMY = await import('./js/enemy.js');
     const TYPES = ENEMY.ENEMY_TYPES;
     const THREE = await import('three');
     const step = () => new Promise((r) => requestAnimationFrame(r));

@@ -65,7 +65,7 @@ try {
   const out = await page.evaluate(async (RIME_TYPES) => {
     const g = window.__game;
     const p = g.player;
-    const TYPES = (await import('/js/enemy.js')).ENEMY_TYPES;
+    const TYPES = (await import('./js/enemy.js')).ENEMY_TYPES;
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
     const res = {};

@@ -51,7 +51,7 @@ try {
 
   // ---- the advertised rates are the real rates ----
   const rates = await page.evaluate(async () => {
-    const { rollDrop, dropChance, POWERUP_TYPES, AMMO_PICKUP } = await import('/js/powerups.js');
+    const { rollDrop, dropChance, POWERUP_TYPES, AMMO_PICKUP } = await import('./js/powerups.js');
     const N = 200000;
     const sample = (hp, ammo, allowAmmo = true) => {
       const t = { nothing: 0 };

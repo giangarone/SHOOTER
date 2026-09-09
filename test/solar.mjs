@@ -52,7 +52,7 @@ try {
   const out = await page.evaluate(async (SOLAR_TYPES) => {
     const g = window.__game;
     const p = g.player;
-    const { ENEMY_TYPES } = await import('/js/enemy.js');
+    const { ENEMY_TYPES } = await import('./js/enemy.js');
     const THREE = await import('three');
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
