@@ -691,6 +691,40 @@ export class Effects {
       });
     }
 
+    // PIPS. A small lit dot stuck to a point in the WORLD, held there by
+    // whoever acquired it and released when they are done - the airborne
+    // cousin of a telegraph mark.
+    //
+    // DELAYED FUSE is the only caller so far, and it is what the pool exists
+    // for: a round that sticks to a body and does nothing for two seconds is
+    // the one shot in the game that lands and produces no feedback at all,
+    // which reads as a broken gun rather than as a fuse. The dot is the fuse.
+    //
+    // ACQUIRED AND RELEASED like a mark, and for the same reason: a
+    // fire-and-forget effect cannot be held for two seconds while the thing it
+    // is stuck to walks across the arena. Twenty-four deep, which is what a
+    // trigger held for the length of a fuse can put on the floor; past that a
+    // round simply goes unmarked rather than stealing a dot from a fuse that is
+    // nearly due.
+    //
+    // SPRITES, not meshes: the dot has to read from any angle and at any range,
+    // and a billboard is the only thing in the renderer that does. They all
+    // share `glowTex` and one shader program, so the pool costs the scene
+    // twenty-four draw calls and no new geometry.
+    this.pips = [];
+    for (let i = 0; i < 24; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: this.glowTex, color: 0xff3b30, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.setScalar(0.5);
+      sp.visible = false;
+      sp.frustumCulled = false;
+      scene.add(sp);
+      this.pips.push({ sprite: sp, mat, used: false });
+    }
+
     // CREEP. See the header block above makeCreepField for what this is and
     // why it is one object rather than thirty.
     this._creepInit(scene);
@@ -1186,6 +1220,46 @@ export class Effects {
     this.marks[h].used = false;
     this.marks[h].shape = '';
     this.marks[h].group.visible = false;
+  }
+
+  // ---- pips ---------------------------------------------------------------
+  //
+  // A lit dot pinned to a moving point. See the pool's note in the constructor.
+
+  /** @returns {number} a handle, or -1 when every pip is taken. */
+  pipAcquire() {
+    for (let i = 0; i < this.pips.length; i++) {
+      if (!this.pips[i].used) {
+        this.pips[i].used = true;
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Move and light a pip. Call it every frame the dot is up; nothing here
+   * animates on its own, exactly as a telegraph mark does not.
+   *
+   * @param {number} alpha 0 hides the sprite outright rather than drawing an
+   *   invisible one - which is what makes a BLINK a blink and not a fade.
+   * @param {number} size  world units across.
+   */
+  pipSet(h, x, y, z, color, alpha, size = 0.5) {
+    if (h < 0) return;
+    const p = this.pips[h];
+    p.sprite.position.set(x, y, z);
+    p.sprite.scale.setScalar(size);
+    p.mat.color.setHex(color);
+    p.mat.opacity = alpha;
+    p.sprite.visible = alpha > 0;
+  }
+
+  pipRelease(h) {
+    if (h < 0) return;
+    this.pips[h].used = false;
+    this.pips[h].mat.opacity = 0;
+    this.pips[h].sprite.visible = false;
   }
 
   // ---- the creep field --------------------------------------------------

@@ -65,7 +65,7 @@ import {
 import { PLAYER_STATUS } from './status.js';
 import {
   Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink, setPlateSink,
-  projStats, projLook,
+  setShareHook, projStats, projLook,
 } from './enemy.js';
 import { Effects } from './effects.js';
 import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
@@ -88,17 +88,62 @@ const HAVE_TYPE = (k) => Object.prototype.hasOwnProperty.call(ENEMY_TYPES, k);
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
-  UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
+  UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
 } from './upgrades.js';
+
+// THE SECOND POOL'S COLOURS, where a pick has an effect in the arena rather
+// than only a number in the stat block. Read off the upgrade table rather than
+// written out again, so a totem, its icon and the flash its effect makes in the
+// world can never end up three different colours - which is the whole reason
+// THEME exists.
+const THEME_MARK = THEME.weakPoint;
+const THEME_CANNON = THEME.cannonade;
+const THEME_ECHO = THEME.echoChamber;
+const THEME_CHAIN = THEME.chainFeed;
+const THEME_FUSE = THEME.delayedFuse;
+const THEME_OVERKILL = THEME.overkill;
+const THEME_FEAR = THEME.fearAura;
+const THEME_CONDUIT = THEME.statusConduit;
+const THEME_STAKES = THEME.highStakes;
+const THEME_VITAL = THEME.vitalTrigger;
+const THEME_BRUISE = THEME.bruiseRounds;
+const THEME_KILLSTREAK = THEME.killStreak;
+const THEME_OATH = THEME.bloodOath;
+
+// STATUS CONDUIT's translation table: a status on the PLAYER (status.js) and
+// the one it becomes on an enemy (STATUS_TINT in enemies/shared.js). WEAKNESS
+// and CURSE are deliberately absent - see _conduit.
+const CONDUIT_MAP = [
+  ['fire', 'burn'],
+  ['poison', 'poison'],
+  ['fear', 'fear'],
+  ['slowness', 'slow'],
+];
+// How often the conduit and the fear aura sweep the roster. Four times a
+// second: finer than either effect reads at, and a quarter of the work.
+const CONDUIT_TICK = 0.25;
+// DELAYED FUSE's blink, in blinks per second at the moment the round lands and
+// at the moment it goes off. Three is slow enough to read as a marker and
+// twelve is fast enough to read as urgent without becoming a flicker - past
+// about fifteen the eye stops counting and starts seeing a solid dot.
+const FUSE_BLINK_MIN = 3;
+const FUSE_BLINK_MAX = 12;
+// And the dot's size in world units, when the round lands and how much it grows
+// by the time it goes off. Three quarters of a metre is a hair wider than a
+// chaser's shoulders at arm's length and a handful of pixels across the arena,
+// which is the range the number is actually tuned for: small enough to sit on a
+// body the player is also trying to shoot, big enough to survive the posterise.
+const PIP_SIZE = 0.75;
+const PIP_GROW = 0.35;
 import { TotemArea, ARM_TIME_ITEM, ROW_Z as TOTEM_ROW_Z } from './totems.js';
 import {
   ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS,
   CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
 } from './items.js';
-// PRIMED MAG throws one of these on a reload - see _throwSpentMag. It is the
-// only deployable main.js builds itself; every other one is an item's, and
-// items.js makes those.
-import { Bomb } from './deploy.js';
+// PRIMED MAG throws the Bomb; PANIC TURRET stands the Turret up. Both are
+// deployables main.js makes itself, for the same reason: they are PASSIVE
+// items, and js/deploy.js's other callers are all active items.
+import { Bomb, Turret } from './deploy.js';
 import { MysteryBox } from './mysterybox.js';
 import { NavGrid } from './nav.js';
 import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './terrain.js';
@@ -1118,6 +1163,32 @@ class Game {
     // of them do, and a shotgun cannot tick Telltale's counter eight times off
     // one shell. See _resolveHit.
     this._shotCrit = new Map();
+    // CRITICAL OVERFLOW's answer for the whole trigger pull. Raised by
+    // _resolveHit and settled once at the end of shoot(), beside the two sets
+    // above and cleared with them.
+    this._shotWasCrit = false;
+    // DELAYED FUSE's stuck rounds, and the point one of them goes off at.
+    this._fuses = [];
+    this._fuseAt = new THREE.Vector3();
+    // Which fuse the countdown blip is currently counting, and which blink of
+    // it was last sounded. See the foot of _updateFuses.
+    this._fuseBeepAt = 0;
+    this._fuseBeepN = -1;
+    // FEAR AURA and STATUS CONDUIT both sweep the whole roster, so neither runs
+    // per frame: they are on their own clocks, a few times a second, which is
+    // finer than either effect can be seen at and a tenth of the work.
+    this._auraT = 0;
+    this._conduitT = 0;
+    // SHARED PAIN's hook, and whether it is currently installed. Bound once
+    // here so the install is an assignment rather than a fresh closure per
+    // frame - see the note beside setShareHook in enemy.js.
+    this._shareOn = false;
+    this._onShare = (d, silent) => this._sharePain(d, silent);
+    // GRAY MATTER's last state, so the uniform is written when it CHANGES
+    // rather than every frame. It is a shader uniform upload.
+    this._monoOn = false;
+    // METRONOME's last seen half-beat index. See the gate in the frame loop.
+    this._metroPulse = -1;
     this._blastAt = new THREE.Vector3();
     // Lightning Wizard's strike point. Its OWN scratch and not _blastAt: a
     // bolt is rolled inside _landShot, before Detonator has fired, and sharing
@@ -1965,6 +2036,12 @@ class Game {
     this._absorbing.length = 0;
     this.money.clear();
     this._pendingSpawns.length = 0;
+    // DELAYED FUSE's stuck rounds hold references to the very enemies being
+    // disposed above, and one left behind would go off in the next wave on a
+    // body that no longer exists. The dots go back to the pool with them, or
+    // sixteen fuses across two runs would leave it permanently empty.
+    for (const f of this._fuses) this.effects.pipRelease(f.pip);
+    this._fuses.length = 0;
     this._bigAlive = 0;
     this._reliefT = RELIEF_INTERVAL;
     this.bossFight = null;
@@ -3202,6 +3279,13 @@ class Game {
     // Through the running list rather than straight to use(), so an item with
     // a window is ticked and, above all, ENDED. An item with no duration is
     // fired and forgotten by start() on the same frame.
+    // VITAL TRIGGER. Beside the BAILIFF refund above, because it is the same
+    // shape: something the player gets back for having pressed the button, paid
+    // the moment the charge is spent and whatever the item then does.
+    if (this.player.mods.itemHeal > 0) {
+      this.player.heal(this.player.mods.itemHeal);
+      this.effects.shockwave(this.player.pos, THEME_VITAL, 3.5, 0.35);
+    }
     this.running.start(this, id, def);
     this.sfx.itemUse();
     this.pad.rumble(0.6, 0.5, 200, 2);
@@ -3496,6 +3580,31 @@ class Game {
       this._pendingBuffs.length = 0;
     }
 
+    // ---- THE SECOND POOL'S WAVE BOUNDARY ----------------------------------
+    //
+    // BLOOD OATH. Five max HP a wave, permanently, and it stops the moment the
+    // cap is at fifty or under - charged HERE against the live maxHealth rather
+    // than counted in the getter, which is what makes the floor behave the way
+    // the card says: something that later lifts the cap back over fifty starts
+    // the meter again, because the test is on the max and not on a wave count.
+    const oath = this.player.mods.oathPerWave;
+    if (oath > 0 && this.player.maxHealth > this.player.mods.oathFloor) {
+      // Never past the floor in one step: a build at 52 loses two, not five.
+      const room = this.player.maxHealth - this.player.mods.oathFloor;
+      this.player.oathLoss += Math.min(oath, room);
+      this.player.health = Math.min(this.player.health, this.player.maxHealth);
+      this.effects.shockwave(this.player.pos, THEME_OATH, 4, 0.4);
+    }
+    // EMERGENCY RATIONS. Exactly fifty, up OR down - it is a floor for a run
+    // that is losing and a ceiling for one that is winning, and which of those
+    // it is is the whole pick. Written directly rather than through heal(),
+    // because it is not a heal in either direction.
+    if (this.player.mods.rations > 0) {
+      this.player.health = Math.min(this.player.mods.rations, this.player.maxHealth);
+    }
+    // LAST BREATH re-arms with the wave, like the ward and the salvo below.
+    this.player.lastBreathUsed = false;
+    this.player.cleanKills = 0;
     this.waveDamageTaken = 0;
     this.player.armWard();
     // OPENING SALVO opens here, on the same signal the ward is armed on.
@@ -4248,6 +4357,378 @@ class Game {
     this.comboTimer = COMBO_WINDOW;
   }
 
+  // ---- THE SECOND POOL'S ARENA EFFECTS ------------------------------------
+
+  /**
+   * DELAYED FUSE. Parks a round on a body instead of dealing it.
+   *
+   * THE BODY IS HELD, NOT THE POINT. A fuse that went off where the shot landed
+   * would be a mine on the floor two seconds behind a moving enemy, which is a
+   * different item and a much worse one - the whole pick is that the round
+   * TRAVELS with what it stuck to. A body that dies in the meantime still owes
+   * the blast: it goes off at the last place the enemy stood, which is where
+   * the rest of the crowd is.
+   *
+   * The list is a plain array walked backwards. It never holds more than a
+   * couple of seconds of trigger, which even at Overwound's rate is a few dozen
+   * entries, and every one of them is removed by the same pass.
+   */
+  _stick(en, dmg, point) {
+    // THE RADIUS IS SNAPSHOTTED WITH THE ROUND, not read when it goes off. A
+    // fuse outlives the trigger pull by two seconds, and in versus that is long
+    // enough for a handover to replace the whole build underneath it - at which
+    // point `mods.fuseRadius` is the incoming player's, or zero, and a round
+    // already in flight would go off over nothing.
+    const delay = this.player.mods.fuseDelay;
+    // HOW FAR UP THE BODY THE ROUND WENT IN, as a height above the enemy's
+    // feet. `point` is where the pellet actually landed, so a shot to the head
+    // marks the head - which is the whole reason the dot is worth drawing ON
+    // the body rather than over it. Clamped off the floor and off the top, so a
+    // graze at the very edge of a hitbox still leaves a dot on the model.
+    const h = Math.min(
+      Math.max(point ? point.y - en.pos.y : en.radius * 1.6, 0.3),
+      Math.max(0.6, en.radius * 3.2)
+    );
+    this._fuses.push({
+      en,
+      dmg,
+      radius: this.player.mods.fuseRadius,
+      at: this.time + delay,
+      delay,
+      // WHERE ON THE BODY, kept as a HEIGHT off the enemy's feet rather than as
+      // a world point: the dot has to ride the body, and a body walks. Only the
+      // height is worth keeping - a horizontal offset would need the enemy's
+      // facing to stay meaningful as it turns, and a dot that slid around the
+      // model as it walked would read as a bug rather than as a round stuck in
+      // it.
+      h,
+      x: en.pos.x, y: en.pos.y, z: en.pos.z,
+      // A pip if one was free. -1 is a fuse the pool had no room for: it still
+      // explodes on time, it is simply unmarked, and because pips are handed
+      // out oldest-first the ones that go unmarked are the newest - which are
+      // also the ones with the longest left to run. See Effects.pipAcquire.
+      pip: this.effects.pipAcquire(),
+    });
+    // The tell, and it has to be a good one: this is the only shot in the game
+    // that lands and does nothing, so without a mark on the body the player
+    // reads two seconds of their own damage as the gun being broken.
+    this.effects.impact(en.pos, THEME_FUSE, 6, 3, 1.6, 0.3);
+  }
+
+  // The fuses coming due. Everything a stuck round is worth goes off over
+  // fuseRadius through the same blast every other explosion in the game uses -
+  // so armour facing, the ward and the Conduit's resistance all apply exactly
+  // as they would to a DETONATOR, and none of it needs saying twice.
+  _updateFuses(dt) {
+    // THE SOONEST FUSE, for the sound. Found on the way through rather than in
+    // a second pass, and used below.
+    let soon = null;
+    for (let i = this._fuses.length - 1; i >= 0; i--) {
+      const f = this._fuses[i];
+      // THE ROUND DIES WITH THE BODY IT IS STUCK IN. A fuse is not a mine on
+      // the floor and it is not a shot in the air - it is lodged in an enemy,
+      // so when that enemy comes apart the round goes with it. Anything else
+      // would leave the arena full of invisible delayed blasts going off at
+      // corpses that are no longer there, which is a mechanic the player has no
+      // way to see, predict or play around.
+      //
+      // It also closes the loop the pick would otherwise open: every round put
+      // into a body that something else finishes first would still be owed a
+      // blast, so a crowded wave would end in a minute of unattributable
+      // explosions. What is fired into a dying enemy is spent, exactly as it is
+      // for a shot that overkills one.
+      //
+      // TESTED HERE rather than hooked into the kill sweep, because `dead` is
+      // set the instant the killing blow lands (Enemy.takeDamage) whatever
+      // dealt it - a bullet, a blast, a poison tick, a turret, another fuse -
+      // and this sweep runs before the roster is compacted, so no death can be
+      // missed and none of them needs a line of its own.
+      if (f.en && f.en.dead) {
+        this._fuses.splice(i, 1);
+        this.effects.pipRelease(f.pip);
+        // A small puff where the dot was, so a round that is lost is SEEN to be
+        // lost. Without it the dots on a body that just died simply blink out,
+        // which reads as the marker being buggy rather than as the round being
+        // spent.
+        this.effects.impact(this._pipAt(f), THEME_FUSE, 5, 2.5, 1.4, 0.22);
+        continue;
+      }
+      // The dot rides the body. Read every frame rather than at the impact: a
+      // fuse in a chaser that walks ten metres has to go off on the chaser, and
+      // the marker has to be on it the whole way there. The point stuck on the
+      // fuse at `_stick` is only ever the fallback for the one frame a death is
+      // being handled in, above.
+      if (f.en) {
+        f.x = f.en.pos.x;
+        f.y = f.en.pos.y;
+        f.z = f.en.pos.z;
+      }
+      if (this.time >= f.at) {
+        this._fuses.splice(i, 1);
+        this.effects.pipRelease(f.pip);
+        this._fuseAt.set(f.x, f.y + f.h, f.z);
+        this._blast(this._fuseAt, f.dmg, f.radius, null, false);
+        this.effects.burst(this._fuseAt, THEME_FUSE, 14, 5, 2.4, 0.35);
+        this.effects.addShake(0.04);
+        this.sfx.fuseBlast();
+        continue;
+      }
+      if (!soon || f.at < soon.at) soon = f;
+      // ---- THE COUNTDOWN, DRAWN ------------------------------------------
+      //
+      // A round that sticks and does nothing for two seconds is the only shot
+      // in the game that lands with no feedback at all, and without this it
+      // reads as a broken gun rather than as a fuse. The dot says WHERE and the
+      // blink rate says WHEN, and neither needs a number.
+      //
+      // The rate ACCELERATES - three blinks a second when the round lands,
+      // twelve as it goes off - because that is the one cadence everybody
+      // already reads as "about to happen", and it works out of the corner of
+      // an eye in a way a shrinking bar or a fading colour does not.
+      if (f.pip < 0) continue;
+      const phase = (this._fuseSpan(f) * this._fuseRate(f)) % 1;
+      const p = this._fuseProgress(f);
+      // ON for the front of each period and OFF for the rest, rather than a
+      // sine: a dot that fades is a dot that is dim half the time, and what is
+      // being communicated is a COUNT. The lit fraction grows with the rate, so
+      // the dot is nearly solid by the end - which is what stops the fastest
+      // part of the countdown from reading as a flicker.
+      const on = phase < 0.35 + 0.35 * p;
+      // It GROWS as it counts down, as well as blinking faster. The dot is
+      // small on purpose - it sits on a body the player is also trying to shoot
+      // - and at range a half-metre sprite against a lit enemy is close to the
+      // limit of what reads at all, so the last half second is given the size
+      // as well as the rate. Additive, so the core saturates to white over any
+      // body colour the theme happens to be wearing; the tint is only ever the
+      // halo, which is what keeps it visible on the red themes.
+      this._pipAt(f);
+      this.effects.pipSet(
+        f.pip, this._fuseAt.x, this._fuseAt.y, this._fuseAt.z,
+        THEME_FUSE, on ? 1 : 0, PIP_SIZE + PIP_GROW * p
+      );
+    }
+    // ---- AND HEARD --------------------------------------------------------
+    //
+    // ONE COUNTDOWN, however many rounds are stuck. A held trigger keeps a
+    // dozen fuses running at once, each blinking on its own clock, and a blip
+    // per blink is a swarm of wasps rather than a count - so the ear gets the
+    // SOONEST fuse and nothing else. That is also the one the player needs:
+    // it is the next thing that is going to happen.
+    //
+    // The fuse is identified by its deadline, so a new soonest fuse restarts
+    // the count rather than inheriting the last one's blink index - which would
+    // swallow the first tick of the round that just became urgent.
+    if (!soon) {
+      this._fuseBeepAt = 0;
+      return;
+    }
+    const n = Math.floor(this._fuseSpan(soon) * this._fuseRate(soon));
+    if (soon.at !== this._fuseBeepAt || n !== this._fuseBeepN) {
+      this._fuseBeepAt = soon.at;
+      this._fuseBeepN = n;
+      this.sfx.fuseTick(this._fuseProgress(soon));
+    }
+  }
+
+  /**
+   * WHERE THE DOT IS DRAWN, into `_fuseAt`.
+   *
+   * The fuse itself lives at a point on the body's centre line, which is INSIDE
+   * the model - and a sprite still depth-tests even with `depthWrite` off, so
+   * drawn there it is simply behind the enemy and never seen. It is pulled
+   * toward the camera by a body radius so it sits on the near surface, facing
+   * whichever way the player happens to be standing.
+   *
+   * The depth test is deliberately KEPT: a fuse behind a pillar must not glow
+   * through it, or the dot stops being a thing in the world and becomes a HUD
+   * element that happens to be drawn in 3D - and a player would start reading
+   * it as a wallhack the pick never promised.
+   */
+  _pipAt(f) {
+    const v = this._fuseAt.set(f.x, f.y + f.h, f.z);
+    const c = this.camera.position;
+    const dx = c.x - v.x;
+    const dy = c.y - v.y;
+    const dz = c.z - v.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    // A body radius, plus a little. The enemy's own radius rather than a
+    // constant, because a colossus is three times a chaser and a dot floating a
+    // chaser's width off its chest would be nowhere near the surface.
+    const out = ((f.en && !f.en.dead ? f.en.radius : 0.5) + 0.15) / d;
+    v.set(v.x + dx * out, v.y + dy * out, v.z + dz * out);
+    return v;
+  }
+
+  // A fuse's three derived numbers, in one place so the dot and the tick can
+  // never disagree about where in its life a round is. `span` is time SINCE the
+  // round stuck, counted back from the deadline rather than forward from the
+  // impact, so every blink lands a fixed distance from the detonation and the
+  // last one is always the last one.
+  _fuseProgress(f) {
+    return Math.min(1, Math.max(0, 1 - (f.at - this.time) / f.delay));
+  }
+  _fuseRate(f) {
+    return FUSE_BLINK_MIN + (FUSE_BLINK_MAX - FUSE_BLINK_MIN) * this._fuseProgress(f);
+  }
+  _fuseSpan(f) {
+    return f.delay - (f.at - this.time);
+  }
+
+  // OVERKILL. What a killing blow was worth beyond the body it killed, handed
+  // to the nearest thing still standing inside overkillRange.
+  //
+  // ONE HOP, NEVER A CHAIN. The carried damage goes through hurtEnemy() rather
+  // than back through the pellet path, so a body it also kills carries nothing
+  // onward - otherwise a single rifle round into a packed wave would walk the
+  // whole room, which is ARC ROUNDS' job and at a fraction of this strength.
+  _carryOver(from, spill) {
+    if (!(spill > 0)) return;
+    const r2 = this.player.mods.overkillRange * this.player.mods.overkillRange;
+    let best = null;
+    let bestD = r2;
+    for (const e of this.enemies) {
+      if (e.dead || e === from) continue;
+      const dx = e.pos.x - from.pos.x;
+      const dz = e.pos.z - from.pos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD) { bestD = d2; best = e; }
+    }
+    if (!best) return;
+    this.hurtEnemy(best, spill);
+    this.effects.tracer(from.pos, best.pos);
+    this.effects.impact(best.pos, THEME_OVERKILL, 8, 3.5, 2, 0.3);
+  }
+
+  /**
+   * FEAR AURA. Five metres of personal space, enforced.
+   *
+   * THE LOCKOUT IS PER BODY AND IT IS THE WHOLE ITEM. Without it an enemy runs
+   * for five seconds, walks back in, and is made to run again - forever - which
+   * is not a passive item, it is a wall the player carries around with them.
+   * Thirty seconds means each enemy in a wave is pushed off the player roughly
+   * once, and the second time it arrives it stays.
+   *
+   * `fearAuraAt` is a field on the ENEMY and dies with it, so a fresh spawn is
+   * never inside someone else's cooldown.
+   */
+  _fearAura() {
+    const m = this.player.mods;
+    const r2 = m.fearAura * m.fearAura;
+    const p = this.player.pos;
+    let any = false;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      if (this.time - e.fearAuraAt < m.fearAuraCd) continue;
+      const dx = e.pos.x - p.x;
+      const dz = e.pos.z - p.z;
+      if (dx * dx + dz * dz > r2) continue;
+      e.fearAuraAt = this.time;
+      e.applyStatus('fear', m.fearAuraTime);
+      this.effects.impact(e.pos, THEME_FEAR, 10, 4, 2, 0.35);
+      any = true;
+    }
+    // The ring is drawn only when the aura actually CAUGHT something. On a
+    // quarter-second clock an unconditional shockwave would be four rings a
+    // second for the whole run, which is a permanent effect standing in for an
+    // occasional one - and the pool it comes out of is four deep and shared.
+    if (any) this.effects.shockwave(p, THEME_FEAR, m.fearAura, 0.35);
+  }
+
+  /**
+   * STATUS CONDUIT. Whatever is on the player is on the room.
+   *
+   * FOUR OF THE SIX PLAYER STATUSES HAVE AN ENEMY OPPOSITE and two do not:
+   * WEAKNESS and CURSE are both about what the PLAYER'S numbers do and there is
+   * nothing on an enemy for them to be. They are simply not in the table, which
+   * is the honest answer - the card says "such as burn, poison, freeze", and
+   * inventing an enemy-side curse to make the sentence come out even would be a
+   * second mechanic nobody asked for.
+   *
+   * The two damage-over-time effects are handed the player's OWN shot as their
+   * per-tick strength, exactly as VENOM and INCENDIARY are (see Player.dotHit),
+   * so a conduit build's burn is worth what the build's gun is worth.
+   */
+  _conduit() {
+    const m = this.player.mods;
+    const r2 = m.conduit * m.conduit;
+    const p = this.player.pos;
+    const hit = this.player.dotHit;
+    let any = false;
+    for (const [mine, theirs] of CONDUIT_MAP) {
+      const t = this.player.status[mine];
+      if (!(t > 0)) continue;
+      any = true;
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dx = e.pos.x - p.x;
+        const dz = e.pos.z - p.z;
+        if (dx * dx + dz * dz > r2) continue;
+        // The remaining time on the PLAYER, so an effect that is nearly over
+        // spreads as an effect that is nearly over. Capped at the tick rate's
+        // own second so a refresh cannot stack into a permanent status.
+        e.applyStatus(theirs, Math.min(t, CONDUIT_TICK * 2), hit);
+      }
+    }
+    if (any) this.effects.shockwave(p, THEME_CONDUIT, m.conduit, 0.3);
+  }
+
+  /**
+   * PANIC TURRET. LITTLE BROTHER's gun, thrown by being hit.
+   *
+   * IT IS THE ITEM'S OWN TURRET, unchanged - same class, same one-of-the-
+   * player's-shots per round, same beat. What differs is that it is PLACED
+   * rather than thrown (the player is being shot at, and a lob that landed
+   * across the room would be a turret they did not choose the position of) and
+   * that it lives ten seconds instead of fifteen.
+   *
+   * ITS OWN CAP, counted over the deployed list rather than kept as a number:
+   * a turret can be retired by MAX_DEPLOYED's eviction or by its own clock, and
+   * a counter would have to be decremented in both places. Five at once.
+   */
+  _panicTurret() {
+    const m = this.player.mods;
+    let live = 0;
+    for (const d of this._deployed) if (d.panic && !d.dead) live++;
+    if (live >= m.panicMax) return;
+    const p = this.player.pos;
+    // Beside the player rather than under them, so the thing they can see
+    // arriving is not inside their own feet. A metre and a half, in a random
+    // direction, which is close enough to be cover and far enough to be a gun.
+    const a = Math.random() * Math.PI * 2;
+    const t = new Turret(
+      this, p.x + Math.cos(a) * 1.5, p.z + Math.sin(a) * 1.5,
+      this.player.getEffectiveDamage(this.player.weapon.damage)
+    );
+    t.panic = true;
+    t.life = m.panicLife;
+    this.deploy(t);
+    this.sfx.itemDeploy();
+  }
+
+  /**
+   * SHARED PAIN. One blow, split evenly over everything alive.
+   *
+   * Called from inside Enemy.takeDamage with the hook up (see setShareHook
+   * there), which is why it does not need to know what dealt the damage: every
+   * bullet, blast, poison tick, turret round and reflected hit in the game
+   * already funnels through that one method.
+   *
+   * THE SLICE GOES THROUGH takeDamage LIKE ANY OTHER HIT, so each body's own
+   * armour, ward, freeze vulnerability and mark still apply to its share. Ten
+   * enemies taking five each is ten ordinary five-point hits, not one fifty
+   * split by fiat - which is what makes the pick read correctly against every
+   * defensive mechanic the roster has.
+   */
+  _sharePain(d, silent) {
+    let n = 0;
+    for (const e of this.enemies) if (!e.dead) n++;
+    if (n <= 0) return;
+    const slice = d / n;
+    for (const e of this.enemies) {
+      if (!e.dead) e.takeDamage(slice, silent);
+    }
+  }
+
   // Reactive Plating. Detonates around the player when they are hit; damage
   // and radius both come from the mods so extra stacks widen it.
   // THORNS. Half of what an attacker just dealt goes straight back into it.
@@ -4600,6 +5081,21 @@ class Game {
       if (en.hitTally % m.telltale === 0) crit = true;
     }
     en.everHit = true;
+    // WEAK POINT. Its own tally, not TELLTALE's - see the note beside
+    // markTally in enemy.js - and once a body is marked it stays marked for
+    // the rest of its life, so this stops counting the moment it lands.
+    if (m.markHits > 0 && !en.marked) {
+      en.markTally++;
+      if (en.markTally >= m.markHits) {
+        en.marked = true;
+        this.effects.shockwave(en.pos, THEME_MARK, Math.max(1.2, en.radius * 2.4), 0.3);
+        this.effects.burst(en.pos, THEME_MARK, 12, 4, 2, 0.35);
+      }
+    }
+    // CRITICAL OVERFLOW asks one question about the whole trigger pull - did
+    // this shot crit - and a crit is only ever resolved against a BODY, so the
+    // answer is collected here and settled once in shoot().
+    if (crit) this._shotWasCrit = true;
     this._shotCrit.set(en, crit);
     return crit;
   }
@@ -4656,10 +5152,27 @@ class Game {
       this.effects.impact(point, 0xc9d2dd, burst, 2.5, 1.2, 0.26);
       return;
     }
-    // `point` is handed on so a placed shield - the Bulwark's buckler - can
-    // test where on the body the pellet actually landed, not just which way it
-    // was travelling.
-    en.takeDamage(dealt, false, dir.x, dir.z, point, crit);
+    // DELAYED FUSE. The round STICKS: no damage now, and in two seconds
+    // whatever it was worth goes off over a small area at wherever the body has
+    // got to. Everything below this line still happens on contact - the status,
+    // the chain, the shove - because those are what the ROUND does, and the
+    // pick only ever moved when the damage lands.
+    if (m.fuseDelay > 0) {
+      this._stick(en, dealt, point);
+    } else {
+      // `point` is handed on so a placed shield - the Bulwark's buckler - can
+      // test where on the body the pellet actually landed, not just which way
+      // it was travelling.
+      //
+      // OVERKILL reads the health the body had BEFORE the blow, because
+      // takeDamage keeps no remainder: the pellet is worth what it is worth,
+      // and what did not fit is what walks to the next body.
+      const before = en.hp;
+      en.takeDamage(dealt, false, dir.x, dir.z, point, crit);
+      if (m.overkill > 0 && en.dead && dealt > before) {
+        this._carryOver(en, dealt - before);
+      }
+    }
     // NO PARTICLES ON A HIT. A shot landing on an enemy is already the most
     // confirmed event in the game - the hitmarker, the body's flash and the
     // health bar all say so - and a spray on top of that was three signals for
@@ -4919,6 +5432,22 @@ class Game {
     if (res !== 'shot') return;
 
     const mods = this.player.mods;
+    // CASH CANNON. The round was fired on credit inside tryShoot, which has no
+    // wallet to reach for; this is where the wallet is. The coin is deliberately
+    // the ORB's sound - the player already knows it as the noise money makes -
+    // and it plays on the shot rather than on the balance, so a magazine bought
+    // with cash sounds like one.
+    if (this.player.cashOwed > 0) {
+      this.credits = Math.max(0, this.credits - this.player.cashOwed);
+      this.player.cashOwed = 0;
+      this._creditsDirty = true;
+      this.sfx.credits();
+      this.sfx.coin();
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), 0xffd600, 8, 3.5, 1.8, 0.3
+      );
+      this.ui.flashReserve();
+    }
     // Breach Round. The reload arms it and this shot spends it, whether or not
     // it hits anything - a wasted breach round is the cost of firing one at
     // nothing, and it re-arms on the next reload either way.
@@ -4928,6 +5457,18 @@ class Game {
     // Cursed Ammo, rolled once per trigger pull. The floor is what keeps it
     // playable: a held trigger must never be able to kill you on its own.
     let dmgMult = 1;
+    // CANNONADE. The first round out of a fresh magazine, and only the first:
+    // `magFresh` is raised where the rounds actually arrive (the reload's last
+    // frame, and CHAIN FEED's instant one) and dropped by the trigger.
+    const cannon = mods.firstShot > 0 && this.player.shotWasFresh;
+    if (cannon) {
+      dmgMult *= mods.firstShot;
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), THEME_CANNON, 18, 6, 3, 0.4
+      );
+      this.effects.addShake(0.18);
+      this.pad.rumble(0.7, 0.4, 220, 2);
+    }
     if (mods.cursedChance > 0 && this.player.health > 1
       && Math.random() < mods.cursedChance) {
       this.player.health = Math.max(1, this.player.health - 1);
@@ -4991,6 +5532,7 @@ class Game {
     this._reflected = false;
     this._shotCrit.clear();
     this._blastHit = false;
+    this._shotWasCrit = false;
     // Twenty/Twenty fires the whole pellet pattern twice off one round. The
     // dedup set is NOT cleared between volleys - both barrels are one trigger
     // pull, so an enemy caught by both still takes one dose of status.
@@ -4998,6 +5540,23 @@ class Game {
       for (let i = 0; i < w.pellets; i++) {
         if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
       }
+    }
+    // ECHO CHAMBER. Every fourth trigger pull fires the pattern a second time
+    // at half strength, off no magazine at all.
+    //
+    // The dedup sets are NOT cleared between the shot and its echo, exactly as
+    // they are not cleared between TWENTY/TWENTY's two volleys and for the same
+    // reason: this is one trigger pull, so a body caught by both still takes
+    // one dose of status and sets off one DETONATOR blast.
+    if (mods.echoEvery > 0 && this.player.shotTally % mods.echoEvery === 0) {
+      for (let v = 0; v < mods.volley; v++) {
+        for (let i = 0; i < w.pellets; i++) {
+          if (this._firePellet(muzzle, targets, spread, w, dmgMult * mods.echoDamage, crit)) {
+            hitAny = true;
+          }
+        }
+      }
+      this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
     }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
@@ -5008,8 +5567,49 @@ class Game {
       this._blast(this._lastImpact, mods.chargeDamage, mods.chargeRadius, null, false);
       this.effects.addShake(0.2);
     }
+    // LUCKY STREAK's body, read BEFORE the dedup set is emptied. One trigger
+    // pull is one entry in it however many pellets landed, which is exactly the
+    // grain the streak counts in - and the first entry is the body the shot was
+    // aimed at, because that is the one the raycast reached first.
+    if (mods.luckyStep > 0) {
+      let first = null;
+      for (const en of this._shotHits) { first = en; break; }
+      this.player.bumpLucky(first);
+    }
+    // CRITICAL OVERFLOW settles once, on the answer the BODIES gave. A shot
+    // that touched nothing crit nothing and pays the non-crit price, which is
+    // the honest reading: what it refunds is a crit, not a die roll.
+    if (mods.critOverflow > 0) this.player.settleShot(this._shotWasCrit);
+    // CHAIN FEED. The magazine is seated again with no reload at all - but only
+    // if this shot both EMPTIED it and killed something. `magAtShot` is what
+    // the trigger saw and `lastShotCost` what it billed, which is the one pair
+    // that answers "was that the last round" for every build.
+    if (mods.chainFeed > 0 && this.player.lastShotCost > 0
+      && this.player.magAtShot <= this.player.lastShotCost) {
+      let killed = false;
+      for (const en of this._shotHits) if (en.dead) { killed = true; break; }
+      if (killed && this.player.instantReload()) {
+        this.sfx.reload();
+        this.effects.burst(muzzle, THEME_CHAIN, 14, 4.5, 2.2, 0.32);
+        this.pad.rumble(0.4, 0.35, 120, 1);
+        this.ui.flashReserve();
+      }
+    }
     this._shotHits.clear();
     this._shotCrit.clear();
+
+    // AIM OR BLEED. Per SHOT and off the same boolean the hitmarker is drawn
+    // from, so what it charges is always what the player just saw. The floor of
+    // 1 is CURSED AMMO's, for the same reason: a held trigger pointed at a wall
+    // must not be able to kill you on its own.
+    if (mods.aimHeal > 0 || mods.missCost > 0) {
+      if (hitAny) {
+        this.player.heal(mods.aimHeal);
+      } else if (mods.missCost > 0 && this.player.health > 1) {
+        this.player.health = Math.max(1, this.player.health - mods.missCost);
+        this.ui.damage();
+      }
+    }
 
     // Hot Streak rides the SHOT, not the pellet: one trigger pull is one step
     // up or one step down however many pellets were in it, and it reads the
@@ -5215,6 +5815,25 @@ class Game {
     this.player.clearCarnage();
     this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
+    // KILL STREAK's counter, broken by the same hit that breaks the flawless
+    // streak below - "without taking damage" means the same thing to both.
+    this.player.cleanKills = 0;
+    // BRUISE ROUNDS. A full magazine for a hit, made rather than moved: the
+    // reserve is never touched, which is what makes it worth having to a build
+    // that is out of both at once.
+    if (this.player.mods.bruise > 0 && this.player.mag < this.player.magSize) {
+      this.player.mag = this.player.magSize;
+      this.player.reloading = 0;
+      // A fresh magazine is a fresh magazine, so CANNONADE's round is armed by
+      // it - the rounds arrived, which is the only question that pick asks.
+      this.player.magFresh = true;
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), THEME_BRUISE, 12, 4, 2, 0.3
+      );
+      this.ui.flashReserve();
+    }
+    // PANIC TURRET, placed by the hit that just landed.
+    if (this.player.mods.panicTurret > 0) this._panicTurret();
     // What LANDED, not what was thrown: curse is applied inside takeDamage.
     // Books the damage and breaks the flawless streak - see _noteDamage.
     this._noteDamage();
@@ -5829,7 +6448,10 @@ class Game {
     const box = this.mysteryBox;
     if (!box.active) return;
     const cost = this._boxCost();
-    box.setPrice('$' + cost, this.credits >= cost);
+    // Affordable to a HIGH STAKES run whatever the balance is - the coin pays,
+    // not the wallet. See _gambleTill.
+    const stakes = this.player.mods.highStakes > 0;
+    box.setPrice('$' + cost, stakes || this.credits >= cost);
   }
 
   // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
@@ -5864,7 +6486,51 @@ class Game {
   // Takes the payment for a reroll. The caller has already established the
   // player can afford it.
   _payReroll(cost) {
+    if (this._gambleTill()) return;
     this.credits -= cost;
+  }
+
+  /**
+   * HIGH STAKES, and it is ONE method because it has to be one rule.
+   *
+   * The reroll console and the mystery box are two different tills charging two
+   * different ladders, and the card makes one promise about both - so the coin
+   * is tossed here and both callers ask it the same question. A second copy of
+   * this at the box would be the exact place the odds quietly drifted apart.
+   *
+   * NINE TIMES IN TEN THE PURCHASE IS SIMPLY FREE. The tenth takes the run down
+   * to one health and one round - not a death, and deliberately not: what makes
+   * this a gamble rather than a coin-flip-for-the-run is that the player walks
+   * out of the shop alive and has to survive the next wave on nothing.
+   *
+   * @returns {boolean} whether the till was covered by the gamble. False means
+   *   the caller charges its own price as it always did.
+   */
+  _gambleTill() {
+    const m = this.player.mods;
+    if (!(m.highStakes > 0)) return false;
+    if (Math.random() < m.stakesOdds) {
+      this.player.health = 1;
+      this.player.shield = 0;
+      this.player.shieldEnd = 0;
+      this.player.mag = Math.min(1, this.player.magSize);
+      this.player.reserveAmmo = 0;
+      this.player.reloading = 0;
+      this.effects.shockwave(this.player.pos, THEME_STAKES, 8, 0.6);
+      this.effects.burst(
+        this.player.eyeInto(this._killPos), THEME_STAKES, 34, 7, 3, 0.8
+      );
+      this.effects.addShake(0.4);
+      this.sfx.hurt();
+      this.pad.rumble(0.9, 0.5, 400, 3);
+      this.ui.damage();
+      this.rig.cueDamage();
+      this.ui.banner('HIGH STAKES');
+      // The hit is not billed against the flawless streak: nothing in the
+      // arena touched the player, they pulled a lever. Same reading as an
+      // item's own health cost - see `pay` in js/items.js.
+    }
+    return true;
   }
 
   /**
@@ -5899,8 +6565,11 @@ class Game {
       this.credits >= ammo && AMMO_PURCHASE.enabled(this.player)
     );
     const cost = this._rerollCost();
+    // Lit for a HIGH STAKES run whatever the balance says, because for that run
+    // the price is not what decides - the coin is.
+    const stakes = this.player.mods.highStakes > 0;
     area.rerollStation.setLabel(
-      'REROLL', this._priceLabel(cost), this.credits >= cost && area.active
+      'REROLL', this._priceLabel(cost), (stakes || this.credits >= cost) && area.active
     );
   }
 
@@ -5919,6 +6588,14 @@ class Game {
     if (!this.player.takeUpgrade(offer.id)) return;
     totem.claimed = true;
 
+    // SACRIFICE ate one of the others on the way in - see Player.takeUpgrade -
+    // and it has to SAY WHICH. A pick that silently deleted part of the build
+    // would read as a bug the next time the player opened the sheet, and by
+    // then they would have no way to know what was gone.
+    if (this.player.sacrificed) {
+      this.ui.banner('SACRIFICED  ' + this.player.sacrificed);
+      this.player.sacrificed = null;
+    }
     this.effects.burst(
       this._killPos.set(totem.pos.x, 1.4, totem.pos.z), offer.theme, 30, 7, 2.5, 0.7
     );
@@ -5962,15 +6639,21 @@ class Game {
   _buyBoxRoll() {
     const box = this.mysteryBox;
     const cost = this._boxCost();
-    if (!box.canBuy || this.credits < cost) {
+    // HIGH STAKES pays for the roll, so it also answers the question "can you
+    // afford one" - a player carrying it can always pull the lever, which is
+    // what makes the one time in ten a real risk rather than a discount they
+    // were saving up for anyway. See _gambleTill.
+    const stakes = this.player.mods.highStakes > 0;
+    if (!box.canBuy || (!stakes && this.credits < cost)) {
       this.sfx.denied();
       // A refusal has to be felt, or a player who cannot afford something
       // presses again and again into silence.
       this.pad.rumble(0.15, 0.5, 60, 1);
       return;
     }
-    // CREDITS ONLY, never _payReroll - see the note in _boxCost.
-    this.credits -= cost;
+    // CREDITS ONLY, never _payReroll - see the note in _boxCost. The gamble is
+    // asked first and, when it covers the roll, nothing is charged at all.
+    if (!this._gambleTill()) this.credits -= cost;
     // Counted AFTER the charge, so the roll being paid for is priced at what
     // the player was shown and the next one is the one that costs double.
     this.totemArea.boxRolls++;
@@ -6209,7 +6892,9 @@ class Game {
     }
     const cost = this._rerollCost();
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
-    if (this.credits < cost) return 'NEED $' + cost;
+    // HIGH STAKES pays the till, so the wallet is not what stands between the
+    // player and a reroll - see _gambleTill. The same rule the box follows.
+    if (this.player.mods.highStakes <= 0 && this.credits < cost) return 'NEED $' + cost;
     return null;
   }
 
@@ -6387,6 +7072,10 @@ class Game {
   // as it is when a totem is walked into.
   _debugGivePassive(id) {
     if (!this.player.takeUpgrade(id)) return;
+    // SACRIFICE ate something on the way in and left its name behind for the
+    // totem's banner. There is no totem here, so the note is dropped rather
+    // than left to fire on the next pick the player claims for real.
+    this.player.sacrificed = null;
     this._debugRefresh();
     this.sfx.menuMove();
   }
@@ -6606,6 +7295,12 @@ class Game {
   // redrawing four station labels per orb is exactly the kind of thing that
   // turns a reward into a stutter.
   _updateMoney(dt) {
+    // AUTO-LOOT. The wave-clear sweep, never switched off - so an orb is
+    // claimed by the frame after it is thrown and the floor is never something
+    // the player has to walk back over. vacuum() only ever moves an orb that is
+    // not already coming, so calling it every frame costs one pass over a list
+    // the update below is walking anyway.
+    if (this.player.mods.autoLoot > 0) this.money.vacuum();
     const got = this.money.update(
       dt, this.player.pos, this._magnetRadius(), this._onOrb
     );
@@ -6897,8 +7592,36 @@ class Game {
       // waited to start.
       // A flat bounty wins over the value-derived figure where one is set -
       // see Enemy.bounty. The melee double rides on both.
-      const bounty = e.bounty !== null ? e.bounty : e.value * CREDITS_PER_VALUE;
+      // PAYDAY. A flat hundred a body, dropped as orbs like every other credit
+      // in the game rather than banked straight into the balance - the money
+      // economy is a thing on the FLOOR, and a payout that skipped the floor
+      // would be the one source the magnet, LODESTONE and AUTO-LOOT never see.
+      //
+      // It is added to the bounty rather than dropped separately so it goes
+      // through the same creditMult and flawless streak everything else does,
+      // which is what keeps the card's "+$100" a number the player can check
+      // against the orbs that actually land.
+      const payday = this.player.mods.killCredits;
+      const bounty =
+        (e.bounty !== null ? e.bounty : e.value * CREDITS_PER_VALUE) + payday;
       const paid = this._dropMoney(e.pos, bounty * meleeMult);
+      // KILL STREAK. Twenty bodies since the last hit taken - the counter is
+      // reset by _hurtPlayer, so this is a stretch of good play inside a wave
+      // rather than a whole clean wave, which is what NO-HIT BONUS already pays.
+      if (this.player.mods.killStreak > 0) {
+        this.player.cleanKills++;
+        if (this.player.cleanKills >= this.player.mods.killStreak) {
+          this.player.cleanKills = 0;
+          this.player.heal(this.player.mods.streakHeal);
+          this.player.reserveAmmo = Math.min(
+            this.player.maxReserve, this.player.reserveAmmo + this.player.mods.streakAmmo
+          );
+          this.sfx.pickupHealth();
+          this.ui.flashReserve();
+          this.ui.banner('KILL STREAK');
+          this.effects.shockwave(this.player.pos, THEME_KILLSTREAK, 5, 0.45);
+        }
+      }
       // WHAT THE ITEM IS OWED FOR IT, held against the orbs just thrown.
       // Deliberately read off `value` and not off the bounty: the melee double
       // and the flawless streak are MONEY, and money is not what charges an
@@ -7440,6 +8163,9 @@ class Game {
     // and completely reliable way to lose a Carnage chain. That is correct:
     // standing in fire is being hit.
     this.player.clearCarnage();
+    // KILL STREAK's counter goes with Carnage's, for the same reason: standing
+    // in fire is being hit, and the card says "without taking damage".
+    this.player.cleanKills = 0;
     const h = this.player.takeDamage(d, this.time);
     // Standing in fire is being hit, for the streak as much as for Carnage.
     this._noteDamage();
@@ -7937,6 +8663,18 @@ class Game {
       }
 
       this._updateWave(dt);
+      // METRONOME's gate. A whole beat - not the upbeat between two - raises
+      // the flag, and letting go of the trigger drops it, which is what makes
+      // the first shot of a burst wait for the NEXT beat rather than leaving on
+      // one that went by while the player was reloading. See Music.pulseWhole
+      // and Player.tryShoot; a run without the pick never reads either.
+      if (this.player.mods.metronome > 0) {
+        if (this.music.pulse !== this._metroPulse) {
+          this._metroPulse = this.music.pulse;
+          if (this.music.pulseWhole) this.player.beatShot = true;
+        }
+        if (!this.input.shoot) this.player.beatShot = false;
+      }
       if (this.input.shoot) this.shoot();
       // One press is one frame of freshness: a semi-auto click made during the
       // fire cooldown is dropped, not queued.
@@ -7974,6 +8712,41 @@ class Game {
       if (dot > 0) this._hurtPlayerDot(dot);
       this._updateMortars(dt);
       this._updatePoisonSpread(dt);
+      // DELAYED FUSE, before the enemy sweep for the reason the ash and the
+      // poison spread are: a body killed by a fuse this frame is collected by
+      // the sweep this frame rather than drawn for one more.
+      if (this._fuses.length) this._updateFuses(dt);
+      // FEAR AURA and STATUS CONDUIT, on their own quarter-second clock.
+      if (this.player.mods.fearAura > 0) {
+        this._auraT -= dt;
+        if (this._auraT <= 0) { this._auraT = CONDUIT_TICK; this._fearAura(); }
+      }
+      if (this.player.mods.conduit > 0) {
+        this._conduitT -= dt;
+        if (this._conduitT <= 0) { this._conduitT = CONDUIT_TICK; this._conduit(); }
+      }
+      // SHARED PAIN's hook, put up and taken down with the pick rather than
+      // tested inside Enemy.takeDamage - which is on the hot path for every
+      // point of damage in the game.
+      const share = this.player.mods.sharedPain > 0;
+      if (share !== this._shareOn) {
+        this._shareOn = share;
+        setShareHook(share ? this._onShare : null);
+      }
+      // GRAY MATTER. Written on the frame it changes and never again.
+      const mono = this.player.mods.mono > 0;
+      if (mono !== this._monoOn) {
+        this._monoOn = mono;
+        this.crt.setMono(mono);
+      }
+      // LAST BREATH's one-shot, the same split jumpFx and dashFx use: the
+      // player class has no audio and no HUD to reach for.
+      if (this.player.ammoFx) {
+        this.player.ammoFx = false;
+        this.sfx.pickupAmmo();
+        this.ui.flashReserve();
+        this.effects.shockwave(this.player.pos, THEME.lastBreath, 4, 0.4);
+      }
       // The running items tick BEFORE the enemy sweep, so anything SUTURE
       // ENGINE heals or BODY COUNT is multiplying is already true for the
       // frame the enemies are updated in - and so an item that expires this

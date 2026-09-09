@@ -141,6 +141,10 @@ const COMPOSITE_FRAG = /* glsl */ `
   uniform float uGlow;
   uniform float uLevels;
   uniform float uPixel;
+  // GRAY MATTER. 0 for every run that has not taken it, and the whole branch
+  // costs one mix() on a pass that is already running - which is why the pick
+  // is a uniform here rather than a second material or a fifth pass.
+  uniform float uMono;
   varying vec2 vUv;
 
   // Ordered dither, 4x4. Built by recursion rather than read out of a const
@@ -168,6 +172,17 @@ const COMPOSITE_FRAG = /* glsl */ `
     );
 
     col += texture2D(tGlow, uv).rgb * uGlow;
+
+    // Desaturated HERE - scene-referred, above the tone curve and above the
+    // posterise - so the grey the player sees is dithered and banded exactly
+    // the way the colour image is. Below the posterise it would be a flat grey
+    // wash over an image that had already been quantised in colour, which
+    // reads as a filter laid on top of the game rather than as the game.
+    //
+    // Rec. 709 luma, not an average: an average turns this game's cyan HUD and
+    // red damage into the same grey, and the whole cost of the pick is that
+    // the player has to read the room by BRIGHTNESS.
+    col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), uMono);
 
     // ACES, by hand, here rather than in the scene's own materials. three
     // SKIPS tone mapping whenever a render target is bound (WebGLRenderer
@@ -266,6 +281,7 @@ export class CrtPass {
         uGlow: { value: GLOW_STRENGTH },
         uLevels: { value: LEVELS },
         uPixel: { value: 1 },
+        uMono: { value: 0 },
       },
       vertexShader: QUAD_VERT,
       fragmentShader: COMPOSITE_FRAG,
@@ -391,6 +407,16 @@ export class CrtPass {
     this._quad.material = material;
     this.renderer.setRenderTarget(target);
     this.renderer.render(this._scene, this._camera);
+  }
+
+  /**
+   * GRAY MATTER's switch. 0 is the ordinary picture and 1 is the whole game in
+   * grey; main.js writes it once a frame off `mods.mono`, so a versus handover
+   * takes the colour away and gives it back with the build and nothing here
+   * has to know that runs can swap.
+   */
+  setMono(on) {
+    this._composite.uniforms.uMono.value = on ? 1 : 0;
   }
 
   render(scene, camera) {

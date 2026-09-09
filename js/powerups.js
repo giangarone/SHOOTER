@@ -115,8 +115,14 @@ export const AMMO_PICKUP = {
   chance: 0.06,
   needy: 0.06,
   icon: 'pickAmmo',
+  // AMMO SURPLUS. The multiplier is read off the player rather than baked into
+  // `amount` above, because `amount` is what the pickup IS - it is read by the
+  // drop's need-scaling and by the HUD's "+45 ROUNDS" - and a pickup that
+  // changed its own advertised size when a totem was claimed would be a
+  // different pickup. What the pick changes is what walking over one is worth.
   apply: (player) => {
-    player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 45);
+    const got = Math.round(45 * (player.mods ? player.mods.ammoPickupMult : 1));
+    player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + got);
   },
   sfx: 'pickupAmmo',
 };

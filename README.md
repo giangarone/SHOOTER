@@ -647,13 +647,13 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 91 upgrades and **the draw is flat** - every one of them has exactly
+The pool is 132 upgrades and **the draw is flat** - every one of them has exactly
 the same chance of appearing. It used to be weighted three ways, with rares
 locked out before wave 2 and cursed before wave 3, and two things were wrong
 with that: the player could not see it (the totem stopped printing a rarity line
 long ago), and the labels had stopped describing the pool anyway, because nearly
 every passive item added since the pool doubled got filed `rare` or `cursed` on
-feel. A specific upgrade turns up in roughly 3% of totem sets, so a run sees a
+feel. A specific upgrade turns up in roughly 2% of totem sets, so a run sees a
 slice of the pool rather than all of it - that is the point, but it means a new
 upgrade only matters if it is worth taking on sight, without a partner card.
 
@@ -840,6 +840,190 @@ still charges health, and it charges it as
 `mods.maxHpFlat` rather than as a payment, because `rebuildMods()` replays the
 owned list from fresh defaults after every pick and a price paid once could not
 survive that.
+
+### The second pool
+
+Forty-one more max-1 picks, and what holds them together is that almost every
+one of them names a **moment** rather than a number: the first round out of a
+magazine, the second before you fired, the fourth shot, the beat, the frame you
+were hit on, the wave boundary. The pool above is mostly "how much"; this is
+mostly "when", which is the axis a player can actually play around once they
+have learnt it.
+
+Every one of them weighs itself. A free upgrade in a flat draw is a totem the
+player never has to think at, so the ones that are simply strong - HEAVY HAND,
+BLOOD OATH, BONE MARROW, GRAY MATTER - are sold for something the build actually
+wanted, and the ones that are conditional are allowed to be unconditionally good
+inside their condition.
+
+**Rate of fire**
+
+| Upgrade | Effect |
+| --- | --- |
+| MACHINE SPIRIT | +5% fire rate per second of held trigger, to +50%. Let go and it is gone |
+| OVERWOUND | +40% fire rate, -30% reload speed |
+| HIPSHOT | 2x fire rate from the hip, 0.5x down the sights |
+| METRONOME | The trigger fires on the beat and nowhere else, at 4x damage. The fire rate stat does nothing |
+| ECHO CHAMBER | Every 4th shot fires a duplicate at half damage, off no ammunition |
+
+METRONOME is the player joining the machinery fire, poison and every sentry gun
+already ride. `Music.pulse` is a half-beat edge and `pulseWhole` separates the
+downbeat from the upbeat; the gun gates on the whole beat, so `fireCd` stops
+being what the trigger asks and `Player.beatShot` - raised on the pulse edge in
+the frame loop, dropped the moment the trigger is released - takes its place.
+Releasing the trigger is what makes the first shot of a burst wait for the NEXT
+beat rather than leaving on one that went by during a reload.
+
+**Damage**
+
+| Upgrade | Effect |
+| --- | --- |
+| CANNONADE | The first shot of every magazine deals 10x |
+| HEAVY HAND | +60% damage, -40% fire rate |
+| WEAK POINT | 3 hits mark an enemy; marked enemies take +50% from every source |
+| OVERKILL | Damage past a kill carries to the nearest enemy within 5m |
+| BLOOD OATH | +100% damage, -5 max HP at every wave start, stopping at 50 max |
+| SHARED PAIN | All damage dealt is split evenly over every living enemy |
+| GRAY MATTER | +10 max HP and +10% damage, fire rate and move speed. The world goes grey |
+| SACRIFICE | +10% damage and fire rate, and one random passive item is destroyed |
+| BOTTOM FEEDER | Reloading from empty: +20% damage for 5s |
+
+SHARED PAIN cannot be a multiplier on a hit, because it is a decision that the
+hit is not landing where it was aimed. `Enemy.takeDamage` is the one place hp
+ever moves, so it takes a module-level hook (`setShareHook`) that main.js puts up
+and takes down with the pick - a run without it pays one null test - and the
+hook deals an even slice to every living body through that same method, with a
+recursion guard up. Each share still goes through its own armour, ward, freeze
+vulnerability and mark, which is what makes the pick read correctly against
+every defensive mechanic the roster has.
+
+WEAK POINT keeps its own tally (`Enemy.markTally`) rather than sharing
+TELLTALE's: that one counts whether or not the hit was already a crit, so a
+build holding both would mark bodies on the wrong hit. The mark is permanent,
+dies with the body, and is worth a flat 1.5x applied last in `takeDamage` -
+after armour, after the Conduit's resistance - because the card says "from all
+sources".
+
+SACRIFICE is the only entry in either pool that changes the LIST rather than the
+stats built from it, so the removal happens once in `Player.takeUpgrade` and not
+in an `apply()`. An `apply()` that dropped an upgrade would drop another one
+every time the player took anything at all, because `rebuildMods()` replays the
+whole owned list from fresh defaults after every pick.
+
+**Ammunition and money**
+
+| Upgrade | Effect |
+| --- | --- |
+| PAYDAY | +$100 per kill, -10% damage |
+| AMMO SURPLUS | Ammo pickups grant 30% more rounds |
+| HIGH STAKES | Rerolls and box rolls cost nothing 90% of the time; 10% they drop you to 1 HP and 1 ammo |
+| BRUISE ROUNDS | Taking damage fills the magazine with free rounds |
+| CHAIN FEED | Killing with the last round of a magazine reloads it instantly |
+| BELT FED DREAM | No magazine and no reload. Every shot takes 2 rounds off the reserve |
+| CASH CANNON | Out of ammunition, the gun keeps firing at $10 a shot |
+| LAST BREATH | Dropping below 20 HP refills the ammo reserve, once per wave |
+| AUTO-LOOT | The wave-clear sweep never switches off, and every credit is worth half |
+| CRITICAL OVERFLOW | Crits deal +50% and refund a round; non-crits cost one more |
+
+HIGH STAKES is one method (`Game._gambleTill`) asked by both tills, because the
+card makes one promise about two different price ladders and a second copy is
+exactly where the odds would quietly drift apart. The affordability check goes
+with the price: a player carrying it can always pull the lever, which is what
+makes the tenth pull a risk rather than a discount they were saving up for.
+
+PAYDAY's hundred is dropped as orbs like every other credit in the game rather
+than banked straight into the balance - the money economy is a thing on the
+FLOOR, and a payout that skipped the floor would be the one source the magnet,
+LODESTONE and AUTO-LOOT never see.
+
+**Staying alive**
+
+| Upgrade | Effect |
+| --- | --- |
+| IRON LUNG | Immune to every status effect, -30% healing |
+| LIFELINE | At 25 HP or below, regenerate 5 HP/s |
+| BONE MARROW | +100 max health, -50% healing |
+| HEALTHY CORE | Regenerate 1 HP/s always, and nothing else may heal you at all |
+| EMERGENCY RATIONS | Every wave starts at exactly 50 HP. +50% healing |
+| FINAL DOSE | Reloading with exactly 1 round left heals 5 HP |
+| AIM OR BLEED | Hits heal 1 HP, misses cost 1 HP, never below 1 |
+| KILL STREAK | 20 kills without taking damage: heal 5 HP and +10 reserve |
+| VITAL TRIGGER | Using the active item also heals 5 HP |
+| TIRELESS | Unlimited stamina |
+
+Five of these move healing, which is why `mods.healMult` and `mods.healBlock`
+are read inside `Player.heal` - the one place health has gone up since OVERDRAW
+made fourteen scattered `Math.min` calls wrong. A heal added anywhere later is
+covered by all five without anyone having to remember it. HEALTHY CORE's own
+trickle writes `health` directly, because `heal()` is exactly what that pick
+switches off.
+
+**What happens around you**
+
+| Upgrade | Effect |
+| --- | --- |
+| PANIC TURRET | Taking damage drops a turret for 10s, up to 5 at once |
+| DELAYED FUSE | Shots stick and explode 2 seconds later for their own damage over a small area. A round in a body that dies first is lost with it |
+| FEAR AURA | Enemies within 5m flee for 5s, once every 30s each |
+| STATUS CONDUIT | Status effects on you are applied to enemies within 5m |
+
+FEAR AURA's per-enemy lockout is the whole item. Without it an enemy runs for
+five seconds, walks back in and is made to run again, forever - which is not a
+passive item, it is a wall the player carries around. `Enemy.fearAuraAt` dies
+with the body, so a fresh spawn is never inside someone else's cooldown.
+
+DELAYED FUSE holds the BODY, not the point: a fuse that went off where the shot
+landed would be a mine on the floor two seconds behind a moving enemy. The
+radius is snapshotted with the round, because a fuse outlives its trigger pull
+by long enough for a versus handover to replace the build underneath it.
+
+**The round dies with the body it is stuck in.** It is not a mine and it is not
+a shot in the air - it is lodged in an enemy, so when that enemy comes apart the
+round goes with it and the blast is never owed. Anything else leaves the arena
+full of invisible delayed explosions going off at corpses that are no longer
+there, which is a mechanic the player cannot see, predict or play around; and
+because a crowded wave kills most bodies before their fuses are due, it would
+end in a minute of unattributable blasts. What is fired into a dying enemy is
+spent, exactly as it is for a shot that overkills one. The test is a single
+`f.en.dead` in the fuse sweep rather than a hook in the kill sweep, because
+`dead` is set the instant the killing blow lands whatever dealt it - a bullet, a
+blast, a poison tick, a turret, another fuse.
+
+**It is also the only shot in the game that lands and produces no feedback**,
+which without a marker reads as a broken gun rather than as a fuse. Every stuck
+round wears a **pip** - a small additive sprite from a pool in `js/effects.js`,
+acquired and released like a telegraph mark - pinned at the height the pellet
+actually landed at and pulled a body radius toward the camera so it sits on the
+near surface rather than inside the model. It still depth-tests: a fuse behind a
+pillar must not glow through it, or the dot stops being a thing in the world and
+starts being a wallhack the pick never promised.
+
+The dot **blinks faster and grows** as the round comes due - three blinks a
+second when it lands, twelve as it goes off - because that is the one cadence
+everybody already reads as "about to happen", and it works out of the corner of
+an eye in a way a shrinking bar cannot. The blip that goes with it counts the
+**soonest fuse and nothing else**: a held trigger keeps a dozen fuses running on
+a dozen clocks, and one voice per blink is a swarm of wasps rather than a count -
+the soonest one is also the one the player needs, because it is the next thing
+that is going to happen.
+
+STATUS CONDUIT translates four of the six player statuses. WEAKNESS and CURSE
+are both about what the PLAYER'S numbers do and there is nothing on an enemy for
+them to be, so they are simply absent - inventing an enemy-side curse to make
+the sentence come out even would be a second mechanic nobody asked for.
+
+**The crit family, three more**
+
+| Upgrade | Effect |
+| --- | --- |
+| TRUE STRIKE | +10% crit damage; 2 seconds off the trigger loads 4 guaranteed crits |
+| DOMINO | A crit gives the next shot +30% crit chance |
+| LUCKY STREAK | +5% crit chance per consecutive hit on the same enemy; a miss or a switch resets it |
+
+All three are read in `Player.rollCrit`, which is still rolled once per trigger
+pull and never per pellet. LUCKY STREAK's counter is fed from `Game.shoot` off
+the first entry in `_shotHits` - one trigger pull is one entry however many
+pellets landed, which is exactly the grain the streak counts in.
 
 ### Active items
 

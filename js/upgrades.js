@@ -177,6 +177,63 @@ export const THEME = {
   // The two new active items, into the families their payloads belong to.
   lockpick: 0xb388ff,     // LOCKPICK: the mystery box's own violet
   payToWin: 0xffd54f,     // PAY TO WIN: money, which is what it spends
+
+  // ---- THE FORTY-ONE THAT CAME IN WITH THE SECOND POOL --------------------
+  //
+  // Same rule as everything above: the colour is what the pick DOES, and a
+  // pick that changes what a familiar number does gets a shade of that
+  // family rather than a hue of its own. Six of them landed in the rate-of-
+  // fire oranges, five in the crit magentas, seven in the vitality greens and
+  // reds, and the rest beside whichever family already owned the number they
+  // move.
+  //
+  // rate of fire
+  machineSpirit: 0xffa000,   // the trigger that learns to be held
+  overwound: 0xe65100,       // rate bought with the reload
+  hipshot: 0xffb74d,         // rate bought with the sights
+  metronome: 0xff6e40,       // rate handed over to the music
+  echoChamber: 0xffcc80,     // every fourth round, twice
+  // damage
+  cannonade: 0xff3d3d,       // the first round out of a fresh magazine
+  heavyHand: 0xa93226,       // damage bought with rate
+  weakPoint: 0xff4fa3,       // the crit family: a place on a body
+  overkill: 0xff7a45,        // damage that does not stop at the corpse
+  bloodOath: 0x9b1b30,       // damage bought with the bar itself
+  sharedPain: 0x7e57c2,      // one blow, split every way
+  grayMatter: 0x9e9e9e,      // a little of everything, and no colour at all
+  sacrifice: 0x6d1b7b,       // a little of everything, and one pick gone
+  bottomFeeder: 0xc0ca33,    // damage off an empty magazine
+  // ammo and economy
+  payday: 0xffca00,          // money per body
+  ammoSurplus: 0xd4af37,     // fuller pickups
+  highStakes: 0xff1493,      // the shop, gambled with
+  bruiseRounds: 0xff8a65,    // a magazine filled by being hit
+  chainFeed: 0xffa726,       // the kill that seats the next magazine
+  beltFedDream: 0xbf8f30,    // no magazine at all
+  cashCannon: 0xffe082,      // rounds bought at ten dollars each
+  lastBreath: 0xfdd835,      // the reserve, refilled at the edge
+  autoLoot: 0xb59a3f,        // the floor, permanently coming to you
+  criticalOverflow: 0xd81b8f, // crits that pay for themselves
+  // staying alive
+  ironLung: 0x26a69a,        // nothing sticks
+  lifeline: 0x00c853,        // the floor of the bar, held
+  boneMarrow: 0x8bc34a,      // a bigger bar, filled slower
+  healthyCore: 0x1b998b,     // the only heal there is
+  emergencyRations: 0x74d17a, // every wave opens at fifty
+  finalDose: 0x4db6ac,       // the last round in the magazine, cashed
+  aimOrBleed: 0xef5350,      // the miss costs blood
+  killStreak: 0xaed581,      // twenty clean
+  vitalTrigger: 0x64ffda,    // the item heals as it fires
+  tireless: 0x40c4ff,        // the bar that never empties
+  // what a shot does when it lands
+  panicTurret: 0xffa733,     // a gun that answers for you
+  delayedFuse: 0xff7519,     // the shot that waits two seconds
+  fearAura: 0xba68c8,        // the room backs away
+  statusConduit: 0x7cb9e8,   // what is on you is on them
+  // the crit family
+  trueStrike: 0xf06292,      // the shot taken after a pause
+  domino: 0xc2185b,          // one crit leaning on the next
+  luckyStreak: 0xff5c8a,     // one body, hit and hit and hit
 };
 
 
@@ -1719,6 +1776,534 @@ export const UPGRADES = {
       mods.crouchGuard = Math.min(0.9, 0.2 * n);
       mods.crouchReload = Math.min(0.9, 0.2 * n);
     },
+  },
+
+  // ---- THE SECOND POOL ----------------------------------------------------
+  //
+  // Forty-one more max-1 picks, and what holds them together is that almost
+  // every one of them names a MOMENT rather than a number: the first round out
+  // of a magazine, the second before you fired, the fourth shot, the beat, the
+  // frame you were hit on, the wave boundary. The pool above is mostly "how
+  // much"; this is mostly "when", which is the axis a player can actually play
+  // around once they have learnt it.
+  //
+  // EVERY ONE OF THEM WEIGHS ITSELF. A free upgrade in a flat draw is a totem
+  // the player never has to think at, so the ones that are simply strong -
+  // Heavy Hand, Blood Oath, Bone Marrow, Gray Matter - are sold for something
+  // the build actually wanted, and the ones that are conditional are the ones
+  // allowed to be unconditionally good inside their condition.
+
+  // ---- RATE OF FIRE -------------------------------------------------------
+
+  // THE TRIGGER THAT LEARNS TO BE HELD, and the exact opposite of every other
+  // rate pick in the pool: those pay from the first round and this one pays
+  // nothing for the first second. Ten seconds of held trigger is the ceiling,
+  // which is longer than any magazine this gun has - so the cap is a thing a
+  // build reaches by never letting go, not a number it sits at.
+  machineSpirit: {
+    name: 'MACHINE SPIRIT',
+    max: 1,
+    theme: THEME.machineSpirit,
+    effects: [['HOLD THE TRIGGER:', NOTE], ['+5% FIRE RATE PER SEC', GOOD], ['UP TO +50%', NOTE]],
+    apply: (mods, n) => {
+      mods.spiritStep = 0.05 * n;
+      mods.spiritMax = 0.5 * n;
+    },
+  },
+  // Rate bought with the one thing a faster gun needs more of. A 1.4s reload
+  // becomes 2s, which is most of a second longer every thirty rounds - and the
+  // rate is spending those rounds faster, so the pick pays for itself twice
+  // and charges for itself twice.
+  overwound: {
+    name: 'OVERWOUND',
+    max: 1,
+    theme: THEME.overwound,
+    effects: [['+40% FIRE RATE', GOOD], ['-30% RELOAD SPEED', BAD]],
+    apply: (mods, n) => {
+      mods.fireRate *= 1 + 0.4 * n;
+      mods.reloadMult *= Math.pow(1 / 0.7, n);
+    },
+  },
+  // THE STANCE IS THE STAT. Crouchfire and Cheekweld already ask the player to
+  // choose a posture; this asks the harder question, because hip-fire is the
+  // inaccurate half of the gun (see `spread` on the pulse rifle) and doubling
+  // the rate of a spray is only worth something at a range the spray can hold.
+  hipshot: {
+    name: 'HIPSHOT',
+    max: 1,
+    theme: THEME.hipshot,
+    effects: [['2x FIRE RATE FROM THE HIP', GOOD], ['0.5x WHILE AIMING', BAD]],
+    apply: (mods, n) => { mods.hipshot = n; },
+  },
+  // THE GUN JOINS THE BAND. The trigger stops being a rate at all: a shot
+  // leaves on the beat and on no other frame, which means the fire rate stat
+  // has nothing left to multiply and the player's own timing has nothing left
+  // to do. What they get for it is a round worth four.
+  //
+  // Fire, poison and every sentry gun in the arena already ride Music.pulse
+  // (see the note in js/music.js); this is the player joining them.
+  metronome: {
+    name: 'METRONOME',
+    max: 1,
+    theme: THEME.metronome,
+    effects: [['FIRE ONLY ON THE BEAT', NOTE], ['4x DAMAGE', GOOD], ['FIRE RATE DOES NOTHING', BAD]],
+    apply: (mods, n) => {
+      mods.metronome = n;
+      mods.damage *= Math.pow(4, n);
+    },
+  },
+  // A FREE ROUND EVERY FOURTH TRIGGER PULL, at half strength and off no
+  // magazine. Counted per SHOT and not per pellet, the rule every other
+  // per-shot pick in the pool follows.
+  echoChamber: {
+    mark: true,
+    name: 'ECHO CHAMBER',
+    max: 1,
+    theme: THEME.echoChamber,
+    effects: [['EVERY 4TH SHOT FIRES TWICE', GOOD], ['THE ECHO IS HALF DAMAGE', NOTE], ['AND COSTS NO AMMO', GOOD]],
+    apply: (mods, n) => {
+      mods.echoEvery = 4;
+      mods.echoDamage = 0.5 * n;
+    },
+  },
+
+  // ---- DAMAGE -------------------------------------------------------------
+
+  // TEN TIMES, ONCE A MAGAZINE. It is the reload rhythm turned into a weapon:
+  // Breach Round and Hellfire both pay the player for reloading, and this pays
+  // them for reloading EARLY, which is the one thing those two do not ask for.
+  cannonade: {
+    mark: true,
+    name: 'CANNONADE',
+    max: 1,
+    theme: THEME.cannonade,
+    effects: [['FIRST SHOT OF A MAGAZINE', NOTE], ['DEALS 10x DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.firstShot = 10 * n; },
+  },
+  // The straight trade, and the only one in the pool that charges rate for
+  // damage rather than the other way round. Net DPS is a hair under even; what
+  // it actually buys is a bigger number per round, which is what matters
+  // against armour, against a boss, and to a magazine that has to last.
+  heavyHand: {
+    name: 'HEAVY HAND',
+    max: 1,
+    theme: THEME.heavyHand,
+    effects: [['+60% DAMAGE', GOOD], ['-40% FIRE RATE', BAD]],
+    apply: (mods, n) => {
+      mods.damage *= 1 + 0.6 * n;
+      mods.fireRate *= Math.pow(0.6, n);
+    },
+  },
+  // TELLTALE'S PATIENT COUSIN. That one turns the third hit on a body into a
+  // crit; this one turns the body itself into a soft target, permanently, for
+  // everything - the gun, a turret, poison, a blast, another enemy's friendly
+  // fire. Three hits is one burst.
+  weakPoint: {
+    mark: true,
+    name: 'WEAK POINT',
+    max: 1,
+    theme: THEME.weakPoint,
+    effects: [['3 HITS MARK AN ENEMY', GOOD], ['MARKED TAKE +50% DAMAGE', GOOD], ['FROM EVERYTHING', NOTE]],
+    apply: (mods, n) => { mods.markHits = 3; mods.markBonus = 0.5 * n; },
+  },
+  // NOTHING IS WASTED ON A CORPSE. A rifle round worth 34 into a body with 5
+  // left used to throw 29 away; now it walks. Five metres, so it pays a player
+  // shooting into a crowd and pays nothing at all to one picking off stragglers.
+  overkill: {
+    mark: true,
+    name: 'OVERKILL',
+    max: 1,
+    theme: THEME.overkill,
+    effects: [['DAMAGE PAST A KILL', NOTE], ['CARRIES TO THE NEXT ENEMY', GOOD]],
+    apply: (mods, n) => { mods.overkill = n; mods.overkillRange = 5; },
+  },
+  // DOUBLE DAMAGE, PAID FOR IN BAR, FOREVER. Five max HP a wave is nothing on
+  // wave two and the whole run by wave twenty - and it stops at fifty, which is
+  // the number that keeps it a build rather than a countdown. Anything that
+  // raises the cap back over fifty starts the meter again, which is the honest
+  // reading of the deal: the oath is on the max, not on a wave count.
+  bloodOath: {
+    name: 'BLOOD OATH',
+    max: 1,
+    theme: THEME.bloodOath,
+    effects: [['+100% DAMAGE', GOOD], ['-5 MAX HP EVERY WAVE', BAD], ['STOPS AT 50 MAX HP', NOTE]],
+    apply: (mods, n) => { mods.oathPerWave = 5 * n; mods.oathFloor = 50; },
+  },
+  // ONE BLOW, SPLIT EVERY WAY. It is a crowd-clearing pick wearing a drawback:
+  // against a lone boss it changes nothing at all, and against thirty bodies it
+  // turns a rifle into a room-wide tick that kills the whole wave at once.
+  // Every source, so poison, turrets, blasts and lightning are all in it.
+  sharedPain: {
+    name: 'SHARED PAIN',
+    max: 1,
+    theme: THEME.sharedPain,
+    effects: [['ALL DAMAGE IS SPLIT', NOTE], ['EVENLY OVER EVERY ENEMY', GOOD]],
+    apply: (mods, n) => { mods.sharedPain = n; },
+  },
+  // TEN PERCENT OF EVERYTHING, and the colour of the room. The stats are
+  // deliberately small and deliberately unconditional - it is the one pick in
+  // the pool with nothing to learn and nothing to play around - so what it
+  // actually costs is the thing the game is hardest to read without: the enemy
+  // colours, the status tints, the theme light. The whole game, in grey.
+  grayMatter: {
+    name: 'GRAY MATTER',
+    max: 1,
+    theme: THEME.grayMatter,
+    effects: [['+10% TO EVERY STAT', GOOD], ['THE WORLD LOSES COLOUR', BAD]],
+    apply: (mods, n) => {
+      mods.maxHpBonus += 10 * n;
+      mods.damage *= 1 + 0.1 * n;
+      mods.fireRate *= 1 + 0.1 * n;
+      mods.moveMult *= 1 + 0.1 * n;
+      mods.mono = n;
+    },
+  },
+  // THE ONE PICK THAT TAKES SOMETHING BACK. It is small on purpose: what it
+  // costs is not the ten percent, it is that the totem is a coin toss with the
+  // rest of the build - and the deeper the build, the worse the odds get.
+  sacrifice: {
+    name: 'SACRIFICE',
+    max: 1,
+    theme: THEME.sacrifice,
+    effects: [['+10% DAMAGE & FIRE RATE', GOOD], ['DESTROYS ONE OF YOUR', BAD], ['OTHER PASSIVE ITEMS', BAD]],
+    apply: (mods, n) => {
+      mods.damage *= 1 + 0.1 * n;
+      mods.fireRate *= 1 + 0.1 * n;
+      // The removal itself is NOT here. apply() is replayed from fresh
+      // defaults on every draft pick (see rebuildMods), so an apply() that
+      // dropped an upgrade would drop another one every time the player took
+      // anything at all. It happens once, at the pick - see Player.takeUpgrade.
+      mods.sacrifice = n;
+    },
+  },
+  // DAMAGE OFF AN EMPTY GUN. The only pick in the pool that pays for running
+  // dry, which is the one thing every other ammunition pick in the game is
+  // trying to stop the player doing.
+  bottomFeeder: {
+    name: 'BOTTOM FEEDER',
+    max: 1,
+    theme: THEME.bottomFeeder,
+    effects: [['RELOAD FROM EMPTY:', NOTE], ['+20% DAMAGE FOR 5s', GOOD]],
+    apply: (mods, n) => { mods.bottomFeed = 0.2 * n; mods.bottomTime = 5; },
+  },
+
+  // ---- AMMUNITION AND MONEY ------------------------------------------------
+
+  // A FLAT HUNDRED A BODY, which is worth more early than Midas and less late -
+  // it does not scale with the enemy, so it pays a wave of chaff and shrugs at
+  // a boss. The damage is what it charges, and it charges it on every source.
+  payday: {
+    name: 'PAYDAY',
+    max: 1,
+    theme: THEME.payday,
+    effects: [['+$100 PER KILL', GOOD], ['-10% DAMAGE', BAD]],
+    apply: (mods, n) => {
+      mods.killCredits = 100 * n;
+      mods.damage *= Math.pow(0.9, n);
+    },
+  },
+  ammoSurplus: {
+    name: 'AMMO SURPLUS',
+    max: 1,
+    theme: THEME.ammoSurplus,
+    effects: [['AMMO PICKUPS GIVE', NOTE], ['+30% MORE ROUNDS', GOOD]],
+    apply: (mods, n) => { mods.ammoPickupMult = 1 + 0.3 * n; },
+  },
+  // THE SHOP, GAMBLED WITH. Nine visits in ten it is the best economy pick in
+  // the game - every reroll and every box roll free, price ladder and all - and
+  // the tenth is the worst thing that can happen to a run that is winning.
+  //
+  // The price check goes with the price: a player carrying this can always
+  // pull the lever, which is what makes the tenth pull a real risk rather than
+  // a discount they were saving up for anyway.
+  highStakes: {
+    name: 'HIGH STAKES',
+    max: 1,
+    theme: THEME.highStakes,
+    effects: [['REROLLS & BOXES ARE FREE', GOOD], ['10%: DROPPED TO 1 HP', BAD], ['AND 1 AMMO', BAD]],
+    apply: (mods, n) => { mods.highStakes = n; mods.stakesOdds = 0.1; },
+  },
+  // A FULL MAGAZINE FOR A HIT. It is the only pick in the pool that turns
+  // taking damage into ammunition, and the rounds are made rather than moved -
+  // the reserve is never touched - so it is worth most to exactly the build
+  // that is running out of both at once.
+  bruiseRounds: {
+    name: 'BRUISE ROUNDS',
+    max: 1,
+    theme: THEME.bruiseRounds,
+    effects: [['BEING HIT REFILLS', NOTE], ['THE MAGAZINE, FREE', GOOD]],
+    apply: (mods, n) => { mods.bruise = n; },
+  },
+  // THE LAST ROUND, CASHED. A magazine emptied INTO something reloads itself,
+  // so a build that counts its shots never stands still - and one that sprays
+  // the last five into a wall pays the full 1.4 seconds like everybody else.
+  chainFeed: {
+    name: 'CHAIN FEED',
+    max: 1,
+    theme: THEME.chainFeed,
+    effects: [['KILL WITH THE LAST ROUND:', NOTE], ['INSTANT RELOAD', GOOD]],
+    apply: (mods, n) => { mods.chainFeed = n; },
+  },
+  // NO MAGAZINE AT ALL. There is nothing to reload, nothing to run dry and
+  // nothing to time - the gun simply runs until the reserve does, at two rounds
+  // a shot. It is the biggest change to how the weapon FEELS in either pool,
+  // and what it costs is that the reserve is now the only number there is.
+  beltFedDream: {
+    name: 'BELT FED DREAM',
+    max: 1,
+    theme: THEME.beltFedDream,
+    effects: [['NO MAGAZINE, NO RELOAD', GOOD], ['FIRES FROM THE RESERVE', NOTE], ['2 AMMO PER SHOT', BAD]],
+    apply: (mods, n) => { mods.beltFedDream = n; mods.beltFedCost = 2; },
+  },
+  // THE GUN NEVER STOPS, IT ONLY GETS EXPENSIVE. Ten dollars a round is real
+  // money on wave three and pocket change on wave thirty, which is the correct
+  // shape: it is an emergency early and a way of playing late.
+  cashCannon: {
+    name: 'CASH CANNON',
+    max: 1,
+    theme: THEME.cashCannon,
+    effects: [['OUT OF AMMO:', NOTE], ['KEEP FIRING AT $10 A SHOT', GOOD]],
+    apply: (mods, n) => { mods.cashCannon = 10 * n; },
+  },
+  // ONE PER WAVE, at the moment the player is least able to go and look for a
+  // crate. It fires on the way DOWN through twenty, so it cannot be farmed by
+  // hovering there - the bar has to cross the line.
+  lastBreath: {
+    name: 'LAST BREATH',
+    max: 1,
+    theme: THEME.lastBreath,
+    effects: [['DROP BELOW 20 HP:', NOTE], ['REFILL THE AMMO RESERVE', GOOD], ['ONCE PER WAVE', NOTE]],
+    apply: (mods, n) => { mods.lastBreath = 20 * n; },
+  },
+  // LODESTONE'S ENDGAME, AT HALF PRICE. The wave-clear sweep never switches
+  // off, so money is something that happens rather than something you walk to -
+  // and every orb is worth half, so the pick is about ATTENTION and not income.
+  autoLoot: {
+    name: 'AUTO-LOOT',
+    max: 1,
+    theme: THEME.autoLoot,
+    effects: [['ALL CREDITS COME TO YOU', GOOD], ['ALWAYS', NOTE], ['-50% CREDIT VALUE', BAD]],
+    apply: (mods, n) => {
+      mods.autoLoot = n;
+      mods.creditMult *= Math.pow(0.5, n);
+    },
+  },
+  // CRITS THAT PAY FOR THEMSELVES, and ordinary rounds that pay for the crits.
+  // At the base 5% chance this is a straight ammunition tax; every crit pick in
+  // the pool above turns it the other way up, which is what makes it a pick for
+  // a build rather than a pick on its own.
+  criticalOverflow: {
+    mark: true,
+    name: 'CRITICAL OVERFLOW',
+    max: 1,
+    theme: THEME.criticalOverflow,
+    effects: [['CRITS: +50% DMG, +1 AMMO', GOOD], ['NON-CRITS COST 1 MORE', BAD]],
+    apply: (mods, n) => {
+      mods.critMult *= 1 + 0.5 * n;
+      mods.critOverflow = n;
+    },
+  },
+
+  // ---- STAYING ALIVE -------------------------------------------------------
+
+  // NOTHING STICKS. Fire, poison, chill, fear, weakness and curse all simply
+  // fail to land - which is most of what the hazard-heavy themes have to say -
+  // and the price is on the other end of the same bar.
+  ironLung: {
+    name: 'IRON LUNG',
+    max: 1,
+    theme: THEME.ironLung,
+    effects: [['IMMUNE TO ALL STATUS', GOOD], ['-30% HEALING', BAD]],
+    apply: (mods, n) => {
+      mods.statusImmune = n;
+      mods.poisonImmune = n;
+      mods.healMult *= Math.pow(0.7, n);
+    },
+  },
+  // A FLOOR UNDER THE BAR. It regenerates only up to 25 and then stops, so it
+  // is not a heal - it is a promise that the bottom of the bar refills itself,
+  // fast, and that the player can spend it. Nothing else in the pool makes
+  // being nearly dead a place you can stay.
+  lifeline: {
+    name: 'LIFELINE',
+    max: 1,
+    theme: THEME.lifeline,
+    effects: [['AT 25 HP OR BELOW:', NOTE], ['REGEN 5 HP/s', GOOD]],
+    apply: (mods, n) => { mods.lifelineAt = 25; mods.lifelineRate = 5 * n; },
+  },
+  // BULWARK WITHOUT THE LEGS, and a much bigger number - what it charges is
+  // every heal in the run, so the bar is twice as long and half as easy to
+  // fill. A build with no healing in it pays nothing at all, which is the one
+  // way this is a free pick and the reason it is worth checking the sheet.
+  boneMarrow: {
+    name: 'BONE MARROW',
+    max: 1,
+    theme: THEME.boneMarrow,
+    effects: [['+100 MAX HEALTH', GOOD], ['-50% HEALING', BAD]],
+    apply: (mods, n) => {
+      mods.maxHpBonus += 100 * n;
+      mods.healMult *= Math.pow(0.5, n);
+    },
+  },
+  // ONE HEAL, AND IT IS THIS ONE. A point a second forever, and every other
+  // source in the game - crates, Vampiric, Blood Pact, the item pool's four
+  // heals, the leech - does nothing at all. It is the strongest slow heal there
+  // is and it makes the entire health economy stop applying to you.
+  healthyCore: {
+    name: 'HEALTHY CORE',
+    max: 1,
+    theme: THEME.healthyCore,
+    effects: [['REGEN 1 HP/s, ALWAYS', GOOD], ['NO OTHER HEALING WORKS', BAD]],
+    apply: (mods, n) => { mods.coreRegen = 1 * n; mods.healBlock = n; },
+  },
+  // EVERY WAVE OPENS AT FIFTY, up OR down. It is a floor for a run that is
+  // losing and a ceiling for one that is winning, and the healing bonus is what
+  // decides which: fifty and a 1.5x heal is a hand back into the fight, and
+  // fifty out of two hundred is a wave you have to earn back.
+  emergencyRations: {
+    name: 'EMERGENCY RATIONS',
+    max: 1,
+    theme: THEME.emergencyRations,
+    effects: [['EVERY WAVE STARTS', NOTE], ['AT EXACTLY 50 HP', BAD], ['+50% HEALING', GOOD]],
+    apply: (mods, n) => { mods.rations = 50; mods.healMult *= 1 + 0.5 * n; },
+  },
+  // THE TACTICAL RELOAD, PAID. One round left in the magazine is a thing the
+  // player has to choose to stop at, which is the whole pick - it asks them to
+  // count, and it pays them 5 HP every time they get it right.
+  finalDose: {
+    name: 'FINAL DOSE',
+    max: 1,
+    theme: THEME.finalDose,
+    effects: [['RELOAD ON YOUR LAST ROUND:', NOTE], ['HEAL 5 HP', GOOD]],
+    apply: (mods, n) => { mods.finalDose = 5 * n; },
+  },
+  // ACCURACY, BILLED BOTH WAYS. Hot Streak charges misses in damage; this
+  // charges them in blood, and pays hits in it. Per SHOT, so a shotgun's nine
+  // pellets are one hit or one miss - and it can never take the last point,
+  // for the same reason Cursed Ammo cannot.
+  aimOrBleed: {
+    name: 'AIM OR BLEED',
+    max: 1,
+    theme: THEME.aimOrBleed,
+    effects: [['HITS HEAL 1 HP', GOOD], ['MISSES COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
+    apply: (mods, n) => { mods.aimHeal = 1 * n; mods.missCost = 1 * n; },
+  },
+  // NO-HIT BONUS AT WAVE SCALE, paid inside a wave instead of at the end of
+  // one. Twenty bodies without being touched is one good stretch rather than
+  // one perfect wave, so this pays a player who is playing well right now.
+  killStreak: {
+    name: 'KILL STREAK',
+    max: 1,
+    theme: THEME.killStreak,
+    effects: [['20 KILLS UNHURT:', NOTE], ['HEAL 5 HP, +10 AMMO', GOOD]],
+    apply: (mods, n) => { mods.killStreak = 20; mods.streakHeal = 5 * n; mods.streakAmmo = 10 * n; },
+  },
+  // The item slot, with a heal stapled to it. It is worth the most to the
+  // cheapest item in the pool - a 40-point charge fired often is more healing
+  // than a 90-point one fired twice a run - which is a nice inversion of how
+  // every other item comparison in the game goes.
+  vitalTrigger: {
+    name: 'VITAL TRIGGER',
+    max: 1,
+    theme: THEME.vitalTrigger,
+    effects: [['USING YOUR ITEM', NOTE], ['ALSO HEALS 5 HP', GOOD]],
+    apply: (mods, n) => { mods.itemHeal = 5 * n; },
+  },
+  // THE BAR NEVER EMPTIES. Second Wind buys the rhythm back faster; this
+  // deletes the rhythm, so sprinting and sliding stop being resources and
+  // become the way the player moves.
+  tireless: {
+    name: 'TIRELESS',
+    max: 1,
+    theme: THEME.tireless,
+    effects: [['UNLIMITED STAMINA', GOOD]],
+    apply: (mods, n) => { mods.staminaDrain *= Math.pow(0, n); },
+  },
+
+  // ---- WHAT HAPPENS AROUND YOU --------------------------------------------
+
+  // LITTLE BROTHER, INVOLUNTARILY. It is the item's own turret, thrown by
+  // being hit rather than by a button, and the cap is what stops a bad wave
+  // from filling the arena: five at once, ten seconds each.
+  panicTurret: {
+    name: 'PANIC TURRET',
+    max: 1,
+    theme: THEME.panicTurret,
+    effects: [['BEING HIT DROPS A TURRET', GOOD], ['10s, UP TO 5 AT ONCE', NOTE]],
+    apply: (mods, n) => { mods.panicTurret = n; mods.panicLife = 10; mods.panicMax = 5; },
+  },
+  // SPLASH DAMAGE, PAID FOR IN TIME. Every round sticks and does nothing for
+  // two seconds, then goes off for what it was worth over a small area. It is
+  // the whole gun turned into a grenade launcher: enormous against a crowd,
+  // and genuinely bad against the one thing walking at you.
+  delayedFuse: {
+    mark: true,
+    name: 'DELAYED FUSE',
+    max: 1,
+    theme: THEME.delayedFuse,
+    effects: [['SHOTS STICK, THEN EXPLODE', GOOD], ['AFTER 2 SECONDS', BAD]],
+    apply: (mods, n) => { mods.fuseDelay = 2; mods.fuseRadius = 2.5 * n; },
+  },
+  // TERROR WITHOUT THE BULLET. Five metres is close enough that it only ever
+  // answers the thing already on top of you, and the half-minute lockout is
+  // what stops a fled enemy from walking back in and fleeing again forever.
+  fearAura: {
+    name: 'FEAR AURA',
+    max: 1,
+    theme: THEME.fearAura,
+    effects: [['ENEMIES WITHIN 5m FLEE', GOOD], ['ONCE EVERY 30s EACH', NOTE]],
+    apply: (mods, n) => {
+      mods.fearAura = 5 * n;
+      mods.fearAuraTime = 5;
+      mods.fearAuraCd = 30;
+    },
+  },
+  // WHATEVER IS ON YOU IS ON THEM. It is the only pick in either pool that
+  // makes being burnt, poisoned or chilled into a thing worth having - a player
+  // standing in the lava is now a lit fuse walking through the crowd.
+  statusConduit: {
+    name: 'STATUS CONDUIT',
+    max: 1,
+    theme: THEME.statusConduit,
+    effects: [['STATUS EFFECTS ON YOU', NOTE], ['SPREAD TO ENEMIES', GOOD], ['WITHIN 5m', NOTE]],
+    apply: (mods, n) => { mods.conduit = 5 * n; },
+  },
+
+  // ---- THE CRIT FAMILY, THREE MORE ----------------------------------------
+
+  // THE PAUSE IS THE PICK. Two seconds off the trigger buys four certain
+  // crits, which is a burst rather than a rate - it pays the player who taps
+  // and takes cover and pays nothing at all to one holding the trigger down.
+  trueStrike: {
+    name: 'TRUE STRIKE',
+    max: 1,
+    theme: THEME.trueStrike,
+    effects: [['+10% CRIT DAMAGE', GOOD], ['HOLD FIRE 2s:', NOTE], ['NEXT 4 SHOTS ALWAYS CRIT', GOOD]],
+    apply: (mods, n) => {
+      mods.critMult *= 1 + 0.1 * n;
+      mods.trueStrikeWait = 2;
+      mods.trueStrikeShots = 4 * n;
+    },
+  },
+  // ONE CRIT LEANING ON THE NEXT. At the base 5% it is a small nudge; on top of
+  // Deadeye and Marksman it is a chain that keeps itself going, which is the
+  // only kind of scaling the crit family does not already have.
+  domino: {
+    name: 'DOMINO',
+    max: 1,
+    theme: THEME.domino,
+    effects: [['AFTER A CRIT:', NOTE], ['+30% CRIT CHANCE', GOOD], ['ON THE NEXT SHOT', NOTE]],
+    apply: (mods, n) => { mods.domino = 0.3 * n; },
+  },
+  // ONE BODY, HIT AND HIT AND HIT. It is Telltale's rhythm turned into a ramp
+  // and it asks for the hardest thing in the game: staying on one target while
+  // the room moves. Switching targets is what breaks it, not missing alone.
+  luckyStreak: {
+    name: 'LUCKY STREAK',
+    max: 1,
+    theme: THEME.luckyStreak,
+    effects: [['+5% CRIT CHANCE PER HIT', GOOD], ['ON THE SAME ENEMY', NOTE], ['A MISS OR A SWITCH RESETS', BAD]],
+    apply: (mods, n) => { mods.luckyStep = 0.05 * n; },
   },
 };
 

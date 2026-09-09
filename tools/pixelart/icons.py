@@ -2417,3 +2417,515 @@ def _(c):
     c.arc(12.0, 5.6, 2.9, 1.5, 20, 200, E)
     c.arc(12.0, 9.4, 2.9, 1.5, 200, 20, E)
     c.line(12.0, 1.8, 12.0, 12.6, E, 1.3)
+
+
+# ---- the second pool -------------------------------------------------------
+#
+# Forty-one more, on exactly the rules at the top of this file: light from the
+# upper left, STRUCTURE is the object and ENERGY is what the pick does to it.
+#
+# The one rule this block leans on hardest is the set's oldest: no two icons may
+# share a silhouette. That is why FINAL DOSE is a cartridge with a cross on it
+# and not a syringe (ADRENALINE is the syringe), why DELAYED FUSE is a clock
+# inside a blast and not a fuse (SHORT FUSE is the fuse), and why WEAK POINT is
+# a cracked plate rather than a reticle - the crit family already owns every
+# ring, eye and bullseye there is.
+
+
+@icon('machineSpirit')      # +5% fire rate per second of held trigger
+def _(c):
+    # A RAMP THAT IS ALSO A BARREL. Four rising blocks under a muzzle, so the
+    # icon says "this climbs" without borrowing OVERCLOCK's dial or HAIR
+    # TRIGGER's blade - the two other rate picks that had to stay distinct.
+    c.rect(3.0, 2.6, 21.0, 6.2, S)                     # the barrel over the top
+    c.disc(4.6, 4.4, 1.9, DEEP)                        # and its muzzle
+    for i, h in enumerate((16.0, 13.2, 10.4, 7.6)):    # the climb
+        x = 5.0 + i * 4.4
+        c.rect(x, h, x + 3.2, 21.8, E)
+
+
+@icon('overwound')          # +40% fire rate, -30% reload speed
+def _(c):
+    # A MAINSPRING WOUND PAST ITS STOP. Two turns tightening onto a hub, and the
+    # loose end sprung out of the case - which is the drawback, drawn. Kept to
+    # two turns: at three the whole thing closes up into a disc.
+    c.arc(11.0, 13.4, 9.4, 2.8, 300, 210, S)
+    c.arc(11.0, 13.4, 5.4, 2.6, 130, 40, S)
+    c.disc(11.0, 13.4, 2.4, E)
+    c.line(15.7, 5.3, 22.4, 2.0, E, 2.4)               # the end that let go
+    c.poly([(22.8, 0.6), (23.4, 4.4), (19.6, 3.6)], E)
+
+
+@icon('hipshot')            # 2x fire rate from the hip, 0.5x while aiming
+def _(c):
+    # THE SIGHTS, STRUCK OUT, OVER A MUZZLE FLASH COMING OFF THE HIP. The barred
+    # ring is the other half of the deal and nothing else in the set is a
+    # cancelled circle; the two objects sit in opposite corners, so neither ever
+    # has to be picked out of the other.
+    c.ring(7.0, 6.4, 6.2, 2.4, S)                      # the sights
+    c.line(2.6, 10.8, 11.4, 2.0, DEEP, 2.2)            # not being used
+    c.rect(1.4, 16.4, 11.0, 19.8, S)                   # the gun, held low
+    c.rect(2.4, 19.8, 5.4, 23.4, S)                    # its grip
+    for a in (-24, 2, 28):                             # and what it is doing
+        r = math.radians(a)
+        c.line(11.4, 18.1, 11.4 + math.cos(r) * 10.6, 18.1 + math.sin(r) * 10.6, E, 2.2)
+
+
+@icon('metronome')          # the trigger fires on the beat, at 4x damage
+def _(c):
+    # THE OBJECT ITSELF. A metronome is the one shape in the world that means
+    # "on the beat" without a word of explanation, and the catalogue has no
+    # other tapering tower.
+    c.poly([(9.2, 1.6), (14.8, 1.6), (20.4, 22.4), (3.6, 22.4)], S)
+    c.poly([(10.4, 3.4), (13.6, 3.4), (18.2, 20.6), (5.8, 20.6)], DEEP)  # the window
+    c.line(12.0, 21.0, 17.6, 4.0, E, 1.8)              # the rod, swung over
+    c.rect(14.6, 8.0, 18.0, 10.4, E)                   # the weight on it
+    c.disc(12.0, 21.0, 1.8, S)                         # and its pivot
+
+
+@icon('echoChamber')        # every 4th shot fires twice, the echo at half
+def _(c):
+    # ONE ROUND AND THE GHOST OF IT. The second cartridge is smaller and drawn
+    # in the pale tone rather than in the structure tone, which is the set's own
+    # way of saying "this one is not really there" - it is half a shot.
+    bullet(c, 2.0, 3.6, 7.4, 17.0, S, S, 0.4)
+    bullet(c, 12.0, 7.2, 5.4, 12.4, E, E, 0.4)
+    for i in range(3):                                 # the shot leaving twice
+        c.rect(19.6, 7.0 + i * 5.0, 22.6, 8.6 + i * 5.0, E)
+
+
+@icon('cannonade')          # the first shot of a magazine deals 10x
+def _(c):
+    # A CANNON, MID-DISCHARGE. The barrel is short and enormously thick - the
+    # heaviest object in the set after LANCE - and the blast is the lit half.
+    c.rect(0.4, 6.0, 2.6, 19.6, S)                     # the breech ring
+    c.poly([(0.8, 7.4), (9.0, 9.6), (9.0, 16.0), (0.8, 18.2)], S)
+    c.disc(17.0, 12.8, 4.0, E)                         # what leaves it
+    spikes(c, 17.0, 12.8, 3.4, 7.0, 6, 2.2, E, phase=0)
+    c.disc(17.0, 12.8, 1.6, P)
+
+
+@icon('heavyHand')          # +60% damage, -40% fire rate
+def _(c):
+    # A SLEDGE. BLOODSPORT already owns the fist and RAGE the knuckles, so the
+    # weight had to be an OBJECT - and a maul is the one tool that means "hits
+    # harder, swings slower" without a word.
+    c.line(4.0, 22.2, 17.6, 6.0, S, 2.6)               # the haft
+    c.poly([(11.0, 2.2), (22.4, 6.2), (19.4, 14.6), (8.0, 10.6)], S)   # the head
+    c.rect(9.2, 4.4, 13.6, 12.0, E)                    # the face that lands
+    c.disc(3.4, 22.4, 2.0, S)                          # the butt of the haft
+
+
+@icon('weakPoint')          # 3 hits mark an enemy; marked take +50%
+def _(c):
+    # A PLATE WITH A CRACK THROUGH IT, and the crack is the lit part. The crit
+    # family already owns every ring, eye and bullseye in the set, so the mark
+    # had to be a thing that happens to ARMOUR rather than a thing you aim at.
+    c.poly([(12.0, 1.4), (21.4, 6.6), (21.4, 17.0), (12.0, 22.6),
+            (2.6, 17.0), (2.6, 6.6)], S)
+    c.line(12.0, 1.4, 9.6, 9.4, E, 1.8)                # the fracture
+    c.line(9.6, 9.4, 15.0, 12.6, E, 1.8)
+    c.line(15.0, 12.6, 10.6, 22.2, E, 1.8)
+    c.line(9.6, 9.4, 4.0, 12.0, E, 1.4)
+
+
+@icon('overkill')           # damage past a kill carries to the next enemy
+def _(c):
+    # A ROUND THAT WENT STRAIGHT THROUGH AND KEPT GOING. The skull is what it
+    # already killed and the arrow leaving the frame is the part that is still
+    # owed - which is the whole mechanic, in one line.
+    skullface(c, 8.6, 12.0, 6.4, S)
+    arrow(c, 1.0, 22.6, 22.6, 3.0, E, 2.2, 5.2)
+
+
+@icon('bloodOath')          # +100% damage, -5 max HP every wave
+def _(c):
+    # A HEART OPENED ON A BLADE. The blade is structure and what comes off it
+    # is energy: the pick is paid for in the bar, wave after wave, and the drops
+    # are the instalments.
+    c.disc(8.0, 9.6, 4.4, S)
+    c.disc(14.4, 9.6, 4.4, S)
+    c.poly([(3.6, 11.4), (18.8, 11.4), (11.2, 21.4)], S)
+    c.line(19.6, 1.4, 6.0, 15.0, E, 2.2)               # the blade through it
+    c.poly([(19.0, 0.8), (23.0, 2.4), (20.6, 5.0)], E)
+    drop(c, 9.0, 21.0, 1.5, E)                         # and what it costs
+    drop(c, 14.6, 19.4, 1.2, E)
+
+
+@icon('sharedPain')         # all damage is split evenly over every enemy
+def _(c):
+    # ONE BLOW ARRIVING AND THREE LEAVING. The stem is heavy and the fan is
+    # thin, because that is the trade: what the room receives is smaller than
+    # what was thrown, three times over.
+    arrow(c, 12.0, 0.6, 12.0, 8.6, S, 4.0, 4.6)
+    c.disc(12.0, 12.0, 3.4, S)
+    c.disc(12.0, 12.0, 1.4, DEEP)
+    arrow(c, 9.4, 14.4, 2.0, 21.8, E, 2.2, 4.2)
+    arrow(c, 12.0, 15.4, 12.0, 23.0, E, 2.2, 4.2)
+    arrow(c, 14.6, 14.4, 22.0, 21.8, E, 2.2, 4.2)
+
+
+@icon('grayMatter')         # +10% to every stat, and the world loses colour
+def _(c):
+    # A BRAIN, SPLIT DOWN THE MIDDLE - the folds lit on one side and nothing at
+    # all on the other. It is the only icon in the set whose subject IS the loss
+    # of colour, so the drawing says it in the one currency a one-ramp icon has.
+    c.disc(12.0, 11.4, 9.0, S)
+    c.rect(9.0, 16.0, 15.0, 22.4, S)                   # the stem
+    for i in range(3):                                 # the folds, on one half
+        c.arc(7.6, 6.6 + i * 4.6, 4.0, 1.8, 90, 290, E)
+    c.rect(11.4, 2.6, 12.6, 20.0, DEEP)                # the fissure
+
+
+@icon('sacrifice')          # +10% damage & rate, and one passive item gone
+def _(c):
+    # A BLADE COMING DOWN THROUGH A TOTEM. The tablet is another pick - the
+    # catalogue's own totem shape - and the split across it is the only part of
+    # this the player has to read.
+    c.rect(5.6, 12.6, 18.4, 23.0, S)                   # the thing given up
+    c.rect(5.6, 16.6, 18.4, 18.0, EMPTY)               # already coming apart
+    c.rect(11.0, 0.8, 13.0, 10.6, E)                   # the blade
+    c.poly([(9.4, 10.6), (14.6, 10.6), (12.0, 15.4)], E)
+    c.rect(7.4, 8.4, 16.6, 10.2, E)                    # its guard
+
+
+@icon('bottomFeeder')       # reloading from empty: +20% damage for 5s
+def _(c):
+    # AN EMPTY MAGAZINE, AND WHAT COMES OUT OF IT. The body is hollow - the one
+    # magazine in the set with nothing showing through it, where EXTENDED MAG
+    # shows four rounds - and the arrow is the payment.
+    c.rect(4.0, 8.0, 13.4, 10.0, S)                    # feed lips
+    c.rect(5.0, 10.0, 12.4, 22.6, S)
+    c.rect(6.2, 12.0, 11.2, 21.2, DEEP)                # and nothing in it
+    arrow(c, 18.0, 22.0, 18.0, 3.0, E, 2.4, 5.0)
+
+
+@icon('payday')             # +$100 per kill, -10% damage
+def _(c):
+    # A BAG. MIDAS is the gilded dead, BLOOD MONEY a bleeding coin, WAR CHEST
+    # money as ammunition - none of them is a sack, which is why this is one.
+    c.disc(12.0, 15.0, 8.0, S)
+    c.rect(4.0, 13.0, 20.0, 22.6, S)
+    c.poly([(8.6, 3.0), (15.4, 3.0), (17.0, 8.6), (7.0, 8.6)], S)   # the neck
+    c.rect(6.6, 8.0, 17.4, 10.2, DEEP)                 # the tie
+    c.arc(12.0, 14.0, 2.9, 1.5, 20, 200, E)            # the dollar
+    c.arc(12.0, 17.8, 2.9, 1.5, 200, 20, E)
+    c.line(12.0, 10.4, 12.0, 21.0, E, 1.3)
+
+
+@icon('ammoSurplus')        # ammo pickups grant 30% more rounds
+def _(c):
+    # A CRATE THAT WILL NOT SHUT. The rounds standing proud of the lid are the
+    # +30%, and they are the lit part; the box is just what they came in.
+    c.rect(2.6, 11.0, 21.4, 22.6, S)
+    c.rect(2.6, 11.0, 21.4, 13.4, S)
+    c.rect(11.0, 13.4, 13.0, 22.6, DEEP)               # the strap
+    bullet(c, 4.6, 2.0, 4.0, 9.6, E, E, 0.44)
+    bullet(c, 10.0, 0.6, 4.0, 11.0, E, E, 0.44)
+    bullet(c, 15.4, 2.6, 4.0, 9.0, E, E, 0.44)
+
+
+@icon('highStakes')         # rerolls and boxes are free - or take everything
+def _(c):
+    # A COIN IN THE AIR, EDGE ON. Nothing else in the set is a coin seen from the
+    # side, and a coin mid-flip is the one object that says "nine times in ten"
+    # without a number - it is the only shape in the game that is not resolved
+    # yet. Flat coins belong to MIDAS and BLOOD MONEY; this one is turning.
+    ellipse(c, 12.0, 12.6, 4.2, 9.4, S)
+    ellipse(c, 12.0, 12.6, 1.8, 6.4, DEEP)
+    c.arc(12.0, 12.6, 8.6, 2.0, 30, 150, E)            # the spin
+    c.arc(12.0, 12.6, 8.6, 2.0, 210, 330, E)
+    c.poly([(3.0, 9.4), (7.0, 8.2), (5.2, 12.0)], E)
+
+
+@icon('bruiseRounds')       # taking damage fills the magazine, free
+def _(c):
+    # A MAGAZINE FILLED WITH WHAT IT COST. What shows through it is drops rather
+    # than cartridges, which is the entire mechanic: the ammunition is made out
+    # of the hit.
+    c.rect(4.6, 2.6, 19.4, 5.2, S)
+    c.rect(6.0, 5.2, 18.0, 22.6, S)
+    drop(c, 12.0, 11.0, 3.0, E)
+    drop(c, 12.0, 18.6, 3.0, E)
+
+
+@icon('chainFeed')          # a kill with the last round reloads instantly
+def _(c):
+    # A BELT WITH NO END. BELT FEED's is a length of belt going somewhere; this
+    # one comes back to itself, which is exactly what "no reload" means.
+    c.ring(12.0, 12.0, 10.0, 3.6, S)
+    for i in range(10):                                # the links in it
+        a = math.radians(i * 36 + 18)
+        c.line(12.0 + math.cos(a) * 6.8, 12.0 - math.sin(a) * 6.8,
+               12.0 + math.cos(a) * 10.4, 12.0 - math.sin(a) * 10.4, E, 1.4)
+
+
+@icon('beltFedDream')       # no magazine at all; 2 ammo a shot, off the belt
+def _(c):
+    # THE MAGAZINE STRUCK OUT, AND THE BELT THAT REPLACED IT. The bar is doing
+    # the same job it does in HIPSHOT - naming the thing the pick removes - and
+    # the two objects are stacked rather than overlapped, so neither has to be
+    # picked out of the other.
+    c.rect(8.0, 1.0, 16.0, 2.6, S)                     # the magazine
+    c.rect(9.0, 2.6, 15.0, 10.4, S)
+    c.rect(4.6, 4.8, 19.4, 6.6, E)                     # gone
+    c.rect(1.0, 14.0, 23.0, 17.4, S)                   # the belt
+    for i in range(5):                                 # and the rounds on it
+        x = 2.4 + i * 4.4
+        c.rect(x, 17.4, x + 3.0, 22.4, E)
+
+
+@icon('cashCannon')         # out of ammo: keep firing at $10 a shot
+def _(c):
+    # A MUZZLE THROWING COINS. The gun is barely there - a bore ring at the
+    # left edge - because what the pick is about is what comes out of it.
+    c.ring(4.0, 12.0, 4.0, 1.8, S)
+    c.rect(0.4, 8.0, 4.0, 16.0, S)
+    for cx, cy, r in ((11.0, 7.6, 3.2), (17.6, 12.0, 4.0), (12.6, 18.6, 3.0)):
+        c.disc(cx, cy, r, E)
+        c.disc(cx, cy, r * 0.5, DEEP)
+
+
+@icon('lastBreath')         # below 20 HP, the reserve refills. Once a wave.
+def _(c):
+    # LUNGS. Nothing else in the catalogue is a pair of lobes on a stem, and it
+    # is the one organ that says "the last of something" - the round drawn down
+    # the windpipe is what the pick actually hands over.
+    c.rect(11.0, 1.4, 13.0, 10.0, S)                   # the windpipe
+    c.rect(7.4, 5.6, 16.6, 7.4, S)
+    c.poly([(10.6, 8.0), (10.6, 20.4), (4.4, 22.0), (2.4, 13.0), (6.0, 8.0)], S)
+    c.poly([(13.4, 8.0), (13.4, 20.4), (19.6, 22.0), (21.6, 13.0), (18.0, 8.0)], S)
+    bullet(c, 10.6, 11.0, 2.8, 8.0, E, E, 0.4)
+
+
+@icon('autoLoot')           # every credit comes to you, always, at half value
+def _(c):
+    # A FUNNEL WITH THE FLOOR GOING INTO IT. LODESTONE is a coin being pulled;
+    # this is the whole room already arriving, which is why the shape is a
+    # throat rather than a magnet.
+    for cx, cy, r in ((4.6, 3.4, 2.6), (12.0, 1.8, 2.4), (19.4, 3.4, 2.6)):
+        c.disc(cx, cy, r, E)
+    c.poly([(1.6, 7.0), (22.4, 7.0), (14.4, 16.0), (9.6, 16.0)], S)
+    c.rect(9.6, 16.0, 14.4, 22.6, S)
+    c.disc(12.0, 19.4, 1.8, E)
+
+
+@icon('criticalOverflow')   # crits deal +50% and refund a round
+def _(c):
+    # A CARTRIDGE WITH A SPARK COMING OFF IT AND AN ARROW GOING BACK IN. The
+    # crit family's own star, but on a ROUND rather than on a target: what this
+    # pick changes is the ammunition economy, not the aim.
+    bullet(c, 8.4, 6.0, 7.2, 16.0, S, S, 0.42)
+    star(c, 17.4, 5.4, 5.0, 1.9, 5, E)
+    c.arc(12.0, 15.0, 8.6, 2.2, 190, 330, E)
+    c.poly([(3.0, 12.0), (7.4, 13.4), (3.4, 17.0)], E)
+
+
+@icon('ironLung')           # immune to every status, -30% healing
+def _(c):
+    # A RESPIRATOR. The one object in the set that is worn on a FACE, and the
+    # filter canisters are the lit part - they are what does the work.
+    c.poly([(3.0, 5.0), (21.0, 5.0), (18.6, 17.0), (12.0, 21.6), (5.4, 17.0)], S)
+    c.rect(1.0, 6.0, 23.0, 8.4, S)                     # the strap
+    c.disc(7.6, 12.0, 3.2, E)
+    c.disc(16.4, 12.0, 3.2, E)
+    c.disc(7.6, 12.0, 1.3, DEEP)
+    c.disc(16.4, 12.0, 1.3, DEEP)
+
+
+@icon('lifeline')           # at 25 HP or below, regen 5 HP/s
+def _(c):
+    # A TRACE THAT COMES BACK. It flatlines across the left of the frame and
+    # then beats - which is the pick exactly: the bottom of the bar is not
+    # where a run ends any more.
+    c.rect(1.0, 19.6, 23.0, 22.4, S)                   # the floor it sits on
+    c.line(1.0, 13.0, 7.0, 13.0, E, 2.0)
+    c.line(7.0, 13.0, 9.6, 3.0, E, 2.0)
+    c.line(9.6, 3.0, 12.4, 17.4, E, 2.0)
+    c.line(12.4, 17.4, 15.0, 9.0, E, 2.0)
+    c.line(15.0, 9.0, 17.0, 13.0, E, 2.0)
+    c.line(17.0, 13.0, 23.0, 13.0, E, 2.0)
+
+
+@icon('boneMarrow')         # +100 max health, -50% healing
+def _(c):
+    # A BONE, CUT THROUGH. The four knobs and the shaft are the silhouette and
+    # the open marrow is the lit part - the health is IN there, and getting it
+    # out is what the pick makes hard.
+    c.rect(6.0, 9.6, 18.0, 14.4, S)
+    for cx, cy in ((5.0, 8.0), (5.0, 16.0), (19.0, 8.0), (19.0, 16.0)):
+        c.disc(cx, cy, 4.0, S)
+    c.rect(6.0, 11.0, 18.0, 13.0, E)
+    c.disc(19.0, 12.0, 2.4, E)
+
+
+@icon('healthyCore')        # regen 1 HP/s always; nothing else may heal
+def _(c):
+    # A CROSS SEALED INSIDE A SHELL. The ring is unbroken all the way round,
+    # which is the drawback drawn: this is the only way in, and there is no
+    # other. NANOWEAVE's regeneration is a weave, and OVERDRAW's cross spills.
+    c.ring(12.0, 12.0, 10.4, 2.6, S)
+    c.ring(12.0, 12.0, 6.6, 1.4, DEEP)
+    c.rect(10.2, 5.6, 13.8, 18.4, E)
+    c.rect(5.6, 10.2, 18.4, 13.8, E)
+
+
+@icon('emergencyRations')   # every wave starts at 50 HP; +50% healing
+def _(c):
+    # A TIN, HALF FULL. The line across the middle is the fifty - the icon's own
+    # half-way mark - and it is drawn as a fill level rather than as a number
+    # because the whole set is wordless.
+    ellipse(c, 12.0, 4.2, 8.4, 2.8, S)
+    c.rect(3.6, 4.2, 20.4, 20.0, S)
+    ellipse(c, 12.0, 20.0, 8.4, 2.8, S)
+    c.rect(3.6, 12.0, 20.4, 20.0, E)                   # the half that is left
+    ellipse(c, 12.0, 20.0, 8.4, 2.8, E)
+    ellipse(c, 12.0, 4.2, 5.6, 1.8, DEEP)              # the opening
+
+
+@icon('finalDose')          # reloading on your last round heals 5 HP
+def _(c):
+    # THE LAST ROUND, AND WHAT IT IS WORTH. A cartridge with a cross struck
+    # across the case - a round that is medicine. ADRENALINE owns the syringe,
+    # so this had to be the ammunition rather than the dose.
+    bullet(c, 8.0, 2.0, 8.0, 20.0, S, S, 0.36)
+    c.rect(10.4, 8.4, 13.6, 18.0, E)
+    c.rect(8.0, 11.6, 16.0, 14.8, E)
+    c.disc(12.0, 21.8, 1.6, E)                         # the drop it leaves
+
+
+@icon('aimOrBleed')         # hits heal 1 HP, misses cost 1
+def _(c):
+    # A RETICLE BLEEDING FROM ONE ARM. The four arms are the aim and the drop
+    # under the low one is the miss - both halves of the deal in one object,
+    # which is the only way a two-sided pick reads at 24 pixels.
+    c.ring(12.0, 10.6, 8.0, 2.2, S)
+    c.rect(11.2, 0.6, 12.8, 5.4, S)
+    c.rect(11.2, 15.8, 12.8, 19.0, S)
+    c.rect(1.6, 9.8, 5.4, 11.4, S)
+    c.rect(18.6, 9.8, 22.4, 11.4, S)
+    c.disc(12.0, 10.6, 1.8, E)
+    drop(c, 12.0, 21.4, 2.0, E)
+
+
+@icon('killStreak')         # 20 kills unhurt: heal 5 HP and +10 ammo
+def _(c):
+    # THREE CHEVRONS CLIMBING TO A CROSS. The chevrons are the run of kills -
+    # the movement family's own stroke, borrowed because a streak is a thing
+    # that goes somewhere - and the cross at the top is what it pays.
+    c.rect(10.0, 1.6, 14.0, 10.0, E)
+    c.rect(7.0, 4.0, 17.0, 8.0, E)
+    for i in range(3):
+        chevron(c, 12.0, 22.0 - i * 4.6, 7.0, S, dirx=0, diry=1, w=3.0)
+
+
+@icon('vitalTrigger')       # using the active item also heals 5 HP
+def _(c):
+    # THE BUTTON, WITH A CROSS ON IT. The item slot's whole interface is one
+    # press, and this is the press - a domed key seen head-on, which nothing
+    # else in the set is.
+    c.disc(12.0, 12.6, 10.2, S)
+    c.disc(12.0, 11.4, 7.8, S)
+    c.rect(10.4, 5.6, 13.6, 17.2, E)
+    c.rect(6.2, 9.8, 17.8, 13.0, E)
+
+
+@icon('tireless')           # unlimited stamina
+def _(c):
+    # THE ONE SYMBOL IN THE SET, and it earns the exception: a bar that never
+    # empties has no object, and every alternative - a boot, a lung, a battery -
+    # is already somebody else's silhouette.
+    c.ring(7.4, 12.0, 6.2, 2.6, E)
+    c.ring(16.6, 12.0, 6.2, 2.6, E)
+    c.rect(1.0, 20.0, 23.0, 22.6, S)                   # a full bar under it
+
+
+@icon('panicTurret')        # being hit drops a turret, 10s, up to 5
+def _(c):
+    # A GUN INSIDE A WARNING TRIANGLE. LITTLE BROTHER is the turret standing on
+    # its tripod; this is the same gun arriving because something went wrong,
+    # and the triangle is the only part of the drawing that says so.
+    c.poly([(12.0, 1.0), (23.0, 21.4), (1.0, 21.4)], S)
+    c.poly([(12.0, 5.6), (19.4, 19.4), (4.6, 19.4)], DEEP)
+    c.disc(12.0, 15.4, 3.6, E)                         # the drum, head-on
+    c.rect(10.8, 8.0, 13.2, 13.0, E)                   # and the barrel
+    c.disc(12.0, 15.4, 1.4, DEEP)
+
+
+@icon('delayedFuse')        # shots stick and explode two seconds later
+def _(c):
+    # A CLOCK STANDING IN A BLAST. SHORT FUSE owns the fuse and DETONATOR the
+    # burst on contact, so what is left to draw is the WAIT - and the hands are
+    # the lit part, because the wait is the whole pick.
+    spikes(c, 12.0, 12.0, 8.6, 12.0, 8, 2.6, S)
+    c.disc(12.0, 12.0, 8.0, S)
+    c.disc(12.0, 12.0, 6.2, DEEP)
+    c.line(12.0, 12.0, 12.0, 6.6, E, 1.8)
+    c.line(12.0, 12.0, 16.4, 13.4, E, 1.8)
+    c.disc(12.0, 12.0, 1.4, E)
+
+
+@icon('fearAura')           # enemies within 5m flee, once every 30s each
+def _(c):
+    # RINGS GOING OUT, AND SOMETHING LEAVING WITH THEM. TERROR is a hit enemy
+    # running; this is the room backing off a player who has not fired, so the
+    # subject is the RADIUS and the figure at its centre is small.
+    c.disc(12.0, 15.6, 3.0, S)
+    c.rect(10.8, 17.8, 13.2, 22.8, S)
+    c.arc(12.0, 15.6, 7.4, 2.0, 30, 150, E)
+    c.arc(12.0, 15.6, 11.0, 2.0, 40, 140, E)
+    chevron(c, 2.6, 20.0, 3.0, E, dirx=-1, w=2.2)
+    chevron(c, 21.4, 20.0, 3.0, E, dirx=1, w=2.2)
+
+
+@icon('statusConduit')      # status effects on you spread to enemies within 5m
+def _(c):
+    # A HUB WIRED TO THREE BODIES. What is on the player is at the centre and
+    # the three things it is arriving at are the outer discs - a topology, not
+    # an effect, because the effect could be any of four.
+    for a in (90, 210, 330):
+        r = math.radians(a)
+        x, y = 12.0 + math.cos(r) * 8.4, 12.0 - math.sin(r) * 8.4
+        c.line(12.0, 12.0, x, y, S, 2.0)
+        c.disc(x, y, 3.0, S)
+        c.disc(x, y, 1.3, E)
+    c.disc(12.0, 12.0, 4.4, E)
+    c.disc(12.0, 12.0, 1.8, DEEP)
+
+
+@icon('trueStrike')         # +10% crit damage; after a pause, 4 sure crits
+def _(c):
+    # A FLETCHED SHAFT ALREADY IN THE MIDDLE OF SOMETHING. ASSASSIN is a dagger
+    # and SEEKER a curve; this is the one straight, feathered line in the set,
+    # and it is drawn ARRIVED rather than travelling.
+    c.disc(17.0, 7.0, 5.4, S)
+    c.disc(17.0, 7.0, 2.6, DEEP)
+    c.line(1.6, 22.4, 17.0, 7.0, E, 2.2)
+    c.line(2.0, 16.2, 7.8, 22.0, E, 2.0)               # the fletching
+    c.line(4.6, 18.8, 9.0, 23.2, E, 1.6)
+
+
+@icon('domino')             # a crit gives the next shot +30% crit chance
+def _(c):
+    # A DOMINO. The catalogue has no other divided tile, and the object already
+    # means "this one sets off the next" everywhere else in the world.
+    c.rect(6.0, 1.0, 18.0, 23.0, S)
+    c.rect(6.0, 11.4, 18.0, 12.6, DEEP)                # the bar
+    c.disc(12.0, 6.0, 2.0, E)                          # one, above
+    for cx, cy in ((9.4, 15.4), (14.6, 15.4), (9.4, 19.6), (14.6, 19.6)):
+        c.disc(cx, cy, 1.7, E)                         # four, below
+
+
+@icon('luckyStreak')        # +5% crit chance per hit on the same enemy
+def _(c):
+    # A HORSESHOE. RABBIT'S FOOT is the other luck pick and it is a paw on a
+    # chain, so the two never rhyme - and the nail holes climbing one arm are
+    # the ramp, which is what makes this a streak rather than a charm.
+    c.arc(12.0, 13.0, 9.6, 3.4, 0, 180, S)
+    c.rect(2.4, 13.0, 5.8, 20.6, S)
+    c.rect(18.2, 13.0, 21.6, 20.6, S)
+    for i in range(4):
+        a = math.radians(15 + i * 50)
+        c.disc(12.0 + math.cos(a) * 7.9, 13.0 - math.sin(a) * 7.9, 1.2, E)
+    c.disc(4.1, 18.4, 1.2, E)
+    c.disc(19.9, 18.4, 1.2, E)

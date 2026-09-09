@@ -92,6 +92,30 @@ export function setPlateSink(fn) {
   plateSink = fn;
 }
 
+// SHARED PAIN. Installed by main.js while the passive item is owned and torn
+// down the moment it is not, so a run without it pays one null test per hit -
+// which is the only cost a pick nobody took is allowed to have.
+//
+// A HOOK RATHER THAN A `mods` READ, because takeDamage() is on the ENEMY and
+// there is no player in reach of it. Every blow in the game already funnels
+// through here - bullets, blasts, poison ticks, turrets, thorns, friendly fire
+// - which is exactly why the split has to live here and nowhere else.
+let shareHook = null;
+// Raised while the hook is redistributing, so the slices it deals do not each
+// call the hook again. A module-level flag and not a field: the recursion is
+// across the whole roster, not on one body.
+let _sharing = false;
+
+export function setShareHook(fn) {
+  shareHook = fn;
+}
+
+// WEAK POINT's multiplier. A module constant rather than a mod read, for the
+// same reason the hook above is a hook: the enemy cannot see the player. The
+// FLAG is what the build sets (main.js only ever marks a body while the pick is
+// owned), and this is what the flag is worth.
+const MARK_MULT = 1.5;
+
 // The one AI frame object, filled and handed to an ai() per enemy per frame.
 // Reused rather than allocated: thirty enemies at 60fps is 1800 objects a
 // second, which is exactly the kind of churn the geometry and material caches
@@ -149,6 +173,16 @@ export class Enemy {
     // pellet - see the _shotHits guard there.
     this.everHit = false;
     this.hitTally = 0;
+    // WEAK POINT's tally, and the mark it ends in. Deliberately NOT hitTally:
+    // that one is TELLTALE's and is counted whether or not the hit was already
+    // a crit, so sharing it would make a build holding both mark bodies on the
+    // wrong hit. Both die with the body, like everHit above.
+    this.markTally = 0;
+    this.marked = false;
+    // FEAR AURA's per-enemy lockout: the game time this body was last made to
+    // run. -99 rather than 0 so an enemy spawned on the first frame of a run is
+    // not already inside its own cooldown.
+    this.fearAuraAt = -99;
     // Collision size, independent of the model's `scale`. Everything that
     // treats an enemy as a circle reads this: obstacle resolution, crowd
     // separation, the arena clamp, melee reach and the player's shards.
@@ -1012,6 +1046,21 @@ export class Enemy {
   // that was actually struck.
   takeDamage(d, silent = false, dirX = 0, dirZ = 0, point = null, crit = false) {
     if (this.dead) return false;
+    // SHARED PAIN, and it is the FIRST thing that happens to a blow because it
+    // is not a modifier on this hit - it is a decision that this hit is not
+    // landing here at all. The hook walks the whole living roster and deals an
+    // even slice to each of them (this body included), through this same
+    // method, with `_sharing` up so the split cannot split itself.
+    //
+    // It returns false - "this did not kill" - which is the honest answer: the
+    // caller's target is not what was hit. Kills are collected by main.js's own
+    // sweep whatever killed them, so nothing is lost by saying so.
+    if (shareHook && !_sharing && !this.dead) {
+      _sharing = true;
+      shareHook(d, silent);
+      _sharing = false;
+      return false;
+    }
     // A warded enemy takes NOTHING - not bullets, not blasts, not the damage
     // over time already ticking on it. A partial reduction here would leave
     // the player unsure whether their shots were working, which is the one
@@ -1054,6 +1103,10 @@ export class Enemy {
         : (typeof def.armorDefault === 'function' ? def.armorDefault(this) : def.armorDefault);
     }
     if (this.buffT > 0) d *= CONDUIT_RESIST;
+    // WEAK POINT. Last of the multipliers and above nothing, because the card
+    // says "from all sources": armour, the freeze bonus and the Conduit's
+    // resistance have all had their say, and this lifts whatever survived them.
+    if (this.marked) d *= MARK_MULT;
     this.hp -= d;
     // WHAT THE HIT WAS WORTH, NOT WHAT THE BODY HAD LEFT. `d` here is already
     // through ward, freeze vulnerability, armour facing and the Conduit's

@@ -233,6 +233,74 @@ const DEFAULT_MODS = {
   aimGuard: 0,          // Cheekweld: damage taken reduced while aiming
   crouchGuard: 0,       // Groundhog: damage taken reduced while crouched
   crouchReload: 0,      // and the reload it shortens, on the same posture
+
+  // ---- THE SECOND POOL -----------------------------------------------------
+  //
+  // Forty-one more max-1 fields, on the same contract as the block above: zero
+  // is "not owned" and every reader tests for it. What is different about this
+  // block is that most of them are read at a MOMENT rather than folded into a
+  // stat - the first round of a magazine, the beat, the frame a hit landed -
+  // so the counters those moments need live on the Player itself (see reset())
+  // and only the SETTINGS are here, where rebuildMods can replay them.
+  spiritStep: 0,        // Machine Spirit: fire rate gained per second of held
+  spiritMax: 0,         // trigger, and the ceiling it stops at
+  hipshot: 0,           // Hipshot: 2x rate from the hip, 0.5x down the sights
+  metronome: 0,         // Metronome: the trigger fires on the beat and nowhere
+                        // else. The fire rate stat has nothing left to multiply
+  echoEvery: 0,         // Echo Chamber: a free duplicate shot every Nth trigger
+  echoDamage: 0,        // pull, at this fraction of the damage
+  firstShot: 0,         // Cannonade: multiplier on the first shot of a magazine
+  markHits: 0,          // Weak Point: hits on one body that mark it
+  markBonus: 0,         // and the extra damage everything then does to it
+  overkill: 0,          // Overkill: damage past a kill walks to the next body
+  overkillRange: 0,
+  oathPerWave: 0,       // Blood Oath: max HP given up at every wave start
+  oathFloor: 0,         // down to this max, and no further
+  sharedPain: 0,        // Shared Pain: every blow is split over the whole room
+  mono: 0,              // Gray Matter: the world, in grey
+  sacrifice: 0,         // Sacrifice: flag only - the removal happens once, at
+                        // the pick, in takeUpgrade
+  bottomFeed: 0,        // Bottom Feeder: damage gained by reloading from empty
+  bottomTime: 0,        // and how long it lasts
+  killCredits: 0,       // Payday: credits per kill
+  ammoPickupMult: 1,    // Ammo Surplus: multiplier on an ammo pickup
+  highStakes: 0,        // High Stakes: rerolls and box rolls are free...
+  stakesOdds: 0,        // ...this often they take everything instead
+  bruise: 0,            // Bruise Rounds: a hit taken fills the magazine, free
+  chainFeed: 0,         // Chain Feed: a kill with the last round reloads it
+  beltFedDream: 0,      // Belt Fed Dream: no magazine at all, and
+  beltFedCost: 0,       // this many rounds off the reserve per shot
+  cashCannon: 0,        // Cash Cannon: credits per shot once the ammo is gone
+  lastBreath: 0,        // Last Breath: the HP crossing that refills the reserve
+  autoLoot: 0,          // Auto-Loot: the wave-clear sweep, permanently on
+  critOverflow: 0,      // Critical Overflow: crits refund a round, others cost
+  statusImmune: 0,      // Iron Lung: no status effect may land on the player
+  healMult: 1,          // multiplier on EVERY heal - see Player.heal
+  healBlock: 0,         // Healthy Core: nothing but coreRegen may heal at all
+  lifelineAt: 0,        // Lifeline: the HP at or below which it regenerates
+  lifelineRate: 0,
+  coreRegen: 0,         // Healthy Core: HP per second, always, combat or not
+  rations: 0,           // Emergency Rations: the HP every wave opens on
+  finalDose: 0,         // Final Dose: HP healed by reloading on one round
+  aimHeal: 0,           // Aim or Bleed: HP per shot that connected
+  missCost: 0,          // and HP per shot that did not
+  killStreak: 0,        // Kill Streak: kills without being hit that pay out
+  streakHeal: 0,        // and what they pay
+  streakAmmo: 0,
+  itemHeal: 0,          // Vital Trigger: HP healed by firing the active item
+  panicTurret: 0,       // Panic Turret: a turret per hit taken
+  panicLife: 0,         // for this long, up to
+  panicMax: 0,          // this many at once
+  fuseDelay: 0,         // Delayed Fuse: seconds a stuck shot waits before it
+  fuseRadius: 0,        // goes off, and the area it goes off over
+  fearAura: 0,          // Fear Aura: metres, and
+  fearAuraTime: 0,      // seconds an enemy caught in it flees, and
+  fearAuraCd: 0,        // seconds before that same enemy can be caught again
+  conduit: 0,           // Status Conduit: metres a status on the player reaches
+  trueStrikeWait: 0,    // True Strike: seconds off the trigger that arm it
+  trueStrikeShots: 0,   // and the guaranteed crits it then hands over
+  domino: 0,            // Domino: crit chance the shot after a crit gets
+  luckyStep: 0,         // Lucky Streak: crit chance per hit on the same body
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -987,6 +1055,32 @@ export class Player {
     // path and has no business holding a reference to the game. Zero until the
     // first frame writes it, which is exactly what a run with no money means.
     this.balance = 0;
+    // ---- THE SECOND POOL'S COUNTERS ---------------------------------------
+    //
+    // On the PLAYER and never in `mods`, for the reason adrenalineStacks,
+    // carnageStacks and noHitStacks are: rebuildMods() replays the owned list
+    // from fresh defaults after every draft pick, so anything an EVENT wrote
+    // into mods would be handed straight back by the next totem walked into.
+    // Every one of these is written by something that HAPPENED.
+    this.firingFor = 0;        // Machine Spirit: seconds of unbroken trigger
+    this.beatShot = false;     // Metronome: a beat is standing and unspent
+    this.shotTally = 0;        // Echo Chamber: trigger pulls, for every fourth
+    this.magFresh = true;      // Cannonade: this magazine has not fired yet
+    this.shotWasFresh = false; // and whether the shot just fired was that one
+    this.oathLoss = 0;         // Blood Oath: max HP given up so far, kept
+    this.bottomEnd = 0;        // Bottom Feeder: the damage window's deadline
+    this.cashOwed = 0;         // Cash Cannon: credits main.js still has to bill
+    this.lastBreathUsed = false; // Last Breath: spent for this wave
+    this.trueStrikeLeft = 0;   // True Strike: guaranteed crits in hand
+    this.dominoNext = false;   // Domino: the last shot crit
+    this.luckyTarget = null;   // Lucky Streak: the body being worked on
+    this.luckyHits = 0;        // and how many landed on it in a row
+    this.cleanKills = 0;       // Kill Streak: kills since the last hit taken
+    this.lastShotAt = -99;     // True Strike: when the trigger last fired
+    this.magOnReload = 0;      // Primed Mag / Bottom Feeder: what was thrown
+    this.sacrificed = null;     // Sacrifice: the name of what it just ate, for
+                                // the banner main.js draws at the pick
+    this.ammoFx = false;        // Last Breath: one-shot, cleared by main.js
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1163,8 +1257,14 @@ export class Player {
     // because it is health the player earned wave by wave and not part of the
     // build: Glass Cannon halving the frame it was earned on would quietly
     // take half of every clean wave back with it.
+    // BLOOD OATH's debt comes off the very end, beside EXECUTIONER's, and for
+    // the same reason: it is a price the run has already paid, not part of the
+    // frame the build multiplies. It is capped as it is charged rather than
+    // here - see Game.startWave - so the oath stops at 50 against whatever the
+    // build's max was on the wave it stopped at, and starts again if something
+    // later lifts that back over 50.
     return Math.max(
-      MIN_MAX_HEALTH, built + this.hpBanked - this.mods.maxHpFlat
+      MIN_MAX_HEALTH, built + this.hpBanked - this.mods.maxHpFlat - this.oathLoss
     );
   }
   get magSize() {
@@ -1212,8 +1312,18 @@ export class Player {
   get effectiveFireRate() {
     const crouch = this.mods.crouchRate > 0 && this.crouching && !this.sliding
       ? 1 + this.mods.crouchRate : 1;
+    // MACHINE SPIRIT. `firingFor` is seconds of UNBROKEN trigger, counted in
+    // update() off the time since the last round left the barrel rather than
+    // off the button - which is what makes a reload, a dry magazine and a
+    // METRONOME build's silence between beats all count correctly as the gun
+    // still firing or not, without any of them being named here.
+    const spirit = this.mods.spiritStep > 0
+      ? 1 + Math.min(this.mods.spiritMax, this.mods.spiritStep * this.firingFor) : 1;
+    // HIPSHOT, read live off the aim flag exactly as Cheekweld's guard is: the
+    // player is paid for the decision, not for the weapon finishing its raise.
+    const hip = this.mods.hipshot > 0 ? (this.aiming ? 0.5 : 2) : 1;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
-      * this.mods.fireRate * crouch * this.paceMult;
+      * this.mods.fireRate * crouch * this.paceMult * spirit * hip;
   }
 
   /**
@@ -1348,6 +1458,26 @@ export class Player {
     const n = (this.upgrades[id] || 0) + 1;
     if (n > def.max) return false;
     this.upgrades[id] = n;
+    // SACRIFICE eats one of the others, ONCE, here at the pick.
+    //
+    // It cannot live in an apply(): rebuildMods() replays the whole owned list
+    // from fresh defaults after every draft pick, so an apply() that dropped an
+    // upgrade would drop a second one the next time the player took anything at
+    // all, and a third after that. This is the one thing in either pool that
+    // changes the LIST rather than the stats built from it, which is exactly
+    // why it happens where the list is written.
+    //
+    // It never eats itself, and it never eats a stack off a tiered pick and
+    // leaves the rest - the whole entry goes, which is what "removes one random
+    // passive item" says. A run holding nothing else simply gets the stats.
+    if (id === 'sacrifice') {
+      const others = Object.keys(this.upgrades).filter((k) => k !== id && this.upgrades[k] > 0);
+      if (others.length) {
+        const gone = others[(Math.random() * others.length) | 0];
+        delete this.upgrades[gone];
+        this.sacrificed = UPGRADES[gone] ? UPGRADES[gone].name : gone;
+      }
+    }
     this.rebuildMods();
     // A max-health change must not leave the player over the new cap or at a
     // stale value; clamp immediately so the HUD never shows 120/100.
@@ -1504,6 +1634,10 @@ export class Player {
     // _afflictPlayer so the lock also covers a status the PLAYER's own
     // machinery would put on them.
     if (this.now < this.statusLockEnd) return false;
+    // IRON LUNG. Nothing lands at all - not fire, not poison, not the chill,
+    // not fear, weakness or curse. Refused HERE, above the table, so an effect
+    // added to status.js later is covered by the pick without a line of its own.
+    if (this.mods.statusImmune > 0) return false;
     const d = dur > 0 ? dur : def.duration;
     // The full duration is what the HUD's timer bar measures against. While an
     // effect is running it only ever GROWS - a two-second top-up landing on a
@@ -1650,7 +1784,48 @@ export class Player {
    * the beat would be a gold number nobody aimed.
    */
   rollCrit() {
-    return Math.random() < this.mods.critChance;
+    const m = this.mods;
+    // TRUE STRIKE, first and unconditionally: four shots that were BOUGHT with
+    // two seconds off the trigger are not a die roll, and spending one on a
+    // shot that would have crit anyway is the honest reading of "the next four
+    // shots" - the player stopped firing for four shots, not for four rolls.
+    if (this.trueStrikeLeft > 0) {
+      this.trueStrikeLeft--;
+      this.dominoNext = m.domino > 0;
+      return true;
+    }
+    let chance = m.critChance;
+    // DOMINO. Spent whether or not it wins - it is the shot after a crit, and
+    // there is only one of those.
+    if (this.dominoNext) {
+      chance += m.domino;
+      this.dominoNext = false;
+    }
+    // LUCKY STREAK. Counted by main.js off the body the shot landed on, which
+    // is the only place that knows - see Game.shoot.
+    if (m.luckyStep > 0) chance += m.luckyStep * this.luckyHits;
+    const crit = Math.random() < chance;
+    // The next shot's leg-up, armed by this one landing. Set here rather than
+    // where the hit resolves so it can never be armed twice by one trigger
+    // pull, however many pellets were in it.
+    if (crit && m.domino > 0) this.dominoNext = true;
+    return crit;
+  }
+
+  // LUCKY STREAK's counter. Called once per trigger pull with the body the
+  // shot landed on, or null for a shot that touched nothing.
+  //
+  // A DIFFERENT BODY IS A RESET AND NOT A CARRY-OVER, which is the whole pick:
+  // it asks the player to stay on one target while the room moves, and
+  // switching costs exactly as much as missing does.
+  bumpLucky(en) {
+    if (this.mods.luckyStep <= 0) return;
+    if (en && en === this.luckyTarget) {
+      this.luckyHits++;
+      return;
+    }
+    this.luckyTarget = en;
+    this.luckyHits = en ? 1 : 0;
   }
 
   // ONE TICK OF DAMAGE OVER TIME: one of the player's own shots, before the
@@ -1746,6 +1921,26 @@ export class Player {
     this.frozenUntil = 0;
     this.item = null;
     this.itemCharge = 0;
+    // The second pool's counters, all of them - see the block in the
+    // constructor for why they are here rather than in mods.
+    this.firingFor = 0;
+    this.beatShot = false;
+    this.shotTally = 0;
+    this.magFresh = true;
+    this.shotWasFresh = false;
+    this.oathLoss = 0;
+    this.bottomEnd = 0;
+    this.cashOwed = 0;
+    this.lastBreathUsed = false;
+    this.trueStrikeLeft = 0;
+    this.dominoNext = false;
+    this.luckyTarget = null;
+    this.luckyHits = 0;
+    this.cleanKills = 0;
+    this.lastShotAt = -99;
+    this.magOnReload = 0;
+    this.sacrificed = null;
+    this.ammoFx = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -1921,6 +2116,52 @@ export class Player {
       }
     }
 
+    // ---- THE SECOND POOL'S CLOCKS -----------------------------------------
+    //
+    // MACHINE SPIRIT's ramp. Measured off the time since the last round left
+    // the barrel rather than off the button, and the window is generous enough
+    // (a whole cycle plus a fifth of a second) that recoil, a stutter in the
+    // frame rate or a METRONOME build's silence between beats all still read as
+    // one unbroken burst - while letting go of the trigger for a beat does not.
+    if (this.mods.spiritStep > 0) {
+      const gap = 1 / Math.max(1e-3, this.effectiveFireRate) + 0.2;
+      this.firingFor = time - this.lastShotAt <= gap ? this.firingFor + dt : 0;
+    }
+    // TRUE STRIKE. Two seconds without firing loads four certain crits, and
+    // they are only ever loaded when the hand is empty - a player who waits
+    // four seconds gets four shots, not eight.
+    if (this.mods.trueStrikeShots > 0 && this.trueStrikeLeft <= 0
+      && time - this.lastShotAt >= this.mods.trueStrikeWait) {
+      this.trueStrikeLeft = this.mods.trueStrikeShots;
+    }
+    // HEALTHY CORE. Written straight into `health` rather than through heal(),
+    // because heal() is the thing this pick switches OFF - see healBlock. It is
+    // the one heal in the game that is not a heal.
+    if (this.mods.coreRegen > 0 && this.health < this.maxHealth) {
+      this.health = Math.min(this.maxHealth, this.health + this.mods.coreRegen * dt);
+    }
+    // LIFELINE. Not gated on combat, unlike every other regeneration in the
+    // pool, and it needs no gate: it stops the moment the bar is back over 25,
+    // so the most a wave break can be farmed for is the 25 points it promises.
+    if (this.mods.lifelineRate > 0 && this.health <= this.mods.lifelineAt) {
+      this.heal(this.mods.lifelineRate * dt);
+    }
+    // BELT FED DREAM's counter. There is no magazine, so the number in the
+    // corner would otherwise freeze at whatever was in the gun when the pick
+    // was taken and never move again. Mirroring the reserve makes the HUD read
+    // "everything you have / everything you have", which is exactly the fact
+    // the pick is about - and it costs one assignment on a frame.
+    if (this.mods.beltFedDream > 0) this.mag = this.reserveAmmo;
+    // LAST BREATH. On the way DOWN through the line, once a wave - so it cannot
+    // be farmed by sitting on it, and the reserve arrives at the moment the
+    // player is least able to go looking for a crate.
+    if (this.mods.lastBreath > 0 && !this.lastBreathUsed
+      && this.health > 0 && this.health < this.mods.lastBreath) {
+      this.lastBreathUsed = true;
+      this.reserveAmmo = this.maxReserve;
+      this.ammoFx = true;
+    }
+
     // Returned to the caller so main.js can fire Reload Burst on exactly the
     // frame the magazine seats, without polling `reloading` from outside.
     let reloadFinished = false;
@@ -1945,6 +2186,15 @@ export class Player {
         this.reserveAmmo -= take;
         reloadFinished = true;
         this.breachReady = true;
+        // CANNONADE. The fresh magazine's first round is the ten-times one,
+        // and it is armed at the same instant the rounds actually arrive.
+        this.magFresh = true;
+        // BOTTOM FEEDER. `magOnReload` is what the magazine held when the
+        // reload was STARTED - see startReload - so this asks the exact
+        // question the card does: was the gun run dry before it was fed.
+        if (this.mods.bottomFeed > 0 && this.magOnReload <= 0) {
+          this.bottomEnd = time + this.mods.bottomTime;
+        }
       }
     }
 
@@ -2887,7 +3137,16 @@ export class Player {
   // Returns false when a reload is pointless (already reloading, mag full, or
   // no reserve), so callers can skip the sound.
   startReload() {
+    // BELT FED DREAM. There is no magazine, so there is nothing to reload and
+    // no dry click either - the gun runs off the reserve until the reserve is
+    // gone. Refused first, because every other guard below is about a magazine.
+    if (this.mods.beltFedDream > 0) return false;
     if (this.reloading > 0 || this.mag === this.magSize || this.reserveAmmo <= 0) return false;
+    // FINAL DOSE. EXACTLY one round left, which is a thing the player has to
+    // choose to stop at rather than a band they drift through - and it is
+    // taken here, at the DECISION, not when the magazine seats: a reload
+    // interrupted by a death still cost the player the round they held back.
+    if (this.mods.finalDose > 0 && this.mag === 1) this.heal(this.mods.finalDose);
     // WHAT IS BEING THROWN AWAY, for PRIMED MAG. Taken here rather than when
     // the reload lands, because that is where the magazine is topped up: by
     // then `mag` is the count of the FRESH one, and a passive item that read it
@@ -2909,7 +3168,48 @@ export class Player {
   // The drawback on the card was never meant to be "none": a shot that fires
   // twice pays twice, and a build that wants both pays six.
   get shotCost() {
+    // BELT FED DREAM bills a FLAT two rounds and ignores both multipliers. It
+    // has replaced the magazine, not scaled it: what the pick promises is "two
+    // ammo per shot", and a Triple Tap build reading six off the reserve for
+    // one trigger pull would be the card lying.
+    if (this.mods.beltFedDream > 0) return this.mods.beltFedCost;
     return this.mods.ammoPerShot * this.mods.volley;
+  }
+
+  // CRITICAL OVERFLOW's settlement, and CASH CANNON's. Called once per trigger
+  // pull by main.js with whether the shot ended up critting - which the trigger
+  // cannot know, because a crit is resolved against the BODY (see
+  // Game._resolveHit).
+  //
+  // A refund goes to the MAGAZINE where there is room and to the reserve
+  // otherwise, because the magazine is the number the player is watching. The
+  // extra round a non-crit costs comes out of the same two, in the same order.
+  settleShot(crit) {
+    if (this.mods.critOverflow <= 0 || this.lastShotCost <= 0) return;
+    // BELT FED DREAM has no magazine to settle against - `mag` is a mirror of
+    // the reserve, rewritten every frame (see update), so a round paid into it
+    // would be gone by the next one. The reserve is the only pool there is.
+    const belt = this.mods.beltFedDream > 0;
+    if (crit) {
+      if (!belt && this.mag < this.magSize) this.mag++;
+      else if (this.reserveAmmo < this.maxReserve) this.reserveAmmo++;
+      return;
+    }
+    if (!belt && this.mag > 0) this.mag--;
+    else if (this.reserveAmmo > 0) this.reserveAmmo--;
+  }
+
+  // CHAIN FEED. A full magazine, now, with no reload to stand through. Not a
+  // startReload() with the clock set to zero: that would arm breachReady and
+  // throw a PRIMED MAG grenade, and neither of those is a thing that happened.
+  instantReload() {
+    const take = Math.min(this.magSize - this.mag, this.reserveAmmo);
+    if (take <= 0) return false;
+    this.mag += take;
+    this.reserveAmmo -= take;
+    this.reloading = 0;
+    this.magFresh = true;
+    return true;
   }
 
   // Returns 'shot' on a real shot, 'empty' when the trigger is pulled dry, or
@@ -2921,7 +3221,15 @@ export class Player {
   // once rather than emptying the tube.
   tryShoot(triggerFresh) {
     const w = this.weapon;
-    if (this.reloading > 0 || this.fireCd > 0) return null;
+    // METRONOME. The cooldown is not a cooldown any more: the gun fires on a
+    // whole beat and on no other frame, so what gates the trigger is whether a
+    // beat is STANDING and unspent. main.js raises `beatShot` on the pulse edge
+    // and drops it the moment the trigger is released, which is what makes the
+    // first shot of a burst wait for the next beat rather than leaving on a
+    // beat that went by while the player was reloading. See Music.pulseWhole.
+    const metro = this.mods.metronome > 0;
+    if (this.reloading > 0) return null;
+    if (metro ? !this.beatShot : this.fireCd > 0) return null;
     // FEAR. The trigger, and only the trigger: reload, melee, dash and jump
     // all still work, so the window is one to move in rather than one to
     // watch. Reported rather than swallowed, so main.js can click at the
@@ -2936,6 +3244,7 @@ export class Player {
     // must not spend its window standing through a reload, and a free shot
     // must not quietly take its round off the reserve instead.
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
+      this.beatShot = false;
       this.lastShotCost = 0;
       // The magazine is never touched by a free shot, so what the trigger saw
       // is simply what is in it - see magAtShot.
@@ -2946,9 +3255,31 @@ export class Player {
       this.recoilPitch +=
         (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
       this._bloomShot();
+      this._noteShot();
+      return 'shot';
+    }
+    // BELT FED DREAM. No magazine at all: the shot is billed straight off the
+    // reserve and there is nothing to run dry but the reserve itself. Tested
+    // above the magazine branch, because there is no magazine for that branch
+    // to be talking about.
+    if (this.mods.beltFedDream > 0) {
+      const belt = this.shotCost;
+      if (this.reserveAmmo < belt) {
+        if (this._tryCashShot()) return 'shot';
+        return 'empty';
+      }
+      this.reserveAmmo -= belt;
+      this.lastShotCost = belt;
+      this.magAtShot = 0;
+      this._fireShot(w);
       return 'shot';
     }
     if (this.mag <= 0) {
+      // CASH CANNON. Out of ammunition is no longer out of the fight - the
+      // gun keeps firing and the wallet pays for it. Only once the RESERVE is
+      // gone too: while there are rounds to reload, reloading is what a dry
+      // magazine means.
+      if (this.reserveAmmo <= 0 && this._tryCashShot()) return 'shot';
       this.startReload();
       return 'empty';
     }
@@ -2972,6 +3303,23 @@ export class Player {
       // magazine; refusing it would jam the gun on one leftover round.
       this.mag = Math.max(0, this.mag - cost);
     }
+    this._fireShot(w);
+    if (this.mag === 0) this.startReload();
+    return 'shot';
+  }
+
+  /**
+   * EVERYTHING A ROUND LEAVING THE BARREL DOES TO THE GUN, once the paying is
+   * settled: the cooldown, the kick, the cone, the sprint lock.
+   *
+   * Three branches of tryShoot bill their round three different ways - the
+   * magazine, the reserve under BELT FED DREAM, and the wallet under CASH
+   * CANNON - and every one of them fires the same weapon afterwards. This is
+   * the half they share, and it exists so a fourth way of paying cannot ship
+   * with a gun that forgot to recoil.
+   */
+  _fireShot(w) {
+    this.beatShot = false;
     this.fireCd = 1 / this.effectiveFireRate;
     this.kick = w.kick;
     // A round fired is a commitment to being somewhere: it walks the player
@@ -2981,8 +3329,36 @@ export class Player {
     this.recoilPitch +=
       (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
     this._bloomShot();
-    if (this.mag === 0) this.startReload();
-    return 'shot';
+    this._noteShot();
+  }
+
+  // What every shot tells the second pool, whoever paid for it.
+  //
+  // TRUE STRIKE is armed off `lastShotAt` in update() rather than counted down
+  // here, so the two seconds are two seconds of SILENCE and not two seconds of
+  // a held trigger that happened to be on cooldown.
+  _noteShot() {
+    this.lastShotAt = this.now;
+    this.shotTally++;
+    // CANNONADE. `magFresh` is consumed HERE, at the trigger, and what it was
+    // is published for main.js - which reads it after tryShoot has already
+    // returned and so can no longer ask the question itself.
+    this.shotWasFresh = this.magFresh;
+    this.magFresh = false;
+  }
+
+  // CASH CANNON's round. Returns whether the wallet could cover it; the credits
+  // themselves are billed by main.js, which owns the balance - see `cashOwed`.
+  _tryCashShot() {
+    const price = this.mods.cashCannon;
+    if (price <= 0 || this.balance - this.cashOwed < price) return false;
+    this.cashOwed += price;
+    // The shot cost no AMMUNITION, which is what BRASS ECHO and CRITICAL
+    // OVERFLOW both read to decide whether there is anything to refund.
+    this.lastShotCost = 0;
+    this.magAtShot = 0;
+    this._fireShot(this.weapon);
+    return true;
   }
 
   // ONE ROUND'S WORTH OF SLOP, and the hold that keeps it there. Called from
@@ -3036,6 +3412,17 @@ export class Player {
    *   whether it was worth anything.
    */
   heal(amount, cap = this.maxHealth) {
+    if (!(amount > 0)) return 0;
+    // HEALTHY CORE. Nothing heals the player but the core's own trickle, which
+    // writes health directly for exactly this reason (see update()). Refused
+    // here rather than at the twenty call sites, so a heal added later is
+    // covered by the pick without anybody having to remember it.
+    if (this.mods.healBlock > 0) return 0;
+    // IRON LUNG, BONE MARROW, EMERGENCY RATIONS - every multiplier on healing
+    // in the pool, in the one place every heal in the game passes through.
+    // Applied BEFORE the cap, so what a reduced heal spills into OVERDRAW is
+    // what it was actually worth and not what it was offered.
+    amount *= this.mods.healMult;
     if (!(amount > 0)) return 0;
     const before = this.health;
     this.health = Math.min(Math.max(cap, before), before + amount);
@@ -3136,6 +3523,9 @@ export class Player {
         this.mods.adrenalineMax, this.mods.adrenalineStep * this.adrenalineStacks
       );
     }
+    // BOTTOM FEEDER's window, read off the frame clock published in update() -
+    // the same way every other timed window on the player is.
+    if (this.now < this.bottomEnd) d *= 1 + this.mods.bottomFeed;
     // Demonic Dodge's window, read off the frame clock published in update().
     return d;
   }

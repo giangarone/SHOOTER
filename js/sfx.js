@@ -12,6 +12,10 @@ const COIN_LADDER = [523.25, 587.33, 698.46, 783.99, 880.0];
 // Minimum seconds between two orb blips, and the silence that resets the
 // ladder to the bottom.
 const COIN_GAP = 0.035;
+// DELAYED FUSE's tick throttle. Wider than the coin's, because a fuse blip is a
+// COUNT the player is following rather than a stream of confirmations - two
+// inside a twentieth of a second stop reading as two.
+const FUSE_GAP = 0.05;
 const COIN_RESET = 0.5;
 
 export class SFX {
@@ -24,6 +28,8 @@ export class SFX {
     // Ladder state for coin(). Context time, so it survives a pause.
     this._coinAt = -10;
     this._coinStep = 0;
+    // DELAYED FUSE's tick throttle - see fuseTick.
+    this._fuseAt = -10;
     // Which kill texture played last, so the next one can avoid it. See kill().
     this._killTex = -1;
   }
@@ -279,6 +285,39 @@ export class SFX {
   }
   empty() {
     this.tone({ f: 140, t: 0.05, v: 0.2 });
+  }
+
+  /**
+   * DELAYED FUSE's tick. One short blip per blink of the dot on a stuck round.
+   *
+   * @param {number} p 0..1 of the way to detonation. It sets the PITCH, so a
+   *   round about to go off is audibly higher than one that just landed - the
+   *   same information the blink rate carries, in the channel the player has
+   *   while they are looking at something else.
+   *
+   * THROTTLED GLOBALLY, and it has to be: a held trigger can have a dozen
+   * fuses running at once, each blinking on its own clock, and one voice per
+   * blink is a swarm of wasps rather than a countdown. The gap is the coin's,
+   * for the same reason the coin has one - this is the second most-played
+   * sound a Delayed Fuse run will hear.
+   *
+   * A SINE AND NOTHING ELSE. Every other tick in the game (the box, the
+   * turret) carries a noise layer, and this one is meant to sit UNDER the gun
+   * rather than beside it: what it has to do is be countable, not be heard.
+   */
+  fuseTick(p = 0) {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    if (now - this._fuseAt < FUSE_GAP) return;
+    this._fuseAt = now;
+    this.tone({ f: 620 + 520 * p, t: 0.03, type: 'sine', v: 0.11 });
+  }
+
+  // And the round going off. A short, low thump - it is a two-metre blast, not
+  // a grenade, and DETONATOR's own boom already owns the big one.
+  fuseBlast() {
+    this.tone({ f: 190, f2: 60, t: 0.16, type: 'triangle', v: 0.3 });
+    this.noise({ t: 0.18, v: 0.22, f: 900 });
   }
   melee() {
     this.tone({ f: 120, f2: 60, t: 0.08, type: 'sawtooth', v: 0.4 });
