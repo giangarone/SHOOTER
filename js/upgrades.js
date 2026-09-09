@@ -215,7 +215,6 @@ function step(owned, fmt) {
 // and `r ^ n` for one that shrinks.
 const pctUp = (p) => (k) => '+' + Math.round(p * k) + '%';
 const pctDown = (r) => (k) => '-' + Math.round((1 - Math.pow(r, k)) * 100) + '%';
-const secs = (v) => (Math.round(v * 10) / 10) + 's';
 
 /**
  * The effect lines to draw for a player who owns `owned` stacks of `def`. A
@@ -273,7 +272,6 @@ export const UPGRADES = {
     // player who actually broke contact. It does not tick in the wave break.
     effects: (n) => [
       ['REGEN ' + step(n, (k) => 2 * k + ' HP/s'), GOOD],
-      ['STARTS AFTER ' + step(n, (k) => secs(Math.max(4, 6 - k))), GOOD],
       ['IN COMBAT ONLY', NOTE],
     ],
     apply: (mods, n) => {
@@ -299,8 +297,8 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.salvage,
     effects: (n) => [
-      ['AMMO / KILL ' + step(n, (k) => '+' + 2 * k), GOOD],
-      ['KILLS REFILL RESERVE', NOTE],
+      ['KILLS GRANT AMMO', GOOD],
+      ['MORE ' + step(n, (k) => 'x' + k), NOTE],
     ],
     apply: (mods, n) => {
       mods.ammoOnKill += 2 * n;
@@ -346,7 +344,7 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.blood,
     effects: (n) => [
-      ['HEAL 1 HP ON KILL', GOOD],
+      ['VAMPIRIC', GOOD],
       ['CHANCE ' + step(n, (k) => 25 * (k + 1) + '%'), NOTE],
     ],
     // Chance per kill, one stack at a time: 50%, then 75%, then every kill.
@@ -358,7 +356,6 @@ export const UPGRADES = {
     theme: THEME.shock,
     effects: (n) => [
       ['SHOCKWAVE WHEN HIT', GOOD],
-      ['DAMAGE ' + step(n, (k) => String(45 * k)), NOTE],
       ['RADIUS ' + step(n, (k) => 5 + k + 'm'), NOTE],
     ],
     apply: (mods, n) => {
@@ -399,8 +396,8 @@ export const UPGRADES = {
     max: 3,
     theme: THEME.echo,
     effects: (n) => [
-      ['HITS ' + step(n, pctUp(5)) + ' TO REFUND', GOOD],
-      ['THE ROUND TO RESERVE', NOTE],
+      ['HITS REFUND AMMO', GOOD],
+      ['CHANCE ' + step(n, pctUp(5)), NOTE],
     ],
     apply: (mods, n) => { mods.ammoRefund = 0.05 * n; },
   },
@@ -483,7 +480,7 @@ export const UPGRADES = {
     // No number in the text on purpose: the tick is one of the player's own
     // shots, which is a moving figure, and printing whatever it happens to be
     // on wave 1 would be a lie for the rest of the run.
-    effects: [['YOUR SHOTS APPLY POISON', GOOD], ['FOR 4s', NOTE]],
+    effects: [['YOUR SHOTS APPLY POISON', GOOD]],
     apply: (mods, n) => {
       mods.poisonPower = 1 * n;
       mods.poisonTime = 4 * n;
@@ -496,7 +493,7 @@ export const UPGRADES = {
     theme: THEME.fire,
     // Twice a beat where poison is once: fire is the fierce, short one and
     // poison the patient one, and on the beat that difference is audible.
-    effects: [['YOUR SHOTS SET FIRE', GOOD], ['FOR 3s', NOTE], ['SPREADS ON DEATH', NOTE]],
+    effects: [['YOUR SHOTS SET FIRE', GOOD], ['SPREADS ON DEATH', NOTE]],
     apply: (mods, n) => {
       mods.burnPower = 1 * n;
       mods.burnTime = 3 * n;
@@ -508,7 +505,7 @@ export const UPGRADES = {
     name: 'CRYO ROUNDS',
     max: 1,
     theme: THEME.ice,
-    effects: [['HITS SLOW BY HALF', GOOD], ['THEIR SHOTS TOO, 3s', NOTE]],
+    effects: [['HITS SLOW ENEMIES', GOOD], ['AND THEIR SHOTS', NOTE]],
     apply: (mods, n) => { mods.slowTime = 3 * n; },
   },
   terror: {
@@ -516,7 +513,7 @@ export const UPGRADES = {
     name: 'TERROR',
     max: 1,
     theme: THEME.fear,
-    effects: [['HIT ENEMIES FLEE', GOOD], ['2s, CANNOT ATTACK', NOTE]],
+    effects: [['HIT ENEMIES FLEE', GOOD]],
     apply: (mods, n) => { mods.fearTime = 2 * n; },
   },
   petrify: {
@@ -524,7 +521,7 @@ export const UPGRADES = {
     name: 'PETRIFY',
     max: 1,
     theme: THEME.stone,
-    effects: [['12% TO FREEZE 1.5s', GOOD], ['FROZEN TAKE +50%', GOOD]],
+    effects: [['CHANCE TO FREEZE', GOOD], ['FROZEN TAKE EXTRA DAMAGE', GOOD]],
     apply: (mods, n) => {
       mods.petrifyChance = 0.12 * n;
       mods.petrifyTime = 1.5 * n;
@@ -535,7 +532,7 @@ export const UPGRADES = {
     name: 'ARC ROUNDS',
     max: 1,
     theme: THEME.electric,
-    effects: [['CHAINS TO 1 ENEMY', GOOD], ['CHAIN HITS FOR 40%', NOTE]],
+    effects: [['CHAIN LIGHTNING', GOOD], ['BETWEEN ENEMIES', NOTE]],
     apply: (mods, n) => {
       mods.chainDamage = 0.4 * n;
       mods.chainRange = 6;
@@ -546,14 +543,14 @@ export const UPGRADES = {
     name: 'KNOCKOUT DROPS',
     max: 1,
     theme: THEME.impact,
-    effects: [['HITS SHOVE ENEMIES', GOOD], ['1.5 METRES BACK', NOTE]],
+    effects: [['HITS SHOVE ENEMIES BACK', GOOD]],
     apply: (mods, n) => { mods.knockback = 1.5 * n; },
   },
   midas: {
     name: 'MIDAS TOUCH',
     max: 1,
     theme: THEME.gold,
-    effects: [['2x CREDITS', GOOD], ['THE HIT TURN GOLD', NOTE]],
+    effects: [['2x CREDITS', GOOD], ['THE DEAD TURN GOLD', NOTE]],
     apply: (mods, n) => {
       mods.creditMult *= 1 + n;
       mods.midas = 1;
@@ -564,7 +561,7 @@ export const UPGRADES = {
     name: 'DETONATOR',
     max: 1,
     theme: THEME.blast,
-    effects: [['HITS EXPLODE', GOOD], ['30 DMG IN 2.5m', NOTE], ['-25% FIRE RATE', BAD]],
+    effects: [['HITS EXPLODE', GOOD], ['-25% FIRE RATE', BAD]],
     apply: (mods, n) => {
       mods.blastDamage = 30 * n;
       mods.blastRadius = 2.5;
@@ -576,7 +573,7 @@ export const UPGRADES = {
     name: 'BLAST CORPSE',
     max: 1,
     theme: THEME.ember,
-    effects: [['THE DEAD EXPLODE', GOOD], ['45 DMG IN 4m', NOTE], ['IT CAN HIT YOU', BAD]],
+    effects: [['THE DEAD EXPLODE', GOOD], ['IT CAN HIT YOU', BAD]],
     apply: (mods, n) => {
       mods.corpseDamage = 45 * n;
       mods.corpseRadius = 4;
@@ -594,7 +591,7 @@ export const UPGRADES = {
     // actually weighing.
     effects: [
       ['EVERY SHOT FIRES 2x', GOOD],
-      ['60% DAMAGE EACH', BAD],
+      ['LESS DAMAGE EACH', BAD],
       ['2 AMMO PER SHOT', BAD],
     ],
     apply: (mods, n) => {
@@ -606,7 +603,7 @@ export const UPGRADES = {
     name: 'HOLY MANTLE',
     max: 1,
     theme: THEME.holy,
-    effects: [['1st HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
+    effects: [['FIRST HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
     apply: (mods, n) => { mods.wardPerWave = n; },
   },
   deadCat: {
@@ -649,7 +646,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.gravity,
-    effects: [['HITS DRAG ENEMIES IN', GOOD], ['1.5m, WITHIN 5m', NOTE]],
+    effects: [['HITS DRAG ENEMIES IN', GOOD]],
     apply: (mods, n) => {
       mods.gravityPull = 1.5 * n;
       mods.gravityRadius = 5;
@@ -684,7 +681,7 @@ export const UPGRADES = {
     theme: THEME.hex,
     // The floor is the whole reason this is playable: without it a held
     // trigger kills you from full health with no enemy in the room.
-    effects: [['20% OF SHOTS: 2x DMG', GOOD], ['THOSE COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
+    effects: [['SOME SHOTS: 2x DAMAGE', GOOD], ['COSTING 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
     apply: (mods, n) => {
       mods.cursedChance = 0.2 * n;
       mods.cursedDamage = 1;
@@ -697,7 +694,6 @@ export const UPGRADES = {
     effects: (n) => [
       [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
       ['FIRE FROM THE RESERVE', NOTE],
-      ['SO YOU RELOAD LESS', GOOD],
     ],
     apply: (mods, n) => { mods.beltFeed = 0.1 * n; },
   },
@@ -708,7 +704,8 @@ export const UPGRADES = {
     effects: (n) => [
       ['DODGE ' + step(n, pctUp(12)), GOOD],
       ['OF HITS TAKEN', NOTE],
-      ['+40% SPEED ON DODGE', GOOD],
+      ['DODGING GRANTS A', GOOD],
+      ['SPEED BURST', NOTE],
     ],
     apply: (mods, n) => { mods.dodgeChance = 0.12 * n; },
   },
@@ -717,7 +714,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.shrapnel,
-    effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 25 DMG EACH', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
+    effects: [['RELOAD THROWS SHARDS', GOOD], ['THEY CANNOT HURT YOU', NOTE]],
     apply: (mods, n) => {
       mods.reloadShards = 8 * n;
       mods.reloadShardDamage = 25 * n;
@@ -728,7 +725,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.ice,
-    effects: [['FROZEN DEAD SHATTER', GOOD], ['60 DMG IN 3.5m', NOTE]],
+    effects: [['FROZEN DEAD SHATTER', GOOD]],
     apply: (mods, n) => {
       mods.shatterDamage = 60 * n;
       mods.shatterRadius = 3.5;
@@ -746,7 +743,7 @@ export const UPGRADES = {
     // burning enemy in a wave dies burning, and a cloud per corpse buried the
     // arena in ash: the zones stopped being places the player had to steer
     // enemies into and became the floor. At 15% a cloud is an event again.
-    effects: [['15% OF BURNING DEAD', NOTE], ['LEAVE BURNING ASH, 4s', GOOD], ['IN A 3.5m CLOUD', NOTE]],
+    effects: [['BURNING DEAD LEAVE ASH', GOOD], ['THE ASH BURNS', NOTE]],
     apply: (mods, n) => {
       // A cloud SETS FIRE to what stands in it rather than dealing its own
       // damage - see _updateAsh. One number, one system: every point of fire
@@ -765,7 +762,7 @@ export const UPGRADES = {
     // Slowing a poisoned enemy would have been Cryo Rounds with a different
     // name - Cryo already halves their speed and their shots. Spreading is the
     // thing only poison does.
-    effects: [['POISON JUMPS ENEMY', GOOD], ['TO ENEMY, WITHIN 3m', NOTE]],
+    effects: [['POISON SPREADS', GOOD], ['BETWEEN ENEMIES', NOTE]],
     apply: (mods, n) => { mods.poisonSpread = 3 * n; },
   },
   entropy: {
@@ -773,7 +770,7 @@ export const UPGRADES = {
     max: 1,
     mark: true,
     theme: THEME.stone,
-    effects: [['STATUS NEVER ENDS', GOOD], ['ON ENEMIES UNDER 30%', NOTE]],
+    effects: [['STATUS NEVER ENDS', GOOD], ['ON DYING ENEMIES', NOTE]],
     apply: (mods, n) => { mods.entropyBelow = 0.3 * n; },
   },
   malady: {
@@ -787,9 +784,8 @@ export const UPGRADES = {
     // - a player could not tell a stronger effect from a longer one. Name the
     // axis on its own line and the trade reads in one pass.
     effects: [
-      ['POISON & BURN DEAL', NOTE],
-      ['+50% DAMAGE PER SEC', GOOD],
-      ['FOR HALF AS LONG', BAD],
+      ['POISON & BURN HIT HARDER', GOOD],
+      ['BUT FADE FASTER', BAD],
     ],
     apply: (mods, n) => {
       mods.dotPower *= 1 + 0.5 * n;
@@ -803,7 +799,7 @@ export const UPGRADES = {
     theme: THEME.charge,
     // Armed by the reload rather than by a timer, so it rewards a rhythm the
     // player already has instead of asking them to stand still and not shoot.
-    effects: [['1st SHOT AFTER EVERY', GOOD], ['RELOAD EXPLODES', GOOD], ['70 DMG IN 4m', NOTE]],
+    effects: [['FIRST SHOT AFTER A', GOOD], ['RELOAD EXPLODES', GOOD]],
     apply: (mods, n) => {
       mods.chargeDamage = 70 * n;
       mods.chargeRadius = 4;
@@ -818,7 +814,7 @@ export const UPGRADES = {
     // touched, so this can never drag a bullet off the weak point the player
     // deliberately lined up - it only takes the shots that were going to hit
     // a wall and gives them somewhere to go.
-    effects: [['MISSED SHOTS CURVE', GOOD], ['TO A TARGET IN 6 deg', NOTE], ['HITS ARE NEVER MOVED', NOTE]],
+    effects: [['MISSED SHOTS CURVE', GOOD], ['TO A TARGET', NOTE], ['HITS ARE NEVER MOVED', NOTE]],
     apply: (mods, n) => {
       // HALVED from 12 degrees. At 12 the cone was wide enough that aiming
       // roughly at a crowd hit something every time, which is the whole gun
@@ -839,7 +835,7 @@ export const UPGRADES = {
     // Arc Rounds: that one is a small certainty on every hit, this is a large
     // uncertainty. At 5% a magazine usually contains one, so it reads as
     // punctuation rather than as a damage number the player has to plan on.
-    effects: [['5% OF HITS CALL', GOOD], ['LIGHTNING: 90 DMG', NOTE], ['+50 AROUND IT', NOTE]],
+    effects: [['HITS CAN CALL LIGHTNING', GOOD]],
     apply: (mods, n) => {
       mods.lightningChance = 0.05 * n;
       mods.lightningDamage = 90 * n;
@@ -864,7 +860,7 @@ export const UPGRADES = {
     // more than the rest of the build put together. Five clean waves for a
     // flat +40% is still the best rare in the pool and is now a target the
     // player can actually finish.
-    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+8% DAMAGE & RATE', GOOD], ['STACKS TO +40%', NOTE]],
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['BONUS DAMAGE & RATE', GOOD]],
     apply: (mods, n) => { mods.noHitBonus = 0.08 * n; },
   },
   ammoHoarder: {
@@ -875,7 +871,7 @@ export const UPGRADES = {
     // nothing about the bullet. It is the only upgrade that touches reserve
     // CAPACITY rather than reserve income, which is what makes it worth a slot
     // next to Scavenger and Ammo Fabricator instead of competing with them.
-    effects: [['2x MAX AMMO RESERVE', GOOD], ['300 \u2192 600 ROUNDS', NOTE]],
+    effects: [['2x MAX AMMO RESERVE', GOOD]],
     apply: (mods, n) => { mods.reserveMult = 1 + n; },
   },
   hotStreak: {
@@ -887,7 +883,7 @@ export const UPGRADES = {
     // free once taken, and this one asks to be earned again every magazine.
     // It rides the same per-shot hit flag the hitmarker does, so the number
     // can never disagree with what the player just saw.
-    effects: [['+1% DMG PER HIT', GOOD], ['-1% PER MISS', BAD], ['+30% CAP, -10% FLOOR', NOTE]],
+    effects: [['HITS BUILD DAMAGE', GOOD], ['MISSES UNDO IT', BAD]],
     apply: (mods, n) => {
       mods.streakStep = 0.01 * n;
       mods.streakCap = 0.3;
@@ -903,7 +899,7 @@ export const UPGRADES = {
     // nothing the first had not already cleared. At 11 off the apex the player
     // tops out near 4.6m, which is over every enemy in the pool and onto the
     // high platforms.
-    effects: [['JUMP AGAIN IN MIDAIR', GOOD], ['CLEARS ~4.5m TOTAL', NOTE]],
+    effects: [['JUMP AGAIN IN MIDAIR', GOOD]],
     apply: (mods, n) => { mods.extraJumps = n; },
   },
 
@@ -916,7 +912,7 @@ export const UPGRADES = {
     name: 'UNTOUCHED',
     max: 1,
     theme: THEME.temper,
-    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['+3 MAX HP, KEPT', GOOD], ['UP TO +60', NOTE]],
+    effects: [['CLEAR A WAVE UNHURT:', NOTE], ['GAIN MAX HP, KEPT', GOOD]],
     apply: (mods, n) => {
       mods.hpPerCleanWave = 3 * n;
       mods.hpBankCap = Math.max(mods.hpBankCap, 60 * n);
@@ -931,7 +927,7 @@ export const UPGRADES = {
     name: 'SCAR TISSUE',
     max: 1,
     theme: THEME.scar,
-    effects: [['+2 MAX HP EVERY WAVE', GOOD], ['UP TO +80', NOTE], ['TAKE +25% DAMAGE', BAD]],
+    effects: [['GAIN MAX HP EVERY WAVE', GOOD], ['TAKE +25% DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.hpPerWave = 2 * n;
       mods.hpBankCap = Math.max(mods.hpBankCap, 80 * n);
@@ -965,7 +961,7 @@ export const UPGRADES = {
     name: 'BLACKOUT',
     max: 1,
     theme: THEME.murk,
-    effects: [['+25 MAX HEALTH', GOOD], ['THE HAZE CLOSES RIGHT IN', BAD], ['YOU SEE VERY LITTLE', BAD]],
+    effects: [['+25 MAX HEALTH', GOOD], ['THE HAZE CLOSES IN', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 25 * n;
       mods.fogMult *= 1 + 2.2 * n;
@@ -984,7 +980,7 @@ export const UPGRADES = {
     name: 'OPENING SALVO',
     max: 1,
     theme: THEME.salvo,
-    effects: [['FIRST 10s OF A WAVE:', NOTE], ['SHOTS COST NO AMMO', GOOD], ['-5% DAMAGE', BAD]],
+    effects: [['FIRST 10s OF A WAVE:', NOTE], ['SHOTS COST NO AMMO', GOOD], ['SLIGHTLY LESS DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.salvoTime = 10 * n;
       mods.damage *= Math.pow(0.95, n);
@@ -1002,7 +998,7 @@ export const UPGRADES = {
     name: 'DIG IN',
     max: 1,
     theme: THEME.entrench,
-    effects: [['STAND STILL 3s:', NOTE], ['REGEN 3 HP/s', GOOD], ['ANY HIT RESETS IT', BAD]],
+    effects: [['STAND STILL TO REGEN', GOOD], ['ANY HIT RESETS IT', BAD]],
     apply: (mods, n) => {
       mods.plantRegen = 3 * n;
       mods.plantDelay = 3;
@@ -1032,7 +1028,7 @@ export const UPGRADES = {
     // to a ceiling of +100% the hundred-kill chain is the target rather than
     // the accident, and what it costs you is that any hit at all takes it all
     // back - which is the whole drawback now that no health is charged for it.
-    effects: [['KILLS: +1% DAMAGE', GOOD], ['UP TO +100%', NOTE], ['RESET WHEN HURT', BAD]],
+    effects: [['KILLS: MORE DAMAGE', GOOD], ['LOST WHEN HURT', BAD]],
     apply: (mods, n) => {
       mods.carnageStep = 0.01 * n;
       mods.carnageMax = 1.0 * n;
@@ -1042,7 +1038,7 @@ export const UPGRADES = {
     name: 'BLOOD PACT',
     max: 1,
     theme: THEME.pact,
-    effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE +25% DAMAGE', BAD]],
+    effects: [['KILLS HEAL YOU', GOOD], ['TAKE +25% DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.killHeal = 3 * n;
       mods.damageTakenMult *= 1 + 0.25 * n;
@@ -1055,7 +1051,7 @@ export const UPGRADES = {
     theme: THEME.hellfire,
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
-    effects: [['RELOAD LEAVES A', NOTE], ['FIRE TRAIL FOR 3s', GOOD], ['IT BURNS WHAT WALKS IN', NOTE]],
+    effects: [['RELOAD LEAVES A FIRE TRAIL', GOOD], ['IT BURNS WHAT WALKS IN', NOTE]],
     apply: (mods, n) => {
       // Sets fire, like every other fire in the game - see _updateFire.
       mods.hellfirePower = 1.5 * n;
@@ -1072,7 +1068,7 @@ export const UPGRADES = {
     // the player has no status effects - only hazard zones to stand out of. So
     // the cost lands on those instead, which is the same idea in the vocabulary
     // the game actually has.
-    effects: [['ENEMY STATUS NEVER', NOTE], ['EXPIRES', GOOD], ['POOLS & LAVA HURT 2x', BAD]],
+    effects: [['ENEMY STATUS NEVER EXPIRES', GOOD], ['HAZARDS HURT 2x', BAD]],
     apply: (mods, n) => {
       mods.statusEternal = n;
       mods.hazardMult *= 2;
@@ -1087,7 +1083,7 @@ export const UPGRADES = {
     // it is the one drawback in the pool that takes the controls away, and a
     // full second of that at close range was a death sentence rather than a
     // price.
-    effects: [['ENEMIES & SHOTS', NOTE], ['MOVE 30% SLOWER', GOOD], ['HITS FREEZE YOU 0.5s', BAD]],
+    effects: [['ENEMIES & SHOTS SLOWED', GOOD], ['HITS FREEZE YOU BRIEFLY', BAD]],
     apply: (mods, n) => {
       mods.worldSlow = Math.pow(0.7, n);
       mods.hitFreeze = 0.5;
@@ -1102,7 +1098,7 @@ export const UPGRADES = {
     // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
     // the pool that scales with the enemy instead of with the build - and the
     // health it charges per use is why it needs no drawback beyond itself.
-    effects: [['EMPTY THE MAGAZINE:', NOTE], ['LIGHTNING HITS ALL', GOOD], ['FOR 20% OF MAX HP', NOTE]],
+    effects: [['EMPTY THE MAGAZINE:', NOTE], ['LIGHTNING HITS ALL', GOOD]],
     apply: (mods, n) => { mods.overloadFrac = 0.2 * n; },
   },
   executioner: {
@@ -1122,7 +1118,7 @@ export const UPGRADES = {
     // Worth nothing for four waves out of five, and it applies to bosses
     // spawned AFTER it is taken - one already standing keeps the health bar it
     // arrived with.
-    effects: [['BOSSES HAVE 50%', NOTE], ['LESS HEALTH', GOOD], ['-50 MAX HEALTH', BAD]],
+    effects: [['BOSSES HAVE HALF HEALTH', GOOD], ['-50 MAX HEALTH', BAD]],
     apply: (mods, n) => {
       mods.bossHpMult *= Math.pow(0.5, n);
       mods.maxHpFlat += 50 * n;
@@ -1132,7 +1128,7 @@ export const UPGRADES = {
     name: 'ANTIDOTE',
     max: 1,
     theme: THEME.antidote,
-    effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY', NOTE]],
+    effects: [['IMMUNE TO POISON', GOOD], ['POISONED ENEMIES HEAL YOU', GOOD]],
     apply: (mods, n) => {
       mods.poisonImmune = n;
       mods.poisonLeech = 1 * n;
@@ -1151,14 +1147,14 @@ export const UPGRADES = {
     // odds barely in your favour, which is exactly what the phrase means.
     // Renaming a passive item players already know would cost more than it
     // could possibly buy.
-    effects: [['51% OF SHOTS: 2x DMG', GOOD], ['49% OF SHOTS: HALF', BAD]],
+    effects: [['SOME SHOTS: DOUBLE DAMAGE', GOOD], ['THE REST: HALF', BAD]],
     apply: (mods, n) => { mods.gamble = n; },
   },
   thorns: {
     name: 'THORNS',
     max: 1,
     theme: THEME.thorns,
-    effects: [['ATTACKERS TAKE BACK', NOTE], ['50% OF THEIR DAMAGE', GOOD]],
+    effects: [['ATTACKERS TAKE DAMAGE BACK', GOOD]],
     apply: (mods, n) => { mods.thorns = 0.5 * n; },
   },
   darkPower: {
@@ -1295,7 +1291,7 @@ export const UPGRADES = {
     // nothing at the muzzle, the full thirty at LONGSHOT_RANGE - so the
     // feedback is continuous and a player who has never read the card still
     // learns that backing off pays.
-    effects: [['UP TO +30% DAMAGE', GOOD], ['THE FURTHER THE TARGET', NOTE]],
+    effects: [['MORE DAMAGE', GOOD], ['THE FURTHER THE TARGET', NOTE]],
     apply: (mods, n) => { mods.longshot = 0.3 * n; },
   },
   pointBlank: {
@@ -1313,7 +1309,7 @@ export const UPGRADES = {
     // about a LINE they either stepped over or did not, and the same five
     // metres is the number every melee reach in the game is already built
     // around - so it is a distance the player has learnt by being bitten at it.
-    effects: [['+30% DAMAGE WITHIN 5m', GOOD]],
+    effects: [['EXTRA DAMAGE UP CLOSE', GOOD]],
     apply: (mods, n) => { mods.pointBlank = 0.3 * n; },
   },
 
@@ -1339,10 +1335,7 @@ export const UPGRADES = {
     //
     // It scales with the DAMAGE and not with the hit, so a tank's slam pays
     // like a tank's slam and a poison tick pays like a poison tick.
-    effects: (n) => [
-      ['CREDITS WHEN HURT ' + step(n, (k) => '$' + 2 * k + '/HP'), GOOD],
-      ['PAID ON DAMAGE TAKEN', NOTE],
-    ],
+    effects: [['CREDITS WHEN HURT', GOOD]],
     apply: (mods, n) => { mods.bloodMoney += 2 * n; },
   },
   adrenaline: {
@@ -1361,7 +1354,7 @@ export const UPGRADES = {
     // is the failure this whole entry is written around. A wave boundary is a
     // moment they do not control, so the ten stacks are something a bad wave
     // gave them rather than something a good one is farmed for.
-    effects: [['+4% DAMAGE PER HIT TAKEN', GOOD], ['UP TO +40%, RESETS EACH WAVE', NOTE]],
+    effects: [['MORE DAMAGE PER HIT TAKEN', GOOD], ['RESETS EACH WAVE', NOTE]],
     apply: (mods, n) => {
       mods.adrenalineStep = 0.04 * n;
       mods.adrenalineMax = 0.4;
@@ -1382,7 +1375,7 @@ export const UPGRADES = {
     // is not, in the same proportion. Adding a flat 15 points instead would
     // have been worth four times as much to a full-health player as to a
     // desperate one, which is backwards for a luck charm.
-    effects: (n) => [['DROP CHANCE ' + step(n, pctUp(15)), GOOD], ['FROM EVERY KILL', NOTE]],
+    effects: (n) => [['DROP CHANCE ' + step(n, pctUp(15)), GOOD]],
     apply: (mods, n) => { mods.dropLuck *= 1 + 0.15 * n; },
   },
   crouchfire: {
@@ -1413,7 +1406,7 @@ export const UPGRADES = {
     // button a health regen with a windup; the body has to actually go down.
     // It reads `meleeKill`, the same flag the credit double is decided on, in
     // the same sweep - so the two can never disagree about what a melee kill is.
-    effects: (n) => [['MELEE KILLS HEAL ' + step(n, (k) => 3 * k + ' HP'), GOOD]],
+    effects: (n) => [['MELEE KILLS HEAL', GOOD], [step(n, (k) => 3 * k + ' HP'), NOTE]],
     apply: (mods, n) => { mods.meleeHeal += 3 * n; },
   },
   warChest: {
@@ -1432,7 +1425,7 @@ export const UPGRADES = {
     // and worth exactly a thousand dollars a point to one that has not. A
     // thousand is the mystery box's own opening price, which is the only
     // number in this game a player already reads as "one purchase".
-    effects: [['+1 DAMAGE PER $1,000', GOOD], ['ON YOUR BALANCE', NOTE]],
+    effects: [['MORE DAMAGE THE MORE', GOOD], ['CREDITS YOU HOLD', NOTE]],
     apply: (mods, n) => { mods.warChest = n; },
   },
   twinCell: {
@@ -1449,7 +1442,7 @@ export const UPGRADES = {
     // the same kills, so what the player is really buying is the right to bank
     // charge they would otherwise have thrown away - see the clamp in
     // Player.addItemCharge, which used to drop the overflow on the floor.
-    effects: [['HOLD 2 ITEM CHARGES', GOOD], ['THE SECOND FILLS AFTER', NOTE]],
+    effects: [['HOLD 2 ITEM CHARGES', GOOD]],
     apply: (mods, n) => { mods.itemChargeCap = 1 + n; },
   },
 
@@ -1478,7 +1471,7 @@ export const UPGRADES = {
     // Deliberately NOT a magnet upgrade. Lodestone already widens the radius
     // around the player; the bird is somewhere else, which is the only thing
     // it can offer that a bigger circle cannot.
-    effects: [['A BIRD COLLECTS CREDITS', GOOD], ['FROM ACROSS THE ARENA', NOTE]],
+    effects: [['A BIRD COLLECTS', GOOD], ['CREDITS FOR YOU', NOTE]],
     apply: (mods, n) => { mods.magpie = n; },
   },
   lamprey: {
@@ -1500,7 +1493,7 @@ export const UPGRADES = {
     //
     // ON THE BEAT, like the turret, the sentry and every fire tick in the game.
     // Nothing rhythmic in this game runs on a private timer - see Music.pulse.
-    effects: [['A LEECH GUARDS YOU', NOTE], ['10 PER DOWNBEAT, HEALS 2', GOOD]],
+    effects: [['A LEECH GUARDS YOU', NOTE], ['AND HEALS YOU', GOOD]],
     apply: (mods, n) => { mods.lamprey = n; },
   },
 
@@ -1528,7 +1521,10 @@ export const UPGRADES = {
     // player knows WHICH five, which no amount of chance can buy: a boss with
     // a sliver left is a reason to burn down to the last five rather than to
     // reload, and that decision is the pick.
-    effects: [['THE LAST 5 ROUNDS OF', NOTE], ['EVERY MAGAZINE ALWAYS CRIT', GOOD]],
+    effects: [
+      ['THE LAST ROUNDS OF EVERY', NOTE],
+      ['MAGAZINE ALWAYS CRIT', GOOD],
+    ],
     apply: (mods, n) => { mods.fatalReserve = Math.max(mods.fatalReserve, 5 * n); },
   },
 
@@ -1563,7 +1559,7 @@ export const UPGRADES = {
     // would be a passive item nobody could take.
     effects: [
       ['RELOADING THROWS THE MAG', GOOD],
-      ['20 DAMAGE PER ROUND LEFT', GOOD],
+      ['IT EXPLODES ON IMPACT', GOOD],
       ['THOSE ROUNDS ARE SPENT', BAD],
     ],
     apply: (mods, n) => { mods.primedMag = 20 * n; },
@@ -1582,7 +1578,7 @@ export const UPGRADES = {
     // back after the spend rather than as a cheaper cost: the meter empties
     // when the button is pressed, exactly as it always has, and then a fifth
     // of it comes back. The player sees the item fire and the bar jump.
-    effects: [['USING AN ITEM REFUNDS', NOTE], ['20% OF ITS CHARGE', GOOD]],
+    effects: [['USING AN ITEM', NOTE], ['REFUNDS SOME CHARGE', GOOD]],
     apply: (mods, n) => { mods.bailiff = Math.min(0.9, 0.2 * n); },
   },
 
@@ -1599,7 +1595,7 @@ export const UPGRADES = {
     // TEN AND TEN, on the two stats a player FEELS rather than reads. It is a
     // small number twice on purpose: the pick is not the multiplier, it is
     // that being at full health has become a thing worth protecting.
-    effects: [['AT FULL HEALTH:', NOTE], ['+10% FIRE RATE', GOOD], ['+10% MOVE SPEED', GOOD]],
+    effects: [['AT FULL HEALTH:', NOTE], ['FASTER FIRE & MOVEMENT', GOOD]],
     apply: (mods, n) => { mods.pace = 0.1 * n; },
   },
 
@@ -1618,7 +1614,7 @@ export const UPGRADES = {
     // it is the last word on what a hit costs: everything that multiplies
     // incoming damage - BLOOD PACT, RED MIST, a curse, a hazard - has already
     // had its say by then and none of them can push a hit past the cap.
-    effects: [['NO SINGLE HIT TAKES MORE', NOTE], ['THAN 25% OF YOUR MAX HP', GOOD]],
+    effects: [['NO SINGLE HIT CAN TAKE', NOTE], ['A QUARTER OF YOUR HP', GOOD]],
     apply: (mods, n) => { mods.hitCap = 0.25 / n; },
   },
 
@@ -1655,7 +1651,7 @@ export const UPGRADES = {
     // has worked that out has earned it. If it ever needs cutting, cut the
     // RATE here rather than adding a condition: a passive item that pays for
     // some heals and not others is the thing this was built to avoid.
-    effects: [['HEALING PAST YOUR MAX HP', NOTE], ['BECOMES ITEM CHARGE', GOOD], ['1 PER 5 HP SPILLED', NOTE]],
+    effects: [['HEALING PAST YOUR MAX HP', NOTE], ['BECOMES ITEM CHARGE', GOOD]],
     apply: (mods, n) => { mods.overdraw = 5 / n; },
   },
 
@@ -1695,7 +1691,7 @@ export const UPGRADES = {
     // arrives on the frame the button lands rather than at the end of the
     // half-second the weapon takes to come up. The player is protected by the
     // DECISION, not by the animation finishing.
-    effects: [['TAKE 20% LESS DAMAGE', GOOD], ['WHILE AIMING DOWN SIGHTS', NOTE]],
+    effects: [['TAKE LESS DAMAGE', GOOD], ['WHILE AIMING', NOTE]],
     apply: (mods, n) => { mods.aimGuard = Math.min(0.9, 0.2 * n); },
   },
 
@@ -1714,7 +1710,7 @@ export const UPGRADES = {
     // slide is a way of MOVING, it is entered out of a sprint and it ends
     // itself, and a slide that also took a fifth less damage would be the best
     // way to cross a room under fire. The stance is what is being paid for.
-    effects: [['WHILE CROUCHED:', NOTE], ['TAKE 20% LESS DAMAGE', GOOD], ['RELOAD 20% FASTER', GOOD]],
+    effects: [['WHILE CROUCHED:', NOTE], ['TAKE LESS DAMAGE', GOOD], ['RELOAD FASTER', GOOD]],
     apply: (mods, n) => {
       mods.crouchGuard = Math.min(0.9, 0.2 * n);
       mods.crouchReload = Math.min(0.9, 0.2 * n);
