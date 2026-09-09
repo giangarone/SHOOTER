@@ -569,6 +569,22 @@ export const SQUALL_REACH = 3.6;
 
 export const SQUALL_PUSH = 5.2;
 
+// HOW LONG THE GUST KEEPS BLOWING, and it is the difference between a shove
+// and a nudge.
+//
+// pullPlayer applies its strength for ONE FRAME, so a single call at 5.2 moves
+// somebody about nine centimetres - which is what every other one-shot
+// knockback in the game does and is fine for them, because for a gargoyle's
+// slam or a dynamo's discharge the knock is a garnish on damage that has
+// already landed. The squall has no damage at all: the shove IS the enemy, and
+// a nine-centimetre one is not one. Held for a third of a second it moves the
+// player closer to two metres, which is off a deck, out of a doorway, or into
+// whatever else the wave has on the floor.
+//
+// It was measured at 1.67m before this existed and that number was a lie - the
+// autotest bot still had a movement key held down and the player was walking.
+export const SQUALL_PUSH_TIME = 0.35;
+
 export const SQUALL_CD = 2.4;
 
 export const SQUALL_OFF = 1.1;
@@ -577,6 +593,18 @@ export function aiSquall(e, a) {
   const p = a.ctx.player;
   if (!p) return;
   e.sqT = (e.sqT || 0) - a.dt;
+
+  // THE GUST, still blowing. Pushed away from where the squall WAS when it let
+  // go rather than from where it is now: it is air that has already been
+  // moved, so it keeps its direction while the thing that made it flies on.
+  // Run before the states below so a squall that dies mid-gust still finishes
+  // the shove it started.
+  if (e.sqPush > 0) {
+    e.sqPush -= a.dt;
+    if (a.ctx.pullPlayer) {
+      a.ctx.pullPlayer(p.pos.x - e.sqX, p.pos.z - e.sqZ, SQUALL_PUSH);
+    }
+  }
 
   // Backing off after a gust. It travels in a straight line away from the
   // player and does nothing, which is the easiest shot it ever offers.
@@ -599,9 +627,13 @@ export function aiSquall(e, a) {
   // NO DAMAGE AT ALL. What it costs the player is the position they had
   // chosen, and that has to be the whole of it - a shove that also hurt would
   // be a rusher that hits from range.
-  if (a.ctx.pullPlayer) {
-    a.ctx.pullPlayer(p.pos.x - e.pos.x, p.pos.z - e.pos.z, SQUALL_PUSH);
-  }
+  //
+  // The point it blows FROM is frozen here, at the moment it lets go, and the
+  // push itself runs at the top of this function for the next third of a
+  // second - see SQUALL_PUSH_TIME.
+  e.sqX = e.pos.x;
+  e.sqZ = e.pos.z;
+  e.sqPush = SQUALL_PUSH_TIME;
   if (a.ctx.effects) {
     _tempAt.set(p.pos.x, 0.6, p.pos.z);
     a.ctx.effects.shockwave(_tempAt, 0x8fe8ff, 3.4, 0.3);
