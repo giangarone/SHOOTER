@@ -25,7 +25,17 @@
     "test:flawless": "node test/flawless.mjs",
     "test:icons": "node test/icons.mjs",
     "test:status": "node test/status.mjs",
-    "test:afflict": "node test/afflict.mjs"
+    "test:afflict": "node test/afflict.mjs",
+    "test:themes": "node test/themes.mjs",
+    "test:ember": "node test/ember.mjs",
+    "test:rime": "node test/rime.mjs",
+    "test:verdant": "node test/verdant.mjs",
+    "test:strata": "node test/strata.mjs",
+    "test:void": "node test/void.mjs",
+    "test:tempest": "node test/tempest.mjs",
+    "test:brine": "node test/brine.mjs",
+    "test:plague": "node test/plague.mjs",
+    "test:solar": "node test/solar.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

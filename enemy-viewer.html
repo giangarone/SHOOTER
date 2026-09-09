@@ -32,6 +32,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { ENEMY_TYPES, Enemy } from './js/enemy.js';
+import { THEMES, THEME_KEYS, ROLE_KEYS } from './js/themes.js';
 
 // The whole point of this page is to judge silhouettes from where the player
 // actually stands. The game is FIRST PERSON: the camera sits at eye height
@@ -67,28 +68,96 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-const names = Object.keys(ENEMY_TYPES);
+// GROUPED BY THEME, IN ROLE ORDER, WITH A GAP BETWEEN BLOCKS.
+//
+// The test this sheet exists to run is that a type is identifiable as a flat
+// black shape. Ten themes add a SECOND test on top of it - that a theme's six
+// enemies read as one family - and neither can be run on an alphabetical row.
+// Standing a theme's six side by side, in the same role order every time, is
+// what makes both answerable at a glance: read across for the family, read
+// down the column for the role.
+//
+// Anything ENEMY_TYPES has that no theme claims - the bosses, and Colossus's
+// turret - goes in a last group of its own rather than being dropped, because
+// a type this sheet cannot see is a type nobody looks at.
+const GROUP_GAP = 1.6;   // in SPACING units, between one theme and the next
+const groups = [];
+const placed = new Set();
+for (const key of THEME_KEYS) {
+  const t = THEMES[key];
+  const row = [];
+  for (const role of ROLE_KEYS) {
+    const type = t.roles[role];
+    // A slot whose own enemy is not built yet is left EMPTY rather than
+    // filled with the RUST type it borrows in game - a row with a chaser
+    // standing in it would quietly pass the family test on a theme that has
+    // not been drawn.
+    if (ENEMY_TYPES[type] && !placed.has(type)) {
+      row.push(type);
+      placed.add(type);
+    } else {
+      row.push(null);
+    }
+  }
+  groups.push({ label: t.name, row });
+}
+const rest = Object.keys(ENEMY_TYPES).filter((k) => !placed.has(k));
+if (rest.length) groups.push({ label: 'BOSSES', row: rest });
+
+// Flattened to the (name, x) pairs the loop below wants, with a gap at every
+// theme boundary and a hole wherever a slot is not built.
+const names = [];
+const slots = [];
+let col = 0;
+for (const g of groups) {
+  g.x0 = col;
+  for (const type of g.row) {
+    if (type) {
+      names.push(type);
+      slots.push(col);
+    }
+    col += 1;
+  }
+  g.x1 = col - 1;
+  col += GROUP_GAP;
+}
 const spinners = [], labels = [], originals = [];
 const silMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
 names.forEach((name, i) => {
   const e = new Enemy(name, new THREE.Vector3(0, 0, 0), 1, 1, 1);
   const g = e.group;
-  // The warden's dome and floor ring are built at world size (6.5m radius) and
-  // would swallow the whole row; the MODEL is what is under review here.
-  if (name === 'warden') {
-    for (const c of [...g.children]) {
-      if (c.isMesh && (c.geometry.type === 'SphereGeometry' || c.geometry.type === 'RingGeometry')) {
-        g.remove(c);
-      }
+  // FIELD GEOMETRY IS STRIPPED, whoever it belongs to. An aura drawn at the
+  // radius it actually works at is metres across - the warden's dome is
+  // thirteen and the hoarfrost's ring fifteen - and in a row spaced six metres
+  // apart it does not read as that enemy's aura, it reads as a line through
+  // the whole sheet. The MODEL is what is under review here.
+  //
+  // Done by geometry type rather than by name so the next enemy with a field
+  // is covered without an edit: nothing in the roster uses a ring or a sphere
+  // as part of its BODY.
+  for (const c of [...g.children]) {
+    if (c.isMesh && (c.geometry.type === 'SphereGeometry' || c.geometry.type === 'RingGeometry')) {
+      g.remove(c);
     }
   }
   // A flier's constructor lifts its group to its hover altitude. This sheet is
   // about the MODEL, and one parked five metres over the row would be off the
   // top of the frame, so every type is stood on the floor here.
+  //
+  // STOOD ON IT, not dropped to zero. A ground type is authored with its feet
+  // at y=0, but a flier is authored around its HOVER POINT - a gargoyle's
+  // claws sit at -0.44 and a mothcap's whole body hangs below its cap - so
+  // zeroing the group buries them to the waist and puts the name plate through
+  // the middle of the model. Measuring the box and lifting by however far it
+  // reaches below the floor sits every type on the ground whatever it was
+  // authored around, which matters more with each flier that gets added.
   g.position.y = 0;
+  g.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(g);
+  if (Number.isFinite(bounds.min.y) && bounds.min.y < 0) g.position.y = -bounds.min.y;
   const holder = new THREE.Object3D();
-  holder.position.x = i * SPACING;
+  holder.position.x = slots[i] * SPACING;
   holder.add(g);
   scene.add(holder);
   spinners.push(holder);
@@ -115,11 +184,31 @@ names.forEach((name, i) => {
   labels.push(sp);
 });
 
+// One header per theme, centred over its six columns, so a group is readable
+// as a group rather than as six enemies that happen to be next to each other.
+const headers = [];
+for (const gr of groups) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 128;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.font = 'bold 84px ui-monospace,monospace';
+  cx.textAlign = 'center';
+  cx.fillText(gr.label, 512, 96);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true, depthTest: false,
+  }));
+  sp.scale.set(9, 1.1, 1);
+  sp.position.set(((gr.x0 + gr.x1) / 2) * SPACING, 3.9, 0);
+  scene.add(sp);
+  headers.push(sp);
+}
+
 let silhouette = false, spinning = true, near = false;
 let focus = 0, camX = 0;
 // Exposed so the model sheet can be driven from the console while iterating.
 window.viewer = {
-  go(i) { focus = Math.max(0, Math.min(names.length - 1, i)); camX = focus * SPACING; },
+  go(i) { focus = Math.max(0, Math.min(names.length - 1, i)); camX = slots[focus] * SPACING; },
   names,
 };
 
@@ -134,6 +223,7 @@ btn('sil', (b) => {
   scene.background = new THREE.Color(silhouette ? 0xe8ecf4 : 0x0b0d12);
   floor.visible = !silhouette;
   for (const l of labels) l.material.color.set(silhouette ? 0x111111 : 0xffffff);
+  for (const h of headers) h.material.color.set(silhouette ? 0x111111 : 0xffffff);
 });
 btn('spin', (b) => { spinning = !spinning; b.classList.toggle('on', spinning); });
 // Models face -z, the camera looks down -z, so an unrotated enemy shows its
@@ -163,7 +253,7 @@ const clock = new THREE.Clock();
 function frame() {
   const dt = clock.getDelta();
   if (spinning) for (const h of spinners) h.rotation.y += dt * 0.6;
-  camX += (focus * SPACING - camX) * Math.min(1, dt * 6);
+  camX += (slots[focus] * SPACING - camX) * Math.min(1, dt * 6);
   cam.position.set(camX, EYE, near ? NEAR_Z : FAR_Z);
   cam.lookAt(camX, near ? 1.0 : 0.85, 0);
   renderer.render(scene, cam);

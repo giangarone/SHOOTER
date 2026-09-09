@@ -144,7 +144,15 @@ const BOLT_FORKS = 3;
 //
 // SIX AT A TIME, which is more than the design ever puts on the floor at once:
 // a vitriol lobs one every few seconds and a husk leaves one where it died.
-const CLOUD_SLOTS = 6;
+// RAISED FROM SIX FOR BRINE, and it is the beam pool's argument again one
+// theme later: for the gas cloud that has always used this, the cluster is
+// DECORATION over a stain that works without it, and cloudAcquire returning -1
+// is survivable by design. For a drifter's ink it is the entire mechanic - the
+// hazard does no damage and applies no status, and all it is for is that you
+// cannot see through it - so an ink zone that failed to get a slot would be a
+// completely invisible enemy doing completely nothing. Four gas plus three ink
+// is seven, so the pool has to clear seven, with one spare.
+const CLOUD_SLOTS = 8;
 // Puffs per cloud. Eight looked like eight circles; sixteen was a solid ball
 // with no structure left in it. Twelve is where the overlaps stop reading as
 // individual dots and start reading as volume.
@@ -654,7 +662,7 @@ export class Effects {
     // the same energy tone as the ring so a lane is as bright as an impact
     // circle's outline - a faint corridor is not a warning.
     const markLane = makeLaneGeometry(0.8);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 16; i++) {
       const mk = new THREE.Group();
       const dm = gridMaterial(0xff3b30, 0);
       const rm = gridMaterial(0xff3b30, 0);
@@ -755,8 +763,17 @@ export class Effects {
     // BEAMS. One-frame lines, redrawn every frame by whatever owns them -
     // a conduit's links to the enemies it is buffing. Same shape as the
     // tracer pool, and cleared at the top of every update().
+    //
+    // RAISED FROM EIGHT FOR TEMPEST, and it had to be: in every other theme a
+    // beam is decoration on a mechanic that exists anyway, and in TEMPEST the
+    // LINE IS THE MECHANIC. An arcling's wire, a coil's sightline and each of
+    // the Conductor's six discharge arcs are all things the player is being
+    // asked to stand off, and beam() drops silently when the pool is dry - so
+    // at eight, a wave of arclings under a Conductor would have deleted the
+    // warning on whichever lines happened to ask last while leaving them just
+    // as lethal. Same argument as the per-kind hazard caps, one layer up.
     this.beams = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 24; i++) {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
       const m = new THREE.LineBasicMaterial({ color: 0x00e5b0, transparent: true, opacity: 0.5 });

@@ -249,6 +249,14 @@ html, body {
    Four 3px blocks and a centre pip, each carrying its own 1px dark outline so
    the reticle survives being held over a muzzle flash or a white floor light.
    Nothing here is anti-aliased or rounded. */
+/* SOLAR's halo. The crosshair and the hit markers go, and NOTHING ELSE does -
+   the gun is unchanged, the cone is unchanged, the health bar and the ammo
+   count are all still there. What the enemy takes is knowing where the middle
+   of the screen is and whether anything landed, and taking any more than that
+   would stop being an enemy and start being a broken HUD. */
+body.hudblind #crosshair,
+body.hudblind #hitmarker { opacity: 0 !important; }
+
 #crosshair {
   position: absolute; left: 50%; top: 50%;
   width: 26px; height: 26px;
@@ -891,6 +899,20 @@ html, body {
   opacity: 0;
 }
 #banner.show { animation: banner 2.1s steps(1, end) forwards; }
+
+/* The block's theme, under the wave number. Smaller, wider tracked and in the
+   room's own cyan rather than white: it is a SUBTITLE, and at the banner's own
+   size two stacked words that big read as two banners fighting each other.
+   It rides the same keyframes so the pair arrive and leave as one thing. */
+#bannersub {
+  position: fixed; top: calc(20% + 40px); left: 0; right: 0; z-index: 7;
+  text-align: center; pointer-events: none;
+  font-size: 16px; letter-spacing: 0.34em;
+  color: var(--cyan);
+  text-shadow: 3px 3px 0 var(--ink), 0 0 22px var(--cyan);
+  opacity: 0;
+}
+#bannersub.show { animation: banner 2.1s steps(1, end) forwards; }
 @keyframes banner {
   0%   { opacity: 0; transform: scale(1.3); }
   6%   { opacity: 1; transform: scale(1.16); }
@@ -1627,6 +1649,7 @@ html, body {
   }
   .overlay button { padding: calc(var(--u) * 3) calc(var(--u) * 6); font-size: 10px; }
   #banner { font-size: 20px; }
+  #bannersub { font-size: 11px; top: calc(20% + 26px); }
   #wave-num { font-size: 24px; }
   #credit-num, #versus-tag { font-size: 16px; }
   #ammo-num { font-size: 24px; }

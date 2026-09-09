@@ -64,7 +64,8 @@ import {
 } from './player.js';
 import { PLAYER_STATUS } from './status.js';
 import {
-  Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink,
+  Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink, setPlateSink,
+  projStats, projLook,
 } from './enemy.js';
 import { Effects } from './effects.js';
 import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
@@ -74,6 +75,16 @@ import { Music } from './music.js';
 import { Magpie, Lamprey } from './companions.js';
 import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
+import { THEMES } from './themes.js';
+
+// Which enemy types are actually BUILT. themes.js names every one of its sixty
+// slots' final type, including the ones that do not exist yet, and falls back
+// to RUST's for any it is handed a `false` for - so the whole ten-theme
+// rotation is playable while the roster is still being made, and each theme
+// stops borrowing the moment its own enemies land. Passed as a predicate
+// rather than imported there, because themes.js and waves.js are both pure
+// data modules that have to stay loadable with no renderer.
+const HAVE_TYPE = (k) => Object.prototype.hasOwnProperty.call(ENEMY_TYPES, k);
 import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
@@ -459,6 +470,57 @@ const MAX_GAS = 4;
 // two trails share the same thirty creep slots and a magma is entitled to its
 // half of them.
 const MAX_FROST = 12;
+// EMBER's OTHER fire, and it is a separate kind from `lava` for exactly the
+// reason the pools and the trails are separate from each other: eviction is
+// per kind, and a kiln's rotating bar and an ashwing's bombing line are LINES.
+// A line with holes evicted out of the middle of it does not read as a line -
+// it reads as the mechanic being broken - and sharing a cap with the magma
+// trail is precisely how those holes would appear, because EMBER is the first
+// theme where four types lay fire into the same wave.
+//
+// Bigger than the frost cap and smaller than the lava one: two sources feed it
+// rather than one, and each patch is short-lived on purpose so the swept wedge
+// is a place you cannot be RIGHT NOW rather than a place that is gone forever.
+const MAX_EMBER = 16;
+// RIME's hail: a hailer's rings and a sleet's columns. Separated from `frost`
+// for the same reason `ember` is separated from `lava` - a rime's TRAIL is a
+// line and a hailer's RING is a ring, and two shapes sharing one eviction
+// queue punch holes in each other. It is the wider of the two because two
+// types feed it against the rime trail's one.
+const MAX_HAIL = 14;
+// VOID's wells. Few, because each one takes a piece of the floor away for two
+// seconds in a way the player cannot simply step off - three at once would be
+// a room with no ground in it.
+const MAX_WELL = 4;
+// TEMPEST's electrified ground. Its own kind for the reason `ember` and `hail`
+// are their own kinds - eviction is per kind - and the SHORTEST-LIVED and most
+// vicious ground in the game, which is what separates it from lava at a
+// glance: lava is a floor you can cross if you have to, and this is a floor
+// that is simply gone for three seconds. One source feeds it, so the cap is
+// the smallest of the damaging kinds.
+const MAX_SHOCK = 10;
+// BRINE's ink. Few, and each one is big: the curtain is the mechanic, and six
+// small clouds is a patchy fog rather than a wall you cannot see through.
+// Capped against the cloud pool in effects.js the same way the gas is, and
+// the two share it - an ink cloud and a vitriol cloud are the same object.
+const MAX_INK = 3;
+// BRINE's scalding columns. The only hazard in the game that is SOLID, so the
+// cap is really a cap on how much of the arena may be walled off at once -
+// four is two vents' worth in flight and is already a room with corners in it
+// that were not there a moment ago.
+const MAX_SCALD = 4;
+// PLAGUE's bile - a lesion's rounds, wherever they stopped. Its own kind and
+// not `pool` for the eviction argument that separates every other kind: a
+// blight throws FOUR big pools and a lesion writes a dozen small ones across
+// the arc the player strafed through, and sharing a queue would have each
+// enemy deleting the other's whole mechanic. The cap is the largest of the
+// poison kinds because the patches are the smallest.
+const MAX_BILE = 14;
+// SOLAR's lens line. The largest cap of any kind, and it has to be: the line
+// is one patch every sixth of a second with a long tail, so a single lens is
+// carrying most of this on its own and the number is really "how long a trail
+// one lens may have behind it".
+const MAX_GLARE = 20;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -478,6 +540,42 @@ const CREEP_LAVA = 0xff4a10;
 // the HUD are one piece of information: this is why that icon lit up.
 const CREEP_GAS = 0x4fe06a;
 const CREEP_FROST = 0x63b3ff;
+// Brighter and yellower than CREEP_LAVA, and that gap is doing real work in an
+// EMBER wave: a magma's trail is ground that has been burning for a while and
+// a kiln's bar is ground that is on fire THIS SECOND. Same family, so the
+// theme still reads as one thing; different enough that the player can tell
+// which of the two they are about to step in.
+const CREEP_EMBER = 0xff8c1a;
+// Paler and whiter than CREEP_FROST, and doing the same job the ember/lava gap
+// does on the other side of the roster: a rime's trail is ground that has been
+// frozen for a while, a hailer's ring is ground that has JUST landed. Same
+// family, distinguishable at a glance.
+const CREEP_HAIL = 0xbfe6ff;
+// VOID's well. The theme's indigo, and the only ground in the game that does
+// no damage of any kind - what it takes is the two seconds the player spent
+// getting out of somewhere.
+const CREEP_WELL = 0x7c4dff;
+// TEMPEST's shock. The theme's cyan - it applies no status, so unlike the gas
+// and the frost it has no HUD chip to agree with and wears the colour of the
+// enemies that laid it instead.
+const CREEP_SHOCK = 0x4ef3ff;
+// BRINE's ink, and it is nearly black on purpose - the whole payload is that
+// you cannot see through it, and a bright cloud would be a thing you can see
+// perfectly well that happens to be in the way.
+const CREEP_INK = 0x07211f;
+// And its scald - the pale hot teal of the column, so the pillar in the room
+// and the enemy that put it there are obviously one thing.
+const CREEP_SCALD = 0x63e8d8;
+// PLAGUE's bile. It applies poison, so it wears the POISON status's colour
+// rather than the theme's magenta - the patch on the floor and the chip in the
+// HUD are one piece of information, which is the rule the gas and the frost
+// already keep.
+const CREEP_BILE = 0x39d353;
+// SOLAR's glare. It burns, so it is in the fire family with the lava and the
+// ember - and paler and yellower than either, because it is light rather than
+// heat and because the player has to be able to tell a lens's line from a
+// magma's trail in the half-second they have to step off one of them.
+const CREEP_GLARE = 0xffe08a;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -497,6 +595,26 @@ const GAS_POISON_SECONDS = 5;
 // still be there when they arrive.
 const SPIT_POOL = { radius: 3.2, life: 6, dps: 9 };
 const SPIT_GAS = { radius: 3.0, life: 7, dps: 6 };
+// The flare's shell. SMALLER than either of the others per patch and thrown in
+// a fan of three - the ground it takes is a shape rather than a circle, which
+// is what makes stepping ACROSS it the answer and backing away from it the
+// mistake.
+const SPIT_EMBER = { radius: 1.6, life: 4, dps: 12 };
+// The hailer's cluster. No damage - see the `hail` row above - so the only
+// numbers that matter are how big each patch of the ring is and how long the
+// player has to find the gap before it closes behind them.
+const SPIT_HAIL = { radius: 1.6, life: 3.6, dps: 0 };
+// The sporegun's seed. Radius, life and dps are all UNUSED - a seed never
+// becomes ground - and it is listed anyway so every kind has a row and the
+// lookup below can stay a plain table rather than a chain of exceptions.
+const SPIT_SEED = { radius: 0, life: 0, dps: 0 };
+// The singularity's well. Wide and short-lived, and worth nothing per second -
+// see the `well` row above.
+const SPIT_WELL = { radius: 7.0, life: 2.2, dps: 0 };
+const SPIT_CONFIG = {
+  pool: SPIT_POOL, gas: SPIT_GAS, ember: SPIT_EMBER, hail: SPIT_HAIL, seed: SPIT_SEED,
+  well: SPIT_WELL,
+};
 const FROST_CHILL_SECONDS = 3;
 
 // WHAT EACH KIND OF BAD GROUND IS. One row per kind, read by _addHazard and
@@ -530,16 +648,77 @@ const HAZARD_KINDS = {
     color: CREEP_FROST, cap: MAX_FROST,
     status: 'slowness', secs: FROST_CHILL_SECONDS,
   },
-};
-// Impact-puff colours for an enemy round that broke against geometry, keyed by
-// the projectile's own type so the splash matches what was in the air. Mirrors
-// PROJ_COLORS in enemy.js; a type with no entry falls back to the shooter's.
-const PROJ_IMPACT = {
-  shooter: 0xb14aed,
-  sniper: 0x00ff88,
-  blight: 0xaaff2a,
-  colossus: 0xff5a00,
-  harrier: 0x27c4ff,
+  // Kiln sweeps, ashwing runs and flare bursts. Burns exactly like lava does -
+  // same status, same tail, same carve - and differs only in its colour and in
+  // having its own cap to be evicted out of.
+  ember: {
+    color: CREEP_EMBER, cap: MAX_EMBER,
+    status: 'fire', secs: LAVA_BURN_SECONDS, carve: true,
+  },
+  // Hailer rings, sleet columns and a glacier's shatter nova. Chills exactly
+  // as frost does and, like frost, deals NO DAMAGE AT ALL: the cold is the
+  // whole payload, and a patch that also bled the player would be a worse
+  // pool. What it costs is the ability to answer everything else.
+  hail: {
+    color: CREEP_HAIL, cap: MAX_HAIL,
+    status: 'slowness', secs: FROST_CHILL_SECONDS,
+  },
+  // The singularity's well. NO damage and NO status - the first hazard in the
+  // game that takes neither, and the only one that MOVES the player. `pull` is
+  // the strength it drags them toward the centre with, per frame, and it is
+  // deliberately weak enough to walk against: a well that simply moved them
+  // would be a stun, and a stun with no telegraph is the worst thing this game
+  // could do to somebody.
+  well: {
+    color: CREEP_WELL, cap: MAX_WELL, pull: 2.4,
+  },
+  // A stormcaller's strike, after it has landed. NO STATUS AT ALL, which is
+  // the one thing that keeps it from being a worse lava: everything it does
+  // it does while the player is standing in it, and the instant they are out
+  // it stops. That is what makes giving up the position a complete answer,
+  // and it is why the dps is the highest of any ground in the game - a patch
+  // with no tail has to bite hard enough to move somebody in the second they
+  // are deciding whether to bother.
+  shock: {
+    color: CREEP_SHOCK, cap: MAX_SHOCK,
+  },
+  // A drifter's curtain. NO damage and NO status - the second hazard in the
+  // game that takes neither, and where the well moves the player this one
+  // takes what they KNOW. The cloud is the whole point of it, so unlike every
+  // other kind the stain on the floor is the decoration and the thing hanging
+  // over it is the mechanic.
+  ink: {
+    color: CREEP_INK, cap: MAX_INK, cloud: true,
+  },
+  // A vent's column, and the only SOLID hazard in the game. `wall` is its
+  // half-width and its height: _addHazard puts a box into the arena's own
+  // obstacle and ground lists and _releaseHazard takes it out again, which is
+  // the whole implementation - both are called from exactly one place each,
+  // including the wave-end sweep, so a column cannot outlive the fight that
+  // raised it.
+  scald: {
+    color: CREEP_SCALD, cap: MAX_SCALD,
+    status: 'fire', secs: LAVA_BURN_SECONDS, carve: true,
+    wall: { r: 1.0, h: 3.6 },
+  },
+  // A lens's line. Its own kind rather than `ember`'s for the reason every
+  // other split in this table exists: eviction is per kind, and a lens lays a
+  // patch every sixth of a second with a two-and-a-half-second tail, so ONE of
+  // them keeps most of a cap busy on its own. Sharing EMBER's would have had
+  // two lenses punching holes through the middle of each other's line - the
+  // exact failure the kiln and the ashwing were separated to avoid, and the
+  // one that makes a line stop reading as a line.
+  glare: {
+    color: CREEP_GLARE, cap: MAX_GLARE,
+    status: 'fire', secs: LAVA_BURN_SECONDS, carve: true,
+  },
+  // Where a lesion's rounds stopped. Small, shallow and short - it is not
+  // meant to be a pool the player is pushed off, it is meant to be a dozen of
+  // them across the ground behind somebody who has been strafing.
+  bile: {
+    color: CREEP_BILE, cap: MAX_BILE, poisonous: true,
+    status: 'poison', secs: GAS_POISON_SECONDS, carve: true,
+  },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
 // queues twelve on its own and APIARY five, so this is not a limit anybody
@@ -548,7 +727,11 @@ const PROJ_IMPACT = {
 const MAX_DEPLOYED = 40;
 // Telegraphed impact circles - Siege's barrage. Capped at the telegraph pool's
 // depth minus the handles the bosses hold for their own warnings.
-const MAX_MORTARS = 6;
+// Raised from six with the telegraph pool that backs it (see effects.js): a
+// mortar was Siege's barrage and nothing else, and it is now also every
+// sporegun's seed and every ring the Overgrowth lays. Still comfortably under
+// the sixteen marks, so a boss's own charge lane always has a slot.
+const MAX_MORTARS = 10;
 // The boss kill's own payout - and, now that the flat clear bonus is gone, the
 // only lump sum left in the game. It is paid in orbs like everything else.
 const BOSS_BONUS_BASE = 400;
@@ -591,6 +774,11 @@ const PICKUP_PULL_SPEED = 9;
 // Display names, kept out of ENEMY_TYPES because nothing else in the game
 // needs an enemy to have one.
 const BOSS_NAMES = {
+  choir: 'THE DROWNED CHOIR',
+  conductor: 'THE CONDUCTOR',
+  forge: 'FORGE-TYRANT',
+  overgrowth: 'THE OVERGROWTH',
+  palecrown: 'THE PALE CROWN',
   colossus: 'COLOSSUS',
   siege: 'SIEGE',
   schism: 'SCHISM',
@@ -697,6 +885,20 @@ class Game {
     // arenas are reproducible from it and a layout that turns out to be no fun
     // can be replayed in the test.
     this._terrainSeed = (Math.random() * 0xffffffff) >>> 0;
+    // The seed the run's THEME ORDER is dealt from - which of the ten themes
+    // fills each five-wave block, and so which boss ends it. One number,
+    // exactly like the terrain seed above and for the same reason: a run that
+    // opened on EMBER and fell apart at BRINE can be replayed from it.
+    //
+    // Unlike the terrain seed it is RE-ROLLED for every run (see beginGame),
+    // because the order the themes arrive in is the thing a run is meant to
+    // vary by. Re-dealt on demand rather than stored as a deck, so there is no
+    // per-run state to get out of step with the wave counter.
+    this._themeSeed = (Math.random() * 0xffffffff) >>> 0;
+    // Debug: pins every block to one theme. Null in a real run. Set through
+    // setTheme() below, which is on the game object the console and the test
+    // harness already reach for.
+    this._forcedTheme = null;
     this.music = new Music('/assets/audio/soundtrack.m4a');
     // Read before the first gesture builds the graph, so a muted player never
     // hears the opening bar leak out before the setting is applied.
@@ -798,7 +1000,7 @@ class Game {
     // their clocks - see _vacuumPickups.
     this._pendingBuffs = [];
     this.queue = [];
-    this._cfg = waveConfig(1);
+    this._cfg = waveConfig(1, this._themeSeed, HAVE_TYPE, this._forcedTheme);
     // The drop safety net's countdown.
     this._reliefT = RELIEF_INTERVAL;
     this.spawnTimer = 0;
@@ -838,6 +1040,7 @@ class Game {
     this._rigState = {
       mode: 'idle', beat: 0, level: 0, bar: 0, downbeat: false,
       healthFrac: 1, comboMult: 1, bossColor: 0xffffff, bossPos: null,
+      themeColor: 0xffffff,
       // BLACKOUT's multiplier on the fog the rig drives. One writer for the
       // density: rig.js breathes it with the music and this scales its target.
       fogMult: 1,
@@ -1022,6 +1225,23 @@ class Game {
       // Colossus throwing one of its turrets. It is a real enemy, spawned
       // mid-air with its flight already set - see _spawnTurret.
       addTurret: (fx, fy, fz, tx, tz) => this._spawnTurret(fx, fy, fz, tx, tz),
+      // The Pale Crown driving one of its anchors into the floor. Also a real
+      // enemy, and unlike every other spawn hook this one RETURNS it: the boss
+      // has to hold references to its three, because the shell comes down when
+      // all three are dead and a count of live anchors in the arena would be
+      // wrong the moment two shells overlapped.
+      addAnchor: (x, z, type) => this._spawnAnchor(x, z, type),
+      // PLAGUE's carrion putting a body back on its feet. A separate hook from
+      // addAnchor because what it makes is a REAL ENEMY of a real type, scaled
+      // by the wave the way the wave's own spawns are - an anchor is scaled by
+      // health alone, since it never moves and never hits.
+      reanimate: (x, z, type, frac) => this._spawnRevenant(x, z, type, frac),
+      // SOLAR's zealot going off in the player's face, and its halo taking the
+      // crosshair away. Both are narrow one-way doors into the presentation
+      // layer, which is deliberate: these are the only two enemies in the game
+      // that reach it, and they should have to say so.
+      blind: (secs) => this.rig.cueBlind(secs),
+      blindHud: () => { this._hudBlind = true; },
       pullPlayer: this._onPullPlayer,
       bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
       // `mods` is deliberately absent here: rebuildMods() swaps the object on
@@ -1047,6 +1267,11 @@ class Game {
       // a spit is a pool, and it is capped against the other pools.
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
+      // ...and a sporegun's seed grows a MORTAR rather than a pool - a circle
+      // that fills and then goes off - so the same argument puts the mortar
+      // hook here too.
+      addMortar: (x, z, radius, delay, damage) =>
+        this._addMortar(x, z, radius, delay, damage),
       player: this.player,
       effects: this.effects,
       sfx: this.sfx,
@@ -1117,6 +1342,13 @@ class Game {
     // the same time - see setDamageSink in enemy.js.
     setDamageSink((pos, dealt, crit) => {
       if (dealt > 0) this.effects.damageNumber(pos, dealt, crit);
+    });
+    // A capacitor's plate coming off. A ring rather than a number, because
+    // nothing was dealt - the shot was spent, and what the player needs to
+    // know is that it counted for something and that the next one will land.
+    setPlateSink((pos) => {
+      this.effects.shockwave(pos, 0x7ef0ff, 1.5, 0.22);
+      this.effects.burst(pos, 0xd6feff, 10, 4, 2, 0.3);
     });
 
     this._bind();
@@ -2543,6 +2775,13 @@ class Game {
     } else {
       r.bossPos = null;
     }
+    // THE BLOCK'S OWN COLOUR. Five waves are one theme now, and the room says
+    // which: the rig pulls its accents toward this and the fog tints with it,
+    // the same way a boss wave already hands the room to the boss. It is a
+    // BIAS rather than a takeover - the accents still cycle and the key light
+    // stays white, because the enemies have to stay readable - so a block
+    // reads as being lit in EMBER's orange without the fight becoming orange.
+    r.themeColor = this._cfg ? this._cfg.themeColor : 0;
     return r;
   }
 
@@ -2606,7 +2845,16 @@ class Game {
   _cueWaveOpen() {
     if (this._waveCued || this.match) return;
     this._waveCued = true;
-    this.ui.banner('WAVE ' + (this.wave + 1));
+    this.ui.banner('WAVE ' + (this.wave + 1), this._themeCaption(this.wave + 1));
+  }
+
+  // The name of the five-wave block that opens on wave n, or '' if n is not
+  // the first wave of one. Only on the first: the point is to mark the CHANGE,
+  // and a name repeated over all four waves of a block stops being an
+  // announcement and becomes furniture.
+  _themeCaption(n) {
+    if (((n - 1) % 5) !== 0) return '';
+    return waveConfig(n, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName;
   }
 
   _musicMuffled() {
@@ -2625,6 +2873,10 @@ class Game {
     this.match = mode === 'versus' ? new VersusMatch(count) : null;
     this.player.reset();
     this._clearEntities();
+    // A NEW DEAL EVERY RUN. The terrain seed is deliberately kept for the
+    // session - a player learning the arena should be able to - but the theme
+    // order is the thing a run varies by, so it is re-rolled here.
+    this._themeSeed = (Math.random() * 0xffffffff) >>> 0;
     // A previous run's arena, if there is one still standing.
     this._resetTerrain();
     this.kills = 0;
@@ -3210,7 +3462,7 @@ class Game {
     // charged for - see the note on its entry in upgrades.js for why the reset
     // is a wave boundary rather than a clock.
     this.player.adrenalineStacks = 0;
-    this._cfg = waveConfig(this.wave);
+    this._cfg = waveConfig(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme);
     this.queue = this._cfg.queue;
     this._startWaveCharge();
     this.spawnTimer = 0.8;
@@ -3224,9 +3476,11 @@ class Game {
     // Already said at the pick in solo (see _cueWaveOpen); a second identical
     // caption on the same wave would just replay the animation for nothing.
     if (!this._waveCued) {
-      this.ui.banner(this.match
-        ? this.match.label() + '  \u00b7  WAVE ' + this.wave
-        : 'WAVE ' + this.wave);
+      this.ui.banner(
+        this.match
+          ? this.match.label() + '  \u00b7  WAVE ' + this.wave
+          : 'WAVE ' + this.wave,
+        this.match ? '' : this._themeCaption(this.wave));
     }
     this._waveCued = false;
     // Blackout, then the whole rig hits at once. The dark beat before it is
@@ -3383,7 +3637,9 @@ class Game {
       // there is, and it yields to ENRAGED - that is a one-shot event the
       // player must not lose sight of behind a label that changes
       // every few seconds.
-      if (!bf.state) bf.note = enemy.bs.weakOpen ? 'CORE EXPOSED' : '';
+      if (!bf.state) {
+        bf.note = enemy.bs.weakOpen ? (enemy.bs.ventNote || 'CORE EXPOSED') : '';
+      }
     } else if (kind === 'charge') {
       // NO SOUND. The charge is already announced by the boss squaring up and
       // by the room; a fanfare on top of it fired every few seconds for the
@@ -3397,6 +3653,15 @@ class Game {
       this.rig.setEnraged(true);
     } else if (kind === 'split') {
       this._splitBoss(enemy);
+    } else if (kind === 'choir') {
+      this._raiseChoir(enemy);
+    } else if (kind === 'freed') {
+      // Killing a SILENT body. The bar does not care - the pool is shared -
+      // so the only way the player finds out they chose wrong is here.
+      bf.note = 'FREED';
+      this.ui.banner('THE CHOIR IS FREED');
+      this.sfx.wave();
+      this.effects.addShake(0.3);
     }
   }
 
@@ -3410,6 +3675,49 @@ class Game {
   // from `parts` later in the same frame, and if the children were not already
   // there the next _updateWave would see an empty parts list and call the
   // fight won.
+  // THE DROWNED CHOIR standing up. Called once, from its own ai() on its first
+  // frame, and it turns the one body main.js spawned into three.
+  //
+  // The pool is DIVIDED rather than duplicated, exactly as a Schism split
+  // divides it: totalMaxHp was taken from the body that spawned, so three
+  // bodies of a third each leaves the bar reading the same fight it was going
+  // to be. Nothing else in the boss machinery needs to know - the bar already
+  // sums every part, the payout already follows the bar's drop, and the fight
+  // already ends when the last part dies.
+  _raiseChoir(e) {
+    const bf = this.bossFight;
+    if (!bf || bf.parts.length > 1) return;
+    const sc = bossScale(this.wave);
+    const share = e.maxHp / 3;
+    e.maxHp = share;
+    e.hp = Math.min(e.hp, share);
+    e.value = Math.round(e.value / 3);
+    for (let i = 1; i < 3; i++) {
+      const ang = (i === 1 ? 2.1 : -2.1) + Math.random() * 0.3;
+      const at = new THREE.Vector3(
+        e.pos.x + Math.cos(ang) * 4.2, 0, e.pos.z + Math.sin(ang) * 4.2
+      );
+      const body = new Enemy('choir', at, sc.hp * this.player.mods.bossHpMult, sc.speed, sc.dmg);
+      body.rate = e.rate;
+      body.cycle = e.cycle;
+      body.maxHp = share;
+      body.hp = share;
+      body.value = e.value;
+      body.bs.voice = i;
+      body.bs.freed = 1;
+      resolveCircle(body.pos, body.radius, this.arena.obstacles, body.collideH);
+      this.scene.add(body.group);
+      this._pendingSpawns.push(body);
+      this._bigAlive++;
+      bf.parts.push(body);
+      this.effects.burst(at, ENEMY_TYPES.choir.color, 30, 7, 2.5, 0.7);
+    }
+    bf.note = '';
+    this.effects.shockwave(e.pos, ENEMY_TYPES.choir.color, 7, 0.6);
+    this.effects.addShake(0.3);
+    this.ui.banner('THEY ARE THREE');
+  }
+
   _splitBoss(e) {
     const bf = this.bossFight;
     if (!bf) return;
@@ -3469,13 +3777,18 @@ class Game {
     bf.addTimer -= dt;
     if (bf.addTimer > 0) return;
     bf.addTimer = bf.addInterval;
-    // Turrets are the boss's own attack, not adds, and must not eat the trickle
-    // budget: three of them standing would otherwise stop the wave sending
-    // anything else at all.
+    // Turrets and anchors are the boss's own attack, not adds, and must not eat
+    // the trickle budget: three of them standing would otherwise stop the wave
+    // sending anything else at all. It matters more for the Pale Crown's
+    // anchors than it ever did for Colossus's turrets - the anchors are up for
+    // most of that fight, so counting them would mean the Crown's shell phases
+    // were also its quiet phases, which is the opposite of the intent.
     let adds = this.enemies.length - bf.parts.length;
-    for (const e of this.enemies) if (e.type === 'turret') adds--;
+    for (const e of this.enemies) {
+      if (e.type === 'turret' || e.type === 'anchor' || e.type === 'pylon') adds--;
+    }
     if (adds >= bf.maxAdds) return;
-    this.spawnEnemy(pickAddType(this.wave));
+    this.spawnEnemy(pickAddType(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme));
   }
 
   // Ends a boss wave the moment the last part dies. Everything still on the
@@ -3582,6 +3895,47 @@ class Game {
     e.tMark = this.effects.markAcquire();
     this.scene.add(e.group);
     this.enemies.push(e);
+  }
+
+  // One of the Pale Crown's anchors, driven in where the boss asked rather than
+  // at a spawn point - the whole mechanic is that they are spread around the
+  // ARENA and have to be crossed to. Returns it so the boss can hold it.
+  // TAKES THE TYPE, because two bosses now drive things into the floor and
+  // they are not the same object: the Pale Crown's anchor is a lock on its
+  // shell and the Conductor's pylon is one end of a wire. Both are inert, both
+  // are spawned by their boss and both are excluded from the add budget, which
+  // is the whole reason they share a hook - the type is what they differ by.
+  _spawnAnchor(x, z, type = 'anchor') {
+    const at = new THREE.Vector3(x, 0, z);
+    // Scaled by health only. An anchor never moves and never hits, so speed
+    // and damage scaling would be multiplying zero.
+    const e = new Enemy(type, at, this._cfg.hpScale, 1, 1);
+    this.scene.add(e.group);
+    this.enemies.push(e);
+    this.effects.burst(at, e.colorHex, 16, 4, 2, 0.5);
+    return e;
+  }
+
+  // A carrion raising a body. It is an ordinary enemy of an ordinary type,
+  // scaled by the wave exactly as a spawned one is - and then cut down to a
+  // fraction of its bar and marked, so it cannot be raised a second time and
+  // so it is worth a fraction of the money. Raising a dead enemy for full
+  // value would make a carrion a payout the player farms rather than a support
+  // they have to deal with.
+  _spawnRevenant(x, z, type, frac = 0.4) {
+    if (!ENEMY_TYPES[type]) return null;
+    const at = new THREE.Vector3(x, 0, z);
+    const c = this._cfg;
+    const e = new Enemy(type, at, c.hpScale, c.speedScale, c.dmgScale);
+    e.maxHp *= frac;
+    e.hp = e.maxHp;
+    e.value = Math.round(e.value * frac);
+    e.revenant = true;
+    resolveCircle(e.pos, e.radius, this.arena.obstacles, e.collideH);
+    this.scene.add(e.group);
+    this.enemies.push(e);
+    this.effects.burst(at, 0xcc3d8a, 20, 5, 2, 0.6);
+    return e;
   }
 
   spawnEnemy(type) {
@@ -4465,6 +4819,44 @@ class Game {
         this.effects.impact(end, station.color, w.pellets > 1 ? 2 : 4, 2.5, 1.2, 0.26);
         break;
       }
+      const mirror = h.object.userData.enemy;
+      if (mirror && !mirror.dead) {
+        const refl = ENEMY_TYPES[mirror.type].reflect;
+        if (refl && refl(mirror, ray.ray.direction.x, ray.ray.direction.z, h.point)) {
+          // THE PLATE EATS THE PELLET AND SENDS ONE BACK. It is worn down by
+          // the COUNT of rounds that land on it, so the trade is the same at
+          // wave four and wave forty.
+          mirror.plateHp--;
+          mirror.flash = 0.12;
+          this.effects.impact(h.point, 0xfff3c4, w.pellets > 1 ? 2 : 5, 3, 1.4, 0.28);
+          // ONE ROUND BACK PER TRIGGER PULL, however many pellets landed. A
+          // shotgun shell is eight pellets and eight of its own rounds coming
+          // back would be a one-shot the player could not read as anything but
+          // the game killing them - the shell still breaks the whole plate,
+          // which is the trade, and it pays for one round.
+          if (!this._reflected) {
+            this._reflected = true;
+            this._spawnProjectile(h.point.x, h.point.y, h.point.z, 'aegis', 1);
+            if (this.sfx) this.sfx.impact();
+          }
+          hitProp = true;
+          end = h.point;
+          break;
+        }
+      }
+      const bubble = h.object.userData.bubble;
+      if (bubble) {
+        // Popped, and the pellet stops. It stops for the same reason it stops
+        // on a totem: the round went into the thing the player aimed at, and
+        // letting it carry on into the enemy behind would make shooting the
+        // bubble free - and the whole enemy is that it is NOT free.
+        bubble.life = 0;
+        this.effects.burst(h.point, projLook(bubble.type).glow, 14, 4, 2, 0.35);
+        if (this.sfx) this.sfx.impact();
+        hitProp = true;
+        end = h.point;
+        break;
+      }
       const en = h.object.userData.enemy;
       if (!en) {
         // Wall, floor or crate - the pellet stops here.
@@ -4582,12 +4974,21 @@ class Game {
     targets.length = 0;
     for (const m of this.arena.meshList) targets.push(m);
     for (const e of this.enemies) targets.push(e.hitbox);
+    // BRINE's angler bubble, and nothing else in the game. Added to the same
+    // list the enemies are on rather than raycast separately, so a bubble
+    // drifting in front of an enemy is cover for it exactly the way a crate
+    // would be - which is the honest reading of a slow object in the way.
+    for (const pr of this.projectiles) {
+      if (pr.shootable) targets.push(pr.mesh);
+    }
     this.totemArea.addTargets(targets);
     this.mysteryBox.addTargets(targets);
 
     const spread = this._shotSpread();
     let hitAny = false;
     this._shotHits.clear();
+    // One reflection per trigger pull - see the mirror branch in _firePellet.
+    this._reflected = false;
     this._shotCrit.clear();
     this._blastHit = false;
     // Twenty/Twenty fires the whole pellet pattern twice off one round. The
@@ -4881,41 +5282,9 @@ class Game {
       t.x = x + dx * c - dz * sn;
       t.z = z + dx * sn + dz * c;
     }
-    let speed, dmg;
-    if (type === 'sniper') {
-      speed = Math.min(32, 22 + this.wave * 0.4);
-      dmg = Math.min(22, 12 + this.wave * 0.5);
-    } else if (type === 'harrier') {
-      // Fast and light. A harrier fires THREE of these per descent, so each
-      // one has to cost well under a third of what a shooter's single round
-      // does or the burst would be the hardest hit in the wave - and it is
-      // fired from close range, at a target that has just been given a reason
-      // to stand still and shoot back.
-      speed = Math.min(26, 18 + this.wave * 0.25);
-      dmg = Math.min(11, 6 + this.wave * 0.25);
-    } else if (type === 'schism') {
-      // Eight at once, so each is cheap: the volley has to cost real health
-      // when it catches you standing in the open and be survivable when one
-      // round clips you on the way past.
-      speed = Math.min(19, 13 + this.wave * 0.22);
-      dmg = Math.min(14, 7 + this.wave * 0.3);
-    } else if (type === 'turret') {
-      // Slow and clearly readable in the air. Three turrets firing at once is
-      // a lot of rounds on the floor, so each one has to be something the
-      // player can see coming and step around while they deal with the boss -
-      // the cost of leaving one standing is the pressure, not the burst.
-      speed = Math.min(16, 11 + this.wave * 0.15);
-      dmg = Math.min(15, 7 + this.wave * 0.3);
-    } else if (type === 'colossus') {
-      // Slower and heavier than an ordinary shooter round. The vent is the
-      // window the player closes in to use, so what comes out of it has to be
-      // dodgeable at short range and cost real health if it is not.
-      speed = Math.min(17, 12 + this.wave * 0.2);
-      dmg = Math.min(24, 11 + this.wave * 0.5);
-    } else {
-      speed = Math.min(20, 13 + this.wave * 0.3);
-      dmg = Math.min(20, 8 + this.wave * 0.8);
-    }
+    // Speed and damage come off the type's own `proj` block (enemy.js), so a
+    // new ranged enemy is a row on its stat block rather than a branch here.
+    const { speed, dmg } = projStats(type, this.wave);
     // Absolute Zero applied HERE and nowhere else, so every enemy round in the
     // game is covered by one line - including the boss volleys that pass a
     // speedScale of 1 and never touch Enemy._projScale(). Cryo's own slow is
@@ -4975,7 +5344,8 @@ class Game {
     // A blight's pool and a vitriol's cloud are thrown identically and land
     // differently, so the arc above is shared and only what grows out of it
     // is not. See HAZARD_KINDS.
-    const g = kind === 'gas' ? SPIT_GAS : SPIT_POOL;
+    // One row per kind. A fifth would be a row here and a row in HAZARD_KINDS.
+    const g = SPIT_CONFIG[kind] || SPIT_POOL;
     this.projectiles.push(new Spit(
       this.scene, this.effects.glowTex, x, y, z,
       (dx / dist) * SPEED, vy, (dz / dist) * SPEED,
@@ -6090,7 +6460,23 @@ class Game {
     this.waveState = 'idle';
     this._waveCued = false;
     this.interT = 0;
-    this.ui.banner('DEBUG  WAVE ' + wave);
+    this.ui.banner('DEBUG  WAVE ' + wave,
+      waveConfig(wave, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName);
+  }
+
+  /**
+   * Debug: pin every block to one theme, or pass null to go back to the run's
+   * dealt order. Takes effect on the NEXT wave, which is what makes it usable
+   * with the wave jump above - set the theme, jump to the wave you want to see
+   * it at, and the block that starts is the one you asked for.
+   *
+   * On the game object rather than in the debug panel because it is the hook
+   * the browser tests drive: with ten themes being built one at a time, every
+   * one of them needs to be reachable at wave 1 AND at wave 41 on demand.
+   */
+  setTheme(key) {
+    this._forcedTheme = key && THEMES[key] ? key : null;
+    return this._forcedTheme;
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
@@ -6875,6 +7261,15 @@ class Game {
       // whole job: a cloud with no footprint has no edge you can trust, and a
       // footprint with no cloud is invisible the moment you are inside it.
       cloud: k.cloud ? this.effects.cloudAcquire() : -1,
+      // A SOLID hazard puts a real box in the arena. Pushed onto BOTH lists
+      // deliberately: `obstacles` is what bodies are resolved out of and
+      // `ground` is what shots stop against, and a pillar that stopped one and
+      // not the other would be either a wall you can shoot through or cover
+      // you can walk through. The nav grid is NOT rebuilt for it - a column
+      // stands for three seconds and re-flooding the field for that would cost
+      // more than the pathing it would fix; enemies bump into it and are
+      // resolved out, which is what the resolver is for.
+      box: k.wall ? this._raiseWall(x, z, k.wall) : null,
     });
     const color = k.color;
     this._ashAt.set(x, 0.1, z);
@@ -6913,6 +7308,28 @@ class Game {
   _releaseHazard(h) {
     this.effects.creepRelease(h.creep);
     if (h.cloud >= 0) this.effects.cloudRelease(h.cloud);
+    if (h.box) this._dropWall(h.box);
+  }
+
+  // The two halves of a solid hazard. Kept together and kept tiny, because the
+  // only thing that can go wrong here is a box that goes in and never comes
+  // out - a permanent invisible pillar in the middle of the arena that nobody
+  // could explain and no test would look for.
+  _raiseWall(x, z, w) {
+    const box = new THREE.Box3(
+      new THREE.Vector3(x - w.r, 0, z - w.r),
+      new THREE.Vector3(x + w.r, w.h, z + w.r)
+    );
+    this.arena.obstacles.push(box);
+    this.arena.ground.push(box);
+    return box;
+  }
+
+  _dropWall(box) {
+    let i = this.arena.obstacles.indexOf(box);
+    if (i >= 0) this.arena.obstacles.splice(i, 1);
+    i = this.arena.ground.indexOf(box);
+    if (i >= 0) this.arena.ground.splice(i, 1);
   }
 
   // Runs the pools down and bleeds the player for standing in one.
@@ -6947,6 +7364,14 @@ class Game {
       // through a blight's lob and a vitriol's cloud alike. Lava and frost are
       // not poison and still work, which is what keeps the deal a specialist
       // answer rather than blanket hazard immunity.
+      // A WELL PULLS FROM ANYWHERE INSIDE IT, and it is checked before the
+      // standing-in-it test below because it is not a damage source at all -
+      // it has no dps, no status, and it works on a player in the air as well
+      // as one on the floor. Being able to jump out of a gravity well would
+      // make it the one hazard in the game that a single button answers.
+      if (k.pull && dx * dx + dz * dz < h.radius * h.radius) {
+        this._pullPlayer(-dx, -dz, k.pull * fade);
+      }
       const immune = k.poisonous && this.player.mods.poisonImmune > 0;
       if (!immune && dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
         // WHAT THE GROUND PUTS ON YOU. Lava sets you alight, gas poisons you,
@@ -7219,7 +7644,18 @@ class Game {
       // green glob that broke against a wall in violet read as a second,
       // unrelated effect.
       else if (res === 'wall') {
-        this.effects.burst(pr.pos, PROJ_IMPACT[pr.type] || PROJ_IMPACT.shooter, 8, 3, 1, 0.3);
+        this.effects.burst(pr.pos, projLook(pr.type).glow, 8, 3, 1, 0.3);
+      }
+      // WHAT THE ROUND LEAVES WHERE IT STOPPED. One row on the type's `proj`
+      // block, read here - so PLAGUE's lesion is a stat block rather than a
+      // branch, exactly as the bounce and the homing are.
+      //
+      // On 'hit' AND on 'wall', which is the entire enemy: a lesion's misses
+      // are not free, and a round that only rotted the floor when it connected
+      // would be an ordinary gunner with a rider.
+      const leave = (res === 'hit' || res === 'wall') && projLook(pr.type).leave;
+      if (leave) {
+        this._addHazard(pr.pos.x, pr.pos.z, leave.radius, leave.life, leave.dps, leave.kind);
       }
       this.scene.remove(pr.mesh);
       this.projectiles.splice(i, 1);
@@ -7229,6 +7665,13 @@ class Game {
   // Pushes state to the HUD every frame. UI caches internally, so these calls
   // are cheap when nothing changed.
   _updateHud() {
+    // SOLAR's halo. Raised by any halo whose field the player is standing in,
+    // consumed here and cleared, so it lapses on its own the moment they step
+    // out or the enemy dies - the same refresh-and-lapse contract the
+    // conduit's buff and the warden's dome keep, and for the same reason:
+    // there is no state to get stuck on.
+    this.ui.setHudBlind(!!this._hudBlind);
+    this._hudBlind = false;
     this.ui.setWave(this.wave);
     // The boss has its own bar, so the counter reads as adds on the field
     // rather than sitting at "ENEMIES 1" for the length of a boss fight.

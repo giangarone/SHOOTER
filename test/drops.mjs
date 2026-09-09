@@ -225,7 +225,26 @@ try {
     g._ash.length = 0;
     g._hazard.forEach((h) => g.effects.creepRelease(h.creep));
     g._hazard.length = 0;
+    // NOTHING MAY BE ALIVE THAT LAYS ZONES OF ITS OWN.
+    //
+    // This block measures that a zone releases its creep slot WHEN IT EXPIRES,
+    // which means waiting for the arena to empty of zones - and it used to do
+    // that with a live wave running underneath it. That was survivable while a
+    // hazard-laying enemy was one roll among six for a slot; it is not
+    // survivable now that a wave is a THEME. An EMBER block is a magma, a
+    // kiln and an ashwing all laying fire continuously, so the drain condition
+    // below can never be reached and the wait times out with a floor full of
+    // zones that were never the ones under test.
+    g._clearEntities();
+    // Still 'active', so no intermission opens and no totems rise - but with
+    // one enemy left in the queue that never arrives, because a wave with an
+    // empty queue and no enemies COMPLETES, and a wave completing clears every
+    // zone in the arena. That would make the check below pass through the
+    // wave-clear path rather than through the expiry it exists to measure.
     g.waveState = 'active';
+    g.queue.length = 0;
+    g.queue.push('chaser');
+    g.spawnTimer = 1e6;
     g.player.mods.ashDps = 18;
     g.player.mods.ashRadius = 3.5;
     g.player.mods.ashTime = 1.2;

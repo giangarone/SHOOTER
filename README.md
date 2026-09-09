@@ -268,7 +268,147 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- Fourteen enemy types: **Chasers** and **Splitters** (melee, splitters break into three on death), **Shooters** and **Snipers** (ranged darts), **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Wraiths** (blink behind you), **Bulwarks** (carry a small buckler that blocks 80% of anything landing on it - shoot the head, the legs or the flanks, all of which take full damage, or burn them, since damage over time ignores the plate entirely), **Conduits** (no attack; buff everything near them), **Blights** (lingering pools that make standing still cost health), **Magmas** (burn a trail of lava into the floor behind them that lasts five seconds - do not retreat down the line they walked) **Wardens** (no attack; project a dome that makes every enemy inside it invincible and stone-grey until you kill the warden itself) and, from wave 21, two FLYING types - **Harriers** (hold station five metres up and are armoured while they are there; they have to drop to head height to fire their burst, and that descent is the window to kill them in) and **Shrikes** (circle out of reach, then dive at the patch of floor you were standing on - miss or hit, they spend the next second and a half climbing slowly away from you, which is the shot)
+- **Sixty enemy types, in ten themes of six** - one per role per theme, and every one of them built:
+  one per role per theme. What exists now, by the theme it belongs to:
+  **RUST** the machine theme, and the whole original roster kept together as
+  one family - **Chasers** (close and swing), **Shooters** (ranged darts),
+  **Tanks** (slow, heavy melee), **Bombers** (lobbed grenades), **Conduits**
+  (no attack; buff everything near them) and **Harriers** (hold station five
+  metres up and are armoured while they are there; they have to drop to head
+  height to fire their burst, and that descent is the window to kill them in).
+  **VOID**, the only theme that cannot
+  be answered by POSITIONING - which is the answer to every other theme in the
+  game. It takes the position instead: **Wraiths** (blink behind you),
+  **Warps** (fire out of a RIFT rather than out of themselves, so there is
+  never a line between them and you for cover to interrupt - the exit opens a
+  beat early and beside you, and stepping off that point is the answer),
+  **Monoliths** (a floating slab that walks THROUGH pillars, crates and decks
+  in a dead straight line - the one enemy in the game you cannot break line of
+  sight with, answerable only by distance and by killing it),
+  **Singularities** (lob a well that does no damage at all and drags you back
+  toward the spot you were leaving - harmless alone, and the reason the
+  monolith catches somebody), **Hexers** (curse) and **Shades** (fear from the
+  air). **PLAGUE**, the theme where CLEARING THE ROOM IS THE MISTAKE - everything in
+  it is unfinished when it dies: **Splitters** (break into three), **Lesions**
+  (burst fire whose rounds rot the floor wherever they LAND, hit or miss, so
+  the shots you dodged are still on the ground behind you), **Husks** (burst
+  into gas over wherever you chose to fight them), **Vitriols** (lingering
+  poison clouds), **Carrions** (no attack; raise one body that dies near them,
+  once each, at a fraction of its bar - killing the crowd in front of one is
+  what feeds it) and **Bloatflies** (slow airborne sacks that burst into gas
+  however they die, so shooting one out of the air over your own head is a
+  decision rather than a free kill). **SOLAR**, the theme that attacks the
+  INTERFACE - it takes the two things you aim with and gives one of them back
+  pointed the wrong way: **Zealots** (detonate in a blinding white-out when
+  they die, and only if you were close - the whole enemy is a decision about
+  range), **Snipers** (long beam, paper-thin), **Aegises** (a mirror that
+  REFLECTS what you fire into it, worn down by the COUNT of rounds that land
+  rather than by their damage, so a shotgun shell breaks the whole plate in one
+  pull and gets one round back for it), **Lenses** (burn a line across the
+  floor toward you, slowly and forever - you outrun it, you do not dodge it),
+  **Halos** (no attack; inside their field your crosshair and hit markers are
+  simply gone) and **Shrikes** (circle, tell, dive). **BRINE**, the theme of things that WILL NOT LET GO - every other theme asks you to be
+  somewhere else, and this one takes being somewhere else away: **Gulpers**
+  (latch on and RIDE you, draining until you shake them off with a melee swing
+  or a dash - the one enemy in the game that cannot be answered with the gun,
+  because it is at the one position a first-person crosshair can never point
+  at), **Anglers** (hang at the back of the room behind a lure and throw slow
+  homing bubbles that CAN BE SHOT OUT OF THE AIR - the only enemy round in the
+  game that is itself a target, and what it costs you is the bullet),
+  **Barnacles** (root themselves and drag you in on a current, so the plates
+  are facing you whether you wanted to be in front of them or not - the only
+  brute in the game that cover is the counter to), **Vents** (erupt a scalding
+  column that is REAL GEOMETRY for as long as it stands - the only artillery
+  that leaves cover behind it, and whether that cover is yours or theirs
+  depends entirely on where you were going), **Howlers** (the fear scream,
+  re-themed as sonar) and **Drifters** (rain a curtain of ink that costs no
+  health at all and takes your SIGHT - the only enemy in the game that attacks
+  information). **TEMPEST**, the only theme whose threats are LINES between two things rather than areas around one -
+  dangerous in the middle and harmless at both ends: **Arclings** (each holds a
+  live wire to the nearest other arcling, so a pair of them is a fence across
+  the room and the answer is to kill ONE and cut it), **Coils** (charge a bolt
+  for three quarters of a second and then fire it INSTANTLY - there is nothing
+  in the air to dodge, and the only counter is to put something solid between
+  you and it before the charge ends, which makes it the one ranged enemy that
+  cover beats and movement does not), **Dynamos** (store what you shoot them
+  with and dump it back out as a shockwave every time the meter fills, so
+  emptying a magazine into one at close range is the worst thing you can do and
+  the same magazine from eight metres out is free), **Stormcallers** (mark the
+  floor and strike it, and what LANDS is only half of it - the patch left
+  behind goes on being lethal for three seconds, so the answer is to give the
+  position up rather than to step out and step back), **Capacitors** (no
+  attack; plate everything near them with a single-hit shield that outlives the
+  capacitor itself - a DPS tax rather than the warden's wall) and **Squalls**
+  (no attack and no damage of any kind; they come over the top and SHOVE you
+  off the deck you climbed to and into whatever else the wave has on the
+  floor). **EMBER**, and the only currency it spends is FLOOR - not one of its six does
+  much of anything on contact: **Cinders** (their touch sets you burning),
+  **Flares** (lob a shell that bursts into a fan of three fires pointing AWAY
+  from them, so backing off down the line it was thrown along walks you through
+  all of it), **Magmas** (a brute that burns a trail of lava behind it - do not
+  circle it twice), **Kilns** (plant themselves and turn a bar of flame around
+  the arena like a lighthouse, one step per half-beat, so it is the one enemy
+  you can hear coming), **Bellows** (no attack at all; while one lives every
+  EMBER enemy near it burns you on contact as well as hitting you) and
+  **Ashwings** (fly straight runs across the arena laying a line of fire the
+  whole way, and cannot steer once committed - the rear-up before the run is
+  the whole counterplay).
+  **RIME**, the mirror of
+  EMBER: fire spends the FLOOR and cold spends the PLAYER - **Rimes** (frost
+  trail; it takes your legs, not your health), **Shards** (fire one lance at a
+  target who is fine and a three-round burst at one who is already chilled, so
+  the rest of the theme is what loads their gun), **Glaciers** (the top sixty
+  per cent of the bar is ice and ice takes less than half of what you put into
+  it - and the crust SHATTERS into a nova of frost around wherever you chose to
+  finish the job), **Hailers** (lob a cluster that lands as a gapped RING
+  around you rather than a patch on you - somewhere not to CROSS rather than
+  somewhere not to stand), **Hoarfrosts** (no attack; stand inside the ring
+  they draw on the floor and everything you fire hits for forty per cent less)
+  and **Sleets** (park directly over your head and pour cold onto the spot you
+  are standing on - the only thing they cost is standing still). **VERDANT**, the theme of
+  things that ARRIVE LATE - nothing in it happens at the moment it is thrown:
+  **Thornlings** (charge in a straight line they cannot steer out of, overshoot
+  and have to come back round - you are never running from one, you are
+  stepping off its line), **Sporeguns** (lob seeds that do nothing at all when
+  they land and sprout into a burst of thorns two seconds later, with the
+  circle filling on the floor the whole time), **Bramblehides** (standing next
+  to one costs health whether or not it is swinging - the thorns reach further
+  than the swing does, so there is a band where they are the only thing
+  happening), **Blights** (lingering pools that make standing still cost
+  health), **Heartwoods** (no attack; they mend the wave behind you, which is
+  the one thing in the game a player cannot see being taken away from them) and
+  **Mothcaps** (the only LOW flier, drifting through the crowd at head height
+  trailing a cloud of spores that outlives it - kill one overhead and the cloud
+  is left exactly where you are standing). **STRATA**, the only theme
+  that fights with the ROOM - a corner is the worst place in the game to be in
+  a STRATA wave and the open middle is the best, which is the reverse of every
+  other theme: **Screes** (curl up and roll, and CAROM OFF THE WALLS rather
+  than stopping at them - not a charge aimed at you so much as a hazard let
+  loose in the room, and it shoves rather than hurts), **Slingers** (throw flat
+  stones that bounce ONCE off a wall - harmless in the open, throwing two
+  stones with one arm while you are backed into a corner), **Bulwarks** (carry
+  a small buckler that blocks 80% of anything landing on it - shoot the head,
+  the legs or the flanks, all of which take full damage, or burn them, since
+  damage over time ignores the plate entirely), **Geodes** (come up through the
+  floor, and not where you are - where you have BEEN: they remember the last
+  three places you stood and erupt under all of them at once, so a wide steady
+  orbit puts three spikes on the arc you are about to come round to),
+  **Wardens** (no attack; project a dome that makes every enemy inside it
+  invincible and stone-grey until you kill the warden itself) and **Gargoyles**
+  (sit in the truss doing nothing, armoured, and will hold that perch for the
+  whole wave if you never walk underneath - the only genuinely OPTIONAL enemy
+  in the game, and a decision about ammunition rather than about danger. Walk
+  under one and it comes down like a dropped block, and then it is on the floor
+  and unarmoured). **BRINE** the deep - **Howlers** (a scream that takes your
+  trigger). **PLAGUE** rot - **Splitters** (break into three on death),
+  **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
+  that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
+  (long beam, paper-thin) and **Shrikes** (circle out of reach, then dive at
+  the patch of floor you were standing on - miss or hit, they spend the next
+  second and a half climbing slowly away from you, which is the shot).
+  **TEMPEST** has none of its own yet. A slot whose enemy is not built borrows
+  RUST's for that role, so the whole rotation is playable while the roster is
+  being made - `npm run test:themes` prints what is still borrowed.
 - **Every enemy is its own silhouette.** Types used to share one capsule body
   and differ only by colour, which falls apart exactly when it matters - a
   frozen or poisoned enemy is wearing the status tint, not its own colour. Each
@@ -292,26 +432,81 @@ context. The start screen says so, and one click anywhere fixes it.
 - **A room full of smoke.** Exponential fog that thickens on the bass and closes
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
-- **A boss every five waves**, in a fixed rotation of five that repeats: the
-  **Colossus** (armoured but for a red core in its chest that opens on a rhythm,
-  a telegraphed charge that knocks it out cold against a wall, and turrets it
-  throws at the ground near you - they arc in under a landing ring, bolt
-  themselves down and start shooting, three on the floor at most, and each one
-  is a few rounds to destroy), **Siege**
-  (telegraphed mortar barrages and a charge of its own), **Schism** (fires eight rounds at once in every direction after a wind-up,
-  and splits three times over - two halves, then four, then eight, so it gets
-  more dangerous as it comes apart),
-  **Maw** (drags you in and rolls rings you have to jump) and the **Herald**
-  (blinks, volleys, and enrages under 30%). Regular enemies keep arriving
-  throughout; killing the boss ends the wave and pays out. It does NOT refill
-  your health or ammo - the payout is large and the stations are right there,
-  so coming out of a boss in trouble is a real state to be in and what you
-  spend the money on is a real decision.
-- **Wave composition is fixed, its cast is not.** Every wave has the same
-  number of enemies and the same mix of ROLES in every run, but which type
-  fills each slot is rolled from that role's members, who are balanced to be
-  near-equivalent. Two runs face the same difficulty and a different fight,
-  which is what keeps scores comparable.
+- **A boss every five waves, and which one is dealt rather than fixed.** Each
+  of the ten themes owns a boss, and the block a theme lands in is where its
+  boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
+  All ten exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  health bar: damage on any of them comes off the same pool, so the bar falls
+  whichever one is shot - what changes is what happens when one DIES. One of
+  the three is always SINGING, lit and loud, and the other two are silent. Kill
+  the singer and the choir carries on a body short; kill a silent one and the
+  survivors are FREED - faster, and attacking twice as often - for the rest of
+  the fight. The singer rotates on its own clock, so the correct target keeps
+  moving. **THE CONDUCTOR**, TEMPEST's, is the only fight in the game whose
+  clock is the music: it counts bars on the beat, drives a pylon into the floor
+  on each of the first three and DISCHARGES along every line it has on the
+  fourth - boss to pylon and pylon to pylon, so three pylons is six live wires
+  cutting the room into wedges. The fight is played between the bars, and a
+  player who clears all three takes a discharge with nothing in it.
+  **THE OVERGROWTH**, VERDANT's, is the only
+  thing in the game that never takes a step: rooted where it grew, so the
+  player can always walk away and the pressure has to come from the arena
+  closing in instead - creepers of thorns marching outward along the ground
+  toward wherever they are standing. And the player chooses its damage window,
+  which no other boss allows: its canopy is shut and armoured at any range and
+  OPENS when they come inside eight metres, which is exactly where it rings
+  itself with thorns. There is no clock on it at all - the whole fight is that
+  one trade, priced in seconds. **THE PALE CROWN**, RIME's, is the one fight in
+  the rotation that is not about the boss: it spends most of itself inside a
+  shell that takes NOTHING at all, and the way in is never the boss - three
+  anchors go into the floor with the shell, and breaking all three is what
+  brings it down. So the fight alternates between two completely different
+  jobs, and the shell has no clock on it: a player who finds the anchors fast
+  is paid in a longer window rather than the same window later. Three shells,
+  each with the arena a little more frozen than the last. The **FORGE-TYRANT**,
+  EMBER's, is the mirror of
+  the Colossus: it HEATS UP as it fights, gaining an attack at each third of
+  the bar - a sweeping bar of flame on the beat, then a wall of fire at a fixed
+  radius with one gap in it - and when the bar fills it has to stop and VENT,
+  which is when its chest opens and it takes full damage. The window is the
+  boss's own decision rather than a metronome, and it is not free: while it is
+  open it radiates fire outward in a growing ring, so the player has to be
+  close enough to shoot and far enough not to burn, and the ring is growing the
+  whole time. Then the **Colossus** (armoured but for a red core in
+  its chest that opens on a rhythm, a telegraphed charge that knocks it out
+  cold against a wall, and turrets it throws at the ground near you - they arc
+  in under a landing ring, bolt themselves down and start shooting, three on
+  the floor at most, and each one is a few rounds to destroy), **Siege**
+  (telegraphed mortar barrages and a charge of its own), **Schism** (fires eight
+  rounds at once in every direction after a wind-up, and splits three times
+  over - two halves, then four, then eight, so it gets more dangerous as it
+  comes apart), **Maw** (drags you in and rolls rings you have to jump) and the
+  **Herald** (blinks, volleys, and enrages under 30%). Regular enemies keep
+  arriving throughout; killing the boss ends the wave and pays out. It does NOT
+  refill your health or ammo - the payout is large and the stations are right
+  there, so coming out of a boss in trouble is a real state to be in and what
+  you spend the money on is a real decision.
+- **Wave composition is fixed; which theme fills it is dealt.** Every wave has
+  the same number of enemies and the same mix of ROLES in every run - that is
+  what keeps two runs comparable - but the run is TEN BLOCKS OF FIVE WAVES and
+  each block is one THEME. A theme is six enemies, one per role, and a boss;
+  the ten are shuffled into a deck at the start of a run, so waves 1-50 meet
+  each of them exactly once and one run opens on EMBER where the next opens on
+  BRINE. Past fifty the deck is re-dealt rather than repeated.
+- **A theme has no wave, so difficulty cannot come from it.** It comes from the
+  per-wave health, speed and damage multipliers alone, which are pure functions
+  of the wave number - a theme dealt into waves 26-30 arrives with the same
+  enemies as one dealt into 1-5 and five times the health. The price is that
+  every theme's stat blocks have to be normalised against every other theme's,
+  role by role: ten rushers that are interchangeable, ten brutes that are
+  interchangeable. `test/themes.mjs` holds the envelope each role has to sit
+  in, because nobody can hold sixty stat blocks in their head.
+- **Each block teaches itself.** The per-type unlock table is gone - a wave gate
+  on EMBER's rusher means nothing when EMBER may be wave 1 or wave 41 - and
+  what it did is done by the block instead: a block opens on its theme's line
+  troops and widens to all six roles by its fourth wave, then the boss. The
+  first four waves of a RUN keep the old hand-authored tutorial shape on top of
+  that, whatever theme was dealt into them.
 - **Pickups drop off the enemies you kill**, not from timers around the map,
   and every kill rolls for them independently. There is no per-wave budget:
   a wave used to carry a fixed number of pickups spread evenly across its
@@ -1100,7 +1295,8 @@ js/beatmap.js       the pre-analysed beat grid and its lookup
 js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
-js/waves.js         wave difficulty config
+js/waves.js         wave difficulty config + the role schedule
+js/themes.js        the ten themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -1117,6 +1313,49 @@ test/icons.mjs      every offer has a drawing and every drawing an offer
 test/pad.mjs        controller support, driven by a synthetic DualSense
 test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
+test/themes.mjs     the theme table and the balance law: every role filled, no
+                    type in two themes, and every stat block inside the
+                    envelope its role has to share across all ten
+test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
+                    bellows lighting the crowd, the ashwing's line, and the
+                    Forge-Tyrant heating up and venting
+test/rime.mjs       RIME end to end - the shard's conditional burst, the
+                    glacier's crust and its one nova, the hailer's gapped ring,
+                    the hoarfrost's field, and the Pale Crown's anchors
+test/verdant.mjs    VERDANT end to end - the thornling's committed charge, the
+                    seed that is safe until it is not, the thorn band outside
+                    the swing, the heartwood's mending, and the Overgrowth's
+                    player-chosen window
+test/strata.mjs     STRATA end to end - the scree's carom, the slinger's single
+                    bounce, the geode firing at where you have been, and the
+                    gargoyle's perch
+test/void.mjs       VOID end to end - the warp's rift, the monolith phasing
+                    through a box its role-mate is stopped by, and the well
+                    that moves the player and costs nothing
+test/tempest.mjs    TEMPEST end to end - and every assertion in it is a pair,
+                    because a line that is not tested from BOTH sides is
+                    indistinguishable from an aura: on the arcling's wire
+                    against off it at the same range, a coil in the open
+                    against a coil behind cover, a dynamo that was shot
+                    against one that was not, the plate's first hit against
+                    its second
+test/brine.mjs      BRINE end to end, and every assertion in it is a pair for
+                    the same reason TEMPEST's are - four of its six are
+                    invisible when broken rather than obviously wrong: the
+                    gulper held AND let go, the vent walled AND the wall came
+                    down, the current pulled AND cover stopped it, the choir
+                    stood up as three AND on one bar
+test/plague.mjs     PLAGUE end to end - and its headline assertion is a
+                    deliberate MISS, because a lesion round that only rotted
+                    the floor where it CONNECTED would be an ordinary gunner
+                    with a rider and nothing would look wrong. Plus the
+                    carrion raising a body once and never twice, and the
+                    bloatfly bursting however it died
+test/solar.mjs      SOLAR end to end - three of its four reach into the
+                    presentation layer, so each is asserted from both sides:
+                    the flash fired close AND not far, the crosshair went
+                    inside the field AND came back outside it, the plate
+                    turned the shot AND stopped once it was spent
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/aim.mjs        the sights, the crosshair that reads the cone, the marker

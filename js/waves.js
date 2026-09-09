@@ -2,131 +2,54 @@
 // no game state, no side effects. main.js calls waveConfig() once when a wave
 // starts and reads the rest from it for the duration.
 //
-// FIXED SHAPE, RANDOM FILL
+// FIXED SHAPE, THEMED CAST
 //
-// The old version rolled every slot in the queue against one flat weight
-// table, which meant one run could meet six tanks on wave 8 and the next six
-// chasers. Two runs were not comparable, and reaching wave 12 measured luck
-// as much as skill.
+// A wave's SHAPE - how many enemies of each ROLE it contains - is a pure
+// function of the wave number, the same in every run that ever plays it. That
+// is what makes the wave a run reached mean the same thing twice, and every
+// number in this file is written to keep it true.
 //
-// So a wave's SHAPE is fixed and its CAST is not. Each wave declares how many
-// enemies of each ROLE it contains - a pure function of the wave number, the
-// same in every run that ever plays it - and the specific type filling each
-// slot is drawn from the types of that role unlocked by then. The roles are
-// built so their members are near-equivalent in threat: swapping a chaser for
-// a wraith changes how the wave FEELS and not how hard it is.
+// What fills each slot is NOT rolled per slot any more. It used to be: each
+// slot drew independently from every type of that role unlocked by then, which
+// gave a wave 14 made of a chaser, a rime, a husk and a warden - four
+// unrelated silhouettes standing in the same room with nothing to say to each
+// other.
 //
-// Adding a type to a role therefore has to be done on that basis. A type that
-// is much stronger than its role-mates reintroduces exactly the luck this
-// exists to remove.
+// The run is now TEN BLOCKS OF FIVE WAVES and each block is ONE THEME (see
+// themes.js). A block's four ordinary waves are filled entirely from that
+// theme's six enemies - one per role, so the role decides the type outright -
+// and its fifth wave is that theme's boss. The blocks are dealt in a random
+// order per run, so one run opens on EMBER and the next on BRINE.
 //
-// Arrival order is shuffled, because the order enemies walk in out of is
-// texture rather than difficulty.
+// SO THE ROLL MOVED UP A LEVEL. It happens once per block instead of once per
+// slot, and what it decides is the whole character of five waves rather than
+// the identity of one body in a crowd.
+//
+// WHERE DIFFICULTY COMES FROM, NOW THAT A TYPE HAS NO WAVE
+//
+// It comes from here and only from here: hpScale, speedScale and dmgScale are
+// pure functions of the ABSOLUTE wave number, so a theme dealt into waves
+// 26-30 arrives with the same enemies as one dealt into 1-5 and five times the
+// health. Nothing in themes.js knows or cares where its block landed.
+//
+// The price is paid on the other side: because a theme can land anywhere,
+// every theme's base stat blocks must be normalised against every other
+// theme's, role by role. Ten rushers that are interchangeable, ten brutes that
+// are interchangeable. That is the same role-parity rule this file has always
+// had, widened from six pools to a ten-by-six grid, and it is enforced in
+// test/themes.mjs rather than by good intentions.
 
-// Role membership. Peers within a role must be comparable in threat - see the
-// note above.
-const ROLES = {
-  rusher: ['chaser', 'splitter', 'wraith', 'magma', 'cinder', 'rime'],
-  gunner: ['shooter', 'sniper'],
-  brute: ['tank', 'bulwark', 'husk'],
-  artillery: ['bomber', 'blight', 'vitriol'],
-  support: ['conduit', 'warden', 'howler', 'hexer'],
-  // The one role whose members are not near-equivalent by accident but by
-  // construction: a harrier will not close and a shrike does nothing else, so
-  // whichever fills a slot the wave still contains "something in the air".
-  flier: ['harrier', 'shrike', 'shade'],
-};
-
-// THE AFFLICTORS AND THE ROLE RULE.
-//
-// Six of the seven types added with the status system join existing roles, and
-// every one of them was priced to sit inside its role rather than on top of
-// it: a cinder hits for five where a chaser hits for twelve, a husk has a
-// hundred and thirty health where a tank has a hundred and eighty, a vitriol
-// does no direct damage at all - exactly like the blight it stands beside.
-// What each one carries instead is a status, and the status is the payment for
-// what was taken off its stat block.
-//
-// That is the whole reason the balance holds. A wave asks for four rushers,
-// not for four chasers, and a run where three of them are cinders has to be
-// the same difficulty as a run where none are. The moment an afflictor is
-// simply a role-mate plus a debuff, the schedule stops being a fixed shape and
-// goes back to being luck - which is the one thing this file exists to
-// prevent.
-//
-// SUPPORT IS THE EXCEPTION WORTH NAMING. It now has four members and they are
-// the least alike of any role: conduit and warden change what the CROWD does,
-// howler and hexer change what the PLAYER does. They are still comparable in
-// threat - each is a high-value target that does no damage of its own and
-// makes everything around it worse - but a support slot is now a genuinely
-// wider question than it was, which is why the schedule never asks for more
-// than two of them.
-
-// The wave a type first becomes eligible. Everything does NOT show up at once:
-// a wave-1 player meets one enemy and learns it, and the roster opens a type
-// at a time from there. A role with nothing unlocked yet simply cannot be
-// scheduled, which is why the early slot table has no `brute` line.
-export const FLIER_UNLOCK = 21;
-
-const UNLOCK = {
-  chaser: 1,
-  splitter: 2,
-  shooter: 3,
-  bomber: 4,
-  tank: 6,
-  sniper: 7,
-  wraith: 8,
-  bulwark: 9,
-  conduit: 11,
-  blight: 12,
-  magma: 13,
-  warden: 14,
-  // ---- the afflictors ----------------------------------------------------
-  // One status at a time, and none of them before wave 10.
-  //
-  // Waves 1-12 are the hand-authored teaching schedule (see SLOTS), and what
-  // they teach is the FLOOR: lanes, pools, telegraph circles, which enemy to
-  // shoot first. A status is a second thing to read - a chip in the HUD, a
-  // number that is no longer what it was - and stacking that on top of the
-  // basics is how a player ends up learning neither.
-  //
-  // The order is by how much each one takes away. Fire and cold take a little
-  // and are obvious about where they came from; fear takes the trigger; curse
-  // takes nothing visible at all and multiplies everything else, which is why
-  // it is last and why it arrives after the player has met all five of the
-  // others.
-  // Eleven, not ten: wave 10 is a boss, and a type whose first appearance is
-  // as an add in a boss fight is a type the player meets while looking at
-  // something else. Every one of these opens on an ordinary wave.
-  cinder: 11,
-  rime: 13,
-  vitriol: 16,
-  husk: 18,
-  howler: 19,
-  hexer: 23,
-  // The air's afflictor waits until the player has had four waves of ordinary
-  // fliers. Being feared on the ground is two seconds of walking; being feared
-  // with something already diving is the dive.
-  shade: 26,
-  // The air opens the wave after the fourth boss. Not earlier: everything
-  // before wave 20 is a lesson in reading the FLOOR - lanes, pools, telegraph
-  // circles - and dropping a threat above the player's sight line while they
-  // are still learning that would only teach them to look in the wrong place.
-  harrier: FLIER_UNLOCK,
-  shrike: FLIER_UNLOCK,
-};
+import {
+  THEMES, ROLE_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
+} from './themes.js';
 
 // ---- bosses --------------------------------------------------------------
-// Every fifth wave, in a fixed rotation that repeats every 25. Wave 30 is
-// Colossus again, wave 55 again after that.
-export const BOSS_ROTATION = ['colossus', 'siege', 'schism', 'maw', 'herald'];
+// Every fifth wave, and which boss it is comes from the block's theme rather
+// than from a fixed rotation. Wave 5 used to be Colossus in every run that
+// ever played; it is now whichever theme was dealt first.
 
 export function isBossWave(n) {
   return n > 0 && n % 5 === 0;
-}
-
-export function bossForWave(n) {
-  return BOSS_ROTATION[(n / 5 - 1) % BOSS_ROTATION.length];
 }
 
 /**
@@ -139,6 +62,9 @@ export function bossForWave(n) {
  * turn a wave-55 boss into eighty seconds of holding the trigger. Late-game
  * threat comes from `dmg` and from `rate` - up to 1.6x the attack frequency -
  * which make the fight harder to survive rather than longer to finish.
+ *
+ * UNCHANGED BY THE THEME REDESIGN, and that is the point: it is a function of
+ * the wave, so it already scales whichever boss the deck put there.
  */
 export function bossScale(n) {
   return {
@@ -149,13 +75,35 @@ export function bossScale(n) {
   };
 }
 
-// Adds keep arriving for as long as the boss lives, so these bound the
-// pressure rather than a total. `maxAdds` is how many may be alive at once;
-// wave 15 is lower because Schism splits into its own crowd.
-function bossPressure(n) {
-  const cycle = Math.floor((n - 1) / 25);
-  const key = bossForWave(n);
-  const base = key === 'schism' ? 3 : key === 'siege' || key === 'herald' ? 5 : 4;
+// How much company each boss keeps. Adds arrive for as long as the boss lives,
+// so these bound the PRESSURE rather than a total: `maxAdds` is how many may
+// be alive at once.
+//
+// Keyed by boss rather than by wave, because a boss no longer has a wave. A
+// fight that makes its own crowd - Schism, which splits into one, and the
+// Choir, which is three bodies from the start - carries fewer; a fight the
+// player can walk away from carries more, because walking away is what the
+// adds are there to stop.
+const ADD_PRESSURE = {
+  schism: 3,
+  choir: 3,
+  overgrowth: 3,   // it cannot move, so its adds ARE its reach
+  colossus: 4,
+  maw: 4,
+  palecrown: 4,
+  forge: 4,
+  conductor: 4,    // its pylons already take up the floor
+  siege: 5,
+  herald: 5,
+};
+const ADD_PRESSURE_DEFAULT = 4;
+
+// `cycle` is which pass through the ten-theme deck this is - it climbs once
+// every fifty waves rather than every twenty-five, because the deck is ten
+// blocks long now instead of five.
+function bossPressure(n, bossKey) {
+  const cycle = Math.floor((n - 1) / 50);
+  const base = ADD_PRESSURE[bossKey] || ADD_PRESSURE_DEFAULT;
   return {
     maxAdds: Math.min(7, base + cycle),
     addInterval: Math.max(2.2, 4.0 - cycle * 0.4),
@@ -163,86 +111,162 @@ function bossPressure(n) {
 }
 
 // ---- the schedule --------------------------------------------------------
-// Slots per role, hand-authored through wave 12 and formula-driven after.
-// Index is the wave number; boss waves are null because their composition
-// comes from the trickle instead.
 //
-// EVERY NUMBER HERE IS A PURE FUNCTION OF THE WAVE NUMBER. That is what makes
-// the wave a run reached mean the same thing in every run.
-const SLOTS = [
+// HOW MANY. The count curve is carried over from the hand-authored schedule
+// unchanged, because it was tuned by playing and the theme redesign is about
+// WHO arrives, not how many. Waves 1-12 are the authored ramp; past that the
+// mix holds steady and only the count grows, up to a ceiling the arena and the
+// enemy cap can actually hold. Boss waves are null - their composition comes
+// from the trickle instead.
+const GROUND_TOTAL = [
   null,
-  { rusher: 6 },
-  { rusher: 7 },
-  { rusher: 7, gunner: 3 },
-  { rusher: 8, gunner: 3, artillery: 2 },
-  null, //  5  BOSS colossus
-  { rusher: 8, gunner: 4, brute: 1, artillery: 2 },
-  { rusher: 9, gunner: 5, brute: 1, artillery: 2 },
-  { rusher: 10, gunner: 5, brute: 2, artillery: 2 },
-  { rusher: 10, gunner: 5, brute: 3, artillery: 3 },
-  null, // 10  BOSS siege
-  { rusher: 11, gunner: 6, brute: 3, artillery: 3, support: 1 },
-  { rusher: 12, gunner: 6, brute: 3, artillery: 4, support: 1 },
+  6, 7, 10, 13, null,      //  1-5
+  15, 17, 19, 21, null,    //  6-10
+  24, 26,                  // 11-12
 ];
 
-// Past the authored range the mix holds steady and only the count grows, up to
-// a ceiling the arena and the enemy cap can actually hold.
-// Fliers, on top of the ground count rather than carved out of it. They are a
-// NEW axis, not a reskin of an old one: taking rushers away to pay for them
-// would leave the wave the same size and quietly easier, because a player who
-// has already solved the floor trades a threat they must answer for one they
-// can ignore. So the air is an addition, and waves past 20 are meant to be
-// harder than the curve alone would have made them.
+function groundTotal(n) {
+  if (n < GROUND_TOTAL.length) return GROUND_TOTAL[n];
+  return Math.min(34, 20 + Math.floor(n * 0.55));
+}
+
+// WHICH ROLES. This is what replaced the per-type unlock table.
 //
-// One at a time to begin with. A pair of shrikes diving on the wave a player
-// first meets them is the kind of introduction that reads as unfair rather
-// than as new.
+// UNLOCK gated each type on the wave it first became eligible, and it did real
+// work: a wave-1 player met one enemy and learned it, and the roster opened a
+// type at a time from there. It cannot survive a random block order - a wave
+// gate on EMBER's rusher is meaningless when EMBER may be wave 1 or wave 41 -
+// so what it did has to be done by the BLOCK instead.
+//
+// Every block therefore teaches itself in the same shape: it opens on the
+// theme's line troops and widens to the full six by its fourth wave. That also
+// gives a block a readable arc - meet the theme, theme at full strength, boss -
+// which the flat schedule never had.
+const BREADTH = {
+  1: ['rusher', 'gunner', 'artillery', 'brute'],
+  2: ['rusher', 'gunner', 'artillery', 'brute', 'flier'],
+  3: ['rusher', 'gunner', 'artillery', 'brute', 'flier', 'support'],
+  4: ROLE_KEYS,
+};
+
+// THE OPENING BLOCK IS STILL A TUTORIAL, whatever theme it is.
+//
+// The ramp above is about learning a THEME. The first four waves of a run are
+// about learning the GAME - what a lane is, what a telegraph circle means,
+// that a pool on the floor is not scenery - and a player doing that for the
+// first time should be looking at one thing at a time regardless of which
+// theme the deck happened to deal first. So the opening block overrides the
+// ramp with the old hand-authored one, which is theme-agnostic by
+// construction: it names roles, and every theme has one of each.
+const OPENING = {
+  1: ['rusher'],
+  2: ['rusher'],
+  3: ['rusher', 'gunner'],
+  4: ['rusher', 'gunner', 'artillery'],
+};
+
+// Two absolute floors on top of the ramp, because these two are about the
+// PLAYER's learning curve rather than the theme's.
+//
+// Support is a high-value target that does no damage of its own and makes
+// everything around it worse, and the answer to one is to stop shooting the
+// crowd and go through it - a decision that means nothing to a player who has
+// not yet learned to read a crowd.
+const SUPPORT_FLOOR = 6;
+// The air waits longer. Everything before it is a lesson in reading the FLOOR -
+// lanes, pools, telegraph circles - and dropping a threat above the player's
+// sight line while they are still learning that would only teach them to look
+// in the wrong place. It used to wait until wave 21; it cannot wait that long
+// now, because every theme has a flier and the first two blocks would never
+// show theirs at all.
+const FLIER_FLOOR = 11;
+
+function rolesFor(n) {
+  const pos = blockPos(n);
+  const open = (n <= 4 ? OPENING[pos] : BREADTH[pos]) || [];
+  return open.filter((r) => {
+    if (r === 'support') return n >= SUPPORT_FLOOR;
+    if (r === 'flier') return n >= FLIER_FLOOR;
+    return true;
+  });
+}
+
+// Fliers sit OUTSIDE the ground total by design. They are a NEW axis, not a
+// reskin of an old one: taking rushers away to pay for them would leave the
+// wave the same size and quietly easier, because a player who has already
+// solved the floor trades a threat they must answer for one they can ignore.
+//
+// One at a time to begin with. A pair of divers on the wave a player first
+// meets them is the kind of introduction that reads as unfair rather than new.
 function fliersFor(n) {
-  if (n < FLIER_UNLOCK) return 0;
-  return Math.min(4, 1 + Math.floor((n - FLIER_UNLOCK) / 8));
+  return Math.min(4, 1 + Math.floor((n - FLIER_FLOOR) / 12));
 }
 
-function slotsFor(n) {
-  const flier = fliersFor(n);
-  if (n < SLOTS.length) return flier ? { ...SLOTS[n], flier } : SLOTS[n];
-  const total = Math.min(34, 20 + Math.floor(n * 0.55));
-  const support = Math.min(2, 1 + Math.floor((n - 11) / 12));
-  const gunner = Math.round(total * 0.24);
-  const brute = Math.round(total * 0.13);
-  const artillery = Math.round(total * 0.14);
-  // Rushers take the remainder so the GROUND total is exactly `total` however
-  // the rounding above lands. `flier` sits outside that sum by design.
-  const rusher = total - gunner - brute - artillery - support;
-  const slots = { rusher, gunner, brute, artillery, support };
-  if (flier) slots.flier = flier;
-  return slots;
+// Never more than two. Support is the role whose members are least alike -
+// some change what the CROWD does and some change what the PLAYER does - so a
+// support slot is a genuinely wide question, and three of them at once is more
+// questions than a wave has room for.
+function supportFor(n) {
+  return Math.min(2, 1 + Math.max(0, Math.floor((n - 11) / 12)));
 }
 
-// The types of `role` that exist by wave n. Never empty for a role the
-// schedule actually uses, because the slot table does not name a role before
-// its first member unlocks.
-function pickForRole(role, n) {
-  const pool = ROLES[role];
-  const open = [];
-  for (const t of pool) {
-    if (UNLOCK[t] <= n) open.push(t);
-  }
-  if (!open.length) return pool[0];
-  return open[(Math.random() * open.length) | 0];
-}
-
-// Enemies in wave n. powerups.js derives its pickup count from this, so the
-// two can't drift apart.
+// THE MIX FLATTENS AS THE WAVE GROWS.
 //
-// A boss wave reports a nominal figure rather than zero: the real count is
-// open-ended (adds arrive until the boss dies), and reporting zero would leave
-// the fight with no pickups at all, which is when the player needs them most.
-export function waveEnemyCount(n) {
-  if (isBossWave(n)) return 16;
-  const slots = slotsFor(n);
-  let total = 0;
-  for (const role in slots) total += slots[role];
-  return total;
+// Rushers used to take whatever was left after the other roles, which came to
+// about half of every wave. That was fine when a rusher slot drew from six
+// different types - the half was a mixed crowd. A theme has exactly ONE
+// rusher, so the same maths now puts seventeen identical bodies on a wave-46
+// floor, and a theme's brute and artillery become a garnish on it.
+//
+// So the other roles take a bigger share - but only where the problem is.
+// Early waves are small: wave 6's "half" is seven rushers, which reads as a
+// crowd rather than as a repeat, and loading it with brutes instead would make
+// it markedly harder for no gain. The shift therefore RAMPS, from exactly the
+// fractions that shipped at wave 6 to the flattened ones by wave 26.
+//
+// It is priced to hold difficulty, not just head count. Trading four rushers
+// for one brute and one artillery on a 34-enemy wave moves the wave's total
+// health by about two per cent, because a brute carries four rushers' worth of
+// it - what changes is how many different things are on screen, which is the
+// entire point.
+function mixAt(n) {
+  const t = Math.max(0, Math.min(1, (n - 6) / 20));
+  //
+  // WHERE THE SLOTS GO IS SET BY HEALTH, NOT BY TASTE. A brute carries four
+  // rushers' worth of it, so paying for the flattening in brutes would make a
+  // late wave eight per cent tougher on top of being flatter - the same wave
+  // with a longer trigger pull, which is not what was wanted. Gunners and
+  // artillery are cheap in health and expensive in ATTENTION, which is exactly
+  // the currency a flatter wave is supposed to cost more of. The numbers below
+  // land a 34-enemy wave on the same total health it had before the change,
+  // shaped 13/9/7/5 instead of 17/8/5/4.
+  return {
+    gunner: 0.24 + 0.03 * t,
+    brute: 0.13 + 0.02 * t,
+    artillery: 0.14 + 0.06 * t,
+  };
+}
+
+// Slots per role for wave n. A role the breadth ramp has not opened yet
+// contributes nothing and its share falls to the rushers, so the GROUND total
+// is exactly groundTotal(n) however the rounding lands.
+function slotsFor(n) {
+  const open = new Set(rolesFor(n));
+  const total = groundTotal(n);
+  const mix = mixAt(n);
+  const slots = {};
+
+  if (open.has('gunner')) slots.gunner = Math.round(total * mix.gunner);
+  if (open.has('brute')) slots.brute = Math.round(total * mix.brute);
+  if (open.has('artillery')) slots.artillery = Math.round(total * mix.artillery);
+  if (open.has('support')) slots.support = supportFor(n);
+
+  let used = 0;
+  for (const r in slots) used += slots[r];
+  slots.rusher = Math.max(1, total - used);
+
+  if (open.has('flier')) slots.flier = fliersFor(n);
+  return slots;
 }
 
 // Fisher-Yates. The counts are fixed; the ORDER they walk in out of is not,
@@ -257,28 +281,54 @@ function shuffle(arr) {
   return arr;
 }
 
-// Everything wave n needs. `queue` is a fresh array that main.js shifts from
-// as it spawns; the scale factors multiply the base stats in ENEMY_TYPES.
-// spawnInterval is seconds between spawns, floored so late waves stay sane.
-//
-// On a boss wave the queue is empty and `boss` is set: main.js spawns the boss
-// and then trickles adds for as long as it lives.
-export function waveConfig(n) {
+/**
+ * Everything wave n needs. `queue` is a fresh array that main.js shifts from
+ * as it spawns; the scale factors multiply the base stats in ENEMY_TYPES.
+ * spawnInterval is seconds between spawns, floored so late waves stay sane.
+ *
+ * On a boss wave the queue is empty and `boss` is set: main.js spawns the boss
+ * and then trickles adds for as long as it lives.
+ *
+ * `seed` is the run's one theme seed - the deck is re-dealt from it on every
+ * call rather than held anywhere, so this stays a pure function of (n, seed)
+ * and there is no per-run state to get out of step with.
+ *
+ * `have` is a predicate saying which types actually exist, threaded through to
+ * themes.js so a theme whose own enemies are not built yet borrows RUST's. It
+ * is passed in rather than imported because this file must stay loadable with
+ * no renderer.
+ *
+ * `force` pins every block to one theme. Debug and tests only - it is the only
+ * way to see a given theme at a given wave without rerolling the run until the
+ * deck cooperates, which matters most while the ten of them are being built.
+ */
+export function waveConfig(n, seed = 0, have = null, force = null) {
   const hpScale = 1 + (n - 1) * 0.18;
   const speedScale = 1 + (n - 1) * 0.04;
   const dmgScale = 1 + (n - 1) * 0.05;
   const spawnInterval = Math.max(0.35, 1.1 - n * 0.05);
 
+  const themeKey = themeForWave(seed, n, force);
+  const theme = THEMES[themeKey];
+  const base = {
+    theme: themeKey,
+    themeName: theme.name,
+    themeColor: theme.color,
+    blockPos: blockPos(n),
+    hpScale,
+    speedScale,
+    dmgScale,
+    spawnInterval,
+  };
+
   if (isBossWave(n)) {
-    const p = bossPressure(n);
+    const bossKey = resolveBoss(themeKey, have);
+    const p = bossPressure(n, bossKey);
     return {
+      ...base,
       queue: [],
-      hpScale,
-      speedScale,
-      dmgScale,
-      spawnInterval,
       boss: true,
-      bossKey: bossForWave(n),
+      bossKey,
       maxAdds: p.maxAdds,
       addInterval: p.addInterval,
     };
@@ -287,15 +337,13 @@ export function waveConfig(n) {
   const slots = slotsFor(n);
   const queue = [];
   for (const role in slots) {
-    for (let i = 0; i < slots[role]; i++) queue.push(pickForRole(role, n));
+    const type = resolveRole(themeKey, role, have);
+    for (let i = 0; i < slots[role]; i++) queue.push(type);
   }
   shuffle(queue);
   return {
+    ...base,
     queue,
-    hpScale,
-    speedScale,
-    dmgScale,
-    spawnInterval,
     boss: false,
     bossKey: null,
     maxAdds: 0,
@@ -313,8 +361,10 @@ const ADD_ROLES = ['rusher', 'rusher', 'rusher', 'gunner', 'gunner', 'artillery'
 // top of everything the boss is already doing.
 const ADD_ROLES_AIR = [...ADD_ROLES, 'flier'];
 
-export function pickAddType(n) {
-  const roles = n >= FLIER_UNLOCK ? ADD_ROLES_AIR : ADD_ROLES;
+// Adds come from the boss's OWN theme, so a boss fight is still that theme's
+// fight - the EMBER boss is fought in a room filling up with EMBER.
+export function pickAddType(n, seed = 0, have = null, force = null) {
+  const roles = n >= FLIER_FLOOR ? ADD_ROLES_AIR : ADD_ROLES;
   const role = roles[(Math.random() * roles.length) | 0];
-  return pickForRole(role, n);
+  return resolveRole(themeForWave(seed, n, force), role, have);
 }

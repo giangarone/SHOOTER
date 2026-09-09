@@ -200,6 +200,33 @@ const ACCENTS = [
 // point of turning the lights off in the first place.
 const HOUSE = 0xffffff;
 
+// THE BLOCK'S THEME IS A HUE, NOT A BLEND.
+//
+// The first pass lerped the palette pick toward the theme colour, which does
+// not survive contact with opposite hues: VERDANT's lime mixed with a blue
+// accent came out grey-teal, and the room read as nothing rather than as a
+// jungle. So the accent is BUILT from the theme instead - its hue, stepped a
+// little either side so successive picks still move, with the saturation and
+// lightness varied over the same steps.
+//
+// What that keeps is the thing the palette was for: the room is never one flat
+// wash, it steps from shade to shade every couple of seconds. What it adds is
+// that every one of those shades is in the block's own family.
+const THEME_HUES = 5;
+// How far around the wheel the steps range, either side of the theme's hue.
+// SMALL, and most of the variation is carried by lightness instead - for two
+// reasons. Hue is the thing that identifies a theme, so spending the variety
+// budget there is spending it on the one axis that must not move; and orange
+// sits right beside the red/magenta wrap, so a symmetric hue step of any size
+// walked EMBER into pink. A fire that ranges from deep red-orange to bright
+// yellow-white is a LIGHTNESS range, which is what this now is.
+const THEME_HUE_SPREAD = 0.016;
+const THEME_SAT_SWING = 0.06;
+const THEME_LIGHT_SWING = 0.17;
+// Scratch. The colour maths in update() runs every frame and allocates nothing.
+const _themeC = new THREE.Color();
+const _hsl = { h: 0, s: 0, l: 0 };
+
 // THE INTERMISSION IS A BLACKOUT, NOT HOUSE LIGHTS.
 //
 // It used to be the opposite: the wave break brought the lights UP, warm and
@@ -494,6 +521,13 @@ export class Rig {
     this._waveT = 0;
     this._dmgT = 0;
     this._staggerT = 0;
+    // SOLAR's zealot. Unlike every other cue here this one is not a fixed
+    // length - a zealot killed at arm's length blinds for the whole of it and
+    // one killed at the edge of its radius for a fraction - so the duration it
+    // was fired with is kept alongside the clock, and the fade is read off the
+    // pair rather than off a constant.
+    this._blindT = 0;
+    this._blindMax = 1;
     this._enraged = false;
     // Smoothed drivers, so a mode change eases rather than snaps. Seeded on a
     // real accent rather than white so the first frame of a run is already
@@ -547,6 +581,20 @@ export class Rig {
   // A boss is staggered: black out, then flare white as it recovers.
   cueStagger() {
     this._staggerT = 0.7;
+  }
+
+  // A zealot went off in the player's face. A HELD white-out rather than the
+  // stagger's blink: what it takes is the ability to see the room for a
+  // moment, so it has to hold and then fade rather than flash and be gone.
+  //
+  // Refreshed to the LONGER of the two if one is already running - two zealots
+  // dying together must not stack into something the player waits out.
+  cueBlind(secs) {
+    if (secs <= 0) return;
+    if (secs > this._blindT) {
+      this._blindT = secs;
+      this._blindMax = secs;
+    }
   }
 
   setEnraged(on) {
@@ -647,6 +695,7 @@ export class Rig {
     if (this._waveT > 0) this._waveT = Math.max(0, this._waveT - dt);
     if (this._dmgT > 0) this._dmgT = Math.max(0, this._dmgT - dt);
     if (this._staggerT > 0) this._staggerT = Math.max(0, this._staggerT - dt);
+    if (this._blindT > 0) this._blindT = Math.max(0, this._blindT - dt);
 
     // The wave cue: the first 40% is the blackout, the rest is the hit
     // decaying back to normal.
@@ -710,6 +759,25 @@ export class Rig {
           % ACCENTS.length;
       }
       this._target.setHex(ACCENTS[this._pickIdx]);
+      // ...unless a theme is running, in which case the step walks that
+      // theme's own family instead of the general palette. Same clock, same
+      // "never twice in a row" walk - only the set of colours it is walking
+      // changes. Not on a boss wave: the branch above already hands the room
+      // to the boss.
+      if (s.themeColor) {
+        _themeC.setHex(s.themeColor);
+        _themeC.getHSL(_hsl);
+        // -2..+2 around the theme's hue, and the same step drives a small
+        // swing in saturation and lightness - so the five shades differ in
+        // more than hue, which is what stops a low-saturation theme like
+        // STRATA from stepping between five colours nobody can tell apart.
+        const k = (this._pickIdx % THEME_HUES) - ((THEME_HUES - 1) / 2);
+        this._target.setHSL(
+          (_hsl.h + k * THEME_HUE_SPREAD + 1) % 1,
+          Math.min(1, Math.max(0.25, _hsl.s * (1 + k * THEME_SAT_SWING))),
+          Math.min(0.9, Math.max(0.26, _hsl.l * (1 + k * THEME_LIGHT_SWING)))
+        );
+      }
     }
     this._colour.lerp(this._target, Math.min(1, dt * 4));
 
@@ -1025,6 +1093,17 @@ export class Rig {
     f = Math.max(f, waveHit * 0.5, stagHit * 0.7);
     if (boss && this._enraged && this.beatFlash) f = Math.max(f, beat * 0.55);
     this.flash = Math.min(0.8, f * (1 - this._house));
+    // THE BLIND SITS ABOVE THE CAP, and it is the only thing that does. 0.8 is
+    // the ceiling for everything else because the room still has to be
+    // readable through a strobe; this one is an enemy deliberately taking that
+    // away, and a blind the player could see through would not be one. It
+    // holds at full for the first third and fades over the rest, so it ends by
+    // giving the room back rather than by switching it on again.
+    if (this._blindT > 0) {
+      const p = this._blindT / this._blindMax;
+      const k = p > 0.66 ? 1 : p / 0.66;
+      this.flash = Math.max(this.flash, 0.95 * k);
+    }
   }
 
   // Moves an accent towards a point on its orbit. Eased rather than set, so

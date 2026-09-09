@@ -43,6 +43,7 @@ export class UI {
     this.bossHp = $('boss-hp');
     this.bossNote = $('boss-note');
     this.bannerEl = $('banner');
+    this.bannerSubEl = $('bannersub');
     this.hitmarker = $('hitmarker');
     this.startOv = $('overlay-start');
     this.overOv = $('overlay-over');
@@ -585,12 +586,35 @@ export class UI {
   // Restarts the CSS animation. Removing the class, forcing a reflow by
   // reading offsetWidth, then re-adding it is what makes it replay - without
   // the reflow the browser coalesces both changes and nothing happens.
-  banner(text) {
+  //
+  // `sub` is the optional second line - the name of the five-wave theme block
+  // that is opening. Passing nothing clears it, so a caller never has to
+  // remember to wipe last wave's subtitle.
+  banner(text, sub = '') {
     this.bannerEl.textContent = text;
     this.bannerEl.classList.remove('show');
     void this.bannerEl.offsetWidth;
     this.bannerEl.classList.add('show');
+    this.bannerSubEl.textContent = sub;
+    this.bannerSubEl.classList.remove('show');
+    void this.bannerSubEl.offsetWidth;
+    if (sub) this.bannerSubEl.classList.add('show');
   }
+  /**
+   * SOLAR's halo: the crosshair and the hit markers are gone.
+   *
+   * A CLASS ON THE BODY, not a style on each element, because what is being
+   * suppressed is a SET of readouts and the set will grow if anything else
+   * ever attacks the HUD. Cached like every other setter here - this is
+   * written every frame and an unconditional classList write would dirty the
+   * compositor on all of them.
+   */
+  setHudBlind(on) {
+    if (this._c.hudBlind === on) return;
+    this._c.hudBlind = on;
+    document.body.classList.toggle('hudblind', on);
+  }
+
   hitMarker() {
     const h = this.hitmarker;
     h.classList.remove('show');

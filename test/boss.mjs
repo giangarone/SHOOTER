@@ -22,7 +22,19 @@ import puppeteer from 'puppeteer-core';
 const PORT = 8211;
 const CHROME = process.env.CHROME
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const WAVES = (process.argv[2] || '5,10,15,20,25,30').split(',').map(Number);
+// A WAVE NO LONGER NAMES A BOSS. Which fight wave 5 is depends on which of
+// the ten themes the run's deck dealt into the first block, so this suite pins
+// the theme with __game.setTheme() and then jumps, rather than assuming wave
+// 15 is Schism the way it used to.
+//
+// The list below is THEMES, not waves, and the loop reads each theme's boss
+// off the table - so a theme whose own boss is still being built is exercised
+// through whichever built fight it currently borrows, and starts exercising
+// its own the day that lands, with no edit here.
+const THEMES_UNDER_TEST = (process.argv[2] || '').split(',').filter(Boolean);
+// Every fifth wave is a boss wave whatever the theme, so one wave per pin is
+// enough - and they are spread up the curve so bossScale() is exercised too.
+const PIN_WAVES = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
 const ROOT = '/Users/gianfrancogarone/Desktop/SHOOTER';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -58,6 +70,9 @@ try {
   {
     const rows = await page.evaluate(async () => {
       const THREE = await import('three');
+      // Colossus is RUST's boss. Pin the theme or the deck decides which fight
+      // this block gets, and it is specifically Colossus's core being checked.
+      window.__game.setTheme('rust');
       const { Enemy, ENEMY_TYPES } = await import('/js/enemy.js');
       const b = new Enemy('colossus', new THREE.Vector3(0, 0, 0), 1, 1, 1);
       const out = [];
@@ -122,6 +137,9 @@ try {
   {
     const r = await page.evaluate(async () => {
       const g = window.__game;
+      // Schism is PLAGUE's boss. Wave 15 used to BE Schism; it is now whatever
+      // the deck dealt, so the theme is what has to be asked for.
+      g.setTheme('plague');
       g.wave = 14;
       g.enemies.forEach((e) => { e.dead = true; });
       g.queue.length = 0;
@@ -208,12 +226,22 @@ try {
       + `early=${r.duringTell} delay=${Math.round(r.delay)}ms`);
   }
 
-  for (const wave of WAVES) {
+  // Which themes to sweep. Given none on the command line, every theme in the
+  // table - so all ten fights are covered the moment they exist, and until
+  // then a theme is covered through the fight it borrows.
+  const themeKeys = THEMES_UNDER_TEST.length
+    ? THEMES_UNDER_TEST
+    : await page.evaluate(async () => Object.keys((await import('/js/themes.js')).THEMES));
+
+  for (let ti = 0; ti < themeKeys.length; ti++) {
+    const themeKey = themeKeys[ti];
+    const wave = PIN_WAVES[ti % PIN_WAVES.length];
     errors.length = 0;
     // Jump to the wave before the boss and let the normal flow start it, so
     // the boss goes through exactly the path a real run takes.
-    await page.evaluate((w) => {
+    await page.evaluate(({ w, t }) => {
       const g = window.__game;
+      g.setTheme(t);
       g.wave = w - 1;
       g.enemies.forEach((e) => { e.dead = true; });
       g.queue.length = 0;
@@ -223,7 +251,7 @@ try {
       g.player.health = 100000;
       g.player.maxHealth = 100000;
       g.player.reserveAmmo = 100000;
-    }, wave);
+    }, { w: wave, t: themeKey });
     await sleep(600);
 
     const seen = { hp: [], parts: [], adds: [], boss: null, bar: null };
@@ -259,18 +287,62 @@ try {
         seen.adds.push(snap.adds);
         seen.bar = snap;
       }
-      if (seen.boss && !snap.boss) { cleared = true; seen.after = snap; break; }
+      if (seen.boss && !snap.boss) {
+        cleared = true;
+        // ONE MORE BEAT BEFORE THE POOL IS COUNTED. The bossFight goes null on
+        // the frame the last part dies, and the wave-end sweep that clears
+        // whatever the fight left in the air - live mortars, and the telegraph
+        // marks they are holding - runs after it. Sampling on the same frame
+        // measured a mark that was still legitimately in use and called it a
+        // leak. What is being asserted is that the pool comes BACK, not that
+        // it comes back within one frame.
+        //
+        // It only started failing when this loop began walking the player into
+        // the Overgrowth's canopy: before that the one rooted boss never got
+        // to lay a ring at all, so it never had a telegraph outstanding when
+        // it died.
+        await sleep(900);
+        seen.after = await page.evaluate(() => ({
+          marks: window.__game.effects.marks.filter((m) => m.used).length,
+        }));
+        break;
+      }
       // Chip the boss down so the fight resolves inside the harness budget.
+      //
+      // MORE THAN HALF THE ROSTER NOW GATES ITS OWN DAMAGE, and this loop
+      // ticks far slower than any of those gates cycle - so each one is opened
+      // here rather than waited on. The point of the loop is to resolve the
+      // fight inside the budget and prove it ENDS cleanly; whether each gate
+      // opens on its own terms is measured in that theme's own suite.
       await page.evaluate(() => {
         const g = window.__game;
         if (!g.bossFight) return;
+        // The Pale Crown's shell takes literally nothing until its three
+        // anchors are broken, so breaking them is the only way in - and doing
+        // it through the real mechanic rather than by forcing a flag means
+        // this loop also proves the shell comes down in a live fight.
+        for (const e of g.enemies) {
+          if (e.type === 'anchor') e.dead = true;
+        }
         for (const p of g.bossFight.parts) {
-          // Colossus only takes full damage while its core is open, and the
-          // harness ticks far slower than the vent cycle, so force the window
-          // rather than waiting on it - the point of this loop is to resolve
-          // the fight inside the budget, not to measure the boss's DPS.
-          if (p.bs && p.bs.shutters) p.bs.weakOpen = true;
-          p.takeDamage(700, true, 0, 1);
+          const bs = p.bs;
+          if (bs) {
+            // Colossus: the chest core, on a fixed rhythm.
+            if (bs.shutters) bs.weakOpen = true;
+            // Forge-Tyrant: the vent it only opens once it has heated up.
+            if (bs.heat !== undefined) bs.venting = true;
+          }
+          // The Overgrowth's gate is not a flag at all - its canopy opens on
+          // the PLAYER'S POSITION, so the only honest way in is to stand
+          // where the fight wants you. Walk the player into the canopy rather
+          // than inflating the damage number: chipping through 0.22 armour
+          // reached six per cent and ran out of ticks, and would have proved
+          // nothing about the gate even if it had landed. Same argument as
+          // the Pale Crown's anchors above - open it through the mechanic.
+          if (p.type === 'overgrowth') {
+            g.player.pos.set(p.pos.x + 3, g.player.pos.y, p.pos.z + 3);
+          }
+          p.takeDamage(2500, true, 0, 1);
         }
       });
       await sleep(820);
@@ -290,7 +362,7 @@ try {
     const ok = seen.boss && cleared && hpFell && !marksLeaked && !errors.length;
     if (!ok) bad++;
     console.log(
-      `${ok ? 'ok  ' : 'FAIL'} wave ${wave} boss=${seen.boss} cleared=${cleared} ` +
+      `${ok ? 'ok  ' : 'FAIL'} ${themeKey.padEnd(8)} w${wave} boss=${seen.boss} cleared=${cleared} ` +
       `hp ${hpSeen[0]}->${hpSeen[hpSeen.length - 1]} maxParts=${maxParts} ` +
       `maxAdds=${maxAdds} bar=${b.barHidden === false ? 'shown' : 'HIDDEN'} ` +
       `note="${b.note || ''}" marksHeld=${seen.after ? seen.after.marks : '?'}`
