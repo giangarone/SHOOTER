@@ -611,7 +611,7 @@ context. The start screen says so, and one click anywhere fixes it.
   is client-side javascript, and a shared board it could not verify would be
   forgeable from the console in seconds. Runs are no longer guaranteed the
   same loot - drops are rolled per kill now - but the RATES are pinned down,
-  in `test/drops.mjs`.
+  in `test/drops.mjs`. 
 
 ## Upgrades
 
