@@ -12,15 +12,15 @@ node test/newpool.mjs       # same thing, works from any directory
 node test/all.mjs newpool   # or by filter, through the runner
 ```
 
-The question is COVERAGE, not a count. Ask which suites touch the thing you
-changed and run all of them - that is often three or four, and for anything
-that lands in the item pool or the enemy tables it is more. Two suites is not a
-budget to stay under; an untested change that passes because nobody asserted on
-it is the failure this is trying to prevent.
+Ask which suites touch the thing you changed and run all of them - that is
+often three or four, and for anything that lands in the item pool or the enemy
+tables it is more. A change nobody asserted on passes for the wrong reason,
+which is what this is here to prevent.
 
-What that costs: a suite is one to six minutes on a runner, so half a dozen of
-them is fifteen minutes inside a job that has hours. Running the RIGHT six is
-cheap. What is not affordable is the whole set - see the prohibition below.
+What that costs: a suite runs anywhere from a tenth of a second to thirteen
+minutes on a runner, so even half a dozen slow ones fit easily inside a job
+that has hours. Running the RIGHT six is cheap. What is not affordable is the
+whole set - see the prohibition below.
 
 ### Which suites cover what
 
