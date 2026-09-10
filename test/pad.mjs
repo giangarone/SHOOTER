@@ -29,6 +29,8 @@
 //       closes an error rather than opening one.
 //    9. Vibration reaches the actuator, and stops when it is turned off.
 //   10. A pad unplugged mid-run pauses instead of leaving the player standing.
+//   11. CREATE opens the debug panel, which parks the run and dims the beam
+//       like every other screen with small caps to read.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8212;
@@ -95,7 +97,7 @@ try {
     const B = {
       CROSS: 0, CIRCLE: 1, SQUARE: 2, TRIANGLE: 3, L1: 4, R1: 5, L2: 6, R2: 7,
       OPTIONS: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15,
-      TOUCHPAD: 17,
+      TOUCHPAD: 17, CREATE: 8,
     };
     const set = (i, on) => {
       pad.buttons[i].pressed = on;
@@ -541,6 +543,26 @@ try {
     g.pad.rumble(1, 1, 100, 4);
     t('vibration setting is obeyed', pad.vibrationActuator.effects.length === 0);
     g.pad.rumbleOn = true;
+
+    // ---- 7b. the debug panel, on CREATE ------------------------------------
+    //
+    // The pad's other flat button and the one thing in the game that uses it.
+    // It is asserted HERE, with the other menu screens, because its failure
+    // mode is the same as theirs: a panel that is up but forgot to declare
+    // itself reading matter leaves the scanlines at full strength across a
+    // wall of small caps, which is a state, not an exception - nothing throws
+    // and the panel itself works perfectly. `body.reading` is the class every
+    // other screen sets, so it is what is asserted, not the opacity.
+    await tap(B.CREATE);
+    t('create opens the debug panel',
+      !g.ui.debugPanel.classList.contains('hidden'), g.state);
+    t('the panel parks the run in paused', g.state === 'paused', g.state);
+    t('the beam is down while the panel is up',
+      document.body.classList.contains('reading'));
+    await tap(B.CREATE);
+    t('create closes it again', g.ui.debugPanel.classList.contains('hidden'));
+    t('and the run resumes', g.state === 'playing', g.state);
+    t('the beam is back up with it', !document.body.classList.contains('reading'));
 
     // ---- 8. the hard gate and the unplug -----------------------------------
     const realId = pad.id;
