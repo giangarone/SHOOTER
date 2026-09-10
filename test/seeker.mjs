@@ -11,8 +11,7 @@
 //   cover still works           an enemy behind a pillar is not reachable
 //   one enemy, then stop        a homed shot does not carry on through pierce
 //   the arc pool drains         curved tracers are returned
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8220;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -27,11 +26,7 @@ const check = (name, ok, detail) => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

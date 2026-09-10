@@ -16,8 +16,7 @@
 // repeat scaling is covered too.
 //
 // Usage: node test/boss.mjs [waveList]
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8211;
 // A WAVE NO LONGER NAMES A BOSS. Which fight wave 5 is depends on which of
@@ -41,11 +40,7 @@ await sleep(800);
 let browser;
 let bad = 0;
 try {
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

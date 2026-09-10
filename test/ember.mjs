@@ -32,8 +32,7 @@
 //   6. The ashwing runs, lays a LINE, and cannot steer once committed.
 //   7. Ember patches never evict the magma's lava, which is the whole reason
 //      the kind was separated.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8218;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,10 +49,7 @@ const ok = (name, cond, extra = '') => {
 const EMBER_TYPES = ['cinder', 'magma', 'flare', 'kiln', 'bellows', 'ashwing'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

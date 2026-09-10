@@ -34,8 +34,7 @@
 //   6. A mothcap flies low and leaves a cloud that outlives it.
 //   7. The Overgrowth never moves, opens only when the player is close, and
 //      answers range with a creeper.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8224;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,10 +51,7 @@ const ok = (name, cond, extra = '') => {
 const VERDANT_TYPES = ['thornling', 'sporegun', 'bramblehide', 'blight', 'heartwood', 'mothcap'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

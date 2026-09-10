@@ -33,8 +33,7 @@
 // WHAT IS ASSERTED, and the shape of it matters: STANDING ON THE LINE COSTS
 // AND STANDING OFF IT DOES NOT, measured as health both ways, because a test
 // that only asks "did it hurt me" cannot tell a wire from an aura.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8226;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,10 +50,7 @@ const ok = (name, cond, extra = '') => {
 const TEMPEST_TYPES = ['arcling', 'coil', 'dynamo', 'stormcaller', 'capacitor', 'squall'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

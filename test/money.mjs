@@ -19,8 +19,7 @@
 // The first two are the ones worth having a test for at all: an economy that
 // quietly leaks a few credits per kill is invisible for twenty waves and then
 // wrong by thousands.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8221;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,11 +34,7 @@ const check = (name, ok, detail) => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

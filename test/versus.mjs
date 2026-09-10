@@ -36,8 +36,7 @@
 //      stops dead on the pass caption, which is exactly where a player finds it.
 //      Asserted on the CLOCK rather than on frames, because a dead loop cannot
 //      serve the frames a rAF-based wait would be asking for.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8230;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,10 +51,7 @@ const ok = (name, cond, extra = '') => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   await page.setViewport({ width: 1100, height: 620 });
   const errors = [];

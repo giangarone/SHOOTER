@@ -21,8 +21,7 @@
 //   4. A geode fires at where the player HAS BEEN, not where they are.
 //   5. A gargoyle holds its perch, is armoured there, comes down only when
 //      walked under, and is unarmoured once it has.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8233;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -39,10 +38,7 @@ const ok = (name, cond, extra = '') => {
 const STRATA_TYPES = ['scree', 'slinger', 'bulwark', 'geode', 'warden', 'gargoyle'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

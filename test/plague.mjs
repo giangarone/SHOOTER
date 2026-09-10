@@ -18,8 +18,7 @@
 //   puddle when it CONNECTED would be an ordinary gunner with a rider on it,
 //   and nothing about the enemy would look wrong. So the headline assertion
 //   here is a deliberate MISS.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8228;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,10 +35,7 @@ const ok = (name, cond, extra = '') => {
 const PLAGUE_TYPES = ['splitter', 'lesion', 'husk', 'vitriol', 'carrion', 'bloatfly'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

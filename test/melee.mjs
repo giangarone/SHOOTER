@@ -18,8 +18,7 @@
 // count and never on wall time. The trials are a race between a player crossing
 // a distance and an enemy completing a windup, and a race is only meaningful if
 // both are timed by the same watch. See the note in trial().
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8207;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,10 +45,7 @@ const STAND_SECONDS = 6;
 const RUN_SPEED = 10;
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

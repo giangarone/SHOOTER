@@ -11,8 +11,7 @@
 //   5. Sprinting takes the gun out of the sights and widens the lens.
 //   6. The shot cone scales with LIVE SPEED - standing, walking and sprinting
 //      are three different guns - and the crosshair reads whichever it is.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8216;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -27,10 +26,7 @@ const ok = (name, cond, extra = '') => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   const errors = [];

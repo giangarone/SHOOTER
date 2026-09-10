@@ -16,8 +16,7 @@
 //      run behind it is still the plain crouch toggle it always was.
 //   6. Melee hits exactly one enemy per swing, lands on a delay rather than on
 //      the button, draws no ring on the floor, and pays double for the kill.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8219;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,10 +31,7 @@ const ok = (name, cond, extra = '') => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   const errors = [];

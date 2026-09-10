@@ -29,8 +29,7 @@
 //       closes an error rather than opening one.
 //    9. Vibration reaches the actuator, and stops when it is turned off.
 //   10. A pad unplugged mid-run pauses instead of leaving the player standing.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8212;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -45,10 +44,7 @@ const ok = (name, cond, extra = '') => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

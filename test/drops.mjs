@@ -19,8 +19,7 @@
 // guarantee they encoded - two runs of a wave get the same loot - is nothing:
 // that was the cost of rolling rather than scheduling, and it was paid on
 // purpose.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8217;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,11 +34,7 @@ const check = (name, ok, detail) => {
 };
 
 try {
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -178,14 +173,32 @@ try {
     g._placeDrop = (kind, pos) => { bled++; return orig(kind, pos); };
     const b = g.bossFight.parts[0];
     const seen = [];
+    const THRESHOLDS = [0.75, 0.5, 0.25];
+    // WAIT FOR THE COUNTER, NOT FOR A FIXED SLICE OF TIME. This used to walk
+    // the boss down and give each step a quarter of a game second, on the
+    // assumption that a quarter second is several frames. On a two-core CI
+    // runner rendering through software GL it can be NO frames, and a bleed is
+    // only ever checked on a frame - so the suite reported bled=1 for a
+    // mechanic that was working, which is worse than useless: an assertion
+    // that fails on a slow host is one nobody trusts when it fails for real.
+    //
+    // Polling the game's own bleedAt keeps the assertion exact - it still
+    // catches a threshold that never fires - while letting a slow host take as
+    // long as it needs.
+    const waitForBleed = (want, ms = 8000) => new Promise((resolve) => {
+      const started = Date.now();
+      const t = setInterval(() => {
+        if (!g.bossFight || g.bossFight.bleedAt >= want || Date.now() - started > ms) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 30);
+    });
     // Walk the boss down through every threshold.
     for (const f of [0.8, 0.7, 0.55, 0.45, 0.3, 0.2]) {
       b.hp = b.maxHp * f;
-      // Game seconds, not wall seconds - see __simWait in js/main.js. The
-      // bleed is checked on a frame, and on a loaded host a quarter of a wall
-      // second is a couple of frames.
-      await window.__simWait(0.26);
-      seen.push({ f, bled });
+      await waitForBleed(THRESHOLDS.filter((t) => f <= t).length);
+      seen.push({ f, bled, bleedAt: g.bossFight ? g.bossFight.bleedAt : -1 });
     }
     g._placeDrop = orig;
     clearInterval(alive);

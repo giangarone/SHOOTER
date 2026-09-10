@@ -12,6 +12,7 @@
 //                 where one is. The old fallback was a macOS-only path.
 //   startServer   one spawn, one cwd, one place to change.
 import { spawn } from 'node:child_process';
+import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,5 +70,33 @@ export function startServer(port, { stdio = 'ignore' } = {}) {
   return spawn(process.execPath, [path.join(ROOT, 'server.js'), String(port)], {
     cwd: ROOT,
     stdio,
+  });
+}
+
+// Every suite launches the same browser the same way, so it is launched here.
+//
+// protocolTimeout is the one that matters. It caps how long puppeteer will
+// wait for a SINGLE CDP call - one page.evaluate - and it defaults to 180s.
+// These suites drive a real game through software GL, and on a two-core CI
+// runner a long evaluate can sit past three minutes and be killed mid-call,
+// which surfaces as a ProtocolError rather than as a failed assertion. The
+// per-suite cap in test/all.mjs is the real backstop; this just stops a slow
+// host from being reported as a broken test.
+export const PROTOCOL_TIMEOUT = Number(process.env.PROTOCOL_TIMEOUT || 600) * 1000;
+
+export function launchBrowser(extra = {}) {
+  return puppeteer.launch({
+    headless: true,
+    executablePath: CHROME,
+    protocolTimeout: PROTOCOL_TIMEOUT,
+    // swiftshader because CI runners have no GPU; the sandbox and /dev/shm
+    // flags because they have no user namespaces and a small shared memory.
+    args: [
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--enable-unsafe-swiftshader',
+      '--use-angle=swiftshader',
+    ],
+    ...extra,
   });
 }

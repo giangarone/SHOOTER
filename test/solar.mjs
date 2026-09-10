@@ -19,8 +19,7 @@
 //   the shot AND stopped turning it once it was spent. A blind that could not
 //   be got out of, or a crosshair that never came back, would not look like a
 //   bug in an enemy - it would look like a bug in the game.
-import puppeteer from 'puppeteer-core';
-import { CHROME, startServer } from './harness.mjs';
+import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8229;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,10 +36,7 @@ const ok = (name, cond, extra = '') => {
 const SOLAR_TYPES = ['zealot', 'sniper', 'aegis', 'lens', 'halo', 'shrike'];
 
 try {
-  browser = await puppeteer.launch({
-    headless: true, executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
