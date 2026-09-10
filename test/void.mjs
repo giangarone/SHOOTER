@@ -27,13 +27,12 @@
 //   3. A monolith walks through a solid obstacle instead of round it.
 //   4. ...and nothing else does, which is what makes it the mechanic.
 //   5. A well drags the player toward it and costs no health at all.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8225;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

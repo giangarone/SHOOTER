@@ -34,13 +34,12 @@
 //   6. A mothcap flies low and leaves a cloud that outlives it.
 //   7. The Overgrowth never moves, opens only when the player is close, and
 //      answers range with a creeper.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
-const PORT = 8221;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = 8224;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

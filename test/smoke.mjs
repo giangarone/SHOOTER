@@ -1,23 +1,14 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8199;
-const CHROME =
-  process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-
 // Caps the game promises to hold. Mirrors the constants in js/main.js.
 const MAX_ACTIVE_PICKUPS = 12;
 const MAX_ACTIVE_AMMO = 5;
 const MAX_PROJECTILES = 72;
 
-if (!existsSync(CHROME)) {
-  console.error('No Chrome found. Set CHROME env to a Chrome/Chromium binary.');
-  process.exit(2);
-}
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

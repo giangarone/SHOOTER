@@ -15,13 +15,12 @@
 // Assassin's freshness are concerned. Without the per-shot cache a scattergun
 // would tick the tally eight times a shell and Telltale would read as a
 // permanent crit - which looks like good luck, not like a bug, for a long time.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
-const PORT = 8231;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = 8234;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

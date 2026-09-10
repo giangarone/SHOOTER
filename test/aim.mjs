@@ -20,13 +20,12 @@
 //   7. Movement opens the cone from either pose, and costs less down the
 //      sights than from the hip.
 //   8. A reload takes the gun out of the aim and hands it back after.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8213;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

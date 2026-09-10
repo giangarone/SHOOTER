@@ -19,14 +19,12 @@
 //                               already paid for
 //   the trickle cannot be farmed a boss wave's adds never stop arriving, so
 //                               they are the one thing with a ceiling on them
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8231;
-const CHROME = process.env.CHROME
-  || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'ignore' });
+const server = startServer(PORT);
 await sleep(800);
 
 let browser;

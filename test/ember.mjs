@@ -32,13 +32,12 @@
 //   6. The ashwing runs, lays a LINE, and cannot steer once committed.
 //   7. Ember patches never evict the magma's lava, which is the whole reason
 //      the kind was separated.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
-const PORT = 8217;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = 8218;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

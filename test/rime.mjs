@@ -32,13 +32,12 @@
 //   6. A sleet parks overhead and drips where the player is standing.
 //   7. The Pale Crown shells, is untouchable while shelled, puts three anchors
 //      in the floor, and drops the shell when they are broken.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
-const PORT = 8219;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = 8222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;

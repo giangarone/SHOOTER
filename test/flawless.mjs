@@ -22,14 +22,12 @@
 // Plus the shower this all pays for: the flawless bonus is thrown at the
 // player's OWN FEET, inside the magnet radius, and before the hold in
 // MoneyOrbs.spawn it was collected on its first frame and never seen at all.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8223;
-const CHROME = process.env.CHROME
-  || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'ignore' });
+const server = startServer(PORT);
 await sleep(800);
 
 let browser;

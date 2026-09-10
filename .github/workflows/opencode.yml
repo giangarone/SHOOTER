@@ -25,11 +25,30 @@ jobs:
         with:
           persist-credentials: false
 
+      # Everything below exists so that the agent can actually RUN the test
+      # suite when it is asked to. Without node modules and a browser on the
+      # runner, every one of the ~30 puppeteer suites fails at launch and the
+      # agent has no way to check its own work.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
           TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
           OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "131072"
+          # test/harness.mjs reads this; without it the tests fall back to
+          # probing /usr/bin, which the setup-chrome action does not populate.
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
         with:
           model: tokenrouter/z-ai/glm-5.3-free
           variant: max

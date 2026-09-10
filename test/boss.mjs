@@ -16,12 +16,10 @@
 // repeat scaling is covered too.
 //
 // Usage: node test/boss.mjs [waveList]
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8211;
-const CHROME = process.env.CHROME
-  || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 // A WAVE NO LONGER NAMES A BOSS. Which fight wave 5 is depends on which of
 // the ten themes the run's deck dealt into the first block, so this suite pins
 // the theme with __game.setTheme() and then jumps, rather than assuming wave
@@ -35,10 +33,9 @@ const THEMES_UNDER_TEST = (process.argv[2] || '').split(',').filter(Boolean);
 // Every fifth wave is a boss wave whatever the theme, so one wave per pin is
 // enough - and they are spread up the curve so bossScale() is exercised too.
 const PIN_WAVES = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
-const ROOT = '/Users/gianfrancogarone/Desktop/SHOOTER';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
+const server = startServer(PORT);
 await sleep(800);
 
 let browser;

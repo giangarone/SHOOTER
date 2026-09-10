@@ -19,14 +19,12 @@
 // The first two are the ones worth having a test for at all: an economy that
 // quietly leaks a few credits per kill is invisible for twenty waves and then
 // wrong by thousands.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8221;
-const CHROME = process.env.CHROME
-  || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'ignore' });
+const server = startServer(PORT);
 await sleep(800);
 
 let browser;

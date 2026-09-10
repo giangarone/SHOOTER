@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/smoke.mjs",
+    "test:all": "node test/all.mjs",
     "test:terrain": "node test/terrain.mjs",
     "test:boss": "node test/boss.mjs",
     "test:drops": "node test/drops.mjs",

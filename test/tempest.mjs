@@ -30,13 +30,12 @@
 // WHAT IS ASSERTED, and the shape of it matters: STANDING ON THE LINE COSTS
 // AND STANDING OFF IT DOES NOT, measured as health both ways, because a test
 // that only asks "did it hurt me" cannot tell a wire from an aura.
-import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { CHROME, startServer } from './harness.mjs';
 
 const PORT = 8226;
-const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const server = spawn(process.execPath, ['server.js', String(PORT)], { stdio: 'inherit' });
+const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
 let browser;
