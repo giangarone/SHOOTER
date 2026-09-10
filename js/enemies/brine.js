@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, _blinkAt, aiMelee, eyes, geo, lump, orbit,
-  partsFor, prism, releaseMarks, segBlocked, shard, slab, spike,
+  ENEMY_TYPES, MELEE_REACH_Y, SHARED_MATS, _blinkAt, aiMelee, eyes, geo,
+  landHit, lump, orbit, partsFor, prism, releaseMarks, segBlocked, shard, slab,
+  spike,
 } from './shared.js';
 
 // THE HOWL. Wind-up, radius, how long the player loses the trigger for, and
@@ -99,6 +100,12 @@ export function buildHowler(e, g, s) {
 
 // Mostly mouth. A wide low jaw slung under a small crusted back, so the
 // silhouette is a shape that is about to close on something.
+//
+// THE TOP PLATE IS ON A HINGE, and the hinge is the strike: aiGulper drops it
+// over the wind-up and slams it shut on the lunge, so the model says the same
+// thing the rear-up does for a player looking at the enemy rather than past it.
+// A mouth that read as permanently open - which is what static plates did -
+// gave the lunge no warning at all.
 export function buildGulper(e, g, s) {
   const P = partsFor(e, g, s);
   // THE JAW IS THE ENEMY. It has to be wider than the body and it has to
@@ -108,13 +115,39 @@ export function buildGulper(e, g, s) {
   // V that is visible from anywhere, and the V is the only thing that says
   // this is a mouth about to close on somebody.
   P('gulpJawLow', prism(0.36, 0.2, 0.62, 5), { y: 0.36, z: -0.46, rx: -1.9 });
-  P('gulpJawTop', prism(0.3, 0.16, 0.56, 5), { y: 0.92, z: -0.44, rx: -1.05 });
-  // Teeth - short spikes along both plates, pointing INTO the gap, which is
-  // what keeps the V from reading as a hinge on a machine.
+  // A keel under the lower jaw, so the underside reads as a mouth's chin and
+  // not as a fifth leg.
+  P('gulpKeel', spike(0.16, 0.3, 4), { y: 0.22, z: -0.5, rx: Math.PI });
+  // The UPPER plate hangs off a HINGE GROUP rather than being a part in its
+  // own right, exactly as the howler's jaw does: a mesh placed by P turns
+  // about its own centre, which would sweep the plate through the skull
+  // instead of rearing it. The hinge sits at the BACK of the head so the
+  // plate lifts away from the player over the wind-up and falls on them over
+  // the strike.
+  const hinge = new THREE.Group();
+  hinge.position.set(0, 0.98 * s, 0.08 * s);
+  const plate = new THREE.Mesh(geo('gulpJawTop', prism(0.3, 0.16, 0.56, 5)), e.bodyMat);
+  plate.position.set(0, 0.08 * s, -0.44 * s);
+  plate.scale.setScalar(s);
+  plate.castShadow = true;
+  hinge.add(plate);
+  // Teeth along the plate, pointing DOWN into the gap - the strike is a bite,
+  // and the teeth are what says so.
+  for (let i = 0; i < 4; i++) {
+    const x = -0.18 + i * 0.12;
+    const tooth = new THREE.Mesh(geo('gulpToothU', spike(0.05, 0.2, 4)), e.bodyMat);
+    tooth.position.set(x * s, -0.02 * s, -0.6 * s);
+    tooth.rotation.x = 1.1;
+    tooth.scale.setScalar(s);
+    hinge.add(tooth);
+  }
+  hinge.rotation.x = -1.05;
+  g.add(hinge);
+  e.jaw = hinge;
+  // Teeth on the lower plate, pointing UP into the same gap.
   for (let i = 0; i < 4; i++) {
     const x = -0.18 + i * 0.12;
     P('gulpTooth', spike(0.05, 0.2, 4), { x, y: 0.5, z: -0.66, rx: -2.0 });
-    P('gulpToothU', spike(0.05, 0.2, 4), { x, y: 0.82, z: -0.64, rx: 1.1 });
   }
   // A small crusted plate over the back, deliberately too small for the body
   // under it - the theme's whole rule in one part.
@@ -315,86 +348,180 @@ export const _brineAt = new THREE.Vector3();
 
 export const _brineTo = new THREE.Vector3();
 
-// How close it has to get to take hold, how long it rides, what the ride costs
-// per second against its bite, and how long before it may try again.
+// ---- THE GULPER'S STRIKE --------------------------------------------------
 //
-// THE RIDE IS SHORT. Four seconds is already a long time to be unable to
-// answer something with the gun, and the whole point of the enemy is to make
-// the melee button and the dash worth reaching for - not to take the player's
-// turn away from them.
-export const GULP_LATCH_R = 1.6;
+// The old gulper LATCHED: it rode the player at GULP_HANG metres, draining
+// until melee'd, dashed off or outwaited. Removed whole, and for a reason
+// rather than a retheme: the latch was arithmetic that could not happen. A
+// rusher at 3.9 m/s taking hold requires crossing 1.6 m of a player who walks
+// at 10 and sprints far past that - the enemy reached latch range only against
+// a player standing still, so the mechanic the whole type was built around
+// fired once in a blue moon and read as a weak rusher the rest of the time.
+//
+// The strike below is built the other way round: the lunge is COMMITTED and
+// faster than the player's walk, so it arrives; everything the player does
+// about it is done with the gun.
 
-export const GULP_RIDE = 4.0;
+// How close it will strike from, and the two sides of the mouthful: what a
+// landed bite heals it for, and what fraction of the enemy's bite that is.
+//
+// THE HEAL IS THE WHOLE POINT OF THE TYPE. BRINE is the theme of things that
+// will not let go; a thing that eats you and is the bigger for it is that idea
+// with the riding removed - the answer is not to shake it off but to kill it
+// during the one window it spends facing away.
+export const GULP_RANGE = 9;
 
-export const GULP_DRAIN = 1.6;
+// Paid in the health the bite actually TOOK, read off the player before and
+// after the hit: a dodged or warded bite feeds it nothing, which keeps the
+// enemy honest against the passive items.
+export const GULP_FEED_MUL = 1.5;
 
-export const GULP_TICK = 0.5;
+// The wind-up. Long for a rusher, because the lunge itself is unsteerable and
+// the whole counterplay is being somewhere else when it lands.
+export const GULP_WINDUP = 0.55;
 
-export const GULP_CD = 3.5;
+// How far the jaw rears OPEN over the tell, in radians. The gape and the
+// wind-up are the model's half of the telegraph, and the lunge closes from
+// exactly this angle so the mouth reads as one motion.
+export const GULP_GAPE = 0.5;
 
-// Where it sits while it is on: just in front of the player and low, so it is
-// at the bottom of the screen rather than inside the camera. A body snapped to
-// the player's own position would be invisible from the one place the player
-// is looking from, and an enemy draining somebody out of sight is the exact
-// thing this game's telegraphs exist to avoid.
-export const GULP_HANG = 0.62;
+// How long it is committed for, and how fast it covers the ground. 3.3x a
+// rusher's speed is ~13 m/s - faster than the player's 10 m/s walk, so the
+// strike reaches a player who saw it and is still moving, which is the entire
+// fix for the latch's arithmetic. It cannot TURN, so the answer is to step off
+// the line, not to outrun it.
+export const GULP_LUNGE = 0.5;
 
-export const _gulpFwd = new THREE.Vector3();
+export const GULP_LUNGE_MUL = 3.3;
+
+// The give-ground. A landed strike is followed by a deliberate walk backwards
+// at walking pace, slower than the player closes - the kill window, and the
+// only time the type is retreating. 1.15s so there is genuinely a window to
+// take, short enough that the window is not a rest.
+export const GULP_SWALLOW = 1.15;
+
+// The teeth of the strike: contact during the lunge is a hit from any state,
+// once per lunge, along the frozen heading.
+export const GULP_STRIKE_R = 2.0;
+
+export const GULP_CD = 2.2;
 
 export function aiGulper(e, a) {
   const ctx = a.ctx;
   const p = ctx.player;
   if (!p) return;
 
-  if (e.latched) {
-    a.vx = 0;
-    a.vz = 0;
-    // Carried, so nothing about the floor or the furniture applies to it. The
-    // snap itself is in Enemy.update, after the move and the resolver.
-    e.phase = true;
-    e.gulpT -= a.dt;
-    e.gulpTick -= a.dt;
-    if (e.gulpTick <= 0) {
-      e.gulpTick = GULP_TICK;
-      ctx.onHitPlayer(e.damage * GULP_DRAIN * GULP_TICK, e.pos, e);
-      if (ctx.effects) ctx.effects.burst(e.pos, 0x8ff0e0, 8, 3, 2, 0.3);
+  if (!e.gulp) {
+    e.gulp = { state: 'walk', t: 0, hx: 0, hz: 1 };
+  }
+  const gs = e.gulp;
+  gs.t -= a.dt;
+
+  if (gs.state === 'lunge') {
+    // RAISING THE VELOCITY IS NOT ENOUGH. Enemy.update clamps a body's step
+    // to speed * stepMul, and stepMul defaults to 1.4 - an ai() that triples
+    // its own velocity without touching stepMul moves at 1.4x and the strike
+    // is a hurried walk. Every committed charge in the game raises it, and
+    // this one is no exception.
+    e.stepMul = GULP_LUNGE_MUL;
+    const sp = e._effSpeed() * GULP_LUNGE_MUL;
+    // NO STEERING. Off the frozen heading, exactly as the thornling's and the
+    // scree's charges are: a bite that tracked would be an unavoidable hit
+    // with a wind-up in front of it, and the wind-up is the whole contract.
+    a.vx = gs.hx * sp;
+    a.vz = gs.hz * sp;
+    // The jaw falls shut over the lunge, from the gape the tell left it in,
+    // so the strike lands as a mouth closing rather than as a body arriving.
+    // GULP_GAPE is measured PAST the resting angle, so the close runs from
+    // -(1.05 + GULP_GAPE) down to the resting -1.05, not to zero - the mouth
+    // never reads as sealed shut, or the V of it stops reading as a mouth.
+    if (e.jaw) {
+      const fill = 1 - Math.max(0, gs.t) / GULP_LUNGE;
+      e.jaw.rotation.x = -1.05 - GULP_GAPE * (1 - fill);
     }
-    // THE TWO INPUTS THAT SHAKE IT OFF, and the clock that does it anyway.
-    // Melee and dash both, because either one alone would make an unlucky
-    // build - one that had spent its dash, or one mid-reload - into a player
-    // with no answer at all.
-    const swung = p.meleeActive > 0;
-    const dashed = ctx.time < p.dashEnd;
-    if (swung || dashed || e.gulpT <= 0) {
-      e.latched = false;
-      e.attackCd = GULP_CD;
-      // Thrown clear in front of the player rather than dropped where it was
-      // riding, so the thing that was just on them is somewhere they can shoot.
-      p.forwardInto(_gulpFwd);
-      e.pos.x = p.pos.x + _gulpFwd.x * 2.4;
-      e.pos.z = p.pos.z + _gulpFwd.z * 2.4;
-      e.knockT = 0.18;
-      e.knockX = _gulpFwd.x * 8;
-      e.knockZ = _gulpFwd.z * 8;
-      e._setEyeAlert(false);
-      if (ctx.effects) {
-        _brineAt.set(e.pos.x, 0.8, e.pos.z);
-        ctx.effects.burst(_brineAt, 0x8ff0e0, 16, 5, 2, 0.4);
+    // Contact during the lunge is a hit, from any state - the same rule the
+    // melee cycle and every committed charge hold, because a body moving this
+    // fast passing through the player without touching them is the bug
+    // players actually notice. The height test is the melee cycle's own rule:
+    // a.dist is XZ-only, and a ground lunge must not bite somebody on a
+    // catwalk any more than a swing does.
+    const dy = Math.abs(p.pos.y - e.pos.y);
+    if (a.dist < GULP_STRIKE_R && dy < MELEE_REACH_Y && !gs.bitten) {
+      gs.bitten = true;
+      const h0 = p.health;
+      landHit(e, ctx);
+      // IT SWALLOWS THE MOUTHFUL. Paid in the health the bite actually took,
+      // not in the bite's nominal number: a dodged or warded bite feeds it
+      // nothing, and a cursed player feeds it more - which is the theme's
+      // own law turned round on the player.
+      const fed = (h0 - p.health) * GULP_FEED_MUL;
+      if (fed > 0) {
+        e.hp = Math.min(e.maxHp, e.hp + fed);
+        if (ctx.effects) {
+          _brineAt.set(e.pos.x, 1.0, e.pos.z);
+          ctx.effects.burst(_brineAt, 0x8ff0e0, 12, 4, 2, 0.4);
+        }
       }
-      if (ctx.sfx) ctx.sfx.impact();
+      if (ctx.sfx) ctx.sfx.melee();
+    }
+    if (gs.t <= 0 || e.blockedBy > 0.05) {
+      gs.state = 'swallow';
+      gs.t = GULP_SWALLOW;
+      gs.bitten = false;
+      e._setEyeAlert(false);
     }
     return;
   }
 
+  e.stepMul = 1.4;
+  if (gs.state === 'tell') {
+    // Planted, aimed, and visibly winding. The jaw rears OPEN over the
+    // wind-up - the model's half of the telegraph, for the player watching
+    // the enemy rather than the floor.
+    a.vx = 0;
+    a.vz = 0;
+    if (e.jaw) {
+      const fill = 1 - Math.max(0, gs.t) / GULP_WINDUP;
+      e.jaw.rotation.x = -1.05 - fill * GULP_GAPE;
+    }
+    if (gs.t <= 0) {
+      gs.hx = a.nx;
+      gs.hz = a.nz;
+      gs.state = 'lunge';
+      gs.t = GULP_LUNGE;
+      gs.bitten = false;
+    }
+    return;
+  }
+
+  if (gs.state === 'swallow') {
+    // THE GIVE-GROUND. Backwards, at walking pace, for a beat and a bit: the
+    // one time the type is retreating, and the window the strike buys the
+    // player whether it landed or missed. It backs away from the PLAYER
+    // rather than back down its own lunge line, so it does not retreat into a
+    // wall pocket it then cannot be shot out of from range.
+    a.vx = -a.nx * a.sp * 0.7;
+    a.vz = -a.nz * a.sp * 0.7;
+    // The jaw holds the resting gape: the lunge already closed it, and this
+    // state is a mouth that has finished - walk leaves the angle alone too,
+    // so -1.05 is the pose every other state settles into.
+    if (e.jaw) e.jaw.rotation.x = -1.05;
+    if (gs.t <= 0) {
+      gs.state = 'walk';
+      gs.t = GULP_CD * e.rate;
+    }
+    return;
+  }
+
+  // Walking. It still swings if the player comes to it - a striker with no
+  // melee is answered by standing next to it.
   aiMelee(e, a);
-  e.attackCd -= a.dt;
-  if (e.attackCd > 0 || a.dist > GULP_LATCH_R) return;
-  e.latched = true;
-  e.gulpT = GULP_RIDE;
-  e.gulpTick = 0;
-  e.flash = 0.16;
-  e._setEyeAlert(true);
-  if (ctx.effects) ctx.effects.shockwave(p.pos, 0x1f8a8a, 2.2, 0.3);
+  if (gs.t <= 0 && a.dist < GULP_RANGE && a.dist > ENEMY_TYPES.gulper.melee.hit) {
+    gs.state = 'tell';
+    gs.t = GULP_WINDUP;
+    e._setEyeAlert(true);
+    e.flash = 0.12;
+  }
 }
 
 export const ANGLER_RANGE = 26;
@@ -825,9 +952,9 @@ const TYPES = {
   // The theme of things that WILL NOT LET GO. Every other theme in the game
   // asks the player to be somewhere else - off the fire, out of the field, off
   // the line - and BRINE is built so that being somewhere else is the thing it
-  // takes away. A gulper is carried with you. A barnacle drags you back. A
-  // vent leaves a wall where you were going. An ink cloud does not stop you
-  // moving, it stops you knowing where you are.
+  // takes away. A gulper eats you and is the bigger for it. A barnacle drags
+  // you back. A vent leaves a wall where you were going. An ink cloud does not
+  // stop you moving, it stops you knowing where you are.
   //
   // SO IT IS THE THEME OF THE ANSWER BEING TAKEN, where VOID is the theme of
   // the position being taken. VOID moves you; BRINE holds you.
@@ -838,22 +965,25 @@ const TYPES = {
   // something: a lure, a siphon, a frond, a curtain. Where TEMPEST is held
   // apart and STRATA is cut, BRINE is ENCRUSTED and it HANGS.
 
-  // Latches on. On contact it stops being an enemy in the room and becomes
-  // something the player is CARRYING, draining while it rides - and the only
-  // ways off are a melee swing, a dash, or waiting it out.
+  // Strikes, swallows, and gives ground. It rears with the jaw opening, lunges
+  // down a line it can no longer steer, and a landed bite FEEDS it - healed by
+  // the health the mouthful actually took - before it deliberately backs off,
+  // slower than the player closes. That back-step is the kill window, and the
+  // whole enemy is the trade: take the hit or take the window.
   //
-  // THE ONE ENEMY YOU WEAR. Everything else in the game is answered with the
-  // gun, and this is the one that cannot be: it is at the player's own
-  // position, which is the single place a first-person crosshair can never be
-  // pointed. So it is the enemy that makes the melee button and the dash into
-  // answers rather than into flourishes, and its whole design is a nudge
-  // toward the two inputs the roster otherwise never requires.
+  // THE OLD LATCH IS GONE, and not rethemed: it was arithmetic that could not
+  // happen. A 3.9 m/s rusher had to cross 1.6 m of a player who walks at 10,
+  // so it took hold only of somebody standing still, and the rest of the time
+  // the type read as a weak rusher. The strike below arrives - committed at
+  // 3.3x, faster than the player's walk - and never touches the player's
+  // position, so it is answered with the gun the whole way.
   //
-  // Weak in the bite for the afflictor's reason: what it does after the hit is
-  // where its cost lives.
+  // Mid-band damage for the role: the bite is a single committed hit rather
+  // than a drain, and what it costs the player is health AND the window it
+  // then hands them.
   gulper: {
     head: { r: 0.3, y: 0.86 },
-    hp: 34, speed: 3.9, damage: 6, value: 220, color: 0x1f8a8a, eye: 0x8ff0e0,
+    hp: 34, speed: 3.9, damage: 10, value: 220, color: 0x1f8a8a, eye: 0x8ff0e0,
     scale: 0.95, radius: 0.46, mass: 1,
     melee: { windup: 0.3, start: 1.4, hit: 2.0, cd: 1.0 },
     build: buildGulper, ai: aiGulper,

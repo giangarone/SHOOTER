@@ -5,9 +5,11 @@
 //   fire, out of the field, out of the corner, off the line. BRINE is the
 //   theme built so that being somewhere else is the thing it takes away:
 //
-//     gulper    rides the player. The one enemy in the game that cannot be
-//               answered with the gun, because it is at the one position a
-//               first-person crosshair can never be pointed at
+//     gulper    strikes, swallows and gives ground. A bite FEEDS it - healed by
+//               the health the mouthful took - and the back-step afterwards is
+//               the kill window. The one enemy whose lunge is faster than the
+//               player's walk, so it arrives; it cannot steer, so it can be
+//               stepped off
 //     angler    a homing round that is itself a TARGET - the only enemy
 //               projectile in the game a pellet can stop
 //     barnacle  roots itself and drags the player in, and cover is the only
@@ -19,11 +21,12 @@
 //               to kill
 //
 //   Four of those six are invisible when broken rather than obviously wrong.
-//   A latch that never releases is a softlock; a latch that never holds is a
-//   weak rusher. A column that is not solid is a slow lava patch. A current
-//   that ignores cover is a brute with no counter. So every assertion below is
-//   a PAIR wherever a pair is possible - it held AND it let go, it walled AND
-//   the wall came down, it pulled AND cover stopped it.
+//   A strike that never arrives is the old latch's bug - a rusher slower than
+//   the player it hunts. A bite that does not feed is a plain rusher with a
+//   coloured particle. A column that is not solid is a slow lava patch. A
+//   current that ignores cover is a brute with no counter. So every assertion
+//   below is a PAIR wherever a pair is possible - it struck AND it fed, it
+//   walled AND the wall came down, it pulled AND cover stopped it.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8227;
@@ -160,55 +163,56 @@ try {
       clean();
     }
 
-    // ---- 2. the gulper takes hold, and lets go ---------------------------
-    // BOTH HALVES, because either one alone is a broken enemy: a latch that
-    // never holds is a weak rusher, and one that never releases is a softlock.
+    // ---- 2. the gulper strikes, feeds, and gives ground -------------------
+    // THREE HALVES, because any one alone is a broken enemy: a strike that
+    // never reaches is the old latch's bug back again (a rusher slower than
+    // the player it hunts), a bite that does not feed it is a plain rusher,
+    // and a strike with no back-step afterwards is a hit with no answer.
     {
       clean();
-      const e = put('gulper', 1.2, 0);
-      // ZEROED. A gulper spawns with a random attack cooldown and this block
-      // is testing the LATCH, not the wait in front of it - left to chance the
-      // measurement is a race, and it lost one.
-      e.attackCd = 0;
-      let latched = false;
+      const e = put('gulper', 6, 0);
+      // WOUNDED FIRST, or the heal is invisible: a fresh gulper is at full
+      // bar and Math.min(maxHp, ...) would swallow the mouthful's whole
+      // effect. Half a bar leaves room to see it fed without leaving so
+      // little that a single bite's tick kills it mid-test.
+      e.takeDamage(e.maxHp * 0.5, true);
+      // ZEROED, so the tell starts on the first frame the range gate allows
+      // and the measurement is not a race against the spawn cooldown.
+      e.gulp = { state: 'walk', t: 0, hx: 0, hz: 1 };
+      let struck = false;
+      let retreated = false;
+      let retreatDist = 0;
       let closest = 99;
-      for (let i = 0; i < 600; i++) {
+      let hpAfter = null;
+      let watched = 0;
+      for (let i = 0; i < 900; i++) {
         await step();
         closest = Math.min(closest, Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z));
-        if (e.latched) { latched = true; break; }
+        const gs = e.gulp;
+        if (gs && gs.state === 'lunge') struck = true;
+        if (struck && gs && gs.state === 'swallow') {
+          // FED, decided on the FIRST swallow frame: hp after the bite
+          // against the half-bar it was wounded to.
+          if (hpAfter === null) hpAfter = e.hp;
+          retreated = true;
+        }
+        if (retreated) {
+          // Watched for long enough to see the whole give-ground, then stop:
+          // the retreat is a second and a bit, and the assertion is a
+          // distance that only grows while this runs.
+          if (++watched > 120) break;
+          retreatDist = Math.max(retreatDist, Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z));
+        }
       }
-      res.gulpLatched = latched;
-      // Reported whether or not it latched, so a failure says whether it never
-      // arrived or arrived and did not take hold - two completely different
-      // bugs that look identical from the assertion alone.
+      res.gulpStruck = struck;
       res.gulpClosest = +closest.toFixed(2);
-      // It rides in FRONT of the player, not inside the camera.
-      res.gulpHang = +Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z).toFixed(2);
-      // ...and it costs health while it is on.
-      res.gulpDrain = await measure(70, () => {});
-      // THE MELEE SWING SHAKES IT OFF. Written straight rather than driven
-      // through the input, because what is under test is the release
-      // condition and not the button that reaches it.
-      p.meleeActive = 0.15;
-      await steps(4);
-      res.gulpMeleeOff = !e.latched;
-      res.gulpThrown = +Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z).toFixed(2);
-      clean();
-    }
-    // ...and the dash does too, on a fresh one.
-    {
-      clean();
-      const e = put('gulper', 1.2, 0);
-      e.attackCd = 0;
-      for (let i = 0; i < 600; i++) {
-        await step();
-        if (e.latched) break;
-      }
-      res.gulpLatched2 = e.latched;
-      p.dashEnd = g.time + 0.3;
-      await steps(4);
-      res.gulpDashOff = !e.latched;
-      p.dashEnd = 0;
+      // The bite healed it past the half-bar mark, by the health the hit
+      // actually took - p is at full health with god on, so the mouthful is
+      // the full damage number times the feed multiplier.
+      res.gulpFed = hpAfter !== null && hpAfter > e.maxHp * 0.5 + 1;
+      res.gulpFedHp = hpAfter === null ? -1 : +hpAfter.toFixed(1);
+      res.gulpRetreated = retreated;
+      res.gulpRetreatDist = +retreatDist.toFixed(2);
       clean();
     }
 
@@ -423,13 +427,11 @@ try {
     out.allBuilt && out.subjectsAlive === out.subjectsMade,
     `${out.subjectsAlive}/${out.subjectsMade} alive  ` + JSON.stringify(out.builtDetail));
 
-  ok('a gulper latches on', out.gulpLatched, `closest=${out.gulpClosest}m`);
-  ok('and rides in front of the player rather than inside the camera',
-    out.gulpHang > 0.3 && out.gulpHang < 1.4, `${out.gulpHang}m`);
-  ok('and drains while it is on', out.gulpDrain > 0, `lost=${out.gulpDrain}`);
-  ok('a melee swing shakes it off', out.gulpMeleeOff);
-  ok('and throws it clear', out.gulpThrown > 1.5, `${out.gulpThrown}m`);
-  ok('a dash shakes one off too', out.gulpLatched2 && out.gulpDashOff);
+  ok('a gulper strikes at the player', out.gulpStruck, `closest=${out.gulpClosest}m`);
+  ok('and a landed bite feeds it', out.gulpFed,
+    `closest=${out.gulpClosest}m hp_after=${out.gulpFedHp}`);
+  ok('and it gives ground afterwards', out.gulpRetreated && out.gulpRetreatDist > 1.5,
+    `retreat=${out.gulpRetreatDist}m`);
 
   ok('an angler fires a bubble', out.anglerFired);
   ok('and the bubble is a target the player can shoot',
