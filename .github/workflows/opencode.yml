@@ -49,6 +49,16 @@ jobs:
         with:
           chrome-version: stable
 
+      # A runner is a fresh machine with no git identity, and a commit cannot
+      # be made without one - the agent got as far as staging its work and then
+      # died on "Author identity unknown", losing the change. Attributed to the
+      # agent rather than to a person on purpose: git log and git blame should
+      # say plainly which commits were written by an agent.
+      - name: Set git identity for the agent
+        run: |
+          git config --global user.name "opencode-agent"
+          git config --global user.email "opencode-agent@users.noreply.github.com"
+
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
