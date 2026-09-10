@@ -740,8 +740,15 @@ export class UI {
    * decides is which overlay is up, and this module is the only one that knows.
    */
   _syncReading() {
+    // THE BUILD SHEET IS ON THIS LIST TOO, and it is the one entry that is not
+    // a menu. It is held open over a LIVE FIGHT, which is exactly the argument
+    // for leaving the grid alone - and it loses: the sheet is a wall of small
+    // caps at the same weight the settings labels are set in, and it is read
+    // for two seconds while the player decides something. Everything else on
+    // this list pauses the game; this one only pauses the reading, which is all
+    // the beam was ever turned down for.
     const up = [this.startOv, this.overOv, this.pauseOv, this.settingsOv,
-      this.confirmOv, this.playersOv]
+      this.confirmOv, this.playersOv, this.statsPanel]
       .some((o) => o && !o.classList.contains('hidden'));
     document.body.classList.toggle('reading', up);
   }
@@ -922,12 +929,14 @@ export class UI {
     this._buildActive(active);
     this._buildPassives(passives);
     this.statsPanel.classList.remove('hidden');
+    this._syncReading();
   }
 
   hideStats() {
     if (!this._statsOpen) return;
     this._statsOpen = false;
     this.statsPanel.classList.add('hidden');
+    this._syncReading();
     // Dropped rather than kept: the next open is a different build, and a
     // stale key would silently suppress the rebuild that would fix it.
     this._statsKey = '';

@@ -1316,7 +1316,7 @@ try {
   ok('carnage: a hit wipes the chain', m.carnageAfterHit === 100);
   ok('blood pact: a kill heals 3', m.pactHealed);
   ok('blood pact: hits cost 25% more', m.pactExtraDamage === 25);
-  ok('thorns: the attacker takes half back', m.thorns === 20, String(m.thorns));
+  ok('thorns: the attacker takes the whole hit back', m.thorns === 40, String(m.thorns));
   ok('absolute zero: the world runs at 70%', m.worldSlow === 0.7, String(m.worldSlow));
   ok('absolute zero: a hit freezes you for 0.5s',
     m.freezeSeconds === 0.5, String(m.freezeSeconds));

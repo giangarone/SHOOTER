@@ -13,9 +13,12 @@
 //     arcling     a live wire to the nearest other arcling. If the segment
 //                 test is wrong it is either a weak rusher (never hits) or an
 //                 unfair one (hits from anywhere)
-//     coil        an INSTANT bolt behind a long charge. It cannot be dodged,
-//                 so if the line-of-sight re-test at the moment of the shot
-//                 does not work, the enemy has no counter at all
+//     coil        a bolt with real flight time behind a long charge, aimed at
+//                 where the player WAS when it fired. Two counters, and both
+//                 have to work: cover (the line-of-sight re-test at the moment
+//                 of the shot) and MOVING (the bolt does not steer). If either
+//                 is broken the enemy is unanswerable in half the rooms it
+//                 spawns in - which is what it used to be, as a hitscan
 //     dynamo      stores what it is hit with and dumps it back. If the meter
 //                 never fills it is a slow tank
 //     stormcaller leaves an electrified patch AFTER the shell lands. Without
@@ -228,6 +231,26 @@ try {
       };
       res.coilOpen = await runCoil(false);
       res.coilCovered = await runCoil(true);
+      // ...and the second counter, which the hitscan version did not have:
+      // STANDING SOMEWHERE ELSE. Same open room, same frozen coil, and the
+      // player is moved five metres sideways on the frame the bolt leaves -
+      // which is a move it has the whole crossing time to make. If this costs
+      // anything the bolt is still steering.
+      {
+        clean();
+        const e = put('coil', -14, 0);
+        e.speed = 0;
+        px = 0;
+        pz = 0;
+        res.coilDodged = await measure(420, () => {
+          e.pos.set(-14, e.pos.y, 0);
+          // Jump aside once per bolt, on the frame it is created, and stay
+          // there until the next charge starts.
+          if (e.coilBolt) pz = 5;
+          else if (e.coilT > 0) pz = 0;
+        });
+        clean();
+      }
       clean();
     }
 
@@ -380,6 +403,8 @@ try {
     out.wireOff === 0, `lost=${out.wireOff}`);
 
   ok('a coil in the open lands its bolt', out.coilOpen > 0, `lost=${out.coilOpen}`);
+  ok('a coil is beaten by stepping off the point it aimed at',
+    out.coilDodged === 0, `lost=${out.coilDodged}`);
   ok('and cover between the two of them stops it',
     out.coilCovered === 0, `lost=${out.coilCovered}`);
 

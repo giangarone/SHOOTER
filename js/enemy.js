@@ -390,6 +390,21 @@ export class Enemy {
     this.hitbox.position.y = (hb ? hb.y : 0.8) * s;
     // Scale the hitbox with the model so big enemies are as easy to hit as they look.
     this.hitbox.scale.setScalar(s);
+    /**
+     * THE HIT SPHERE AS TWO PLAIN NUMBERS, in world units, for anything that
+     * needs the enemy's BODY rather than the point its feet are on.
+     *
+     * `pos` is the point a body stands on, and for most of the roster that is
+     * close enough to the middle of it that treating the enemy as a point costs
+     * nothing. For a boss it is not: a Colossus is a six-metre body whose `pos`
+     * is on the floor under it, so a blast that goes off in its chest is two
+     * and a half metres from `pos` and a radial test against `pos` finds
+     * nothing there at all - which is exactly the bug DELAYED FUSE hit (see
+     * Game._blast). Reading them off the mesh would mean a getWorldPosition per
+     * enemy per blast; these are constants of the type, so they are taken once.
+     */
+    this.hitR = (hb ? hb.r : 0.6) * s;
+    this.hitY = (hb ? hb.y : 0.8) * s;
     this.hitbox.userData.enemy = this;
     this.group.add(this.hitbox);
 
