@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
 import { UPGRADES } from './upgrades.js';
-import { WEAPONS, STARTING_WEAPON, setGunMarks, setGunTag } from './weapons.js';
+import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 import { ACTIVE_ITEMS } from './items.js';
 
@@ -1284,18 +1284,6 @@ export class Player {
     this.magBaseY = this.magPart ? this.magPart.position.y : 0;
   }
 
-  // Lights one plate on the receiver per owned passive item that changes what
-  // a bullet does, in that upgrade's totem colour (the `mark` flag in
-  // upgrades.js). Called whenever the owned list changes, never per frame.
-  refreshGunMarks() {
-    const colors = [];
-    for (const id of Object.keys(this.upgrades)) {
-      const def = UPGRADES[id];
-      if (def && def.mark) colors.push(def.theme);
-    }
-    setGunMarks(this.gun, colors);
-  }
-
   // Derived stats. These are getters, not fields, because a draft pick can
   // change the underlying mods at any wave boundary - anything that cached
   // them would silently keep the pre-upgrade value for the rest of the run.
@@ -1545,7 +1533,6 @@ export class Player {
     // A magazine-shrinking upgrade must not leave the gun holding more rounds
     // than it can now carry.
     this.mag = Math.min(this.mag, this.magSize);
-    this.refreshGunMarks();
     return true;
   }
 
@@ -2048,7 +2035,6 @@ export class Player {
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
     this._equipModel();
-    this.refreshGunMarks();
     this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
     this.wardCharges = 0;

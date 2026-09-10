@@ -1523,12 +1523,6 @@ class Game {
         upgrades: { ...this.player.upgrades },
         upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
         weapon: this.player.weapon.name,
-        // The receiver plates and the marked upgrades they stand for. Kept
-        // side by side so the smoke test can assert they agree.
-        gunMarks: this.player.gun.getObjectByName('marks').children
-          .reduce((n, m) => n + (m.visible ? 1 : 0), 0),
-        markedUpgrades: Object.keys(this.player.upgrades)
-          .filter((id) => UPGRADES[id] && UPGRADES[id].mark).length,
         maxHealth: this.player.maxHealth,
         magSize: this.player.magSize,
         enemies: this.enemies.length,
@@ -7240,7 +7234,7 @@ class Game {
 
   // A TIER AT A TIME, through the player's own takeUpgrade - so a stacking
   // passive stacks, a maxed one refuses, and every clamp that comes with an
-  // upgrade (the health cap, the magazine, the gun marks) is applied exactly
+  // upgrade (the health cap, the magazine) is applied exactly
   // as it is when a totem is walked into.
   _debugGivePassive(id) {
     if (!this.player.takeUpgrade(id)) return;
@@ -7264,7 +7258,6 @@ class Game {
     this.player.rebuildMods();
     this.player.health = Math.min(this.player.health, this.player.maxHealth);
     this.player.mag = Math.min(this.player.mag, this.player.magSize);
-    this.player.refreshGunMarks();
     this._debugRefresh();
     this.sfx.menuBack();
   }

@@ -109,9 +109,6 @@ try {
     // at three. A renamed field or a cap that drifted fails here.
     ['flawless multiplier matches the streak',
       rep.flawlessMult === Math.min(3, 1 + 0.25 * rep.flawlessStreak)],
-    // One lit plate on the receiver per owned bullet passive item. Covers
-    // refreshGunMarks() being called on every draft pick, not just the first.
-    ['gun marks match build', rep.gunMarks === rep.markedUpgrades],
     ['loadout intact', typeof rep.weapon === 'string'],
     ['no console errors', fatal.length === 0],
     // Guards against the checks below passing vacuously if a report field is
