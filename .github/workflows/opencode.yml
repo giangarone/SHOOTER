@@ -28,10 +28,18 @@ jobs:
       issues: write
 
     steps:
+      # persist-credentials is left ON (the default) because the agent PUSHES.
+      # Turning it off strips the token out of git's config after the clone, so
+      # `git push` has nothing to authenticate with, finds no terminal to
+      # prompt at, and dies on "could not read Username for https://github.com"
+      # - after committing, so the work is already staged and then lost. The
+      # token the action passes itself is for the API, not for the remote.
+      #
+      # The flag guards against a later step reusing the token. This job has
+      # contents: write and runs an agent with a shell, so that horse has left:
+      # the gate is the author allowlist in the `if` above, not this.
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          persist-credentials: false
 
       # Everything below exists so that the agent can actually RUN the test
       # suite when it is asked to. Without node modules and a browser on the
