@@ -1379,11 +1379,28 @@ When balancing, check damage per second *after* reloads, not per shot.
 ## Test
 
 ```bash
+npm run test:all
+```
+
+Every suite, one after another, in about fifteen minutes. This is the gate, and
+CI runs it on every push and pull request. It reads the suite list from the
+directory rather than a list kept by hand, so a new suite is picked up the
+moment it lands; each gets a 300s cap (`TIMEOUT=600` to lengthen it), and the
+run ends with a pass/fail summary and a non-zero exit if anything failed. Pass
+a filter to narrow it: `node test/all.mjs tempest`.
+
+The suites need a Chrome on the machine, because `puppeteer-core` ships without
+one. `test/harness.mjs` finds it — `CHROME`, `CHROME_PATH` or
+`PUPPETEER_EXECUTABLE_PATH` if you set one, otherwise the usual macOS, Linux
+and Windows locations, and if none of them exist an error naming every path it
+tried. It also resolves the repo from its own location rather than the working
+directory, so `node test/boss.mjs` runs from anywhere.
+
+```bash
 npm test
 ```
 
-Runs a headless-Chrome smoke test that plays the game automatically for 60s
-(requires a system Chrome; override with `CHROME=/path/to/chrome`). Besides
+A headless-Chrome smoke test that plays the game automatically for 60s. Besides
 checking the game runs, it asserts the pickup, ammo and projectile caps hold
 and that GPU resource counts stay bounded — lights, shader programs and
 geometries must not grow as enemies spawn and die.
@@ -1400,7 +1417,7 @@ npm run test:active
 npm run test:newpool
 ```
 
-Two targeted suites, because the smoke test's bot rarely survives past the
+The targeted suites, because the smoke test's bot rarely survives past the
 early waves and would pass every later assertion vacuously. `test:boss` drives
 the game into each boss wave in turn and checks the fight resolves, the adds
 stay capped, telegraph handles are returned to their pool, and — the one boss
@@ -1463,6 +1480,7 @@ floor, and scores double what the same body is worth shot.
 
 ```
 index.html          page + HUD + overlays
+AGENTS.md           how to change this repo without breaking it
 server.js           zero-dependency static dev server
 css/styles.css      HUD / overlay styling
 js/main.js          game loop, state, waves, shooting
@@ -1498,6 +1516,9 @@ js/totems.js        wave-end totems + ammo/reroll stations
 js/pad.js           the DualSense: polling, deadzones, button edges, rumble
 js/padmenu.js       button glyphs, the menu focus driver, the name keyboard
 js/utils.js         collision + misc helpers
+test/all.mjs        runs every suite in test/, serially, with a summary
+test/harness.mjs    the repo root, the Chrome, and the server spawn - the three
+                    things a suite cannot assume about the machine it is on
 test/smoke.mjs      headless smoke test
 test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer

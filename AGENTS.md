@@ -1,0 +1,103 @@
+# Working on VOID ARENA
+
+Notes for an agent picking this repo up. The README is the design document —
+what the game does and why. This file is the shorter question: how to change it
+without breaking it.
+
+## Run the tests. They are the whole point.
+
+```bash
+npm run test:all
+```
+
+Thirty suites, serially, about fifteen minutes. This is the gate. A change is
+not finished until this passes, and "it looks right" is not a substitute —
+almost nothing this codebase gets wrong is visible in a single frame.
+
+While iterating, run only what you touched:
+
+```bash
+npm run test:tempest        # one suite by name
+node test/all.mjs tempest   # or by filter, through the runner
+```
+
+`node test/<name>.mjs` works too, from any directory. Some suites take an
+argument — `node test/boss.mjs ember,rime` pins the themes under test instead
+of walking all ten.
+
+CI runs `test:all` on every push and pull request, so a suite that fails will
+be caught. Catching it yourself is faster than waiting fifteen minutes to be
+told.
+
+### What the suites are for
+
+They are not unit tests. Each one drives a real headless browser against a real
+server and asserts on game STATE several seconds apart, because that is the
+only place this game's bugs live. A boss that never releases its telegraph
+handles, a countdown that re-arms itself every frame, a homing shot that
+ignores cover — none of those throw, none show up in a screenshot, and all of
+them are a suite away from being obvious.
+
+So: **when you add a mechanic, add the assertion that would fail if it broke.**
+Put it in the suite that owns that area rather than starting a new file. The
+headers in each suite explain what it is guarding and are worth reading before
+you extend one.
+
+### If a suite fails
+
+Read what it printed. These suites report the actual numbers — `damage=34
+arcs=1` — rather than just failing, so the failure usually names the cause. A
+suite that TIMES OUT rather than failing is different: that is normally a hang
+in the game, not a slow machine.
+
+## The rig
+
+`test/harness.mjs` owns the three things a test cannot assume, and every
+browser suite imports from it:
+
+- `ROOT` — the repo, resolved from `import.meta.url`. Never `process.cwd()`,
+  and never an absolute path to somebody's machine. Suites must run from any
+  directory.
+- `CHROME` — `puppeteer-core` ships no browser. The harness takes `CHROME`,
+  `CHROME_PATH` or `PUPPETEER_EXECUTABLE_PATH` if set, then probes the usual
+  macOS, Linux and Windows locations, then throws naming every path it tried.
+- `startServer(port)` — one spawn, absolute script, explicit cwd.
+
+**Every suite owns a unique port.** They collide silently if not: the second
+server fails to bind and that suite quietly tests the first one's game. If you
+add a suite, take a port nothing else uses.
+
+New suites are picked up by `test:all` automatically — it reads the directory.
+There is no list to update.
+
+## Laying out a change
+
+- `js/main.js` is the loop, the waves and the run state. Most systems are
+  reached from here.
+- `js/enemies/` is one file per theme, ten of them, registered by `index.js`.
+  `shared.js` holds what more than one theme needs — the geometry and material
+  caches, the status tables, the steering helpers, and `ENEMY_TYPES` itself.
+- The ten themes are interchangeable by design. `test/themes.mjs` holds the
+  balance law: every role filled, no type in two themes, every stat block
+  inside the envelope its role shares across all ten. Adding an enemy means
+  satisfying that, not just making it fun.
+- Anything on a rhythm hangs off `Music.pulse`, the half-beat edge — not a
+  timer of its own.
+- Pools are everywhere: projectiles, particles, decals, telegraph handles. If
+  you take a handle, release it on every path out, including the one where the
+  thing dies early. Several suites assert pools drain precisely because that
+  path is easy to miss.
+- `js/pixelicons.js` is GENERATED (see `tools/pixelart`). Every offer needs a
+  drawing and every drawing an offer — `npm run test:icons` is the check, and
+  it runs in milliseconds.
+
+## House style
+
+Match the file you are in. This codebase comments the WHY — what breaks
+otherwise, what the alternative was, which bug the line exists to prevent — and
+does not narrate the what. A comment explaining that a loop iterates is noise
+here; a comment explaining that a suffix range means the LAST n bytes and not
+the first is the reason `server.js` is correct.
+
+Keep the README current when behavior changes. It is long, specific, and people
+actually read it.
