@@ -1427,11 +1427,11 @@ export const ACTIVE_ITEMS = {
 
   itemLockpick: {
     name: 'LOCKPICK',
-    charge: 120,
+    charge: 60,
     theme: THEME.lockpick,
     // THE MOST EXPENSIVE ITEM IN THE POOL, and it has to be: what it buys is
-    // the thing every other item in this file is bought WITH. A hundred and
-    // twenty dead chasers is most of two waves, and what comes back is one
+    // the thing every other item in this file is bought WITH. Sixty dead
+    // chasers is most of a wave, and what comes back is one
     // roll of a box that would otherwise have cost a thousand dollars and
     // doubled from there.
     //
