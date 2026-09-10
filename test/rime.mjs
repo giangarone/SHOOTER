@@ -63,6 +63,15 @@ try {
     const TYPES = (await import('./js/enemy.js')).ENEMY_TYPES;
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
+    // SECONDS OF GAME, not a count of frames. The loop clamps dt at 0.05, so a
+    // frame is worth 1/60s of game on an idle machine and up to 0.05s on a
+    // loaded one - the same steps(n) simulates THREE TIMES more game on a slow
+    // host. Anything whose meaning is a duration has to be waited for in this
+    // unit or it silently changes what it is testing.
+    const simSteps = async (seconds) => {
+      const until = g.time + seconds;
+      while (g.time < until) await step();
+    };
     const res = {};
 
     g.autoTest = false;
@@ -146,7 +155,7 @@ try {
         e.speed = 0;   // parked, so it cannot orbit out of its own range
         e.attackCd = 0;
         let seen = 0;
-        let sinceFirst = -1;
+        let firstAt = -1;
         let prev = g.projectiles.length;
         for (let i = 0; i < 1400; i++) {
           if (chilled) p.applyStatus('slowness', 5);
@@ -154,16 +163,16 @@ try {
           const now = g.projectiles.length;
           if (now > prev) {
             seen += now - prev;
-            if (sinceFirst < 0) sinceFirst = 0;
+            if (firstAt < 0) firstAt = g.time;
           }
           prev = now;
           // Once the first round is away, watch a window wide enough to
           // contain a three-round burst and narrow enough to exclude the next
-          // volley's cooldown.
-          if (sinceFirst >= 0) {
-            sinceFirst++;
-            if (sinceFirst > 70) break;
-          }
+          // volley's cooldown. IN GAME SECONDS: this was 70 frames, which is
+          // that window at 60fps and three times it on a host rendering at
+          // twenty, where it stretched far enough to swallow the next volley
+          // and count a calm shard's single lance as two.
+          if (firstAt >= 0 && g.time - firstAt > 1.2) break;
         }
         return seen;
       };
