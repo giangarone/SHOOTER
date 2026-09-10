@@ -62,6 +62,15 @@ try {
     const p = g.player;
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
+    // SECONDS OF GAME, not a count of frames. The loop clamps dt at 0.05, so a
+    // frame is worth 1/60s of game on an idle machine and up to 0.05s on a
+    // loaded one - the same steps(n) simulates THREE TIMES more game on a slow
+    // host. Anything whose meaning is a duration has to be waited for in this
+    // unit or it silently changes what it is testing.
+    const simSteps = async (seconds) => {
+      const until = g.time + seconds;
+      while (g.time < until) await step();
+    };
     const res = {};
 
     // The bot fights, which would kill every subject before it acted. Pinned
@@ -128,7 +137,7 @@ try {
         subjects.push(e);
         built[t] = !!(e.group && e.group.children.length > 2);
       }
-      await steps(120);
+      await simSteps(2);
       res.allBuilt = Object.values(built).every(Boolean);
       res.builtDetail = built;
       res.subjectsAlive = subjects.filter((e) => !e.dead).length;
@@ -192,7 +201,7 @@ try {
       const bell = put('bellows', 1.5, 0);
       bell.speed = 0;
       const chas = put('chaser', 5, 0);
-      await steps(60);
+      await simSteps(1);
       res.litWhileAlive = chas.igniteT > 0;
       res.litRange = +Math.hypot(chas.pos.x - bell.pos.x, chas.pos.z - bell.pos.z).toFixed(1);
 
@@ -209,7 +218,7 @@ try {
       px = 0;
       pz = 0;
       bell.dead = true;
-      await steps(60);
+      await simSteps(1);
       // Only meaningful if it was lit in the first place - otherwise this
       // passes for free on a bellows that never worked at all.
       res.unlitAfterDeath = res.litWhileAlive && !(chas.igniteT > 0);

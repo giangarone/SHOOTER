@@ -65,6 +65,15 @@ try {
     const TYPES = (await import('./js/enemy.js')).ENEMY_TYPES;
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
+    // SECONDS OF GAME, not a count of frames. The loop clamps dt at 0.05, so a
+    // frame is worth 1/60s of game on an idle machine and up to 0.05s on a
+    // loaded one - the same steps(n) simulates THREE TIMES more game on a slow
+    // host. Anything whose meaning is a duration has to be waited for in this
+    // unit or it silently changes what it is testing.
+    const simSteps = async (seconds) => {
+      const until = g.time + seconds;
+      while (g.time < until) await step();
+    };
     const res = {};
     // What a creeper is supposed to lay, mirrored from OG_CREEP_N in enemy.js.
     const OG_CREEP_N_EXPECTED = 5;
@@ -95,12 +104,16 @@ try {
     };
     // Runs a window with the refill off, so the only health lost is the
     // health the thing under test took.
-    const measure = async (frames, fn) => {
+    // SECONDS, not frames. This returns HEALTH LOST OVER A WINDOW, and a
+    // window counted in frames is up to three times longer on a loaded host -
+    // so every number it produces scales with the machine rather than with the
+    // thing under test.
+    const measure = async (seconds, fn) => {
       god = false;
       p.health = p.maxHealth;
       const before = p.health;
       if (fn) fn();
-      await steps(frames);
+      await simSteps(seconds);
       const lost = before - p.health;
       god = true;
       return +lost.toFixed(2);
@@ -148,7 +161,7 @@ try {
     // ---- 0. control: does an EMPTY arena cost the player health? --------
     {
       clean();
-      res.idleLoss = await measure(120);
+      res.idleLoss = await measure(2);
       res.idleMax = p.maxHealth;
       clean();
     }
@@ -163,7 +176,7 @@ try {
         subjects.push(e);
         built[t] = !!(e.group && e.group.children.length > 2);
       }
-      await steps(120);
+      await simSteps(2);
       res.allBuilt = Object.values(built).every(Boolean);
       res.builtDetail = built;
       res.subjectsAlive = subjects.filter((e) => !e.dead).length;
@@ -232,7 +245,7 @@ try {
         // measured as the first one having hurt somebody.
         for (const x of g.enemies) x.dead = true;
         await steps(2);
-        res.seedEarlyLoss = await measure(6, () => { px = m.x; pz = m.z; });
+        res.seedEarlyLoss = await measure(0.1, () => { px = m.x; pz = m.z; });
         res.seedMortarsThen = g._mortars.length;
         res.seedHarmlessAtFirst = res.seedEarlyLoss === 0;
         // ...and not harmless when it goes off.
@@ -258,7 +271,7 @@ try {
       // something about the poke, not about the enemy. Standing at 4.2m is
       // outside a 3.5m hit and inside a 4.6m aura, so anything that lands here
       // can only be the thorns.
-      res.brambleTicks = await measure(120, () => { px = e.pos.x - 4.2; pz = 0; });
+      res.brambleTicks = await measure(2, () => { px = e.pos.x - 4.2; pz = 0; });
       res.brambleHurtsNear = res.brambleTicks > 0;
       // ...and not from across the room.
       // MOVED, AND GIVEN A FRAME TO NOTICE. The thorn clock keeps running
@@ -284,7 +297,7 @@ try {
         });
         return origHurt(d, pos);
       };
-      res.brambleFarLoss = await measure(120);
+      res.brambleFarLoss = await measure(2);
       g._hurtPlayer = origHurt;
       res.brambleFarHits = JSON.stringify(hits.slice(0, 4));
       res.brambleFarDist = +Math.hypot(e.pos.x - px, e.pos.z - pz).toFixed(1);
@@ -301,19 +314,19 @@ try {
       hurt.speed = 0;
       hurt.hp = hurt.maxHp * 0.3;
       const hpA = hurt.hp;
-      await steps(120);
+      await simSteps(2);
       res.heartHeals = hurt.hp > hpA;
       res.heartGain = +(hurt.hp - hpA).toFixed(1);
       // Never past full - a heal that overshot would make a healed enemy
       // tougher than one that was never hurt.
       hurt.hp = hurt.maxHp;
-      await steps(60);
+      await simSteps(1);
       res.heartNoOverheal = hurt.hp <= hurt.maxHp;
       // ...and it stops when the caster dies, which is the reason to shoot it.
       hurt.hp = hurt.maxHp * 0.3;
       h.dead = true;
       const hpB = hurt.hp;
-      await steps(120);
+      await simSteps(2);
       res.heartStopsOnDeath = hurt.hp === hpB;
       clean();
     }
@@ -346,7 +359,7 @@ try {
       px = 0;
       pz = 0;
       e.pos.set(20, e.pos.y, 0);
-      await steps(60);
+      await simSteps(1);
       res.ogShutFar = !e.bs.open;
       res.ogArmorFar = armorNow();
       // THE PEAK, not the count at some instant. A creeper's five thorns are
@@ -380,7 +393,7 @@ try {
       // Close in: the canopy opens and it takes full damage.
       px = e.pos.x - 4;
       pz = 0;
-      await steps(60);
+      await simSteps(1);
       res.ogOpenNear = e.bs.open;
       res.ogArmorNear = armorNow();
       res.ogCanopyMoved = e.canopy && e.canopy[0].position.y > 2.05 * e.scale;

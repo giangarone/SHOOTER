@@ -131,7 +131,7 @@ try {
         subjects.push(e);
         built[t] = !!(e.group && e.group.children.length > 2);
       }
-      await steps(120);
+      await simSteps(2);
       res.allBuilt = Object.values(built).every(Boolean);
       res.builtDetail = built;
       res.subjectsAlive = subjects.filter((e) => !e.dead).length;
@@ -219,7 +219,7 @@ try {
       // Exactly once: a nova that re-fired every frame under the threshold
       // would carpet the arena and would still pass a "did it nova" check.
       const after = kinds('frost').length;
-      await steps(60);
+      await simSteps(1);
       res.glacierNovaOnce = kinds('frost').length <= after;
       clean();
     }
@@ -263,7 +263,7 @@ try {
       // ...and it lapses when the caster dies. This is the reason to shoot it,
       // so it is the half worth asserting hardest.
       e.dead = true;
-      await steps(90);
+      await simSteps(1.5);
       res.hoarLapsed = res.hoarWeakens && !p.hasStatus('weakness');
       clean();
     }

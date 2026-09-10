@@ -222,7 +222,7 @@ try {
       if (raised) {
         raised.dead = true;
         car.carCd = 0;
-        await steps(120);
+        await simSteps(2);
         res.carrionSecond = g.enemies.filter((x) => x.revenant && !x.dead).length;
       }
       clean();

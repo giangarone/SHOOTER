@@ -64,6 +64,15 @@ try {
     const THREE = await import('three');
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
+    // SECONDS OF GAME, not a count of frames. The loop clamps dt at 0.05, so a
+    // frame is worth 1/60s of game on an idle machine and up to 0.05s on a
+    // loaded one - the same steps(n) simulates THREE TIMES more game on a slow
+    // host. Anything whose meaning is a duration has to be waited for in this
+    // unit or it silently changes what it is testing.
+    const simSteps = async (seconds) => {
+      const until = g.time + seconds;
+      while (g.time < until) await step();
+    };
     const res = {};
 
     g.autoTest = false;
@@ -158,7 +167,7 @@ try {
         subjects.push(e);
         built[t] = !!(e.group && e.group.children.length > 2);
       }
-      await steps(120);
+      await simSteps(2);
       res.allBuilt = Object.values(built).every(Boolean);
       res.builtDetail = built;
       res.subjectsAlive = subjects.filter((e) => !e.dead).length;
