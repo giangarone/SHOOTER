@@ -74,19 +74,57 @@ const OFF = '\x1b[0m';
 const run = (file) =>
   new Promise((resolve) => {
     const started = Date.now();
+    // detached puts the suite in its OWN PROCESS GROUP, which is the whole
+    // point of the option here. A suite is node, which spawns a server and a
+    // Chrome, and Chrome spawns a tree of its own - all GRANDCHILDREN. Killing
+    // the node child left every one of them alive, and an orphaned headless
+    // Chrome does not idle: it sat at 200% CPU rendering through software GL
+    // and starved every suite that came after, so ONE timeout turned into a
+    // cascade of unrelated suites failing to so much as load a page. With a
+    // group, the negative pid below takes the lot.
     const child = spawn(process.execPath, [path.join(ROOT, 'test', file)], {
       cwd: ROOT,
       stdio: 'inherit',
+      detached: true,
     });
-    const timer = setTimeout(() => child.kill('SIGKILL'), TIMEOUT);
+
+    const killGroup = (signal) => {
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // The group is already gone - the suite exited between the timer
+        // firing and this call. Nothing to kill, and nothing to report.
+      }
+    };
+
+    // SIGTERM first so Chrome gets to tear its own tree down, then SIGKILL a
+    // few seconds later for whatever ignored it.
+    //
+    // The flag, rather than reading the exit signal: a SIGTERMed node runs its
+    // own handlers and exits with a CODE, so the suite comes back looking like
+    // an ordinary failure. A hang and a failed assertion want different
+    // answers from whoever reads the summary, so the timer records that it
+    // fired instead of guessing afterwards.
+    let timedOut = false;
+    let hardTimer;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      hardTimer = setTimeout(() => killGroup('SIGKILL'), 5000);
+    }, TIMEOUT);
+
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
+      clearTimeout(hardTimer);
+      // The suite is down but its Chrome may not be - a crashed or wedged
+      // suite leaks the same orphans a timeout does. Sweep the group either
+      // way; on a clean exit there is nothing left in it and this is a no-op.
+      killGroup('SIGKILL');
       resolve({
         file,
         ms: Date.now() - started,
-        // A SIGKILL here is ours, from the timer above.
-        timedOut: signal === 'SIGKILL',
-        ok: code === 0 && !signal,
+        timedOut,
+        ok: !timedOut && code === 0 && !signal,
       });
     });
   });

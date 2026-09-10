@@ -4,30 +4,39 @@ Notes for an agent picking this repo up. The README is the design document —
 what the game does and why. This file is the shorter question: how to change it
 without breaking it.
 
-## Run the tests. They are the whole point.
-
-```bash
-npm run test:all
-```
-
-Thirty suites, serially, about fifteen minutes. This is the gate. A change is
-not finished until this passes, and "it looks right" is not a substitute —
-almost nothing this codebase gets wrong is visible in a single frame.
-
-While iterating, run only what you touched:
+## Run the suites you touched. CI runs the rest.
 
 ```bash
 npm run test:tempest        # one suite by name
+node test/tempest.mjs       # same thing, works from any directory
 node test/all.mjs tempest   # or by filter, through the runner
 ```
 
-`node test/<name>.mjs` works too, from any directory. Some suites take an
-argument — `node test/boss.mjs ember,rime` pins the themes under test instead
-of walking all ten.
+Run the one or two suites that own the area you changed, and let CI do the
+sweep. **On a CI runner, DO NOT run `npm run test:all`.** It is thirty suites
+against a real headless browser, and a runner has no GPU - the game rasterizes
+every frame in software on a shared vCPU, which makes the whole set take about
+two hours there against twenty minutes on a developer machine. An agent that
+runs it burns its entire job on tests and gets cancelled before it can commit.
+This has already happened: six hours, and a good fix lost with the runner.
 
-CI runs `test:all` on every push and pull request, so a suite that fails will
-be caught. Catching it yourself is faster than waiting fifteen minutes to be
-told.
+CI runs the full set on every push and pull request, sharded four ways, in
+about thirty minutes. That is the gate, and it does not need your help.
+
+Some suites take an argument - `node test/boss.mjs ember,rime` pins the themes
+under test instead of walking all ten, which is much faster when you only care
+about one.
+
+If you genuinely need the whole set locally, it is `npm run test:all`, about
+twenty minutes on a developer machine.
+
+### If a suite is killed rather than failing
+
+`TIMEOUT` in the summary means the suite passed its per-suite cap and was
+killed - a hang, or just a very slow machine. It is not an assertion failure,
+and re-running the suite on its own is the way to tell which. Do not raise
+`TIMEOUT=` and re-run the whole set hoping it passes; that is how a twenty
+minute job becomes a six hour one.
 
 ### What the suites are for
 
@@ -47,8 +56,7 @@ you extend one.
 
 Read what it printed. These suites report the actual numbers — `damage=34
 arcs=1` — rather than just failing, so the failure usually names the cause. A
-suite that TIMES OUT rather than failing is different: that is normally a hang
-in the game, not a slow machine.
+suite that TIMES OUT rather than failing is a different question - see above.
 
 ## The rig
 
