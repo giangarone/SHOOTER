@@ -748,7 +748,7 @@ export class UI {
     // this list pauses the game; this one only pauses the reading, which is all
     // the beam was ever turned down for.
     const up = [this.startOv, this.overOv, this.pauseOv, this.settingsOv,
-      this.confirmOv, this.playersOv, this.statsPanel]
+      this.confirmOv, this.playersOv, this.statsPanel, this.debugPanel]
       .some((o) => o && !o.classList.contains('hidden'));
     document.body.classList.toggle('reading', up);
   }
@@ -1082,9 +1082,20 @@ export class UI {
     }
   }
 
-  showDebug() { this.debugPanel.classList.remove('hidden'); }
+  // On the same `reading` terms as every other screen with small caps to read:
+  // a hundred tiles and a settings label lose the same third to the grid. Both
+  // open and close have to call _syncReading because neither goes through
+  // showPause/hidePause - the panel parks the run in `paused` directly, and the
+  // pause overlay it suppresses is the one thing keeping `reading` on.
+  showDebug() {
+    this.debugPanel.classList.remove('hidden');
+    this._syncReading();
+  }
 
-  hideDebug() { this.debugPanel.classList.add('hidden'); }
+  hideDebug() {
+    this.debugPanel.classList.add('hidden');
+    this._syncReading();
+  }
 
   /**
    * One entry: the icon, the name, and the effect lines under it.
