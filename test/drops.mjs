@@ -72,6 +72,18 @@ try {
       hurt: sample(0.1, 1),
       dry: sample(1, 0.05),
       noAmmo: sample(1, 0.05, false),
+      // A BATTERY IS THE ONLY DROP THAT PAYS OUT IN A CURRENCY THE PLAYER MIGHT
+      // NOT OWN - the active item's meter - so it is gated at the roll rather
+      // than left to land as a plate that means nothing. Sampled both ways.
+      noItem: (() => {
+        const t = { nothing: 0 };
+        for (let i = 0; i < N; i++) {
+          const k = rollDrop(1, 1, true, 1, false);
+          if (!k) t.nothing++; else t[k] = (t[k] || 0) + 1;
+        }
+        for (const k in t) t[k] = t[k] / N;
+        return t;
+      })(),
       // What the module itself says it should be doing, to check the sample
       // against rather than against numbers copied into this file.
       wantFull: dropChance(1, 1),
@@ -137,6 +149,14 @@ try {
     `shield ${(rates.full.shield || 0).toFixed(4)} -> ${(rates.hurt.shield || 0).toFixed(4)}`);
   check('the ammo cap suppresses ammo entirely', !rates.noAmmo.ammo,
     `ammo=${rates.noAmmo.ammo}`);
+  // The battery, both ways round. It is rolled at the same flat half a per cent
+  // the buffs are, and it is withheld OUTRIGHT - not merely made rare - from a
+  // player with no meter to pour it into, exactly as health is at a full bar.
+  check('battery drops at ~0.5% a kill',
+    Math.abs((rates.full.battery || 0) - 0.005) < 0.0015,
+    `sampled=${((rates.full.battery || 0) * 100).toFixed(2)}%`);
+  check('a player with no active item is offered no battery at all',
+    !rates.noItem.battery, `battery=${rates.noItem.battery}`);
   // Floor is well under the 0.5% base: ammo is rolled first and eats into it,
   // so a starving player sees the buffs at a shade under their flat rate - the
   // point is that they are still reachable, not that they are undiminished.

@@ -105,6 +105,35 @@ export const POWERUP_TYPES = {
     apply: () => {},
     sfx: 'pickupMagnet',
   },
+  // BATTERY. The active item's meter, filled to the top in one step.
+  //
+  // THE ONLY DROP IN THE GAME THAT PAYS OUT IN A CURRENCY THE PLAYER MIGHT NOT
+  // OWN, which is why it is gated at the roll rather than made to do something
+  // else for a player carrying nothing: a pickup whose payload depends on the
+  // build is a pickup that has to be explained, and a battery on the floor of a
+  // run with no item slot filled is a plate that means nothing. See rollDrop -
+  // it is skipped outright unless there is a meter with room in it, exactly as
+  // health is skipped on a full bar.
+  //
+  // FULL, not a fixed number of points. Every active item has its own cost and
+  // a flat grant would be most of a Trauma Kit and a rounding error against
+  // Brimstone; what the plate promises is a press, and it has to be worth one
+  // whatever is in the slot. It fills the CEILING, so a player who has taken
+  // TWIN CELL gets both charges - the ceiling is what that pick moves, and an
+  // item that quietly paid out half as much to the build that widened the meter
+  // would be punishing the pick.
+  //
+  // Routed through addItemCharge rather than written straight onto the field so
+  // the ready chime and the HUD flash fire exactly as they do when the meter
+  // fills the ordinary way.
+  battery: {
+    color: 0xffd54f,
+    emissive: 0xffd54f,
+    chance: 0.005,
+    icon: 'pickBattery',
+    apply: (player) => { player.addItemCharge(player.itemChargeMax); },
+    sfx: 'pickupBuff',
+  },
 };
 
 // Ammo is deliberately not in POWERUP_TYPES: it is not one of the buffs, and
@@ -204,7 +233,8 @@ const ABSORB_MIN_GLOW = 0.45;
 
 // The order categories are offered in. Need first: a starving player's ammo
 // matters more than a shield they will not live to use.
-const ROLL_ORDER = ['ammo', 'health', 'damageBoost', 'fireRateBoost', 'magnet', 'shield'];
+const ROLL_ORDER = ['ammo', 'health', 'battery', 'damageBoost', 'fireRateBoost', 'magnet',
+  'shield'];
 
 // The need curve. `frac` is how full the bar is; the result is 0 at full and 1
 // at empty, squared so it stays out of the way until things are actually bad.
@@ -224,6 +254,10 @@ function needScale(frac) {
  *
  * @param {number} hpFrac    health / maxHealth
  * @param {number} ammoFrac  (reserve + mag) / maxReserve
+ * @param {boolean} wantBattery false when the player is carrying no active item
+ *   or its meter is already at the ceiling. A battery plate is worth nothing in
+ *   either case, and the same rule health holds at a full bar applies: a drop
+ *   that cannot be spent is a drop that should not have been rolled.
  * @param {boolean} allowAmmo false when the arena already holds as much loose
  *   ammo as it should. An empty player killing a whole wave would otherwise
  *   carpet the floor in crates, all of one shape, most of them redundant by
@@ -231,10 +265,11 @@ function needScale(frac) {
  * @returns {string|null} a spawnable type key, or null for nothing at all -
  *   which is what most kills return.
  */
-export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1) {
+export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
     if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;
     if (def.needy) {
@@ -254,11 +289,12 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1) {
  * Exact rather than a sum: the categories are independent rolls, so this is
  * one minus the chance every one of them misses.
  */
-export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1) {
+export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
   let miss = 1;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
     if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;
     if (def.needy) {

@@ -659,12 +659,21 @@ export const UPGRADES = {
       mods.volleyDamage = 0.6;
     },
   },
+  // THREE FREE MISTAKES A WAVE, not one. At one it was a pick that mattered for
+  // the first contact of a wave and then sat dead for the ninety seconds that
+  // decided the run - a passive item the player stopped owning the moment it
+  // paid out. Three is a real allowance: it survives an opening the player
+  // misread, and it still runs out inside a wave that is going badly, which is
+  // the only reason it is worth taking rather than counting on.
+  //
+  // THEY DO NOT BANK. armWard SETS the count at every wave start, so a clean
+  // wave hands the next one three and not six - see Player.armWard.
   holyMantle: {
     name: 'HOLY MANTLE',
     max: 1,
     theme: THEME.holy,
-    effects: [['1st HIT EACH WAVE', GOOD], ['DEALS NO DAMAGE', NOTE]],
-    apply: (mods, n) => { mods.wardPerWave = n; },
+    effects: [['1st 3 HITS EACH WAVE', GOOD], ['DEAL NO DAMAGE', NOTE]],
+    apply: (mods, n) => { mods.wardPerWave = 3 * n; },
   },
   deadCat: {
     name: 'DEAD CAT',
@@ -769,15 +778,23 @@ export const UPGRADES = {
     ],
     apply: (mods, n) => { mods.dodgeChance = 0.12 * n; },
   },
+  // A MULTIPLE OF THE GUN, NOT A FLAT TWENTY-FIVE. The old number was the same
+  // mistake fire and poison were built out of (see Player.dotHit): a real hit
+  // on wave three and a rounding error on wave thirty, so the one passive item
+  // in the pool that pays out on the reload got weaker every time the player
+  // did anything else right. Charged at four times a shot it is worth what the
+  // build is worth - every damage passive item feeds it - and a ring of eight
+  // is thirty-two shots' worth of damage spread around the player, which is
+  // what a vent that costs a reload should be.
   reloadBurst: {
     name: 'RELOAD BURST',
     max: 1,
     mark: true,
     theme: THEME.shrapnel,
-    effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 25 DMG EACH', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
+    effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 4x YOUR DAMAGE', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
     apply: (mods, n) => {
       mods.reloadShards = 8 * n;
-      mods.reloadShardDamage = 25 * n;
+      mods.reloadShardMult = 4 * n;
     },
   },
   crystallize: {
@@ -988,9 +1005,17 @@ export const UPGRADES = {
     name: 'SCAR TISSUE',
     max: 1,
     theme: THEME.scar,
-    effects: [['+2 MAX HP EVERY WAVE', GOOD], ['UP TO +80', NOTE], ['TAKE +25% DAMAGE', BAD]],
+    // FIVE A WAVE, NOT TWO. Two was under the noise floor of a health bar that
+    // scales with the wave: a player who took this on wave five and looked at
+    // their bar on wave fifteen had earned twenty points, which is less than
+    // one late hit, while the +25% taken had been charged on every hit in
+    // between. The drawback was the only half of the trade anyone could feel.
+    // THE CAP IS UNCHANGED at +80, so what changes is how fast it arrives - it
+    // is paid off in sixteen waves instead of forty, and a long run still ends
+    // holding the same ceiling with the same permanent 25% on top of it.
+    effects: [['+5 MAX HP EVERY WAVE', GOOD], ['UP TO +80', NOTE], ['TAKE +25% DAMAGE', BAD]],
     apply: (mods, n) => {
-      mods.hpPerWave = 2 * n;
+      mods.hpPerWave = 5 * n;
       mods.hpBankCap = Math.max(mods.hpBankCap, 80 * n);
       mods.damageTakenMult *= 1 + 0.25 * n;
     },
@@ -1211,12 +1236,24 @@ export const UPGRADES = {
     effects: [['51% OF SHOTS: 2x DMG', GOOD], ['49% OF SHOTS: HALF', BAD]],
     apply: (mods, n) => { mods.gamble = n; },
   },
+  // THE WHOLE HIT, NOT HALF OF IT. At 50% this was a pick that shortened a
+  // fight the player was already losing by a fraction they could not see: half
+  // of one melee swing, spread over a health bar that scales with the wave.
+  // At 100% it is legible - whatever just hit you takes exactly that much - and
+  // it becomes the answer to the crowd that surrounds you rather than a small
+  // discount on being surrounded.
+  //
+  // IT IS STILL NOT A WAY TO PLAY. The damage is paid out of the player's own
+  // health bar, so the optimal exploit - standing in a crowd and letting them
+  // kill themselves - is the same play that kills you first: it reflects what
+  // an attacker DEALT, and dealing is the part that ends runs. Nothing here
+  // heals, blocks or caps the incoming hit.
   thorns: {
     name: 'THORNS',
     max: 1,
     theme: THEME.thorns,
-    effects: [['ATTACKERS TAKE BACK', NOTE], ['50% OF THEIR DAMAGE', GOOD]],
-    apply: (mods, n) => { mods.thorns = 0.5 * n; },
+    effects: [['ATTACKERS TAKE BACK', NOTE], ['100% OF THEIR DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.thorns = 1 * n; },
   },
   darkPower: {
     name: 'DARK POWER',

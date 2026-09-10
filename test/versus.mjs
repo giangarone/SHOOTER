@@ -241,6 +241,13 @@ try {
     // the last thing the walk touches and the bug hides; the rounds behind the
     // fatal one are what the loop reaches for after the list has been emptied.
     g.player.maxHealth = 20;
+    // A FRAME FIRST, and it is not a delay for its own sake: the harness leaves
+    // an empty wave behind, that wave clears on the way in, and a wave cleared
+    // without taking a hit now hands the player a full bar and a full reserve
+    // back (see Player.resupply). Health written before that lands is health
+    // the resupply undoes, and the four rounds below would then be measuring
+    // the reward rather than the walk they are here to test.
+    await raw(2);
     g.player.health = 1;
     const at = g.player.pos;
     for (let i = 0; i < 4; i++) g._spawnProjectile(at.x + 3, 1.2, at.z + 3 + i * 0.15);

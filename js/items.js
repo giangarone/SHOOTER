@@ -271,7 +271,12 @@ export const ACTIVE_ITEMS = {
 
   itemPurify: {
     name: 'WHITE CELL',
-    charge: 20,
+    // FIFTEEN, NOT TWENTY. It is the cheapest item in the pool and it should
+    // be: what it answers is a status the player is already suffering, so a
+    // meter that is still filling while they burn is an item that arrives
+    // after the thing it was for. Everything else here creates an opportunity;
+    // this one only ever undoes something.
+    charge: 15,
     theme: THEME.antidote,
     // THE CLEANSE ALONE IS NOT THE ITEM. Every status in the game arrives from
     // something that is still there - a lava patch under your feet, a gas

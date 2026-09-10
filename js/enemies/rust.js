@@ -1114,14 +1114,28 @@ const TYPES = {
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
     // Only full damage while the core is open. Direction is deliberately NOT
-    // consulted any more: the core sits on the face the boss already turns
-    // toward the player, so a shot that reaches it came from the front by
-    // construction, and a directional test would only find ways to refuse hits
-    // the player can see landing. armorDefault matches the shut value, the
-    // opposite of Bulwark's choice: a damage source that arrives without a
-    // direction must not be able to bypass the mechanic by accident.
+    // consulted: the core sits on the face the boss already turns toward the
+    // player, so a shot that reaches it came from the front by construction,
+    // and a directional test would only find ways to refuse hits the player can
+    // see landing.
+    //
+    // WHICH IS EXACTLY WHY armorDefault IS THE SAME FUNCTION. It was the flat
+    // shut value, 0.22, on the reasoning that a hit arriving with no direction
+    // must not bypass the mechanic by accident - and that was the right worry
+    // answered the wrong way, because this armour is a STATE and not a facing.
+    // A constant meant every directionless source in the game - a DELAYED FUSE
+    // blast, a Detonator, a burn, a poison tick - was held at 22% while the
+    // core stood wide open, which is not the mechanic being protected, it is
+    // the mechanic being ignored in the one window it exists for. DELAYED FUSE
+    // felt this hardest: the item's entire payload arrives as a blast, so a
+    // player who cracked the vent and emptied a magazine into it watched a
+    // whole build do a fifth of its damage.
+    //
+    // Nothing bypasses anything now: shut is still 0.22 for every source, open
+    // is 1 for every source. The same shape the Pale Crown's shell and the
+    // glacier's crust already use, and for the same reason.
     armor: (e) => (e.bs.state === 'stagger' || e.bs.weakOpen ? 1 : 0.22),
-    armorDefault: 0.22,
+    armorDefault: (e) => (e.bs.state === 'stagger' || e.bs.weakOpen ? 1 : 0.22),
     // Fired only through the open vent, so the round wears the core's own heat
     // rather than the generic shooter purple - and it is slower and heavier
     // than an ordinary one, because the vent is the window the player closes

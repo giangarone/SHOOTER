@@ -330,6 +330,29 @@ export function aiArcling(e, a) {
   }
 }
 
+// THE COIL. It used to be the one hitscan in the game: it charged for a beat
+// and then dealt its damage on the same frame it fired, so a player who read
+// the wind-up perfectly and stepped aside was hit anyway. The only counter was
+// cover, and in a room with none it was simply an enemy that could not be
+// answered - which is not a mechanic, it is a tax.
+//
+// SO THE BOLT NOW TRAVELS. The wind-up is unchanged and still draws a
+// sightline, but what leaves at the end of it is a rail of charge that CROSSES
+// THE GAP AT A SPEED, and it is aimed at the point the player was standing on
+// when it fired - not at where they are when it arrives. The whole enemy is
+// now two questions asked half a second apart:
+//
+//   BEFORE the charge ends - can I put something solid between us? (Line of
+//   sight is still re-tested at the instant of firing, so cover works exactly
+//   as it always did.)
+//   AFTER it fires - am I still standing where it aimed? (The bolt has real
+//   flight time, so a sidestep clears it.)
+//
+// Which keeps everything TEMPEST is about - a threat that is a SEGMENT rather
+// than an area, answered by geometry - and takes away the part that could not
+// be played around. It is still the theme's cover enemy; it is no longer the
+// theme's unavoidable one.
+
 // How long the bolt charges, how often, and how far it reaches. The charge is
 // long for a ranged attack, and it has to be: it is not a window to dodge in,
 // it is a window to get BEHIND something in, and that takes real seconds.
@@ -343,9 +366,52 @@ export const COIL_RANGE = 22;
 // level, so a knee-high crate does not block a shot the player can see over.
 export const COIL_EYE = 1.3;
 
+// HOW FAST THE RAIL CROSSES THE ROOM, in metres a second. Fast enough to still
+// read as a bolt of charge rather than as a thrown rock, and slow enough that
+// the coil's own orbit distance (13m) buys the player well over half a second
+// to be somewhere else. That is the reaction window the old hitscan never had.
+export const COIL_BOLT_SPEED = 22;
+
+// HOW WIDE THE IMPACT IS. Generous on purpose: standing still has to be
+// punished, or the answer to the enemy becomes "ignore it". One sidestep
+// clears it and no amount of standing there does.
+export const COIL_HIT_R = 1.6;
+
 export function aiCoil(e, a) {
   const p = a.ctx.player;
   if (!p) return;
+
+  // ---- THE RAIL IN FLIGHT -------------------------------------------------
+  //
+  // Driven before anything else and independently of the coil's own state: the
+  // bolt has left, so it is no longer the enemy's business where the enemy is
+  // or what it does next. It flies from where it was fired to where it was
+  // aimed, and the coil is free to walk away from its own shot.
+  if (e.coilBolt) {
+    const b = e.coilBolt;
+    b.d = Math.min(b.len, b.d + COIL_BOLT_SPEED * a.dt);
+    const k = b.len > 0 ? b.d / b.len : 1;
+    if (a.ctx.effects) {
+      // FROM THE LAUNCH POINT TO THE TIP, not from the enemy. The line the
+      // player has to clear is the one that was fired, and drawing it off a
+      // coil that has since strafed two metres would be the game lying about
+      // where the danger is.
+      _tempAt.set(b.ox, COIL_EYE, b.oz);
+      _tempTo.set(b.ox + (b.tx - b.ox) * k, COIL_EYE, b.oz + (b.tz - b.oz) * k);
+      a.ctx.effects.beam(_tempAt, _tempTo, 0xd6feff);
+    }
+    if (b.d < b.len) return;
+    e.coilBolt = null;
+    _tempTo.set(b.tx, COIL_EYE, b.tz);
+    if (a.ctx.effects) a.ctx.effects.burst(_tempTo, 0xd6feff, 14, 5, 2, 0.4);
+    // WHERE IT WAS AIMED, against where the player IS. This is the whole
+    // change: the test is a distance at the moment of ARRIVAL, so the player
+    // has had the flight time to make it fail.
+    const dx = p.pos.x - b.tx;
+    const dz = p.pos.z - b.tz;
+    if (dx * dx + dz * dz <= COIL_HIT_R * COIL_HIT_R) landHit(e, a.ctx);
+    return;
+  }
 
   if (e.coilT > 0) {
     // HOLDS STILL FOR THE WHOLE CHARGE. A coil that kept orbiting while it
@@ -358,9 +424,10 @@ export function aiCoil(e, a) {
     const k = 1 - Math.max(0, e.coilT) / COIL_CHARGE;
     if (e.coilCore) e.coilCore.scale.setScalar((0.5 + k * 1.8) * e.scale);
     if (a.ctx.effects) {
-      // A line to the target for the whole wind-up. The bolt itself is
-      // instant, so this is the ONLY thing that tells the player which enemy
-      // is about to hit them and from where.
+      // A line to the target for the whole wind-up. It TRACKS the player while
+      // the charge runs, which is what makes the lock-in at the end meaningful:
+      // the player can see the aim following them, and can see the moment it
+      // stops following.
       _tempTo.set(p.pos.x, COIL_EYE, p.pos.z);
       _tempAt.set(e.pos.x, COIL_EYE, e.pos.z);
       a.ctx.effects.beam(_tempAt, _tempTo, 0x2fd8e8);
@@ -368,9 +435,9 @@ export function aiCoil(e, a) {
     if (e.coilT > 0) return;
 
     // THE SHOT. Line of sight is re-tested HERE, at the instant it fires, and
-    // not when it started charging - that gap is the whole mechanic.
+    // not when it started charging - that gap is the cover half of the
+    // mechanic, and it is untouched.
     _tempAt.set(e.pos.x, COIL_EYE, e.pos.z);
-    _tempTo.set(p.pos.x, COIL_EYE, p.pos.z);
     const blocked = segBlocked(
       e.pos.x, COIL_EYE, e.pos.z, p.pos.x, COIL_EYE, p.pos.z, a.ctx.obstacles
     );
@@ -382,11 +449,15 @@ export function aiCoil(e, a) {
       if (a.ctx.effects) a.ctx.effects.burst(_tempAt, 0x2fd8e8, 12, 4, 2, 0.4);
       return;
     }
-    if (a.ctx.effects) {
-      a.ctx.effects.beam(_tempAt, _tempTo, 0xd6feff);
-      a.ctx.effects.burst(_tempTo, 0xd6feff, 14, 5, 2, 0.4);
-    }
-    landHit(e, a.ctx);
+    // THE AIM IS LOCKED HERE AND NEVER READ AGAIN. Everything after this point
+    // is the bolt's, and the bolt does not steer.
+    const len = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
+    e.coilBolt = {
+      ox: e.pos.x, oz: e.pos.z,
+      tx: p.pos.x, tz: p.pos.z,
+      len, d: 0,
+    };
+    if (a.ctx.effects) a.ctx.effects.burst(_tempAt, 0x2fd8e8, 8, 4, 2, 0.3);
     return;
   }
 
@@ -857,28 +928,30 @@ const TYPES = {
     build: buildArcling, ai: aiArcling,
   },
 
-  // The one ranged enemy in the game that is not beaten by moving.
+  // The enemy that asks TWO questions half a second apart - see the long note
+  // above aiCoil.
   //
-  // It charges a bolt between its horns for a beat and then fires it INSTANTLY
-  // - there is no projectile in the air to dodge, so a player who watches the
-  // charge and steps sideways is hit anyway. What beats it is putting
-  // something solid in the way before the charge finishes: the line of sight
-  // is re-tested at the instant of the shot, and a blocked coil discharges
-  // into the obstacle and loses the whole cycle.
+  // It charges a bolt between its horns for a beat, drawing a sightline that
+  // FOLLOWS the player the whole time, and then fires a rail of charge at
+  // wherever they were standing when the charge ran out. Cover beats the first
+  // half: line of sight is re-tested at the instant it fires and a blocked coil
+  // discharges into the obstacle for nothing. MOVING beats the second: the bolt
+  // has real flight time and does not steer, so the point it was aimed at is a
+  // point the player has had the crossing time to leave.
   //
-  // So it is the enemy that makes COVER the answer, in a game whose every
-  // other threat is answered by leaving where you are - and it is deliberately
-  // paired in the same theme with the arcling and the Conductor, both of which
-  // punish standing still. TEMPEST asks the player to keep choosing between
-  // them.
+  // So it is still the enemy that makes COVER the answer, paired deliberately
+  // in one theme with the arcling and the Conductor, both of which punish
+  // standing still - it simply no longer punishes a player who read it right.
   coil: {
     head: { r: 0.3, y: 1.16 },
     hp: 24, speed: 2.2, damage: 14, value: 270, color: 0x2fd8e8, eye: 0xd6feff,
     scale: 1.0, radius: 0.48, mass: 1,
     orbit: { dist: 13, band: 2.5, out: 0.85, in: -0.7, strafe: 0.4, flip: 2, flipVar: 2 },
-    // NO `proj` BLOCK, and that absence is the mechanic: a coil never puts
-    // anything in the air. The bolt is a beam drawn for a tenth of a second
-    // and damage applied on the same frame.
+    // NO `proj` BLOCK, and that absence is deliberate: the rail is not a
+    // Projectile. It is a segment with a speed, owned and driven by aiCoil,
+    // because what it collides with is one point at the end of its run rather
+    // than anything it passes through - a coil's bolt cannot be walked into
+    // halfway, only stood on when it lands.
     build: buildCoil, ai: aiCoil,
   },
 

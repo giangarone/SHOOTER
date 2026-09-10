@@ -4971,14 +4971,35 @@ class Game {
     this.effects.burst(point, 0x536dfe, 10, 3, 1.5, 0.35);
   }
 
-  // Radial damage with linear falloff, shared by Detonator and Blast Corpse.
+  // Radial damage with linear falloff, shared by every explosion in the game -
+  // Detonator, Blast Corpse, Crystallize, Delayed Fuse, Arc Rounds' splash.
   // `skip` is the enemy that is already taking the hit directly, and
   // `hitPlayer` is what separates the two: your own impact blasts cannot hurt
   // you, but a corpse going off in your face is the whole cost of the pick.
+  //
+  // THE DISTANCE IS TO THE BODY, NOT TO THE POINT THE BODY STANDS ON, and that
+  // distinction is the whole of a bug DELAYED FUSE lived with: a fuse sticks
+  // where the round actually landed, so a shot into a Colossus's chest parked
+  // its blast two and a half metres above `pos` - and against a 2.5m fuse
+  // radius measured from `pos`, a point on the floor under a six-metre boss,
+  // the explosion found nothing and the item read as dealing no damage to
+  // Colossus at all. It was never about the fuse: EVERY blast in the game was
+  // measuring to the wrong place, and it only showed on the enemies big enough
+  // for the wrong place to be metres away from the right one.
+  //
+  // So the enemy is treated as the SPHERE it is actually shot at (Enemy.hitR /
+  // hitY - the same hit sphere the player's own rounds test against), and the
+  // falloff runs from its SURFACE: a blast touching a body deals full damage
+  // and one `radius` clear of it deals none. For the ordinary roster - hit
+  // spheres around half a metre, centred near chest height - this moves almost
+  // nothing. For a boss it is the difference between working and not.
   _blast(point, dmg, radius, skip, hitPlayer) {
     for (const e of this.enemies) {
       if (e === skip || e.dead) continue;
-      const d = e.pos.distanceTo(point);
+      const dx = e.pos.x - point.x;
+      const dy = e.pos.y + e.hitY - point.y;
+      const dz = e.pos.z - point.z;
+      const d = Math.max(0, Math.sqrt(dx * dx + dy * dy + dz * dz) - e.hitR);
       if (d > radius) continue;
       e.takeDamage(dmg * (1 - d / radius));
     }
@@ -5912,10 +5933,13 @@ class Game {
       this.ui.banner('DODGE');
       return;
     }
-    // Holy Mantle. The ward eats the hit whole, however big it was, and is
-    // spent doing it - it is a free mistake per wave, not damage reduction.
+    // Holy Mantle. A ward eats the hit whole, however big it was, and is spent
+    // doing it - it is three free mistakes per wave, not damage reduction.
+    //
+    // SPENT, NOT CLEARED. `wardReady = false` would take all three, which is
+    // exactly the bug the counter was introduced to make impossible.
     if (this.player.wardReady) {
-      this.player.wardReady = false;
+      this.player.spendWard();
       this.effects.shockwave(this.player.pos, 0x4ef3ff, 3.5, 0.4);
       this.effects.burst(pos, 0x4ef3ff, 16, 5, 2, 0.5);
       this.sfx.impact();
@@ -6421,6 +6445,20 @@ class Game {
           // otherwise be the one drop left lying on the floor.
           this.money.vacuum(FLAWLESS_ORB_SWEEP_DELAY);
           msg += '  FLAWLESS x' + this.flawlessMult();
+          // THE RESUPPLY. Health bar and reserve both to the top - see
+          // Player.resupply, which carries the argument for it and names the
+          // play it rewards.
+          //
+          // AFTER the shower and BEFORE the banked-HP line, so the banner reads
+          // in the order the rewards land, and reported only when it actually
+          // gave something: a player who cleared a wave untouched and full does
+          // not need to be told they are still full.
+          const kit = this.player.resupply();
+          if (kit.hp > 0 || kit.ammo > 0) {
+            this.effects.shockwave(this.player.pos, 0x8affc1, 7, 0.55);
+            this.sfx.pickupHealth();
+            msg += '  RESUPPLIED';
+          }
         }
         // No-Hit Bonus. Read from the same flag the clear bonus just set, so
         // the two can never disagree about what flawless means, and banked on
@@ -7364,7 +7402,12 @@ class Game {
       this.player.health / this.player.maxHealth,
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
       this._ammoActive() < MAX_ACTIVE_AMMO,
-      this.player.mods.dropLuck
+      this.player.mods.dropLuck,
+      // A BATTERY IS ONLY ROLLED WHEN THERE IS A METER TO POUR IT INTO. No
+      // item, or a meter already at its ceiling, and the category is skipped
+      // outright rather than left to land as a plate the player walks over for
+      // nothing - the same rule health holds at a full bar.
+      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax
     );
     if (kind) this._placeDrop(kind, pos);
   }
@@ -8437,10 +8480,17 @@ class Game {
   // it reads as the gun venting rather than as a shot the player aimed. Each
   // shard is a projectile like any other and counts against the same cap: a
   // reload in the middle of a heavy wave throws what there is room for.
+  //
+  // WHAT A SHARD IS WORTH IS WHAT A SHOT IS WORTH, four times over - read off
+  // `dotHit`, which is the player's own round through getEffectiveDamage, so
+  // every damage passive item in the build feeds the ring exactly as it feeds
+  // a burn. Snapshotted here, at the throw, rather than carried on the shard:
+  // a totem claimed while eight shards are in the air must not rescale them.
   _reloadBurst() {
     const m = this.player.mods;
     const n = m.reloadShards;
     if (n <= 0) return;
+    const dmg = this.player.dotHit * m.reloadShardMult;
     const spin = Math.random() * Math.PI * 2;
     for (let i = 0; i < n; i++) {
       if (this.projectiles.length >= MAX_PROJECTILES) break;
@@ -8448,7 +8498,7 @@ class Game {
       this.projectiles.push(new Shard(
         this.scene, this.effects.glowTex,
         this.player.pos.x, 1.0, this.player.pos.z,
-        Math.cos(a), Math.sin(a), 16, m.reloadShardDamage, 2.2
+        Math.cos(a), Math.sin(a), 16, dmg, 2.2
       ));
     }
     this.effects.shockwave(this.player.pos, 0xff7043, 2.5, 0.35);

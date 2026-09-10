@@ -111,7 +111,7 @@ const DEFAULT_MODS = {
   beltFeed: 0,          // Belt Feed: chance a shot comes from the reserve
   dodgeChance: 0,       // Evasion: chance an incoming hit is avoided outright
   reloadShards: 0,      // Reload Burst: shards thrown when a reload finishes
-  reloadShardDamage: 0,
+  reloadShardMult: 0,   // ...each worth this many of the player's own shots
   shatterDamage: 0,     // Crystallize: blast when a frozen enemy dies
   shatterRadius: 0,
   ashPower: 0,          // Ashen: lingering cloud where a burning enemy died;
@@ -1157,9 +1157,14 @@ export class Player {
     // the other's streak - silent, and worth real money.
     this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
-    // Holy Mantle's charge, re-armed at every wave start, and Dead Cat's
+    // Holy Mantle's charges, re-armed at every wave start, and Dead Cat's
     // revive counter, which is spent once per run and not refilled.
-    this.wardReady = false;
+    //
+    // A COUNT, NOT A FLAG - see armWard. `wardReady` is still a readable and
+    // writable boolean on top of it (the accessors below), because every place
+    // that ever asked was asking "can a hit be eaten right now" and that
+    // question has not changed shape.
+    this.wardCharges = 0;
     this.livesUsed = 0;
     // No-Hit Bonus: waves cleared without taking a point of damage since the
     // passive item was picked up. It lives on the PLAYER rather than in mods
@@ -1810,10 +1815,90 @@ export class Player {
     this.bumpCarnage();
   }
 
-  // Holy Mantle. Called at the start of every wave: the ward is a per-wave
-  // charge, so a wave survived without spending it does not bank a second one.
+  /**
+   * THE FLAWLESS RESUPPLY. A wave cleared without taking a point of damage
+   * refills the health bar and the reserve, both to the top.
+   *
+   * IT IS PAID IN THINGS THE PLAYER WOULD OTHERWISE HAVE GONE SHOPPING FOR,
+   * which is the whole reason it is a reward and not a difficulty setting: it
+   * hands back consumables, never a permanent stat. UNTOUCHED and SCAR TISSUE
+   * are what pay in max HP, and this deliberately does not touch the ceiling -
+   * it fills the bar the ceiling describes.
+   *
+   * THE EXPLOIT IT INVITES, named before the numbers were picked: a resupply
+   * this complete makes the safest possible wave the most profitable one, so
+   * the optimal play is to kite at maximum range with sentries and hazards
+   * doing the killing and never contest anything. That play is already the
+   * optimal one for the flawless streak, the No-Hit stack and UNTOUCHED - this
+   * adds no new incentive, it pays the existing one harder - and it is bounded
+   * by the thing that has always bounded it: a wave has to actually END, the
+   * roster walks at the player, and the reward is zero the instant one hit
+   * lands. What it changes is the shape of a run's failure: a player who was
+   * playing perfectly no longer bleeds out over ten clean waves because the
+   * crates never dropped.
+   *
+   * Returns what it actually gave, so the banner can stay quiet when the
+   * player was already topped up and the line would be noise.
+   */
+  resupply() {
+    // A RESUPPLY IS NOT A REVIVE, and the order of a frame is what makes that
+    // worth a line: the wave clear runs before the death is booked at the end
+    // of Game.update, so a player sitting at zero when the last enemy falls
+    // would be healed to full and never die. DEAD CAT is the pick that brings
+    // a run back from zero; a clean wave must not do it for free.
+    if (this.health <= 0) return { hp: 0, ammo: 0 };
+    const hp = Math.max(0, this.maxHealth - this.health);
+    const ammo = Math.max(0, this.maxReserve - this.reserveAmmo);
+    // Through heal() rather than a write, so OVERDRAW and everything else with
+    // an opinion about the ceiling sees it - the cap is the bar's own top,
+    // which is what "max health" means here. And WHAT LANDED is what is
+    // reported, not what was asked for: a run carrying HEALTHY CORE refuses
+    // every heal in the game including this one, and a banner announcing a
+    // resupply that the build had already forbidden would be the game lying.
+    const healed = hp > 0 ? this.heal(hp) : 0;
+    if (ammo > 0) {
+      this.reserveAmmo = this.maxReserve;
+      // The same flash a crate raises. A reserve that silently doubles between
+      // waves is a number the player never looks at.
+      this.ammoFx = true;
+    }
+    // The magazine is NOT topped up, on purpose: what is in the gun is what the
+    // player left in it, and a reload is a second and a half they can spend in
+    // the shop for free. Filling it as well would quietly delete the tactical
+    // reload from the wave break.
+    return { hp: Math.round(healed), ammo: Math.round(ammo) };
+  }
+
+  // Holy Mantle. Called at the start of every wave: the wards are a per-wave
+  // grant, so a wave survived without spending them does not bank a second set.
+  // SET rather than added, which is the whole of that rule in one line.
   armWard() {
-    this.wardReady = this.mods.wardPerWave > 0;
+    this.wardCharges = this.mods.wardPerWave;
+  }
+
+  /**
+   * WHETHER A HIT CAN BE EATEN RIGHT NOW.
+   *
+   * The count above replaced a boolean, and this is what stops that being a
+   * change every caller had to be told about: five test harnesses and the
+   * versus snapshot write `wardReady = false` to disarm the mantle, and all of
+   * them mean "none left". Writing `true` arms one - not three - because
+   * nothing that writes it is Holy Mantle re-arming a wave; it is always
+   * something setting up a single hit.
+   */
+  get wardReady() {
+    return this.wardCharges > 0;
+  }
+
+  set wardReady(v) {
+    this.wardCharges = v ? Math.max(1, this.wardCharges) : 0;
+  }
+
+  // Spends ONE ward. Subtracts rather than clearing, which is the whole of the
+  // three-per-wave grant at the spending end: a player who eats one hit still
+  // has the other two, and the wave does not hand out more.
+  spendWard() {
+    if (this.wardCharges > 0) this.wardCharges--;
   }
 
   // OPENING SALVO. Opened at every wave start, beside the ward, so the two
@@ -1966,7 +2051,7 @@ export class Player {
     this.refreshGunMarks();
     this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
-    this.wardReady = false;
+    this.wardCharges = 0;
     this.livesUsed = 0;
     this.breachReady = false;
     this.lastShotCost = 0;

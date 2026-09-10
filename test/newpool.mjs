@@ -627,6 +627,77 @@ try {
   ok('[2P] and their item', v.p1ItemBack);
   ok('[2P] and none of player two’s', v.p1NoTwinCell && v.p1NoWarChest);
 
+  // ---- DELAYED FUSE AGAINST A BODY THE SIZE OF A BOSS ---------------------
+  //
+  // The item deals ALL of its damage as a blast, and blasts used to be measured
+  // from the enemy's `pos` - the point its feet are on. On the ordinary roster
+  // that is inside the body and nothing was ever wrong. On a COLOSSUS, whose
+  // `pos` is on the floor under six metres of boss, a fuse stuck in the chest
+  // went off two and a half metres from `pos` and a 2.5m radius measured from
+  // `pos` found nothing at all: the whole build did literally zero damage to
+  // the one enemy it had the most rounds to put into.
+  //
+  // Two halves, and both are asserted because either one alone still reads as
+  // "the item does nothing":
+  //   the GEOMETRY - the blast has to reach a body whose middle is metres above
+  //   the point it stands on
+  //   the ARMOUR   - a Colossus's plating is a STATE (core open or shut), and a
+  //   blast arrives with no direction, so it used to be held at the shut value
+  //   even while the core stood wide open
+  const fuse = await page.evaluate(async () => {
+    const g = window.__game;
+    const P = g.player;
+    const V = P.pos.constructor;
+    const out = {};
+    for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
+    P.upgrades.delayedFuse = 1;
+    P.rebuildMods();
+
+    // A round parked in the chest, exactly where a player aiming at the core
+    // would put it, and then run past the fuse's own delay.
+    const blow = async (weakOpen) => {
+      g.enemies.length = 0;
+      g._fuses.length = 0;
+      const e = new g.__EnemyForTest('colossus', new V(0, 0, 0), 1, 1, 1);
+      e.bs.weakOpen = weakOpen;
+      g.enemies.push(e);
+      const hp0 = e.hp;
+      // Chest height on the hit sphere - the point a pellet that hit the core
+      // would report, and the point the old code measured 2.56m away from.
+      g._stick(e, 1000, new V(e.pos.x, e.pos.y + e.hitY, e.pos.z));
+      await window.__simWait(P.mods.fuseDelay + 0.5);
+      const dealt = +(hp0 - e.hp).toFixed(1);
+      g.enemies.length = 0;
+      return dealt;
+    };
+    out.chestHeight = await blow(false);
+    out.coreOpen = await blow(true);
+    // The control: the same round parked at the enemy's FEET, which is where
+    // the old measurement thought every round was. It has to hurt too - a fix
+    // that only worked at chest height would be a second special case.
+    out.atFeet = await (async () => {
+      g.enemies.length = 0;
+      g._fuses.length = 0;
+      const e = new g.__EnemyForTest('colossus', new V(0, 0, 0), 1, 1, 1);
+      g.enemies.push(e);
+      const hp0 = e.hp;
+      g._stick(e, 1000, new V(e.pos.x, e.pos.y + 0.3, e.pos.z));
+      await window.__simWait(P.mods.fuseDelay + 0.5);
+      const dealt = +(hp0 - e.hp).toFixed(1);
+      g.enemies.length = 0;
+      return dealt;
+    })();
+    return out;
+  });
+
+  ok('[fuse] a round stuck in a Colossus\'s chest actually explodes on it',
+    fuse.chestHeight > 0, `dealt=${fuse.chestHeight}`);
+  ok('[fuse] and one stuck at its feet does too',
+    fuse.atFeet > 0, `dealt=${fuse.atFeet}`);
+  ok('[fuse] the open core takes the blast at full value, not the plated value',
+    fuse.coreOpen > fuse.chestHeight * 3,
+    `shut=${fuse.chestHeight} open=${fuse.coreOpen}`);
+
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } finally {
   if (browser) await browser.close();
