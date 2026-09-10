@@ -256,7 +256,7 @@ const PLAYER_SKIP = new Set([
 
   // ---- THE BODY, WHICH IS NOT THE RUN ------------------------------------
   //
-  // A snapshot carries what a player HAS - their build, their vitals, their
+   // A snapshot carries what a player HAS - their build, their health, their
   // ammo, their money, their timers. It does not carry where they are standing
   // or which way they are looking, and that is the whole reason a turn change
   // does not cut.

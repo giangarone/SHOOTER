@@ -144,7 +144,7 @@ html, body {
      8    layered captions and panels - #handoff, #stats-panel
      10+  menus, then the tube itself
    The four status washes used to sit at 6, one above the HUD, so a player on
-   fire had amber tongues climbing over the vitals bar - the exact readout
+    fire had amber tongues climbing over the health bar - the exact readout
    someone on fire is looking at - and the fire layer carried a mask cut short
    of the bar to work around it. They are under the HUD now, which is where a
    thing that happens to the ROOM belongs. */
@@ -176,7 +176,7 @@ html, body {
    not of a number: it is the only multiplier left on the HUD and it still must
    not compete with the figure it modifies. Green rather than gold, because
    what it is saying is "you have not been hit" and only incidentally "you are
-   being paid more" - it is the same reading the vitals bar gives. */
+   being paid more" - it is the same reading the health bar gives. */
 #flawless {
   font-size: 8px; letter-spacing: 0.16em; color: #7dff9b;
   text-shadow: 1px 1px 0 var(--ink), 0 0 10px rgba(125, 255, 155, 0.5);
@@ -228,7 +228,7 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* WHOSE TURN IT IS, over the VITALS in versus. Sized as a FIGURE, at the
+/* WHOSE TURN IT IS, over the HEALTH in versus. Sized as a FIGURE, at the
    credits' own 24px: at 10px in the corner it was the smallest thing on the
    frame, and the one fact a hot-seat match cannot afford to make anyone squint
    at is which of the two people in the room is holding the pad. It reads as
@@ -813,7 +813,7 @@ body.hudblind #hitmarker { opacity: 0 !important; }
    is the status that wants the player to break contact right now.
 
    IT STOPS SHORT OF THE HUD. An earlier cut reached a fifth of the way up the
-   screen and put flames over the VITALS bar, which is the exact readout someone
+   screen and put flames over the HEALTH bar, which is the exact readout someone
    on fire needs to see. Held under it now, and at 80% so the bar reads through
    the tallest tongue.
 

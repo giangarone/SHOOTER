@@ -66,7 +66,7 @@ light show: firing cancels sprinting, so a penalty that stopped when the sprint
 did could never be the cone a bullet was actually fired through. Shooting out
 of a run is inaccurate for a moment, and the crosshair says so on the way down.
 
-The bar lives under the health bar in the VITALS box: the same segmented cell
+The bar lives under the health bar in the HEALTH box: the same segmented cell
 mask at half the height and twice the cell count. **Its colour is the level and
 nothing else** — cyan, and red below the amount that would let a run start,
 which is the same line the lockout uses. It does not change with what the

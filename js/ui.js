@@ -185,7 +185,7 @@ export class UI {
    * never showed it.
    *
    * So the turn gets a line of its own and the balance keeps its cells in
-   * every mode. That line sits OVER THE VITALS, at the size of a figure: the
+    * every mode. That line sits OVER THE HEALTH, at the size of a figure: the
    * health bar is the readout that describes the body on screen, and whose
    * body it is belongs with it.
    *
