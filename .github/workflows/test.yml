@@ -10,9 +10,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # The whole suite is ~30 headless-Chrome runs, one at a time. The per-suite
-    # cap in test/all.mjs is what should normally fire; this is the backstop.
-    timeout-minutes: 60
+    # SHARDED, because a runner has no GPU. The game rasterizes every frame in
+    # software on a shared vCPU, which makes these suites roughly five times
+    # slower here than on a developer machine - not any one of them hanging,
+    # just thirty of them being slow. Four runners in parallel turns a
+    # two-hour serial job into a thirty-minute one.
+    #
+    # test/all.mjs balances the split by weight, so the four shards finish at
+    # about the same time rather than one carrying every long suite.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    name: test (shard ${{ matrix.shard }}/4)
+    # Generous, because it should never be what stops a run - the per-suite cap
+    # below is the real limit, and it names the suite that hung. The whole
+    # sharded run is ~30 minutes.
+    timeout-minutes: 120
+
     steps:
       - uses: actions/checkout@v6
 
@@ -34,4 +50,8 @@ jobs:
       - name: Run the full suite
         env:
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          SHARD: ${{ matrix.shard }}/4
+          # Suites that take 90s on a developer machine can take past 300s
+          # here. This is a hang detector, not a performance budget.
+          TIMEOUT: 900
         run: npm run test:all

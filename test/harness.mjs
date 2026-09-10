@@ -84,8 +84,14 @@ export function startServer(port, { stdio = 'ignore' } = {}) {
 // host from being reported as a broken test.
 export const PROTOCOL_TIMEOUT = Number(process.env.PROTOCOL_TIMEOUT || 600) * 1000;
 
-export function launchBrowser(extra = {}) {
-  return puppeteer.launch({
+// A CI runner has no GPU: the game rasterizes every frame on a shared vCPU
+// through swiftshader, so the FIRST page load - shaders, geometry, the whole
+// scene graph - can sit well past puppeteer's 30s navigation default. That is
+// a separate clock from protocolTimeout and has to be set on the page.
+export const NAV_TIMEOUT = Number(process.env.NAV_TIMEOUT || 120) * 1000;
+
+export async function launchBrowser(extra = {}) {
+  const browser = await puppeteer.launch({
     headless: true,
     executablePath: CHROME,
     protocolTimeout: PROTOCOL_TIMEOUT,
@@ -99,4 +105,14 @@ export function launchBrowser(extra = {}) {
     ],
     ...extra,
   });
+  // Every suite makes its page the same way, so the timeouts are applied here
+  // rather than asking 28 files to remember.
+  const newPage = browser.newPage.bind(browser);
+  browser.newPage = async (...a) => {
+    const page = await newPage(...a);
+    page.setDefaultNavigationTimeout(NAV_TIMEOUT);
+    page.setDefaultTimeout(NAV_TIMEOUT);
+    return page;
+  };
+  return browser;
 }
