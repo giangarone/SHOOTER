@@ -27,7 +27,7 @@ jobs:
     # Generous, because it should never be what stops a run - the per-suite cap
     # below is the real limit, and it names the suite that hung. The whole
     # sharded run is ~30 minutes.
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v6
@@ -51,7 +51,8 @@ jobs:
         env:
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
           SHARD: ${{ matrix.shard }}/4
-          # Suites that take 90s on a developer machine can take past 300s
-          # here. This is a hang detector, not a performance budget.
-          TIMEOUT: 900
+          # A HANG DETECTOR, not a performance budget. Kept above the
+          # harness's protocolTimeout (1200s) so a stuck page.evaluate reports
+          # itself by name instead of the suite being killed anonymously.
+          TIMEOUT: 1500
         run: npm run test:all

@@ -82,7 +82,15 @@ export function startServer(port, { stdio = 'ignore' } = {}) {
 // which surfaces as a ProtocolError rather than as a failed assertion. The
 // per-suite cap in test/all.mjs is the real backstop; this just stops a slow
 // host from being reported as a broken test.
-export const PROTOCOL_TIMEOUT = Number(process.env.PROTOCOL_TIMEOUT || 600) * 1000;
+// Twenty minutes. brine and versus both died on the old ten, and tempest
+// PASSED at 582s of it - seventeen seconds of headroom, which is not headroom.
+// The number is not a performance budget and should not be read as one: these
+// suites take 84s and 107s on a developer machine, and the runner is five to
+// seven times slower than that with no GPU. What actually stops a hung suite
+// is the per-suite cap in test/all.mjs, which is deliberately set above this
+// so a genuinely stuck evaluate reports a ProtocolError naming itself rather
+// than being SIGKILLed anonymously.
+export const PROTOCOL_TIMEOUT = Number(process.env.PROTOCOL_TIMEOUT || 1200) * 1000;
 
 // A CI runner has no GPU: the game rasterizes every frame on a shared vCPU
 // through swiftshader, so the FIRST page load - shaders, geometry, the whole
