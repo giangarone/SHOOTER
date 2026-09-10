@@ -414,8 +414,8 @@ export function captureRun(game) {
  * Writes a snapshot back over the live singletons.
  *
  * ORDER MATTERS at the end: the build has to be replayed into `mods` before
- * anything reads a derived stat, and the viewmodel has to be re-marked because
- * the receiver plates are baked into the ONE gun both players are holding.
+ * anything reads a derived stat, and the viewmodel has to be re-equipped
+ * because the magazine part is baked into the ONE gun both players are holding.
  */
 export function restoreRun(game, snap) {
   const p = game.player;
@@ -450,7 +450,6 @@ export function restoreRun(game, snap) {
 
   p.rebuildMods();
   p._equipModel();
-  p.refreshGunMarks();
   // NOT applyCamera. The body was never captured, so there is nothing to write
   // back to it - and calling it here is exactly the hard cut the skip list
   // above exists to avoid.
