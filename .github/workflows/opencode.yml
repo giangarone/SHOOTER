@@ -29,5 +29,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "131072"
         with:
           model: tokenrouter/z-ai/glm-5.3-free
+          variant: max
