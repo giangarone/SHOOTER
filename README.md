@@ -506,7 +506,10 @@ context. The start screen says so, and one click anywhere fixes it.
   what it did is done by the block instead: a block opens on its theme's line
   troops and widens to all six roles by its fourth wave, then the boss. The
   first four waves of a RUN keep the old hand-authored tutorial shape on top of
-  that, whatever theme was dealt into them.
+  that, whatever theme was dealt into them. A block's first wave announces its
+  name under the wave number, in the theme's own colour - solo at the passive
+  item pick that opens the wave, versus at the wave itself (a caption over the
+  pass screen would be announcing a fight the next player has not started).
 - **Pickups drop off the enemies you kill**, not from timers around the map,
   and every kill rolls for them independently. There is no per-wave budget:
   a wave used to carry a fixed number of pickups spread evenly across its

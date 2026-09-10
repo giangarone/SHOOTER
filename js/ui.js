@@ -593,14 +593,27 @@ export class UI {
   // the reflow the browser coalesces both changes and nothing happens.
   //
   // `sub` is the optional second line - the name of the five-wave theme block
-  // that is opening. Passing nothing clears it, so a caller never has to
-  // remember to wipe last wave's subtitle.
-  banner(text, sub = '') {
+  // that is opening - and `subColor` its hue as a themes.js number, so the
+  // word lands in the same colour the rig is tinting the room toward. Passing
+  // nothing clears both, so a caller never has to remember to wipe last
+  // wave's subtitle.
+  banner(text, sub = '', subColor = 0) {
     this.bannerEl.textContent = text;
     this.bannerEl.classList.remove('show');
     void this.bannerEl.offsetWidth;
     this.bannerEl.classList.add('show');
     this.bannerSubEl.textContent = sub;
+    // The subtitle's hue is WRITTEN, NOT CLASSED - the same reasoning as the
+    // handoff's --pc: the palette lives in themes.js and a class per theme
+    // would be ten stylesheet rules that could drift from it. Removed rather
+    // than merely skipped whenever there is no subtitle, so a plain banner
+    // can never inherit the last block's tint.
+    if (sub && subColor) {
+      this.bannerSubEl.style.setProperty(
+        '--sub', '#' + subColor.toString(16).padStart(6, '0'));
+    } else {
+      this.bannerSubEl.style.removeProperty('--sub');
+    }
     this.bannerSubEl.classList.remove('show');
     void this.bannerSubEl.offsetWidth;
     if (sub) this.bannerSubEl.classList.add('show');

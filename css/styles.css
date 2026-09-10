@@ -901,15 +901,17 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 #banner.show { animation: banner 2.1s steps(1, end) forwards; }
 
 /* The block's theme, under the wave number. Smaller, wider tracked and in the
-   room's own cyan rather than white: it is a SUBTITLE, and at the banner's own
-   size two stacked words that big read as two banners fighting each other.
-   It rides the same keyframes so the pair arrive and leave as one thing. */
+   ROOM'S OWN HUE - the same colour rig.js is tinting the fixtures toward, so
+   the word says which block of five you are in before you have read it. It
+   rides the same keyframes so the pair arrive and leave as one thing.
+   --sub is written inline by UI.banner from themes.js; the cyan is the
+   fallback for a subtitle raised with no hue, of which there are none today. */
 #bannersub {
   position: fixed; top: calc(20% + 40px); left: 0; right: 0; z-index: 7;
   text-align: center; pointer-events: none;
   font-size: 16px; letter-spacing: 0.34em;
-  color: var(--cyan);
-  text-shadow: 3px 3px 0 var(--ink), 0 0 22px var(--cyan);
+  color: var(--sub, var(--cyan));
+  text-shadow: 3px 3px 0 var(--ink), 0 0 22px var(--sub, var(--cyan));
   opacity: 0;
 }
 #bannersub.show { animation: banner 2.1s steps(1, end) forwards; }

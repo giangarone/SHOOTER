@@ -2974,7 +2974,10 @@ class Game {
   _cueWaveOpen() {
     if (this._waveCued || this.match) return;
     this._waveCued = true;
-    this.ui.banner('WAVE ' + (this.wave + 1), this._themeCaption(this.wave + 1));
+    this.ui.banner(
+      'WAVE ' + (this.wave + 1),
+      this._themeCaption(this.wave + 1),
+      this._themeCaptionColor(this.wave + 1));
   }
 
   // The name of the five-wave block that opens on wave n, or '' if n is not
@@ -2984,6 +2987,14 @@ class Game {
   _themeCaption(n) {
     if (((n - 1) % 5) !== 0) return '';
     return waveConfig(n, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName;
+  }
+
+  // The same look-up, answering "and what colour?". Gated like the name so
+  // the pair agree on which waves carry a theme at all - mid-block waves
+  // return 0, which banner() reads as "no tint to write".
+  _themeCaptionColor(n) {
+    if (((n - 1) % 5) !== 0) return 0;
+    return waveConfig(n, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeColor;
   }
 
   _musicMuffled() {
@@ -3626,12 +3637,17 @@ class Game {
     // fight starts rather than only before it.
     // Already said at the pick in solo (see _cueWaveOpen); a second identical
     // caption on the same wave would just replay the animation for nothing.
+    // In versus the theme joins it: the wave is announcing itself here rather
+    // than at the pick (a caption over the pass screen would be announcing a
+    // fight the next player has not started), so this is the one place a
+    // match ever hears which block of five it is in.
     if (!this._waveCued) {
       this.ui.banner(
         this.match
           ? this.match.label() + '  \u00b7  WAVE ' + this.wave
           : 'WAVE ' + this.wave,
-        this.match ? '' : this._themeCaption(this.wave));
+        this._themeCaption(this.wave),
+        this._themeCaptionColor(this.wave));
     }
     this._waveCued = false;
     // Blackout, then the whole rig hits at once. The dark beat before it is
@@ -7321,8 +7337,8 @@ class Game {
     this.waveState = 'idle';
     this._waveCued = false;
     this.interT = 0;
-    this.ui.banner('DEBUG  WAVE ' + wave,
-      waveConfig(wave, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName);
+    const dbg = waveConfig(wave, this._themeSeed, HAVE_TYPE, this._forcedTheme);
+    this.ui.banner('DEBUG  WAVE ' + wave, dbg.themeName, dbg.themeColor);
   }
 
   /**

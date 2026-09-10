@@ -84,6 +84,11 @@ try {
     const caption = () => !document.getElementById('handoff').classList.contains('hidden');
 
     // ---- 1. the match opens ------------------------------------------------
+    // The block's theme is PINNED, not dealt: the check below reads the
+    // subtitle's colour back, and a TEMPEST block would make it vacuous -
+    // TEMPEST's own hue is the cyan the subtitle falls back to, so a banner
+    // that never wrote its tint would look correct to it and to the eye.
+    g.setTheme('verdant');
     g.beginGame('versus');
     // Both players are made unkillable by anything but this test.
     g.player.maxHealth = 9999;
@@ -95,6 +100,34 @@ try {
 
     // ---- 2. a CLEAR hands over ---------------------------------------------
     t('wave 1 starts', (await until(() => g.waveState === 'active')) >= 0, g.waveState);
+    // THE THEME IS SAID IN A MATCH TOO. A match's waves all open through
+    // startWave() rather than at the pick (a caption over the pass screen
+    // would announce a fight the next player has not started - see
+    // _cueWaveOpen), and the subtitle used to be silenced there with the
+    // rest: fifty waves of two runs and never once which block of five
+    // either was in. Wave 1 opens the first block, so there is a theme to
+    // read the moment the match's first wave starts - and the hue is the one
+    // themes.js gives that block, read back through the same custom property
+    // the stylesheet does, so a banner quietly falling back to plain cyan
+    // (which is one theme's actual colour and so cannot be spotted by eye)
+    // fails here rather than nobody.
+    {
+      const sub = document.getElementById('bannersub');
+      // getComputedStyle hands back rgb() notation, so the hue is compared as
+      // CHANNELS rather than as a hex string.
+      const got = getComputedStyle(sub).color.match(/\d+/g).map(Number);
+      const want = g._themeCaptionColor(1);
+      const rgb = [(want >> 16) & 255, (want >> 8) & 255, want & 255];
+      t('the opening wave says the block\'s theme in a match',
+        sub.classList.contains('show') && sub.textContent === g._themeCaption(1),
+        '"' + sub.textContent + '"');
+      t('and the theme word is in the block\'s own colour',
+        got.length === 3 && got.every((c, i) => Math.abs(c - rgb[i]) <= 1),
+        got.join(',') + ' vs ' + rgb.join(','));
+      // Unpinned, so every match the suite opens after this one is dealt the
+      // ordinary way - the pin exists for the two checks above and nothing else.
+      g.setTheme(null);
+    }
     t('an empty wave clears', (await until(() => g.waveState === 'intermission')) >= 0, g.waveState);
     // Forfeiting the pick is what ends the turn - see the intermission gate in
     // _updateWave. Claiming one would end it identically and needs a live offer.
