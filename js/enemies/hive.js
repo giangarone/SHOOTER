@@ -175,11 +175,20 @@ export const WASP_PASS_Y = 1.1;
 
 export const WASP_TELL = 0.7;
 
-export const WASP_PASS_TIME = 1.05;
+// THE PASS HAS TO OUT-REACH THE STANDOFF, or the wasp rears from a range its
+// own run cannot cross and lands short every time - a committed pass that
+// stops in front of the player is a tell with nothing behind it. The run
+// covers speed x WASP_PASS_MUL x this, and that product has to clear the
+// standoff with room to come out the FAR SIDE: 3.6 x 3 x 1.45 is roughly
+// sixteen metres against an eleven metre orbit, which is the player's spot
+// plus the overshoot that makes the pass read as a pass.
+export const WASP_PASS_TIME = 1.45;
 
 export const WASP_PASS_MUL = 3.0;
 
-export const WASP_STANDOFF = 16;
+// The orbit it waits on, and the distance the pass above is sized against -
+// the two numbers are one decision and neither moves alone.
+export const WASP_STANDOFF = 11;
 
 export const WASP_CD = 3.2;
 
@@ -531,9 +540,18 @@ export function aiSpitter(e, a) {
   if (a.dist > SPIT_RANGE) {
     e._setEyeAlert(false);
     if (e.spitThroat) e.spitThroat.scale.setScalar(0.8 * e.scale);
+    // THE WALL IN PROGRESS IS SPENT, for a spitter that was not in the room
+    // for it. Without this line one that walks into range mid-period fires
+    // the instant it arrives, untold, off the beat every other spitter is
+    // on - the drizzle this whole enemy is written to avoid.
+    e._lastSpitWall = Math.floor(a.ctx.pulse / SPIT_PERIOD);
     return;
   }
+  const wall = Math.floor(a.ctx.pulse / SPIT_PERIOD);
   const ph = a.ctx.pulse % SPIT_PERIOD;
+  // A SPITTER SPAWNED MID-WALL HAS MISSED IT, the same way one that walked
+  // in has: the first volley it takes part in is the next whole one.
+  if (e._lastSpitWall === undefined) e._lastSpitWall = wall;
   // THE TELL PULSE: one half-beat out from the volley, together, everywhere.
   const rearing = ph === SPIT_PERIOD - 1;
   e._setEyeAlert(rearing);
@@ -547,8 +565,8 @@ export function aiSpitter(e, a) {
   // and a volley that quietly skipped a beat would read as the room's rhythm
   // being broken rather than as a frame being long.
   if (ph >= SPIT_PERIOD - 1) return;
-  if (Math.floor(a.ctx.pulse / SPIT_PERIOD) === e._lastSpitWall) return;
-  e._lastSpitWall = Math.floor(a.ctx.pulse / SPIT_PERIOD);
+  if (wall === e._lastSpitWall) return;
+  e._lastSpitWall = wall;
   e.flash = 0.12;
   // A FAN, not a stack: spread rewards stepping ACROSS the wall rather than
   // backing away from it, which is the habit the whole theme is built on.
@@ -872,10 +890,12 @@ export const QUEEN_SETS = 3;
 
 export function _queenArmor(e) {
   if (e.bs.weakOpen) return 1;
-  const setsLeft = Math.max(0, QUEEN_SETS - (e.bs.molt || 0));
-  // One entry per sets-left count: 3 left is 0.45, 2 is 0.62, 1 is 0.8, and
-  // zero (a molt raced past the last threshold) is bare.
-  return QUEEN_ARMOR[setsLeft - 1] ?? 1;
+  const molted = Math.min(QUEEN_SETS, Math.max(0, e.bs.molt || 0));
+  // INDEXED BY MOLTS SURVIVED, which is the direction the shell actually
+  // comes off: all three sets on is 0.45, then 0.62, then 0.8, and a queen
+  // who has spent every set is bare. Indexed by sets LEFT it reads the
+  // ladder backwards - she would armour UP as the plates fall off.
+  return QUEEN_ARMOR[molted] ?? 1;
 }
 
 // The hatch.

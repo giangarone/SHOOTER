@@ -39,8 +39,10 @@
 //      never arrives as a plain touch.
 //   5. The brooder's glob becomes exactly three mortars, close together -
 //      a nest, not a scatter.
-//   6. The nurse feeds: a target's cooldown runs down faster near one, and
-//      the beam is drawn while it does.
+//   6. The nurse feeds: a BROODER's cooldown runs down faster near one and
+//      its mortar lands sooner, and the beam is drawn while it does. Read
+//      off the brooder and not the spitter, whose volley is the music's
+//      clock and not a cooldown at all.
 //   7. The wasp poisons on the pass, and the poison outlives the hit by
 //      seconds.
 //   8. The Brood Queen: armour tiers down across three molts, the hatch
@@ -175,26 +177,44 @@ try {
     // two walls of the volley (six half-beats apart) plus a tell, and eight
     // seconds of game covers it however slowly the host is rendering.
     {
+      // The theme's own module, the same instance the game is running, so
+      // the wall's width is read off the constant rather than retyped here.
+      const { SPIT_DARTS } = await import('./js/enemies/hive.js');
       clean();
       const A = put('spitter', 11, 0);
       const B = put('spitter', 0, 11);
       A.speed = 0;
       B.speed = 0;
-      const fired = [];
-      let prev = g.projectiles.length;
-      const until = g.time + 8;
-      while (g.time < until && fired.length < 6) {
+      // COUNTED AS A PER-FRAME DELTA, and the delta is the whole assertion:
+      // two synchronous spitters put SIX darts on the floor in ONE frame,
+      // and two private clocks put three in one frame and three in another.
+      // Carried on a high-water mark instead - the shape this test had
+      // first - both readings look identical, because the darts expire
+      // between walls and the count never climbs past the old peak.
+      // Counted by IDENTITY rather than by length: a dart that expires on
+      // the same frame a wall spawns would otherwise hide one of the six.
+      const seen = new WeakSet();
+      for (const q of g.projectiles) seen.add(q);
+      const volleys = [];
+      const until = g.time + 10;
+      while (g.time < until && volleys.length < 4) {
         await step();
-        const now = g.projectiles.length;
-        if (now > prev) {
-          fired.push(g.time);
-          prev = now;
+        let fresh = 0;
+        for (const q of g.projectiles) {
+          if (!seen.has(q)) { seen.add(q); fresh++; }
         }
+        if (fresh > 0) volleys.push({ t: g.time, n: fresh });
       }
-      // The two first volleys, one from each spitter: the gap between them
-      // has to be a single frame's worth, not a private clock's worth.
-      res.spitFired = fired.length;
-      res.spitGap = fired.length >= 2 ? +(fired[1] - fired[0]).toFixed(3) : -1;
+      res.spitFired = volleys.length;
+      res.spitTogether = volleys.length > 0
+        && volleys.every((v) => v.n === 2 * SPIT_DARTS);
+      res.spitDeltas = volleys.map((v) => v.n);
+      // And the walls are a rhythm, not a stutter: consecutive volleys sit
+      // a whole SPIT_PERIOD of half-beats apart, the same gap every time.
+      const gaps = volleys.slice(1).map((v, i) => v.t - volleys[i].t);
+      res.spitGap = gaps.length ? +gaps[0].toFixed(3) : -1;
+      res.spitEven = gaps.length >= 2
+        && gaps.every((x) => Math.abs(x - gaps[0]) < 0.25);
       clean();
     }
 
@@ -258,41 +278,53 @@ try {
     }
 
     // ---- 6. the nurse feeds -------------------------------------------------
-    // A spitter's volley is the cleanest clock in the theme to read the
-    // feeding off: every wall is six half-beats apart, and a fed spitter
-    // fires its NEXT wall sooner. Watched as a gap between consecutive
-    // volleys, in game seconds - three walls is eighteen seconds of game
-    // whichever way the host is rendering, which is the whole point of
-    // waiting on the clock rather than on frames.
+    // READ OFF A COOLDOWN, because a cooldown is the only thing the nurse
+    // touches. The spitter is the wrong subject for it however clean its
+    // rhythm looks: its volley is on the PULSE, which is the music's clock
+    // and no enemy's, so a nurse standing on top of one changes nothing at
+    // all. The brooder is the theme's cooldown enemy, and the mortar it
+    // lays is the visible end of the number the nurse is paying down.
     {
-      const volleyGap = async (withNurse) => {
+      const timeToLay = async (withNurse) => {
         clean();
-        const e = put('spitter', 12, 0);
+        const e = put('brooder', 12, 0);
         e.speed = 0;
+        // Set by hand so the first shot carries no random tail: what is
+        // under test is the RATE the number comes down at, not the roll.
+        e.attackCd = 3;
         if (withNurse) {
-          const n = put('nurse', 3, 0);
+          const n = put('nurse', 13, 0);
           n.speed = 0;
         }
-        const walls = [];
-        let prev = g.projectiles.length;
-        const until = g.time + 12;
-        while (g.time < until && walls.length < 3) {
-          await step();
-          const now = g.projectiles.length;
-          if (now > prev) {
-            walls.push(g.time);
-            prev = now;
-          }
-        }
+        const t0 = g.time;
+        const until = g.time + 8;
+        // The lay is the frame the cooldown is re-armed on - it goes back
+        // up to BROOD_CD and over, which nothing else in the loop does.
+        while (g.time < until && e.attackCd <= 3) await step();
+        const dt = e.attackCd > 3 ? g.time - t0 : 1e9;
         clean();
-        if (walls.length < 3) return 1e9;
-        // Between the second and third walls, so the nurse's beam has had a
-        // whole volley to reach the target in.
-        return walls[2] - walls[1];
+        return dt;
       };
-      res.gapAlone = await volleyGap(false);
-      res.gapFed = await volleyGap(true);
-      res.nurseFaster = res.gapFed < res.gapAlone;
+      res.layAlone = await timeToLay(false);
+      res.layFed = await timeToLay(true);
+      // A whole second of cooldown a second is ~1.9x the unfed rate, so the
+      // fed lay has to land well inside the unfed one - measured with room
+      // for a frame either side rather than against the exact ratio.
+      res.nurseFaster = res.layFed < res.layAlone * 0.85;
+
+      // AND THE BEAM SAYS SO. The haste is invisible without it, which is
+      // the one way this enemy can be wrong and still look right.
+      clean();
+      const beams = [];
+      const origBeam = g.effects.beam.bind(g.effects);
+      g.effects.beam = (a2, b2, c2) => { beams.push(1); return origBeam(a2, b2, c2); };
+      const b = put('brooder', 12, 0);
+      b.speed = 0;
+      const nb = put('nurse', 13, 0);
+      nb.speed = 0;
+      await simSteps(1);
+      g.effects.beam = origBeam;
+      res.nurseBeams = beams.length;
       clean();
     }
 
@@ -352,13 +384,15 @@ try {
       for (const frac of [0.7, 0.4, 0.15]) {
         q.hp = q.maxHp * frac;
         await simSteps(0.1);
-        molts.push({
-          molt: bs.molt,
-          weak: !!bs.weakOpen,
-          armor: qArmor(),
-        });
+        const weak = !!bs.weakOpen;
+        const molt = bs.molt;
         // Let the window close again so the next molt is a fresh event.
         await simSteps(2.6);
+        // THE SHELL IS READ WITH THE WINDOW SHUT. An open window is a flat
+        // 1 by design - it is the whole point of the window - so reading
+        // the ladder during one measures the window three times and says
+        // nothing whatever about the plates.
+        molts.push({ molt, weak, armor: qArmor() });
       }
       res.queenMolts = molts.map((m) => m.molt);
       res.queenMoltWindows = molts.every((m) => m.weak);
@@ -434,6 +468,11 @@ try {
       await simSteps(2.6);   // let any window close
       bs.weakOpen = false;
       bs.state = 'walk';
+      // PLATES BACK ON for the read: by this point in the fight she has
+      // molted three times and is bare, and a bare queen taking full damage
+      // is correct rather than a bug. The set is put back by hand so the
+      // shut-window number is the shell's and not the molt counter's.
+      bs.molt = 0;
       const hpA = q.hp;
       q.takeDamage(100, false, 0, 0);
       res.queenShellTakes = +(hpA - q.hp).toFixed(1);
@@ -464,8 +503,10 @@ try {
 
   // ---- 3
   ok('two spitters fire the same wall, not two clocks',
-    out.spitFired >= 4 && out.spitGap >= 0 && out.spitGap < 0.12,
-    `first-gap=${out.spitGap}s volleys=${out.spitFired}`);
+    out.spitFired >= 2 && out.spitTogether,
+    `volleys=${out.spitFired} darts-per-frame=${out.spitDeltas.join(',')}`);
+  ok('and the walls keep one rhythm between them',
+    out.spitEven, `gap=${out.spitGap}s`);
 
   // ---- 4
   ok('the soldier’s sting connects', out.soldierHit, `moved ${out.soldierMoved}m`);
@@ -482,8 +523,11 @@ try {
   ok('and the glob itself grows no ground', out.nestNoHazard);
 
   // ---- 6
-  ok('a fed wave fires sooner than an unfed one',
-    out.nurseFaster, `alone=${out.gapAlone.toFixed(2)}s fed=${out.gapFed.toFixed(2)}s`);
+  ok('a fed wave acts sooner than an unfed one',
+    out.nurseFaster,
+    `alone=${out.layAlone.toFixed(2)}s fed=${out.layFed.toFixed(2)}s`);
+  ok('and the feeding is drawn while it happens',
+    out.nurseBeams > 0, `beams=${out.nurseBeams}`);
 
   // ---- 7
   ok('the wasp poisons on its pass', out.waspPoisons);
