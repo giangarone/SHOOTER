@@ -146,6 +146,33 @@ try {
     // Held off for the duration rather than hoping it does not happen.
     const origVac = g.money.vacuum;
     g.money.vacuum = () => {};
+    // THE PLAYER HAS TO STAND STILL, and the bot will not. This block
+    // measures one distance - orb to player - and drops the orb at a fixed
+    // offset from wherever the player happens to be: a bot that wanders
+    // toward it covers the 1.2m of slack inside a second of game time and
+    // drags the orb into the radius it exists to prove the orb ignores. The
+    // bot is switched off, its keys cleared, and the player pinned to the
+    // spot for the duration - the same wrap void.mjs pins with, plus a god
+    // ring because with the bot gone the wave's cast is free to swing at a
+    // player who cannot dodge.
+    //
+    // XZ ONLY. The floor under the player is whatever the generated layout
+    // left there, and forcing y to 0 would pin them inside a platform's
+    // geometry for the resolver to fight; the magnet reads XZ distance, so
+    // the height is none of this test's business.
+    g.autoTest = false;
+    const p = g.player;
+    for (const k of ['forward', 'back', 'left', 'right', 'jump', 'shoot', 'shootFresh',
+      'aim', 'crouch', 'sprint', 'melee']) g.input[k] = false;
+    const pinX = p.pos.x;
+    const pinZ = p.pos.z;
+    const origUpdate = p.update.bind(p);
+    p.update = (...args) => {
+      origUpdate(...args);
+      p.pos.x = pinX;
+      p.pos.z = pinZ;
+      p.health = p.maxHealth;
+    };
     // Radius per tier, run through the upgrade's own apply() rather than a
     // copy of its formula - the point is that the CATALOGUE moves the radius,
     // so a retune there has to show up here.
@@ -161,14 +188,14 @@ try {
     // ignored, and the same orb is taken once a tier of Lodestone is owned.
     const drop = (d) => {
       g.money.clear();
-      g.money.spawn({ x: g.player.pos.x + d, y: 0.45, z: g.player.pos.z }, 40, 1, 0);
+      g.money.spawn({ x: pinX + d, y: 0.45, z: pinZ }, 40, 1, 0);
       // Land it before the test: a still-falling orb is not what is being
       // measured here.
       for (let i = 0; i < g.money.count; i++) {
         g.money.state[i] = 1;
-        g.money.pos[i * 3] = g.player.pos.x + d;
+        g.money.pos[i * 3] = pinX + d;
         g.money.pos[i * 3 + 1] = 0.42;
-        g.money.pos[i * 3 + 2] = g.player.pos.z;
+        g.money.pos[i * 3 + 2] = pinZ;
       }
     };
     // Seconds of GAME, for the reason the sweep above gives: the magnet pulls
@@ -186,6 +213,8 @@ try {
     const taken = await settle(1.5);
     g.player.mods.magnetMult = 1;
     g.money.clear();
+    p.update = origUpdate;
+    g.autoTest = true;
     g._dropMoney = origDrop;
     g.money.vacuum = origVac;
     return { base: BASE_MAGNET_RADIUS, radii, ignored, taken };
