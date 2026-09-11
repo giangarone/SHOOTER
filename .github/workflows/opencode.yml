@@ -89,4 +89,4 @@ jobs:
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
         with:
           model: tokenrouter/z-ai/glm-5.3-free
-          variant: max
+          variant: high
