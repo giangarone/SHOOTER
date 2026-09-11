@@ -301,6 +301,67 @@ const DEFAULT_MODS = {
   trueStrikeShots: 0,   // and the guaranteed crits it then hands over
   domino: 0,            // Domino: crit chance the shot after a crit gets
   luckyStep: 0,         // Lucky Streak: crit chance per hit on the same body
+
+  // ---- THE THIRD POOL ------------------------------------------------------
+  //
+  // Twenty-seven more max-1 fields on the same contract: zero is "not owned"
+  // and every reader tests for it. What is different about this block is how
+  // many of them are questions about a RUNNING TOTAL the player has built up -
+  // money spent, boxes bought, health banked off crates - and those totals live
+  // on the Player itself (see reset()), not here, for the reason noHitStacks
+  // does: mods are replayed from these defaults on every draft pick, so
+  // anything an EVENT writes into them is refunded by the next totem.
+  crowbar: 0,           // Crowbar: multiplier on the melee swing, and
+  crowbarAmmo: 0,       // reserve rounds granted by a swing that CONNECTED
+  harmWands: 0,         // Harm Wands: rounds at the BOTTOM of the magazine
+  harmWandsRate: 0,     // that fire this much faster. Read against
+                        // Player.magAtShot, exactly as fatalReserve is.
+  highRate: 0,          // Tightrope: fire rate gained while off the floor
+  fumesDamage: 0,       // Running On Fumes: damage and fire rate gained while
+  fumesRate: 0,         // the stamina bar is in its red - see staminaLow
+  aimCrit: 0,           // Iron Liturgy: crit chance gained down the sights
+  pityAfter: 0,         // Pity Party: landed shots without a crit that arm
+  pityMult: 0,          // a guaranteed crit at this FLAT multiplier
+  critHealChance: 0,    // Red Harvest: chance a crit heals, and
+  critHeal: 0,          // what it heals. Once per trigger pull, never per pellet.
+  feverDream: 0,        // Fever Dream: damage gained while the PLAYER is poisoned
+  longHaulStep: 0,      // Long Haul: damage gained against a boss per
+  longHaulEvery: 0,     // this many seconds the fight has run. Uncapped.
+  poisonStacks: 1,      // Secondary Infection: times poison may stack on one
+                        // body. ONE by default, which is the refresh rule every
+                        // other status in the game keeps - see enemy.applyStatus.
+  enemyHpMult: 1,       // Underfed: multiplier on a non-boss enemy's health
+  coldBloodAt: 0,       // Cold Blood: the HP fraction at or below which
+  coldBloodCut: 0,      // this much of every blow is taken off
+  bandage: 0,           // Fresh Bandages: HP a reload heals at or below half
+  curtainCall: 0,       // Curtain Call: health crates the last kill of a wave drops
+  slowRelease: 1,       // Slow Release: multiplier on a health crate, paid out
+  slowReleaseTime: 0,   // over this many seconds instead of at once
+  strayMercy: 0,        // Stray Mercy: chance an incoming PROJECTILE heals
+  strayMercyHeal: 0,    // this much instead of hurting. Named for the pick and
+                        // not for BLOOD TRANSFUSION, which is a different
+                        // thing in a different pool - see Game._strayMercy.
+  gristleChance: 0,     // Gristle: chance a health crate also banks
+  gristleHp: 0,         // this much PERMANENT max health
+  interest: 0,          // High Interest: fraction of the balance paid at a wave end
+  paperTrail: 0,        // Paper Trail: damage gained per $1,000 ever SPENT
+  beltStep: 0,          // Money Belt: damage taken reduced by this much per
+  beltPer: 0,           // this many credits held, up to
+  beltCap: 0,           // this much
+  lootMult: 1,          // Fire Sale: multiplier on what an orb or pickup is worth
+  lootDespawn: 1,       // and on how long it lies there before it goes
+  movingDay: 0,         // Moving Day: reserve rounds per orb still on the floor
+                        // when the wave ends
+  raffle: 0,            // Raffle Ticket: item charge rate gained per box bought
+  float: 0,             // Updraft: the jump button held stops the fall...
+  floatDrain: 0,        // ...for this much stamina a second, and it still
+  floatFall: 0,         // sinks at this many metres a second
+  jackpot: 0,           // Jackpot: chance a GROUND jump refills everything
+  slideFire: 0,         // Scorched Earth: burn power of the trail a slide lays,
+  slideFireRadius: 0,   // as a multiple of one of the player's own shots
+  quorumEvery: 0,       // Quorum: kills that summon a turret, which lives
+  quorumLife: 0,        // this long, up to
+  quorumMax: 0,         // this many at once
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -549,6 +610,12 @@ const STAMINA_DELAY = 0.8;
 // it, and is a habit rather than a decision. The lock is what makes running
 // the bar to empty a thing the player chose to do and now has to live with.
 const STAMINA_UNLOCK = 0.33;
+// TIGHTROPE's floor. `pos.y` is the surface the player is standing ON, so
+// anything above this is a box, a tread, a deck or the top of a jump. Not
+// zero: the step-up eases the CAMERA rather than the body (see _stepLag), and
+// a float compared against an exact zero would flicker the bonus on and off
+// for anyone standing on a seam between two floor pieces.
+const RAISED_GROUND = 0.12;
 // How long the sprint's accuracy penalty takes to bleed off after the run
 // ends. THE SAME WINDOW a shot locks the sprint out for, and deliberately so:
 // firing cancels sprinting, so a penalty that vanished with the run would
@@ -1168,6 +1235,38 @@ export class Player {
     this.sacrificed = null;     // Sacrifice: the name of what it just ate, for
                                 // the banner main.js draws at the pick
     this.ammoFx = false;        // Last Breath: one-shot, cleared by main.js
+    // ---- THE THIRD POOL'S COUNTERS ----------------------------------------
+    //
+    // Same rule as the block above and for the same reason: every one of these
+    // is written by something that HAPPENED, so none of them can live in mods.
+    // Four are RUN TOTALS that must survive to the end of a run - the money
+    // spent, the boxes bought, the max health crates banked - and those are the
+    // ones a rebuildMods() would be most quietly wrong about.
+    this.pityMiss = 0;          // Pity Party: landed shots since the last crit
+    this.pityNext = false;      // and whether the next one is owed
+    this.pityShot = false;      // ...and whether the shot in flight IS it, which
+                                // is what _hitMult reads for the flat multiplier
+    this.spentTotal = 0;        // Paper Trail: every credit this run has spent
+    this.boxesBought = 0;       // Raffle Ticket: mystery box rolls paid for
+    this.crateHp = 0;           // Gristle: permanent max health off health
+                                // crates. Kept apart from hpBanked because that
+                                // one is capped by hpBankCap, which is SCAR
+                                // TISSUE's ceiling and has nothing to do with
+                                // this - see the maxHealth getter.
+    this.healOwed = 0;          // Slow Release: HP still to be paid out, and
+    this.healRate = 0;          // the rate it is being paid at. A POOL and a
+                                // RATE rather than a deadline, which is what
+                                // lets two crates stack honestly - see heal
+                                // pickup and _tickSlowRelease.
+    this.quorumKills = 0;       // Quorum: kills since the last free turret
+    this.jackpotFx = false;     // Jackpot: one-shot, cleared by main.js
+    this.gristleFx = false;     // Gristle: one-shot, likewise. A permanent
+                                // point of max health with NO tell is the one
+                                // kind of reward a player reports as broken -
+                                // the bar grew and nothing said so.
+    this.floatFx = false;       // Updraft: true on any frame the float is
+                                // holding the player up, for the HUD and the
+                                // wisp main.js draws under their feet
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1343,8 +1442,13 @@ export class Player {
     // here - see Game.startWave - so the oath stops at 50 against whatever the
     // build's max was on the wave it stopped at, and starts again if something
     // later lifts that back over 50.
+    // GRISTLE's crates ride beside the wave bank and for the same reason: it
+    // is health the player went and picked up, not part of the build, so a
+    // GLASS CANNON taken afterwards must not halve the crates they already
+    // walked over.
     return Math.max(
-      MIN_MAX_HEALTH, built + this.hpBanked - this.mods.maxHpFlat - this.oathLoss
+      MIN_MAX_HEALTH,
+      built + this.hpBanked + this.crateHp - this.mods.maxHpFlat - this.oathLoss
     );
   }
   get magSize() {
@@ -1402,8 +1506,30 @@ export class Player {
     // HIPSHOT, read live off the aim flag exactly as Cheekweld's guard is: the
     // player is paid for the decision, not for the weapon finishing its raise.
     const hip = this.mods.hipshot > 0 ? (this.aiming ? 0.5 : 2) : 1;
+    // HARM WANDS. Read off `magAtShot` - what the TRIGGER saw - and not off the
+    // live count, for exactly the reason FATAL RESERVE is: by the time anything
+    // downstream looks, the magazine has already been billed, by one round or
+    // by three under TRIPLE TAP or by none at all under BELT FEED. Both places
+    // that fire a round set magAtShot BEFORE they set the cooldown off this
+    // getter, so what the rate is bought with is the round that just left.
+    //
+    // A magazine SHORTER than fifteen is fast the whole way down, which is the
+    // honest reading of "the last fifteen rounds" and is what a HOLLOW POINT
+    // build has paid for.
+    const wands = this.mods.harmWands > 0 && this.magAtShot > 0
+      && this.magAtShot <= this.mods.harmWands ? 1 + this.mods.harmWandsRate : 1;
+    // TIGHTROPE, off the feet being off the floor. Not a named piece of
+    // geometry: pos.y IS the surface being stood on (see update), so a kerb, a
+    // crate, a stair tread and a catwalk all count, and so does the top of a
+    // jump - which is correct, and is the one part of the pick that is free.
+    const high = this.mods.highRate > 0 && this.pos.y > RAISED_GROUND
+      ? 1 + this.mods.highRate : 1;
+    // RUNNING ON FUMES, off the LOCKOUT's own line - see staminaLow - so the
+    // window the card promises is exactly the red the HUD draws.
+    const fumes = this.mods.fumesRate > 0 && this.staminaLow ? 1 + this.mods.fumesRate : 1;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
-      * this.mods.fireRate * crouch * this.paceMult * spirit * hip;
+      * this.mods.fireRate * crouch * this.paceMult * spirit * hip
+      * wands * high * fumes;
   }
 
   /**
@@ -1445,6 +1571,23 @@ export class Player {
     // GROUNDHOG. A slide is not a stance - see reloadTime.
     if (this.mods.crouchGuard > 0 && this.crouching && !this.sliding) {
       k *= 1 - this.mods.crouchGuard;
+    }
+    // COLD BLOOD. A LINE and not a ramp, unlike BERSERKER's mirror of it: the
+    // player can see themselves cross a quarter of the bar, and a ramp would
+    // make the best moment of the pick the one moment it is invisible.
+    if (this.mods.coldBloodCut > 0 && this.health <= this.maxHealth * this.mods.coldBloodAt) {
+      k *= 1 - this.mods.coldBloodCut;
+    }
+    // MONEY BELT. The balance is published onto the player every frame by
+    // main.js, which owns it - the same number WAR CHEST reads, so the two
+    // halves of an economy build can never disagree about what is in the
+    // wallet. Floored at the step for the reason War Chest is floored at the
+    // thousand: the player reads their balance as a number of purchases.
+    if (this.mods.beltStep > 0) {
+      const belt = Math.min(
+        this.mods.beltCap, this.mods.beltStep * Math.floor(this.balance / this.mods.beltPer)
+      );
+      if (belt > 0) k *= 1 - belt;
     }
     return k;
   }
@@ -1677,6 +1820,14 @@ export class Player {
   // the alternative is a hidden overflow that makes the next charge instant.
   addItemCharge(points) {
     if (!this.item || !(points > 0)) return;
+    // RAFFLE TICKET. Every box roll the run has ever paid for makes the meter
+    // fill faster, and it rides HERE because this is the only door charge comes
+    // through - so the kills, the battery plate, OVERDRAW's spill and BAILIFF's
+    // refund are all lifted by the same number, and none of them had to be
+    // told about the pick.
+    if (this.mods.raffle > 0 && this.boxesBought > 0) {
+      points *= 1 + this.mods.raffle * this.boxesBought;
+    }
     // COUNTED, not merely tested. Without Twin Cell this is the same boolean
     // edge it always was; with it, the chime has to fire on the SECOND charge
     // arriving as well, and a `was ? : ` on `itemReady` would be true either
@@ -1952,6 +2103,13 @@ export class Player {
    */
   rollCrit() {
     const m = this.mods;
+    // PITY PARTY's mark, cleared at the START of every roll as well as by
+    // settlePity at the end of every trigger pull. Belt and braces, and the
+    // braces are load-bearing: `pityShot` makes _hitMult return a flat 5x, so
+    // a path that ever spent an owed crit without settling it would leave
+    // EVERY subsequent hit in the run at five times damage. One stale shot is
+    // survivable; a permanent one is not, and this is the line that bounds it.
+    this.pityShot = false;
     // TRUE STRIKE, first and unconditionally: four shots that were BOUGHT with
     // two seconds off the trigger are not a die roll, and spending one on a
     // shot that would have crit anyway is the honest reading of "the next four
@@ -1961,7 +2119,20 @@ export class Player {
       this.dominoNext = m.domino > 0;
       return true;
     }
+    // PITY PARTY, second and on the same terms TRUE STRIKE is first on: a crit
+    // that was OWED is not a die roll. `pityShot` is what _hitMult reads for
+    // the flat multiplier and is cleared by settlePity at the end of the same
+    // trigger pull, so it can never be carried into the next one.
+    if (this.pityNext) {
+      this.pityNext = false;
+      this.pityShot = true;
+      this.dominoNext = m.domino > 0;
+      return true;
+    }
     let chance = m.critChance;
+    // IRON LITURGY, off the aim flag rather than off the raise animation -
+    // CHEEKWELD's rule, and the pair are meant to be found together.
+    if (m.aimCrit > 0 && this.aiming) chance += m.aimCrit;
     // DOMINO. Spent whether or not it wins - it is the shot after a crit, and
     // there is only one of those.
     if (this.dominoNext) {
@@ -1993,6 +2164,93 @@ export class Player {
     }
     this.luckyTarget = en;
     this.luckyHits = en ? 1 : 0;
+  }
+
+  /**
+   * PITY PARTY's drought, settled once per trigger pull.
+   *
+   * COUNTED IN SHOTS THAT LANDED, which is the whole shape of the pick. A
+   * trigger pull that touched nothing is a MISS, not a drought - counting those
+   * would pay a player for shooting at a wall, and the only thing in this game
+   * that should never pay is doing nothing at something.
+   *
+   * `pityShot` is cleared HERE and not in rollCrit, because the multiplier is
+   * read at the moment a pellet lands and a shotgun's nine pellets all land
+   * after the roll. One trigger pull sets it, the same trigger pull clears it.
+   *
+   * @param {boolean} landed  whether the shot touched a body at all
+   * @param {boolean} crit    what the BODIES said, not what the die said
+   */
+  settlePity(landed, crit) {
+    this.pityShot = false;
+    if (this.mods.pityAfter <= 0 || !landed) return;
+    if (crit) {
+      this.pityMiss = 0;
+      return;
+    }
+    this.pityMiss++;
+    if (this.pityMiss >= this.mods.pityAfter) {
+      this.pityMiss = 0;
+      this.pityNext = true;
+    }
+  }
+
+  /**
+   * SLOW RELEASE. A health crate, owed rather than paid.
+   *
+   * A POOL AND A RATE, not a deadline, and that is what makes two crates stack
+   * the way the card promises. Each one adds its own amount to `healOwed` and
+   * its own amount-over-twenty-seconds to `healRate`, so a player who walks
+   * over two heals at twice the speed for the same twenty seconds - rather
+   * than at one speed for forty, which is what a single shared clock would
+   * have given them and is not what "they stack" means.
+   *
+   * The pool is drained through heal() like everything else, so HEALTHY CORE
+   * still blocks it, BONE MARROW still scales it and OVERDRAW still catches
+   * what does not fit.
+   */
+  addSlowHeal(amount) {
+    if (!(amount > 0) || !(this.mods.slowReleaseTime > 0)) return;
+    this.healOwed += amount;
+    this.healRate += amount / this.mods.slowReleaseTime;
+  }
+
+  // One frame of it. Called from update() unconditionally - a regeneration the
+  // player has already paid for does not stop because a wave ended, and the
+  // pool is finite, so there is nothing here a shop can be farmed for.
+  _tickSlowRelease(dt) {
+    if (this.healOwed <= 0) return;
+    const step = Math.min(this.healOwed, this.healRate * dt);
+    this.healOwed -= step;
+    this.heal(step);
+    if (this.healOwed <= 1e-6) {
+      this.healOwed = 0;
+      this.healRate = 0;
+    }
+  }
+
+  /**
+   * GRISTLE. One permanent point of max health off a crate.
+   *
+   * ITS OWN BANK, not hpBanked: that one is capped by `hpBankCap`, which is
+   * SCAR TISSUE's and UNTOUCHED's ceiling and has nothing whatever to do with
+   * how many crates a run walks over. Sharing the field would have made either
+   * pick quietly eat the other's ceiling.
+   *
+   * The point is HEALED as well as banked, for bankWaveHealth's reason: the
+   * bar has just grown by one and a player whose bar grows without filling has
+   * been given a bigger empty space.
+   *
+   * @returns {boolean} whether it landed, so the caller can say so
+   */
+  bankCrateHealth() {
+    if (!(this.mods.gristleChance > 0) || Math.random() >= this.mods.gristleChance) {
+      return false;
+    }
+    this.crateHp += this.mods.gristleHp;
+    this.heal(this.mods.gristleHp);
+    this.gristleFx = true;
+    return true;
   }
 
   // ONE TICK OF DAMAGE OVER TIME: one of the player's own shots, before the
@@ -2107,6 +2365,21 @@ export class Player {
     this.magOnReload = 0;
     this.sacrificed = null;
     this.ammoFx = false;
+    // The third pool's counters - see the constructor. The four run totals
+    // (spentTotal, boxesBought, crateHp, and the heal pool) are cleared here
+    // and nowhere else: they are meant to last a whole run and no less.
+    this.pityMiss = 0;
+    this.pityNext = false;
+    this.pityShot = false;
+    this.spentTotal = 0;
+    this.boxesBought = 0;
+    this.crateHp = 0;
+    this.healOwed = 0;
+    this.healRate = 0;
+    this.quorumKills = 0;
+    this.jackpotFx = false;
+    this.gristleFx = false;
+    this.floatFx = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -2253,6 +2526,18 @@ export class Player {
     // called from several places that have none to give it.
     this.now = time;
     this._tickStatus(dt);
+    // SLOW RELEASE's pool. NOT gated on `combat`, unlike NANOWEAVE and the
+    // fabricator beside it - and it does not need to be. Those two pay per
+    // second out of nothing, which is a vending machine in a shop with no clock
+    // on it; this pays out a FINITE amount the player already walked over, so a
+    // wave break can be stood in for as long as anyone likes and the total does
+    // not move. Cutting it at the wave boundary would only lose the player
+    // health they had bought.
+    this._tickSlowRelease(dt);
+    // UPDRAFT's flag is raised by the float branch in the movement block below
+    // and read by main.js on the same frame, so it is cleared HERE - at the top
+    // of the frame that will or will not set it again.
+    this.floatFx = false;
     this.fireCd -= dt;
     if (this.meleeCd > 0) this.meleeCd -= dt;
     if (this.meleeActive > 0) this.meleeActive -= dt;
@@ -2528,6 +2813,42 @@ export class Player {
     }
 
     this.vel.y -= 22 * dt;
+    // ---- UPDRAFT ------------------------------------------------------------
+    //
+    // The jump button, HELD, and the fall stops.
+    //
+    // A TERM IN THE GRAVITY LINE AND NOT A STATE ON THE BODY, which is the
+    // whole reason it does not reuse PARTY BALLOONS' machinery: that item puts
+    // a body in the air and holds it there helpless with a ground snap at the
+    // end, where this is a verb the player steers with. Written as a clamp on
+    // vel.y the frame AFTER gravity is applied, so a dash taken out of a float
+    // still owns the velocity through its own blend above, a jump out of the
+    // ground still leaves at JUMP_V, and the ceiling test below still stops a
+    // head against a deck. None of those needed a line.
+    //
+    // ONLY ON THE WAY DOWN. Clamping a rising jump would cap the arc, so the
+    // player would press jump and go LESS high - the float catches the fall,
+    // it does not fight the leap.
+    //
+    // IT SPENDS THE SPRINT BAR, and the lockout is the sprint's: a bar run to
+    // empty in the air is a bar that refuses the run on landing, which is what
+    // keeps a float from being free flight. The drain is charged before the
+    // clamp so the last frame of a bar cannot buy a frame of hang.
+    if (this.mods.float > 0 && input.jump && !this.onGround && this.vel.y < 0
+      && !this.staminaLocked && this.stamina > 0) {
+      this.stamina -= this.mods.floatDrain * this.mods.staminaDrain * dt;
+      this._staminaHold = STAMINA_DELAY;
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        this.staminaLocked = true;
+      }
+      // A SINK, NOT A HOVER. Holding the button still costs height, slowly -
+      // a true hover is a player who cannot be reached by anything that walks,
+      // and the arena has fliers in it precisely because the floor is where the
+      // fight is.
+      this.vel.y = Math.max(this.vel.y, -this.mods.floatFall);
+      this.floatFx = true;
+    }
     // Ground jump keeps its held-key behaviour - bunny-hopping down a corridor
     // is movement the game already had. The AIR jump is edge-triggered, or a
     // held space would spend every charge on the frame after takeoff.
@@ -2544,6 +2865,22 @@ export class Player {
     if (canJump && input.jump && this.onGround) {
       this.vel.y = JUMP_V;
       this.onGround = false;
+      // JACKPOT. THE GROUND JUMP AND NOT THE AIR ONE, deliberately: this
+      // branch is held-key (bunny-hopping down a corridor is movement the game
+      // already had), the air jump is edge-triggered off a charge, and rolling
+      // on both would hand a DOUBLE JUMP build twice a plain one's odds for a
+      // reason nowhere on the card. Four hops a second at 1% is still a thing
+      // that HAPPENS twice a run rather than a thing that is farmed, because
+      // what it pays out is a full bar and a full reserve - and a player who is
+      // already full has won nothing.
+      //
+      // One-shot flag, like jumpFx beside it: player.js has no sound and no
+      // banner, and main.js clears it on the frame it reads it.
+      if (this.mods.jackpot > 0 && Math.random() < this.mods.jackpot) {
+        this.health = this.maxHealth;
+        this.reserveAmmo = this.maxReserve;
+        this.jackpotFx = true;
+      }
       // A JUMP IS ALWAYS AVAILABLE OUT OF A SLIDE, and it takes the slide's
       // speed with it. `vel` is the slide's velocity by this point in the
       // frame, so there is nothing to reconstruct - the launch is simply what
@@ -3753,6 +4090,21 @@ export class Player {
     // BOTTOM FEEDER's window, read off the frame clock published in update() -
     // the same way every other timed window on the player is.
     if (this.now < this.bottomEnd) d *= 1 + this.mods.bottomFeed;
+    // PAPER TRAIL. WAR CHEST reads the balance and this reads what has left it,
+    // so an economy build holding both is paid for the whole of its money -
+    // once for having it and once for having spent it. Floored at the thousand,
+    // for War Chest's reason: the player reads money in purchases.
+    if (this.mods.paperTrail > 0 && this.spentTotal >= 1000) {
+      d *= 1 + this.mods.paperTrail * Math.floor(this.spentTotal / 1000);
+    }
+    // FEVER DREAM. The status the arena put on YOU, read live off the same
+    // table statusDamageMult walks - so the window opens on the frame the
+    // poison lands and closes on the frame it runs out, with nothing to expire
+    // separately and nothing to keep in step.
+    if (this.mods.feverDream > 0 && this.status.poison > 0) d *= 1 + this.mods.feverDream;
+    // RUNNING ON FUMES, off the lockout's own line, exactly as its half of the
+    // fire rate is - see effectiveFireRate and staminaLow.
+    if (this.mods.fumesDamage > 0 && this.staminaLow) d *= 1 + this.mods.fumesDamage;
     // Demonic Dodge's window, read off the frame clock published in update().
     return d;
   }

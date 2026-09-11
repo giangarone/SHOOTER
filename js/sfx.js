@@ -739,6 +739,42 @@ export class SFX {
     this.tone({ f: 1180, t: 0.04, v: 0.14, type: 'sine' });
   }
 
+  /**
+   * JACKPOT. One jump in a hundred, and the only tell it has.
+   *
+   * IT HAS TO BE HEARD WHEN NOBODY IS LOOKING. A 1% roll on a verb the player
+   * presses a hundred times a wave lands while they are aimed somewhere else,
+   * so a flash at the feet is not enough - the sound is the notification, and
+   * it is the one cue in the game deliberately built to interrupt.
+   *
+   * WHAT MAKES IT READ AS A PAYOUT: a rising major arpeggio - C, E, G, C - and
+   * not a chord. A chord is an impact (the boss reveal is one); an arpeggio is
+   * a machine counting out what it owes, which is what a jackpot is. Each note
+   * glides up into the next the way the coin blip does, so it sits in the same
+   * family as every other money sound in the game rather than arriving from
+   * somewhere else.
+   *
+   * The coin ladder is deliberately NOT reused: that one climbs with a chain
+   * and resets in silence, so the same payout would sound different depending
+   * on how recently an orb was collected - and this has to sound identical
+   * every time, because it is the thing the player learns.
+   */
+  jackpot() {
+    const N = [523.25, 659.25, 783.99, 1046.5];
+    for (let i = 0; i < N.length; i++) {
+      const f = N[i];
+      this.tone({ f: f * 0.7, f2: f, t: 0.14, type: 'triangle', v: 0.26, delay: i * 0.07 });
+      this.tone({ f: f * 2, t: 0.07, type: 'sine', v: 0.1, delay: i * 0.07 + 0.02 });
+    }
+    // The bell on top of the run, held long enough to ring under the last two
+    // notes rather than after them - a payout that finished cleanly would read
+    // as a menu confirm.
+    this.tone({ f: 2093, f2: 1568, t: 0.5, type: 'sine', v: 0.14, delay: 0.21 });
+    // And a body under it, so the whole thing lands rather than floats. Very
+    // low and very quiet: it is felt, not heard.
+    this.tone({ f: 130, f2: 65, t: 0.45, type: 'sine', v: 0.2 });
+  }
+
   // A MONEY ORB COLLECTED. Bubbly rather than metallic: three tuned partials
   // gliding up a fifth, no noise layer at all, because this is the most-played
   // sound in the game and a noise layer on it becomes unbearable by wave five.

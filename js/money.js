@@ -101,6 +101,7 @@ const HUE_SPREAD = 0.02;
 // dissolves into the floor exactly when there are most of them.
 const VERT = `
   uniform float uTime;
+  uniform float uLife;
   uniform float uScale;
   attribute float aHue;
   attribute float aSize;
@@ -113,7 +114,13 @@ const VERT = `
     float age = uTime - aSpawn;
     // Pops in over the first fifth of a second, blinks out over the last few.
     float in_ = clamp(age * 5.0, 0.0, 1.0);
-    float left = ${ORB_LIFETIME.toFixed(1)} - age;
+    // A UNIFORM AND NOT A CONSTANT, because FIRE SALE shortens it: the blink
+    // is the only warning an orb gives before it goes, and one baked at
+    // twenty seconds would have every orb of that run vanish mid-glow with the
+    // blink still six seconds in its future. The BLINK's own length stays
+    // fixed - what it means is "this is about to go", and that is worth more
+    // and not less on a short fuse.
+    float left = uLife - age;
     float blink = left > ${ORB_BLINK_TIME.toFixed(1)}
       ? 1.0
       : step(0.45, fract(left * 4.0)) * clamp(left, 0.0, 1.0);
@@ -223,6 +230,7 @@ export class MoneyOrbs {
     this.mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
+        uLife: { value: ORB_LIFETIME },
         uHue: { value: 0.12 },
         uScale: { value: 400 },
       },
@@ -243,6 +251,10 @@ export class MoneyOrbs {
     this.time = 0;
     // Seconds left on an armed-but-not-yet-fired vacuum(). See vacuum().
     this._sweepT = 0;
+    // FIRE SALE's fuse. The CPU side of the same number the shader blinks
+    // against - kept as a field rather than read out of the uniform so the
+    // despawn test below and the blink can never be looking at two numbers.
+    this.life = ORB_LIFETIME;
     // Set to true by anything that writes a position; the upload is skipped
     // entirely on a frame where every orb is asleep.
     this._dirty = false;
@@ -259,6 +271,22 @@ export class MoneyOrbs {
   setViewport(h, fovDeg) {
     const f = Math.max(1, h) / (2 * Math.tan((fovDeg * Math.PI) / 360));
     this.mat.uniforms.uScale.value = f;
+  }
+
+  /**
+   * FIRE SALE's shortened fuse, in seconds.
+   *
+   * IT APPLIES TO EVERY ORB ALREADY DOWN THERE, not only to new ones, and that
+   * is deliberate: the despawn is `age >= life` against a birth stamp, so a
+   * pick taken at the shop clears the floor of anything already older than the
+   * new fuse on the next frame. There is nothing on the floor at a shop - the
+   * clear swept it - so there is nothing for that to take.
+   */
+  setLifetime(secs) {
+    const v = Math.max(1, secs);
+    if (this.life === v) return;
+    this.life = v;
+    this.mat.uniforms.uLife.value = v;
   }
 
   /** The rainbow rim's phase. `c` is the rig's current house colour. */
@@ -496,7 +524,7 @@ export class MoneyOrbs {
       if (st === SETTLED) {
         // The whole point of the settled state: no integration, no writes.
         // Just the two tests that can get it out of that state again.
-        if (this.time - this.born[i] >= ORB_LIFETIME) { this._remove(i--); continue; }
+        if (this.time - this.born[i] >= this.life) { this._remove(i--); continue; }
         // Landed early, still held. It sits there and is not collectable yet.
         if (this.delay[i] > 0) { this.delay[i] -= dt; continue; }
         const dx = this.pos[i3] - px;
@@ -627,6 +655,9 @@ export class MoneyOrbs {
   clear() {
     this.count = 0;
     this._sweepT = 0;
+    // A new run is born on the default fuse. main.js sets it again from the
+    // build on the first frame, but a reset must not inherit the last run's.
+    this.setLifetime(ORB_LIFETIME);
     this.points.geometry.setDrawRange(0, 0);
   }
 }

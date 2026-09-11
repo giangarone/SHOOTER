@@ -234,6 +234,47 @@ export const THEME = {
   trueStrike: 0xf06292,      // the shot taken after a pause
   domino: 0xc2185b,          // one crit leaning on the next
   luckyStreak: 0xff5c8a,     // one body, hit and hit and hit
+  // ---- THE TWENTY-SEVEN THAT CAME IN WITH THE THIRD POOL -------------------
+  //
+  // Same rule as every block above: the colour is what the pick DOES. Ten of
+  // them landed in families that already existed (the crit magentas, the
+  // vitality greens, the economy golds); the rest sit beside whichever number
+  // they move.
+  //
+  // the gun, and when it is faster
+  crowbar: 0x9e7b4f,         // the swing, worth four of itself
+  harmWands: 0xff8f6b,       // the bottom of the magazine, faster
+  tightrope: 0xffab91,       // rate bought with height
+  runningOnFumes: 0xd84b20,  // everything, on an empty bar
+  // the crit family
+  ironLiturgy: 0xd16ba5,     // crit chance bought with the sights
+  pityParty: 0xff4081,       // the crit a drought owes you
+  redHarvest: 0xe0245e,      // the crit that pays in blood
+  // damage, and what it is measured against
+  feverDream: 0x64dd17,      // your own poison, turned outward
+  longHaul: 0xb03a2e,        // the fight that has gone on too long
+  secondaryInfection: 0x2e9e4f, // poison, three deep
+  underfed: 0x7a8b6f,        // thinner enemies
+  // staying alive
+  coldBlood: 0x5c8dc7,       // armour at the bottom of the bar
+  freshBandages: 0xa5d6a7,   // the reload that also dresses a wound
+  curtainCall: 0xff6f91,     // the last body, always generous
+  slowRelease: 0x66d9a6,     // a crate taken slowly
+  strayMercy: 0xad3c5e,      // the shot that helps
+  gristle: 0xd7a3a3,         // a bar that grows off the floor
+  // money, and what it buys that is not in the shop
+  highInterest: 0xe0b040,    // credits that earn
+  paperTrail: 0xcdb79e,      // every dollar ever spent
+  moneyBelt: 0x8d9b6a,       // the wallet as armour
+  fireSale: 0xff9e40,        // twice as much, half as long
+  movingDay: 0xc9a227,       // the floor, cashed in as rounds
+  raffleTicket: 0xc5a3ff,    // the box's own violet, banked
+  // movement, and what a jump is worth
+  updraft: 0x64c8e8,         // the jump that does not end
+  jackpot: 0xffef62,         // one hop in a hundred
+  scorchedEarth: 0xe25822,   // the slide that leaves a line
+  // what happens around you
+  quorum: 0xf9b233,          // ten bodies, one gun
 };
 
 
@@ -2294,6 +2335,459 @@ export const UPGRADES = {
     theme: THEME.luckyStreak,
     effects: [['+5% CRIT CHANCE PER HIT', GOOD], ['ON THE SAME ENEMY', NOTE], ['A MISS OR A SWITCH RESETS', BAD]],
     apply: (mods, n) => { mods.luckyStep = 0.05 * n; },
+  },
+  // ---- THE THIRD POOL ------------------------------------------------------
+  //
+  // Twenty-seven more max-1 picks, on the contract the two blocks above hold:
+  // zero is "not owned" and every reader tests for it. What they have in common
+  // as a GROUP is that most of them are questions about a thing the player is
+  // DOING or a thing the run has ACCUMULATED - how high they are standing, how
+  // much stamina is left, how many boxes they have bought, how long the boss
+  // fight has run - rather than a flat number folded into the stat block. The
+  // counters those questions need live on the Player (see reset()); only the
+  // settings are here, where rebuildMods can replay them.
+
+  // ---- the gun, and the moments it is better ------------------------------
+
+  // THE ONE PICK THAT MAKES THE BUTT OF THE RIFLE A WEAPON. Melee is already
+  // worth double at the kill (MELEE_KILL_MULT) and reaches four metres; four
+  // times the damage is what turns "the thing you do when something is on top
+  // of you" into a thing you walk toward something to do.
+  //
+  // THE TEN ROUNDS ARE WHAT PAY FOR THE WALK. They land on a HIT and not on a
+  // kill - the swing that connected is the one that cost the player the
+  // distance, and a swing that finished something off would pay a build that
+  // was already winning. It is deliberately the same shape SCAVENGER has and
+  // deliberately bigger per event, because a swing is one event every 0.6s and
+  // a kill is whatever the wave is handing out.
+  crowbar: {
+    name: 'CROWBAR',
+    max: 1,
+    theme: THEME.crowbar,
+    effects: [['MELEE DEALS 4x DAMAGE', GOOD], ['AND GRANTS 10 AMMO', GOOD], ['ON EVERY HIT', NOTE]],
+    apply: (mods, n) => { mods.crowbar = 4 * n; mods.crowbarAmmo = 10 * n; },
+  },
+  // FATAL RESERVE'S SHAPE, IN RATE. The bottom of the magazine, read off the
+  // count the TRIGGER saw rather than the live one for exactly the reason that
+  // pick is - see Player.magAtShot and the note in _resolveHit. Fifteen is
+  // most of a default magazine and all of a HOLLOW POINT one, which is the
+  // point: what it rewards is shooting the magazine dry instead of topping up.
+  harmWands: {
+    name: 'HARM WANDS',
+    max: 1,
+    theme: THEME.harmWands,
+    effects: [['THE LAST 15 ROUNDS OF', NOTE], ['EVERY MAGAZINE FIRE', NOTE], ['50% FASTER', GOOD]],
+    apply: (mods, n) => { mods.harmWands = 15 * n; mods.harmWandsRate = 0.5 * n; },
+  },
+  // HEIGHT AS A STAT. Every generated arena has boxes, decks and catwalks in
+  // it and nothing in either pool has ever paid for standing on one - the high
+  // ground bought sightlines and cost cover, and that was the whole of it.
+  // Read off the FEET being off the floor rather than off a named piece of
+  // geometry, so a kerb counts, a crate counts and a stair counts.
+  tightrope: {
+    name: 'TIGHTROPE',
+    max: 1,
+    theme: THEME.tightrope,
+    effects: [['+25% FIRE RATE', GOOD], ['WHILE OFF THE FLOOR', NOTE]],
+    apply: (mods, n) => { mods.highRate = 0.25 * n; },
+  },
+  // THE RED END OF THE STAMINA BAR, WHICH NOTHING HAS EVER PAID FOR. It is the
+  // one meter in the game a player only ever sees as a punishment - the lockout
+  // that refuses the next sprint - and this makes the bottom of it the best the
+  // gun ever is. The line is the LOCKOUT's own (see Player.staminaLow), so the
+  // window the card describes is exactly the red the HUD draws.
+  runningOnFumes: {
+    name: 'RUNNING ON FUMES',
+    max: 1,
+    theme: THEME.runningOnFumes,
+    effects: [['+100% DAMAGE', GOOD], ['+50% FIRE RATE', GOOD], ['WHILE STAMINA IS RED', NOTE]],
+    apply: (mods, n) => { mods.fumesDamage = 1.0 * n; mods.fumesRate = 0.5 * n; },
+  },
+
+  // ---- the crit family, three more ----------------------------------------
+
+  // CHEEKWELD'S TRADE, POINTED OUTWARD. That pick buys armour down the sights
+  // and this buys crit, off the same `aiming` flag and for the same reason -
+  // the player is paid for the DECISION, not for the weapon finishing its
+  // raise. +25% on a 5% base is a sixfold crit rate for as long as the sights
+  // are up, which is the largest single step the crit family has.
+  ironLiturgy: {
+    name: 'IRON LITURGY',
+    max: 1,
+    theme: THEME.ironLiturgy,
+    effects: [['+25% CRIT CHANCE', GOOD], ['WHILE AIMING DOWN SIGHTS', NOTE]],
+    apply: (mods, n) => { mods.aimCrit = 0.25 * n; },
+  },
+  // THE PITY TIMER, AND IT IS COUNTED IN SHOTS THAT LANDED. A trigger pull
+  // that touched nothing is not a drought, it is a miss - counting those would
+  // make the pick pay for shooting at a wall, which is the one thing in the
+  // game that should never pay. Five is short enough to land twice a magazine
+  // at the base crit rate and long enough that a DEADEYE build rarely reaches
+  // it, so the pick is worth most to the run that has nothing else.
+  //
+  // FIVE TIMES, FLAT, and not five times critMult: it is a number the card
+  // states outright, and a mega-crit that quietly got bigger with the rest of
+  // the crit family would be the one line in the pool that cannot be checked.
+  pityParty: {
+    name: 'PITY PARTY',
+    max: 1,
+    theme: THEME.pityParty,
+    effects: [['AFTER 5 NON-CRITS:', NOTE], ['A GUARANTEED 5x CRIT', GOOD]],
+    apply: (mods, n) => { mods.pityAfter = 5; mods.pityMult = 5 * n; },
+  },
+  // A CRIT, PAID IN BLOOD. One point is almost nothing per crit and is the
+  // whole pick over a magazine: a DEADEYE build crits a third of its shots, so
+  // this is a health bar that fills while the trigger is held and nothing at
+  // all to a build that never crits - which is the trade it is priced at.
+  //
+  // ONCE PER TRIGGER PULL, like every other question about a crit. A scattergun
+  // landing nine pellets on one chest is one crit and one coin, not nine.
+  redHarvest: {
+    name: 'RED HARVEST',
+    max: 1,
+    theme: THEME.redHarvest,
+    effects: [['CRITS HEAL 1 HP', GOOD], ['HALF THE TIME', NOTE]],
+    apply: (mods, n) => { mods.critHealChance = 0.5 * n; mods.critHeal = 1; },
+  },
+
+  // ---- damage, and what it is measured against ----------------------------
+
+  // BEING POISONED IS NOW SOMETHING TO WANT. It is STATUS CONDUIT's idea taken
+  // one step further: that pick makes a status on the player into a weapon
+  // against the room, and this makes it into the gun. Poison is the LONG
+  // status - eight seconds, four a second - so the window is a real stretch of
+  // a fight rather than a flash, and every theme with a poisoner in it becomes
+  // a theme that arms you.
+  feverDream: {
+    name: 'FEVER DREAM',
+    max: 1,
+    theme: THEME.feverDream,
+    effects: [['+100% DAMAGE', GOOD], ['WHILE YOU ARE POISONED', NOTE]],
+    apply: (mods, n) => { mods.feverDream = 1.0 * n; },
+  },
+  // THE FIGHT THAT HAS GONE ON TOO LONG. Uncapped, and it is the only pick in
+  // the pool that is - a boss fight ENDS, which is the ceiling, and a player
+  // who has been at one for two minutes is a player the boss is winning
+  // against. +2% every five seconds is 24% at a minute and 48% at two, so it
+  // never decides a fight that was going well and always decides one that was
+  // not.
+  //
+  // BOSSES ONLY. Read in _hitMult, which is the one place a hit knows what it
+  // landed ON - see the note there.
+  longHaul: {
+    name: 'LONG HAUL',
+    max: 1,
+    theme: THEME.longHaul,
+    effects: [['+2% DAMAGE TO A BOSS', GOOD], ['EVERY 5s OF THE FIGHT', NOTE], ['NO CEILING', GOOD]],
+    apply: (mods, n) => { mods.longHaulStep = 0.02 * n; mods.longHaulEvery = 5; },
+  },
+  // THE ONE STATUS IN THE GAME THAT STACKS. Everything else refreshes - see
+  // the note at the top of status.js - and this is the deliberate exception,
+  // held to poison alone and to three deep, because poison is the status that
+  // ticks half as often as fire and is meant to be the patient one. Three
+  // stacks is fire's rate at three times fire's duration, which is what the
+  // pick is worth and why it is only ever worth it to a build that poisons.
+  secondaryInfection: {
+    name: 'SECONDARY INFECTION',
+    max: 1,
+    theme: THEME.secondaryInfection,
+    effects: [['POISON STACKS 3 DEEP', GOOD], ['ON THE SAME ENEMY', NOTE]],
+    apply: (mods, n) => { mods.poisonStacks = 1 + 2 * n; },
+  },
+  // EVERY BODY IN THE ROOM, THINNER. It is the only pick that changes the
+  // enemy rather than the player, which also makes it the only one whose value
+  // never falls off: a fifth off every health bar is a fifth off wave 40's as
+  // much as wave 4's, where a flat damage number is not.
+  //
+  // NOT BOSSES. A boss is a fight with a shape, and EXECUTIONER already sells
+  // half a boss's health for a piece of the player's own bar - a pick that
+  // handed over a fifth of it for nothing would make that one a worse version
+  // of this.
+  underfed: {
+    name: 'UNDERFED',
+    max: 1,
+    theme: THEME.underfed,
+    effects: [['ENEMIES HAVE', NOTE], ['20% LESS HEALTH', GOOD], ['NOT BOSSES', NOTE]],
+    apply: (mods, n) => { mods.enemyHpMult *= Math.pow(0.8, n); },
+  },
+
+  // ---- staying alive ------------------------------------------------------
+
+  // ARMOUR THAT ONLY EXISTS WHERE IT MATTERS. BERSERKER pays damage for a low
+  // bar and this pays survival for it, and the two are meant to be found
+  // together: the quarter of the bar that used to be the part a run died in is
+  // the part it now fights hardest in.
+  //
+  // A HARD LINE AND NOT A RAMP, unlike BERSERKER - it is a place on the bar the
+  // player can see themselves crossing, and a ramp would make the best moment
+  // of the pick invisible.
+  coldBlood: {
+    name: 'COLD BLOOD',
+    max: 1,
+    theme: THEME.coldBlood,
+    effects: [['-30% DAMAGE TAKEN', GOOD], ['BELOW 25% HEALTH', NOTE]],
+    apply: (mods, n) => { mods.coldBloodAt = 0.25; mods.coldBloodCut = 0.3 * n; },
+  },
+  // THE RELOAD AS A SECOND VERB. Two health is small and the reload is the one
+  // thing a player does dozens of times a wave, so over a fight it is a real
+  // trickle - and it is gated at half the bar, so a run that is winning gets
+  // nothing from it at all.
+  //
+  // ON THE MAGAZINE SEATING, not on the button. It rides the same one-frame
+  // signal RELOAD BURST and HELLFIRE do, so a reload cancelled halfway pays
+  // nothing.
+  freshBandages: {
+    name: 'FRESH BANDAGES',
+    max: 1,
+    theme: THEME.freshBandages,
+    effects: [['RELOADING HEALS 2 HP', GOOD], ['AT HALF HEALTH OR BELOW', NOTE]],
+    apply: (mods, n) => { mods.bandage = 2 * n; },
+  },
+  // THE LAST BODY OF A WAVE, ALWAYS GENEROUS. Three crates is most of a health
+  // bar, and it arrives at the one moment in a wave when the player is
+  // guaranteed to be able to walk to them - the room is empty and the shop has
+  // not risen yet.
+  //
+  // IT IS NOT A DROP ROLL. rollDrop withholds health at a full bar for a good
+  // reason (a plate that cannot be used is a plate that should not have been
+  // rolled), and this deliberately ignores that: the wave-clear sweep collects
+  // whatever is left anyway, and OVERDRAW and the crate's own +25 ceiling both
+  // have something to do with it.
+  curtainCall: {
+    name: 'CURTAIN CALL',
+    max: 1,
+    theme: THEME.curtainCall,
+    effects: [['THE LAST KILL OF A WAVE', NOTE], ['DROPS 3 HEALTH CRATES', GOOD]],
+    apply: (mods, n) => { mods.curtainCall = 3 * n; },
+  },
+  // TWICE THE CRATE, PAID OUT OVER TWENTY SECONDS. Against NANOWEAVE (a rate
+  // that runs forever out of combat) this is a POOL - a fixed amount owed,
+  // draining at its own rate - which is what lets two crates stack honestly:
+  // each one adds its fifty and its own 2.5 a second, so a player who walks
+  // over two heals at five a second for twenty seconds rather than at 2.5 for
+  // forty.
+  //
+  // THE TWENTY SECONDS ARE THE COST. Fifty health is enormous and none of it
+  // is there on the frame the crate is taken, so a crate grabbed at 10 HP with
+  // something still shooting does not save the run - it has to be taken BEFORE
+  // it is needed, which is the one thing a health crate has never asked for.
+  slowRelease: {
+    name: 'SLOW RELEASE',
+    max: 1,
+    theme: THEME.slowRelease,
+    effects: [['HEALTH CRATES HEAL 2x', GOOD], ['OVER 20 SECONDS', BAD]],
+    apply: (mods, n) => { mods.slowRelease = 1 + n; mods.slowReleaseTime = 20; },
+  },
+  // ONE SHOT IN TWENTY HELPS. Kept clear of BLOOD TRANSFUSION, the active item
+  // that spends the player's own bar to top the run up: this is not a
+  // transfusion at all, it is a round that arrived and did the wrong thing.
+  //
+  // It is EVASION's shape - a die rolled on the way in - with the outcome
+  // turned all the way round: a dodge is a hit that did not land, and this is
+  // a hit that landed on your side. Twenty health is more than most single
+  // blows in the game are worth, so the pick is a net gain against anything
+  // that shoots and nothing at all against anything that swings.
+  //
+  // PROJECTILES ONLY, which is the whole shape of it. A rusher's fist reaches
+  // the player through the ENEMY context and a bullet through the PROJECTILE
+  // one (see _projCtx), so the pick asks the player to let the gunners shoot
+  // at them and to stay off the rushers.
+  strayMercy: {
+    name: 'STRAY MERCY',
+    max: 1,
+    theme: THEME.strayMercy,
+    effects: [['5% OF PROJECTILES', NOTE], ['HEAL YOU 20 HP', GOOD], ['INSTEAD OF HURTING', NOTE]],
+    apply: (mods, n) => { mods.strayMercy = 0.05 * n; mods.strayMercyHeal = 20; },
+  },
+  // SCAR TISSUE OFF THE FLOOR INSTEAD OF OFF THE CLOCK. That pick banks max
+  // health at a wave clear, which is a thing that happens TO a run; this banks
+  // it off a crate, which is a thing the player walked to - so a run carrying
+  // it collects health it does not need, and the bar itself is what the wave
+  // paid out.
+  //
+  // ONE POINT AND NOT FIVE. It has no ceiling and no wave gate, so the number
+  // has to be small enough that thirty crates is thirty health and not a
+  // second run's worth of bar.
+  gristle: {
+    name: 'GRISTLE',
+    max: 1,
+    theme: THEME.gristle,
+    effects: [['HEALTH CRATES HAVE A', NOTE], ['30% CHANCE OF +1 MAX HP', GOOD], ['PERMANENTLY', GOOD]],
+    apply: (mods, n) => { mods.gristleChance = 0.3 * n; mods.gristleHp = 1; },
+  },
+
+  // ---- money, and what it buys that is not in the shop --------------------
+
+  // CREDITS THAT EARN. The only pick in the pool that pays for NOT spending,
+  // and it is deliberately paid at the wave END rather than per second: a rate
+  // would make standing in the shop the best move in the game, and the wave
+  // boundary is a thing the player cannot farm - it arrives when the room is
+  // empty and not before.
+  //
+  // IT COMPOUNDS, as the word means: the interest is paid into the balance the
+  // next wave's interest is measured against.
+  highInterest: {
+    name: 'HIGH INTEREST',
+    max: 1,
+    theme: THEME.highInterest,
+    effects: [['BANKED CREDITS EARN', NOTE], ['20% INTEREST AT', NOTE], ['EVERY WAVE END', GOOD]],
+    apply: (mods, n) => { mods.interest = 0.2 * n; },
+  },
+  // WAR CHEST'S OPPOSITE NUMBER. That pick pays for the money sitting in the
+  // wallet and this pays for the money that has left it, so the two are the
+  // two halves of an economy build and neither is worth much to a run that
+  // does neither.
+  //
+  // PERMANENT AND UNCAPPED, because the thing it counts already is: a run
+  // cannot un-spend money. A wave-40 run has bought perhaps a dozen boxes and
+  // as many rerolls at a doubling price, which is +40% or so - real, and
+  // nothing like the runaway CARNAGE is.
+  paperTrail: {
+    name: 'PAPER TRAIL',
+    max: 1,
+    theme: THEME.paperTrail,
+    effects: [['+1% DAMAGE PER $1,000', GOOD], ['YOU HAVE EVER SPENT', NOTE], ['PERMANENTLY', GOOD]],
+    apply: (mods, n) => { mods.paperTrail = 0.01 * n; },
+  },
+  // THE WALLET AS ARMOUR. Capped at 20% and it takes $10,000 to get there,
+  // which is a shop's worth of savings deliberately not spent - so the pick is
+  // a reason to walk past the box, and it is at its weakest on the wave after
+  // one is bought. That swing is the whole of it.
+  moneyBelt: {
+    name: 'MONEY BELT',
+    max: 1,
+    theme: THEME.moneyBelt,
+    effects: [['-1% DAMAGE TAKEN', GOOD], ['PER $500 HELD', NOTE], ['UP TO -20%', NOTE]],
+    apply: (mods, n) => { mods.beltStep = 0.01 * n; mods.beltPer = 500; mods.beltCap = 0.2 * n; },
+  },
+  // TWICE AS MUCH, HALF AS LONG - and it is much less than half. An orb lies
+  // on the floor for 20 seconds and a crate for 30; at a 70% cut those are six
+  // and nine, which is barely longer than the fight that dropped them. The pick
+  // is a reason to go INTO the room a wave was fought in rather than to sweep
+  // it afterwards, and a player who hangs back loses more than the double ever
+  // paid them.
+  //
+  // THE WAVE-CLEAR SWEEP IS NOT A LOOPHOLE. It collects what is left, but the
+  // clock runs during the fight - so what the sweep finds is whatever survived
+  // six seconds, which on a long wave is the last few kills and nothing else.
+  fireSale: {
+    name: 'FIRE SALE',
+    max: 1,
+    theme: THEME.fireSale,
+    effects: [['ORBS AND PICKUPS', NOTE], ['ARE WORTH 2x', GOOD], ['AND DESPAWN 70% FASTER', BAD]],
+    apply: (mods, n) => { mods.lootMult = 1 + n; mods.lootDespawn = Math.pow(0.3, n); },
+  },
+  // WHAT IS STILL ON THE FLOOR WHEN THE WAVE ENDS, IN ROUNDS. The sweep pays
+  // the credits as it always did; this is paid on top of them, per orb, which
+  // makes the pick a reason to STAY IN THE FIGHT rather than to break off and
+  // tidy up after every kill.
+  //
+  // THE EXPLOIT IT IS PRICED AGAINST: hoard the floor, collect nothing, cash
+  // in at the clear. It does not work, and the reason is ORB_LIFETIME - an orb
+  // left for more than twenty seconds is gone, money and all, so a player
+  // hoarding deliberately is burning credits for rounds at a rate nobody would
+  // take. What is left at a clear is the orbs from the last twenty seconds of
+  // the fight, which is what the pick is actually paying for.
+  //
+  // The reserve's own ceiling is the cap; there is no second one.
+  movingDay: {
+    name: 'MOVING DAY',
+    max: 1,
+    theme: THEME.movingDay,
+    effects: [['AT EVERY WAVE END', NOTE], ['UNCOLLECTED ORBS BECOME', NOTE], ['5 AMMO EACH', GOOD]],
+    apply: (mods, n) => { mods.movingDay = 5 * n; },
+  },
+  // THE BOX, BANKED. Every roll ever bought makes the item meter fill faster,
+  // for the rest of the run - so the mystery box stops being a thing a run
+  // visits and becomes a thing a run is built around, and the doubling price
+  // at each shop is what keeps that from being free.
+  //
+  // IT IS THE RATE AND NOT THE CEILING, which is TWIN CELL's. A player holding
+  // both banks two charges and fills them faster; neither pick does the other's
+  // job.
+  raffleTicket: {
+    name: 'RAFFLE TICKET',
+    max: 1,
+    theme: THEME.raffleTicket,
+    effects: [['EVERY MYSTERY BOX BOUGHT', NOTE], ['+5% ITEM CHARGE RATE', GOOD], ['PERMANENTLY', GOOD]],
+    apply: (mods, n) => { mods.raffle = 0.05 * n; },
+  },
+
+  // ---- movement, and what a jump is worth ---------------------------------
+
+  // HOLD THE BUTTON AND STOP FALLING. It is LEAD BALLOON's exact opposite and
+  // DOUBLE JUMP's other half: that pick gives a second arc and this gives the
+  // first one no end, for as long as the bar lasts.
+  //
+  // NOT PARTY BALLOONS' MACHINERY, and deliberately. That item lifts an ENEMY
+  // off the floor and holds it there helpless - a scripted removal with a
+  // ground snap at the end of it - where this is a verb the player is holding
+  // down and steering with. The one is a state on a body; the other is a term
+  // in the gravity line (see Player.update), which is the only place a float
+  // can compose correctly with a dash, a jump and a ceiling at the same time.
+  //
+  // IT SPENDS THE SPRINT BAR, which is what stops it being flight: every
+  // second in the air is a second of run the player does not have when they
+  // land, and the lockout at the bottom applies to the float exactly as it
+  // applies to the sprint.
+  updraft: {
+    name: 'UPDRAFT',
+    max: 1,
+    theme: THEME.updraft,
+    effects: [['HOLD JUMP TO FLOAT', GOOD], ['IT SPENDS STAMINA', BAD]],
+    apply: (mods, n) => { mods.float = n; mods.floatDrain = 26; mods.floatFall = 1.1; },
+  },
+  // ONE HOP IN A HUNDRED PAYS FOR EVERYTHING. A jump is the cheapest thing the
+  // player does and the only verb in the game with no resource behind it, so
+  // this is the one pick that rewards a habit rather than a decision - and at
+  // 1% it lands perhaps twice a run, which is exactly often enough to be a
+  // thing that HAPPENS rather than a thing that is farmed.
+  //
+  // THE GROUND JUMP ONLY. The air jump is edge-triggered off a charge and a
+  // held key bunny-hops down a corridor at four hops a second; rolling on both
+  // would make a DOUBLE JUMP build's odds twice a plain one's for no reason
+  // anybody could read off the card.
+  jackpot: {
+    name: 'JACKPOT',
+    max: 1,
+    theme: THEME.jackpot,
+    effects: [['GROUND JUMPS HAVE A 1%', NOTE], ['CHANCE OF FULL HP & AMMO', GOOD]],
+    apply: (mods, n) => { mods.jackpot = 0.01 * n; },
+  },
+  // HELLFIRE, OFF THE SLIDE INSTEAD OF OFF THE RELOAD. Same patches, same
+  // beat, same friendly creep - what changes is what lays them, and a slide is
+  // a thing with a direction and an end, so the line it leaves is a wall drawn
+  // across a room rather than a trail that follows the player around.
+  //
+  // A build holding both gets both; the patches are on one list with one cap,
+  // because they are the same object and a slide through your own reload trail
+  // should not evict it.
+  scorchedEarth: {
+    name: 'SCORCHED EARTH',
+    max: 1,
+    theme: THEME.scorchedEarth,
+    effects: [['SLIDING LEAVES A', NOTE], ['TRAIL OF FIRE', GOOD], ['IT BURNS ENEMIES', NOTE]],
+    apply: (mods, n) => { mods.slideFire = 0.5 * n; mods.slideFireRadius = 2.2; },
+  },
+
+  // ---- what happens around you --------------------------------------------
+
+  // PANIC TURRET, BOUGHT WITH KILLS INSTEAD OF WITH BLOWS. That pick answers a
+  // run that is losing and this one answers a run that is winning, which is why
+  // they are the same gun at two different prices - ten bodies and ten seconds,
+  // against one hit and ten seconds.
+  //
+  // IT IS THE ITEM'S OWN TURRET, unchanged: same class, same one-of-the-
+  // player's-shots per round, same half-beat. Its own cap, counted over the
+  // deployed list for the reason PANIC TURRET's is - a turret can be retired by
+  // MAX_DEPLOYED's eviction or by its own clock, and a counter would have to be
+  // decremented in both places.
+  quorum: {
+    name: 'QUORUM',
+    max: 1,
+    theme: THEME.quorum,
+    effects: [['EVERY 10 KILLS SUMMONS', NOTE], ['A FREE SENTRY TURRET', GOOD], ['FOR 10s', NOTE]],
+    apply: (mods, n) => { mods.quorumEvery = 10; mods.quorumLife = 10; mods.quorumMax = 3 * n; },
   },
 };
 

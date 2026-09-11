@@ -641,13 +641,13 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 132 upgrades and **the draw is flat** - every one of them has exactly
+The pool is 159 upgrades and **the draw is flat** - every one of them has exactly
 the same chance of appearing. It used to be weighted three ways, with rares
 locked out before wave 2 and cursed before wave 3, and two things were wrong
 with that: the player could not see it (the totem stopped printing a rarity line
 long ago), and the labels had stopped describing the pool anyway, because nearly
 every passive item added since the pool doubled got filed `rare` or `cursed` on
-feel. A specific upgrade turns up in roughly 2% of totem sets, so a run sees a
+feel. A specific upgrade turns up in under 2% of totem sets, so a run sees a
 slice of the pool rather than all of it - that is the point, but it means a new
 upgrade only matters if it is worth taking on sight, without a partner card.
 
@@ -1018,6 +1018,237 @@ All three are read in `Player.rollCrit`, which is still rolled once per trigger
 pull and never per pellet. LUCKY STREAK's counter is fed from `Game.shoot` off
 the first entry in `_shotHits` - one trigger pull is one entry however many
 pellets landed, which is exactly the grain the streak counts in.
+
+### The third pool
+
+Twenty-seven more max-1 picks. The second pool is mostly "when"; this one is
+mostly **"where you are standing and what the run has already done"** - how high
+off the floor you are, how much stamina is left, how much money has left the
+wallet since wave one, how long the boss fight has run. Several of them are the
+first things in the game to pay for a fact about the run rather than about the
+frame.
+
+Four of them keep a **running total on the Player** rather than in `mods`:
+`spentTotal`, `boxesBought`, `crateHp` and the slow-release heal pool. That is
+not a style choice. `rebuildMods()` replays the whole owned list from
+`DEFAULT_MODS` after every draft pick, so anything an EVENT writes into `mods`
+is handed back by the next totem the player walks into - silently, and in a
+direction nobody notices, because the number is only ever slightly too small.
+
+**The gun, and the moments it is better**
+
+| Upgrade | Effect |
+| --- | --- |
+| CROWBAR | Melee deals 4x damage and a swing that connects grants 10 reserve rounds |
+| HARM WANDS | The last 15 rounds of every magazine fire 50% faster |
+| TIGHTROPE | +25% fire rate while standing above the arena floor |
+| RUNNING ON FUMES | +100% damage and +50% fire rate while the stamina bar is in its red |
+
+HARM WANDS reads `Player.magAtShot` - what the TRIGGER saw - and not the live
+count, for the reason FATAL RESERVE does: by the time anything downstream looks,
+the magazine has been billed by one round, or by three under TRIPLE TAP, or by
+nothing at all when BELT FEED took it off the reserve. Both branches that fire a
+round set `magAtShot` before they set the cooldown off `effectiveFireRate`, so
+the rate is always bought with the round that just left.
+
+TIGHTROPE reads `pos.y > RAISED_GROUND` and names no geometry, so a kerb, a
+stair tread, a crate and a catwalk all count - and so does the top of a jump,
+which is correct and is the one part of the pick that is free. Nothing in either
+earlier pool had ever paid for the high ground, which until now bought sightlines
+and cost cover and nothing else.
+
+RUNNING ON FUMES uses `Player.staminaLow`, which is the **lockout's own line** -
+the point below which the game refuses the next sprint. That is what makes the
+window the card describes exactly the red the HUD draws, rather than a rough
+threshold at a round number that happens to look similar.
+
+**The crit family, three more**
+
+| Upgrade | Effect |
+| --- | --- |
+| IRON LITURGY | +25% crit chance while aiming down sights |
+| PITY PARTY | After 5 consecutive landed non-crits, the next shot is a guaranteed 5x crit |
+| RED HARVEST | Crits heal 1 HP, half the time |
+
+All three obey the family's one rule: a crit is resolved **once per trigger
+pull, never per pellet**. PITY PARTY counts only shots that LANDED - a trigger
+pull that touched nothing is a miss, not a drought, and counting those would pay
+a player for shooting at a wall. Its multiplier is a flat 5x that REPLACES
+`critMult` in `_hitMult` rather than stacking on it, because the card states the
+number outright and a mega-crit that quietly grew with the rest of the crit
+family would be the one line in the pool a player cannot check.
+
+**Damage, and what it is measured against**
+
+| Upgrade | Effect |
+| --- | --- |
+| FEVER DREAM | +100% damage while YOU are poisoned |
+| LONG HAUL | +2% damage to a boss for every 5s the fight has lasted, uncapped |
+| SECONDARY INFECTION | Poison stacks up to three times on the same enemy |
+| UNDERFED | Non-boss enemies have 20% less health |
+
+FEVER DREAM is STATUS CONDUIT's idea taken one step further: that pick turns a
+status on the player into a weapon against the room, and this one turns it into
+the gun. Poison is the long status - eight seconds at four a second - so the
+window is a real stretch of a fight, and every theme with a poisoner in it
+becomes a theme that arms you.
+
+LONG HAUL is the only uncapped number in any of the three pools, and the ceiling
+is that the fight ENDS. It is read in `_hitMult`, which is the one place a hit
+knows what it landed on. Its clock is `bossFight.startedAt`, tested for
+PRESENCE and not for sign - game time only grows from zero in a real run, so
+`>= 0` looks equivalent and is not.
+
+SECONDARY INFECTION is **the one status in the game that stacks**. Everything
+else refreshes (see the note at the head of `js/status.js`) and the exception is
+held to poison alone and to three deep, because that argument is about statuses
+on the PLAYER, where the number is nowhere on screen. This is the player's own
+poison on a body with a health bar they can watch. The cap reaches `Enemy` the
+same way SHARED PAIN's hook does - a module-level `setPoisonStackCap`, pushed
+from the frame loop - because `applyStatus` is on the enemy and cannot see a
+build. The stack multiplies the DOT rather than running a second timer: one
+clock, one number, and it is the number already floating off the body on the
+beat.
+
+UNDERFED is applied at the SPAWN and not on the wave config. Folding it into
+`_cfg` would mean a pick taken at the shop did nothing until the wave after
+next, and would leave the arena holding two generations of enemy on two
+different health curves. Bosses are exempt: EXECUTIONER already sells half a
+boss's health for a piece of the player's own bar, and a pick that handed over a
+fifth of it for nothing would make that one strictly worse.
+
+**Staying alive**
+
+| Upgrade | Effect |
+| --- | --- |
+| COLD BLOOD | -30% damage taken below 25% health |
+| FRESH BANDAGES | Reloading at half health or below heals 2 HP |
+| CURTAIN CALL | The last enemy killed in a wave drops 3 health crates |
+| SLOW RELEASE | Health crates heal 2x, paid out over 20 seconds |
+| STRAY MERCY | 5% of incoming projectiles heal 20 HP instead of hurting |
+| GRISTLE | Health crates have a 30% chance of banking +1 permanent max HP |
+
+COLD BLOOD is a LINE and not a ramp, unlike BERSERKER which it mirrors: the
+player can see themselves cross a quarter of the bar, and a ramp would make the
+best moment of the pick the one moment it is invisible. The pair are meant to be
+found together - the quarter of the bar a run used to die in becomes the quarter
+it fights hardest in.
+
+SLOW RELEASE is a **pool and a rate**, not a deadline, and that is what lets two
+crates stack the way the card promises. Each one adds its fifty to `healOwed`
+and its own fifty-over-twenty-seconds to `healRate`, so a player who walks over
+two heals at twice the speed for the same twenty seconds - not at one speed for
+forty, which is what a single shared clock would have given them and is not what
+"they stack" means. The pool drains through `Player.heal` like every other heal
+in the game, so HEALTHY CORE still blocks it and OVERDRAW still catches the
+spill. The twenty seconds are the cost: fifty health is enormous and none of it
+is there on the frame the crate is taken, so a crate grabbed at 10 HP with
+something still shooting does not save the run.
+
+STRAY MERCY is rolled in the projectile context's own `onHitPlayer` lambda,
+above `_hurtPlayer` entirely - so a transfused round never touches the damage
+sinks at all. It does not break CARNAGE, it does not spend a ward, it does not
+reset the flawless streak, because nothing hit the player. That is the honest
+reading of "instead of hurting", and it is also what makes the pick projectiles
+only: a rusher's fist reaches the player through the ENEMY context, so the pick
+asks you to let the gunners shoot at you and to stay off the rushers.
+
+GRISTLE banks into `crateHp`, its own field, and NOT into `hpBanked` - that one
+is capped by `hpBankCap`, which is SCAR TISSUE's and UNTOUCHED's ceiling and has
+nothing to do with how many crates a run walks over. Sharing the field would
+have made either pick quietly eat the other's limit.
+
+CURTAIN CALL deliberately ignores the rule `rollDrop` holds about withholding
+health at a full bar. A crate heals 25 OVER the cap by its own rule, OVERDRAW
+turns the spill into item charge, GRISTLE may bank a point of max HP off it and
+SLOW RELEASE turns it into twenty seconds of regeneration - there is no build in
+which three crates are worth nothing.
+
+**Money, and what it buys that is not in the shop**
+
+| Upgrade | Effect |
+| --- | --- |
+| HIGH INTEREST | Banked credits earn 20% interest at every wave end, compounding |
+| PAPER TRAIL | +1% damage per $1,000 the run has ever spent, permanently |
+| MONEY BELT | -1% damage taken per $500 held, up to -20% |
+| FIRE SALE | Orbs and pickups are worth 2x and despawn 70% faster |
+| MOVING DAY | At every wave end, orbs still on the floor also pay 5 reserve rounds each |
+| RAFFLE TICKET | +5% item charge rate for every mystery box the run has bought |
+
+HIGH INTEREST is paid at the **boundary** and not per second, which is the whole
+of why it is not a way of farming the shop: a rate would make standing still the
+best move in the game (the wave break has no clock on it), and a wave end
+arrives when the room is empty and not one second before.
+
+PAPER TRAIL forced a real change: every credit that leaves the wallet now goes
+through one `Game._spend`. There were three places writing `credits -=` and a
+fourth billing CASH CANNON's debt, so the pick would have been correct about
+rerolls and blind to the ammo console. It is WAR CHEST's opposite number - that
+one pays for the money in the wallet and this pays for the money that has left
+it, so an economy build holding both is paid twice for the same dollar, once
+each way.
+
+MOVING DAY counts the orbs and does not consume them: the sweep still pays their
+credits exactly as it always did. **The exploit it is priced against** is
+hoarding - leave everything, cash in at the clear - and it does not work,
+because `ORB_LIFETIME` is twenty seconds. An orb left longer is gone, money and
+all, so a player hoarding on purpose is burning credits to buy rounds at a rate
+nobody would take. What the pick actually pays for is the last twenty seconds of
+a fight, which makes it a reason to stay in one rather than to break off and
+tidy up after every kill.
+
+FIRE SALE's fuse is a **uniform**, not a constant. The orbs' blink is computed
+in the shader against `uLife`; one baked at twenty seconds would have every orb
+of that run vanish mid-glow with its blink still six seconds in the future. Its
+half on the pickups runs through `Game._addPickup`, one door for every plate the
+game ever places, so the relief net and the health scatter shorten with
+everything else rather than being the two spawners that quietly did not.
+
+RAFFLE TICKET rides in `Player.addItemCharge`, the only door charge comes
+through, so the kills, the battery plate, OVERDRAW's spill and BAILIFF's refund
+are all lifted by it without any of them being told. It is the RATE where TWIN
+CELL is the CEILING; a run holding both banks two charges and fills them faster.
+
+**Movement, and what happens around you**
+
+| Upgrade | Effect |
+| --- | --- |
+| UPDRAFT | Hold jump to float. It spends stamina |
+| JACKPOT | Every ground jump has a 1% chance of full health and a full reserve |
+| SCORCHED EARTH | Sliding leaves a trail of fire that burns enemies |
+| QUORUM | Every 10 kills summons a free sentry turret for 10s |
+
+UPDRAFT does **not** reuse PARTY BALLOONS' machinery, and the difference is the
+point: that item lifts an ENEMY off the floor and holds it there helpless, with
+a ground snap at the end - a scripted removal - where this is a verb the player
+holds down and steers with. It is written as a clamp on `vel.y` the frame after
+gravity is applied, which is the only place a float composes correctly with a
+dash, a jump and a ceiling at once. It only catches a FALL: clamping a rising
+jump would cap the arc, so the player would press jump and go less high. And it
+sinks slowly rather than hovering, because a true hover is a player nothing that
+walks can reach.
+
+JACKPOT is the ground jump only. That branch is held-key - bunny-hopping down a
+corridor is movement the game already had - where the air jump is edge-triggered
+off a charge, and rolling on both would hand a DOUBLE JUMP build twice a plain
+one's odds for a reason nowhere on the card. The **sound is the whole tell**: a
+1% roll on a verb pressed a hundred times a wave lands while the player is aimed
+somewhere else, so `SFX.jackpot` is a rising major arpeggio built to interrupt -
+a machine counting out what it owes, which is what a jackpot is.
+
+SCORCHED EARTH lays HELLFIRE's own patches off the slide instead of off the
+reload: one list, one cap, because they are the same object and a slide through
+your own reload trail must not evict it. A slide has a direction and an end, so
+what it leaves is a wall drawn across a room rather than a trail that follows
+the player about. A build holding both gets both, and the reload's numbers win
+where the two overlap.
+
+QUORUM is PANIC TURRET's gun bought with kills instead of with blows - the same
+class, the same one-of-the-player's-shots per round, the same half-beat. One
+answers a run that is losing and the other a run that is winning, which is why
+they are one gun at two prices. It carries its own flag and its own cap counted
+over the deployed list, so a run holding both gets both caps rather than one
+eating the other's.
 
 ### Active items
 
@@ -1461,6 +1692,7 @@ npm run test:sprint
 npm run test:crouch
 npm run test:active
 npm run test:newpool
+npm run test:thirdpool
 ```
 
 The targeted suites, because the smoke test's bot rarely survives past the
@@ -1616,6 +1848,9 @@ test/solar.mjs      SOLAR end to end - three of its four reach into the
                     turned the shot AND stopped once it was spent
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
+test/thirdpool.mjs  the twenty-seven picks that read where the player is
+                    standing or what the run has already spent, and the four
+                    totals that must survive a draft pick
 test/aim.mjs        the sights, the crosshair that reads the cone, the marker
 test/accuracy.mjs   the held trigger blooms, caps, recovers - and is not recoil
 test/crouch.mjs     the crouch, the slide, the dive out of a jump, the swing

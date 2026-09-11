@@ -33,11 +33,40 @@ export const POWERUP_TYPES = {
     color: 0x00e676,
     emissive: 0x00e676,
     amount: 25,
+    /**
+     * THE ONE PICKUP THREE PASSIVE ITEMS ALL REACH FOR, and they are answered
+     * here rather than in main.js for AMMO SURPLUS's reason: `amount` above is
+     * what the pickup IS - it is what the drop's need-scaling and the HUD read
+     * - and what a pick changes is what walking over one is WORTH.
+     *
+     * The order matters. FIRE SALE scales the crate first (it is a question
+     * about the object), then SLOW RELEASE decides whether the result is paid
+     * now or owed, and GRISTLE's coin is tossed last and independently of both
+     * - it is a question about the crate having been PICKED UP, not about how
+     * much of it landed.
+     */
     apply: (player) => {
-      // TWENTY-FIVE OVER THE CAP, which is the crate's own rule and the reason
-      // it takes a `cap` at all - see Player.heal. Anything past even that
-      // ceiling is OVERDRAW's, if the run owns it.
-      player.heal(25, player.maxHealth + 25);
+      const m = player.mods || {};
+      // FIRE SALE. Twice the crate, and the despawn that pays for it is on the
+      // Powerup's own clock - see PICKUP_LIFETIME's use in update().
+      const amount = 25 * (m.lootMult || 1);
+      if (m.slowRelease > 1) {
+        // SLOW RELEASE. Twice as much again, owed rather than paid. It does
+        // NOT go through the +25 overheal ceiling below, and cannot: the pool
+        // is drained a fraction of a point at a time through Player.heal, so
+        // the cap it is measured against is whatever the bar is at on each of
+        // those frames. An overheal that only exists on the frame the crate is
+        // taken is not something a twenty-second drip can spend.
+        player.addSlowHeal(amount * m.slowRelease);
+      } else {
+        // TWENTY-FIVE OVER THE CAP, which is the crate's own rule and the
+        // reason it takes a `cap` at all - see Player.heal. Anything past even
+        // that ceiling is OVERDRAW's, if the run owns it.
+        player.heal(amount, player.maxHealth + 25);
+      }
+      // GRISTLE. One permanent point, three times in ten - see
+      // Player.bankCrateHealth for why it has a bank of its own.
+      player.bankCrateHealth();
     },
     chance: 0.04,
     needy: 0.04,
@@ -151,7 +180,11 @@ export const AMMO_PICKUP = {
   // changed its own advertised size when a totem was claimed would be a
   // different pickup. What the pick changes is what walking over one is worth.
   apply: (player) => {
-    const got = Math.round(45 * (player.mods ? player.mods.ammoPickupMult : 1));
+    const m = player.mods;
+    // AMMO SURPLUS and FIRE SALE, multiplying: one pick makes the crate fuller
+    // and the other makes it worth double at the price of the clock, and a
+    // build holding both has bought both.
+    const got = Math.round(45 * (m ? m.ammoPickupMult * (m.lootMult || 1) : 1));
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + got);
   },
   sfx: 'pickupAmmo',

@@ -111,6 +111,17 @@ export function setShareHook(fn) {
   shareHook = fn;
 }
 
+// SECONDARY INFECTION's depth, for the same reason the hook above is a hook:
+// applyStatus() is on the ENEMY and there is no player within reach of it.
+// One module-level number rather than a mods read, pushed by main.js whenever
+// the build changes - and it is the CAP, not a flag, so a run without the pick
+// holds 1 and every body's stack is pinned there.
+let poisonStackCap = 1;
+
+export function setPoisonStackCap(n) {
+  poisonStackCap = Math.max(1, n || 1);
+}
+
 // WEAK POINT's multiplier. A module constant rather than a mod read, for the
 // same reason the hook above is a hook: the enemy cannot see the player. The
 // FLAG is what the build sets (main.js only ever marks a body while the pick is
@@ -332,6 +343,11 @@ export class Enemy {
     // everything else in it moves to. Now a tick is a discrete event on the
     // beat: burn twice a bar-beat, poison once. See _tickStatus.
     this._dot = { poison: 0, burn: 0 };
+    // SECONDARY INFECTION's depth on THIS body. Always at least 1, which is
+    // the refresh rule every other status keeps - see applyStatus. It
+    // multiplies the poison tick and nothing else, so a run without the pick
+    // is multiplying by one and reads exactly as it always did.
+    this.poisonStacks = 1;
     // Where the pulse stood at the last tick. -1 until the first one is seen,
     // so an enemy set alight mid-beat waits for the next edge rather than
     // taking a tick on the frame it caught fire.
@@ -541,6 +557,25 @@ export class Enemy {
       if (this._statusCd[kind] > 0) return;
       this._statusCd[kind] = dur * 2;
     }
+    // SECONDARY INFECTION. THE ONE STATUS IN THIS GAME THAT STACKS, and the
+    // exception is held to poison alone and to three deep.
+    //
+    // WHY THE EXCEPTION IS SAFE HERE and is not safe anywhere else: everything
+    // in STATUS_ORDER refreshes because a stacking effect across thirty
+    // enemies a wave is a death sentence with no number on screen (see the
+    // note at the top of status.js) - but that argument is about statuses ON
+    // THE PLAYER. This is the player's own poison on a body, and the body has
+    // a health bar the player can watch it come off.
+    //
+    // IT COUNTS A FRESH APPLICATION, not a refresh of a dying one: the stack
+    // goes up whenever poison lands on something already poisoned, and falls
+    // to nothing when the timer runs out (see _tickStatus). What the stack
+    // multiplies is the DOT, so three stacks is three times the tick and not
+    // three timers - one clock, one number, and it is the number already
+    // floating off the body on the beat.
+    if (kind === 'poison' && poisonStackCap > 1 && this.status.poison > 0) {
+      this.poisonStacks = Math.min(poisonStackCap, this.poisonStacks + 1);
+    }
     this.status[kind] = Math.max(this.status[kind], dur);
     if (power > 0 && kind in this._dot) this._dot[kind] = Math.max(this._dot[kind], power);
   }
@@ -655,6 +690,11 @@ export class Enemy {
       if (this.status[k] <= 0) {
         this.status[k] = 0;
         if (k in this._dot) this._dot[k] = 0;
+        // The stack dies with the timer. A body that shook the poison off is a
+        // clean body, and the next dose starts at one - which is what makes
+        // three stacks something the player has to keep ON a target rather
+        // than something a target accumulates for the rest of its life.
+        if (k === 'poison') this.poisonStacks = 1;
       } else {
         any = true;
       }
@@ -680,7 +720,8 @@ export class Enemy {
       this._dotPulse = ctx.pulse;
       if (!first) {
         const dmg = (this.status.burn > 0 ? this._dot.burn : 0)
-          + (this.status.poison > 0 && ctx.pulseWhole ? this._dot.poison : 0);
+          + (this.status.poison > 0 && ctx.pulseWhole
+            ? this._dot.poison * this.poisonStacks : 0);
         if (dmg > 0) {
           this.takeDamage(dmg, true);
           if (this.dead) return;
