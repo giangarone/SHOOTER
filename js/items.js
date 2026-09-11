@@ -107,7 +107,7 @@ const NOTE = 0;
 // be weighing what they do, and a printed "20s" makes that a sum instead.
 
 /**
- * The pool. Thirty-seven.
+ * The pool. Sixty-six.
  *
  * IT USED TO BE FIVE, and the note here used to say that five was the point:
  * few enough that a player learnt all of them inside two runs and a swap was a
@@ -116,7 +116,7 @@ const NOTE = 0;
  * and taking a second item throws the first away - which is unchanged - and the
  * row still comes up only every third shop, so a run still sees three or four
  * offers however deep the pool is. Five meant a player saw the same three items
- * every run. Thirty-seven means the offer is a thing that happens TO a run
+ * every run. Sixty-six means the offer is a thing that happens TO a run
  * rather than a menu it works through, and the decision at the box is the
  * same one it always was: is this better than what I am carrying.
  *
@@ -1434,8 +1434,10 @@ export const ACTIVE_ITEMS = {
     name: 'LOCKPICK',
     charge: 60,
     theme: THEME.lockpick,
-    // THE MOST EXPENSIVE ITEM IN THE POOL, and it has to be: what it buys is
-    // the thing every other item in this file is bought WITH. Sixty dead
+    // THE DEAREST THING IN THE POOL THAT IS SPENT IN THE SHOP, and it has to
+    // be: what it buys is the thing every other item in this file is bought
+    // WITH. (EXECUTIVE DECISION costs twice as much, and is spent in a boss
+    // fight - the two never compete for the same press.) Sixty dead
     // chasers is most of a wave, and what comes back is one
     // roll of a box that would otherwise have cost a thousand dollars and
     // doubled from there.
@@ -1508,6 +1510,862 @@ export const ACTIVE_ITEMS = {
       game.sfx.buy();
     },
   },
+
+  // =========================================================================
+  // THE THIRD BLOCK - TWENTY-FOUR MORE
+  // =========================================================================
+  //
+  // What the pool did not have before these, and what each of them was added
+  // to cover:
+  //
+  //   - A PROMISE RATHER THAN A PAYMENT. LIFE INSURANCE and BACKORDER are the
+  //     first two items in the game that do nothing at the moment they are
+  //     pressed. One of them is a window that only pays if something goes
+  //     wrong inside it; the other is a parcel that only pays if the player is
+  //     still standing when it lands. Every other heal in the pool is a number
+  //     arriving on the frame of the press.
+  //   - A DEBT. MEDICAL DEBT and LIFE SENTENCE take their price LATER - at the
+  //     end of the wave, or for the rest of the run - where BLOOD TAX and OPEN
+  //     VEIN take theirs now. A cost the player has already forgotten about by
+  //     the time it arrives is a different decision to one they watch happen.
+  //   - THE ROOM'S OWN COUNT AS THE PAYLOAD. FAITH HEALING, PICKPOCKET, HEAD
+  //     COUNT and PHLEBOTOMY all read something off the arena and pay out in
+  //     proportion to it, which makes them BODY COUNT's cousins: an empty room
+  //     is an empty press, and knowing that is the skill.
+  //   - THE WALLET AS AMMUNITION. MONEY SHOT and GOLDEN PARACHUTE join PAY TO
+  //     WIN as the three items whose real cost is money, and all three are
+  //     bounded by the same thing: there is no way to earn a credit without
+  //     killing something.
+  //
+  // NOTHING HERE HAS A SYSTEM OF ITS OWN, which is the rule the second block
+  // set and this one keeps. Four more items run for a window and join the
+  // running list; one more thing is left in the arena and joins the deployed
+  // list; the rest write a field the shot path, the melee or the kill sweep
+  // was already reading.
+
+  // ---- the promise, and the debt ------------------------------------------
+
+  itemInsurance: {
+    name: 'LIFE INSURANCE',
+    charge: 60,
+    theme: THEME.holy,
+    // THE ONLY ITEM IN THE POOL THAT PAYS OUT FOR A MISTAKE. Ten seconds in
+    // which the hit that would have ended the run leaves the player at one
+    // health and hands back twenty - so the window is not damage reduction, it
+    // is one death cancelled, and only one: the policy is spent by the claim.
+    //
+    // PRESSED BEFORE THE TROUBLE, WHICH IS THE WHOLE DECISION. AEGIS is eight
+    // seconds of nothing landing at all and costs the same sixty; this is ten
+    // seconds in which everything lands normally and exactly one of them is
+    // survived. A player who presses it and is never in danger has spent a
+    // wave's charge on nothing, which is what insurance is.
+    //
+    // IT RIDES Player.takeDamage, the one place every source of damage in the
+    // game ends up - a bullet, a burn, a lava patch, a corpse blast - because
+    // a policy that only covered bullets would be a policy the player finds
+    // the edge of by dying to a pool.
+    effects: [['THE HIT THAT WOULD KILL YOU', GOOD], ['LEAVES YOU AT 1 HP AND HEALS 20', GOOD]],
+    duration: 10,
+    use: (game) => {
+      const p = game.player;
+      p.insuredEnd = game.time + 10;
+      game.effects.shockwave(p.pos, THEME.holy, 7, 0.6);
+      game.effects.burst(p.eyeInto(_v), 0xfff2b0, 26, 5, 3, 0.7);
+      game.sfx.itemSurge();
+    },
+    // CLEARED WHATEVER ENDED IT, claim or clock. `insuredEnd` is the whole of
+    // the state and Player.takeDamage zeroes it the moment it pays, so this is
+    // only ever tidying up a window nothing happened in.
+    end: (game) => { game.player.insuredEnd = 0; },
+  },
+
+  itemBackorder: {
+    name: 'BACKORDER',
+    charge: 60,
+    theme: THEME.vitality,
+    // TWENTY-FIVE HEALTH, IN TEN SECONDS' TIME. TRAUMA KIT is twenty-five now
+    // for fifty, so this is dearer AND slower - and what the extra ten points
+    // of charge buy is that the parcel is already paid for when the fight
+    // turns. It is pressed at the top of a wave, not in the middle of one.
+    //
+    // IT IS NOT A RUNNING ITEM, deliberately. Every window in the running list
+    // is torn down when a wave ends (see RunningItems.clear, called from
+    // _clearHazards), and a delivery that was silently cancelled by the wave
+    // clearing under it would read as the item having simply failed. The
+    // deadline lives on the PLAYER instead - one field, rebased across a
+    // versus handover like every other clock there - so the parcel arrives
+    // through the shop, through the next wave's opening, wherever the player
+    // happens to be when the ten seconds are up.
+    //
+    // A DEATH CANCELS IT, which needs no code at all: the run is over, and
+    // Player.reset clears the field with everything else.
+    effects: [['A 25 HP HEAL SHIPS', GOOD], ['IN 10 SECONDS', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      p.backordered = true;
+      p.backorderAt = game.time + 10;
+      game.effects.shockwave(p.pos, THEME.vitality, 5, 0.45);
+      game.ui.banner('DISPATCHED');
+      game.sfx.itemDeploy();
+    },
+  },
+
+  itemMedicalDebt: {
+    name: 'MEDICAL DEBT',
+    charge: 20,
+    theme: THEME.pact,
+    // FORTY NOW, THIRTY AT THE END OF THE WAVE, AND IT STACKS. BLOOD TAX pays
+    // its twenty-five up front and can never kill you; this one is the same
+    // bargain with the terms reversed and the safety off - the bill arrives
+    // when the wave does, it is thirty per press, and it goes through the
+    // ordinary damage path, so a player who pressed it three times owes ninety
+    // and may not have ninety.
+    //
+    // TWENTY POINTS, WHICH IS CHEAP ON PURPOSE. What makes this a decision is
+    // not the charge, it is the arithmetic the player has to do about a wave
+    // they have not finished yet - and an item that could only be afforded
+    // once a wave would never get to make the second press interesting.
+    //
+    // THE BILL IS COLLECTED IN main.js, at the wave clear, and NOT by an
+    // end() here: a running item's window is torn down when the wave ends,
+    // which is the exact moment this is supposed to fire.
+    effects: [['HEAL 40 HP NOW', GOOD], ['TAKE 30 WHEN THE WAVE ENDS', NOTE], ['AND IT STACKS', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      p.heal(40);
+      p.medicalDebt += 30;
+      game.effects.shockwave(p.pos, THEME.pact, 7, 0.6);
+      game.effects.burst(p.eyeInto(_v), 0x8affc1, 26, 5, 3, 0.7);
+      game.ui.banner('ON ACCOUNT');
+      game.sfx.itemHeal2();
+    },
+  },
+
+  itemLifeSentence: {
+    name: 'LIFE SENTENCE',
+    charge: 20,
+    theme: THEME.entrench,
+    // A FULL HEAL FOR TWENTY POINTS, AND YOU ARE SLOWER FOREVER. It is the
+    // cheapest full heal in the game by a distance - SIX CHAMBERS costs
+    // thirty-six for a coin toss at one - and the price is not paid in health
+    // or in money but in the thing the whole game is played with.
+    //
+    // TEN PERCENT, COMPOUNDING, AND IT NEVER COMES BACK. Two presses is a
+    // fifth of the player's legs, four is a third, and a run that answers
+    // every bad wave with this one arrives at wave twenty unable to leave
+    // anything. That is the item: it always works, and it is always the last
+    // thing you want to have needed.
+    //
+    // It rides `moveLoss`, a PERMANENT mark on the player beside hpBanked
+    // rather than a mod, for the same reason GRAFT's three health is: a
+    // rebuildMods() on the next totem claimed would wipe anything written into
+    // the block, and this is meant to outlive the build.
+    effects: [['HEAL TO FULL HEALTH', GOOD], ['PERMANENTLY 10% SLOWER', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      p.health = p.maxHealth;
+      p.moveLoss *= 0.9;
+      game.effects.shockwave(p.pos, THEME.entrench, 8, 0.7);
+      game.effects.burst(p.eyeInto(_v), 0x8d6e63, 30, 5, 3, 0.8);
+      game.ui.banner('SENTENCED');
+      game.sfx.itemGraft();
+    },
+  },
+
+  itemCompound: {
+    name: 'COMPOUND INTEREST',
+    charge: 20,
+    theme: THEME.power,
+    // GRAFT'S SIBLING, IN DAMAGE. One percent is deliberately almost nothing:
+    // pressed once it is invisible, and that is the point - this is the only
+    // item in the pool that is worth carrying rather than worth pressing, and
+    // a run that keeps it from wave four is a run that presses it twenty-odd
+    // times and finishes with a quarter more gun than it started with.
+    //
+    // TWENTY POINTS AND NOT SIXTY, unlike GRAFT. Three max health is a real
+    // number the moment it lands; one percent is not, and an item whose payout
+    // only exists in aggregate has to be affordable often enough to aggregate.
+    //
+    // COMPOUNDING, as the name promises: each press is a percent of what the
+    // last one left, so the gain accelerates very slightly. Over a run that is
+    // a rounding error, and it is the honest reading of the word.
+    effects: [['+1% DAMAGE', GOOD], ['PERMANENTLY, AND IT COMPOUNDS', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      p.compoundMult *= 1.01;
+      game.effects.shockwave(p.pos, THEME.power, 5, 0.5);
+      game.effects.burst(p.eyeInto(_v), 0xe53935, 20, 5, 3, 0.6);
+      game.ui.banner('+1% DAMAGE');
+      game.sfx.itemGraft();
+    },
+  },
+
+  // ---- the room's own count as the payload --------------------------------
+
+  itemFaith: {
+    name: 'FAITH HEALING',
+    charge: 40,
+    theme: THEME.holy,
+    // HEALED BY THE THING THAT IS TRYING TO KILL YOU, and the closer it is the
+    // more it is worth. Two health per body inside ten metres is nothing at
+    // all across an empty room and forty in the middle of a wave-twenty crowd,
+    // which makes it the only heal in the pool that is best pressed at the
+    // WORST moment - surrounded, and about to be hit.
+    //
+    // TEN METRES IS THE RANGE THE PLAYER CAN SEE, not a number they can count:
+    // it is TECTONIC's nine plus a step, so a player who owns both learns one
+    // distance. Nothing is consumed - the enemies are not harmed and not
+    // moved - which is what keeps this a heal rather than a crowd answer.
+    effects: [['HEAL 2 HP PER ENEMY', GOOD], ['STANDING WITHIN 10m', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      let n = 0;
+      for (const e of game.enemies) {
+        if (e.dead) continue;
+        if (e.pos.distanceTo(p.pos) > 10) continue;
+        n++;
+        // A thread from each body to the player, so what paid for the heal is
+        // legible as a COUNT rather than as a number on the health bar.
+        game.effects.beam(e.pos.clone().setY(1.0), p.eyeInto(_v).clone(), 0xfff2b0);
+      }
+      if (!n) {
+        // The same voice WATERLINE gives a press that could not do anything.
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.holy, 3, 0.3);
+        return;
+      }
+      p.heal(2 * n);
+      game.effects.shockwave(p.pos, THEME.holy, 10, 0.7);
+      game.effects.burst(p.eyeInto(_v), 0xfff2b0, 24, 5, 3, 0.7);
+      game.sfx.itemHeal2();
+    },
+  },
+
+  itemPickpocket: {
+    name: 'PICKPOCKET',
+    charge: 20,
+    theme: THEME.brass,
+    // FAITH HEALING'S POORER COUSIN, AND IT ASKS NOTHING ABOUT DISTANCE. One
+    // health and five rounds per body ANYWHERE on the floor, which makes it
+    // the item for the wave that has already spread out - the moment the ten
+    // metre version pays nothing.
+    //
+    // THE AMMUNITION IS THE REAL PAYLOAD. A point a body is a trickle; five
+    // rounds a body against a full wave is more than an ammo crate, and there
+    // is otherwise no way at all to buy rounds in the middle of a fight except
+    // OPEN VEIN, which costs fifty health to do it.
+    effects: [['PER ENEMY ALIVE:', NOTE], ['HEAL 1 HP AND GAIN 5 AMMO', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      let n = 0;
+      for (const e of game.enemies) if (!e.dead) n++;
+      if (!n) {
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.brass, 3, 0.3);
+        return;
+      }
+      p.heal(n);
+      p.reserveAmmo = Math.min(p.maxReserve, p.reserveAmmo + n * 5);
+      game.ui.flashReserve();
+      game.effects.shockwave(p.pos, THEME.brass, 8, 0.6);
+      game.effects.burst(p.eyeInto(_v), 0xffb300, 24, 5, 3, 0.6);
+      game.sfx.itemAmmo();
+    },
+  },
+
+  itemHeadCount: {
+    name: 'HEAD COUNT',
+    charge: 20,
+    theme: THEME.hoard,
+    // A HUNDRED DOLLARS A HEAD, PAID FOR NOT HAVING KILLED THEM YET. It is the
+    // one item in the pool that is worth MORE at the start of a wave than at
+    // the end of one, which is a shape nothing else here has - and it is the
+    // reason the charge is cheap: an item pressed on the opening frame of a
+    // fight has to be affordable out of the last one.
+    //
+    // IT CANNOT BE FARMED, and the reason is the same one the charge meter
+    // relies on: enemies arrive on the wave's own schedule and nothing the
+    // player does adds one. Standing still with the button held pays exactly
+    // once per meter, and the meter is filled by killing.
+    //
+    // PAID AS ORBS ON THE FLOOR, through _dropMoney like every other credit in
+    // the game, so it takes MIDAS and the flawless streak and is swept up by
+    // the magnet - a payout that went straight into the balance would be the
+    // one source none of those ever saw.
+    effects: [['GAIN $100 PER ENEMY ALIVE', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      let n = 0;
+      for (const e of game.enemies) if (!e.dead) n++;
+      if (!n) {
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.hoard, 3, 0.3);
+        return;
+      }
+      game._dropMoney(p.pos, 100 * n);
+      game.money.vacuum(0.4);
+      game.effects.shockwave(p.pos, THEME.hoard, 9, 0.6);
+      game.ui.banner('COUNTED ' + n);
+      game.sfx.credits();
+    },
+  },
+
+  itemPhlebotomy: {
+    name: 'PHLEBOTOMY',
+    charge: 20,
+    theme: THEME.blood,
+    // WHAT IS MISSING OFF YOUR BAR, DEALT TO EVERY BODY IN THE ROOM. At full
+    // health it is a dead press and at four health it is the largest number in
+    // the game applied to everything at once, which makes it the only item in
+    // the pool that is strongest at exactly the moment the player is weakest.
+    //
+    // IT COSTS NOTHING AND HEALS NOTHING. The temptation was to take the
+    // health as well and make it a Martyr; the whole shape is that the player
+    // is ALREADY paying - they are at nine health, they were going to be at
+    // nine health anyway, and this is the one thing that turns that into an
+    // advantage. Twenty points, because a wave spent at low health is its own
+    // punishment and this is what makes it survivable.
+    //
+    // FLAT, AND NOT SCALED BY THE GUN. Every other room-wide payload in the
+    // pool reads getEffectiveDamage; this one deliberately does not, because
+    // the number IS the health bar - a build multiplier on top would make the
+    // card's promise a lie in the one direction the player cannot check.
+    effects: [['DEAL YOUR MISSING HEALTH', GOOD], ['TO EVERY ENEMY', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      const dmg = Math.max(0, p.maxHealth - p.health);
+      if (dmg <= 0) {
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.blood, 3, 0.3);
+        return;
+      }
+      // A copy of the list, for PAY TO WIN's reason: a splitter's children are
+      // pushed onto `enemies` the moment the parent dies, and something that
+      // was not on the floor when the button was pressed must not be paid.
+      for (const e of game.enemies.slice()) {
+        if (e.dead) continue;
+        game.effects.impact(e.pos, 0xff2d6f, 8, 4, 2.5, 0.4);
+        game.hurtEnemy(e, dmg);
+      }
+      game.effects.shockwave(p.pos, THEME.blood, 30, 0.9);
+      game.effects.addShake(0.3);
+      game.sfx.itemPact();
+    },
+  },
+
+  // ---- the room, all at once (the second helping) -------------------------
+
+  itemPanic: {
+    name: 'PANIC BUTTON',
+    charge: 30,
+    theme: THEME.fear,
+    // EIGHT SECONDS IN WHICH NOTHING IS COMING TOWARD YOU. It is CRYO PULSE's
+    // opposite number and priced ten points under it: freeze holds the crowd
+    // where it is and hands the player a stationary target, this sends the
+    // crowd AWAY and hands them a scattered one. What the player buys is the
+    // same thing either way - distance - and which is better is a question
+    // about the room they are standing in.
+    //
+    // IT IS THE STATUS TERROR ALREADY APPLIES, so a boss staggers rather than
+    // running (fearMode 'stagger' - see js/enemies/) and a resistant type
+    // shortens it, exactly as they do for every other fear in the game. An
+    // item that could send a boss to the far wall for eight seconds would be
+    // the only boss strategy there is.
+    effects: [['EVERY ENEMY FLEES', GOOD], ['FOR 8s', NOTE]],
+    use: (game) => {
+      for (const e of game.enemies) {
+        if (e.dead) continue;
+        e.applyStatus('fear', 8);
+        game.effects.impact(e.pos, 0x9d4edd, 6, 3, 2.5, 0.5);
+      }
+      game.effects.shockwave(game.player.pos, THEME.fear, 30, 0.9);
+      game.effects.addShake(0.25);
+      game.sfx.itemRites();
+    },
+  },
+
+  itemFoodPoisoning: {
+    name: 'FOOD POISONING',
+    charge: 40,
+    theme: THEME.poison,
+    // BRIMSTONE IN THE OTHER ELEMENT, AT THE OTHER SHAPE. Fire is three
+    // seconds and a high rate; poison everywhere in this game is long and
+    // patient (see status.js), so this is eight seconds of the whole room
+    // going down slowly - and the difference on the floor is that a crowd
+    // BRIMSTONE would have killed outright is instead a crowd that dies while
+    // the player deals with something else.
+    //
+    // ONE OF THE PLAYER'S OWN SHOTS PER TICK, half of what BRIMSTONE's fire is
+    // worth, because poison ticks once a beat where fire ticks twice - so the
+    // two items are the same total damage arriving at different speeds, and
+    // both are still worth a slot at wave thirty.
+    effects: [['POISON ALL ENEMIES', GOOD], ['FOR 8s', NOTE]],
+    use: (game) => {
+      let n = 0;
+      const dose = game.player.dotHit;
+      for (const e of game.enemies) {
+        if (e.dead) continue;
+        e.applyStatus('poison', 8, dose);
+        game.effects.impact(e.pos, 0x39d353, 6, 3, 2.5, 0.5);
+        n++;
+      }
+      game.effects.shockwave(game.player.pos, THEME.poison, 30, 0.9);
+      if (n) game.effects.addShake(0.2);
+      game.sfx.itemBlast();
+    },
+  },
+
+  itemBalloons: {
+    name: 'PARTY BALLOONS',
+    charge: 30,
+    theme: THEME.wind,
+    // FIVE BODIES TAKEN OUT OF THE FIGHT AND LEFT WHERE THEY CAN BE SHOT. It
+    // is not a stun - CRYO PULSE is the stun, and a frozen enemy is still
+    // standing in the crowd - it is REMOVAL: five things drift up out of the
+    // scrum, stop being able to reach anything, and are still there to be
+    // killed at leisure five seconds later.
+    //
+    // THE NEAREST FIVE, which is the same rule JACOB'S LADDER picks its chain
+    // by and the same helper - so a player who has carried one already knows
+    // what "five" means here, and it is always the five that are actually on
+    // top of you.
+    //
+    // NOT BOSSES, and this one is a hard exemption rather than a resistance:
+    // a boss is a fight with a floor pattern, and lifting it off the floor for
+    // five seconds does not weaken it, it deletes the fight.
+    effects: [['THE 5 NEAREST ENEMIES FLOAT', GOOD], ['HELPLESS FOR 5s - NOT BOSSES', NOTE]],
+    use: (game) => {
+      let n = 0;
+      for (const e of nearestEnemies(game, 5)) {
+        if (!e.balloon(5)) continue;
+        game.effects.burst(e.pos, 0x26c6da, 18, 4, 5, 0.8);
+        n++;
+      }
+      game.effects.shockwave(game.player.pos, THEME.wind, 12, 0.6);
+      if (!n) game.sfx.denied();
+      else game.sfx.itemSurge();
+    },
+  },
+
+  // ---- the windows on the gun ---------------------------------------------
+
+  itemEncore: {
+    name: 'ENCORE',
+    charge: 30,
+    theme: THEME.echo,
+    // EVERY TRIGGER PULL FIRED TWICE, AND THE SECOND ONE IS FREE. It is ECHO
+    // CHAMBER's every-fourth-shot ghost turned all the way up for eight
+    // seconds: the same pattern, the same spread, the same statuses, at full
+    // strength and off no magazine at all.
+    //
+    // THE MAGAZINE IS WHAT MAKES IT A WINDOW AND NOT A BUFF. RED LINE doubles
+    // the rate and doubles the reloads with it; this doubles the damage of a
+    // magazine without touching the rounds, so eight seconds of it is eight
+    // seconds where the gun is twice the gun AND lasts twice as long. Thirty
+    // points is cheap for that, and it is meant to be: it is the item that
+    // rewards being reloaded when it is pressed, which is a thing the player
+    // has to have planned.
+    //
+    // IT DOES NOT STACK WITH ITSELF and cannot: re-firing refreshes, like
+    // every other window in the running list.
+    effects: [['EVERY SHOT FIRES TWICE', GOOD], ['FOR 8s - THE SECOND IS FREE', NOTE]],
+    duration: 8,
+    use: (game) => {
+      game.player.encore = 1;
+      game.effects.shockwave(game.player.pos, THEME.echo, 6, 0.55);
+      game.sfx.itemSurge();
+    },
+    end: (game) => { game.player.encore = 0; },
+  },
+
+  itemMagDump: {
+    name: 'MAG DUMP',
+    charge: 10,
+    theme: THEME.shrapnel,
+    // THE WHOLE MAGAZINE, AS ONE CONE, NOW. LANCE is the other item that
+    // spends the ammunition and it is the exact opposite shape: that one is
+    // thirty rounds as a single line through everything, this is however many
+    // are left thrown out in a wide fan that stops at the first thing each
+    // pellet touches. One is a sniper's answer and one is a panicking one.
+    //
+    // TEN POINTS, WHICH IS ALMOST NOTHING - only BLINK DRIVE's three is
+    // cheaper among the items that cost enemies at all - because the magazine
+    // is the price and the magazine is real. It is worth nothing at
+    // all on an empty gun (it refuses, out loud, for LANCE's reason) and it
+    // costs a full reload every time it is pressed.
+    //
+    // IT IS THE PLAYER'S OWN ROUNDS, fired through the same pellet path a
+    // trigger pull uses - so every passive item in the build, every status on
+    // the ammunition and every crit rule applies to all of them, and nothing
+    // here has an opinion about damage at all.
+    effects: [['FIRE YOUR WHOLE MAGAZINE', GOOD], ['AT ONCE, AS A WIDE CONE', NOTE]],
+    // A press on an empty gun would spend the charge and fire nothing, which
+    // is the failure LANCE's gate exists to prevent - same voice, same reason.
+    ready: (game) => game.player.mag > 0,
+    use: (game) => { game.magDump(); },
+  },
+
+  // ---- things left in the arena (the second helping) ----------------------
+
+  itemMolotov: {
+    name: 'MOLOTOV',
+    charge: 20,
+    theme: THEME.fire,
+    // FIREBREAK IS A LINE YOU HIDE BEHIND; THIS IS A CIRCLE YOU PUT SOMEWHERE
+    // ELSE. The wall stands where the player is and stops what is coming; the
+    // bottle is thrown across the room and makes the place the crowd is
+    // WALKING THROUGH cost them something. Twenty seconds is most of a wave -
+    // long enough that it is worth throwing at a spawn point rather than at a
+    // body.
+    //
+    // IT BURNS, IT DOES NOT BLAST. There is no impact damage at all: what
+    // lands is ground, and ground in this game sets fire to whatever stands in
+    // it on the beat like every other fire (see FireWall, _updateFire). An
+    // item that also hit for a number on the throw would be two damage systems
+    // on one bottle, only one of which the player can see.
+    //
+    // AND IT CANNOT HURT THE PLAYER, on FALLING SKY's terms: every hazard in
+    // this game is a question answered by moving, and it can be answered
+    // because the player knows who threw it. The one item that DOES burn its
+    // own thrower is FLOOR IS LAVA, and there the whole point is that the
+    // floor is gone.
+    effects: [['THROW A BOTTLE - IT LEAVES', GOOD], ['BURNING GROUND FOR 20 SECONDS', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      p.muzzleInto(_v);
+      facing(game);
+      // The burn is snapshotted at the throw, like every other fire in the
+      // game - see Player.dotHit and the note on Lob.
+      game.deploy(new Lob(game, _v, _dir, 'molotov', p.dotHit * 2));
+      game.sfx.itemDeploy();
+    },
+  },
+
+  itemLava: {
+    name: 'FLOOR IS LAVA',
+    charge: 40,
+    theme: THEME.hellfire,
+    // THE ONE ITEM THAT CHANGES WHERE THE GAME IS PLAYED. For ten seconds the
+    // arena floor is not a place anybody can stand - the player included - and
+    // the only ground left is what the terrain generator put ABOVE it: the
+    // decks, the tiers, the stairs and the crates the player has spent the
+    // whole run running past.
+    //
+    // IT BURNS ITS OWN THROWER, AND THAT IS THE ITEM. Every other room-wide
+    // payload in the pool is free to the player; this one is pressed and then
+    // SURVIVED, which is why it is the only one whose value depends on where
+    // the player was standing when they pressed it. Press it from a catwalk
+    // and it is BRIMSTONE for forty points; press it in the open and it is
+    // ten seconds of being chased onto furniture.
+    //
+    // THE ENEMIES CANNOT ANSWER IT. They path on the floor, most of them
+    // cannot climb, and the ones that fly are above it anyway - so what the
+    // player is buying is ten seconds in which the room's own geometry is the
+    // only safe thing in it, and they are the only one who knows that.
+    effects: [['THE WHOLE FLOOR BURNS FOR 10s', GOOD], ['YOU BURN TOO - GET HIGH', NOTE]],
+    duration: 10,
+    use: (game) => {
+      game._lavaFloorStart();
+      game.effects.shockwave(game.player.pos, THEME.hellfire, 30, 1.0);
+      game.effects.addShake(0.4);
+      game.ui.banner('THE FLOOR IS LAVA');
+      game.sfx.itemBlast();
+    },
+    tick: (game, s, dt) => { game._lavaFloorTick(dt); },
+    end: (game) => { game._lavaFloorEnd(); },
+  },
+
+  // ---- melee, for once ----------------------------------------------------
+
+  itemFeltThat: {
+    name: 'EVERYONE FELT THAT',
+    charge: 30,
+    theme: THEME.impact,
+    // THE ONLY ITEM IN THE POOL THAT IS ABOUT THE BUTT OF THE GUN. Melee is
+    // otherwise a thing the player does when something is already on top of
+    // them - one committed swing, a double bounty, and a real risk - and for
+    // eight seconds this makes it the best attack in the game: five times the
+    // damage, and every body in the arena takes the same number the one you
+    // actually hit did.
+    //
+    // IT STILL NEEDS A TARGET. The swing that connects is what pays out, so
+    // eight seconds of swinging at air is eight seconds of nothing - which is
+    // what keeps this a melee item rather than a room-clear with an animation
+    // in front of it. The player has to walk into the crowd to use it, which
+    // is the same thing melee has always asked.
+    //
+    // AND THE MELEE KILL DOUBLE RIDES ON TOP, untouched: everything this kills
+    // with the swing is tagged the way any melee kill is, so a crowd taken
+    // down by one hit pays a crowd's worth of doubled bounties.
+    effects: [['MELEE DEALS 5x DAMAGE FOR 8s', GOOD], ['AND EVERY ENEMY TAKES IT', GOOD]],
+    duration: 8,
+    use: (game) => {
+      const p = game.player;
+      p.meleeMult = 5;
+      p.meleeShare = 1;
+      game.effects.shockwave(p.pos, THEME.impact, 8, 0.6);
+      game.effects.burst(p.eyeInto(_v), 0x00e5c0, 26, 6, 3, 0.7);
+      game.sfx.itemFrenzy();
+    },
+    end: (game) => {
+      game.player.meleeMult = 1;
+      game.player.meleeShare = 0;
+    },
+  },
+
+  // ---- the floor, and the wallet ------------------------------------------
+
+  itemTransfusion: {
+    name: 'BLOOD TRANSFUSION',
+    charge: 20,
+    theme: THEME.blood,
+    // EVERY PLATE ON THE FLOOR BECOMES A HEALTH PLATE. It is the one item that
+    // acts on the LOOT rather than on the room, and what it is worth is
+    // decided entirely by what a wave happened to drop - which makes it the
+    // second item in the pool (after BODY COUNT) whose whole skill is knowing
+    // when the floor is worth it.
+    //
+    // TWENTY POINTS, BECAUSE IT CAN BE WORTH NOTHING. An empty floor is an
+    // empty press, out loud, and a floor with four ammo crates on it is a
+    // hundred health - the spread is enormous and the charge is priced at the
+    // bottom of it.
+    //
+    // THE PLATES ARE REPLACED WHERE THEY LIE, keeping the time they have left,
+    // so a crate that was about to blink out becomes a health plate that is
+    // about to blink out. Moving them to the player would make this a heal
+    // with extra steps; leaving them where they are is what keeps it a thing
+    // that happened to the ARENA.
+    effects: [['EVERY PICKUP ON THE FLOOR', NOTE], ['BECOMES A HEALTH PICKUP', GOOD]],
+    use: (game) => {
+      const n = game._transfuse();
+      const p = game.player;
+      if (!n) {
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.blood, 3, 0.3);
+        return;
+      }
+      game.effects.shockwave(p.pos, THEME.blood, 26, 0.8);
+      game.ui.banner('TRANSFUSED ' + n);
+      game.sfx.itemHeal2();
+    },
+  },
+
+  itemHealthSeek: {
+    name: 'HEALTH & SEEK',
+    charge: 40,
+    theme: THEME.vitality,
+    // SEVENTY-FIVE HEALTH, SCATTERED WHERE THE PLAYER IS NOT. Three plates at
+    // the crate's own twenty-five, spawned on open floor anywhere in the arena
+    // - so what this item hands out is not a heal, it is three reasons to go
+    // somewhere, and going somewhere in the middle of a wave is the expensive
+    // part.
+    //
+    // THEY OVERHEAL, because they are real health pickups and that is what a
+    // health pickup does (twenty-five over the cap - see POWERUP_TYPES). This
+    // is the only way in the game to put yourself over your own maximum on
+    // purpose, and it costs a walk across a live arena to do it.
+    //
+    // AND THEY TIME OUT. Thirty seconds like every other plate, which is what
+    // stops this being a bank: an item that let the player stockpile health
+    // around the map would make the wave break the safest time to press it,
+    // and the wave break is exactly when it should be worth least.
+    effects: [['SPAWN 3 HEALTH PICKUPS', GOOD], ['SOMEWHERE IN THE ARENA', NOTE]],
+    use: (game) => {
+      game._scatterHealth(3);
+      game.effects.shockwave(game.player.pos, THEME.vitality, 8, 0.6);
+      game.ui.banner('DELIVERED');
+      game.sfx.itemHeal2();
+    },
+  },
+
+  itemPinata: {
+    name: 'PINATA',
+    charge: 40,
+    theme: THEME.salvage,
+    // FIVE GUARANTEED DROPS, PAID OUT BY KILLING. Every other item in the pool
+    // resolves the moment it is pressed or inside a window with a clock on it;
+    // this one sits on the run until the player has earned it out, which makes
+    // it the only item that cannot be pressed at the wrong time - it can only
+    // be pressed too early to matter.
+    //
+    // IT ROLLS THE ORDINARY TABLE, not a table of its own. What is guaranteed
+    // is that SOMETHING drops, not what: the need terms still apply, so a
+    // starving player's five are mostly ammunition and a comfortable one's are
+    // mostly buffs, exactly as an ordinary kill's would be. An item with its
+    // own loot table would be a second economy with one caller.
+    //
+    // NOT ON BOSS PARTS, on the same terms the kill sweep already holds: a
+    // boss pays out by bleeding at health thresholds, and letting the counter
+    // spend itself on the one body that is already a payout would be five
+    // drops the player never sees.
+    effects: [['THE NEXT 5 ENEMIES YOU KILL', NOTE], ['ARE GUARANTEED TO DROP', GOOD]],
+    use: (game) => {
+      game.player.pinataLeft = 5;
+      game.effects.shockwave(game.player.pos, THEME.salvage, 7, 0.6);
+      game.effects.burst(game.player.eyeInto(_v), 0xc6ff00, 26, 6, 3, 0.7);
+      game.ui.banner('PINATA x5');
+      game.sfx.itemSurge();
+    },
+  },
+
+  itemMoneyShot: {
+    name: 'MONEY SHOT',
+    charge: 40,
+    theme: THEME.gold,
+    // THE WHOLE BALANCE, AS DAMAGE, TO EVERYTHING. PAY TO WIN spends a
+    // thousand at a time for two shots' worth of damage and is deliberately a
+    // bad buy; this spends every dollar the player has for exactly that many
+    // points, which is a terrible rate early and an absurd one on a run that
+    // has been hoarding.
+    //
+    // IT IS THE ANSWER TO A FULL WALLET AND NOTHING ELSE. A player who spends
+    // their money in the shop - which is what money is for - presses this for
+    // almost nothing, and that is correct: what it converts is the money that
+    // was not doing anything, and the decision it creates is whether to keep
+    // eight thousand dollars for a box roll or spend it on the wave that is
+    // currently killing you.
+    //
+    // A FLAT NUMBER, DELIBERATELY NOT SCALED BY THE GUN. The card promises a
+    // balance and a balance is a number the player can read off the corner of
+    // the screen; multiplying it by the build would make the one item in the
+    // pool with a checkable promise the one item whose promise is wrong.
+    effects: [['SPEND EVERY CREDIT YOU HAVE', NOTE], ['DEAL THAT MUCH TO EVERY ENEMY', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      const spent = Math.floor(game.credits);
+      if (spent <= 0) {
+        game.sfx.denied();
+        game.effects.shockwave(p.pos, THEME.gold, 3, 0.3);
+        return;
+      }
+      game.credits -= spent;
+      game._creditsDirty = true;
+      for (const e of game.enemies.slice()) {
+        if (e.dead) continue;
+        game.effects.impact(e.pos, 0xf9a825, 10, 5, 3, 0.4);
+        game.hurtEnemy(e, spent);
+      }
+      game.effects.shockwave(p.pos, THEME.gold, 30, 0.9);
+      game.effects.addShake(0.45);
+      game.ui.banner('SPENT $' + spent.toLocaleString());
+      game.sfx.credits();
+      game.sfx.itemBlast();
+    },
+  },
+
+  itemParachute: {
+    name: 'GOLDEN PARACHUTE',
+    charge: 40,
+    theme: THEME.lodestone,
+    // FIVE THOUSAND DOLLARS TO NOT FIGHT THE WAVE. It is the most expensive
+    // thing a player can buy with money - a box roll starts at a thousand -
+    // and what it buys is the one thing money has never been able to buy in
+    // this game, which is the fight itself not happening.
+    //
+    // NOTHING IT REMOVES PAYS OUT. The bodies are taken off the floor rather
+    // than killed: no bounty, no orbs, no item charge, no drops. That is not a
+    // meanness, it is the only thing standing between this and an infinite
+    // money loop - a wave-twenty cast is worth more than five thousand
+    // dollars, so a version that paid its own bodies out would refund the
+    // price and then some, every time, forever.
+    //
+    // AND IT ENDS THE WAVE PROPERLY - an ORDINARY wave, which is the only
+    // kind it will take (see the gate below). The queue is emptied along with
+    // the floor, so _updateWave sees an empty room on the next frame and runs
+    // the ordinary clear - the flawless streak, the resupply, the shop, all of it.
+    // A player who takes no damage buying their way out has still cleared the
+    // wave without being touched, which is the honest reading.
+    effects: [['$5,000 PER USE', NOTE], ['CLEAR THE WAVE INSTANTLY', GOOD], ['NOT ON A BOSS WAVE', NOTE]],
+    // TWO REFUSALS, in one line and in the same voice an uncharged press gets.
+    //
+    // THE MONEY is PAY TO WIN's rule exactly: the second item in the pool
+    // refused for want of a balance rather than a meter.
+    //
+    // AND NOT ON A BOSS WAVE. A boss wave does not end when the floor is clear
+    // - it ends when the boss is dead, and the adds never stop - so there is
+    // no room here to empty. Buying one out would mean killing the boss, which
+    // is EXECUTIVE DECISION's whole job at three times the charge; letting the
+    // cheaper item do it for money would retire the dearer one outright. The
+    // boss is the one fight the run has to actually have.
+    ready: (game) => game.credits >= PARACHUTE_COST && !game.bossFight,
+    use: (game) => {
+      game.credits -= PARACHUTE_COST;
+      game._creditsDirty = true;
+      const n = game._clearWaveNow();
+      game.effects.shockwave(game.player.pos, THEME.lodestone, 30, 1.0);
+      game.effects.addShake(0.35);
+      game.ui.banner(n ? 'BOUGHT OUT' : 'NOTHING TO BUY');
+      game.sfx.buy();
+    },
+  },
+
+  itemExecutive: {
+    name: 'EXECUTIVE DECISION',
+    charge: 120,
+    theme: THEME.executioner,
+    // TWICE THE PRICE OF ANYTHING ELSE IN THE POOL, FOR ONE BOSS. A hundred
+    // and twenty points is a hundred and twenty basic enemies - most of two
+    // waves - which means it can be charged in the run-up to a boss and
+    // nowhere else, and it can never be charged twice for the same one.
+    //
+    // IT IS THE ONLY THING IN THE GAME THAT IGNORES A HEALTH BAR. LAST RITES
+    // finishes what the player already beat down; this deletes the fight from
+    // full, and the reason it is allowed to exist at all is the price: a
+    // player who spends two waves' worth of charge to skip the wave they were
+    // charging it for has not won anything, they have chosen which fight to
+    // have.
+    //
+    // THE WAVE STILL PAYS. The parts are killed rather than removed - unlike
+    // GOLDEN PARACHUTE, which cannot pay or it refunds itself - because a boss
+    // bounty is a fixed sum that no amount of pressing this can farm: there is
+    // exactly one boss per boss wave.
+    effects: [['INSTANTLY KILL A BOSS', GOOD]],
+    // REFUSED WHERE THERE IS NO BOSS, on SECOND OPINION's terms: a press that
+    // spent two waves of charge on an empty room would be the worst failure in
+    // the pool by a distance.
+    ready: (game) => !!game.bossFight && game.bossFight.parts.length > 0,
+    use: (game) => {
+      game._executeBoss();
+      game.effects.shockwave(game.player.pos, THEME.executioner, 30, 1.0);
+      game.effects.addShake(0.8);
+      game.ui.banner('TERMINATED');
+      game.sfx.itemRites();
+    },
+  },
+
+  // ---- the shield ---------------------------------------------------------
+
+  itemSecondSkin: {
+    name: 'SECOND SKIN',
+    charge: 50,
+    theme: THEME.armor,
+    // TWENTY POINTS OF SHIELD, AND NO CLOCK ON THEM. The shield PICKUP is
+    // fifty for fifteen seconds - a window to push into - and this is the
+    // opposite trade: less than half as much, kept until something takes it.
+    // What the player is buying is not the size of it, it is that it is still
+    // there in two minutes.
+    //
+    // TWENTY IS LESS THAN TRAUMA KIT'S TWENTY-FIVE AND COSTS THE SAME FIFTY,
+    // which looks wrong and is not: a shield point is better than a health
+    // point, because takeDamage spends the shield FIRST and fully - a hit that
+    // breaks it does not carry the remainder through - so twenty of these eats
+    // one arbitrarily large hit as well as twenty small ones.
+    //
+    // IT CANCELS THE PICKUP'S CLOCK RATHER THAN INHERITING IT. Adding to a
+    // shield that was already counting down would make the item's twenty
+    // expire on somebody else's timer, which is the one behaviour a player
+    // could not predict; taking the clock off is the reading that is always
+    // in the player's favour and is always the same.
+    effects: [['+20 SHIELD', GOOD], ['IT DOES NOT EXPIRE', GOOD]],
+    use: (game) => {
+      const p = game.player;
+      p.shield += 20;
+      p.shieldEnd = 0;
+      game.effects.shockwave(p.pos, THEME.armor, 7, 0.6);
+      game.effects.burst(p.eyeInto(_v), 0x4ef3ff, 26, 5, 3, 0.7);
+      game.sfx.pickupShield();
+    },
+  },
 };
 
 // What one press of PAY TO WIN takes out of the bank. A FLAT thousand, not a
@@ -1516,6 +2374,16 @@ export const ACTIVE_ITEMS = {
 // this is a thing they may press eight times in a row. A doubling cost would
 // turn the joke into a sum.
 export const PAY_TO_WIN_COST = 1000;
+
+// What one press of GOLDEN PARACHUTE takes out of the bank.
+//
+// FIVE TIMES PAY TO WIN'S, and flat for the same reason: it is the largest
+// single price in the game and it has to stay a number the player can hold
+// against their balance rather than a sum that changes with the wave. Five
+// thousand is roughly three box rolls or a dozen ammo refills - a whole run's
+// savings on an early wave, and a wave's takings on a late one, which is
+// exactly the curve an escape hatch should have.
+export const PARACHUTE_COST = 5000;
 
 export const ACTIVE_ITEM_KEYS = Object.keys(ACTIVE_ITEMS);
 
@@ -1538,7 +2406,7 @@ export const HUMOURS = [
 // THE RUNNING LIST
 // ---------------------------------------------------------------------------
 //
-// Fourteen of the thirty-seven items do not finish on the frame they start.
+// Fifteen of the sixty-six items do not finish on the frame they start.
 // This is the four lines that make that possible, and it is deliberately the
 // smallest thing that could: a list of activations, each holding the item that
 // made it, its own scratch object and a clock. No registry, no ids to keep in
@@ -1728,7 +2596,7 @@ export const ITEM_BAR_MAX_CELLS = 12;
  * even to be a whole number of points.
  *
  * THE NUMBERS DID NOT MOVE WHEN THE UNIT DID. This used to be seconds, and the
- * costs are the same thirty-seven figures they always were - what changed is
+ * costs are the same figures they always were - what changed is
  * what fills them, so the segmenting is untouched along with the ratios.
  *
  * @param {number} charge  points to fill
@@ -1743,8 +2611,8 @@ export function itemCells(charge) {
  *
  * NEVER THE ITEM ALREADY CARRIED. A box that can hand back what is already in
  * the slot is a box that can charge two thousand dollars for nothing, and there
- * is no way for the player to see that coming. With thirty-seven items and one
- * carried there are always thirty-six left, so this can never come up empty.
+ * is no way for the player to see that coming. With sixty-six items and one
+ * carried there are always sixty-five left, so this can never come up empty.
  *
  * THE EXCLUSION IS PER PLAYER AND COSTS NOTHING TO MAKE SO. Versus is hot seat:
  * one Player instance whose whole run - `item` included - is snapshotted and

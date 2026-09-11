@@ -324,6 +324,14 @@ const PLAYER_CLOCKS = [
   // Opening Salvo's window. A benched player must not come back to a window
   // that expired while someone else was shooting.
   'salvoEnd',
+  // LIFE INSURANCE's policy and BACKORDER's delivery. Both are deadlines the
+  // benched player paid for out of their own charge meter, so both come back
+  // with the time they had left rather than with a timestamp from a clock that
+  // kept running without them. Whether the parcel EXISTS is a separate boolean
+  // on the player - see the note on `backordered` - precisely because rebasing
+  // an empty deadline lands it in the past, which for this one field would
+  // read as "it arrived".
+  'insuredEnd', 'backorderAt',
 ];
 
 // The same trap, on Game's side of the line.
@@ -414,8 +422,8 @@ export function captureRun(game) {
  * Writes a snapshot back over the live singletons.
  *
  * ORDER MATTERS at the end: the build has to be replayed into `mods` before
- * anything reads a derived stat, and the viewmodel has to be re-marked because
- * the receiver plates are baked into the ONE gun both players are holding.
+ * anything reads a derived stat, and the viewmodel has to be re-equipped
+ * because the magazine part is baked into the ONE gun both players are holding.
  */
 export function restoreRun(game, snap) {
   const p = game.player;
@@ -450,7 +458,6 @@ export function restoreRun(game, snap) {
 
   p.rebuildMods();
   p._equipModel();
-  p.refreshGunMarks();
   // NOT applyCamera. The body was never captured, so there is nothing to write
   // back to it - and calling it here is exactly the hard cut the skip list
   // above exists to avoid.

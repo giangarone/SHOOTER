@@ -983,6 +983,51 @@ def _(c):
 RAW = {'venom'}
 
 
+# THE BATTERY PICKUP, AND THE ONE ICON IN THE SET THAT IS NOT DRAWN.
+#
+# It was authored straight into the generated table rather than here, which is
+# a thing that works right up until somebody runs this script: build.py writes
+# the table from A.ICONS and nothing else, so a hand-written entry is silently
+# deleted by the next build - and a pickup with no drawing is a crash the first
+# time an enemy dies (see test/icons.mjs, which is what caught it).
+#
+# Kept EXACTLY as it shipped, tone for tone, rather than redrawn: this is the
+# plate players already know, and the point of moving it here is that it
+# survives, not that it changes. It goes in RAW because those tones are final -
+# the shading pass has already been applied to them by hand.
+@icon('pickBattery')        # BATTERY PICKUP - the item meter, filled
+def _(c):
+    c.blit([
+        '........................',
+        '........................',
+        '.........22222..........',
+        '.........22222..........',
+        '......2222222222........',
+        '......2222222222.1......',
+        '......22222222221.......',
+        '......223333322221......',
+        '......2233333322221.....',
+        '......2223333322221.....',
+        '......2222333222221.....',
+        '......2222333322221.....',
+        '......2222233332221.....',
+        '......2222233333221.....',
+        '......2222223333221.....',
+        '......2222233322221.....',
+        '......2222333222221.....',
+        '......2223332222221.....',
+        '......2233322222221.....',
+        '......2233222222221.....',
+        '......2222222222221.....',
+        '......1111111111111.....',
+        '........................',
+        '........................',
+    ], 0, 0)
+
+
+RAW.add('pickBattery')
+
+
 # ---- the player's status effects ------------------------------------------
 #
 # What something ELSE has done to YOU. These are the only icons in the set that
@@ -2935,3 +2980,478 @@ def _(c):
         c.disc(12.0 + math.cos(a) * 7.9, 13.0 - math.sin(a) * 7.9, 1.2, E)
     c.disc(4.1, 18.4, 1.2, E)
     c.disc(19.9, 18.4, 1.2, E)
+
+
+# ---- the third block of active items ---------------------------------------
+#
+# Twenty-four more, under the same rules the block above added: the light is
+# upper-left and applied by finish(), ENERGY is what the item DOES and
+# STRUCTURE is what it does it to, and NO NEW ICON MAY SHARE A SILHOUETTE WITH
+# ITS NEAREST NEIGHBOUR - each one below names the drawing it was checked
+# against. At ninety-odd drawings that check is the only thing standing between
+# the set and two items nobody can tell apart across an arena.
+
+
+def burst(c, cx, cy, r, t):
+    """An impact mark: a filled core with six short spikes off it."""
+    spikes(c, cx, cy, r * 0.3, r, 6, max(1.6, r * 0.38), t, phase=12)
+    c.disc(cx, cy, r * 0.52, t)
+
+
+def hangline(c, x, y0, y1, t):
+    """A cord from the top edge down to something hanging off it."""
+    c.line(x, y0, x, y1, t, 1.2)
+
+
+def note(c, x, y, t):
+    """One quaver: a filled head with a stem and a flag.
+
+    The head is an ELLIPSE and not a disc, and it is tilted by being wider than
+    it is tall - a round head with a stick on it is a pin, and the set already
+    has several pins.
+    """
+    ellipse(c, x, y, 3.6, 2.8, t)
+    c.rect(x + 2.4, y - 11.0, x + 4.2, y, t)
+    c.line(x + 4.2, y - 11.0, x + 7.4, y - 6.6, t, 2.0)
+
+
+@icon('itemInsurance')      # LIFE INSURANCE - the killing blow leaves you at 1
+def _(c):
+    # A SAFETY NET UNDER A FALLING HEART.
+    #
+    # THE FIRST PASS WAS AN UMBRELLA AND IT WAS THE WRONG OBJECT, for a reason
+    # worth writing down: a canopy over a small lit core is AEGIS's drawing.
+    # Both items save the player from a killing blow, and the two icons sat a
+    # centimetre apart on the box's reel looking like the same dome. They are
+    # not the same promise at all - AEGIS means the blow does not land, and
+    # this means it lands and something catches you afterwards - so the shelter
+    # had to come out from OVER the heart and go UNDER it.
+    #
+    # A net is also the only mesh in the set, which is the silhouette test:
+    # nothing else here is a slung curve with strands hanging off it.
+    c.disc(9.2, 5.0, 3.4, E)                           # the heart, falling
+    c.disc(14.8, 5.0, 3.4, E)
+    c.poly([(5.6, 6.4), (18.4, 6.4), (12.0, 13.2)], E)
+    # THE NET IS A SOLID BAND WITH HOLES CUT IN IT, not strands drawn on the
+    # empty page. Drawn as a rim arc and a row of hanging lines it came back as
+    # a scatter of loose pixels - a two-pixel curve at radius twelve is dashes
+    # after the outline pass, and dashes are not a mesh. A filled bowl with a
+    # grid taken OUT of it survives at any size, which is the same trick the
+    # crate icons use for their slats.
+    c.rect(0.6, 12.4, 23.4, 14.4, S)                   # the rim it is slung on
+    c.poly([(1.0, 14.4), (23.0, 14.4), (19.0, 22.4), (5.0, 22.4)], S)
+    for x in (5.0, 9.0, 13.0, 17.0):                   # the holes, in two rows
+        c.rect(x - 0.6, 15.6, x + 1.0, 17.6, DEEP)
+    for x in (7.0, 11.0, 15.0):
+        c.rect(x - 0.6, 18.8, x + 1.0, 20.8, DEEP)
+
+
+@icon('itemBackorder')      # BACKORDER - a 25 HP heal arrives in 10 seconds
+def _(c):
+    # A TIED PARCEL. Against TRAUMA KIT (a case with a handle and a cross
+    # filling it) and AMMO SURPLUS (a crate with rounds standing proud of the
+    # lid): this one is SHUT, and shut is the whole item - what is in it is not
+    # yours yet. The string crossing the box is the silhouette difference, and
+    # the only lit thing is the small cross label, because the promise is the
+    # payload and the box is not.
+    c.rect(2.4, 6.0, 21.6, 21.4, S)
+    c.rect(2.4, 6.0, 21.6, 8.2, S)                     # the lid, a shade proud
+    c.rect(11.2, 6.0, 12.8, 21.4, DEEP)                # the string, down
+    c.rect(2.4, 12.6, 21.6, 14.2, DEEP)                # and across
+    c.poly([(9.0, 2.0), (15.0, 2.0), (13.6, 6.0), (10.4, 6.0)], S)   # the knot
+    c.rect(15.6, 15.6, 20.4, 20.4, E)                  # the label...
+    c.rect(17.4, 16.6, 18.6, 19.4, DEEP)               # ...with a cross on it
+    c.rect(16.4, 17.6, 19.6, 18.4, DEEP)
+
+
+@icon('itemMedicalDebt')    # MEDICAL DEBT - heal 40, take 30 at the wave end
+def _(c):
+    # AN INVOICE, TORN OFF. Against BLOOD TAX (an opened palm) and OPEN VEIN (a
+    # bag feeding a magazine): those two are the price being paid, and this is
+    # the price being POSTED - a sheet of paper is the only object in the set
+    # that means "later". The perforated bottom edge is what stops it reading
+    # as a plain card, and the cross at the head is what it is a bill for.
+    c.rect(4.0, 1.0, 20.0, 18.0, S)
+    # THE TORN EDGE IS THE SILHOUETTE, and it has to be coarse: four-pixel
+    # teeth survive the outline pass, two-pixel ones close up into a straight
+    # line and the bill becomes a card.
+    for x in range(4, 20, 4):
+        c.poly([(x, 18.0), (x + 4, 18.0), (x + 2, 22.6)], S)
+    c.rect(11.0, 2.4, 13.0, 8.0, E)                    # the cross it is billing
+    c.rect(9.2, 4.2, 14.8, 6.2, E)
+    for y in (10.0, 13.0):                             # the line items
+        c.rect(6.4, y, 17.6, y + 1.6, DEEP)
+    c.rect(12.0, 15.4, 17.6, 17.0, E)                  # and the total, in red
+
+
+@icon('itemLifeSentence')   # LIFE SENTENCE - heal to full, 10% slower forever
+def _(c):
+    # A BALL AND CHAIN, drawn literally, and it earns the literalism the same
+    # way LEAD BALLOON does: the object IS both halves of the pick. Against
+    # BULWARK (health bought with speed, a slab) - that one is armour you chose
+    # to wear and this is something locked to you.
+    #
+    # THE CUFF IS THE LIT PART. The weight is what everybody draws; what the
+    # item actually does is close the ring.
+    c.disc(15.0, 16.4, 7.0, S)                         # the ball
+    c.disc(12.4, 13.8, 1.8, P)                         # its high light, by hand
+    # THE CHAIN IS ONE BAR. Drawn as a row of small rings it came back as three
+    # squiggles - a ring whose wall is one pixel after the shading pass has no
+    # hole left in it - and cutting notches across a bar to suggest links ate
+    # the bar instead. What has to survive is that the ball is TETHERED, and a
+    # single thick stroke from the cuff to the ball says that at any size.
+    c.line(5.6, 8.2, 12.4, 13.6, S, 3.6)
+    c.ring(4.4, 4.8, 3.8, 2.0, E)                      # the cuff, closed on you
+
+
+@icon('itemCompound')       # COMPOUND INTEREST - +1% damage, permanently
+def _(c):
+    # A PER CENT SIGN, AND IT IS THE ONLY ONE IN THE SET. Everything else in
+    # the money family is an OBJECT - a sack, a stack, a coin, a trophy - so
+    # the one pick whose payload is a RATE gets the notation instead, which
+    # nothing can be confused with.
+    #
+    # THE BAR IS LIT AND THE TWO RINGS ARE NOT, because the reading is the
+    # stroke: two discs with a line between them is a division sign, and the
+    # forty-five degrees is the whole difference.
+    c.ring(7.0, 6.6, 4.6, 2.0, S)
+    c.ring(17.0, 17.4, 4.6, 2.0, S)
+    c.line(19.4, 3.4, 4.6, 20.6, E, 2.8)
+
+
+@icon('itemFaith')          # FAITH HEALING - 2 HP per enemy within 10m
+def _(c):
+    # A HALO OVER SOMEBODY WITH THEIR ARMS OUT. Against pickHealth (a cross)
+    # and WHITE CELL (a cell eating something dark): the healing family is all
+    # crosses and cells, and this is the one heal that is paid for by the room
+    # rather than carried - so it is a POSTURE, which nothing else here draws.
+    #
+    # THE HALO IS THE LIT PART and it is drawn as a flat ellipse rather than a
+    # circle, because a circle over a head at this size is a bubble.
+    ering(c, 12.0, 3.6, 7.0, 2.8, 0.3, E)
+    c.disc(12.0, 10.0, 3.4, S)                         # the head
+    c.rect(9.4, 13.0, 14.6, 23.0, S)                   # the body
+    # THE ARMS ARE THICK OR THEY ARE NOT THERE. A two-pixel diagonal is one
+    # pixel after the shading pass has taken its lower edge, and a figure with
+    # no arms is a post.
+    c.line(9.8, 14.4, 1.8, 11.2, S, 3.0)
+    c.line(14.2, 14.4, 22.2, 11.2, S, 3.0)
+
+
+@icon('itemPickpocket')     # PICKPOCKET - 1 HP and 5 ammo per enemy alive
+def _(c):
+    # A WALLET WITH SOMEBODY ELSE'S THINGS COMING OUT OF IT. Against PAYDAY (a
+    # sack) and WAR CHEST (a stack seen edge on): those are money you have, and
+    # a wallet is money that was somebody's - the fold and the flap are the
+    # silhouette, and the two things standing out of it say what is being
+    # lifted, which is not money at all.
+    c.rect(1.6, 11.0, 22.4, 22.4, S)
+    c.rect(1.6, 11.0, 22.4, 13.0, D)                   # the lip of the fold
+    # The flap, folded over the front. A clasp drawn as a dark block was a hole
+    # punched in the wallet; a band with a small catch on it is a wallet.
+    c.rect(1.6, 16.4, 22.4, 18.6, D)
+    c.rect(9.6, 15.4, 14.4, 19.6, S)
+    c.rect(11.0, 16.8, 13.0, 18.2, DEEP)
+    bullet(c, 3.4, 2.0, 4.6, 9.6, E, P, 0.42)          # a round, lifted
+    c.rect(13.4, 2.0, 15.8, 10.0, E)                   # and a cross
+    c.rect(10.8, 4.8, 18.4, 7.2, E)
+
+
+@icon('itemHeadCount')      # HEAD COUNT - $100 per enemy alive
+def _(c):
+    # A CLIPBOARD. Against BODY COUNT (a five bar gate) - that one counts what
+    # you have killed and this one counts what is still standing, so it is the
+    # ROLL rather than the tally: a board with a clip on it is the only object
+    # in the set that means "a list of who is here".
+    #
+    # THE TICKS ARE LIT AND THE COIN IS NOT. What the item pays is money, but
+    # what it READS is the room - and the reading is the part the player has to
+    # get right.
+    c.rect(2.4, 3.4, 17.6, 22.6, S)
+    c.rect(6.0, 1.0, 14.0, 5.0, S)                     # the clip
+    c.rect(8.0, 1.8, 12.0, 3.6, DEEP)
+    # TWO TICKS, NOT THREE. Three at this size is a row of scribbles; two big
+    # enough to have a corner in them read as marks somebody made.
+    for y in (9.0, 16.0):
+        c.line(4.6, y + 1.4, 7.4, y + 4.0, E, 2.2)
+        c.line(7.4, y + 4.0, 13.4, y - 1.6, E, 2.2)
+    c.disc(19.0, 19.0, 4.4, E)                         # and what they are worth
+    c.disc(19.0, 19.0, 1.8, DEEP)
+
+
+@icon('itemExecutive')      # EXECUTIVE DECISION - instantly kill a boss
+def _(c):
+    # A GAVEL. Against LAST RITES (a skull with a flatline) and EXECUTIONER (a
+    # blade over a crown): both of those are the killing itself, and this is
+    # the DECISION - a gavel is the one object that means a thing is over
+    # because somebody said so, and it is the only mallet in the set that is
+    # not HEAVY HAND's sledge (that one is a maul on a long haft, drawn on the
+    # diagonal; this is square-on with a block under it).
+    c.rect(4.0, 2.4, 20.0, 8.4, S)                     # the head
+    c.rect(4.0, 2.4, 20.0, 4.0, P)
+    c.rect(10.6, 8.4, 13.4, 15.0, S)                   # the handle
+    c.rect(3.0, 16.6, 21.0, 20.0, E)                   # the block it lands on
+    c.rect(6.0, 20.0, 18.0, 22.4, S)
+
+
+@icon('itemFeltThat')       # EVERYONE FELT THAT - melee x5, and to everybody
+def _(c):
+    # A BUTT-STROKE, WITH THE ROOM AROUND IT. Against TECTONIC (a band of
+    # ground split, arrows out) and HEAVY HAND (a maul): the arcs here are
+    # struck off ONE CORNER rather than out of the centre, which is what makes
+    # this a blow travelling rather than an explosion - and the object doing it
+    # is a stock, which the set has nowhere else except CHEEKWELD's profile.
+    # THREE IMPACTS, AND THE ONE IN THE MIDDLE IS THE ONE THAT WAS HIT.
+    #
+    # THE FIRST PASS WAS ARCS OFF THE STOCK and it did not survive the size: an
+    # arc two pixels wide at radius eight is a dotted line after the outline
+    # pass, and three of them read as scratches on the icon rather than as a
+    # blow going out. What has to be legible is the COUNT - one swing, three
+    # things felt it - so the shockwave is drawn as the things themselves.
+    # NOTHING MAY OVERLAP. The stock and the impact are two objects, and a star
+    # whose arms cross the thing that threw it is one silhouette with spikes on
+    # it - which at arena range is a mess and at any range is not a blow
+    # arriving anywhere. They get a corner each.
+    c.poly([(0.8, 2.0), (7.4, 0.6), (9.2, 6.0), (2.6, 8.0)], S)      # the stock
+    c.rect(7.0, 5.0, 10.0, 8.0, S)                     # the wrist of it
+    #
+    # AND THEY ARE BURSTS, NOT STARS. star() at eight points with a narrow
+    # waist draws arms one pixel wide, which the outline pass eats: what came
+    # back was three spiders. A filled core with a few short spikes off it is
+    # solid at any size and is what an impact looks like anyway.
+    burst(c, 16.4, 7.6, 6.6, E)                        # what it landed on
+    burst(c, 5.2, 17.8, 4.2, E)                        # and everybody else
+    burst(c, 17.2, 19.2, 4.2, E)
+
+
+@icon('itemPanic')          # PANIC BUTTON - every enemy flees for 8s
+def _(c):
+    # THE BUTTON ITSELF, domed and on a housing. Nothing else in the set is a
+    # thing you press - which is a joke worth making once, in the pool where
+    # every item is - and against PANIC TURRET (a gun in a warning triangle)
+    # the silhouette is a cylinder, not a triangle.
+    # THE GAP IS WHAT MAKES IT A BUTTON. A dome sitting straight on its housing
+    # is a bell; a dome standing a couple of pixels PROUD of a wider collar is
+    # a thing with somewhere to travel, and travel is the whole object.
+    ellipse(c, 12.0, 9.2, 8.4, 6.0, E)                 # the dome
+    c.rect(3.6, 9.2, 20.4, 12.4, E)
+    ellipse(c, 12.0, 12.4, 8.4, 2.8, E)
+    c.rect(2.0, 16.0, 22.0, 18.6, S)                   # the collar, wider
+    ellipse(c, 12.0, 16.0, 10.0, 2.6, S)
+    ellipse(c, 12.0, 18.6, 10.0, 2.6, S)
+    c.rect(5.0, 20.6, 19.0, 22.6, S)                   # the base under it
+    c.rect(7.0, 21.4, 17.0, 22.2, DEEP)
+
+
+@icon('itemFoodPoisoning')  # FOOD POISONING - poison every enemy for 8s
+def _(c):
+    # A BOWL WITH SOMETHING COMING OFF IT. Against VENOM ROUNDS (a poisoned
+    # cartridge) and NEUROTOXIN (poison moving between bodies): the poison
+    # family is all ammunition and topology, and this is the only one that is
+    # SERVED - a bowl is the object, and the three coils rising out of it are
+    # the lit part because the fumes are what actually reaches the room.
+    for i, x in enumerate((7.0, 12.0, 17.0)):
+        c.line(x, 11.0, x - 1.8, 7.6, E, 1.8)
+        c.line(x - 1.8, 7.6, x + 1.4, 4.6, E, 1.8)
+        c.line(x + 1.4, 4.6, x - 0.6, 1.6, E, 1.8)
+    c.poly([(1.6, 12.2), (22.4, 12.2), (18.0, 21.0), (6.0, 21.0)], S)
+    c.rect(1.6, 12.2, 22.4, 14.0, D)                   # the rim, catching light
+    c.rect(8.0, 21.0, 16.0, 22.8, S)                   # the foot
+
+
+@icon('itemMolotov')        # MOLOTOV - burning ground for 20 seconds
+def _(c):
+    # A BOTTLE WITH A RAG IN THE NECK, and it is the only bottle in the set.
+    # Against FIREBREAK (fire standing in a line) and BRIMSTONE (fire over a
+    # crowd): those two are the fire, and this is the thing you throw - so the
+    # glass is the silhouette and the flame is small, sitting where the rag is
+    # rather than filling the frame.
+    flame(c, 15.6, 7.0, 4.2, 7.0, E)                   # the rag, lit
+    c.poly([(9.0, 9.4), (14.0, 9.4), (16.4, 14.0), (16.4, 22.4),
+            (6.6, 22.4), (6.6, 14.0)], S)              # the body of it
+    c.rect(10.0, 4.6, 13.0, 9.6, S)                    # the neck
+    c.rect(8.4, 15.6, 14.6, 20.4, E)                   # what is in it
+
+
+@icon('itemTransfusion')    # BLOOD TRANSFUSION - every pickup becomes health
+def _(c):
+    # TWO ARROWS ROUND A DROP. Against OPEN VEIN (a bag feeding a magazine) and
+    # BLOOD FROM STONE (a drop out of a fracture): those are blood going
+    # somewhere, and this is an EXCHANGE - a closed loop of two arrows is the
+    # only way to draw "turned into" at this size, and nothing else in the set
+    # is a cycle.
+    c.arc(12.0, 12.0, 10.4, 2.6, 30, 160, S)
+    c.arc(12.0, 12.0, 10.4, 2.6, 210, 340, S)
+    c.poly([(2.4, 8.6), (8.0, 6.4), (6.4, 12.6)], S)   # the two heads
+    c.poly([(21.6, 15.4), (16.0, 17.6), (17.6, 11.4)], S)
+    drop(c, 12.0, 13.4, 3.4, E)
+
+
+@icon('itemEncore')         # ENCORE - every trigger pull fires twice for 8s
+def _(c):
+    # TWO NOTES, AND THEY ARE THE ONLY MUSIC IN THE SET. Against ECHO CHAMBER
+    # (one round and the ghost of it) and TWENTY/TWENTY (two rounds off one
+    # pull): both of those draw the AMMUNITION, and the point of this one is
+    # that the second shot is not ammunition at all - so it is drawn as the
+    # thing being played again rather than as a round.
+    note(c, 5.6, 15.4, S)
+    note(c, 13.6, 19.6, E)
+
+
+@icon('itemMagDump')        # MAG DUMP - the whole magazine, as one cone
+def _(c):
+    # A MAGAZINE TIPPED OUT. Against BOTTOM FEEDER (an empty magazine with one
+    # arrow) and EXTENDED MAG (a full one, upright): the difference is the
+    # ANGLE and the fan - a box on its side with five rounds leaving it in
+    # different directions is a spill, and a spill is what the item is.
+    c.poly([(1.2, 2.4), (9.4, 0.8), (12.6, 9.4), (4.4, 11.8)], S)
+    c.poly([(3.6, 9.8), (12.4, 7.6), (13.6, 11.6), (4.8, 13.8)], D)  # the lips
+    # FOUR ROUNDS, NOT FIVE, AND BIG. Five at the size that fits five is five
+    # smudges; four laid on a clean fan away from the mouth is a spill, and a
+    # spill is what the item is.
+    for x, y in ((8.4, 15.4), (14.2, 10.0), (14.6, 16.4), (19.4, 11.0)):
+        bullet(c, x, y, 4.2, 7.2, E, P, 0.42)
+
+
+@icon('itemPinata')         # PINATA - the next 5 kills are guaranteed to drop
+def _(c):
+    # A STAR ON A CORD, WITH A STICK UNDER IT. Against LUCKY STREAK (a
+    # horseshoe) and RABBIT'S FOOT (a paw on a chain): those are luck, and this
+    # is not luck at all - it is a thing that is going to be broken open. The
+    # cord running off the top edge is what makes it hang rather than float,
+    # and the star is the only seven-pointed shape in the set.
+    hangline(c, 10.0, 0.0, 4.6, S)
+    # SIX POINTS AND A DEEP WAIST. At an inner radius near half the outer the
+    # points are bumps and the whole thing is a lumpy circle; taking the waist
+    # down to a third is what puts the star in the SILHOUETTE, which is the
+    # only thing that survives arena range.
+    star(c, 10.0, 11.4, 10.6, 3.6, 6, S, phase=90)
+    c.disc(10.0, 11.4, 3.0, E)                         # what is inside it
+    c.line(16.6, 23.0, 23.0, 16.6, S, 2.4)             # the stick
+
+
+@icon('itemMoneyShot')      # MONEY SHOT - spend every credit as damage
+def _(c):
+    # A COIN COMING APART. Against MIDAS and BLOOD MONEY, which are each one
+    # whole disc face-on: this is the same object destroyed, which is the item
+    # - the balance does not buy anything, it is SPENT. The spikes leaving it
+    # are the damage and they are the lit part.
+    # SIX SPIKES, NOT EIGHT. At eight the coin is inside a sunburst and the
+    # object is gone - what has to survive is a DISC with something happening
+    # to it, so the spikes are few enough to be counted and the coin is left
+    # most of the frame.
+    spikes(c, 12.0, 12.0, 8.0, 13.0, 6, 2.6, E, phase=24)
+    c.disc(12.0, 12.0, 8.8, S)
+    c.ring(12.0, 12.0, 5.4, 1.6, D)                    # the milled inner rim
+    # The fracture, straight through the middle, in the empty tone so the coin
+    # is really in two pieces rather than having a line drawn on it.
+    c.line(3.0, 7.0, 21.0, 17.0, EMPTY, 2.4)
+
+
+@icon('itemLava')           # FLOOR IS LAVA - the whole floor burns for 10s
+def _(c):
+    # THE FLOOR, GONE, AND ONE THING STILL STANDING OUT OF IT. Against
+    # HELLFIRE (a reload laying fire behind you) and BRIMSTONE (fire over a
+    # crowd): those are fire happening TO something, and this is fire that has
+    # replaced the ground - so the lit part is the whole lower half of the
+    # frame, and the structure is the one pillar that is still safe.
+    #
+    # THE PILLAR IS WHY THIS WORKS AT 24 PIXELS. Lava alone is a texture; a
+    # column standing in it is a place, and the place is the item.
+    c.rect(0.5, 15.0, 23.5, 23.5, E)
+    for x in range(0, 24, 3):                          # the surface, molten
+        c.poly([(x, 15.0), (x + 3, 15.0), (x + 1.5, 12.2)], E)
+    c.rect(8.0, 6.0, 16.0, 17.0, S)                    # the pillar
+    c.rect(6.4, 4.0, 17.6, 6.4, S)                     # its cap, walkable
+    c.rect(9.6, 8.4, 14.4, 16.0, D)                    # a shaded face on it
+    for x, y in ((3.0, 11.0), (20.6, 12.2)):           # two embers off it
+        c.disc(x, y, 1.4, E)
+
+
+@icon('itemBalloons')       # PARTY BALLOONS - the 5 nearest float, helpless
+def _(c):
+    # THREE BALLOONS WITH SOMETHING HANGING OFF THEM. Against LEAD BALLOON,
+    # which is ONE balloon, dead, with a block on the string: this is the
+    # opposite picture in every part - three of them, inflated, and what is on
+    # the string is going UP. The strings converging is what makes the group
+    # one object rather than three drawings.
+    # THEY MUST NOT TOUCH. Three ellipses at a radius that fills the top of the
+    # frame merge into one cloud the moment the outline pass runs, and a cloud
+    # is not three of anything - so they are small, and the space between them
+    # is doing as much work as they are.
+    # ARRANGED AS A TRIANGLE, NOT A ROW. Three ellipses side by side at a size
+    # worth drawing leave a pixel between them, which the outline pass closes -
+    # and three balloons that have merged are one cloud. Staggering the middle
+    # one upward buys the gap without shrinking any of them.
+    for cx, cy, r in ((4.6, 8.0, 3.6), (19.4, 8.0, 3.6), (12.0, 3.4, 3.8)):
+        ellipse(c, cx, cy, r, r * 1.15, E)
+        c.poly([(cx - 1.0, cy + r * 1.05), (cx + 1.0, cy + r * 1.05),
+                (cx, cy + r * 1.5)], E)                # the knot
+        c.line(cx, cy + r * 1.4, 12.0, 15.4, S, 1.0)   # and the string
+    skullface(c, 12.0, 18.8, 4.0, S)                   # and what is up there
+
+
+@icon('itemParachute')      # GOLDEN PARACHUTE - $5,000 clears the wave
+def _(c):
+    # A CANOPY WITH A COIN UNDER IT. Against AEGIS (a dome over a floor): a
+    # dome sits ON something and a canopy hangs, which the four rigging lines
+    # are there to say - and what they are carrying is money, because the item
+    # is not an escape, it is a payoff.
+    c.arc(12.0, 13.0, 11.0, 3.4, 10, 170, S)
+    for x0, x1 in ((1.6, 9.4), (7.4, 10.6), (16.6, 13.4), (22.4, 14.6)):
+        c.line(x0, 13.4, x1, 18.0, S, 1.0)
+    c.disc(12.0, 20.0, 3.6, E)                         # the payout
+    c.disc(12.0, 20.0, 1.5, DEEP)
+
+
+@icon('itemHealthSeek')     # HEALTH & SEEK - 3 health pickups, somewhere
+def _(c):
+    # A LENS OVER A CROSS. Against pickHealth (the bare cross) and TRAUMA KIT
+    # (a case with one in it): what this item hands out is a cross the player
+    # has to go and FIND, and a magnifier is the only object that means
+    # looking - the handle is the whole silhouette difference from the two
+    # rings in the crit family, which have no stem.
+    c.ring(9.6, 9.6, 8.8, 2.4, S)
+    # The cross has to be worth finding: at 2x3 pixels it was a speck in the
+    # middle of a ring, which reads as a bubble rather than as a lens over
+    # something.
+    c.rect(8.2, 4.6, 11.0, 14.6, E)
+    c.rect(4.6, 8.2, 14.6, 11.0, E)
+    c.line(15.4, 15.4, 22.2, 22.2, S, 3.6)             # the handle
+
+
+@icon('itemSecondSkin')     # SECOND SKIN - +20 shield, and it does not expire
+def _(c):
+    # A BODY INSIDE A SECOND OUTLINE OF ITSELF. Against pickShield (a hexagon)
+    # and AEGIS (a dome): both of those are a thing put in FRONT of you, and
+    # the whole of this item is that it is worn - so the shape is the player's
+    # own, twice, with a gap between. Nothing else in the set is one silhouette
+    # nested in another.
+    # THE GAP HAS TO BE DRAWN, not implied. Two silhouettes in the two lit
+    # tones sit one inside the other and read as one solid body with a rim -
+    # every tone in this ramp is a shade of the same hue, so there is no edge
+    # anywhere between them. A band of the DEEP tone between the two is what
+    # makes the outer one a separate skin rather than a highlight on the inner.
+    c.disc(12.0, 6.2, 6.0, E)                          # the outer skin
+    c.poly([(2.6, 22.8), (4.0, 12.4), (20.0, 12.4), (21.4, 22.8)], E)
+    c.disc(12.0, 6.2, 4.6, DEEP)                       # the gap under it
+    c.poly([(4.8, 22.8), (5.8, 14.4), (18.2, 14.4), (19.2, 22.8)], DEEP)
+    c.disc(12.0, 6.2, 3.2, S)                          # and the body inside
+    c.poly([(6.8, 22.8), (7.6, 16.2), (16.4, 16.2), (17.2, 22.8)], S)
+
+
+@icon('itemPhlebotomy')     # PHLEBOTOMY - deal your missing health to all
+def _(c):
+    # A TUBE TIPPED OUT. Against ADRENALINE (a syringe, upright, with a flange
+    # and a needle) and BLOOD FROM STONE (a drop out of a fracture): a syringe
+    # PUTS something in and this takes it out, so it is drawn on the diagonal,
+    # emptying - and what leaves it fans out to three places rather than
+    # falling in one line, because the item pays everybody at once.
+    # PARALLEL SIDES AND A COLLAR, or this is a dagger - ASSASSIN's dagger, at
+    # the same angle. A blade tapers to a point and a tube does not, so the far
+    # end is cut square and the near end wears a rim wider than the body.
+    c.poly([(2.4, 7.2), (7.2, 2.4), (16.4, 11.6), (11.6, 16.4)], S)
+    c.poly([(0.6, 5.4), (5.4, 0.6), (8.2, 3.4), (3.4, 8.2)], S)      # the collar
+    c.poly([(4.6, 7.2), (7.2, 4.6), (14.6, 12.0), (12.0, 14.6)], E)  # what is in it
+    for x, y, r in ((17.6, 18.0, 2.2), (21.4, 14.4, 1.8), (13.2, 21.4, 1.8)):
+        drop(c, x, y, r, E)                            # and where it goes

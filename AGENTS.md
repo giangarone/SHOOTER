@@ -4,28 +4,62 @@ Notes for an agent picking this repo up. The README is the design document —
 what the game does and why. This file is the shorter question: how to change it
 without breaking it.
 
-## Run the suites you touched. CI runs the rest.
+## Run the suites that cover what you changed
 
 ```bash
-npm run test:tempest        # one suite by name
-node test/tempest.mjs       # same thing, works from any directory
-node test/all.mjs tempest   # or by filter, through the runner
+npm run test:newpool        # one suite by name
+node test/newpool.mjs       # same thing, works from any directory
+node test/all.mjs newpool   # or by filter, through the runner
 ```
 
-Run the one or two suites that own the area you changed, and let CI do the
-sweep. **On a CI runner, DO NOT run `npm run test:all`.** It is thirty suites
-against a real headless browser, and a runner has no GPU - the game rasterizes
-every frame in software on a shared vCPU, which makes the whole set take about
-two hours there against twenty minutes on a developer machine. An agent that
-runs it burns its entire job on tests and gets cancelled before it can commit.
-This has already happened: six hours, and a good fix lost with the runner.
+Ask which suites touch the thing you changed and run all of them - that is
+often three or four, and for anything that lands in the item pool or the enemy
+tables it is more. A change nobody asserted on passes for the wrong reason,
+which is what this is here to prevent.
 
-CI runs the full set on every push and pull request, sharded four ways, in
-about thirty minutes. That is the gate, and it does not need your help.
+What that costs: a suite runs anywhere from a tenth of a second to thirteen
+minutes on a runner, so even half a dozen slow ones fit easily inside a job
+that has hours. Running the RIGHT six is cheap. What is not affordable is the
+whole set - see the prohibition below.
+
+### Which suites cover what
+
+Grep for the thing you touched if it is not here; these are the common ones.
+
+| changed | run |
+|---|---|
+| a passive or active item, the pool, the box | `newpool` `active` `icons` |
+| an upgrade's numbers | `newpool` `icons`, plus whatever it modifies |
+| an enemy, or a theme's table | `themes` `icons`, that theme's own suite, `boss` |
+| movement - sprint, crouch, slide, dash, jump | `crouch` `sprint` `pad` |
+| the weapon, the cone, recoil, reload | `accuracy` `aim` `seeker` `headshot` |
+| money, prices, payouts, the streak | `money` `charge` `flawless` `drops` |
+| a boss, or its telegraphs | `boss` `drops` `charge` |
+| the HUD, an overlay, a menu | `pad` `versus` `flawless` |
+| `js/main.js` - the loop itself | whatever you changed, plus `smoke` |
+
+**`icons` and `themes` cost a tenth of a second each.** If a change goes
+anywhere near an offer, a drawing or an enemy table, run them - there is no
+reason not to, and `icons` is the one that catches an item with no artwork,
+which is a crash the first time it is rolled and twenty minutes into a run.
 
 Some suites take an argument - `node test/boss.mjs ember,rime` pins the themes
 under test instead of walking all ten, which is much faster when you only care
 about one.
+
+### The one thing not to do
+
+**On a CI runner, DO NOT run `npm run test:all`.** Thirty-one suites against a
+real headless browser, and a runner has no GPU - it rasterizes every frame in
+software on a shared vCPU, so the set is about ninety minutes of work there
+against twenty on a developer machine. CI affords it by splitting the suites
+across four machines at once; an agent has one, and gets no benefit from the
+same trick. An agent that runs it burns its whole job on tests and is cancelled
+before it can commit. This has already happened: six hours, and a good fix lost
+with the runner.
+
+CI runs the full set on every push and pull request, sharded four ways, in
+about thirty minutes. That is the gate, and it does not need your help.
 
 If you genuinely need the whole set locally, it is `npm run test:all`, about
 twenty minutes on a developer machine.

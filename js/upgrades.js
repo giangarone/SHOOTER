@@ -523,15 +523,7 @@ export const UPGRADES = {
   // the player cannot see is a stat increase with extra steps, so each drives
   // a body tint and a particle drip (see STATUS_TINT in enemies/shared.js) and the
   // colours are held distinct from each other and from the hit flash.
-  //
-  // `mark: true` also puts a plate in the theme colour on the gun's receiver
-  // (see setGunMarks in weapons.js). It belongs on upgrades that change what a
-  // bullet DOES to what it hits - a status, a chain, a blast, a second shot -
-  // and never on a stat change. Twelve plates fit; keep the marked set inside
-  // that. Passive numbers like magazine size or reload speed stay unmarked, or
-  // the readout stops meaning anything.
   venom: {
-    mark: true,
     name: 'VENOM ROUNDS',
     max: 1,
     theme: THEME.poison,
@@ -547,7 +539,6 @@ export const UPGRADES = {
     },
   },
   incendiary: {
-    mark: true,
     name: 'INCENDIARY',
     max: 1,
     theme: THEME.fire,
@@ -561,7 +552,6 @@ export const UPGRADES = {
     },
   },
   cryo: {
-    mark: true,
     name: 'CRYO ROUNDS',
     max: 1,
     theme: THEME.ice,
@@ -569,7 +559,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.slowTime = 3 * n; },
   },
   terror: {
-    mark: true,
     name: 'TERROR',
     max: 1,
     theme: THEME.fear,
@@ -577,7 +566,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.fearTime = 2 * n; },
   },
   petrify: {
-    mark: true,
     name: 'PETRIFY',
     max: 1,
     theme: THEME.stone,
@@ -588,7 +576,6 @@ export const UPGRADES = {
     },
   },
   arcRounds: {
-    mark: true,
     name: 'ARC ROUNDS',
     max: 1,
     theme: THEME.electric,
@@ -599,7 +586,6 @@ export const UPGRADES = {
     },
   },
   knockout: {
-    mark: true,
     name: 'KNOCKOUT DROPS',
     max: 1,
     theme: THEME.impact,
@@ -617,7 +603,6 @@ export const UPGRADES = {
     },
   },
   detonator: {
-    mark: true,
     name: 'DETONATOR',
     max: 1,
     theme: THEME.blast,
@@ -629,7 +614,6 @@ export const UPGRADES = {
     },
   },
   blastCorpse: {
-    mark: true,
     name: 'BLAST CORPSE',
     max: 1,
     theme: THEME.ember,
@@ -640,7 +624,6 @@ export const UPGRADES = {
     },
   },
   twentyTwenty: {
-    mark: true,
     name: 'TWENTY/TWENTY',
     max: 1,
     theme: THEME.precision,
@@ -698,7 +681,6 @@ export const UPGRADES = {
   piercingShot: {
     name: 'PIERCING SHOT',
     max: 3,
-    mark: true,
     theme: THEME.pierce,
     effects: (n) => [
       ['PIERCE ' + step(n, (k) => String(k)), GOOD],
@@ -713,7 +695,6 @@ export const UPGRADES = {
   gravityRounds: {
     name: 'GRAVITY ROUNDS',
     max: 1,
-    mark: true,
     theme: THEME.gravity,
     effects: [['HITS DRAG ENEMIES IN', GOOD], ['1.5m, WITHIN 5m', NOTE]],
     apply: (mods, n) => {
@@ -789,7 +770,6 @@ export const UPGRADES = {
   reloadBurst: {
     name: 'RELOAD BURST',
     max: 1,
-    mark: true,
     theme: THEME.shrapnel,
     effects: [['RELOAD THROWS 8', GOOD], ['SHARDS, 4x YOUR DAMAGE', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
     apply: (mods, n) => {
@@ -800,7 +780,6 @@ export const UPGRADES = {
   crystallize: {
     name: 'CRYSTALLIZE',
     max: 1,
-    mark: true,
     theme: THEME.ice,
     effects: [['FROZEN DEAD SHATTER', GOOD], ['60 DMG IN 3.5m', NOTE]],
     apply: (mods, n) => {
@@ -811,7 +790,6 @@ export const UPGRADES = {
   ashen: {
     name: 'ASHEN',
     max: 1,
-    mark: true,
     theme: THEME.ember,
     // A lingering ZONE, not another instant blast: Blast Corpse and
     // Crystallize already own that shape, and a cloud you have to push enemies
@@ -834,7 +812,6 @@ export const UPGRADES = {
   neurotoxin: {
     name: 'NEUROTOXIN',
     max: 1,
-    mark: true,
     theme: THEME.poison,
     // Slowing a poisoned enemy would have been Cryo Rounds with a different
     // name - Cryo already halves their speed and their shots. Spreading is the
@@ -845,7 +822,6 @@ export const UPGRADES = {
   entropy: {
     name: 'ENTROPY',
     max: 1,
-    mark: true,
     theme: THEME.stone,
     effects: [['STATUS NEVER ENDS', GOOD], ['ON ENEMIES UNDER 30%', NOTE]],
     apply: (mods, n) => { mods.entropyBelow = 0.3 * n; },
@@ -853,7 +829,6 @@ export const UPGRADES = {
   malady: {
     name: 'MALADY',
     max: 1,
-    mark: true,
     theme: THEME.fire,
     // Poison and burn ONLY. Cryo, Terror and Petrify have no strength to
     // amplify, so the same trade on them would be a drawback with no upside.
@@ -873,7 +848,6 @@ export const UPGRADES = {
   breachRound: {
     name: 'BREACH ROUND',
     max: 1,
-    mark: true,
     theme: THEME.charge,
     // Armed by the reload rather than by a timer, so it rewards a rhythm the
     // player already has instead of asking them to stand still and not shoot.
@@ -886,7 +860,6 @@ export const UPGRADES = {
   seeker: {
     name: 'SEEKER',
     max: 1,
-    mark: true,
     theme: THEME.precision,
     // Rescues MISSES and nothing else. A shot already on target is never
     // touched, so this can never drag a bullet off the weak point the player
@@ -907,7 +880,6 @@ export const UPGRADES = {
   lightningWizard: {
     name: 'LIGHTNING WIZARD',
     max: 1,
-    mark: true,
     theme: THEME.storm,
     // Rare per shot and heavy when it lands, which is the opposite trade to
     // Arc Rounds: that one is a small certainty on every hit, this is a large
@@ -924,7 +896,6 @@ export const UPGRADES = {
   noHitBonus: {
     name: 'NO-HIT BONUS',
     max: 1,
-    mark: true,
     theme: THEME.flawless,
     // The only PERMANENT growth in the pool, and the only reward for a skill
     // the game already measured and only ever paid in credits. It stacks for
@@ -945,9 +916,8 @@ export const UPGRADES = {
     name: 'AMMO HOARDER',
     max: 1,
     theme: THEME.hoard,
-    // Unmarked: the receiver plates say what a BULLET does, and this changes
-    // nothing about the bullet. It is the only upgrade that touches reserve
-    // CAPACITY rather than reserve income, which is what makes it worth a slot
+    // It is the only upgrade that touches reserve CAPACITY rather than
+    // reserve income, which is what makes it worth a slot
     // next to Scavenger and Ammo Fabricator instead of competing with them.
     effects: [['2x MAX AMMO RESERVE', GOOD], ['300 \u2192 600 ROUNDS', NOTE]],
     apply: (mods, n) => { mods.reserveMult = 1 + n; },
@@ -1107,7 +1077,6 @@ export const UPGRADES = {
   carnage: {
     name: 'CARNAGE',
     max: 1,
-    mark: true,
     theme: THEME.carnage,
     // A CAP, and a smaller step under it. Uncapped at 5% a kill it was the
     // best damage in the game after twenty kills and absurd after fifty. At 1%
@@ -1133,7 +1102,6 @@ export const UPGRADES = {
   hellfire: {
     name: 'HELLFIRE',
     max: 1,
-    mark: true,
     theme: THEME.hellfire,
     // Armed by the reload, the same signal Reload Burst and Breach Round ride,
     // so it pays a rhythm the player already has instead of asking for a new one.
@@ -1148,7 +1116,6 @@ export const UPGRADES = {
   eternalAffliction: {
     name: 'ETERNAL AFFLICTION',
     max: 1,
-    mark: true,
     theme: THEME.affliction,
     // The drafted drawback was "status effects on you last twice as long", and
     // the player has no status effects - only hazard zones to stand out of. So
@@ -1178,7 +1145,6 @@ export const UPGRADES = {
   overload: {
     name: 'OVERLOAD',
     max: 1,
-    mark: true,
     theme: THEME.overload,
     // A fraction of MAX HP rather than a flat number, so it stays worth firing
     // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
@@ -1223,7 +1189,6 @@ export const UPGRADES = {
   devilsGamble: {
     name: "DEVIL'S GAMBLE",
     max: 1,
-    mark: true,
     theme: THEME.gamble,
     // Rolled once per SHOT, not per pellet: a shotgun whose nine pellets each
     // rolled their own coin would average out to nothing, and the whole point
@@ -1301,7 +1266,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.critChance += 0.15 * n; },
   },
   marksman: {
-    mark: true,
     name: 'MARKSMAN',
     max: 1,
     theme: THEME.marksman,
@@ -1314,7 +1278,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.critChance += 0.25 * n; },
   },
   deadCenter: {
-    mark: true,
     name: 'DEAD CENTER',
     max: 1,
     theme: THEME.deadcenter,
@@ -1337,7 +1300,6 @@ export const UPGRADES = {
     },
   },
   assassin: {
-    mark: true,
     name: 'ASSASSIN',
     max: 1,
     theme: THEME.assassin,
@@ -1355,7 +1317,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.assassin = n; },
   },
   telltale: {
-    mark: true,
     name: 'TELLTALE',
     max: 1,
     theme: THEME.telltale,
@@ -1379,7 +1340,6 @@ export const UPGRADES = {
   // in opposite directions, and they are a matched pair on purpose: whichever
   // one a run draws, it is being told to stand somewhere.
   longshot: {
-    mark: true,
     name: 'LONGSHOT',
     max: 1,
     theme: THEME.distance,
@@ -1393,7 +1353,6 @@ export const UPGRADES = {
     apply: (mods, n) => { mods.longshot = 0.3 * n; },
   },
   pointBlank: {
-    mark: true,
     name: 'POINT BLANK',
     max: 1,
     theme: THEME.muzzle,
@@ -1893,7 +1852,6 @@ export const UPGRADES = {
   // magazine. Counted per SHOT and not per pellet, the rule every other
   // per-shot pick in the pool follows.
   echoChamber: {
-    mark: true,
     name: 'ECHO CHAMBER',
     max: 1,
     theme: THEME.echoChamber,
@@ -1910,7 +1868,6 @@ export const UPGRADES = {
   // Breach Round and Hellfire both pay the player for reloading, and this pays
   // them for reloading EARLY, which is the one thing those two do not ask for.
   cannonade: {
-    mark: true,
     name: 'CANNONADE',
     max: 1,
     theme: THEME.cannonade,
@@ -1936,7 +1893,6 @@ export const UPGRADES = {
   // everything - the gun, a turret, poison, a blast, another enemy's friendly
   // fire. Three hits is one burst.
   weakPoint: {
-    mark: true,
     name: 'WEAK POINT',
     max: 1,
     theme: THEME.weakPoint,
@@ -1947,7 +1903,6 @@ export const UPGRADES = {
   // left used to throw 29 away; now it walks. Five metres, so it pays a player
   // shooting into a crowd and pays nothing at all to one picking off stragglers.
   overkill: {
-    mark: true,
     name: 'OVERKILL',
     max: 1,
     theme: THEME.overkill,
@@ -2130,7 +2085,6 @@ export const UPGRADES = {
   // the pool above turns it the other way up, which is what makes it a pick for
   // a build rather than a pick on its own.
   criticalOverflow: {
-    mark: true,
     name: 'CRITICAL OVERFLOW',
     max: 1,
     theme: THEME.criticalOverflow,
@@ -2274,7 +2228,6 @@ export const UPGRADES = {
   // the whole gun turned into a grenade launcher: enormous against a crowd,
   // and genuinely bad against the one thing walking at you.
   delayedFuse: {
-    mark: true,
     name: 'DELAYED FUSE',
     max: 1,
     theme: THEME.delayedFuse,

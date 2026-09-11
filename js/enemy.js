@@ -48,10 +48,11 @@ import {
   resolveCircle, pointInObstacle, groundSurface, AGENT_HEIGHT, BOSS_HEIGHT, STEP_HEIGHT,
 } from './utils.js';
 import {
-  ARENA_HALF, BODY_BASE_INTENSITY, BODY_FLASH_HEX, BODY_FLASH_INTENSITY,
-  CONDUIT_RESIST, CONDUIT_SPEED, ENEMY_TYPES, FLARE_BURST, FLARE_BURST_REACH,
-  FLARE_BURST_SPREAD, FLY_MAX_Y, FLY_RATE_DEFAULT, FREEZE_VULN, GROUND_FALL,
-  HAIL_RING_GAP, HAIL_RING_N, HAIL_RING_R, MELEE_REACH_Y,
+  ARENA_HALF, BALLOON_RISE, BODY_BASE_INTENSITY, BODY_FLASH_HEX,
+  BODY_FLASH_INTENSITY, CONDUIT_RESIST, CONDUIT_SPEED, ENEMY_TYPES, FLARE_BURST,
+  FLARE_BURST_REACH, FLARE_BURST_SPREAD, FLY_MAX_Y, FLY_RATE_DEFAULT,
+  FREEZE_VULN, GROUND_FALL, HAIL_RING_GAP, HAIL_RING_N, HAIL_RING_R,
+  MELEE_REACH_Y,
   NAV_TURN, PLATE_HEX, SHARED_MATS, SLOW_FACTOR, SPORE_DAMAGE, SPORE_RADIUS,
   SPORE_SPROUT, STATUS_FX, STATUS_INTENSITY, STATUS_ORDER, STATUS_TINT,
   STEP_EASE, WARD_STONE, _dripAt, _steer, _wraithEnd, buildChaser,
@@ -253,6 +254,13 @@ export class Enemy {
     // Nothing else in the file needed a special case.
     this.flying = !!def.fly;
     this.hoverY = this.flying ? def.fly.height : 0;
+    // PARTY BALLOONS. Seconds left off the floor, and it is NOT a status: the
+    // status table is a set of timers that tint the body and are resisted,
+    // refreshed and held by half a dozen passive items, and being carried into
+    // the air is none of those things. One number, checked in three places -
+    // the behaviour branch below, the ground snap and the altitude step - and
+    // it means "this body is not in the fight".
+    this.balloonT = 0;
     this.flyRate = FLY_RATE_DEFAULT;
     if (this.flying) this.pos.y = this.hoverY;
     // Ceiling on this frame's step, as a multiple of the enemy's own speed.
@@ -535,6 +543,29 @@ export class Enemy {
     }
     this.status[kind] = Math.max(this.status[kind], dur);
     if (power > 0 && kind in this._dot) this._dot[kind] = Math.max(this._dot[kind], power);
+  }
+
+  /**
+   * PARTY BALLOONS: take this body out of the fight and off the floor.
+   *
+   * REFRESHES RATHER THAN STACKING, the rule every status and every running
+   * item in this game follows - two presses is one longer window, not two
+   * bodies' worth of drift on one body.
+   *
+   * THE REFUSALS ARE THE ITEM'S, not a resistance. A boss is exempt outright
+   * (see the note on the item) and a corpse cannot be lifted; there is no
+   * statusMul here and no cooldown, because this is not in the status table -
+   * an enemy that shrugged half of it off would be half in the air, which is
+   * not a state the ground snap can express.
+   *
+   * @param {number} secs
+   * @returns {boolean} whether this body actually left the floor, so the item
+   *   can tell a press that lifted nothing from one that lifted five.
+   */
+  balloon(secs) {
+    if (this.dead || this.boss || this.immovable) return false;
+    this.balloonT = Math.max(this.balloonT, secs);
+    return true;
   }
 
   /**
@@ -855,7 +886,22 @@ export class Enemy {
       _wraithEnd(this);
     }
 
-    if (this.status.freeze > 0) {
+    if (this.balloonT > 0) {
+      // FLOATING, AND THAT IS THE WHOLE OF IT. Above the freeze branch because
+      // it outranks every other reason a body might be doing nothing: an enemy
+      // ten metres up is not petrified, not afraid and not steering, and any
+      // ai() that ran here would be a shooter still shooting from a balloon.
+      // Same three lines the freeze uses to abandon a half-wound swing.
+      this.balloonT -= dt;
+      this.windup = 0;
+      this.swing = 0;
+      this._setEyeAlert(false);
+      // A wraith caught mid-teleport, for the reason the block above this one
+      // exists: neither this branch nor the ones below call ai() again, so a
+      // body left as a disc on the floor would stay one for the rest of its
+      // life.
+      if (this.blinkState) _wraithEnd(this);
+    } else if (this.status.freeze > 0) {
       // Petrified: no movement, no attack, and any half-wound swing is lost -
       // including one already in the air.
       this.windup = 0;
@@ -969,7 +1015,10 @@ export class Enemy {
     // the box just climbed is one this enemy is standing ON, and resolveCircle
     // skips those - without the ordering it would be shoved straight back off
     // every step it took.
-    if (!this.flying) {
+    // A BALLOON IS NOT STANDING ON ANYTHING. Skipping the snap is what lets the
+    // altitude step below actually lift the body: the ground query would put it
+    // back on the floor on the very next frame.
+    if (!this.flying && this.balloonT <= 0) {
       const target = groundSurface(this.pos, this.radius, ctx.obstacles, STEP_HEIGHT);
       if (target > this.pos.y) {
         // THE BODY GOES UP NOW, THE MODEL CATCHES UP. `pos.y` has to move on
@@ -1041,10 +1090,19 @@ export class Enemy {
     // altitude it had - dropping it out of the sky would be a free kill on the
     // one status that is already the strongest thing in the pool.
     if (this.igniteT > 0) this.igniteT -= dt;
-    if (this.flying && this.status.freeze <= 0) {
+    if (this.flying && this.status.freeze <= 0 && this.balloonT <= 0) {
       const target = Math.min(FLY_MAX_Y, this.hoverY);
       this.pos.y += (target - this.pos.y) * Math.min(1, dt * this.flyRate);
     }
+    // AND THE BALLOON'S OWN CLIMB. A fixed rate rather than the exponential
+    // approach a flier uses, because a flier is ARRIVING at a station it knows
+    // and this is something drifting: it should still be visibly rising when
+    // the five seconds are up, so the drop back is a fall from wherever it got
+    // to rather than from a ceiling everything shares. The ground snap above
+    // is skipped for the whole window, so what brings it down is that same
+    // snap resuming - at GROUND_FALL, the rate everything in this game falls
+    // off a ledge at.
+    if (this.balloonT > 0) this.pos.y += BALLOON_RISE * dt;
     const bob = this.status.freeze > 0 ? 0 : this._dance * amp + sway;
     // `_stepLag` is the step-up smoothing above: the body is already at the new
     // height and the model is still on its way there.

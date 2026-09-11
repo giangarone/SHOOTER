@@ -8,7 +8,7 @@
 //
 // WHY THIS REPLACED THE PEDESTAL. That row rose every third shop and handed
 // over one item free, with a doubling reroll beside it. Two consequences, both
-// bad: a run met four active items out of thirty-seven, so most of the
+// bad: a run met four active items out of sixty-six, so most of the
 // catalogue was unreachable by anyone who was not lucky; and the one mechanism
 // for chasing a particular item priced itself out after two tries. The box
 // inverts both. It is there every shop, it can be rolled as many times as the
@@ -29,7 +29,7 @@
 //      and ALL THIRTY-SEVEN item icons are built in the constructor and shown
 //      or hidden thereafter. This matters more here than anywhere else in the
 //      game: the reel swaps icons forty times in four seconds, and building
-//      them on demand would allocate thirty-seven geometries during an
+//      them on demand would allocate sixty-six geometries during an
 //      animation whose whole job is to feel smooth.
 //   3. TEXTURES ARE COUNTED. Two are spent here - the card and the question
 //      mark - against a hard cap the smoke test holds the whole game to. The

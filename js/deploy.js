@@ -915,6 +915,93 @@ export class FireWall {
 }
 
 // ---------------------------------------------------------------------------
+// MOLOTOV - the ground the bottle leaves
+// ---------------------------------------------------------------------------
+//
+// FIREBREAK'S OPPOSITE NUMBER, and the two are deliberately the same machinery
+// wearing different geometry: a wall is a capsule the player stands behind for
+// eight seconds, this is a disc thrown across the room that is still there
+// twenty seconds later. Both set fire and neither deals damage of its own - one
+// fire system, one number, one rhythm (see the note in FireWall.update).
+//
+// IT DOES NOT BLOCK SHOTS. The wall does, because a wall is cover; a puddle is
+// not, and a `blocks` here would make the item a portable barricade the player
+// throws at their own feet - which is FIREBREAK, twenty points cheaper.
+//
+// THE FLAMES ARE A RING, NOT A FILL. Sprites over the whole disc at a density
+// that reads from across the arena is forty additive quads on one patch of
+// floor, which is the white-out the wall's own note describes; the edge is also
+// the only part an enemy has to see, because the edge is what they walk over.
+const PIT_R = 4;
+const PIT_FLAMES = 12;
+
+export class Firepit {
+  constructor(game, x, z, burn, standY = 0) {
+    this.x = x;
+    this.z = z;
+    this.y = standOn(game, x, z, standY);
+    this.life = 20;
+    // Snapshotted at the throw, like every other fire in the game - see
+    // Player.dotHit and the note on Turret's damage.
+    this.burn = burn;
+    this.dead = false;
+
+    this.group = new THREE.Group();
+    this.mats = [];
+    this.flames = [];
+    for (let i = 0; i < PIT_FLAMES; i++) {
+      const a = (i / PIT_FLAMES) * Math.PI * 2;
+      // Scattered off the rim rather than exactly on it: a perfect circle of
+      // sprites reads as a drawn ring, and fire has no radius.
+      const r = PIT_R * (0.72 + Math.random() * 0.3);
+      const f = glow(game.effects.glowTex, i % 2 ? 0xff9d2e : 0xdd2c00, 1.5, 0.34);
+      f.position.set(x + Math.cos(a) * r, this.y + 0.7, z + Math.sin(a) * r);
+      f.userData.phase = Math.random() * Math.PI * 2;
+      this.group.add(f);
+      this.flames.push(f);
+      this.mats.push(f.material);
+    }
+    game.scene.add(this.group);
+    this.effects = game.effects;
+    this.creep = game.effects.creepAcquire(true);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    if (this.life <= 0) return 'dead';
+    // The last second is the warning, exactly as a hazard patch's is: the floor
+    // going clean is the only notice anybody gets that the ground is safe.
+    const fade = Math.min(1, this.life);
+    for (const f of this.flames) {
+      f.userData.phase += dt * 9;
+      const w = 0.75 + 0.35 * Math.sin(f.userData.phase);
+      f.scale.setScalar(1.5 * w * fade);
+      f.material.opacity = 0.34 * fade * (0.7 + 0.3 * w);
+      f.position.y = this.y + 0.65 + 0.14 * Math.sin(f.userData.phase * 0.7);
+    }
+    this.effects.creepSet(this.creep, this.x, this.z, PIT_R, 0xdd2c00, fade * 0.7);
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      const dx = e.pos.x - this.x;
+      const dz = e.pos.z - this.z;
+      const reach = PIT_R + e.radius;
+      if (dx * dx + dz * dz > reach * reach) continue;
+      // Refreshed every frame they are inside and left to run down once they
+      // are out, which is what makes crossing the edge cost less than standing
+      // in the middle. FireWall's rule, for FireWall's reason.
+      e.applyStatus('burn', 2, this.burn);
+    }
+    return 'alive';
+  }
+
+  destroy() {
+    this.effects.creepRelease(this.creep);
+    this.group.parent?.remove(this.group);
+    for (const m of this.mats) m.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // EVENT HORIZON - the thrown orb and the singularity it becomes
 // ---------------------------------------------------------------------------
 //
@@ -1158,12 +1245,22 @@ export class HoleOrb {
 // 6.5 up, 22 down - because a fourth throw in the game that flew differently
 // would read as a different physics rather than as a different payload. What it
 // LANDS as is the only thing that varies, and that is one string.
+// WHAT EACH THROW STANDS UP, AND WHAT COLOUR IT WEARS ON THE WAY.
+//
+// Two tables rather than a chain of ternaries, because there are three kinds
+// now and the ternary version had the colour written out twice - once for the
+// halo in flight and once for the impact - which is exactly the pair that
+// drifts apart. Every class here takes the same (game, x, z, damage, fromY),
+// so the throw does not have to know which one it is carrying.
+const LOB_LANDS = { mine: Mine, turret: Turret, molotov: Firepit };
+const LOB_TINT = { mine: 0xff7043, turret: 0xffab40, molotov: 0xdd2c00 };
+
 export class Lob {
   /**
    * @param {object} game
    * @param {THREE.Vector3} from   the muzzle, so it leaves the gun
    * @param {THREE.Vector3} dir    flattened facing
-   * @param {'mine'|'turret'} kind what to stand up where it lands
+   * @param {'mine'|'turret'|'molotov'} kind what to stand up where it lands
    * @param {number} damage        snapshotted at the throw - see Mine, Turret
    */
   constructor(game, from, dir, kind, damage) {
@@ -1180,7 +1277,7 @@ export class Lob {
     this.life = 4;
     this.spin = new THREE.Vector3(Math.random(), Math.random(), Math.random());
 
-    const tint = kind === 'mine' ? 0xff7043 : 0xffab40;
+    const tint = LOB_TINT[kind] || LOB_TINT.turret;
     this.mat = emissive(0x2a2f3a, 0.2);
     this.mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), this.mat);
     // The same halo the thing it becomes will wear, so the throw and the object
@@ -1220,11 +1317,17 @@ export class Lob {
     const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.z));
     // The throw already tracked a real height through its arc and used to drop
     // it here, which is how a turret landing on a platform ended up under one.
-    ctx.deploy(this.kind === 'mine'
-      ? new Mine(this.game, x, z, this.damage, this.pos.y)
-      : new Turret(this.game, x, z, this.damage, this.pos.y));
+    ctx.deploy(new LOB_LANDS[this.kind](this.game, x, z, this.damage, this.pos.y));
     _v.set(x, this.pos.y + 0.1, z);
-    ctx.effects.impact(_v, this.kind === 'mine' ? 0xff7043 : 0xffab40, 8, 3, 1, 0.3);
+    ctx.effects.impact(_v, LOB_TINT[this.kind], 8, 3, 1, 0.3);
+    // A BOTTLE BREAKS, and the other two do not: a mine and a turret are set
+    // down, and the whole read of a molotov is that the thing that was thrown
+    // is gone. It is also what makes the twenty seconds legible as one event
+    // starting rather than as ground that was quietly always there.
+    if (this.kind === 'molotov') {
+      ctx.effects.shockwave(_v, 0xdd2c00, PIT_R, 0.6);
+      ctx.effects.burst(_v, 0xff9d2e, 26, 6, 3, 0.7);
+    }
   }
 
   destroy() {

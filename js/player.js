@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
 import { UPGRADES } from './upgrades.js';
-import { WEAPONS, STARTING_WEAPON, setGunMarks, setGunTag } from './weapons.js';
+import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 import { ACTIVE_ITEMS } from './items.js';
 
@@ -1090,6 +1090,46 @@ export class Player {
     this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
     this.statusLockEnd = 0;    // WHITE CELL: applyStatus refuses until this
     this.itemCritEnd = 0;      // SWEET SPOT: every shot crits until this time
+    this.insuredEnd = 0;       // LIFE INSURANCE: the policy is live until this
+    // Raised by the claim above and lowered by main.js on the frame it draws
+    // it, the way jumpFx and dashFx are: takeDamage has no effects, no HUD
+    // and no sound, and a payout the player cannot see is a payout they
+    // will call a bug.
+    this.insuranceFx = false;
+    this.encore = 0;           // ENCORE: 1 while every trigger pull fires twice
+    this.meleeMult = 1;        // EVERYONE FELT THAT: the swing's multiplier
+    this.meleeShare = 0;       // ...and 1 while every body takes what it dealt
+    this.pinataLeft = 0;       // PINATA: kills still owed a guaranteed drop
+    // BACKORDER'S PARCEL. A deadline rather than a running window, because the
+    // running list is torn down at every wave clear (see RunningItems.clear)
+    // and a delivery cancelled by the wave ending under it would read as the
+    // item having failed.
+    //
+    // TWO FIELDS, AND THE FLAG IS THE ONE THAT DECIDES. `backorderAt` is a
+    // deadline and so is rebased across a versus handover (see PLAYER_CLOCKS
+    // in versus.js), which means an "empty" 0 comes back as a small POSITIVE
+    // number sitting in the past - a parcel that instantly delivers itself to
+    // whoever took the controller next. Every other clock here survives that
+    // because a stale deadline in the past is indistinguishable from an
+    // expired one; this is the one whose past is its payload. So whether a
+    // parcel exists at all is a boolean, and the clock only says when.
+    this.backordered = false;
+    this.backorderAt = 0;
+    // MEDICAL DEBT, in health, payable when the wave ends. It stacks across
+    // presses and it is allowed to kill - see the bill in Game._updateWave.
+    this.medicalDebt = 0;
+    // ---- THE TWO PERMANENT MARKS AN ITEM CAN LEAVE ---------------------
+    //
+    // Beside hpBanked rather than in `mods`, and for hpBanked's exact reason:
+    // rebuildMods() replays the owned upgrade list from fresh defaults after
+    // every totem claimed, so anything an item wrote into the block would be
+    // handed back by the next pick. These outlive the build.
+    //
+    // LIFE SENTENCE's legs, as a multiplier on movement rather than a count of
+    // presses, so the ten percent compounds the way the card says it does.
+    this.moveLoss = 1;
+    // COMPOUND INTEREST's gun, on the same terms.
+    this.compoundMult = 1;
     // ADRENALINE's stacks. On the PLAYER and not in `mods`, for the reason
     // noHitStacks and carnageStacks are: rebuildMods() replays the owned list
     // from fresh defaults after every draft pick, so a counter an EVENT wrote
@@ -1282,18 +1322,6 @@ export class Player {
     // animate that half of the reload - see _animateReload.
     this.magPart = model.getObjectByName('mag') || null;
     this.magBaseY = this.magPart ? this.magPart.position.y : 0;
-  }
-
-  // Lights one plate on the receiver per owned passive item that changes what
-  // a bullet does, in that upgrade's totem colour (the `mark` flag in
-  // upgrades.js). Called whenever the owned list changes, never per frame.
-  refreshGunMarks() {
-    const colors = [];
-    for (const id of Object.keys(this.upgrades)) {
-      const def = UPGRADES[id];
-      if (def && def.mark) colors.push(def.theme);
-    }
-    setGunMarks(this.gun, colors);
   }
 
   // Derived stats. These are getters, not fields, because a draft pick can
@@ -1545,7 +1573,6 @@ export class Player {
     // A magazine-shrinking upgrade must not leave the gun holding more rounds
     // than it can now carry.
     this.mag = Math.min(this.mag, this.magSize);
-    this.refreshGunMarks();
     return true;
   }
 
@@ -2048,7 +2075,6 @@ export class Player {
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
     this._equipModel();
-    this.refreshGunMarks();
     this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
     this.wardCharges = 0;
@@ -2097,6 +2123,19 @@ export class Player {
     this.orbHealEnd = 0;
     this.statusLockEnd = 0;
     this.itemCritEnd = 0;
+    this.insuredEnd = 0;
+    this.insuranceFx = false;
+    this.encore = 0;
+    this.meleeMult = 1;
+    this.meleeShare = 0;
+    this.pinataLeft = 0;
+    this.backordered = false;
+    this.backorderAt = 0;
+    this.medicalDebt = 0;
+    // The two permanent marks. A new run starts at full speed and base damage
+    // however deep the last one got - the same rule hpBanked is wiped under.
+    this.moveLoss = 1;
+    this.compoundMult = 1;
     this.adrenalineStacks = 0;
     this.balance = 0;
     this.extX = 0;
@@ -2384,7 +2423,10 @@ export class Player {
       // Evasion's reward for a dodge: a burst of speed to leave with. Rage
       // stacks multiplicatively with it, because both are short windows the
       // player earned and neither should quietly swallow the other.
-      const speed = BASE_SPEED * this.mods.moveMult * this.rageSpeedMult
+      // LIFE SENTENCE's price, on the walk and on the slide below, because a
+      // player who bought their health with their legs must not be able to get
+      // it back by going to ground.
+      const speed = BASE_SPEED * this.moveLoss * this.mods.moveMult * this.rageSpeedMult
         // PACE CAR's other half, on the same one getter the trigger reads, so
         // the legs and the gun can never disagree about whether the bar is
         // full. See paceMult.
@@ -2418,8 +2460,8 @@ export class Player {
       // bleeding away evenly from the first frame.
       const u = 1 - Math.max(0, this.slideT) / SLIDE_TIME;
       const mult = SLIDE_SPEED_MULT + (1 - SLIDE_SPEED_MULT) * smooth(u);
-      const sp = BASE_SPEED * mult * this.mods.moveMult * this.rageSpeedMult
-        * this.statusSpeedMult();
+      const sp = BASE_SPEED * mult * this.moveLoss * this.mods.moveMult
+        * this.rageSpeedMult * this.statusSpeedMult();
       this.moveVX = this.slideDX * sp;
       this.moveVZ = this.slideDZ * sp;
     }
@@ -3637,6 +3679,26 @@ export class Player {
     }
     this.health = Math.max(0, this.health - d);
     this.lastHurt = time;
+    // LIFE INSURANCE, and this is the last thing that happens to the number
+    // because it is a claim on the OUTCOME rather than on the blow: the hit
+    // lands in full, everything above has already had its say, and only then
+    // is the question asked - did that kill me.
+    //
+    // HERE AND NOT IN main.js, deliberately. _hurtPlayer is the bullet door
+    // and _hurtPlayerDot is the burning-ground door, and both of them read the
+    // health this returns to decide whether the run is over; a policy written
+    // into one of them would be a policy a lava patch could walk through. This
+    // is the single place every source of damage in the game converges.
+    //
+    // SPENT BY THE CLAIM. One death cancelled per press, not ten seconds of
+    // immortality - so the window is zeroed here rather than left to expire,
+    // and the item's own end() finds nothing left to clear.
+    if (this.health <= 0 && this.insuredEnd > time) {
+      this.insuredEnd = 0;
+      this.health = 1;
+      this.heal(20);
+      this.insuranceFx = true;
+    }
     return this.health;
   }
 
@@ -3654,8 +3716,12 @@ export class Player {
     if (this.mods.warChest > 0) {
       base += this.mods.warChest * Math.floor(this.balance / 1000);
     }
+    // COMPOUND INTEREST rides here, in with the multipliers rather than on the
+    // base: what the card promises is a percent of the shot, and a percent of
+    // the BASE would quietly shrink against a build that had stacked Hollow
+    // Point three times - which is exactly the run that pressed it most.
     let d = base * this.damageMult * this.mods.damage * this.statusDamageMult()
-      * this.itemDamageMult;
+      * this.itemDamageMult * this.compoundMult;
     if (this.mods.steady > 0) {
       d *= 1 + this.mods.steady * this.stillness;
     }
