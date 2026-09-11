@@ -324,6 +324,14 @@ const PLAYER_CLOCKS = [
   // Opening Salvo's window. A benched player must not come back to a window
   // that expired while someone else was shooting.
   'salvoEnd',
+  // LIFE INSURANCE's policy and BACKORDER's delivery. Both are deadlines the
+  // benched player paid for out of their own charge meter, so both come back
+  // with the time they had left rather than with a timestamp from a clock that
+  // kept running without them. Whether the parcel EXISTS is a separate boolean
+  // on the player - see the note on `backordered` - precisely because rebasing
+  // an empty deadline lands it in the past, which for this one field would
+  // read as "it arrived".
+  'insuredEnd', 'backorderAt',
 ];
 
 // The same trap, on Game's side of the line.

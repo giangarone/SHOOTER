@@ -285,6 +285,63 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBatte
 }
 
 /**
+ * PINATA's drop: the same table, with the "nothing" outcome removed.
+ *
+ * PROPORTIONAL, NOT PRIORITISED. The obvious implementation is to roll the
+ * ordinary table over and over until something comes back, and it gives the
+ * wrong answer: rollDrop returns the FIRST category that hits, so re-rolling it
+ * concentrates the result on whatever is offered earliest - ammo, always. This
+ * picks one category with a probability proportional to its own chance, which
+ * is the mix the table would produce over a hundred kills, delivered on one.
+ *
+ * IT KEEPS EVERY GATE. Health is still withheld at a full bar, ammo when the
+ * floor already holds enough of it and a battery when there is no meter to
+ * pour it into - so a guaranteed drop is guaranteed to be something the player
+ * can use, which is the whole reason those gates exist. If every category is
+ * gated out (a full player, a carpeted floor, no item) the guarantee cannot be
+ * kept and this returns null: the caller keeps its count for the next kill
+ * rather than spending it on a plate nobody wants.
+ *
+ * The arguments are rollDrop's, exactly, so the two can never drift.
+ *
+ * @returns {string|null}
+ */
+export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
+  let total = 0;
+  for (const key of ROLL_ORDER) {
+    if (key === 'ammo' && !allowAmmo) continue;
+    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'battery' && !wantBattery) continue;
+    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
+    total += def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
+  }
+  if (total <= 0) return null;
+  // LUCK IS DELIBERATELY NOT READ. RABBIT'S FOOT lifts the odds that anything
+  // drops at all, and here everything drops - a multiplier applied to every
+  // weight in a normalised draw cancels itself out, so passing it would be a
+  // parameter that provably does nothing.
+  let r = Math.random() * total;
+  for (const key of ROLL_ORDER) {
+    if (key === 'ammo' && !allowAmmo) continue;
+    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'battery' && !wantBattery) continue;
+    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
+    r -= def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
+    if (r <= 0) return key;
+  }
+  // Floating-point crumbs at the very end of the walk. The last eligible
+  // category is the honest answer, and it is never null.
+  for (let i = ROLL_ORDER.length - 1; i >= 0; i--) {
+    const key = ROLL_ORDER[i];
+    if (key === 'ammo' && !allowAmmo) continue;
+    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'battery' && !wantBattery) continue;
+    return key;
+  }
+  return null;
+}
+
+/**
  * The chance a single kill drops anything at all, for tests and for tuning.
  * Exact rather than a sum: the categories are independent rolls, so this is
  * one minus the chance every one of them misses.
@@ -640,6 +697,25 @@ export function spawnRelief(typeKey, arena, near, scene, glowTex, time) {
   }
   // Nowhere clear nearby - fall back to open floor anywhere rather than
   // withholding the one pickup meant to stop a death spiral.
+  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time, defFor(typeKey));
+}
+
+/**
+ * HEALTH & SEEK's spawn: a pickup on open floor ANYWHERE in the arena.
+ *
+ * The third spawner, and the only one with no reference point at all. A kill's
+ * drop lands on the body and the relief net lands in a ring around the player,
+ * because both of those are answers to something that just happened; this one
+ * is the item saying "somewhere else", and somewhere else is the whole payload
+ * - three plates at the player's feet would be a heal with extra steps.
+ *
+ * randomSpawnPos already refuses the middle of the arena and the inside of an
+ * obstacle, and falls back to open floor when every sample is rejected, so
+ * this can never fail to produce a pickup.
+ *
+ * @returns {Powerup}
+ */
+export function spawnAnywhere(typeKey, arena, scene, glowTex, time) {
   return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time, defFor(typeKey));
 }
 

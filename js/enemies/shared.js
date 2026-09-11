@@ -355,6 +355,14 @@ export const FLY_RATE_DEFAULT = 4;
 // past the point where a shot from the floor stops being a fair ask.
 export const FLY_MAX_Y = 6.5;
 
+// PARTY BALLOONS: how fast a body lifted off the floor drifts up, in metres a
+// second. Deliberately slow. Five seconds at this rate is a little over four
+// metres - well inside FLY_MAX_Y, so a balloon is never higher than something
+// the game already expects to be shot at, and it is still climbing when the
+// window closes, which is what makes the drop back read as the effect ending
+// rather than as the body having simply parked up there.
+export const BALLOON_RISE = 0.85;
+
 // Every enemy's id, and the counter is PRIVATE to this module with a function
 // over it rather than an exported `let`. An imported binding is read-only, so
 // `++idSeq` from the class's file is a TypeError at runtime and not at parse

@@ -85,7 +85,9 @@ import { THEMES } from './themes.js';
 // rather than imported there, because themes.js and waves.js are both pure
 // data modules that have to stay loadable with no renderer.
 const HAVE_TYPE = (k) => Object.prototype.hasOwnProperty.call(ENEMY_TYPES, k);
-import { rollDrop, spawnDropAt, spawnRelief } from './powerups.js';
+import {
+  forcedDrop, rollDrop, spawnAnywhere, spawnDropAt, spawnRelief,
+} from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS } from './money.js';
 import {
   UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
@@ -109,6 +111,39 @@ const THEME_VITAL = THEME.vitalTrigger;
 const THEME_BRUISE = THEME.bruiseRounds;
 const THEME_KILLSTREAK = THEME.killStreak;
 const THEME_OATH = THEME.bloodOath;
+// LIFE INSURANCE's payout. The item is drawn in THEME.holy like AEGIS, and the
+// claim wears it too: what the player has to read off the flash is which of
+// the two things that can save them from a killing blow just did.
+const THEME_INSURED = THEME.holy;
+
+// ---- MAG DUMP and FLOOR IS LAVA ------------------------------------------
+
+// How wide the dump throws the magazine, in the same normalised screen units
+// _shotSpread returns. About six times a moving player's own cone: far enough
+// off the reticle that the outer rounds are a spray rather than a burst, and
+// short of a full hemisphere, which would put half the magazine behind the
+// player's shoulders and into the floor.
+const MAG_DUMP_SPREAD = 0.5;
+
+// FLOOR IS LAVA, in one place.
+//
+// The DPS is a magma trail's own (MAGMA_PATCH_DPS in js/enemies/ember.js), and
+// deliberately so: this is the same ground an ember wave lays under the
+// player, and a second number would mean the player learns "lava hurts this
+// much" twice. It is carved by the burn's own rate the way every lava patch is
+// - see the tick.
+const LAVA_FLOOR_TIME = 10;
+const LAVA_FLOOR_DPS = 12;
+// The nine stamps: a 3x3 grid at this spacing, each this wide. Sized so the
+// ragged edges overlap well inside the arena bound rather than meeting exactly
+// at it, because two creep blobs that just touch leave a seam, and a seam in
+// this looks like somewhere it is safe to stand.
+const LAVA_FLOOR_STEP = 13;
+const LAVA_FLOOR_R = 13;
+// How far off the floor is out of it. The same figure _updateHazard uses for a
+// player standing in a pool, so "in it" means one thing everywhere - and it is
+// what makes a jump a moment of relief here exactly as it is there.
+const LAVA_FLOOR_CLEAR = 0.8;
 
 // STATUS CONDUIT's translation table: a status on the PLAYER (status.js) and
 // the one it becomes on an enemy (STATUS_TINT in enemies/shared.js). WEAKNESS
@@ -1267,7 +1302,19 @@ class Game {
     // them together would put a branch in a hot loop that is wrong half the
     // time it runs.
     this._hazard = [];
-    // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the thirty-seven do not
+    // FLOOR IS LAVA's decal handles, and its two accumulators. The ITEM is in
+    // the running list like every other window; what is here is the state that
+    // window writes on the world, held on Game for the same reason every other
+    // zone's is - the creep pool is Game's to hand back, and an item's scratch
+    // object dies with the activation.
+    this._lavaCreep = [];
+    this._lavaT = 0;
+    // Fractional damage between whole points, and the throttle on them. Both
+    // are a hazard patch's own `acc` and `tick` under different names, because
+    // this bleeds the player exactly the way standing in a patch does.
+    this._lavaAcc = 0;
+    this._lavaTick = 0;
+    // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the sixty-six do not
     // finish on the frame they are pressed; this is the list that ticks them
     // and, more importantly, the list that ENDS them. See RunningItems.
     this.running = new RunningItems();
@@ -3582,6 +3629,336 @@ class Game {
     this.sfx.itemLance();
   }
 
+  // ---- MAG DUMP ----------------------------------------------------------
+
+  /**
+   * The whole magazine, fired as one wide cone, on the frame of the press.
+   *
+   * IT IS THE PELLET PATH, NOT A NEW ONE. Every round goes through
+   * _firePellet exactly as a trigger pull's would, so the build's passive
+   * items, the ammunition's statuses, the pierce cap, SEEKER's bend and the
+   * hit-once-per-body rule all apply without being told this exists. What is
+   * different is only how many go out at once and how wide.
+   *
+   * ONE ROLL FOR ALL OF THEM. The crit die is thrown once, the way it is for a
+   * shotgun's nine pellets and for LANCE's beam: this is one press, and thirty
+   * separate coins would average out to exactly nothing.
+   *
+   * THE DEDUP SETS ARE NOT CLEARED BETWEEN ROUNDS, for the same reason
+   * TWENTY/TWENTY's two volleys share them - one press is one dose of status
+   * on a body and one DETONATOR blast, however many rounds found it.
+   *
+   * NOT A TRIGGER PULL. tryShoot() is never called, so nothing that counts
+   * shots counts these: no recoil bloom, no CANNONADE, no FATAL RESERVE, no
+   * bumpStreak per round. The rounds leave the magazine the way LANCE's thirty
+   * do - spent, not fired.
+   */
+  magDump() {
+    const p = this.player;
+    const n = p.mag;
+    if (n <= 0) return;
+    p.mag = 0;
+    const w = p.weapon;
+    const targets = this._targets;
+    targets.length = 0;
+    for (const m of this.arena.meshList) targets.push(m);
+    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
+    for (const pr of this.projectiles) {
+      if (pr.shootable) targets.push(pr.mesh);
+    }
+    const muzzle = p.muzzleInto(this._muzzle);
+    const crit = p.rollCrit();
+    this._shotHits.clear();
+    this._shotCrit.clear();
+    this._blastHit = false;
+    this._shotWasCrit = false;
+    this._reflected = false;
+    let hitAny = false;
+    // THE CONE IS THE ITEM. Six times the widest a moving player's own spread
+    // ever opens to, which puts the far rounds well off the reticle - what the
+    // player is buying is AREA, and a dump that landed in the same place a
+    // burst would have is just a burst.
+    for (let i = 0; i < n; i++) {
+      if (this._firePellet(muzzle, targets, MAG_DUMP_SPREAD, w, 1, crit)) hitAny = true;
+    }
+    if (this._blastHit) {
+      const m = p.mods;
+      this._blast(this._blastAt, m.blastDamage, m.blastRadius, null, false);
+    }
+    if (p.mods.critOverflow > 0) p.settleShot(this._shotWasCrit);
+    this._shotHits.clear();
+    this._shotCrit.clear();
+    targets.length = 0;
+    // One press, one entry in the accuracy figures - the same grain LANCE is
+    // booked at, and the reason the stat is still readable after one.
+    this.stats.shotsFired++;
+    if (hitAny) {
+      this.stats.hits++;
+      this.ui.hitMarker();
+      this.sfx.hit();
+    }
+    p.bumpStreak(hitAny);
+    // Everything that says "that was the whole magazine": the flash, a kick
+    // three times a normal shot's, and the reserve counter flaring because the
+    // number in the corner is where the player actually reads their ammunition.
+    this.effects.flash(muzzle);
+    this.effects.burst(muzzle, 0xffab00, 34, 9, 3, 0.5);
+    this.effects.addShake(0.55);
+    p.kick = -0.26;
+    this.pad.rumble(1, 0.7, 300, 2);
+    this.ui.flashReserve();
+    this.sfx.itemBlast();
+  }
+
+  // ---- BLOOD TRANSFUSION, HEALTH & SEEK ----------------------------------
+
+  /**
+   * Every plate on the floor, turned into a health plate where it lies.
+   *
+   * REPLACED RATHER THAN MUTATED. A Powerup builds its mesh and its halo from
+   * the type it was constructed with (see pickupIcon and glowMaterial, both
+   * keyed by type), so rewriting `type` on a live one would leave an ammo crate
+   * on screen that heals - the one outcome worse than the item not working.
+   *
+   * IT KEEPS THE TIME THE OLD PLATE HAD LEFT. `spawnTime` is copied over, so a
+   * crate that was already blinking becomes a health plate that is already
+   * blinking. Handing back a fresh thirty seconds would make this a way to
+   * REFRESH the floor as well as convert it, which is a second effect the card
+   * does not mention.
+   *
+   * @returns {number} how many were converted, so the item can refuse an empty
+   *   floor out loud rather than silently doing nothing.
+   */
+  _transfuse() {
+    let n = 0;
+    for (let i = 0; i < this.powerups.length; i++) {
+      const old = this.powerups[i];
+      // Already health, or already on its way to the player: an absorbing
+      // plate has left the live list's jurisdiction (see _updateAbsorbing) and
+      // converting one mid-flight would be a pickup changing in the air.
+      if (old.typeKey === 'health' || old.absorbing || old.dead) continue;
+      const made = spawnDropAt(
+        'health', old.pos, this.scene, this.effects.glowTex, this.time,
+        this.arena.obstacles
+      );
+      made.spawnTime = old.spawnTime;
+      this.effects.burst(this._killPos.set(old.pos.x, old.pos.y + 0.9, old.pos.z),
+        0xff2d6f, 12, 3, 2, 0.5);
+      old.destroy();
+      this.powerups[i] = made;
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * HEALTH & SEEK: `n` health plates on open floor, anywhere in the arena.
+   *
+   * CAPPED WITH EVERY OTHER SPAWNER. MAX_ACTIVE_PICKUPS is a promise about how
+   * much loot can be on the floor at once and it is not the item's to break -
+   * a player who presses this onto an already-carpeted arena gets fewer plates,
+   * which is the same answer the relief net gets in the same situation.
+   */
+  _scatterHealth(n) {
+    for (let i = 0; i < n; i++) {
+      if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
+      this.powerups.push(
+        spawnAnywhere('health', this.arena, this.scene, this.effects.glowTex, this.time)
+      );
+    }
+  }
+
+  // ---- GOLDEN PARACHUTE, EXECUTIVE DECISION ------------------------------
+
+  /**
+   * The wave, bought out: the queue emptied and the floor cleared, paying
+   * nothing for either.
+   *
+   * NOTHING HERE GOES THROUGH THE KILL SWEEP, and that is the whole design.
+   * Marking the bodies dead would run every reward in the game - the bounty,
+   * the orbs, the item charge, the drop roll, the combo - and a late wave's
+   * cast is worth more than the five thousand dollars the press cost, so the
+   * item would refund itself and then some. They are DISPOSED instead, exactly
+   * the way _clearEntities disposes a roster at a run boundary.
+   *
+   * THE WAVE THEN ENDS ON ITS OWN. _updateWave asks for an empty queue and an
+   * empty roster and finds both on the next frame, so the flawless test, the
+   * resupply, the banked health and the shop all run in their ordinary order.
+   * Nothing here knows what a wave clear involves.
+   *
+   * @returns {number} bodies and queued spawns removed, for the banner.
+   */
+  _clearWaveNow() {
+    let n = this.queue.length;
+    this.queue.length = 0;
+    for (const e of this.enemies) {
+      if (!e.dead) n++;
+      // A puff where each body was. There is no corpse - the bodies did not
+      // die, they were bought off - and a room that simply blinked empty would
+      // read as the game having lost track of the wave.
+      this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 0.9, e.pos.z),
+        0xffc400, 14, 5, 2.5, 0.5);
+      this.scene.remove(e.group);
+      e.dispose();
+    }
+    this.enemies.length = 0;
+    this._bigAlive = 0;
+    // Children a splitter queued this frame go with their parents: they are
+    // pushed onto the roster after the sweep, and one left here would be the
+    // single body standing in an arena the player has already paid to empty.
+    this._pendingSpawns.length = 0;
+    return n;
+  }
+
+  /**
+   * EXECUTIVE DECISION: every part of the current boss, dead, now.
+   *
+   * SET DEAD RATHER THAN DAMAGED, and this is the one place in the game that
+   * does it. Enemy.takeDamage is a stack of things that can refuse a blow -
+   * a warden's ward, a capacitor's plate, a Colossus's plating, a shell that
+   * is currently closed - and every one of them is a correct answer to a
+   * BULLET. An item whose entire card is "instantly kill a boss" cannot be
+   * eaten by a phase; a hundred and twenty points is not a price anybody pays
+   * for a maybe.
+   *
+   * THE SWEEP STILL BOOKS THEM. `dead` is exactly what the sweep in
+   * _updateEnemies looks for, so the bounty, the corpse, the combo and
+   * _finishBossWave all happen the way they would have if the player had shot
+   * the last part off - which is right, because they did fight the wave, they
+   * just did not fight the last of it.
+   */
+  _executeBoss() {
+    if (!this.bossFight) return;
+    for (const e of this.bossFight.parts.slice()) {
+      if (e.dead) continue;
+      e.hp = 0;
+      e.dead = true;
+      this.effects.burst(this._killPos.set(e.pos.x, e.pos.y + 1.6, e.pos.z),
+        0x880e4f, 40, 8, 4, 0.9);
+      this.effects.shockwave(e.pos, 0x880e4f, 12, 0.9);
+    }
+  }
+
+  // ---- FLOOR IS LAVA -----------------------------------------------------
+
+  /**
+   * Ten seconds in which the arena floor is a hazard and the furniture is not.
+   *
+   * IT IS NOT A HAZARD PATCH, and it deliberately does not go through
+   * _addHazard. A patch is a circle with a cap on how many of its kind can
+   * exist, and this is not a circle - it is "the floor", which is a HEIGHT
+   * TEST rather than a distance one. Feeding nine overlapping patches into the
+   * pool would also evict every magma trail and gas cloud a wave had laid,
+   * which is a boss's own attacks being cancelled by the player's item.
+   *
+   * NINE STAMPS, AND ONLY FOR THE LOOK. The creep field is a shared pool of
+   * thirty (see Effects._creepInit); nine of them in a grid cover a 44 metre
+   * arena with the ragged edges lava should have. If the pool is already busy
+   * - a Colossus alone can hold a dozen - creepAcquire hands back -1 and
+   * creepSet ignores it, so the floor is patchier and NOTHING ELSE CHANGES:
+   * what burns is the height test below, never the decal. A player cannot be
+   * hurt by ground they cannot see, and cannot be saved by a gap in it either.
+   */
+  _lavaFloorStart() {
+    this._lavaFloorEnd();
+    this._lavaT = LAVA_FLOOR_TIME;
+    this._lavaAcc = 0;
+    this._lavaTick = 0;
+    for (let i = 0; i < 9; i++) {
+      this._lavaCreep.push(this.effects.creepAcquire(true));
+    }
+  }
+
+  _lavaFloorTick(dt) {
+    this._lavaT -= dt;
+    // The last second fades, exactly as a hazard patch's does: the floor going
+    // clean is the only notice anybody gets that it is safe to stand on again.
+    const fade = Math.max(0, Math.min(1, this._lavaT));
+    for (let i = 0; i < this._lavaCreep.length; i++) {
+      const gx = (i % 3) - 1;
+      const gz = ((i / 3) | 0) - 1;
+      this.effects.creepSet(
+        this._lavaCreep[i], gx * LAVA_FLOOR_STEP, gz * LAVA_FLOOR_STEP,
+        LAVA_FLOOR_R, CREEP_LAVA, fade * 0.8
+      );
+    }
+    // WHAT IS STANDING ON THE FLOOR, AND WHAT IS NOT. `pos.y` is the surface a
+    // body is standing on for a ground enemy and a real altitude for a flier,
+    // so one test answers both: anything up on the terrain is out of it, and
+    // anything in the air is over it. The 0.8 is the same figure _updateHazard
+    // uses for the player, so "in it" means one thing everywhere in the game.
+    for (const e of this.enemies) {
+      if (e.dead || e.pos.y >= LAVA_FLOOR_CLEAR) continue;
+      // Refreshed while they stand in it and left to run down when they climb
+      // out, the rule every fire in this game follows.
+      e.applyStatus('burn', 2, this.player.dotHit);
+    }
+    if (this.player.pos.y >= LAVA_FLOOR_CLEAR) return;
+    // THE PLAYER BURNS ON EXACTLY A MAGMA PATCH'S TERMS - the same status for
+    // the same 2.5 seconds, and the same carve: the burn's own dps is taken
+    // OUT of the ground's rate, so standing here costs what standing in lava
+    // has always cost and the tail is what makes leaving early worth
+    // something. Through _afflictPlayer rather than straight onto the player,
+    // because that is where `invulnEnd` is checked: an item that set the
+    // player alight mid-AEGIS would break the one item AEGIS exists to be.
+    this._afflictPlayer('fire', LAVA_BURN_SECONDS);
+    this._lavaAcc += Math.max(0, LAVA_FLOOR_DPS - PLAYER_STATUS.fire.dps) * dt;
+    this._lavaTick -= dt;
+    if (this._lavaAcc < 1 || this._lavaTick > 0) return;
+    const whole = Math.floor(this._lavaAcc);
+    this._lavaAcc -= whole;
+    this._lavaTick = 0.34;
+    this._hurtPlayerDot(whole);
+  }
+
+  // Hands the stamps back. Called by the item's end(), by _clearHazards - so a
+  // wave ending takes the floor with it - and by _lavaFloorStart, so a second
+  // press cannot leak the first press's handles into a pool only thirty deep.
+  _lavaFloorEnd() {
+    for (const h of this._lavaCreep) this.effects.creepRelease(h);
+    this._lavaCreep.length = 0;
+    this._lavaT = 0;
+    this._lavaAcc = 0;
+  }
+
+  // ---- BACKORDER, and LIFE INSURANCE's receipt ---------------------------
+
+  /**
+   * The parcel landing, and the policy paying out. One method because both are
+   * the same shape: a thing that happened to the player somewhere the player
+   * could not be told about it.
+   *
+   * BACKORDER IS DELIVERED HERE AND NOT BY THE RUNNING LIST because the
+   * running list is torn down at every wave clear - see the note on the item.
+   * So it is a deadline on the player, checked once a frame, and it arrives
+   * through the shop and across a wave boundary exactly as promised.
+   *
+   * LIFE INSURANCE'S CLAIM IS PAID INSIDE Player.takeDamage, which is the only
+   * place that can see every source of damage in the game - and which has no
+   * effects, no HUD and no sound. It raises a flag; this is where the flag
+   * becomes something the player can see.
+   */
+  _updateItemDeliveries() {
+    const p = this.player;
+    if (p.insuranceFx) {
+      p.insuranceFx = false;
+      this.effects.shockwave(p.pos, THEME_INSURED, 12, 0.9);
+      this.effects.burst(p.eyeInto(this._killPos), 0xfff2b0, 44, 7, 4, 1.0);
+      this.effects.addShake(0.4);
+      this.ui.banner('CLAIM PAID');
+      this.pad.rumble(0.9, 0.6, 260, 3);
+      this.sfx.itemHeal2();
+    }
+    if (!p.backordered || this.time < p.backorderAt) return;
+    p.backordered = false;
+    p.backorderAt = 0;
+    p.heal(25);
+    this.effects.shockwave(p.pos, THEME_VITAL, 8, 0.7);
+    this.effects.burst(p.eyeInto(this._killPos), 0x8affc1, 30, 6, 3, 0.8);
+    this.ui.banner('DELIVERED  +25 HP');
+    this.sfx.itemHeal2();
+  }
+
   // Rolls the next wave's enemy queue and difficulty, and sets the pickup
   // budget for it. Enemies then trickle out of the queue on spawnTimer.
   startWave() {
@@ -5692,6 +6069,22 @@ class Game {
       }
       this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
     }
+    // ENCORE. The whole pattern again, at full strength, off no magazine -
+    // ECHO CHAMBER's ghost with the every-fourth and the half-damage taken off
+    // it, which is exactly what the item is and why it rides the same lines.
+    //
+    // The dedup sets are NOT cleared between the shot and its encore, for the
+    // reason the echo above does not clear them and TWENTY/TWENTY's two
+    // volleys do not either: this is ONE trigger pull, so a body caught by
+    // both takes one dose of status and sets off one DETONATOR blast.
+    if (this.player.encore > 0) {
+      for (let v = 0; v < mods.volley; v++) {
+        for (let i = 0; i < w.pellets; i++) {
+          if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
+        }
+      }
+      this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
+    }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
     }
@@ -5861,8 +6254,12 @@ class Game {
     const d = Math.hypot(bestDX, bestDZ) || 1;
     this._shotCrit.clear();
     const hot = this._resolveHit(target, crit, false);
+    // EVERYONE FELT THAT's five, folded in with the crit and the range picks
+    // rather than applied afterwards, so the number that lands on the body and
+    // the number every other body takes below are the same number - and so the
+    // damage figure floating off the target is the one the player was shown.
     const dealt = this.player.getEffectiveDamage(MELEE_DAMAGE)
-      * this._hitMult(target, hot);
+      * this._hitMult(target, hot) * this.player.meleeMult;
     this._shotCrit.clear();
     // A swing travels from the player toward the enemy, which is what tells
     // a shield or a weak point whether it was struck.
@@ -5871,6 +6268,29 @@ class Game {
     // sweep in _updateEnemies - and this only records how the body died, so
     // the combo multiplier and the double still compose there.
     if (target.dead) target.meleeKill = true;
+    // ...AND EVERYONE ELSE. The swing still had to CONNECT - this hangs off
+    // the body that was actually struck, so eight seconds of swinging at air
+    // is eight seconds of nothing, which is what keeps the item a melee item
+    // rather than a room-clear with an animation in front of it.
+    //
+    // A copy of the roster, for PAY TO WIN's reason: a splitter's children are
+    // pushed onto `enemies` the moment the parent dies, and something that was
+    // not standing there when the swing landed must not be hit by it.
+    //
+    // TAGGED AS MELEE KILLS, all of them. The double bounty and BLOODSPORT's
+    // heal are both worked out from that flag in the death sweep, and a body
+    // taken down by the butt of the gun is a melee kill wherever it was
+    // standing - the item's whole promise is that they all felt the same blow.
+    if (this.player.meleeShare > 0) {
+      for (const e of this.enemies.slice()) {
+        if (e.dead || e === target) continue;
+        this.effects.impact(e.pos, 0x00e5c0, 8, 4, 2.5, 0.35);
+        this.hurtEnemy(e, dealt);
+        if (e.dead) e.meleeKill = true;
+      }
+      this.effects.shockwave(this.player.pos, THEME.impact, 26, 0.8);
+      this.effects.addShake(0.3);
+    }
     // KNOCKBACK IS NOW A MOVE, NOT A TELEPORT. This used to add three metres to
     // the enemy's position on the frame of the hit, so the body was simply
     // somewhere else on the next frame - which read as the enemy blinking
@@ -6475,6 +6895,26 @@ class Game {
           this.effects.shockwave(this.player.pos, 0xeaff6b, 7, 0.7);
           msg += '  NO-HIT x' + n + ' (+' + pct + '% DMG & RATE)';
         }
+        // MEDICAL DEBT FALLS DUE, and where it falls due is the whole of
+        // whether the item has a price at all.
+        //
+        // AFTER THE FLAWLESS TEST, so a self-inflicted bill does not break a
+        // streak the player earned by not being hit - `lastPerfect` was
+        // settled at the top of this block, off the damage the FIGHT did.
+        //
+        // AND AFTER THE RESUPPLY, which is the line that matters. A flawless
+        // clear refills the health bar (see Player.resupply); billed before
+        // it, thirty health would be handed straight back, and MEDICAL DEBT on
+        // a clean wave would be forty free health with no cost whatsoever -
+        // pressed on the opening frame of every wave the player expected to
+        // clear untouched. Charged after, the bill is real however well the
+        // wave went.
+        //
+        // FOLDED INTO THE CLEAR BANNER rather than raised as its own, for the
+        // reason No-Hit and the banked health are: a second banner would wipe
+        // the first before it could be read.
+        const bill = this._payMedicalDebt();
+        if (bill > 0) msg += '  MEDICAL DEBT -' + bill + ' HP';
         this.ui.banner(msg);
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
@@ -6532,6 +6972,38 @@ class Game {
     }
   }
 
+  /**
+   * MEDICAL DEBT's bill, at the end of the wave that ran it up.
+   *
+   * IT CAN KILL, and that is the item. It goes through _hurtPlayer like any
+   * other blow - so Holy Mantle's ward can eat it, Evasion can dodge it,
+   * Thorns has nobody to reflect it at and LIFE INSURANCE will pay it out -
+   * because a player who assembled an answer to being hit has assembled an
+   * answer to this, and quietly routing round all of it would make the one
+   * item with a delayed cost the one item nothing in the build can talk to.
+   *
+   * NOT Player.pay(). That helper is for an item's OWN price, floored at 1 so
+   * a button can never end a run - the correct rule for BLOOD TAX, which is
+   * paid the instant it is pressed and read. This is a bill the player took on
+   * knowing the terms, and the card says so.
+   *
+   * THE DEATH IS LEFT TO THE LOOP, exactly as every other caller of
+   * _hurtPlayer leaves it: this runs inside _updateWave, and booking a death
+   * here would tear the frame's own lists down underneath it. See the note at
+   * the end of _hurtPlayer.
+   *
+   * @returns {number} what was owed, so the caller can put it on the clear
+   *   banner rather than raising a second one over it.
+   */
+  _payMedicalDebt() {
+    const owed = this.player.medicalDebt;
+    if (owed <= 0) return 0;
+    this.player.medicalDebt = 0;
+    this.effects.shockwave(this.player.pos, THEME.pact, 8, 0.7);
+    this._hurtPlayer(owed, this.player.eyeInto(this._killPos));
+    return owed;
+  }
+
   // Raises a fresh set of three totems. Called on every wave clear, so a set
   // the player never claimed is simply replaced - that pick is forfeited.
   _presentTotems(isReroll = false) {
@@ -6555,7 +7027,7 @@ class Game {
    * Raises the mystery box. EVERY shop, unconditionally.
    *
    * The row this replaced came up on a count of shops, so a run met four active
-   * items out of thirty-seven and most of the catalogue was unreachable. The
+   * items out of sixty-six and most of the catalogue was unreachable. The
    * box is always there and is limited by MONEY instead - which is a limit the
    * player can do something about, and the reason the schedule is gone rather
    * than merely shortened. See the header of mysterybox.js.
@@ -7405,6 +7877,27 @@ class Game {
     if (kind) this._placeDrop(kind, pos);
   }
 
+  /**
+   * PINATA's next drop, or null if the promise cannot be kept right now.
+   *
+   * NULL DOES NOT SPEND THE COUNTER. Two things can refuse: a floor already
+   * holding as much loot as MAX_ACTIVE_PICKUPS allows, and a player who is
+   * full of everything the table can offer. Neither is the player's fault and
+   * neither should cost them one of their five, so the kill simply drops
+   * nothing and the next one tries again - which is also the only reading
+   * under which "the next 5 enemies you kill" stays true.
+   */
+  _pinataKind() {
+    if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return null;
+    return forcedDrop(
+      this.player.health / this.player.maxHealth,
+      (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
+      this._ammoActive() < MAX_ACTIVE_AMMO,
+      this.player.mods.dropLuck,
+      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax
+    );
+  }
+
   _ammoActive() {
     let n = 0;
     for (const p of this.powerups) if (p.typeKey === 'ammo') n++;
@@ -7829,8 +8322,22 @@ class Game {
       // Loot falls where the thing died. Boss parts are excluded: the boss
       // pays out by bleeding at health thresholds and by the kill bonus, and
       // letting the final part roll as well would double-pay the same kill.
-      if (!e.boss) this._rollDrop(e.pos);
-      else this._bossDeathPos.copy(e.pos);
+      // PINATA. Spent BEFORE the ordinary roll and instead of it: what the
+      // item guarantees is that something drops, and rolling on top of a
+      // guaranteed drop would be two plates off one body - which the arena's
+      // own one-drop-per-kill rule says never happens.
+      //
+      // NOT ON A BOSS PART, on the same terms the roll below is not: a boss
+      // pays out by bleeding at health thresholds and by its own bounty, and a
+      // counter spent on the one body that is already a payout would be a drop
+      // the player never sees.
+      const pinata = !e.boss && this.player.pinataLeft > 0
+        ? this._pinataKind() : null;
+      if (pinata) {
+        this.player.pinataLeft--;
+        this._placeDrop(pinata, e.pos);
+      } else if (!e.boss) this._rollDrop(e.pos);
+      if (e.boss) this._bossDeathPos.copy(e.pos);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
       const m = this.player.mods;
@@ -8945,6 +9452,12 @@ class Game {
       // frame the enemies are updated in - and so an item that expires this
       // frame has handed its multiplier back before a shot can read it.
       this.running.update(this, dt);
+      // BACKORDER's parcel and LIFE INSURANCE's receipt. After the running
+      // list, because the running list is where LIFE INSURANCE's window is
+      // ended - so a claim and the window closing on the same frame are drawn
+      // in the order they happened. Neither is gated on the wave: the parcel
+      // is deliberately allowed to arrive in the shop.
+      this._updateItemDeliveries();
       this._updateEnemies(dt);
       // AFTER the enemy sweep, for the same reason the ash and the poison
       // spread run before it: a turret's kill made here would be a dead enemy

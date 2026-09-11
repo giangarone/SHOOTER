@@ -1027,7 +1027,7 @@ An active item does nothing until it is fired, and firing it is a decision made
 at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
 pad.
 
-Forty of them, in five groups by what they actually reach for.
+Sixty-six of them, in six groups by what they actually reach for.
 
 **Instant, on the room:**
 
@@ -1093,11 +1093,77 @@ Forty of them, in five groups by what they actually reach for.
 | LODESTAR | Pull in every orb and pickup on the floor | 60 |
 | ORGAN GRINDER | A cymbal monkey. Every enemy walks to it and ignores you; after 5s it goes off for 8x bullet damage over 9m | 50 |
 | SECOND OPINION | Rerolls the shop on use, free | 50 |
-| LOCKPICK | A free Mystery Box roll, started on use | 120 |
+| LOCKPICK | A free Mystery Box roll, started on use | 60 |
 | PAY TO WIN | $1,000 for 2x your damage to every enemy in the arena | 0 |
 
-LOCKPICK is the most expensive item in the pool and has to be: what it buys is
-the thing every other item here is bought with. It throws itself away - there is
+**The third block** - twenty-four more, and what each of them covers that
+nothing above it did:
+
+| Item | Effect | Charge |
+| --- | --- | --- |
+| LIFE INSURANCE | For 10s, the hit that would kill you leaves you at 1 HP and heals 20 | 60 |
+| SECOND SKIN | +20 shield, with no clock on it | 50 |
+| FAITH HEALING | Heal 2 HP per enemy standing within 10m | 40 |
+| BACKORDER | A 25 HP heal arrives in 10 seconds | 60 |
+| PHLEBOTOMY | Every enemy takes the health you are missing | 20 |
+| PANIC BUTTON | Every enemy on the floor flees for 8s | 30 |
+| FOOD POISONING | Poison every enemy for 8s | 40 |
+| MOLOTOV | A thrown bottle. Burning ground for 20 seconds | 20 |
+| BLOOD TRANSFUSION | Every pickup on the floor becomes a health pickup | 20 |
+| ENCORE | For 8s every trigger pull fires twice, and the second is free | 30 |
+| MAG DUMP | Fire the whole magazine at once, as one wide cone | 10 |
+| PICKPOCKET | Heal 1 HP and gain 5 rounds per enemy alive | 20 |
+| PINATA | The next 5 enemies you kill are guaranteed to drop | 40 |
+| MONEY SHOT | Spend every credit; deal that much to every enemy | 40 |
+| FLOOR IS LAVA | The whole floor burns for 10s - you included | 40 |
+| PARTY BALLOONS | The 5 nearest enemies float helpless for 5s. Not bosses | 30 |
+| HEAD COUNT | $100 per enemy alive | 20 |
+| EXECUTIVE DECISION | Instantly kill a boss | 120 |
+| EVERYONE FELT THAT | For 8s melee deals 5x, and every enemy takes it | 30 |
+| LIFE SENTENCE | Heal to full; permanently 10% slower | 20 |
+| COMPOUND INTEREST | +1% damage, permanently, and it compounds | 20 |
+| MEDICAL DEBT | Heal 40 now, take 30 when the wave ends. It stacks | 20 |
+| GOLDEN PARACHUTE | $5,000 clears the current wave. Not a boss wave | 40 |
+| HEALTH & SEEK | Three health pickups, somewhere in the arena | 40 |
+
+Four of them are the first items in the pool that do not resolve when they are
+pressed. LIFE INSURANCE is a ten-second window that pays only if something goes
+wrong inside it, and the claim is paid in `Player.takeDamage` rather than in
+`_hurtPlayer` - the one place every source of damage in the game converges, so
+a policy cannot be walked through by standing in lava. BACKORDER is a deadline
+on the player rather than an entry in the running list, because the running
+list is torn down at every wave clear (`RunningItems.clear`, from
+`_clearHazards`) and a parcel silently cancelled by the wave ending under it
+would read as the item having failed. MEDICAL DEBT bills at the wave clear, and
+bills AFTER the flawless resupply - before it, a clean wave would refill the
+bar and the item would be forty free health. PINATA sits on the run until five
+kills have spent it.
+
+EXECUTIVE DECISION is the only thing in the game that ignores a health bar. It
+sets the boss's parts dead rather than damaging them, because every refusal in
+`Enemy.takeDamage` - a ward, a capacitor plate, a Colossus's plating, a closed
+shell - is a correct answer to a BULLET and none of them may eat a hundred and
+twenty points of charge.
+
+GOLDEN PARACHUTE pays nothing for what it removes, and that is the only thing
+between it and an infinite loop: a late wave's cast is worth more than five
+thousand dollars, so a version that ran its bodies through the kill sweep would
+refund its own price and then some, every press. The bodies are disposed the
+way a run boundary disposes a roster; the queue empties with them, and
+`_updateWave` runs the ordinary clear on the next frame. It refuses a boss wave
+outright - a boss wave ends when the boss dies, not when the floor is clear,
+and buying one out would retire EXECUTIVE DECISION at a third of the charge.
+
+FLOOR IS LAVA is the only item that changes where the game is played. For ten
+seconds the arena floor burns everything standing on it, the player included,
+and the only safe ground is what the terrain generator put above it. It is a
+HEIGHT test rather than a hazard patch - nine creep stamps cover the floor for
+the look, and if the creep pool is busy the decal is patchier and nothing about
+what burns changes, because a player must not be hurt by ground they cannot see
+or saved by a gap in it.
+
+LOCKPICK is the dearest thing in the pool that is spent in the shop, and has
+to be: what it buys is the thing every other item here is bought with. It throws itself away - there is
 one slot, and taking what the box hands over is what replaces it - so it is a
 single free roll rather than a machine to operate twice at one shop. Like SECOND
 OPINION it leaves the console's price ladder alone (`TotemArea.boxRolls`),

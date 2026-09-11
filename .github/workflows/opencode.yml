@@ -26,6 +26,12 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      # Lets the job mint an OIDC token, which the action trades for an
+      # opencode GitHub App token. That token is what makes the PRs it opens
+      # trigger `tests` on their own - a PR opened with GITHUB_TOKEN instead
+      # lands the run in "awaiting approval" and sits there until a human
+      # clicks it.
+      id-token: write
 
     steps:
       # persist-credentials is left ON (the default) because the agent PUSHES.
@@ -79,4 +85,3 @@ jobs:
         with:
           model: tokenrouter/z-ai/glm-5.3-free
           variant: max
-          use_github_token: true

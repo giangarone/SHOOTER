@@ -780,8 +780,34 @@ try {
       }
       // The item's own mark on the run, undone, so the next iteration starts
       // from the same place this one did.
+      //
+      // ALL FIVE OF THEM. GRAFT banks max health, HAEMOPHAGE banks hits,
+      // PINATA banks guaranteed drops, and LIFE SENTENCE and COMPOUND INTEREST
+      // are permanent by design - a run carries them to the end. A sweep that
+      // forgot the last two left every damage assertion in this file reading
+      // one percent high and every movement one ten percent slow, which is a
+      // failure that looks like a balance bug in a completely unrelated pick.
       P.hpBanked = 0;
       P.leechShots = 0;
+      P.pinataLeft = 0;
+      P.moveLoss = 1;
+      P.compoundMult = 1;
+      P.medicalDebt = 0;
+      // SECOND SKIN's shield, which has no clock on it by design and so is a
+      // mark on the run exactly as the two above are. Left standing it soaks
+      // the next iteration's damage silently - and, worse, the BLOOD PACT
+      // assertion four hundred lines below, which is how this was found.
+      P.shield = 0;
+      P.shieldEnd = 0;
+      // HOT STREAK's live bonus. Two items in the pool spend rounds without a
+      // trigger pull - LANCE and MAG DUMP - and both book the result on the
+      // streak the way a shot does, so a dump that found nothing leaves the
+      // player at -1%. Which is correct in a run and poison in a sweep: it is
+      // a signed multiplier on every damage assertion in this file.
+      P.streak = 0;
+      P.backordered = false;
+      P.insuredEnd = 0;
+      P.insuranceFx = false;
       g.running.clear(g);
       g._clearDeployed();
     }
@@ -1087,6 +1113,463 @@ try {
 
     take('devilsGamble');
     out.gambleSet = P.mods.gamble === 1;
+
+    // ======================================================================
+    // THE THIRD BLOCK OF ACTIVE ITEMS
+    // ======================================================================
+    //
+    // The pool sweep above already proves none of these throws and none of
+    // them leaks a multiplier. What it cannot prove is that any of them DOES
+    // anything - a use() that writes a field nothing reads passes it - so each
+    // one below is fired at a live arena and read back through the thing it is
+    // supposed to move.
+    //
+    // The three permanent marks (LIFE SENTENCE, COMPOUND INTEREST, PINATA) and
+    // the two delayed ones (BACKORDER, MEDICAL DEBT) are the ones worth the
+    // most here: all five outlive the press, which means all five can be
+    // silently wiped by a rebuildMods(), a wave boundary or a handover, and
+    // none of those failures shows up on the frame it is caused.
+    P.upgrades = {};
+    P.rebuildMods();
+    g.running.clear(g);
+    g._clearDeployed();
+    clearField();
+    P.moveLoss = 1;
+    P.compoundMult = 1;
+    P.medicalDebt = 0;
+    P.pinataLeft = 0;
+    P.backordered = false;
+    P.insuredEnd = 0;
+    P.shield = 0;
+    P.shieldEnd = 0;
+    P.streak = 0;
+    P.health = P.maxHealth;
+
+    // ---- LIFE INSURANCE: the killing blow, cancelled, once ----
+    P.health = 30;
+    useItem('itemInsurance');
+    g._hurtPlayer(500, P.pos, null);
+    // At one, plus the twenty the policy pays out.
+    out.insuredSurvived = P.health === 21;
+    out.insuredSpent = P.insuredEnd === 0;
+    // AND SPENT MEANS SPENT. A second killing blow inside the same ten seconds
+    // is a death - one claim per press, or the item is ten seconds of being
+    // unkillable for the price of a heal.
+    g._hurtPlayer(500, P.pos, null);
+    out.insuredOnlyOnce = P.health === 0;
+    g.running.clear(g);
+    P.health = P.maxHealth;
+    P.insuranceFx = false;
+    // IT COVERS THE GROUND AS WELL AS THE GUN. Burning to death is the failure
+    // a policy written into _hurtPlayer alone would not have covered, and the
+    // reason the claim lives in Player.takeDamage.
+    P.health = 12;
+    useItem('itemInsurance');
+    g._hurtPlayerDot(40);
+    out.insuredCoversDot = P.health === 21;
+    g.running.clear(g);
+
+    // ---- SECOND SKIN: twenty points of shield, and no clock on it ----
+    P.shield = 0;
+    P.shieldEnd = 0;
+    P.health = 50;
+    useItem('itemSecondSkin');
+    out.skinShield = P.shield === 20 && P.shieldEnd === 0;
+    // Thirty seconds of the player's own update, which is well past the shield
+    // PICKUP's fifteen: this one does not expire.
+    for (let i = 0; i < 600; i++) {
+      g.time += 0.05;
+      P.update(0.05, g.input, g.arena.obstacles, g.time, true);
+    }
+    out.skinDoesNotExpire = P.shield === 20;
+    g._hurtPlayer(12, P.pos, null);
+    out.skinSoaksFirst = P.health === 50 && P.shield === 8;
+    P.shield = 0;
+    P.shieldEnd = 0;
+
+    // ---- FAITH HEALING: two per body inside ten metres, and only inside ----
+    clearField();
+    P.pos.set(0, 0, 0);
+    spawn('chaser', 3, 0);
+    spawn('chaser', -4, 2);
+    spawn('chaser', 0, 18);          // well outside the ten
+    P.health = P.maxHealth - 30;
+    useItem('itemFaith');
+    out.faithHealed = P.health === P.maxHealth - 26;
+
+    // ---- PHLEBOTOMY: the missing health, to everybody ----
+    clearField();
+    const bled = spawn('chaser', 4, 0);
+    bled.hp = 500;
+    bled.maxHp = 500;
+    P.health = P.maxHealth - 40;
+    useItem('itemPhlebotomy');
+    out.phlebotomyDealt = Math.abs(bled.hp - 460) < 0.001;
+    // ...and nothing at all on a full bar, which is the press it refuses.
+    P.health = P.maxHealth;
+    bled.hp = 500;
+    useItem('itemPhlebotomy');
+    out.phlebotomyRefusesFull = bled.hp === 500;
+
+    // ---- PANIC BUTTON and FOOD POISONING: the whole floor ----
+    clearField();
+    const runner = spawn('chaser', 5, 0);
+    const queasy = spawn('chaser', -5, 0);
+    useItem('itemPanic');
+    out.panicFeared = runner.status.fear > 7 && queasy.status.fear > 7;
+    useItem('itemFoodPoisoning');
+    out.poisonedAll = runner.status.poison > 7 && queasy.status.poison > 7;
+    // The dose is the player's own shot, so it is still worth a slot at wave
+    // thirty rather than being a flat number set on wave three.
+    out.poisonDoseScales = runner._dot.poison > 1;
+
+    // ---- PARTY BALLOONS: five off the floor, and never a boss ----
+    clearField();
+    const lifted = [];
+    for (let i = 0; i < 6; i++) lifted.push(spawn('chaser', -6 + i * 2, 3));
+    const bossy2 = spawn('chaser', 0, 5);
+    bossy2.boss = true;
+    useItem('itemBalloons');
+    out.balloonsLifted = lifted.filter((e) => e.balloonT > 0).length
+      + (bossy2.balloonT > 0 ? 1 : 0);
+    out.balloonsSpareBosses = bossy2.balloonT === 0;
+    const floater = lifted.find((e) => e.balloonT > 0);
+    const beforeY = floater.pos.y;
+    tick(20);
+    out.balloonsRise = floater.pos.y > beforeY + 0.2;
+    // ...and they come back down when it ends, which is the ground snap
+    // resuming rather than anything the item does.
+    const highY = floater.pos.y;
+    tick(140);
+    out.balloonsLand = floater.balloonT <= 0 && floater.pos.y < highY;
+
+    // ---- ENCORE: one trigger pull, two patterns ----
+    //
+    // COUNTED IN PELLETS FIRED, not in damage dealt. A damage reading needs the
+    // rounds to actually land, which needs the camera pointed at a body - and
+    // this block drives Game.shoot() directly, without the frame loop that
+    // aims the camera off the player. What the item promises is that the whole
+    // pattern goes out twice, and the pattern leaving the muzzle is exactly
+    // what _firePellet counts.
+    clearField();
+    P.upgrades = {};
+    P.rebuildMods();
+    g.running.clear(g);
+    const realPellet = g._firePellet;
+    let pellets = 0;
+    g._firePellet = function (...args) {
+      pellets++;
+      return realPellet.apply(this, args);
+    };
+    P.mag = 40;
+    P.fireCd = 0;
+    g.shoot();
+    const oneShot = pellets;
+    pellets = 0;
+    P.mag = 40;
+    P.fireCd = 0;
+    useItem('itemEncore');
+    g.shoot();
+    out.encoreDoubles = oneShot > 0 && pellets === oneShot * 2;
+    // THE SECOND ROUND IS FREE: one trigger pull, one round off the magazine.
+    P.mag = 40;
+    P.fireCd = 0;
+    g.shoot();
+    out.encoreIsFree = P.mag === 39;
+    g.running.clear(g);
+    pellets = 0;
+    P.mag = 40;
+    P.fireCd = 0;
+    g.shoot();
+    out.encoreEnds = pellets === oneShot;
+    g._firePellet = realPellet;
+
+    // ---- MAG DUMP: the whole magazine, and never an empty one ----
+    P.mag = 0;
+    P.giveItem('itemMagDump');
+    const dumpCharge = P.itemCharge;
+    g.tryItem();
+    out.dumpRefusesEmpty = P.itemCharge === dumpCharge;
+    P.mag = 24;
+    g.tryItem();
+    out.dumpSpendsTheMagazine = P.mag === 0;
+
+    // ---- PICKPOCKET and HEAD COUNT: paid by the head ----
+    clearField();
+    for (let i = 0; i < 4; i++) spawn('chaser', -6 + i * 3, 6);
+    P.health = P.maxHealth - 10;
+    P.reserveAmmo = 0;
+    useItem('itemPickpocket');
+    out.pickpocketPaid = P.health === P.maxHealth - 6 && P.reserveAmmo === 20;
+    const purseBefore = g.credits;
+    g.money.clear();
+    useItem('itemHeadCount');
+    g.money.vacuum();
+    for (let i = 0; i < 40; i++) { g.time += 0.05; g._updateMoney(0.05); }
+    out.headCountPaid = g.credits - purseBefore >= 400;
+
+    // ---- MONEY SHOT: the balance, spent ----
+    clearField();
+    const rich = spawn('chaser', 4, 4);
+    rich.hp = 5000;
+    rich.maxHp = 5000;
+    g.credits = 900;
+    useItem('itemMoneyShot');
+    out.moneyShotDealt = Math.abs(rich.hp - 4100) < 0.001;
+    out.moneyShotSpent = g.credits === 0;
+
+    // ---- BLOOD TRANSFUSION and HEALTH & SEEK: the floor ----
+    for (const p of g.powerups) p.destroy();
+    g.powerups.length = 0;
+    g._placeDrop('ammo', P.pos);
+    g._placeDrop('shield', P.pos);
+    g._placeDrop('health', P.pos);
+    useItem('itemTransfusion');
+    out.transfused = g.powerups.length === 3
+      && g.powerups.every((p) => p.typeKey === 'health');
+    for (const p of g.powerups) p.destroy();
+    g.powerups.length = 0;
+    useItem('itemHealthSeek');
+    out.seekSpawnedThree = g.powerups.length === 3
+      && g.powerups.every((p) => p.typeKey === 'health');
+    for (const p of g.powerups) p.destroy();
+    g.powerups.length = 0;
+
+    // ---- PINATA: five kills, five drops ----
+    clearField();
+    P.health = P.maxHealth * 0.5;
+    P.reserveAmmo = 0;
+    useItem('itemPinata');
+    out.pinataArmed = P.pinataLeft === 5;
+    let dropped = 0;
+    for (let i = 0; i < 6; i++) {
+      const doomed = spawn('chaser', -8 + i * 2, 8);
+      doomed.hp = 0;
+      doomed.dead = true;
+      const before = g.powerups.length;
+      g._updateEnemies(0.016);
+      if (g.powerups.length > before) dropped++;
+      for (const p of g.powerups) p.destroy();
+      g.powerups.length = 0;
+    }
+    // Five guaranteed; the sixth is an ordinary roll and usually nothing.
+    out.pinataDropped = dropped >= 5;
+    out.pinataSpent = P.pinataLeft === 0;
+
+    // ---- MOLOTOV: ground that burns, and burns for a long time ----
+    clearField();
+    g._clearDeployed();
+    P.pos.set(0, 0, 0);
+    P.yaw = 0;
+    useItem('itemMolotov');
+    out.molotovThrown = g._deployed.length === 1;
+    for (let i = 0; i < 120; i++) { g.time += 0.05; g._updateDeployed(0.05); }
+    out.molotovLanded = g._deployed.length === 1
+      && g._deployed[0].constructor.name === 'Firepit';
+    const singed = spawn('chaser', g._deployed[0].x, g._deployed[0].z);
+    tick(4);
+    g._updateDeployed(0.05);
+    out.molotovBurns = singed.status.burn > 0;
+    // Twenty seconds is the promise, and the wave taking it away is the only
+    // thing that should.
+    for (let i = 0; i < 200; i++) { g.time += 0.05; g._updateDeployed(0.05); }
+    out.molotovLasts = g._deployed.length === 1;
+    g._clearDeployed();
+
+    // ---- FLOOR IS LAVA: everything on the floor, the player included ----
+    clearField();
+    const grounded = spawn('chaser', 6, 6);
+    const upstairs = spawn('chaser', -6, -6);
+    upstairs.pos.y = 3;
+    P.pos.set(0, 0, 0);
+    P.health = P.maxHealth;
+    P.invulnEnd = 0;
+    useItem('itemLava');
+    const creepHeld = g._lavaCreep.length;
+    for (let i = 0; i < 40; i++) {
+      g.time += 0.05;
+      g.running.update(g, 0.05);
+    }
+    out.lavaBurnsTheFloor = grounded.status.burn > 0;
+    out.lavaSparesTheHigh = upstairs.status.burn === 0;
+    out.lavaBurnsYou = P.status.fire > 0 && P.health < P.maxHealth;
+    // ...and standing on the furniture is the answer, for the player too.
+    P.clearStatuses();
+    P.health = P.maxHealth;
+    P.pos.y = 3;
+    for (let i = 0; i < 40; i++) {
+      g.time += 0.05;
+      g.running.update(g, 0.05);
+    }
+    out.lavaSparesYouUpThere = P.health === P.maxHealth && P.status.fire === 0;
+    out.lavaHeldCreep = creepHeld > 0;
+    for (let i = 0; i < 400; i++) {
+      g.time += 0.05;
+      g.running.update(g, 0.05);
+    }
+    // THE STAMPS COME BACK. The creep pool is thirty deep and shared with every
+    // hazard in the game; nine leaked per press would empty it inside four.
+    out.lavaGaveCreepBack = g._lavaCreep.length === 0;
+    P.pos.y = 0;
+    P.clearStatuses();
+    P.health = P.maxHealth;
+
+    // ---- EVERYONE FELT THAT: one swing, everybody ----
+    //
+    // THE DIE IS HELD DOWN for this one. Every hit in the game rolls the crit
+    // (see rollCrit) and the base chance is not zero, so a swing that happens
+    // to crit is worth 1.5x - which against a "five times" assertion is a
+    // failure roughly one run in six, for a reason that has nothing to do with
+    // the item. What is being measured is the multiplier the ITEM applies.
+    const realCrit = P.rollCrit;
+    P.rollCrit = () => false;
+    clearField();
+    P.pos.set(0, 0, 0);
+    P.yaw = 0;
+    const struck = spawn('chaser', 0, -1.4);
+    const bystander = spawn('chaser', 12, 12);
+    struck.hp = 100000;
+    struck.maxHp = 100000;
+    bystander.hp = 100000;
+    bystander.maxHp = 100000;
+    P.meleeCd = 0;
+    g._meleeStrike();
+    const plainHit = 100000 - struck.hp;
+    out.meleeAloneHitsOne = plainHit > 0 && bystander.hp === 100000;
+    struck.hp = 100000;
+    useItem('itemFeltThat');
+    g._meleeStrike();
+    const bigHit = 100000 - struck.hp;
+    out.meleeFive = Math.abs(bigHit - plainHit * 5) < 0.001;
+    out.meleeShared = Math.abs((100000 - bystander.hp) - bigHit) < 1;
+    g.running.clear(g);
+    struck.hp = 100000;
+    bystander.hp = 100000;
+    P.meleeCd = 0;
+    g._meleeStrike();
+    out.meleeEnds = Math.abs((100000 - struck.hp) - plainHit) < 0.001
+      && bystander.hp === 100000;
+    P.rollCrit = realCrit;
+
+    // ---- LIFE SENTENCE and COMPOUND INTEREST: the two permanent marks ----
+    P.upgrades = {};
+    P.rebuildMods();
+    P.moveLoss = 1;
+    P.compoundMult = 1;
+    P.health = 10;
+    useItem('itemLifeSentence');
+    out.sentenceHealed = P.health === P.maxHealth;
+    out.sentenceSlowed = Math.abs(P.moveLoss - 0.9) < 1e-9;
+    useItem('itemLifeSentence');
+    out.sentenceCompounds = Math.abs(P.moveLoss - 0.81) < 1e-9;
+    const dmgBefore = P.getEffectiveDamage(100);
+    useItem('itemCompound');
+    out.compoundRaised = Math.abs(P.getEffectiveDamage(100) - dmgBefore * 1.01) < 1e-6;
+    // A TOTEM MUST NOT HAND EITHER OF THEM BACK. Both live on the player rather
+    // than in `mods` precisely because rebuildMods() replays the owned list
+    // from fresh defaults after every pick.
+    P.upgrades = { overclock: 1 };
+    P.rebuildMods();
+    out.marksSurviveRebuild = Math.abs(P.moveLoss - 0.81) < 1e-9
+      && Math.abs(P.compoundMult - 1.01) < 1e-9;
+    P.upgrades = {};
+    P.rebuildMods();
+    P.moveLoss = 1;
+    P.compoundMult = 1;
+
+    // ---- BACKORDER: it arrives, and it arrives through a wave break ----
+    P.health = P.maxHealth - 40;
+    useItem('itemBackorder');
+    out.backorderPending = P.backordered && P.backorderAt > g.time;
+    // The running list being torn down is exactly what a wave clear does, and
+    // it must not take the parcel with it.
+    g.running.clear(g);
+    g._clearHazards();
+    out.backorderSurvivesTheWave = P.backordered;
+    for (let i = 0; i < 40; i++) {
+      g.time += 0.05;
+      g._updateItemDeliveries();
+    }
+    out.backorderNotYet = P.health === P.maxHealth - 40;
+    for (let i = 0; i < 200; i++) {
+      g.time += 0.05;
+      g._updateItemDeliveries();
+    }
+    out.backorderArrived = P.health === P.maxHealth - 15 && !P.backordered;
+    // And it arrives ONCE.
+    for (let i = 0; i < 100; i++) {
+      g.time += 0.05;
+      g._updateItemDeliveries();
+    }
+    out.backorderArrivesOnce = P.health === P.maxHealth - 15;
+
+    // ---- MEDICAL DEBT: forty now, thirty at the wave, and it stacks ----
+    P.health = P.maxHealth - 60;
+    useItem('itemMedicalDebt');
+    out.debtHealed = P.health === P.maxHealth - 20;
+    out.debtOwed = P.medicalDebt === 30;
+    useItem('itemMedicalDebt');
+    out.debtStacks = P.medicalDebt === 60;
+    P.health = P.maxHealth;
+    P.invulnEnd = 0;
+    P.wardCharges = 0;
+    const beforeBill = P.health;
+    const billed = g._payMedicalDebt();
+    out.debtBilled = billed === 60 && P.health === beforeBill - 60;
+    out.debtCleared = P.medicalDebt === 0;
+    P.health = P.maxHealth;
+
+    // ---- GOLDEN PARACHUTE: the wave, bought, and nothing paid back ----
+    clearField();
+    g.bossFight = null;
+    g.queue.length = 0;
+    for (let i = 0; i < 5; i++) spawn('chaser', -8 + i * 3, 10);
+    g.queue.push('chaser', 'chaser');
+    g.credits = 4000;
+    P.giveItem('itemParachute');
+    const parachuteCharge = P.itemCharge;
+    g.tryItem();
+    out.parachuteNeedsTheMoney = P.itemCharge === parachuteCharge
+      && g.enemies.length === 5;
+    g.credits = 9000;
+    g.money.clear();
+    g.tryItem();
+    out.parachuteCleared = g.enemies.length === 0 && g.queue.length === 0;
+    out.parachutePaid = g.credits === 4000;
+    // NOTHING IT REMOVED PAID OUT, which is the only thing standing between
+    // this and a wave that refunds its own price.
+    for (let i = 0; i < 40; i++) { g.time += 0.05; g._updateMoney(0.05); }
+    out.parachutePaysNothingBack = g.credits === 4000;
+    // ...and it will not touch a boss wave, which is EXECUTIVE DECISION's job.
+    g.bossFight = { parts: [spawn('chaser', 0, 12)], key: 'test', note: '' };
+    P.giveItem('itemParachute');
+    const bossWaveCharge = P.itemCharge;
+    g.tryItem();
+    out.parachuteRefusesABoss = P.itemCharge === bossWaveCharge
+      && g.enemies.length === 1;
+
+    // ---- EXECUTIVE DECISION: one boss, and only when there is one ----
+    clearField();
+    g.bossFight = null;
+    P.giveItem('itemExecutive');
+    const execCharge = P.itemCharge;
+    g.tryItem();
+    out.executiveNeedsABoss = P.itemCharge === execCharge;
+    const target = spawn('chaser', 0, 10);
+    target.boss = true;
+    target.hp = 90000;
+    target.maxHp = 90000;
+    // A ward is exactly the kind of refusal a bullet has to respect and this
+    // one must not: at a hundred and twenty points the press cannot be a maybe.
+    target.wardT = 99;
+    g.bossFight = { parts: [target], key: 'test', note: '' };
+    g.tryItem();
+    out.executiveKilled = target.dead && target.hp === 0;
+    g.bossFight = null;
+    clearField();
+    g.credits = 0;
+    g._creditsDirty = true;
+
     return out;
   });
 
@@ -1327,6 +1810,91 @@ try {
   ok('executioner: the cost survives a rebuild', m.executionerSurvivesRebuild);
   ok('executioner: and comes back if it is dropped', m.executionerRefunded);
   ok("devil's gamble is wired", m.gambleSet);
+
+  // ---- the third block of active items ----
+  ok('life insurance: the killing blow leaves you at 1 and pays 20',
+    m.insuredSurvived);
+  ok('life insurance: the claim spends the policy', m.insuredSpent);
+  ok('life insurance: and only one claim per press', m.insuredOnlyOnce);
+  ok('life insurance: it covers the ground as well as the gun',
+    m.insuredCoversDot);
+  ok('second skin: +20 shield with no clock on it', m.skinShield);
+  ok('second skin: it outlives the pickup that shares the field',
+    m.skinDoesNotExpire);
+  ok('second skin: and it is spent before health is', m.skinSoaksFirst);
+  ok('faith healing: 2 HP per body inside ten metres, and none outside',
+    m.faithHealed);
+  ok('phlebotomy: every enemy takes the health you are missing',
+    m.phlebotomyDealt);
+  ok('phlebotomy: and nothing at all on a full bar', m.phlebotomyRefusesFull);
+  ok('panic button: the whole floor runs', m.panicFeared);
+  ok('food poisoning: the whole floor is poisoned', m.poisonedAll);
+  ok('food poisoning: the dose is the gun, not a flat number',
+    m.poisonDoseScales);
+  ok('party balloons: five leave the floor', m.balloonsLifted === 5,
+    String(m.balloonsLifted));
+  ok('party balloons: a boss stays where it is', m.balloonsSpareBosses);
+  ok('party balloons: they rise', m.balloonsRise);
+  ok('party balloons: and they come back down', m.balloonsLand);
+  ok('encore: one trigger pull does the work of two', m.encoreDoubles);
+  ok('encore: the second round is free', m.encoreIsFree);
+  ok('encore: and it ends', m.encoreEnds);
+  ok('mag dump: an empty gun refuses the press', m.dumpRefusesEmpty);
+  ok('mag dump: it spends the whole magazine', m.dumpSpendsTheMagazine);
+  ok('pickpocket: 1 HP and 5 rounds a head', m.pickpocketPaid);
+  ok('head count: $100 a head, on the floor', m.headCountPaid);
+  ok('money shot: the balance lands on every enemy', m.moneyShotDealt);
+  ok('money shot: and the balance is gone', m.moneyShotSpent);
+  ok('blood transfusion: every plate on the floor becomes health',
+    m.transfused);
+  ok('health & seek: three plates, somewhere else', m.seekSpawnedThree);
+  ok('pinata: five kills are armed', m.pinataArmed);
+  ok('pinata: and five kills drop', m.pinataDropped);
+  ok('pinata: the count is spent', m.pinataSpent);
+  ok('molotov: the bottle is thrown', m.molotovThrown);
+  ok('molotov: and it leaves ground behind', m.molotovLanded);
+  ok('molotov: the ground burns what stands in it', m.molotovBurns);
+  ok('molotov: for twenty seconds', m.molotovLasts);
+  ok('floor is lava: everything on the floor burns', m.lavaBurnsTheFloor);
+  ok('floor is lava: and everything above it does not', m.lavaSparesTheHigh);
+  ok('floor is lava: it burns you too', m.lavaBurnsYou);
+  ok('floor is lava: unless you are up on something', m.lavaSparesYouUpThere);
+  ok('floor is lava: it takes creep stamps', m.lavaHeldCreep);
+  ok('floor is lava: ...and gives every one of them back',
+    m.lavaGaveCreepBack);
+  ok('everyone felt that: a plain swing still hits one body',
+    m.meleeAloneHitsOne);
+  ok('everyone felt that: the swing deals five times', m.meleeFive);
+  ok('everyone felt that: and everybody takes it', m.meleeShared);
+  ok('everyone felt that: and it ends', m.meleeEnds);
+  ok('life sentence: heals to full', m.sentenceHealed);
+  ok('life sentence: and costs 10% of your legs', m.sentenceSlowed);
+  ok('life sentence: which compounds', m.sentenceCompounds);
+  ok('compound interest: +1% damage', m.compoundRaised);
+  ok('neither permanent mark is undone by a totem', m.marksSurviveRebuild);
+  ok('backorder: the parcel is pending', m.backorderPending);
+  ok('backorder: a wave clear does not cancel it',
+    m.backorderSurvivesTheWave);
+  ok('backorder: it does not arrive early', m.backorderNotYet);
+  ok('backorder: it arrives', m.backorderArrived);
+  ok('backorder: exactly once', m.backorderArrivesOnce);
+  ok('medical debt: forty now', m.debtHealed);
+  ok('medical debt: thirty owed', m.debtOwed);
+  ok('medical debt: and it stacks', m.debtStacks);
+  ok('medical debt: the bill lands at the wave', m.debtBilled);
+  ok('medical debt: and clears', m.debtCleared);
+  ok('golden parachute: it refuses without the money',
+    m.parachuteNeedsTheMoney);
+  ok('golden parachute: the wave is gone', m.parachuteCleared);
+  ok('golden parachute: and the money with it', m.parachutePaid);
+  ok('golden parachute: nothing it removed pays out',
+    m.parachutePaysNothingBack);
+  ok('golden parachute: and a boss wave is not for sale',
+    m.parachuteRefusesABoss);
+  ok('executive decision: it refuses without a boss', m.executiveNeedsABoss);
+  ok('executive decision: and nothing on a boss can refuse it',
+    m.executiveKilled);
+
 
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } finally {
