@@ -134,12 +134,16 @@ try {
     o.meleePlain = cbBefore - cbTarget.hp;
     o.meleePlainAmmo = P.reserveAmmo - 10;
     bare();
-    noCrit();
     clearField();
     const cbTarget2 = spawn('chaser', 0, -2);
     P.yaw = 0;
     P.reserveAmmo = 10;
     give('crowbar');
+    // AFTER THE GIVE, not before it. rebuildMods replays DEFAULT_MODS, and the
+    // 5% base crit comes back with it - so a noCrit placed above the give is
+    // silently undone, one swing in twenty lands at 4x * critMult, and the
+    // ratio below reports a crowbar that is working exactly as designed.
+    noCrit();
     const cbBefore2 = cbTarget2.hp;
     g._meleeStrike();
     o.meleeCrow = cbBefore2 - cbTarget2.hp;
