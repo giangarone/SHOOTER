@@ -354,6 +354,19 @@ export class NavGrid {
     return this.origin + ((i / this.dim) | 0) * CELL;
   }
 
+  /**
+   * The baked surface at a world position, for a caller that has to seed the
+   * flood at the height of the thing it is routing toward - the MAGPIE, whose
+   * orbs rest wherever the floor happens to be, including on a stair or a
+   * deck. A flood seeded at the wrong height is not a worse route, it is no
+   * route: the seed cell's height is compared against its neighbours by the
+   * step rule, and one seeded at floor level under a deck reads the deck's own
+   * cells as unreachable walls.
+   */
+  surfaceAt(x, z) {
+    return this.height[this.index(x, z)];
+  }
+
   // Called once per frame with the player's position. Refloods at most every
   // REBUILD_INTERVAL, and only when the player has actually changed cell -
   // standing still costs nothing.

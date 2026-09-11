@@ -56,6 +56,11 @@ const COLLECT_RADIUS = 0.7;
 // which turned collecting a wave's money into tidying up rather than into
 // moving through the room.
 export const BASE_MAGNET_RADIUS = 5.5;
+// How close an orb has to be to a position the MAGPIE has written off for the
+// refusal to apply. Roughly one orb's landing scatter, so a pocket of buried
+// money is refused as a pocket rather than orb by orb, while money a metre or
+// two along the same wall stays very much on the menu.
+export const SHUN_DIST = 1.2;
 // How hard the magnet pulls, in metres per second per second, and the speed it
 // gives up trying to add to. An orb accelerates the whole way in, so it snaps
 // into the player rather than drifting after them.
@@ -358,6 +363,11 @@ export class MoneyOrbs {
    * @param {number} leash   and how far from `home` the orb may be
    * @param {THREE.Vector3} home  the player, which is what the leash is measured
    *                              from - see MAGPIE_LEASH in companions.js
+   * @param {{x:number,z:number}[]} [shun]  positions to refuse, within
+   *                              SHUN_DIST - the write-off list the bird
+   *                              hands in after it has proved a position has
+   *                              no route to it. See the watchdog in
+   *                              Magpie.update.
    * @returns {{x: number, z: number}|null} a POSITION, never an index
    *
    * A POSITION AND NOT AN INDEX, deliberately. Orbs are swap-removed (see
@@ -374,12 +384,18 @@ export class MoneyOrbs {
    * setting off - but an orb under a hold is one the game has deliberately
    * frozen (a boss shower landing), and walking onto it would do nothing.
    */
-  nearestOrb(x, z, maxD, leash, home) {
+  nearestOrb(x, z, maxD, leash, home, shun) {
     let bestX = 0;
     let bestZ = 0;
     let bestD = maxD * maxD;
     let found = false;
     const leash2 = leash * leash;
+    // The refusals are a short list of positions rather than indices, for the
+    // same reason the target is: a buried orb times out and a fresh one can
+    // land in the same pocket, and the verdict "nothing reaches HERE" is about
+    // the geometry, not about the orb.
+    const shuns = shun && shun.length ? shun : null;
+    const s2 = SHUN_DIST * SHUN_DIST;
     for (let i = 0; i < this.count; i++) {
       if (this.delay[i] > 0) continue;
       // Already flying to the player. Chasing one would be the bird racing the
@@ -387,6 +403,15 @@ export class MoneyOrbs {
       if (this.state[i] === HOME) continue;
       const ox = this.pos[i * 3];
       const oz = this.pos[i * 3 + 2];
+      if (shuns) {
+        let refused = false;
+        for (const s of shuns) {
+          const rx = ox - s.x;
+          const rz = oz - s.z;
+          if (rx * rx + rz * rz < s2) { refused = true; break; }
+        }
+        if (refused) continue;
+      }
       const hx = ox - home.x;
       const hz = oz - home.z;
       if (hx * hx + hz * hz > leash2) continue;

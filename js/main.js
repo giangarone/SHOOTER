@@ -2117,7 +2117,18 @@ class Game {
     this.terrain.clearCollision();
     this.nav.rebake(this.arena.obstacles);
     this.navBig.rebake(this.arena.obstacles);
+    this._rebakeCompanionNav();
     this.rig.setTerrainColliders(this.terrain.colliders);
+  }
+
+  // The bird's own grid rides the same rebake schedule as the enemy grids -
+  // every call site below already clears or publishes the arena's obstacle
+  // list, so sweeping the companion slots here is the whole of keeping it in
+  // step with the room it is standing in. Magpie.rebake() also drops its
+  // errand and its shunned positions, which are verdicts about the OLD floor.
+  _rebakeCompanionNav() {
+    const bird = this._companions[0];
+    if (bird) bird.rebake(this.arena.obstacles);
   }
 
   // Both buttons show one shared state, so muting on the pause screen is
@@ -6327,6 +6338,7 @@ class Game {
     this.terrain.collect();
     this.nav.rebake(this.arena.obstacles);
     this.navBig.rebake(this.arena.obstacles);
+    this._rebakeCompanionNav();
     this.rig.setTerrainColliders(this.terrain.colliders);
     // The clearance circle above makes this very nearly impossible, but "very
     // nearly" is not a guarantee: the player is free to walk into a piece
@@ -6343,6 +6355,7 @@ class Game {
     this.terrain.clearCollision();
     this.nav.rebake(this.arena.obstacles);
     this.navBig.rebake(this.arena.obstacles);
+    this._rebakeCompanionNav();
     this.rig.setTerrainColliders(this.terrain.colliders);
   }
 

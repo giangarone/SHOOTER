@@ -277,6 +277,123 @@ try {
       const took = g.money.collectAt(9, 9, 1.2, g._onOrb);
       o.magpieTook = took > 0 && g.credits > before;
     }
+
+    // ---- 6b. THE BIRD ROUTES, IT DOES NOT GRIND ---------------------------
+    //
+    // The enemies were given a flow field (nav.js) because a body that walks
+    // a straight line at its target presses into the first crate on that line
+    // and stays there. The bird walks too, so it gets the same three cases:
+    // a wall between it and the money, money up a flight of stairs, and money
+    // no route can fix. All on a bare floor with exactly the geometry each
+    // case asks for - a generated interior would put the measurement under
+    // the layout's control rather than the mechanic's.
+    //
+    // SUCCESS IS READ OFF bird.collected, never off the orb count: an orb
+    // that times out also empties the floor, and a suite that counted orbs
+    // would pass on the bird standing still for twenty seconds.
+    {
+      const bird = g._companions[0];
+      // Bare floor, wave pinned open (an empty queue would clear the wave
+      // and regenerate the layout mid-measurement), obstacles exactly what
+      // the case puts there.
+      const bareFloor = () => {
+        if (g.terrain.state !== 'hidden') {
+          g.terrain.reset();
+          g.terrain.clearCollision();
+          g.nav.rebake(g.arena.obstacles);
+          g.navBig.rebake(g.arena.obstacles);
+        }
+        g.waveState = 'active';
+        if (!g.queue.length) g.queue.push('chaser');
+        g.spawnTimer = 1e9;
+        g.arena.obstacles.length = 0;
+        bird.rebake(g.arena.obstacles);
+        g.money.clear();
+      };
+      const box = (x, z, w, h, d, top) => {
+        g.arena.obstacles.push({
+          min: { x: x - w / 2, y: top - h, z: z - d / 2 },
+          max: { x: x + w / 2, y: top, z: z + d / 2 },
+        });
+        bird.rebake(g.arena.obstacles);
+      };
+      // One settled orb at a spot: spawned with no spread so it drops
+      // straight, then aged past the arc without ever being near the player.
+      const drop = (x, z) => {
+        g.money.spawn({ x, y: 0.4, z }, 40, 1, 0);
+        for (let i = 0; i < 40; i++) g.money.update(0.016, { x: 99, y: 0, z: 99 }, 0.1, () => {});
+      };
+      // THE PLAYER IS PARKED OUTSIDE THE MAGNET AND INSIDE THE LEASH for
+      // every case below: at (0, 18) every orb here stands 14-20m from them -
+      // past the 5.5m magnet, which would otherwise claim the money through
+      // the floor and pass the case without the bird doing anything - and
+      // inside the bird's 22m leash, which would otherwise have the bird
+      // ignore the money for a different reason.
+      const run = (limit, startX, startZ) => {
+        P.pos.set(0, 0, 18);
+        P.vel.set(0, 0, 0);
+        bird.pos.set(startX, 0, startZ);
+        bird.think = 0;
+        const before = bird.collected;
+        let frames = 0;
+        for (; frames < limit; frames++) {
+          bird.update(0.05, g._compCtx);
+          if (bird.collected > before) break;
+        }
+        return { got: bird.collected > before, frames };
+      };
+
+      // A WALL between the bird and the money, taller than either can step
+      // and longer than the leash, so the only way to the orb is round an
+      // end of it - 30m of detour the patience window has to survive.
+      bareFloor();
+      box(0, 0, 1.2, 3, 30, 3);
+      drop(-4, 0);
+      o.magpieWall = (() => {
+        const r = run(400, 4, 0);
+        return r.got && r.frames < 400;
+      })();
+
+      // THE MONEY IS UP A FLIGHT. Four 0.6 risers - the enemy step, so every
+      // tread reads as ground - with the orb on the top one. The bird has to
+      // climb, which is the ground query running before the push-out; the
+      // version that resolved first spent the ceiling pressed against the
+      // lowest tread.
+      bareFloor();
+      for (let i = 0; i < 4; i++) box(0, 6 - i * 1.25, 3, 0.6 * (i + 1), 1.25, 0.6 * (i + 1));
+      drop(0, 2.25);
+      o.magpieClimbs = (() => {
+        const r = run(400, 0, 14);
+        return r.got && r.frames < 400 && bird.pos.y > 2;
+      })();
+
+      // A BURIED ORB. Money can settle inside a wall - the spawn arc ignores
+      // the scenery - and there is no route to the middle of a block. The
+      // bird starts nearest the buried one so it is tried FIRST, has to write
+      // it off inside the patience window, shun the position, and then take
+      // the reachable orb standing on open floor. The shun is what stops the
+      // bird re-picking the nearest - i.e. the same buried - orb forever.
+      bareFloor();
+      box(8, 0, 4, 3, 4, 3);
+      drop(8, 0);
+      drop(-8, 0);
+      o.magpieWriteOff = (() => {
+        const r = run(600, 14, 0);
+        return r.got && r.frames < 600 && bird._shun.length > 0;
+      })();
+
+      // And the write-off refused the GEOMETRY, not the position: the same
+      // spot with the block gone is money again. rebake() clears the shun
+      // list with the grid, so a new room's floor is not fenced off by the
+      // last room's burials.
+      bareFloor();
+      drop(8, 0);
+      o.magpieShunCleared = (() => {
+        const r = run(400, -14, 0);
+        return r.got && r.frames < 400;
+      })();
+    }
+
     // The leech bites on the beat and heals when it lands the last hit.
     {
       const leech = g._companions[1];
@@ -491,6 +608,11 @@ try {
   ok('a bare run has no pets', r.noPets);
   ok('the build stands them up', r.petsUp && r.petsInScene);
   ok('the magpie collects, through the player’s own payout', r.magpieTook);
+  ok('the magpie routes round a wall to the money', r.magpieWall);
+  ok('the magpie climbs a flight for money on it', r.magpieClimbs);
+  ok('the magpie writes off a buried orb and takes the reachable one',
+    r.magpieWriteOff);
+  ok('and a cleared room un-shuns the position', r.magpieShunCleared);
   ok('the lamprey finishes and heals', r.leech.killed && r.leech.healed === 2,
     JSON.stringify(r.leech));
   ok('losing the build takes them down', r.petsDown);

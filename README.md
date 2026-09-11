@@ -741,6 +741,18 @@ BLOOD FROM STONE all still happen once, in `_collectOrb`. It is deliberately not
 a wider magnet: LODESTONE already grows the circle around the player, and being
 somewhere else is the only thing a bird can offer that a bigger circle cannot.
 
+The bird navigates like the enemies do - a `NavGrid` flow field of its own
+(`js/nav.js`), flooded toward whichever orb it is currently headed for rather
+than toward the player. Without it a bird that walks a straight line at the
+money presses into the first crate on that line and stays there, which is the
+bug the enemies were given a flow field to be rid of. It climbs stairs and
+treads the same way they do, on the same step height, so money on a deck is as
+good as money on the floor. Money the room has genuinely buried - an orb's
+spawn arc ignores the scenery, so one can settle inside a wall - is written off
+after a patience window with no progress: its position is shunned for a while
+rather than the bird grinding at a slab over money nobody can reach, and the
+shun list is cleared every wave when the floor changes.
+
 LAMPREY holds station about 2.5m from the player and goes for whatever comes
 close, biting for 10 **on the downbeat** and healing 2 HP when it lands the last
 hit. `Music.pulse` is a half-beat edge - it is what the sentry guns and every

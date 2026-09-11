@@ -31,6 +31,7 @@
 
 import * as THREE from 'three';
 import { groundSurface, resolveCircle } from './utils.js';
+import { NavGrid } from './nav.js';
 import { BOUND } from './arena.js';
 
 const _v = new THREE.Vector3();
@@ -51,6 +52,16 @@ const _v = new THREE.Vector3();
 // the pillars and the tiers, which is exactly the ground the player cannot be
 // bothered to walk back to. Hopping across the floor is what makes it read as
 // running an errand.
+//
+// AND IT ROUTES, LIKE THE ENEMIES DO. A bird that walked a straight line at the
+// money would press into the first crate between it and the money and stay
+// there - exactly the bug the enemies were given a flow field to be rid of
+// (nav.js). So it gets one of its own: same bake, same rebakes, but flooded
+// toward the ORB it is headed for, because the player's field points
+// everything at the player. What no route can fix is money the room has
+// genuinely buried - an orb's spawn arc ignores the scenery and can drop it
+// inside a wall - and that is what the write-off watchdog in update() is for:
+// never stuck beats never gives up.
 export class Magpie {
   constructor(game) {
     const p = game.player.pos;
@@ -59,6 +70,10 @@ export class Magpie {
     // player". Re-decided on a cadence rather than every frame - see update().
     this.target = null;
     this.think = 0;
+    // The write-off clock for the current target - see the watchdog in
+    // update(). Lives on the bird rather than in a local so a re-pick halfway
+    // through a hopeless errand resets it.
+    this.patience = 0;
     // The hop. A bird's walk is not a glide, and a bird that slid across the
     // floor would read as an object being dragged. `_hop` is the phase and
     // `_step` the current stride rate, which climbs with speed.
@@ -69,6 +84,32 @@ export class Magpie {
     // A pet that never reports what it did is a pet the player has to take on
     // faith.
     this.collected = 0;
+    // The route, on the enemy machinery (nav.js). Baked for the bird's own
+    // 0.28 radius, so it fits through everywhere an enemy fits and a few gaps
+    // besides - the generator validates every layout against the 0.5 enemy
+    // bake, so a narrower agent is never the one left without a way through.
+    // Flooded toward whatever the bird is actually headed for, which is the
+    // one difference from the enemies' grid: theirs all point at the player.
+    //
+    // BAKED AT THE BIRD'S OWN HEIGHT, not the enemy's. A magpie is a 1m thing
+    // on the floor: the decks and overpasses the enemy grid treats as
+    // standable surfaces are, to this bake, ceilings it walks UNDER - which
+    // is also what its collision already says (the 1.0 in resolveCircle
+    // below). Baking at AGENT_HEIGHT instead would leave the floor beneath a
+    // deck an unreachable island in the field, and an orb that scattered
+    // under one would have the bird pressing into a table leg with the field
+    // refusing to help - the one grind this file exists without.
+    this.nav = new NavGrid(game.arena.obstacles, BOUND, MAGPIE_RADIUS, MAGPIE_HEIGHT);
+    // steer()'s out-vector, on the bird rather than module-shared so two
+    // companions could never scribble over each other's heading.
+    this._steer = { x: 0, z: 0 };
+    // Written-off positions - see the watchdog in update(). A position the
+    // bird has already failed to reach is not one it should be handed again.
+    this._shun = [];
+    // How far the bird was from the target when the current patience window
+    // opened. The watchdog compares against it to tell "working on it" from
+    // "going nowhere".
+    this._windowDist = Infinity;
 
     const g = new THREE.Group();
     this.geos = [];
@@ -166,15 +207,32 @@ export class Magpie {
     this.think -= dt;
     if (this.think <= 0) {
       this.think = MAGPIE_THINK;
-      this.target = this.money.nearestOrb(
-        this.pos.x, this.pos.z, MAGPIE_RANGE, MAGPIE_LEASH, this.player.pos
+      const pick = this.money.nearestOrb(
+        this.pos.x, this.pos.z, MAGPIE_RANGE, MAGPIE_LEASH, this.player.pos,
+        this._shun
       );
+      // THE CADENCE RE-PICKS EVERY 0.3s, and the re-pick usually returns the
+      // same orb - it is by definition the nearest. The patience window has
+      // to ride across those or it can never accumulate: it is reset only
+      // when the errand actually CHANGES, so a bird that has been making
+      // progress on one orb keeps the credit for it and a bird that has not
+      // is still carrying a window it opened three re-picks ago.
+      const same = pick && this.target
+        && Math.abs(pick.x - this.target.x) < 0.01
+        && Math.abs(pick.z - this.target.z) < 0.01;
+      this.target = pick;
+      if (!same) {
+        this.patience = pick ? MAGPIE_PATIENCE : 0;
+        this._windowDist = Infinity;
+      }
     }
 
     // WHERE IT IS HEADED. An orb if it has one, and otherwise the player -
     // offset behind and to the side rather than onto them, so a bird with
     // nothing to do trots along at heel instead of standing inside the camera.
-    let tx, tz, want;
+    let tx;
+    let tz;
+    let want;
     if (this.target) {
       tx = this.target.x;
       tz = this.target.z;
@@ -194,31 +252,124 @@ export class Magpie {
     // moving target forever; collecting must not, or it stalls a hand's width
     // short of the money.
     const stop = this.target ? 0 : 0.55;
-    let speed = 0;
-    if (dist > stop) {
-      // Sprints when it is a long way behind, which is what keeps it from being
-      // left across the arena every time the player dashes - and what makes a
-      // bird that has spotted money read as EAGER.
-      speed = Math.min(MAGPIE_SPRINT, want * (1 + Math.max(0, dist - 6) * 0.35));
-      const k = (speed * dt) / dist;
-      this.pos.x += dx * k;
-      this.pos.z += dz * k;
-      // Turns toward where it is going rather than snapping: the tail is the
-      // longest thing on the model and a snap swings it through the floor.
-      const aim = Math.atan2(dx, dz);
-      let turn = aim - this.yaw;
-      while (turn > Math.PI) turn -= Math.PI * 2;
-      while (turn < -Math.PI) turn += Math.PI * 2;
-      this.yaw += turn * Math.min(1, dt * 9);
+    // WHERE IT IS GOING, rather than straight at it. The flow field turns
+    // "walk at the money" into "walk to the money", which is the difference
+    // between a bird that grinds into the first crate on the line and one
+    // that comes round it - the enemies' whole trick, on a field of its own
+    // because theirs points at the player. Reflooded toward the current
+    // destination only when that destination has moved to a new cell, so an
+    // orb standing still costs nothing, and `steer` still gets a fresh
+    // answer every frame off the field it has.
+    //
+    // THE SEED IS THE SURFACE AT THE DESTINATION, not the bird's own height.
+    // Orbs ignore the scenery on the way down and settle wherever the floor
+    // happens to be - including ON a stair tread or a deck (money.js FLY has
+    // no obstacle test). A flood is seeded from the target's cell and a cell
+    // is only reachable from a neighbour within one step of ITS height, so a
+    // bird on the floor routing at an orb up a flight has to seed the field
+    // at the tread the orb is standing on - the flood then runs DOWN the
+    // flight toward the bird, which is a legal route walked the other way.
+    // Seeding at the bird's height instead would read every tread above it
+    // as a wall and declare reachable money buried.
+    this.nav.update(dt, tx, tz, this.nav.surfaceAt(tx, tz));
+    let hx = dx;
+    let hz = dz;
+    let routed = false;
+    if (this.nav.steer(this.pos.x, this.pos.z, this._steer, this.pos.y)) {
+      hx = this._steer.x;
+      hz = this._steer.z;
+      routed = true;
     }
 
+    // THE WRITE-OFF WATCHDOG. Everything above should get the bird to any orb
+    // the floor offers a route to - the same field, the same flood, the same
+    // rules that get thirty enemies to the player every frame. What no route
+    // fixes is money the room has genuinely buried: an orb's spawn arc flies
+    // through the scenery and can settle inside a wall, where the field has no
+    // answer and `steer` falls back to the straight line forever. A bird that
+    // spent its life pressed against a slab over money nobody can reach would
+    // be worse than no bird at all, so the errand is timed: within one
+    // patience window the bird has to have got CLOSER than the window opened
+    // at, and an orb it has not is dropped, its position shunned and another
+    // picked. Progress rather than an average speed, because a route round a
+    // wall spends its first second walking AWAY from the money and arrives
+    // having averaged nothing at all.
+    if (this.target) {
+      if (dist < this._windowDist) {
+        this._windowDist = dist;
+        this.patience = MAGPIE_PATIENCE;
+      } else {
+        this.patience -= dt;
+        if (this.patience <= 0) {
+          // Shun the POSITION, not the orb - nearestOrb hands back positions,
+          // and the one it hands back next is usually this same one (it is by
+          // definition the nearest). Capped so a long run across a decorated
+          // floor does not accumulate a lease on the whole room; stale entries
+          // age out on the same cap.
+          this._shun.push({ x: this.target.x, z: this.target.z });
+          if (this._shun.length > MAGPIE_SHUN_MAX) this._shun.shift();
+          this.target = null;
+          this.think = 0;   // a new errand on the very next frame, not in 0.3s
+        }
+      }
+    }
+
+    let speed = 0;
+    if (dist > stop) {
+      // AT HEEL, AN UNROUTABLE TARGET IS "AS CLOSE AS THE ROOM ALLOWS". The
+      // heel point can be buried in a crate the player is hugging - the offset
+      // is fixed off their yaw, and the player is free to stand nose against
+      // a box. There is nothing to write off (the player MOVES, and the
+      // point moves with them), so the honest read of a steer failure there
+      // is "arrived for this room", and the bird trots at whatever gap the
+      // push-out left it. Pressing on would be the one grind left in the
+      // file: hop-in-place against a crate face forever. For an orb, the
+      // straight line stands - the watchdog is timing it.
+      const moving = routed || this.target;
+      if (moving) {
+        // Sprints when it is a long way behind, which is what keeps it from
+        // being left across the arena every time the player dashes - and what
+        // makes a bird that has spotted money read as EAGER.
+        speed = Math.min(MAGPIE_SPRINT, want * (1 + Math.max(0, dist - 6) * 0.35));
+        // Steered heading, unit-normalised: the route can point a long way
+        // off the straight line, and `speed` above is metres per second, not
+        // a fraction of the remaining distance.
+        const k = (speed * dt) / (Math.hypot(hx, hz) || 1);
+        this.pos.x += hx * k;
+        this.pos.z += hz * k;
+        // Turns toward where it is going rather than snapping: the tail is
+        // the longest thing on the model and a snap swings it through the
+        // floor.
+        const aim = Math.atan2(hx, hz);
+        let turn = aim - this.yaw;
+        while (turn > Math.PI) turn -= Math.PI * 2;
+        while (turn < -Math.PI) turn += Math.PI * 2;
+        this.yaw += turn * Math.min(1, dt * 9);
+      }
+    }
+
+    // ---- the ground -------------------------------------------------------
+    //
+    // UP FIRST, THEN THE PUSH-OUT - the enemy order, and the reverse of the
+    // order this file used to run them in. groundSurface is what says the box
+    // in front of the bird is a stair tread rather than a crate, and it does
+    // that off this.pos.y: resolve-before-ground reads a bird at the foot of a
+    // flight as standing level with the tread's top and shoves it back off
+    // every step it takes, which is the second half of "gets stuck" - the bird
+    // could not climb onto so much as a kerb. Up is instant, because that is
+    // what a step is; down is a fall at the enemy rate, because a bird with
+    // no jump should not teleport down a flight either.
+    const floor = groundSurface(this.pos, MAGPIE_RADIUS, ctx.obstacles);
+    if (floor > this.pos.y) {
+      this.pos.y = floor;
+    } else if (floor < this.pos.y) {
+      this.pos.y = Math.max(floor, this.pos.y - MAGPIE_FALL * dt);
+    }
     // Stays in the room, on the floor it is standing on, and out of the crates
     // - the same three calls in the same order every ground enemy makes.
     this.pos.x = Math.max(-BOUND + 0.6, Math.min(BOUND - 0.6, this.pos.x));
     this.pos.z = Math.max(-BOUND + 0.6, Math.min(BOUND - 0.6, this.pos.z));
-    resolveCircle(this.pos, 0.28, ctx.obstacles, 1.0);
-    const floor = groundSurface(this.pos, 0.28, ctx.obstacles);
-    this.pos.y += (floor - this.pos.y) * Math.min(1, dt * 12);
+    resolveCircle(this.pos, MAGPIE_RADIUS, ctx.obstacles, MAGPIE_HEIGHT);
 
     // ---- collecting ------------------------------------------------------
     //
@@ -269,6 +420,23 @@ export class Magpie {
     this.halo.material.opacity = 0.22 + this._flap * 0.3;
   }
 
+  /**
+   * A new arena layout has settled. Called on the same wave-boundary schedule
+   * the enemy grids are rebaked on (Game._rebakeCompanionNav), because a flow
+   * field over last wave's boxes is a map of a room that no longer exists.
+   *
+   * The shun list goes with it: a position was buried in GEOMETRY, not in the
+   * orb's nature, and the same spot in the next room is usually open floor.
+   */
+  rebake(obstacles) {
+    this.nav.rebake(obstacles);
+    this._shun.length = 0;
+    this._windowDist = Infinity;
+    this.patience = 0;
+    this.target = null;
+    this.think = 0;
+  }
+
   destroy() {
     this.group.parent?.remove(this.group);
     for (const g of this.geos) g.dispose();
@@ -292,6 +460,27 @@ const MAGPIE_RUN = 9;
 // Faster than the player's 10, and only ever reached when it is a long way
 // behind. A pet that cannot catch up is a pet that is always somewhere else.
 const MAGPIE_SPRINT = 15;
+// THE WRITE-OFF WINDOW. Anything the bird can reach at all it reaches in well
+// under two and a half seconds - the biggest wall the generator builds is a
+// four-metre detour at run pace - so a full window spent without getting
+// closer means no route exists, and the orb is dropped and another picked.
+// Cleared at every wave: a position buried in this room's geometry is only
+// buried until the floor changes (see rebake()).
+const MAGPIE_PATIENCE = 2.5;
+// How many positions the bird remembers to refuse. Small on purpose: the
+// list is a queue of failures, not a lease, and the oldest half-dozen cover a
+// buried shower without fencing off whole corners of a decorated floor.
+const MAGPIE_SHUN_MAX = 6;
+// Down off a kerb at the enemy rate (GROUND_FALL), named here rather than
+// imported so the bird's tuning reads as one block.
+const MAGPIE_FALL = 9;
+// The bird's collision radius, shared by the resolve, the ground query and
+// the flow-field bake, where it used to be a literal in three places. A bird
+// is narrower than the enemy grid's 0.5, so it fits everywhere an enemy does.
+const MAGPIE_RADIUS = 0.28;
+// How tall the bird is for collision and the nav bake. Decks and overpasses
+// are overhead to something this short - see the bake note in the constructor.
+const MAGPIE_HEIGHT = 1.0;
 
 // ---------------------------------------------------------------------------
 // LAMPREY - the leech that guards the player
