@@ -37,7 +37,8 @@
     "test:tempest": "node test/tempest.mjs",
     "test:brine": "node test/brine.mjs",
     "test:plague": "node test/plague.mjs",
-    "test:solar": "node test/solar.mjs"
+    "test:solar": "node test/solar.mjs",
+    "test:hive": "node test/hive.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

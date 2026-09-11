@@ -40,7 +40,7 @@
 // test/themes.mjs rather than by good intentions.
 
 import {
-  THEMES, ROLE_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
+  THEMES, THEME_KEYS, ROLE_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
 } from './themes.js';
 
 // ---- bosses --------------------------------------------------------------
@@ -95,14 +95,17 @@ const ADD_PRESSURE = {
   conductor: 4,    // its pylons already take up the floor
   siege: 5,
   herald: 5,
+  broodqueen: 3,   // she raises her own - a hatch is worth two of anyone's adds
 };
 const ADD_PRESSURE_DEFAULT = 4;
 
-// `cycle` is which pass through the ten-theme deck this is - it climbs once
-// every fifty waves rather than every twenty-five, because the deck is ten
-// blocks long now instead of five.
+// `cycle` is which pass through the deck this is - it climbs once per
+// deck-length in waves (fifty at ten themes, fifty-five at eleven) rather
+// than every twenty-five, because the deck is the theme list long now
+// instead of five. Derived from the table's own length so a theme added to
+// the game does not leave this behind as a quietly wrong constant.
 function bossPressure(n, bossKey) {
-  const cycle = Math.floor((n - 1) / 50);
+  const cycle = Math.floor((n - 1) / (THEME_KEYS.length * 5));
   const base = ADD_PRESSURE[bossKey] || ADD_PRESSURE_DEFAULT;
   return {
     maxAdds: Math.min(7, base + cycle),

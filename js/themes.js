@@ -1,4 +1,4 @@
-// THE TEN THEMES, AND THE ORDER A RUN MEETS THEM IN.
+// THE THEMES, AND THE ORDER A RUN MEETS THEM IN.
 //
 // Pure data + maths: no three.js, no game state, no side effects - the same
 // contract waves.js keeps, and for the same reason. waves.js asks this file
@@ -12,9 +12,9 @@
 // unrelated silhouettes with nothing to say to each other - and the boss
 // rotation was fixed, so wave 5 was Colossus in every run that ever played.
 //
-// A run is now TEN BLOCKS OF FIVE WAVES. Each block is one theme: four waves
-// of that theme's six enemies, then that theme's boss. The blocks are dealt in
-// a random order, so one run opens on EMBER and the next on BRINE.
+// A run is now A BLOCK OF FIVE WAVES PER THEME. Each block is one theme: four
+// waves of that theme's six enemies, then that theme's boss. The blocks are
+// dealt in a random order, so one run opens on EMBER and the next on BRINE.
 //
 // WHAT RANDOM ORDER COSTS, AND WHO PAYS IT
 //
@@ -25,10 +25,10 @@
 // and so scale a theme to wherever it landed for free.
 //
 // The price is that every theme's stat blocks must be normalised against every
-// other theme's, role by role: ten rushers that are interchangeable, ten
-// brutes that are interchangeable. That is the same role-parity rule waves.js
-// has always had, widened from six pools to a ten-by-six grid, and it is
-// enforced in test/themes.mjs rather than by good intentions.
+// other theme's, role by role: every rusher interchangeable with every other
+// rusher, every brute with every other brute. That is the same role-parity
+// rule waves.js has always had, widened from six pools to the whole grid, and
+// it is enforced in test/themes.mjs rather than by good intentions.
 //
 // ONE TYPE PER ROLE PER THEME. Not a list. A theme is six enemies and a boss,
 // and which six is not a roll - the roll is which theme, and it happens once
@@ -39,13 +39,12 @@ export const ROLE_KEYS = ['rusher', 'gunner', 'brute', 'artillery', 'support', '
 
 // THE TABLE IS AUTHORED COMPLETE AND FILLED IN OVER TIME.
 //
-// Every one of the sixty slots below names its FINAL type, including the ones
+// Every one of the slots below names its FINAL type, including the ones
 // that do not exist yet. `resolveRole` falls back to RUST's type for any name
 // with no entry in ENEMY_TYPES, so the whole rotation is playable from the
 // first day and each theme quietly stops borrowing the moment its own enemies
 // land. The alternative - a table that grows a theme at a time - would mean
-// the schedule, the tests and the room theming all changing shape nine more
-// times.
+// the schedule, the tests and the room theming all changing shape every time.
 //
 // `color` is the room's colour for that block: rig.js tints fixtures, beams
 // and fog toward it, the way it already does for a boss.
@@ -207,6 +206,26 @@ export const THEMES = {
       flier: 'shrike',
     },
   },
+
+  // The swarm. No body in it is the threat on its own - the colony is - and
+  // every one of its six is about what the OTHERS are doing: a drone that
+  // runs with the cloud, a gunner that fires on the beat with every gunner
+  // in the room, a support that feeds the wave's cooldowns. The theme that
+  // spends ORGANIZATION, where EMBER spends floor and RIME spends the
+  // player.
+  hive: {
+    name: 'HIVE',
+    color: 0xffa000,
+    boss: 'broodqueen',
+    roles: {
+      rusher: 'drone',
+      gunner: 'spitter',
+      brute: 'soldier',
+      artillery: 'brooder',
+      support: 'nurse',
+      flier: 'wasp',
+    },
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
@@ -230,12 +249,12 @@ function makeRng(seed) {
   };
 }
 
-// The ten themes in the order this run meets them, as a dealt DECK rather than
-// ten independent draws: waves 1-50 play each theme exactly once, so a run
-// cannot see EMBER twice and never see RIME, and reaching wave 50 means the
-// same thing in every run.
+// The themes in the order this run meets them, as a dealt DECK rather than
+// independent draws: one full pass through the table plays each theme
+// exactly once, so a run cannot see EMBER twice and never see RIME, and
+// reaching the end of a pass means the same thing in every run.
 //
-// `cycle` is which pass through the deck this is, so past wave 50 the deck is
+// `cycle` is which pass through the deck this is, so past the pass the deck is
 // reshuffled rather than repeated - a different order, still every theme once,
 // still reproducible from the run's one seed.
 export function themeOrder(seed, cycle = 0) {
@@ -299,10 +318,10 @@ export function resolveRole(themeKey, role, have) {
  * The boss for `themeKey`, or a stand-in while that theme's own boss has not
  * been built yet.
  *
- * NOT the fallback theme's boss. Ten themes borrowing one boss would make
+ * NOT the fallback theme's boss. Every theme borrowing one boss would make
  * every fifth wave of every run the same fight, which is the exact thing the
  * fixed rotation was replaced to stop - and it would stay that way for the
- * whole time the ten fights are being built. So a theme with no boss of its
+ * whole time the fights are being built. So a theme with no boss of its
  * own borrows from whichever bosses DO exist, chosen by its position in the
  * table: deterministic, and it spreads what is built as evenly as it can over
  * what is not.

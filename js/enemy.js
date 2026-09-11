@@ -49,7 +49,8 @@ import {
 } from './utils.js';
 import {
   ARENA_HALF, BALLOON_RISE, BODY_BASE_INTENSITY, BODY_FLASH_HEX,
-  BODY_FLASH_INTENSITY, CONDUIT_RESIST, CONDUIT_SPEED, ENEMY_TYPES, FLARE_BURST,
+  BODY_FLASH_INTENSITY, CONDUIT_RESIST, CONDUIT_SPEED, EGG_CLUSTER,
+  EGG_CLUSTER_SPREAD, ENEMY_TYPES, FLARE_BURST,
   FLARE_BURST_REACH, FLARE_BURST_SPREAD, FLY_MAX_Y, FLY_RATE_DEFAULT,
   FREEZE_VULN, GROUND_FALL, HAIL_RING_GAP, HAIL_RING_N, HAIL_RING_R,
   MELEE_REACH_Y,
@@ -1481,13 +1482,18 @@ export class Projectile {
 // a row here and a row in HAZARD_KINDS, and nothing else.
 // Where a bouncing round turns. Just inside the arena's own half-width, so the
 // stone visibly meets the wall rather than passing through it and reappearing.
+// Where a bouncing round turns. Just inside the arena's own half-width, so the
+// stone visibly meets the wall rather than passing through it and reappearing.
 const PROJ_BOUND = ARENA_HALF - 0.4;
 
 const _projSteer = new THREE.Vector3();
 
+// Which type's `proj` block a spit of each kind wears. Adding a kind is
+// a row here, a row in HAZARD_KINDS and a row in SPIT_CONFIG, and nothing
+// else.
 const SPIT_LOOK = {
   pool: 'blight', gas: 'vitriol', ember: 'flare', hail: 'hailer', seed: 'sporegun',
-  well: 'singularity',
+  well: 'singularity', egg: 'brooder',
 };
 
 export class Spit {
@@ -1515,7 +1521,9 @@ export class Spit {
     // blight and the vitriol; the flare's shell bursts into a FAN along its
     // own heading, and the hailer's cluster into a gapped RING around where it
     // came down - see _land. The two shapes are two different questions: a fan
-    // is ground behind you and a ring is ground AROUND you.
+    // is ground behind you and a ring is ground AROUND you. The brooder's egg
+    // is a single glob too - its cluster is of MORTARS, in _land, not of
+    // patches here.
     this.burst = kind === 'ember' ? FLARE_BURST : kind === 'hail' ? HAIL_RING_N : 1;
     this.burstShape = kind === 'hail' ? 'ring' : 'fan';
 
@@ -1563,6 +1571,28 @@ export class Spit {
     if (this.kind === 'seed') {
       if (ctx.addMortar) {
         ctx.addMortar(this.pos.x, this.pos.z, SPORE_RADIUS, SPORE_SPROUT, SPORE_DAMAGE);
+      }
+      if (ctx.effects) {
+        ctx.effects.burst(this.pos, projLook(this.type).glow, 10, 2.5, 1, 0.4);
+      }
+      return;
+    }
+    // A brooder's egg, and the same bargain the seed makes one of: the glob
+    // grows NOTHING when it lands, and what it becomes is a NEST of mortars
+    // rather than a single one - three filling circles close enough to read
+    // as a cluster, so the question is "be off that nest" rather than "be off
+    // that spot". Same delay, same completely safe floor in between.
+    if (this.kind === 'egg') {
+      if (ctx.addMortar) {
+        const off = Math.random() * Math.PI * 2;
+        for (let i = 0; i < EGG_CLUSTER; i++) {
+          const ang = off + (i / EGG_CLUSTER) * Math.PI * 2;
+          ctx.addMortar(
+            this.pos.x + Math.cos(ang) * EGG_CLUSTER_SPREAD,
+            this.pos.z + Math.sin(ang) * EGG_CLUSTER_SPREAD,
+            this.radius, this.poolLife, this.dps
+          );
+        }
       }
       if (ctx.effects) {
         ctx.effects.burst(this.pos, projLook(this.type).glow, 10, 2.5, 1, 0.4);

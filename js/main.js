@@ -77,11 +77,11 @@ import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { THEMES } from './themes.js';
 
-// Which enemy types are actually BUILT. themes.js names every one of its sixty
+// Which enemy types are actually BUILT. themes.js names every one of its
 // slots' final type, including the ones that do not exist yet, and falls back
-// to RUST's for any it is handed a `false` for - so the whole ten-theme
-// rotation is playable while the roster is still being made, and each theme
-// stops borrowing the moment its own enemies land. Passed as a predicate
+// to RUST's for any it is handed a `false` for - so the whole rotation is
+// playable while the roster is still being made, and each theme stops
+// borrowing the moment its own enemies land. Passed as a predicate
 // rather than imported there, because themes.js and waves.js are both pure
 // data modules that have to stay loadable with no renderer.
 const HAVE_TYPE = (k) => Object.prototype.hasOwnProperty.call(ENEMY_TYPES, k);
@@ -701,12 +701,17 @@ const SPIT_HAIL = { radius: 1.6, life: 3.6, dps: 0 };
 // becomes ground - and it is listed anyway so every kind has a row and the
 // lookup below can stay a plain table rather than a chain of exceptions.
 const SPIT_SEED = { radius: 0, life: 0, dps: 0 };
+// The brooder's egg. Same deal as the seed - the glob grows no ground, so the
+// radius/life/dps here are the MORTAR's (circle, fuse, damage) rather than a
+// patch's, read by Spit._land when it places the nest. See the `egg` row in
+// enemy.js.
+const SPIT_EGG = { radius: 1.7, life: 1.7, dps: 10 };
 // The singularity's well. Wide and short-lived, and worth nothing per second -
 // see the `well` row above.
 const SPIT_WELL = { radius: 7.0, life: 2.2, dps: 0 };
 const SPIT_CONFIG = {
-  pool: SPIT_POOL, gas: SPIT_GAS, ember: SPIT_EMBER, hail: SPIT_HAIL, seed: SPIT_SEED,
-  well: SPIT_WELL,
+  pool: SPIT_POOL, gas: SPIT_GAS, ember: SPIT_EMBER, hail: SPIT_HAIL,
+  seed: SPIT_SEED, well: SPIT_WELL, egg: SPIT_EGG,
 };
 const FROST_CHILL_SECONDS = 3;
 
@@ -877,6 +882,7 @@ const BOSS_NAMES = {
   schism: 'SCHISM',
   maw: 'MAW',
   herald: 'HERALD',
+  broodqueen: 'THE BROOD QUEEN',
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 
@@ -978,8 +984,8 @@ class Game {
     // arenas are reproducible from it and a layout that turns out to be no fun
     // can be replayed in the test.
     this._terrainSeed = (Math.random() * 0xffffffff) >>> 0;
-    // The seed the run's THEME ORDER is dealt from - which of the ten themes
-    // fills each five-wave block, and so which boss ends it. One number,
+    // The seed the run's THEME ORDER is dealt from - which theme fills each
+    // five-wave block, and so which boss ends it. One number,
     // exactly like the terrain seed above and for the same reason: a run that
     // opened on EMBER and fell apart at BRINE can be replayed from it.
     //

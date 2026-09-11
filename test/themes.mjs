@@ -1,23 +1,27 @@
 // THE THEME TABLE, AND THE BALANCE LAW IT RESTS ON.
 //
-// A run is ten five-wave blocks, each block one theme, dealt in a random
-// order. That ordering is the whole design and it is also the whole danger:
+// A run is a five-wave block per theme, the blocks dealt in a random order.
+// That ordering is the whole design and it is also the whole danger:
 // a type can no longer be balanced against the wave it appears on, because it
 // has no wave any more. EMBER's rusher may be the first enemy of the run or
 // the last thing before wave 45.
 //
 // So the rule waves.js has always had - peers within a role are near
 // equivalent in threat - stops being a rule about six small pools and becomes
-// a rule about a TEN BY SIX GRID. Ten rushers that must be interchangeable.
-// Ten brutes. If that slips, the theme a run happens to be dealt at wave 1
-// decides how hard wave 1 was, and the wave a run reached stops meaning the
-// same thing in every run - which is the one thing the schedule exists to
-// prevent.
+// a rule about the WHOLE GRID: every rusher interchangeable with every other,
+// every brute with every other. If that slips, the theme a run happens to be
+// dealt at wave 1 decides how hard wave 1 was, and the wave a run reached
+// stops meaning the same thing in every run - which is the one thing the
+// schedule exists to prevent.
 //
-// Nobody can hold sixty stat blocks in their head across the many sittings it
-// takes to build them, so this file holds them instead. It is deliberately the
-// cheapest test in the suite - pure data, no browser, no renderer - so it can
-// be the thing that fails first.
+// Nobody can hold sixty-odd stat blocks in their head across the many sittings
+// it takes to build them, so this file holds them instead. It is deliberately
+// the cheapest test in the suite - pure data, no browser, no renderer - so it
+// can be the thing that fails first.
+//
+// Every count below is derived from the table's own length rather than
+// authored, so the suite grows with the game instead of agreeing with a
+// comment about it.
 import { ENEMY_TYPES } from '../js/enemy.js';
 import {
   THEMES, THEME_KEYS, ROLE_KEYS, FALLBACK_THEME,
@@ -34,7 +38,13 @@ const have = (k) => Object.prototype.hasOwnProperty.call(ENEMY_TYPES, k);
 
 // ---- 1. the table is well formed ----------------------------------------
 
-ok('ten themes', THEME_KEYS.length === 10, `${THEME_KEYS.length}`);
+// DERIVED, NOT AUTHORED. The table has grown a theme at a time and every
+// count in here follows the table's own length now - a suite that said "ten"
+// while the game dealt eleven would be a suite agreeing with a comment
+// rather than with the game.
+const N = THEME_KEYS.length;
+
+ok(`${N} themes`, THEME_KEYS.length === N, `${THEME_KEYS.length}`);
 
 const missingRole = [];
 const badMeta = [];
@@ -71,7 +81,7 @@ for (const key of THEME_KEYS) {
   }
 }
 ok('no type fills two slots', dupes.length === 0, dupes.join('; '));
-ok('sixty slots', owner.size === 60, `${owner.size}`);
+ok(`${N * ROLE_KEYS.length} slots`, owner.size === N * ROLE_KEYS.length, `${owner.size}`);
 
 const bossOwner = new Map();
 const bossDupes = [];
@@ -80,7 +90,7 @@ for (const key of THEME_KEYS) {
   if (bossOwner.has(b)) bossDupes.push(`${b}: ${bossOwner.get(b)} + ${key}`);
   else bossOwner.set(b, key);
 }
-ok('ten distinct bosses', bossDupes.length === 0 && bossOwner.size === 10, bossDupes.join('; '));
+ok(`${N} distinct bosses`, bossDupes.length === 0 && bossOwner.size === N, bossDupes.join('; '));
 
 // ---- 3. nothing built is homeless ---------------------------------------
 // The other direction: a type that exists but no theme names is a type that
@@ -156,7 +166,7 @@ for (const p of pending) {
 // shipped, with a little headroom, and they are frozen. Deriving them from the
 // table would make the test agree with whatever was last added: one slightly
 // hot type widens the envelope, the next one is measured against the wider
-// envelope, and after ten themes the rule means nothing. If a new enemy really
+// envelope, and after eleven themes the rule means nothing. If a new enemy really
 // needs to sit outside its role, the envelope is what gets edited - as a
 // deliberate, reviewable change to the game's balance, which is the point.
 const ROLE_ENVELOPE = {
@@ -251,8 +261,8 @@ ok('every built boss is flagged as one', badBoss.length === 0, badBoss.join(', '
 // every run.
 
 const deck = themeOrder(12345);
-ok('a deck is all ten themes, once each',
-  deck.length === 10 && new Set(deck).size === 10);
+ok(`a deck is all ${N} themes, once each`,
+  deck.length === N && new Set(deck).size === N);
 
 const sameSeed = themeOrder(12345);
 ok('the same seed deals the same order', deck.join() === sameSeed.join());
@@ -263,26 +273,28 @@ for (let s = 1; s <= 200; s++) {
 }
 ok('different seeds deal different orders', differing > 190, `${differing}/200`);
 
-// Over waves 1-50 every theme is met exactly once, and every wave inside a
-// block is the same theme.
+// Over the whole first pass every theme is met exactly once, and every wave
+// inside a block is the same theme. A deck-length is now table-length times
+// five waves, so the horizon follows the table too.
+const PASS = N * 5;
 const seen = new Map();
 let blockBroken = 0;
-for (let n = 1; n <= 50; n++) {
+for (let n = 1; n <= PASS; n++) {
   const t = themeForWave(999, n);
   if (blockPos(n) === 1) seen.set(t, (seen.get(t) || 0) + 1);
   else if (t !== themeForWave(999, n - 1)) blockBroken++;
 }
-ok('waves 1-50 meet every theme exactly once',
-  seen.size === 10 && [...seen.values()].every((v) => v === 1));
+ok(`waves 1-${PASS} meet every theme exactly once`,
+  seen.size === N && [...seen.values()].every((v) => v === 1));
 ok('a block is one theme for all five of its waves', blockBroken === 0);
 
-// Past fifty the deck is re-dealt rather than repeated.
+// Past a deck-length the deck is re-dealt rather than repeated.
 const first = [];
 const second = [];
-for (let n = 1; n <= 50; n += 5) first.push(themeForWave(999, n));
-for (let n = 51; n <= 100; n += 5) second.push(themeForWave(999, n));
-ok('waves 51-100 are all ten themes again',
-  second.length === 10 && new Set(second).size === 10);
+for (let n = 1; n <= PASS; n += 5) first.push(themeForWave(999, n));
+for (let n = PASS + 1; n <= PASS * 2; n += 5) second.push(themeForWave(999, n));
+ok(`waves ${PASS + 1}-${PASS * 2} are all ${N} themes again`,
+  second.length === N && new Set(second).size === N);
 ok('the second pass is re-dealt, not repeated', first.join() !== second.join());
 
 // blockPos has to agree with the boss cadence main.js already runs on.
@@ -295,19 +307,19 @@ ok('blockIndex counts from zero', blockIndex(1) === 0 && blockIndex(5) === 0 && 
 
 // ---- report -------------------------------------------------------------
 
-console.log('\n  role         built   hp envelope   dmg        speed');
+console.log('\n  role         built    hp envelope   dmg        speed');
 for (const r of roleTable) {
   const e = r.env;
   console.log(
-    `  ${r.role.padEnd(11)}  ${String(r.n).padStart(2)}/10   ` +
+    `  ${r.role.padEnd(11)}  ${String(r.n).padStart(2)}/${String(THEME_KEYS.length).padStart(2)}   ` +
     `${(e.hp[0] + '-' + e.hp[1]).padStart(9)}  ` +
     `${(e.damage[0] + '-' + e.damage[1]).padStart(7)}  ` +
     `${(e.speed[0] + '-' + e.speed[1]).padStart(9)}`
   );
 }
 
-const built = 60 - pending.filter((p) => !p.endsWith('boss')).length;
-console.log(`\n  ${built}/60 enemies and ${10 - pending.filter((p) => p.includes('.boss=')).length}/10 bosses built.`);
+const built = N * ROLE_KEYS.length - pending.filter((p) => !p.endsWith('boss')).length;
+console.log(`\n  ${built}/${N * ROLE_KEYS.length} enemies and ${N - pending.filter((p) => p.includes('.boss=')).length}/${N} bosses built.`);
 if (pending.length) {
   console.log('  still borrowing from ' + FALLBACK_THEME.toUpperCase() + ':');
   for (const key of THEME_KEYS) {

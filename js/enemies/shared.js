@@ -200,6 +200,18 @@ export const SHARED_MATS = {
   shrikeEdge: new THREE.MeshStandardMaterial({
     color: 0x9aa8c4, roughness: 0.2, metalness: 0.9,
   }),
+  // HIVE's two. The family reads as insects: a dark segmented CARAPACE for
+  // every plate, and one AMBER seam lit on each body - the part that does the
+  // thing, kept on its own material for the same reason the tank's furnace
+  // is, so it survives a status tint and a frozen hive enemy still reads as
+  // a hive enemy.
+  hiveChitin: new THREE.MeshStandardMaterial({
+    color: 0x2b2015, roughness: 0.45, metalness: 0.35, flatShading: true,
+  }),
+  hiveAmber: new THREE.MeshStandardMaterial({
+    color: 0xffa000, emissive: 0xffa000, emissiveIntensity: 1.1,
+    roughness: 0.25, metalness: 0.1,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 
