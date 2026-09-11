@@ -220,8 +220,6 @@ Two traps that have cost real time in these suites:
 Seven stat blocks and the registration first, then `npm run test:themes` —
 before any mechanic is written, because that is the suite that tells you
 whether the shape is legal at all. Then the AI, then the theme's own suite.
-Commit as soon as the theme loads and `test:themes` is green; the interesting
-half of this job is long, and it should not be sitting only on a runner.
 
 ## House style
 
