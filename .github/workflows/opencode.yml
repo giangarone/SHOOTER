@@ -34,18 +34,23 @@ jobs:
       id-token: write
 
     steps:
-      # persist-credentials is left ON (the default) because the agent PUSHES.
-      # Turning it off strips the token out of git's config after the clone, so
-      # `git push` has nothing to authenticate with, finds no terminal to
-      # prompt at, and dies on "could not read Username for https://github.com"
-      # - after committing, so the work is already staged and then lost. The
-      # token the action passes itself is for the API, not for the remote.
+      # persist-credentials is OFF because opencode brings its own credentials
+      # now. Both it and checkout write the SAME git config key,
+      # http.https://github.com/.extraheader, and git keeps a repeated key as
+      # multi-valued rather than overwriting - so the push went out carrying
+      # two Authorization headers and GitHub rejected it outright:
+      # `remote: Duplicate header: "Authorization"`, 400, after committing, so
+      # the work was already done and then lost.
       #
-      # The flag guards against a later step reusing the token. This job has
-      # contents: write and runs an agent with a shell, so that horse has left:
-      # the gate is the author allowlist in the `if` above, not this.
+      # This was the opposite way round under `use_github_token: true`: back
+      # then opencode had no credentials of its own and pushed on the ones
+      # checkout left behind, so turning the flag off broke the push instead.
+      # Dropping that input (to stop PRs landing in "awaiting approval") is
+      # what flipped this.
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       # Everything below exists so that the agent can actually RUN the test
       # suite when it is asked to. Without node modules and a browser on the
