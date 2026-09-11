@@ -17,6 +17,9 @@ import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
 import { UPGRADES } from './upgrades.js';
 import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
+// UPDRAFT climbs, and the room is a closed box - see the ceiling clamp in
+// update(). This is the only thing player.js wants from the arena.
+import { CEIL_Y } from './arena.js';
 import { ACTIVE_ITEMS } from './items.js';
 
 // Every stat an upgrade is allowed to touch, at its un-upgraded value.
@@ -353,9 +356,11 @@ const DEFAULT_MODS = {
   movingDay: 0,         // Moving Day: reserve rounds per orb still on the floor
                         // when the wave ends
   raffle: 0,            // Raffle Ticket: item charge rate gained per box bought
-  float: 0,             // Updraft: the jump button held stops the fall...
-  floatDrain: 0,        // ...for this much stamina a second, and it still
-  floatFall: 0,         // sinks at this many metres a second
+  float: 0,             // Updraft: the jump button held CLIMBS...
+  floatDrain: 0,        // ...for this much stamina a second, at
+  floatRise: 0,         // this many metres a second, reached at
+  floatLift: 0,         // this acceleration - which must beat the 22 m/s^2 in
+                        // update(), because gravity is applied before it
   jackpot: 0,           // Jackpot: chance a GROUND jump refills everything
   slideFire: 0,         // Scorched Earth: burn power of the trail a slide lays,
   slideFireRadius: 0,   // as a multiple of one of the player's own shots
@@ -2834,7 +2839,7 @@ export class Player {
     // empty in the air is a bar that refuses the run on landing, which is what
     // keeps a float from being free flight. The drain is charged before the
     // clamp so the last frame of a bar cannot buy a frame of hang.
-    if (this.mods.float > 0 && input.jump && !this.onGround && this.vel.y < 0
+    if (this.mods.float > 0 && input.jump && !this.onGround
       && !this.staminaLocked && this.stamina > 0) {
       this.stamina -= this.mods.floatDrain * this.mods.staminaDrain * dt;
       this._staminaHold = STAMINA_DELAY;
@@ -2842,11 +2847,28 @@ export class Player {
         this.stamina = 0;
         this.staminaLocked = true;
       }
-      // A SINK, NOT A HOVER. Holding the button still costs height, slowly -
-      // a true hover is a player who cannot be reached by anything that walks,
-      // and the arena has fliers in it precisely because the floor is where the
-      // fight is.
-      this.vel.y = Math.max(this.vel.y, -this.mods.floatFall);
+      // IT CLIMBS. Holding the button takes the player UP, not merely slows
+      // the fall - the whole verb is leaving the floor, and a glide is a thing
+      // that happens on the way down from a jump you already took.
+      //
+      // AN ACCELERATION, NOT AN ASSIGNMENT, and it has to BEAT gravity rather
+      // than replace it: the 22 above has already come off vel.y this frame, so
+      // FLOAT_LIFT is a number larger than that and the net climb is the
+      // difference. Writing the rise speed straight into vel.y would arrest a
+      // fifteen-metre-a-second fall on one frame, which is the step change in
+      // velocity the dash's own envelope exists to avoid - it reads as hitting
+      // something, not as being lifted. Eased in, a fall is visibly caught and
+      // then turned round.
+      //
+      // AND IT NEVER CAPS A FASTER CLIMB. Guarded rather than clamped with a
+      // bare Math.min, or a jump taken at JUMP_V - or a dash aimed at the roof
+      // - would be pulled DOWN to the float's terminal the instant the button
+      // was held, so pressing jump would make you go less high.
+      if (this.vel.y < this.mods.floatRise) {
+        this.vel.y = Math.min(
+          this.mods.floatRise, this.vel.y + this.mods.floatLift * dt
+        );
+      }
       this.floatFx = true;
     }
     // Ground jump keeps its held-key behaviour - bunny-hopping down a corridor
@@ -2944,6 +2966,29 @@ export class Player {
     // top of the head, or the eye plus enough room for the whole frustum.
     // Crouching and sliding drop the eye, so they get the headroom back.
     const stopH = Math.max(PLAYER_HEIGHT, this.eyeH + CAM_CLEARANCE);
+    // ---- THE LID ------------------------------------------------------------
+    //
+    // THE ROOM IS A CLOSED BOX (see CEIL_Y in arena.js) and until UPDRAFT
+    // nothing could reach the top of it, so the lid was a raycast target and
+    // never a collider: the tallest thing in the game was an air jump at 4.6m
+    // under a ceiling at 16. A climb reaches it in a couple of seconds, and
+    // without this the player rises straight through the slab and out of the
+    // venue - the walls stop at the ceiling, so there is nothing up there at
+    // all, in any direction.
+    //
+    // A HARD STOP RATHER THAN A TERM IN THE FLOAT, deliberately. The float is
+    // not the only way up: a dash aimed at the roof carries DASH_SPEED through
+    // its own vertical blend, and a term inside the float branch would leave
+    // that one able to punch out of the room exactly as it can today. This is
+    // the rule "the player is inside the venue", and it belongs with the other
+    // vertical resolution.
+    //
+    // The same stopH the obstacle test below uses, so the camera never ends up
+    // above the slab looking down through it.
+    if (this.pos.y + stopH > CEIL_Y) {
+      this.pos.y = CEIL_Y - stopH;
+      if (this.vel.y > 0) this.vel.y = 0;
+    }
     if (this.vel.y > 0) {
       const headPrev = prevY + stopH;
       const headNow = this.pos.y + stopH;

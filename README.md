@@ -1213,20 +1213,51 @@ CELL is the CEILING; a run holding both banks two charges and fills them faster.
 
 | Upgrade | Effect |
 | --- | --- |
-| UPDRAFT | Hold jump to float. It spends stamina |
+| UPDRAFT | Hold jump to fly upward. It spends stamina |
 | JACKPOT | Every ground jump has a 1% chance of full health and a full reserve |
 | SCORCHED EARTH | Sliding leaves a trail of fire that burns enemies |
 | QUORUM | Every 10 kills summons a free sentry turret for 10s |
 
-UPDRAFT does **not** reuse PARTY BALLOONS' machinery, and the difference is the
+UPDRAFT **climbs**, and that is the whole pick rather than a stronger version of
+a glide. A glide changes how a fall ends; this changes where the fight is. The
+venue is sixteen metres tall and had nothing in the top twelve of them, and a
+run carrying this can put itself there - over the crowd, onto a catwalk, off the
+far side. TIGHTROPE is the pick that notices.
+
+It does **not** reuse PARTY BALLOONS' machinery, and the difference is the
 point: that item lifts an ENEMY off the floor and holds it there helpless, with
 a ground snap at the end - a scripted removal - where this is a verb the player
-holds down and steers with. It is written as a clamp on `vel.y` the frame after
-gravity is applied, which is the only place a float composes correctly with a
-dash, a jump and a ceiling at once. It only catches a FALL: clamping a rising
-jump would cap the arc, so the player would press jump and go less high. And it
-sinks slowly rather than hovering, because a true hover is a player nothing that
-walks can reach.
+holds down and steers with. It is a term in the gravity line the frame after
+gravity is applied, which is the only place a climb composes correctly with a
+dash, a jump and the lid at once.
+
+It is an **acceleration and not an assignment**, and it has to beat gravity
+rather than replace it: the 22 m/s² has already come off `vel.y` by then, so
+`floatLift` is 62 and the net climb is 40. Writing the rise speed straight into
+`vel.y` would arrest a fifteen-metre-a-second fall on a single frame, which is
+exactly the step change in velocity the dash's own envelope exists to avoid - it
+reads as hitting something rather than as being lifted. It is also guarded
+rather than clamped with a bare `Math.min`, or holding the button would pull a
+jump leaving at `JUMP_V` **down** to the float's terminal, and pressing jump
+would make you go less high.
+
+**The exploit it is priced against** is climbing to the ceiling and sitting
+there out of reach of everything that walks. It cannot be reached at all: the
+bar is 100 and the drain is 68, so a full bar is under a second and a half of
+climb - about nine metres at 6 m/s, against a lid the player's head meets at
+fourteen. One bar does not get you to the roof; it gets you over the crowd and
+onto the high ground, which is what the pick is for, and the lockout then
+refuses the next sprint as well.
+
+It also made the lid a **collider** for the first time. The room is a closed box
+(`CEIL_Y`), but until something could reach the top of it the ceiling was a
+raycast target and nothing more - the tallest thing in the game was an air jump
+at 4.6m under a ceiling at 16. The stop is taken in the vertical resolution
+beside the obstacle test rather than inside the float branch, because the float
+is not the only way up: a dash aimed at the roof carries `DASH_SPEED` through
+its own vertical blend and could punch out of the venue today. It clamps against
+the same `stopH` the obstacle test uses, so the camera never ends up above the
+slab looking down through it.
 
 JACKPOT is the ground jump only. That branch is held-key - bunny-hopping down a
 corridor is movement the game already had - where the air jump is edge-triggered

@@ -532,21 +532,46 @@ try {
 
     // ---- 6. MOVEMENT --------------------------------------------------------
 
-    // UPDRAFT. Held jump, on the sprint bar.
+    // UPDRAFT. Held jump, and it CLIMBS.
     bare();
     give('updraft');
-    o.floatDrain = P.mods.floatDrain > 0 && P.mods.floatFall > 0;
+    o.floatArmed = P.mods.floatDrain > 0 && P.mods.floatRise > 0 && P.mods.floatLift > 0;
     const held = { ...g.input, jump: true };
+    // A FALL IS CAUGHT AND THEN TURNED ROUND, over frames rather than on one:
+    // the lift is an acceleration, so the assertion is the SHAPE, not a single
+    // value - still falling after one frame, rising by the time it settles.
     P.onGround = false;
     P.pos.set(0, 6, 0);
     P.vel.set(0, -14, 0);
     P.stamina = 100;
     P.staminaLocked = false;
     P.update(0.05, held, g.arena.obstacles, g.time, true);
-    o.floatCaught = P.vel.y;
+    o.floatAfterOne = P.vel.y;
+    for (let i = 0; i < 12; i++) P.update(0.05, held, g.arena.obstacles, g.time, true);
+    o.floatSettled = P.vel.y;
     o.floatSpent = 100 - P.stamina;
-    o.floatFlag = true;   // read below, off a fresh frame
-    // A LOCKED BAR DOES NOT FLOAT: the lockout is the sprint's, and it is what
+    // AND IT ACTUALLY GAINS HEIGHT from a standing start on the floor.
+    bare();
+    give('updraft');
+    P.pos.set(0, 0, 0);
+    P.vel.set(0, 0, 0);
+    P.onGround = false;
+    P.stamina = 100;
+    P.staminaLocked = false;
+    for (let i = 0; i < 20; i++) P.update(0.05, held, g.arena.obstacles, g.time, true);
+    o.floatClimbed = P.pos.y;
+    // THE LID STOPS IT. The room is a closed box and the ceiling was never a
+    // collider before this pick could reach it - a climb that did not stop
+    // leaves the venue entirely.
+    for (let i = 0; i < 400; i++) {
+      P.stamina = 100;
+      P.staminaLocked = false;
+      P.update(0.05, held, g.arena.obstacles, g.time, true);
+    }
+    o.floatCeiling = P.pos.y;
+    o.floatHead = P.pos.y + Math.max(1.8, P.eyeH + 0.25);
+    o.ceilY = g.__ceilForTest;
+    // A LOCKED BAR DOES NOT CLIMB: the lockout is the sprint's, and it is what
     // stops the pick being flight.
     P.pos.set(0, 6, 0);
     P.vel.set(0, -14, 0);
@@ -555,16 +580,22 @@ try {
     P.onGround = false;
     P.update(0.05, held, g.arena.obstacles, g.time, true);
     o.floatLocked = P.vel.y;
-    // AND IT NEVER CAPS A RISING JUMP.
+    // AND IT NEVER CAPS A FASTER CLIMB. A jump leaves at JUMP_V, well over the
+    // float's own terminal, and holding the button must not pull it DOWN to
+    // that - pressing jump would make you go less high.
     P.pos.set(0, 6, 0);
     P.vel.set(0, 9, 0);
     P.stamina = 100;
     P.staminaLocked = false;
     P.onGround = false;
     P.update(0.05, held, g.arena.obstacles, g.time, true);
-    // Gravity still takes its 22 m/s^2 off the frame - what must NOT happen is
-    // the clamp catching a rising jump and capping the arc.
     o.floatRising = P.vel.y;
+    // THE WHOLE BAR, IN SECONDS OF CLIMB, AND IN METRES. The pair the exploit
+    // is priced against - see the note on the pick. The height is what the
+    // assertion actually cares about: one bar must not reach the lid.
+    o.floatBarSeconds = +(100 / P.mods.floatDrain).toFixed(2);
+    o.floatBarMetres = +(o.floatBarSeconds * P.mods.floatRise).toFixed(2);
+    o.lidHeight = g.__ceilForTest - Math.max(1.8, P.eyeH + 0.25);
     P.pos.set(0, 0, 0);
     P.vel.set(0, 0, 0);
     P.onGround = true;
@@ -868,12 +899,26 @@ try {
   ok('and stops at the reserve cap', r.movingCapped);
 
   // ---- movement ----
-  ok('updraft is armed with a drain and a sink', r.floatDrain);
-  ok('and it catches a fall', r.floatCaught > -2 && r.floatCaught < 0,
-    String(r.floatCaught));
+  ok('updraft is armed with a drain, a rise and a lift', r.floatArmed);
+  ok('and one frame only slows a fall', r.floatAfterOne < 0 && r.floatAfterOne > -14,
+    String(r.floatAfterOne));
+  ok('and it turns the fall into a climb', r.floatSettled > 0, String(r.floatSettled));
+  ok('and settles at the rise speed', near(r.floatSettled, 6, 0.01),
+    String(r.floatSettled));
   ok('and it spends the bar', r.floatSpent > 0, String(r.floatSpent));
-  ok('and a locked bar does not float', r.floatLocked < -10, String(r.floatLocked));
-  ok('and it never caps a rising jump', r.floatRising > 7.5, String(r.floatRising));
+  ok('and it gains real height off the floor', r.floatClimbed > 4,
+    String(r.floatClimbed));
+  ok('and the lid stops it', r.floatHead <= r.ceilY + 1e-6,
+    `head=${r.floatHead} ceil=${r.ceilY}`);
+  ok('and it stops just under it rather than short of it',
+    r.floatHead > r.ceilY - 0.01, `head=${r.floatHead} ceil=${r.ceilY}`);
+  ok('and a locked bar does not climb', r.floatLocked < -10, String(r.floatLocked));
+  ok('and it never caps a faster climb', r.floatRising > 7.5, String(r.floatRising));
+  // The pick buys the high ground and not a home up there. The assertion is the
+  // HEIGHT rather than the seconds: what must stay true is that one bar cannot
+  // reach the roof, and that survives a change to either number.
+  ok('and one bar cannot reach the lid', r.floatBarMetres < r.lidHeight,
+    `bar=${r.floatBarMetres}m lid=${r.lidHeight.toFixed(2)}m (${r.floatBarSeconds}s)`);
 
   ok('jackpot is a 1% roll', near(r.jackpotChance, 0.01), String(r.jackpotChance));
   ok('and it fires about that often', Math.abs(r.jackpotRate - 0.01) < 0.006,

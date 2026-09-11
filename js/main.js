@@ -58,7 +58,7 @@
 // framerate decaying over a few waves.
 
 import * as THREE from 'three';
-import { buildArena, BOUND as ARENA_BOUND } from './arena.js';
+import { buildArena, BOUND as ARENA_BOUND, CEIL_Y } from './arena.js';
 import {
   Player, NO_HIT_CAP, MAX_SPEED, flawlessStreakMult, FLAWLESS_STREAK_CAP,
 } from './player.js';
@@ -1572,6 +1572,9 @@ class Game {
       // every frame (see the setShareHook block); a test that drives the enemy
       // step directly never runs that line, so it needs the same door.
       this.__setPoisonCap = setPoisonStackCap;
+      // The lid's height, for the UPDRAFT ceiling assertion - a test must not
+      // hard-code a number the arena owns.
+      this.__ceilForTest = CEIL_Y;
       /**
        * WAIT ON THE GAME CLOCK, not on the wall clock. For test/*.mjs.
        *
