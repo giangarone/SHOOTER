@@ -127,6 +127,37 @@ const THEME_MERCY = THEME.strayMercy;
 const THEME_BANDAGE = THEME.freshBandages;
 const THEME_GRISTLE = THEME.gristle;
 const THEME_UPDRAFT = THEME.updraft;
+// The fourth pool's, for the flashes each of them throws.
+const THEME_SYNCOPATION = THEME.syncopation;
+const THEME_HEARTBEAT = THEME.heartbeat;
+const THEME_POCKET = THEME.pocketGrenade;
+const THEME_PRODIGAL = THEME.prodigalRounds;
+const THEME_FULLLOAD = THEME.fullLoad;
+const THEME_SCYTHE = THEME.scythe;
+const THEME_THROATCUT = THEME.throatCut;
+const THEME_BALLAST = THEME.ballastTanks;
+const THEME_FLOW = THEME.flowReload;
+const THEME_BEDBUGS = THEME.bedbugs;
+const THEME_SPLASHBACK = THEME.splashback;
+const THEME_FRUITS = THEME.firstFruits;
+const THEME_JUMPER = THEME.jumperCables;
+const THEME_DIME = THEME.dimeNovel;
+// COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
+// player's own CHILLED chip is drawn in - one colour for one effect, wherever
+// it is coming from, which is the rule STATUS_TINT exists to hold.
+const CREEP_ICE = 0x63b3ff;
+// How many patches of it may be on the floor at once, and how far the player
+// has to travel to lay the next. Both are the fire trail's own numbers (see
+// MAX_FIRE_PATCHES and FIRE_STEP): a sprint and a slide leave lines of the
+// same grain, so a run holding COLD FOOT and SCORCHED EARTH draws two trails
+// that look like one system rather than two.
+const MAX_ICE_PATCHES = 20;
+const ICE_STEP = 0.85;
+// Seconds a patch of ice lies there. Longer than fire's 2.4 on purpose: fire
+// is an event the player is meant to run through and ice is TERRAIN they are
+// meant to fight around, and a wall that melted as fast as a fire burned out
+// would never be there when the thing chasing them arrived.
+const ICE_LIFE = 5;
 
 // ---- MAG DUMP and FLOOR IS LAVA ------------------------------------------
 
@@ -1315,6 +1346,29 @@ class Game {
     this._fireLaying = false;
     this._fireLastX = 0;
     this._fireLastZ = 0;
+    // COLD FOOT's trail, on the fire trail's exact shape and with a list, a cap
+    // and a laying edge of its own. KEPT APART from _fire rather than folded
+    // into it with a flag, for the reason the fire trail is kept apart from
+    // _ash: one cap over both would mean a sprint out of a reload quietly
+    // evicting the fire a HELLFIRE build had just paid for, and the two zones
+    // do completely different things to whatever stands in them.
+    this._ice = [];
+    this._iceLaying = false;
+    this._iceLastX = 0;
+    this._iceLastZ = 0;
+    // BEDBUGS' second bites: {en, dmg, at}. A list rather than a field on the
+    // enemy because one body can be owed several at once - a scattergun is
+    // eight pellets and eight bites - and because the sweep that pays them has
+    // to be able to drop the ones owed to a body that has already died.
+    this._bites = [];
+    // Where the pulse stood when SYNCOPATION and HEARTBEAT last fired. -1 is
+    // "never", which is what makes the FIRST beat after a pick is claimed wait
+    // for the next one rather than landing instantly - see Turret's _lastPulse
+    // for the same guard and the same reason.
+    this._beatPulse = -1;
+    // Scratch list for the random draw, reused rather than allocated every
+    // beat. One array for a thing that runs twice a second all run.
+    this._beatTargets = [];
     this._ashAt = new THREE.Vector3();
     // Player-damaging ground zones, and telegraphed impacts. Both are plain
     // data with no scene objects of their own, the same trick _ash uses: the
@@ -1489,6 +1543,11 @@ class Game {
       hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
       pull: (point, radius, dist) => this._pull(point, radius, dist, null),
       deploy: (d) => this.deploy(d),
+      // SHARED MAG's tell. The QUIET half of the ammunition readout - just the
+      // flash, no sound and no shockwave - because a turret drinking the
+      // reserve is a steady drain rather than an event, and the player.ammoFx
+      // one-shot the frame loop handles carries both of those with it.
+      flashAmmo: () => this.ui.flashReserve(),
       // THE BEAT, for anything that fires on it. Refreshed per frame in
       // _updateDeployed alongside the enemy context's copy - see Music.pulse.
       pulse: 0,
@@ -2188,6 +2247,13 @@ class Game {
     this._fire.length = 0;
     this._fireUntil = 0;
     this._fireLaying = false;
+    for (const p of this._ice) this.effects.creepRelease(p.creep);
+    this._ice.length = 0;
+    this._iceLaying = false;
+    // BEDBUGS' bites go with the bodies they were owed to. They hold enemy
+    // references, and a bite surviving a reset would be a reference to a
+    // corpse from the last run - see the note on the fuse sweep.
+    this._bites.length = 0;
     // THE ARENA IS DELIBERATELY NOT TOUCHED HERE. This clears ENTITIES, and it
     // is called from the turn handover as well as from a run reset - so it can
     // be called while a perfectly good layout is standing, and it is called
@@ -3433,6 +3499,18 @@ class Game {
       this.player.heal(this.player.mods.itemHeal);
       this.effects.shockwave(this.player.pos, THEME_VITAL, 3.5, 0.35);
     }
+    // DIME NOVEL, third in the row of things a PRESS pays for, beside BAILIFF's
+    // refund and VITAL TRIGGER's heal - all three land the moment the charge is
+    // spent and whatever the item then does, so all three are worth exactly as
+    // much to PAY TO WIN's free press as to LANCE's.
+    //
+    // OPENED FROM NOW rather than extended: twenty seconds is twenty seconds
+    // from the last press, which is the reading a player pressing the button
+    // twice in a fight would expect and the only one that needs no arithmetic.
+    if (this.player.mods.dimeCrit > 0) {
+      this.player.dimeEnd = this.time + this.player.mods.dimeTime;
+      this.effects.shockwave(this.player.pos, THEME_DIME, 4, 0.4);
+    }
     this.running.start(this, id, def);
     this.sfx.itemUse();
     this.pad.rumble(0.6, 0.5, 200, 2);
@@ -4125,6 +4203,16 @@ class Game {
     this.player.armWard();
     // OPENING SALVO opens here, on the same signal the ward is armed on.
     this.player.armSalvo(this.time);
+    // BALLAST TANKS and FIRST FRUITS, on the same signal again - a wave's four
+    // grants are armed in one place so none of them can be forgotten by a
+    // change to the wave boundary. See Player.armWaveGrants.
+    const shieldBefore = this.player.shield;
+    this.player.armWaveGrants();
+    if (this.player.shield > shieldBefore) {
+      this.effects.shockwave(this.player.pos, THEME_BALLAST, 6, 0.5);
+      this.effects.burst(this.player.eyeInto(this._killPos), THEME_BALLAST, 22, 5, 2.6, 0.6);
+      this.sfx.pickupShield();
+    }
     this._reliefT = RELIEF_INTERVAL;
     if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
   }
@@ -5810,6 +5898,29 @@ class Game {
       if (m.overkill > 0 && en.dead && dealt > before) {
         this._carryOver(en, dealt - before);
       }
+      // BEDBUGS. A quarter of what the round was worth, owed to the same body
+      // two seconds from now.
+      //
+      // PER PELLET, and deliberately above the _shotHits guard rather than
+      // below it: the card says a fraction of every HIT'S damage, and a
+      // scattergun shell that put eight pellets into one chest hit it eight
+      // times. This is the one place in the per-pellet half of this method that
+      // is supposed to be here.
+      //
+      // BOOKED OFF `dealt`, which is what the SHOT was worth and not what
+      // landed - armour and the ward have not had their say yet at this point,
+      // and they have their say again when the bite arrives through hurtEnemy.
+      // Charging the reduction twice would make the pick worth a quarter of a
+      // quarter against exactly the armoured types it is meant to wear down.
+      //
+      // AND THE BITE CANNOT BITE. It is paid through hurtEnemy in
+      // _updateBites, which does not come back through here, so a hit can
+      // never schedule a hit that schedules a hit.
+      if (m.bedbugs > 0 && !en.dead) {
+        this._bites.push({
+          en, dmg: dealt * m.bedbugs, at: this.time + m.bedbugsDelay,
+        });
+      }
     }
     // NO PARTICLES ON A HIT. A shot landing on an enemy is already the most
     // confirmed event in the game - the hitmarker, the body's flash and the
@@ -5830,6 +5941,12 @@ class Game {
     }
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
+    // SPLASHBACK. Whatever is on the PLAYER right now, on the body they just
+    // hit. Below the passive item statuses because it is one more of them, and
+    // in the per-SHOT half of this method (under the _shotHits guard) because
+    // it is a question about the trigger pull rather than about the pellet -
+    // the same rule the four above it follow.
+    if (m.splashback > 0) this._splashback(en);
     if (m.petrifyChance && Math.random() < m.petrifyChance) {
       en.applyStatus('freeze', m.petrifyTime);
     }
@@ -6141,6 +6258,28 @@ class Game {
       this.effects.addShake(0.18);
       this.pad.rumble(0.7, 0.4, 220, 2);
     }
+    // ODD COUPLE and EVEN BETTER, on `magAtShot` - what the TRIGGER saw, never
+    // the live count, for the reason FATAL RESERVE and HARM WANDS read it: by
+    // the time anything downstream looks the magazine has already been billed,
+    // by one round or by three under TRIPLE TAP or by none at all under BELT
+    // FEED, and this is the only number that answers the card's question the
+    // same way for every build.
+    //
+    // GATED ON A MAGAZINE EXISTING. `magAtShot` is zero for a round billed
+    // straight off the reserve (BELT FED DREAM) and for one bought with money
+    // (CASH CANNON) - and zero is an even number, so without this test EVEN
+    // BETTER would quietly be an unconditional +20% to exactly the two builds
+    // that have no magazine to read.
+    //
+    // HERE RATHER THAN IN _hitMult, because it is a question about the SHOT and
+    // not about the body it lands on - which is the only kind of question that
+    // function answers. It also means a melee swing, which has no magazine
+    // behind it, is untouched by either pick.
+    if (this.player.magAtShot > 0 && (mods.oddCouple > 0 || mods.evenBetter > 0)) {
+      const odd = (this.player.magAtShot & 1) === 1;
+      if (odd && mods.oddCouple > 0) dmgMult *= 1 + mods.oddCouple;
+      if (!odd && mods.evenBetter > 0) dmgMult *= 1 + mods.evenBetter;
+    }
     if (mods.cursedChance > 0 && this.player.health > 1
       && Math.random() < mods.cursedChance) {
       this.player.health = Math.max(1, this.player.health - 1);
@@ -6255,6 +6394,31 @@ class Game {
       this._blast(this._lastImpact, mods.chargeDamage, mods.chargeRadius, null, false);
       this.effects.addShake(0.2);
     }
+    // POCKET GRENADE. The round that emptied the magazine, as a blast.
+    //
+    // `magAtShot <= lastShotCost` is the one pair that answers "was that the
+    // last round" for every build - CHAIN FEED asks it the same way and for the
+    // same reason. A shot billed to the reserve or to the wallet has
+    // `magAtShot` at zero and is correctly not the last round of anything.
+    //
+    // BESIDE BREACH ROUND rather than in the enemy branch, because a grenade
+    // buried in a wall still goes off: the round was spent either way, and a
+    // version that paid only on a hit would punish the miss twice.
+    //
+    // THREE TIMES THE SHOT, which is the shot the player just fired and not the
+    // weapon's base - dmgMult carries CANNONADE, the gamble, the cursed round
+    // and the two parity picks, so the grenade is worth what the round that
+    // became it was worth.
+    if (mods.pocketGrenade > 0 && this.player.magAtShot > 0
+      && this.player.magAtShot <= this.player.lastShotCost) {
+      const worth = this.player.getEffectiveDamage(w.damage) * dmgMult * mods.pocketGrenade;
+      this._blast(this._lastImpact, worth, mods.pocketRadius, null, false);
+      this.effects.shockwave(this._lastImpact, THEME_POCKET, mods.pocketRadius, 0.6);
+      this.effects.burst(this._lastImpact, THEME_POCKET, 20, 6, 3, 0.5);
+      this.effects.addShake(0.24);
+      this.pad.rumble(0.6, 0.4, 180, 2);
+      this.sfx.impact();
+    }
     // LUCKY STREAK's body, read BEFORE the dedup set is emptied. One trigger
     // pull is one entry in it however many pellets landed, which is exactly the
     // grain the streak counts in - and the first entry is the body the shot was
@@ -6326,6 +6490,27 @@ class Game {
       this.player.heal(1);
       this.effects.impact(this.player.eyeInto(this._killPos), 0xff2d6f, 6, 3, 2, 0.3);
     }
+    // PRODIGAL ROUNDS. BRASS ECHO's mirror image, written beside the hitmarker
+    // branch below and off the same boolean, so the two can never disagree
+    // about what a miss is - between them there is no shot in the game that is
+    // simply gone.
+    //
+    // WHAT THE SHOT SPENT, not what a shot costs: a round fired inside OPENING
+    // SALVO's free window cost nothing, and paying it back would be making
+    // ammunition rather than getting it back. Same test tryAmmoRefund makes.
+    if (!hitAny && mods.prodigal > 0 && this.player.lastShotCost > 0
+      && this.player.reserveAmmo < this.player.maxReserve
+      && Math.random() < mods.prodigal) {
+      this.player.reserveAmmo = Math.min(
+        this.player.maxReserve, this.player.reserveAmmo + this.player.lastShotCost
+      );
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), THEME_PRODIGAL, 6, 3, 1.6, 0.3
+      );
+      // The number in the corner is where the player actually reads their
+      // ammunition; a puff at the muzzle in a firefight is not a readout.
+      this.ui.flashReserve();
+    }
     if (hitAny) {
       this.stats.hits++;
       this.sfx.hit();
@@ -6346,6 +6531,43 @@ class Game {
       }
     }
     targets.length = 0;
+  }
+
+  /**
+   * THROAT CUT. One body, finished outright, or nothing at all.
+   *
+   * WRITTEN RATHER THAN DEALT, and that is the whole reason it is a method.
+   * The obvious implementation is `hurtEnemy(e, e.hp + 1)` - which is what LAST
+   * RITES does - and it is wrong for an EXECUTION: takeDamage multiplies a blow
+   * by the type's armour before subtracting it, so `hp + 1` against a
+   * Colossus's 0.22 plating leaves the thing standing on four fifths of what it
+   * had. An item that finishes the nearly dead can live with that; a card that
+   * says "instantly kills" cannot.
+   *
+   * So it takes _executeBoss's route: hp to zero, `dead` raised, and the death
+   * sweep in _updateEnemies books the bounty, the drop, the combo and the
+   * corpse exactly as it does for anything else that died this frame. Nothing
+   * downstream can tell the difference, which is the point.
+   *
+   * NOT BOSSES, and the refusal is absolute. See the note on the entry.
+   *
+   * @returns {boolean} whether the body was taken - false means the caller
+   *   should deal its ordinary damage instead.
+   */
+  _throatCut(e) {
+    const at = this.player.mods.throatCut;
+    if (at <= 0 || e.dead || e.boss) return false;
+    if (e.hp > e.maxHp * at) return false;
+    // A HARD LINE NEEDS A LOUD TELL. The body simply vanishing with no number
+    // off it is the one outcome a player reads as the game dropping their
+    // swing rather than as the swing having worked, so what it had left is
+    // reported as the blow that took it - which it was.
+    this.effects.damageNumber(e.pos, e.hp, true, false);
+    e.hp = 0;
+    e.dead = true;
+    this.effects.impact(e.pos, THEME_THROATCUT, 14, 6, 3, 0.45);
+    this.effects.burst(e.pos, THEME_THROATCUT, 18, 5, 2.6, 0.5);
+    return true;
   }
 
   // Arms a swing. THE HIT IS NOT DEALT HERE: player.tryMelee() starts the
@@ -6382,6 +6604,11 @@ class Game {
     // to reward the one attack that requires it.
     const crit = this.player.rollCrit();
     const cosArc = Math.cos(MELEE_ARC);
+    // LONG ARM. A FRACTION of the base reach rather than a flat number of
+    // metres, so the "+ e.radius" below still does its job: the reach grows
+    // with the target either way, and a boss stays meleeable from outside its
+    // own surface at double the range exactly as it was at single.
+    const reach = MELEE_RANGE * (1 + this.player.mods.meleeReach);
     let target = null;
     let bestD = Infinity;
     let bestDX = 0;
@@ -6395,7 +6622,7 @@ class Game {
       // Reach grows with the target: a boss two metres wide would otherwise be
       // unmeleeable, since its surface is already past MELEE_RANGE while its
       // centre is far outside it.
-      if (d > MELEE_RANGE + e.radius - 0.5) continue;
+      if (d > reach + e.radius - 0.5) continue;
       // Anything the player is standing inside has no meaningful direction, so
       // it is always in the arc.
       if (d > 0.001 && (dx * forward.x + dz * forward.z) / d < cosArc) continue;
@@ -6435,11 +6662,60 @@ class Game {
     this._shotCrit.clear();
     // A swing travels from the player toward the enemy, which is what tells
     // a shield or a weak point whether it was struck.
-    target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, hot);
+    //
+    // THROAT CUT ABOVE THE BLOW, not after it. The question the card asks is
+    // whether the body the swing ARRIVED AT was under half, and asking it
+    // afterwards would ask about a body the swing had already taken from 60%
+    // to 45% - a version of the pick that finishes anything it can bring under
+    // the line in one hit, which is a different and much larger promise.
+    if (!this._throatCut(target)) {
+      target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, hot);
+    }
     // TAGGED, NOT PAID. The reward is worked out in one place - the death
     // sweep in _updateEnemies - and this only records how the body died, so
     // the combo multiplier and the double still compose there.
     if (target.dead) target.meleeKill = true;
+    // SCYTHE. Everything else in the arc takes the same number the target took
+    // - not a share of it, which is what separates this from SHARED PAIN - and
+    // it is the same number for the reason EVERYONE FELT THAT's sweep uses one:
+    // the figure floating off the target has to be the figure every other body
+    // is taking, or the player is reading a lie.
+    //
+    // THE ARC AND THE REACH, both the ones the primary target was found
+    // through, so LONG ARM widens the sweep exactly as far as it lengthens the
+    // strike. EVERYONE FELT THAT is the item that takes the whole ROOM; this
+    // takes a direction, which is the difference between the two.
+    //
+    // A copy of the roster, for PAY TO WIN's reason: a splitter's children are
+    // pushed onto `enemies` the moment the parent dies, and something that was
+    // not standing there when the swing landed must not be hit by it.
+    if (this.player.mods.scythe > 0) {
+      const fwd = this._meleeDir;
+      for (const e of this.enemies.slice()) {
+        if (e.dead || e === target) continue;
+        const ex = e.pos.x - this.player.pos.x;
+        const ez = e.pos.z - this.player.pos.z;
+        const ed = Math.hypot(ex, ez);
+        if (ed > reach + e.radius - 0.5) continue;
+        if (ed > 0.001 && (ex * fwd.x + ez * fwd.z) / ed < cosArc) continue;
+        this.effects.impact(e.pos, THEME_SCYTHE, 8, 4, 2.5, 0.35);
+        // THROAT CUT reaches every body the swing touched, this one included.
+        // The pick is about what a SWING does to something under half, and a
+        // sweep is a swing - a version that spared the bodies at the edge of
+        // the arc would be a rule with no reading the player could guess.
+        //
+        // Through hurtEnemy for the direction the sweep has none of: the blow
+        // arrives from the player, not along the line to any one target.
+        if (!this._throatCut(e)) this.hurtEnemy(e, dealt);
+        // TAGGED AS MELEE KILLS. The double bounty and BLOODSPORT's heal are
+        // both worked out from that flag in the death sweep, and a body taken
+        // down by the butt of the gun is a melee kill wherever in the arc it
+        // was standing.
+        if (e.dead) e.meleeKill = true;
+      }
+      this.effects.shockwave(this.player.pos, THEME_SCYTHE, reach, 0.5);
+      this.effects.addShake(0.16);
+    }
     // CROWBAR's ten rounds. ON THE HIT AND NOT ON THE KILL: the swing that
     // connected is the one that cost the player the walk, and paying on the
     // kill would pay a build that was already winning. Off the TARGET, so
@@ -6629,6 +6905,22 @@ class Game {
     }
     // PANIC TURRET, placed by the hit that just landed.
     if (this.player.mods.panicTurret > 0) this._panicTurret();
+    // JUMPER CABLES. Beside PANIC TURRET and BRUISE ROUNDS because it is the
+    // third of the same shape: something the player gets back for having been
+    // hit, paid on the blow and not on the damage.
+    //
+    // HERE AND NOT IN _hurtPlayerDot, which is the whole of what makes it a
+    // pick rather than an exploit. Fire, poison and the lava floor bill through
+    // that door several times a second, and paying them would make standing in
+    // a hazard the fastest way to charge an item in the game - a mechanic whose
+    // optimal play is to stop playing. A blow that arrived from something in
+    // the room is what this counts, once per blow.
+    if (this.player.mods.hitCharge > 0) {
+      this.player.addItemCharge(this.player.mods.hitCharge);
+      this.effects.burst(
+        this.player.eyeInto(this._killPos), THEME_JUMPER, 10, 4, 2, 0.3
+      );
+    }
     // What LANDED, not what was thrown: curse is applied inside takeDamage.
     // Books the damage and breaks the flawless streak - see _noteDamage.
     this._noteDamage();
@@ -7173,6 +7465,19 @@ class Game {
         // banner would wipe the first before it could be read.
         const earned = this._payInterest();
         if (earned > 0) msg += '  INTEREST +$' + earned;
+        // FULL LOAD, last of all.
+        //
+        // AT THE CLEAR AND NOT AT THE OPEN, which is the whole of what makes it
+        // worth a draft pick rather than a convenience: the SHOP happens
+        // between the two, so a reserve filled here is money the player still
+        // has while the stations are standing. Filled at the open it would
+        // arrive after the only moment it could have changed a purchase.
+        //
+        // AFTER THE FLAWLESS RESUPPLY above, so a run holding both is not told
+        // twice about the same rounds - resupply reports what it actually gave,
+        // and by the time this runs there is nothing left for it to report.
+        const loaded = this._fullLoad();
+        if (loaded > 0) msg += '  FULL LOAD +' + loaded + ' ROUNDS';
         this.ui.banner(msg);
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
@@ -7256,6 +7561,53 @@ class Game {
       this._placeDrop('health', this._lastKillPos);
     }
     this.effects.shockwave(this._lastKillPos, THEME_CURTAIN, 5, 0.5);
+  }
+
+  /**
+   * FULL LOAD. The reserve and the magazine, both to the top, at every clear.
+   *
+   * THE MAGAZINE TOO, which nothing else in the game does for free - a FLAWLESS
+   * resupply deliberately leaves it alone (see Player.resupply), because that
+   * one is a reward for a wave taken perfectly and the reload is a second and a
+   * half the player can spend in the shop. This is the whole of what the pick
+   * is, and a player who read "refilled" and then had to stand through a reload
+   * at the top of the next wave would be right to call it broken.
+   *
+   * THE MAGAZINE IS FILLED FROM THE FULL RESERVE, in that order, so a run that
+   * walked in empty gets both rather than a magazine's worth of the reserve it
+   * was just given. A reload already in flight is cancelled: the rounds are in.
+   *
+   * @returns {number} rounds actually granted, so the banner can stay quiet for
+   *   a player who was already full - a line announcing nothing is noise.
+   */
+  _fullLoad() {
+    const p = this.player;
+    if (p.mods.fullLoad <= 0) return 0;
+    const before = p.reserveAmmo + p.mag;
+    // THE MAGAZINE IS FILLED FIRST AND THE RESERVE TOPPED UP AFTER IT, and the
+    // order is the difference between "refilled" and "nearly refilled": done
+    // the other way round the magazine is fed out of a reserve that is already
+    // at its ceiling, so the run walks into the next wave thirty rounds short
+    // of the maximum the card promised - and calling this again would hand
+    // those thirty back, which is a refill that pays twice.
+    //
+    // BELT FED DREAM has no magazine to fill - `mag` is a mirror of the
+    // reserve, rewritten every frame (see Player.update), so a round written
+    // into it would be gone by the next one.
+    if (p.mods.beltFedDream <= 0 && p.mag < p.magSize) {
+      p.mag = p.magSize;
+      p.reloading = 0;
+      // A full magazine is a fresh magazine, so CANNONADE's round is armed by
+      // it: the rounds arrived, which is the only question that pick asks.
+      p.magFresh = true;
+    }
+    p.reserveAmmo = p.maxReserve;
+    const got = Math.round(p.reserveAmmo + p.mag - before);
+    if (got <= 0) return 0;
+    this.ui.flashReserve();
+    this.effects.shockwave(p.pos, THEME_FULLLOAD, 7, 0.5);
+    this.sfx.pickupAmmo();
+    return got;
   }
 
   /**
@@ -8244,7 +8596,12 @@ class Game {
       // item, or a meter already at its ceiling, and the category is skipped
       // outright rather than left to land as a plate the player walks over for
       // nothing - the same rule health holds at a full bar.
-      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax
+      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax,
+      // PLASMA BAG lifts the full-bar gate on the health plate. The gate is not
+      // a rule about health - it is the rule that a drop which cannot be SPENT
+      // should not be rolled - and a crate carrying ten points of shield can be
+      // spent on a full bar.
+      this.player.mods.crateShield > 0
     );
     if (kind) this._placeDrop(kind, pos);
   }
@@ -8266,7 +8623,8 @@ class Game {
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
       this._ammoActive() < MAX_ACTIVE_AMMO,
       this.player.mods.dropLuck,
-      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax
+      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax,
+      this.player.mods.crateShield > 0
     );
   }
 
@@ -8741,11 +9099,32 @@ class Game {
       // pays out by bleeding at health thresholds and by its own bounty, and a
       // counter spent on the one body that is already a payout would be a drop
       // the player never sees.
-      const pinata = !e.boss && this.player.pinataLeft > 0
-        ? this._pinataKind() : null;
-      if (pinata) {
-        this.player.pinataLeft--;
-        this._placeDrop(pinata, e.pos);
+      //
+      // FIRST FRUITS SHARES THE COUNTER'S RULES AND NOT ITS COUNTER. It is the
+      // same guarantee off the same table - a plate the player can actually use
+      // - so it asks _pinataKind the same question and spends nothing when the
+      // answer is no. What separates the two is WHEN: PINATA is five kills
+      // bought with an item press, and this is the first three of every wave,
+      // armed by armWaveGrants and never banked.
+      //
+      // PINATA IS TESTED FIRST because it was PAID FOR. A player holding both
+      // on the opening kills of a wave spends the press's counter before the
+      // wave's free one, which is the reading that never wastes the thing that
+      // cost something.
+      let forced = null;
+      if (!e.boss && this.player.pinataLeft > 0) {
+        forced = this._pinataKind();
+        if (forced) this.player.pinataLeft--;
+      }
+      if (!forced && !e.boss && this.player.fruitsLeft > 0) {
+        forced = this._pinataKind();
+        if (forced) {
+          this.player.fruitsLeft--;
+          this.effects.shockwave(e.pos, THEME_FRUITS, 4, 0.4);
+        }
+      }
+      if (forced) {
+        this._placeDrop(forced, e.pos);
       } else if (!e.boss) this._rollDrop(e.pos);
       if (e.boss) this._bossDeathPos.copy(e.pos);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
@@ -9018,6 +9397,228 @@ class Game {
         );
       }
     }
+  }
+
+  // ---- the two picks that hang off the music -------------------------------
+
+  /**
+   * SYNCOPATION and HEARTBEAT, on the downbeat.
+   *
+   * ON THE PULSE EDGE AND ON THE WHOLE BEAT. The sentries fire twice a beat
+   * (see Turret.update) and the burn ticks on the upbeat; a third thing landing
+   * on every pulse would make the beat a wash of numbers rather than a rhythm.
+   * Once a beat is a thing the player can HEAR arriving, which is the only
+   * reason to hang either of these on the music at all.
+   *
+   * `_beatPulse` is the edge, held the way every other reader of Music.pulse
+   * holds one - see the worked example in music.js. Sampling the pulse VALUE
+   * rather than a timer of our own is what stops a long frame swallowing a beat
+   * or a short one firing two.
+   *
+   * NEITHER OF THEM BOOKS A KILL. Everything here goes through hurtEnemy, and
+   * the death sweep in _updateEnemies collects whatever died this frame
+   * whatever killed it - the combo, the bounty and the drop all compose there
+   * and nothing needs a second path.
+   */
+  _updateBeatPicks() {
+    const m = this.player.mods;
+    if (m.syncopation <= 0 && m.heartbeat <= 0) return;
+    if (this.music.pulse === this._beatPulse) return;
+    const first = this._beatPulse < 0;
+    this._beatPulse = this.music.pulse;
+    if (first || !this.music.pulseWhole) return;
+    if (!this.enemies.length) return;
+
+    // SYNCOPATION. One body, chosen at random out of the living, for one of the
+    // player's own shots - through Player.dotHit, so it grows with the build
+    // the way every other proc in the game does rather than sitting at a flat
+    // number that is everything on wave four and nothing on wave forty.
+    //
+    // THE ROLL IS OVER THE LIVING ONLY. Taking a random index out of `enemies`
+    // and skipping it if it was dead would quietly make the pick fire less
+    // often the more bodies were waiting to be swept, which is a rate nobody
+    // could have predicted from the card.
+    if (m.syncopation > 0) {
+      const live = this._beatTargets;
+      live.length = 0;
+      for (const e of this.enemies) if (!e.dead) live.push(e);
+      if (live.length) {
+        const pick = live[(Math.random() * live.length) | 0];
+        this.effects.impact(pick.pos, THEME_SYNCOPATION, 8, 4, 2.2, 0.3);
+        this.hurtEnemy(pick, this.player.dotHit * m.syncopation);
+      }
+      live.length = 0;
+    }
+    // HEARTBEAT. A coin per body per downbeat, and a flat point when it wins.
+    //
+    // A FLAT POINT AND NOT A FRACTION, which is the one number in the pool that
+    // does not scale with the build - see the note on the entry. What that buys
+    // is a pick whose value is about the SIZE OF THE WAVE, so it is worth
+    // taking on a run that has drafted no damage at all.
+    //
+    // NO PARTICLE PER BODY. Thirty enemies each tossing a coin is up to six
+    // impact bursts a beat, and the pool that draws them is shared with every
+    // hit the player is landing at the same time.
+    if (m.heartbeat > 0) {
+      for (const e of this.enemies.slice()) {
+        if (e.dead) continue;
+        if (Math.random() >= m.heartbeat) continue;
+        this.hurtEnemy(e, m.heartbeatHit);
+      }
+    }
+  }
+
+  // ---- COLD FOOT: the ice a sprint lays ------------------------------------
+
+  // One patch of it: the fire trail's four-numbers-and-a-drip shape, on its own
+  // list with its own cap, for the reason the fire trail is kept off the ash
+  // list - see the note on _addFire. Friendly creep, exactly like ash and fire:
+  // the player standing in their own ice has to be visibly safe, or nobody will
+  // ever sprint.
+  _addIce(x, z) {
+    if (this._ice.length >= MAX_ICE_PATCHES) {
+      this.effects.creepRelease(this._ice.shift().creep);
+    }
+    this._ice.push({
+      x, z, life: ICE_LIFE, radius: this.player.mods.coldFootRadius, drip: 0,
+      creep: this.effects.creepAcquire(false),
+    });
+    this.effects.burst(this._ashAt.set(x, 0.25, z), CREEP_ICE, 4, 1.4, 1.4, 0.5);
+  }
+
+  /**
+   * Lays the trail while the player is running and runs the patches down
+   * behind them.
+   *
+   * DISTANCE-GATED, exactly as the fire trail is, and with the same first-patch
+   * edge: a sprint that began near an old patch would otherwise drop nothing
+   * for its first metre, because the gate measures against a stale coordinate.
+   *
+   * OFF THE SPRINT AND NOT THE SLIDE, which is the whole difference between
+   * this and SCORCHED EARTH. A slide is a second and a direction, so what it
+   * leaves is a wall; a sprint is however long the stamina bar lasts and
+   * wherever the player chooses to go, so what this leaves is a floor they can
+   * draw on - and the thing chasing them has to cross whatever they drew.
+   */
+  _updateIce(dt) {
+    const m = this.player.mods;
+    const laying = m.coldFoot > 0 && this.player.sprinting;
+    const began = laying && !this._iceLaying;
+    this._iceLaying = laying;
+    if (laying) {
+      const dx = this.player.pos.x - this._iceLastX;
+      const dz = this.player.pos.z - this._iceLastZ;
+      if (began || dx * dx + dz * dz > ICE_STEP * ICE_STEP) {
+        this._iceLastX = this.player.pos.x;
+        this._iceLastZ = this.player.pos.z;
+        this._addIce(this.player.pos.x, this.player.pos.z);
+      }
+    }
+    for (let i = this._ice.length - 1; i >= 0; i--) {
+      const p = this._ice[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.effects.creepRelease(p.creep);
+        this._ice.splice(i, 1);
+        continue;
+      }
+      this.effects.creepSet(p.creep, p.x, p.z, p.radius, CREEP_ICE, Math.min(1, p.life));
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dx = e.pos.x - p.x;
+        const dz = e.pos.z - p.z;
+        if (dx * dx + dz * dz > p.radius * p.radius) continue;
+        // IT SLOWS AND IT DOES NOT HURT. There is already one thing the player
+        // lays behind them that deals damage, and a second would only be a
+        // worse version of it. Re-applied every frame an enemy is inside:
+        // applyStatus refreshes rather than stacking, so this holds the timer
+        // up while they stand in it and lets it run down the moment they leave
+        // - the same contract the fire trail holds, and the reason the ice is
+        // felt as a place rather than as a hit.
+        e.applyStatus('slow', m.coldFoot);
+      }
+      // A third the rate a hazard pool drips at, for the fire trail's reason:
+      // twenty of these can be on the floor at once.
+      p.drip -= dt;
+      if (p.drip <= 0) {
+        p.drip = 0.5;
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * p.radius;
+        this.effects.burst(
+          this._ashAt.set(p.x + Math.cos(ang) * r, 0.2, p.z + Math.sin(ang) * r),
+          CREEP_ICE, 2, 1.0, 1.4, 0.8
+        );
+      }
+    }
+  }
+
+  // ---- BEDBUGS: the second bite --------------------------------------------
+
+  /**
+   * The bites coming due. A quarter of what a round was worth, landing on the
+   * body it was fired into two seconds after the fact.
+   *
+   * IT DIES WITH THE BODY, on DELAYED FUSE's terms and for its reason: what is
+   * owed to a corpse would arrive as an unattributable number over an empty
+   * floor, and a wave killed quickly would end in a minute of them. Tested here
+   * rather than hooked into the kill sweep because `dead` is raised the instant
+   * the killing blow lands whatever dealt it, and this sweep runs before the
+   * roster is compacted - so no death can be missed and none of them needs a
+   * line of its own.
+   *
+   * THROUGH hurtEnemy AND NOT BACK THROUGH _landShot. That is what bounds the
+   * whole mechanic: a bite deals damage and books nothing, so it cannot arm a
+   * bite of its own and a hit can never become an infinite series.
+   *
+   * NO DIRECTION IS PASSED. A bite arrives from inside the body rather than
+   * along the line the round travelled, so armour reads its default - which is
+   * the same answer poison, fire and every blast in the game get, and is the
+   * honest one for damage that was already inside.
+   */
+  _updateBites() {
+    for (let i = this._bites.length - 1; i >= 0; i--) {
+      const b = this._bites[i];
+      if (!b.en || b.en.dead) {
+        this._bites.splice(i, 1);
+        continue;
+      }
+      if (this.time < b.at) continue;
+      this._bites.splice(i, 1);
+      this.effects.impact(b.en.pos, THEME_BEDBUGS, 5, 2.5, 1.4, 0.24);
+      this.hurtEnemy(b.en, b.dmg);
+    }
+  }
+
+  /**
+   * SPLASHBACK. Every affliction the player is carrying, put on the body they
+   * just hit.
+   *
+   * ONLY WHAT AN ENEMY CAN CARRY, and the mapping is the whole method. Burning,
+   * poison, the chill and fear exist on both sides of this fight and are passed
+   * straight through - `slowness` on the player is `slow` on an enemy, which is
+   * the one name that differs. WEAKNESS and CURSE exist only on the player (see
+   * status.js): there is nothing on an enemy for them to become, and inventing
+   * a meaning for them here would be a second definition of a word the player
+   * already knows from their own HUD.
+   *
+   * THE POWER IS THE PLAYER'S OWN SHOT, through Player.dotHit, exactly as VENOM
+   * and INCENDIARY's are - so a poison the player is carrying comes off a body
+   * at the rate the player's gun does, not at the rate of whatever poisoned
+   * them. Scaled by MALADY like every other damage-over-time in the game.
+   *
+   * THE DURATION IS THE PLAYER'S REMAINING TIME, not the table's full one. What
+   * the card promises is that the shots carry what the player has, and eight
+   * fresh seconds of poison off a burn with half a second left would be the
+   * pick manufacturing an affliction rather than passing one on.
+   */
+  _splashback(en) {
+    const m = this.player.mods;
+    const P = this.player.status;
+    const power = this.player.dotHit * m.dotPower;
+    if (P.fire > 0) en.applyStatus('burn', P.fire * m.dotTime, power);
+    if (P.poison > 0) en.applyStatus('poison', P.poison * m.dotTime, power);
+    if (P.slowness > 0) en.applyStatus('slow', P.slowness);
+    if (P.fear > 0) en.applyStatus('fear', P.fear);
   }
 
   // Runs the clouds down and sets fire to whatever is standing in one. The
@@ -9568,11 +10169,20 @@ class Game {
     // are things the BUILD decides and the systems that read them have no way
     // to ask. Idempotent - setLifetime returns immediately when nothing moved.
     this.money.setLifetime(ORB_LIFETIME * this.player.mods.lootDespawn);
+    // VINTAGE ORBS' rate, published on the same line and for the same reason:
+    // money.js is a leaf with no player to read, and both numbers can change
+    // between any two waves. Note the ORDER - the fuse is set first, so the
+    // ceiling the age bonus is clamped against is this frame's fuse and not
+    // last frame's. A run holding FIRE SALE as well therefore ripens its orbs
+    // over ten seconds rather than twenty, which is the honest reading: the
+    // bonus is paid for time on the floor, and that pick halves the time there
+    // is.
+    this.money.setVintage(this.player.mods.vintage);
     // Beside the balance, because it is a fact about the balance: it is the
     // rate everything on the floor is being paid at. Hidden at 1x - a "x1"
     // sitting there permanently is not information.
     this.ui.setFlawless(this.flawlessMult());
-    this.ui.setHealth(this.player.health, this.player.maxHealth);
+    this.ui.setHealth(this.player.health, this.player.maxHealth, this.player.shield);
     this.ui.setStamina(
       this.player.staminaFrac, this.player.staminaLow, this.player.staminaLocked
     );
@@ -9806,6 +10416,21 @@ class Game {
         );
         this.pad.rumble(0.8, 0.6, 200, 3);
       }
+      // FLOW RELOAD. The same shape again: a one-shot raised in player.js,
+      // which has no effects reference and no sound of its own.
+      //
+      // NO BANNER, and that is a deliberate difference from the two above. The
+      // window is one second long and opens several times a wave; a caption
+      // that replaced whatever was on screen every time a magazine was changed
+      // would wipe the wave line, the flawless line and the no-hit line all
+      // day. A ring at the feet and the invulnerability frame the HUD already
+      // draws for AEGIS are the tell - the player is told the same way they are
+      // told about every other second of immunity in the game.
+      if (this.player.flowFx) {
+        this.player.flowFx = false;
+        this.effects.shockwave(this.player.pos, THEME_FLOW, 5, 0.5);
+        this.sfx.pickupShield();
+      }
       // UPDRAFT. A wisp under the feet on every frame the float is holding, so
       // the stamina the player is spending is visible where they are looking.
       // Throttled off the frame clock rather than fired every frame: at 60fps
@@ -9903,6 +10528,15 @@ class Game {
       // frame as a dead enemy that is still being drawn.
       this._updateAsh(dt);
       this._updateFire(dt);
+      // COLD FOOT's ice, beside the fire trail it is modelled on and before the
+      // enemy sweep for the reason the ash and the poison spread are there: a
+      // body killed by one of these this frame is collected by the sweep this
+      // frame rather than drawn for one more.
+      this._updateIce(dt);
+      // BEDBUGS' second bites and the two picks that ride the beat, on the same
+      // side of the sweep and for the same reason.
+      if (this._bites.length) this._updateBites();
+      this._updateBeatPicks();
       this._updateHazard(dt);
       // FIRE and POISON on the PLAYER. player.update() ran the timers and put
       // the fractional damage on a tab; this is where it is paid, through the

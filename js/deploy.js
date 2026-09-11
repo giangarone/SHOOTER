@@ -213,7 +213,55 @@ export class Turret {
     _v.copy(target.pos).setY(target.pos.y + 0.9);
     ctx.effects.tracer(this.muzzle, _v);
     ctx.effects.flash(this.muzzle);
-    ctx.hurtEnemy(target, this.damage);
+    // ---- THE THREE TURRET PICKS --------------------------------------------
+    //
+    // All three read `ctx.player.mods` LIVE rather than being snapshotted with
+    // the damage above, and the difference is deliberate. The damage is what
+    // the thing was BUILT out of - the gun in the player's hands at the throw -
+    // and a turret that got stronger because a totem was claimed while it was
+    // standing would be a second weapon nobody is aiming. These are not the
+    // turret; they are the BELT it is being fed from and what is in the rounds,
+    // and both of those belong to the player right now. A player who claims
+    // VENOMGRID mid-wave expects the sentries they can see to start poisoning.
+    const m = ctx.player.mods;
+    let dmg = this.damage;
+    // SHARED MAG. A round off the player's own reserve buys three times the
+    // shot - and out of ammunition the turret keeps firing at the ordinary
+    // number, which is the line that makes the pick safe to take blind: the
+    // worst case is the turret the player already had, never a turret that has
+    // stopped working.
+    if (m.sharedMag > 0 && ctx.player.reserveAmmo >= m.sharedMagCost) {
+      ctx.player.reserveAmmo -= m.sharedMagCost;
+      dmg *= m.sharedMag;
+      // The number in the corner is where the player reads their ammunition,
+      // and three turrets drinking twelve rounds a second between them is a
+      // thing they have to be able to SEE happening.
+      //
+      // THE READOUT'S FLASH AND NOT `ammoFx`. That flag is LAST BREATH's
+      // one-shot and carries a sound and a shockwave with it (see the frame
+      // loop); raised four times a second per turret it would be a klaxon.
+      // This is the quiet half of the same tell, which is all a steady drain
+      // needs.
+      if (ctx.flashAmmo) ctx.flashAmmo();
+    }
+    ctx.hurtEnemy(target, dmg);
+    // VENOMGRID and HELLSPITTER. The player's own poison and fire, through
+    // Player.dotHit and scaled by MALADY exactly as the gun's are - a turret
+    // with a status of its own would be a fourth number with a fourth rate that
+    // nobody could find. Applied after the damage so a body the shot killed is
+    // not given eight seconds of poison it will never spend.
+    if (!target.dead) {
+      if (m.turretPoison > 0) {
+        target.applyStatus(
+          'poison', m.turretPoisonTime * m.dotTime, ctx.player.dotHit * m.turretPoison * m.dotPower
+        );
+      }
+      if (m.turretBurn > 0) {
+        target.applyStatus(
+          'burn', m.turretBurnTime * m.dotTime, ctx.player.dotHit * m.turretBurn * m.dotPower
+        );
+      }
+    }
     ctx.sfx.turret();
     // A shallow blink DOWN on the shot rather than a flare up: the flash at
     // the muzzle is already the bright thing, and two bright things on the

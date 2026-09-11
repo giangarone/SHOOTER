@@ -28,8 +28,8 @@ Grep for the thing you touched if it is not here; these are the common ones.
 
 | changed | run |
 |---|---|
-| a passive or active item, the pool, the box | `newpool` `thirdpool` `active` `icons` |
-| an upgrade's numbers | `newpool` `thirdpool` `icons`, plus whatever it modifies |
+| a passive or active item, the pool, the box | `newpool` `thirdpool` `fourthpool` `active` `icons` |
+| an upgrade's numbers | `newpool` `thirdpool` `fourthpool` `icons`, plus whatever it modifies |
 | an enemy, or a theme's table | `themes` `icons`, that theme's own suite, `boss` |
 | movement - sprint, crouch, slide, dash, jump | `crouch` `sprint` `pad` |
 | the weapon, the cone, recoil, reload | `accuracy` `aim` `seeker` `headshot` |

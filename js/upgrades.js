@@ -275,6 +275,50 @@ export const THEME = {
   scorchedEarth: 0xe25822,   // the slide that leaves a line
   // what happens around you
   quorum: 0xf9b233,          // ten bodies, one gun
+  // ---- THE TWENTY-SEVEN THAT CAME IN WITH THE FOURTH POOL -------------------
+  //
+  // Same rule as every block above: the colour is what the pick DOES. Most of
+  // them land in families that already existed - the armour cyans, the fire
+  // oranges, the poison greens, the economy golds - and the two genuinely new
+  // ones are the RHYTHM pair, which get the game's danger pinks because what
+  // they do is put damage in the room on a clock the player does not control.
+  //
+  // the music, which nothing in the pool had ever paid for
+  syncopation: 0xff33ee,     // the off-beat, striking on its own
+  heartbeat: 0xff0066,       // the downbeat, felt in every body at once
+  // the magazine, read as a number rather than as a supply
+  oddCouple: 0x9ecbff,       // an odd count
+  evenBetter: 0x5f9ee8,      // ...and its opposite, one shade down
+  hotMag: 0xff7f2a,          // a full magazine, running hot
+  pocketGrenade: 0xff5722,   // the round at the bottom of it, going off
+  prodigalRounds: 0xc8b560,  // the shot that missed, come home
+  fullLoad: 0xffc266,        // the reserve, filled at every clear
+  // the butt of the rifle, three ways
+  longArm: 0xa9744f,         // reach, in CROWBAR's own brown
+  scythe: 0x7f8fa6,          // the sweep
+  throatCut: 0x97233f,       // and the finish
+  // the shield, which now has a bar of its own to be read on
+  ballastTanks: 0x2ab7d6,    // fifty of it, every wave
+  plasmaBag: 0x5fd6c2,       // ten more, off a crate
+  // staying alive
+  flowReload: 0x2bb3c9,      // a second nothing can reach you in
+  bellows: 0x84b6c4,         // a full bar of air
+  sterileField: 0xdff5ea,    // everything on you, washed off
+  crashCart: 0xff4d6d,       // a hundred, and only at the bottom
+  // what your shots carry
+  bedbugs: 0x6b3f2a,         // the second bite
+  splashback: 0x8e6fd8,      // your own affliction, pointed outward
+  // the turrets, which were a single item and are now a family
+  sharedMag: 0xffcf40,       // your reserve, in its drum
+  venomgrid: 0x4caf50,       // ...poisoned
+  hellspitter: 0xd1440f,     // ...alight
+  // the floor, and what is lying on it
+  vintageOrbs: 0xd9c26b,     // money that ages well
+  firstFruits: 0x9ccc65,     // the first three bodies of a wave
+  coldFoot: 0xa8e0ff,        // ice behind a run
+  // the item slot
+  jumperCables: 0xd6e000,    // charge off a hit taken
+  dimeNovel: 0xe8a0c8,       // crit off a button pressed
 };
 
 
@@ -2810,6 +2854,571 @@ export const UPGRADES = {
     theme: THEME.quorum,
     effects: [['EVERY 10 KILLS SUMMONS', NOTE], ['A FREE SENTRY TURRET', GOOD], ['FOR 10s', NOTE]],
     apply: (mods, n) => { mods.quorumEvery = 10; mods.quorumLife = 10; mods.quorumMax = 3 * n; },
+  },
+  // ---- THE FOURTH POOL -----------------------------------------------------
+  //
+  // Twenty-seven more max-1 picks on the contract the three blocks above hold:
+  // zero is "not owned" and every reader tests for it. What they have in common
+  // as a GROUP is that most of them hang off a clock the player does not own -
+  // the beat, the wave boundary, a reload seating, a crate being walked over,
+  // a turret's own shot - rather than off the trigger. That is deliberate and
+  // it is the reason the block exists: three pools of picks that all paid on a
+  // trigger pull had made the shot the only event in the game worth building
+  // around, and a run that is rewarded for the fight CONTINUING plays
+  // differently from one rewarded for firing faster.
+  //
+  // The exception, and it is worth naming: ODD COUPLE and EVEN BETTER are
+  // trigger picks, and they read `magAtShot` - what the TRIGGER saw - exactly
+  // as FATAL RESERVE and HARM WANDS do, never the live count.
+
+  // ---- the music, which nothing in the pool had ever paid for --------------
+
+  // A SECOND GUN THAT IS NOT A GUN. Once a whole beat, one body in the room
+  // takes a round's worth of damage - the player's own round, through
+  // Player.dotHit, so it grows with the build the way every other proc in the
+  // game does rather than sitting at a flat number that is everything on wave
+  // four and nothing on wave forty.
+  //
+  // ON THE WHOLE BEAT AND NOT THE HALF. The sentries fire twice a beat and the
+  // burn ticks on the upbeat; a third thing landing on every pulse would have
+  // made the beat a wall of numbers rather than a rhythm. Once a beat is a
+  // thing the player can HEAR arriving, which is the whole point of hanging it
+  // on the music at all.
+  //
+  // RANDOM, AND THAT IS THE PRICE. It cannot be aimed at the thing that needs
+  // killing, so it is worth most in a crowd and least in the fight the player
+  // actually cares about - which is the opposite shape to every damage pick
+  // above it and is why it can be this large.
+  syncopation: {
+    name: 'SYNCOPATION',
+    max: 1,
+    theme: THEME.syncopation,
+    effects: [['ONCE A BEAT:', NOTE], ['ONE SHOT OF DAMAGE', GOOD], ['TO A RANDOM ENEMY', NOTE]],
+    apply: (mods, n) => { mods.syncopation = 1 * n; },
+  },
+  // THE ROOM'S OWN PULSE, TURNED AGAINST IT. One damage is almost nothing to
+  // one enemy and is the pick against THIRTY of them - which is the shape it is
+  // priced for: a flat point per body per downbeat is worth exactly as much as
+  // the wave is crowded, and a boss standing alone barely notices it.
+  //
+  // A FLAT POINT AND NOT A FRACTION, deliberately. Everything else that scales
+  // with the build scales with the build; this is the one number in the pool
+  // that does not, and what that buys is a pick whose value is about the SIZE
+  // OF THE WAVE rather than about the gun - so it is worth taking on a run that
+  // has drafted no damage at all.
+  heartbeat: {
+    name: 'HEARTBEAT',
+    max: 1,
+    theme: THEME.heartbeat,
+    effects: [['ON EVERY DOWNBEAT:', NOTE], ['EVERY ENEMY HAS A 20%', NOTE], ['CHANCE OF TAKING 1 DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.heartbeat = 0.2 * n; mods.heartbeatHit = 1; },
+  },
+
+  // ---- the magazine, read as a number rather than as a supply --------------
+
+  // THE COUNT IN THE CORNER BECOMES A THING TO PLAY. Half of every magazine is
+  // a fifth more damage, and which half is decided by a number the player has
+  // been watching since the first wave and has never once been asked to think
+  // about. Owned alone it is +20% on every other shot; owned with EVEN BETTER
+  // it is +20% on all of them, which is the one pair in the pool that is
+  // deliberately worth assembling.
+  //
+  // READ OFF `magAtShot`, never off the live count. By the time anything
+  // downstream looks the magazine has already been billed - by one round, or by
+  // three under TRIPLE TAP, or by none at all under BELT FEED - and the card
+  // names the count the player SAW when they pulled the trigger.
+  oddCouple: {
+    name: 'ODD COUPLE',
+    max: 1,
+    theme: THEME.oddCouple,
+    effects: [['+20% DAMAGE', GOOD], ['WHEN THE MAGAZINE HOLDS', NOTE], ['AN ODD NUMBER OF ROUNDS', NOTE]],
+    apply: (mods, n) => { mods.oddCouple = 0.2 * n; },
+  },
+  // ODD COUPLE'S OTHER HALF, and it is the same pick in every respect but the
+  // parity - same number, same reading of `magAtShot`, same page of the card.
+  // Two entries rather than one that asks which, because the JOKE is the point:
+  // whichever one the player is offered, the other is out there.
+  evenBetter: {
+    name: 'EVEN BETTER',
+    max: 1,
+    theme: THEME.evenBetter,
+    effects: [['+20% DAMAGE', GOOD], ['WHEN THE MAGAZINE HOLDS', NOTE], ['AN EVEN NUMBER OF ROUNDS', NOTE]],
+    apply: (mods, n) => { mods.evenBetter = 0.2 * n; },
+  },
+  // HARM WANDS' EXACT OPPOSITE, and the two are meant to be found together: one
+  // is fastest at the bottom of a magazine and this is fastest at the top, so a
+  // build holding both fires at a rate that dips in the middle and peaks at
+  // either end. Owned alone it is a reason to reload EARLY, which is a decision
+  // nothing else in the pool asks for.
+  //
+  // A PERCENT PER ROUND is +30% on a default magazine and +45% on an EXTENDED
+  // MAG one, falling to nothing as it empties - so what it is worth over a
+  // whole magazine is roughly half its headline, which is what makes a number
+  // that large affordable.
+  //
+  // REFUSED UNDER BELT FED DREAM, in the getter. That pick has no magazine at
+  // all - see the note in Player.effectiveFireRate.
+  hotMag: {
+    name: 'HOT MAG',
+    max: 1,
+    theme: THEME.hotMag,
+    effects: [['+1% FIRE RATE PER ROUND', GOOD], ['IN THE MAGAZINE', NOTE]],
+    apply: (mods, n) => { mods.hotMag = 0.01 * n; },
+  },
+  // THE ROUND NOBODY EVER WANTED. The last one in a magazine is the one that
+  // starts a reload, so it has always been the worst shot in the game to be
+  // holding; this makes it the best. Three times damage, thrown as a blast at
+  // wherever it stopped, so it is worth firing into a crowd rather than saved.
+  //
+  // A BLAST AND NOT A MULTIPLIER, on BREACH ROUND's terms and for its reason:
+  // what the player gets back for having run the magazine dry should be worth
+  // something to the ROOM, not just to whatever one body the round landed on.
+  //
+  // IT GOES OFF WHEREVER THE SHOT STOPPED, a wall included. The round was spent
+  // either way, and a version that only paid on a hit would be a pick that
+  // punished the miss twice.
+  pocketGrenade: {
+    name: 'POCKET GRENADE',
+    max: 1,
+    theme: THEME.pocketGrenade,
+    effects: [['THE LAST ROUND OF EVERY', NOTE], ['MAGAZINE EXPLODES', GOOD], ['FOR 3x DAMAGE', GOOD]],
+    apply: (mods, n) => { mods.pocketGrenade = 3 * n; mods.pocketRadius = 4; },
+  },
+  // BRASS ECHO'S MIRROR IMAGE. That pick pays back a round that HIT and this
+  // one pays back a round that did not, and the pair is deliberate: between
+  // them there is no shot in the game that is simply gone.
+  //
+  // TWENTY PER CENT RATHER THAN BRASS ECHO'S FIVE, because a miss is worth less
+  // than a hit by definition - the player got nothing else out of it - and
+  // because what this is really priced against is the SCATTERGUN, which misses
+  // more than anything else in the game and pays the most ammunition for it.
+  //
+  // IT REFUNDS WHAT THE SHOT SPENT, not what a shot costs: a round fired inside
+  // OPENING SALVO's free window cost nothing, and paying it back would be
+  // making ammunition rather than getting it back.
+  prodigalRounds: {
+    name: 'PRODIGAL ROUNDS',
+    max: 1,
+    theme: THEME.prodigalRounds,
+    effects: [['20% OF SHOTS THAT MISS', NOTE], ['RETURN TO THE RESERVE', GOOD]],
+    apply: (mods, n) => { mods.prodigal = 0.2 * n; },
+  },
+  // THE AMMO STATION, FOR FREE, ONCE A WAVE. What it really buys is the
+  // DECISION it removes: the reserve is one of two things a player walks into a
+  // shop meaning to fix, and a run holding this can spend the whole balance on
+  // the other one.
+  //
+  // AT THE CLEAR AND NOT AT THE OPEN, which matters more than it looks: the
+  // shop happens between the two, so filling at the clear means the money saved
+  // is money the player has while the stations are standing. Filled at the open
+  // it would arrive after the only moment it could have changed a purchase.
+  //
+  // THE MAGAZINE TOO. "Refill your ammo to maximum" is what the card says, and
+  // a player who read that and then had to stand through a reload at the top of
+  // the next wave would be right to call it broken. It is the one place in the
+  // game the magazine is topped up for free - a FLAWLESS resupply deliberately
+  // does not (see Player.resupply), because that one is a reward for a wave
+  // taken perfectly and this is the whole of what the pick does.
+  fullLoad: {
+    name: 'FULL LOAD',
+    max: 1,
+    theme: THEME.fullLoad,
+    effects: [['EVERY WAVE ENDS WITH', NOTE], ['YOUR AMMO REFILLED', GOOD]],
+    apply: (mods, n) => { mods.fullLoad = n; },
+  },
+
+  // ---- the butt of the rifle, three ways ----------------------------------
+
+  // TWICE THE REACH, AND THE REACH IS THE WHOLE MELEE PROBLEM. A swing is worth
+  // double at the kill and four times that under CROWBAR, and none of it ever
+  // mattered because 3.6 metres is close enough that a rusher has already hit
+  // you. Seven metres is the range a chaser is at when the player DECIDES to
+  // swing rather than the range it is at when they have run out of choices.
+  //
+  // A FRACTION OF MELEE_RANGE rather than a flat number of metres, so the reach
+  // still grows with the target the way the base one does - a boss two metres
+  // wide stays meleeable from outside its own surface.
+  longArm: {
+    name: 'LONG ARM',
+    max: 1,
+    theme: THEME.longArm,
+    effects: [['+100% MELEE REACH', GOOD]],
+    apply: (mods, n) => { mods.meleeReach = 1 * n; },
+  },
+  // THE SWING STOPS BEING ONE COMMITTED STRIKE. Everything in the arc takes the
+  // full number the primary target took - not a share of it, which is what
+  // separates this from SHARED PAIN - so the answer to being surrounded is a
+  // thing the player can walk INTO rather than away from.
+  //
+  // THE ARC, AND NOT THE ROOM. EVERYONE FELT THAT is the item that hits
+  // everything alive wherever it is standing, and a passive item that did the
+  // same would make that one a worse version of this. What this sells is a
+  // DIRECTION: the sixty degrees the swing was already tested against, at the
+  // reach the swing already has - so LONG ARM makes it a bigger sweep, which is
+  // the second pair in this block worth assembling.
+  //
+  // EVERY BODY IN IT IS A MELEE KILL. The double bounty and BLOODSPORT's heal
+  // are both worked out from that flag, and a body taken down by the butt of
+  // the gun is a melee kill wherever in the arc it was standing.
+  scythe: {
+    name: 'SCYTHE',
+    max: 1,
+    theme: THEME.scythe,
+    effects: [['MELEE STRIKES EVERYTHING', GOOD], ['IN THE ARC IN FRONT OF YOU', NOTE]],
+    apply: (mods, n) => { mods.scythe = n; },
+  },
+  // HALF A HEALTH BAR IS A LOT OF HEALTH BAR, and that is the point: the swing
+  // stops being a damage number and becomes a QUESTION - is that one under
+  // half. A wave of things the player has already shot once is a wave they can
+  // walk through, and a wave they have not is a wave where this does nothing at
+  // all.
+  //
+  // NOT BOSSES, and the refusal is absolute rather than scaled. EXECUTIONER
+  // sells half a boss's health for a piece of the player's own bar and LAST
+  // RITES is an item that finishes the nearly dead; a passive item that deleted
+  // a boss at half health for nothing would make both of them jokes.
+  //
+  // IT READS THE HEALTH BEFORE THE SWING, not after. A blow that took a body
+  // from 60% to 45% has not "found it under half" - the swing that arrived
+  // found it over half, and the damage it dealt is what it is worth.
+  throatCut: {
+    name: 'THROAT CUT',
+    max: 1,
+    theme: THEME.throatCut,
+    effects: [['MELEE INSTANTLY KILLS', GOOD], ['ENEMIES UNDER 50% HEALTH', NOTE], ['NOT BOSSES', BAD]],
+    apply: (mods, n) => { mods.throatCut = 0.5 * n; },
+  },
+
+  // ---- the shield, which now has a bar of its own to be read on -----------
+
+  // FIFTY POINTS, EVERY WAVE, AND NO CLOCK ON THEM. A shield point is better
+  // than a health point - takeDamage spends the shield FIRST and fully, so a
+  // hit that breaks it does not carry the remainder through - which means fifty
+  // of these eats one arbitrarily large blow as well as fifty small ones. On a
+  // hundred-point bar that is half a life handed over at the top of every
+  // fight.
+  //
+  // WHAT PAYS FOR IT IS THAT IT DOES NOT COMPOUND. It is SET to fifty at every
+  // wave, not added, so a wave cleared without being touched banks nothing - the
+  // player who needs it gets all of it and the player who does not gets
+  // nothing, which is the same shape the relief drop and the need curve have.
+  //
+  // A FLOOR AND NOT A WRITE, though: a run also holding SECOND SKIN can carry
+  // more than fifty into a wave and keeps it. See Player.armWaveGrants.
+  ballastTanks: {
+    name: 'BALLAST TANKS',
+    max: 1,
+    theme: THEME.ballastTanks,
+    effects: [['EVERY WAVE STARTS WITH', NOTE], ['A 50 POINT SHIELD', GOOD]],
+    apply: (mods, n) => { mods.waveShield = 50 * n; },
+  },
+  // THE CRATE, WORTH SOMETHING ON A FULL BAR. A health plate is withheld
+  // outright at full health (see rollDrop) precisely because it would be a drop
+  // that cannot be used; this is the pick that makes the ten points a crate
+  // carries worth having whatever the bar is at, because a shield point does
+  // not have a ceiling to hit.
+  //
+  // ON TOP OF THE HEAL RATHER THAN INSTEAD OF IT. It is the smallest number in
+  // the shield family by a distance, and it has to be: a crate is a thing the
+  // player walks over several times a wave, where BALLAST TANKS is once and
+  // SECOND SKIN costs a full item charge.
+  plasmaBag: {
+    name: 'PLASMA BAG',
+    max: 1,
+    theme: THEME.plasmaBag,
+    effects: [['HEALTH CRATES ALSO GIVE', NOTE], ['A 10 POINT SHIELD', GOOD]],
+    apply: (mods, n) => { mods.crateShield = 10 * n; },
+  },
+
+  // ---- staying alive ------------------------------------------------------
+
+  // A SECOND IN WHICH NOTHING LANDS, ON EVERY RELOAD. The reload is the one
+  // thing in this game the player does that has never been anything but a cost
+  // - a second and a half of standing there with no gun - and this turns it
+  // into cover. What it changes is WHEN a magazine is changed: a reload taken
+  // while something is winding up is now the correct answer to it.
+  //
+  // ON THE ROUNDS ARRIVING, not on the button. A reload interrupted by a death
+  // or a handover buys nothing, which is the same edge BOTTOM FEEDER's window
+  // opens on.
+  //
+  // THE EXPLOIT IS LEFT OPEN ON PURPOSE, and it is worth naming: fire one
+  // round, reload, take the second, repeat. startReload refuses a full
+  // magazine, so every second of cover has to be bought with a trigger pull and
+  // a whole reload stood through - a rate of fire far below simply shooting,
+  // and a reserve draining the whole time. A player who wants to be
+  // untouchable can have it, and they will not kill anything while they are.
+  flowReload: {
+    name: 'FLOW RELOAD',
+    max: 1,
+    theme: THEME.flowReload,
+    effects: [['EVERY RELOAD GRANTS', NOTE], ['1s OF INVULNERABILITY', GOOD]],
+    apply: (mods, n) => { mods.flowReload = 1 * n; },
+  },
+  // ARMOUR AT THE TOP OF THE STAMINA BAR, which is the one meter in this game
+  // nothing had ever read as a RESOURCE - it was a permission to sprint and a
+  // lockout when it ran out, and that was all of it. RUNNING ON FUMES pays for
+  // the bottom of it; this pays for the top, and the two are exact opposites.
+  //
+  // FULL MEANS FULL, on PACE CAR's terms: the moment a sprint, a slide or a
+  // dash takes anything off the top the armour is gone until the bar is back.
+  // What makes that affordable rather than punishing is that stamina refills on
+  // its own - the guard is always a few seconds away from coming back, however
+  // badly the fight is going, which is not true of any other conditional guard
+  // in the pool.
+  bellows: {
+    name: 'BELLOWS',
+    max: 1,
+    theme: THEME.bellows,
+    effects: [['TAKE 15% LESS DAMAGE', GOOD], ['AT FULL STAMINA', NOTE]],
+    apply: (mods, n) => { mods.bellowsGuard = 0.15 * n; },
+  },
+  // WHITE CELL, AS A PASSIVE ITEM, PAID FOR BY THE HEAL. Every affliction in
+  // status.js comes off - the burn, the poison, the chill, fear, weakness and
+  // the curse - and what it costs is the health the player had to spend
+  // anyway, which is why it is worth most to exactly the builds that are
+  // already healing and nothing at all to one that never does.
+  //
+  // A WHOLE POINT OF HEALING, AND THE THRESHOLD IS THE ENTIRE PICK. Most
+  // healing in this game arrives as a rate times dt - NANOWEAVE's trickle, DIG
+  // IN's, SLOW RELEASE's drip, HEALTHY CORE's - and a cleanse that fired on a
+  // hundredth of a point would not be a cleanse at all, it would be IRON LUNG:
+  // nothing could ever land on a run carrying any regeneration. So what it
+  // tests for is a heal the player can SEE arriving, and a trickle stays a
+  // trickle. See Player.heal.
+  sterileField: {
+    name: 'STERILE FIELD',
+    max: 1,
+    theme: THEME.sterileField,
+    effects: [['ANY HEAL ALSO CLEARS', NOTE], ['EVERY STATUS ON YOU', GOOD]],
+    apply: (mods, n) => { mods.sterileField = n; },
+  },
+  // THE CRATE, AT THE BOTTOM OF THE BAR. Twenty-five health is a quarter of a
+  // fresh run's bar and a rounding error on a run that has banked forty points
+  // of max HP; a hundred is a whole life, and it is only ever paid to a player
+  // who is twenty points from losing one.
+  //
+  // A FLOOR, NOT A MULTIPLIER. It does not scale with anything - not the
+  // build, not the wave, not healMult - which is what keeps it a rescue rather
+  // than a healing strategy: a run at 15 health gets a hundred, and a run at 21
+  // gets the ordinary twenty-five, and the player can see exactly which side of
+  // the line they are on because the number is on the HUD.
+  //
+  // IT REPLACES THE CRATE'S OWN HEAL rather than adding to it, and it goes
+  // through the same door: FIRE SALE still doubles it, SLOW RELEASE still owes
+  // it over twenty seconds, GRISTLE still tosses its coin. One crate, one
+  // payout, whichever size it was.
+  crashCart: {
+    name: 'CRASH CART',
+    max: 1,
+    theme: THEME.crashCart,
+    effects: [['HEALTH CRATES HEAL 100 HP', GOOD], ['WHILE YOU ARE UNDER 20 HP', NOTE]],
+    apply: (mods, n) => { mods.crashCart = 100 * n; mods.crashCartAt = 20; },
+  },
+
+  // ---- what your shots carry ----------------------------------------------
+
+  // EVERY HIT, TWICE. A quarter of it comes back two seconds later on the same
+  // body, which is a flat +25% damage to anything that lives that long and
+  // nothing at all to anything that does not - so it is worth most against the
+  // big slow types and against a boss, and least against the rushers it would
+  // have been strongest against if it paid immediately.
+  //
+  // THE SECOND BITE DOES NOT BITE. It is booked once, where the round lands,
+  // and the damage it deals goes through hurtEnemy rather than back through the
+  // shot path - so a hit cannot schedule a hit that schedules a hit, which is
+  // the one way a percentage-of-damage effect becomes infinite.
+  //
+  // AND IT DIES WITH THE BODY, on DELAYED FUSE's terms and for its reason: what
+  // is owed to a corpse would otherwise arrive as an unattributable number over
+  // an empty floor, and a crowded wave would end in a minute of them.
+  bedbugs: {
+    name: 'BEDBUGS',
+    max: 1,
+    theme: THEME.bedbugs,
+    effects: [['25% OF EVERY HIT LANDS', NOTE], ['A SECOND TIME', GOOD], ['TWO SECONDS LATER', NOTE]],
+    apply: (mods, n) => { mods.bedbugs = 0.25 * n; mods.bedbugsDelay = 2; },
+  },
+  // BEING AFFLICTED IS NOW A WEAPON. STATUS CONDUIT makes a status on the
+  // player reach the bodies standing near them; this puts it on the AMMUNITION,
+  // so what the room did to you goes back out at whatever you are aiming at -
+  // which is a longer reach, a chosen target, and it costs a shot rather than
+  // a radius.
+  //
+  // ONLY WHAT AN ENEMY CAN CARRY. Burning, poison, the chill and fear all exist
+  // on both sides of the fight and are passed straight through; weakness and
+  // the curse exist only on the player (see status.js) and are simply not
+  // transferable - there is nothing on an enemy for them to become, and
+  // inventing one would be a second meaning for a word the player already
+  // knows.
+  //
+  // THE POWER IS YOUR OWN SHOT, through Player.dotHit, like every other
+  // damage-over-time in the game - so a poison the player is carrying comes off
+  // an enemy at the rate the player's gun does, not at the rate whatever
+  // poisoned them does.
+  splashback: {
+    name: 'SPLASHBACK',
+    max: 1,
+    theme: THEME.splashback,
+    effects: [['YOUR SHOTS APPLY EVERY', NOTE], ['STATUS EFFECT YOU CARRY', GOOD]],
+    apply: (mods, n) => { mods.splashback = n; },
+  },
+
+  // ---- the turrets, which were one item and are now a family --------------
+
+  // THE SENTRY, FED FROM YOUR OWN BELT. A turret's damage is snapshotted at the
+  // throw - one of the player's shots - and three times that is a second gun
+  // worth having rather than a decoration, which is what LITTLE BROTHER has
+  // always struggled to be next to the things the player can aim.
+  //
+  // IT COSTS A ROUND A SHOT, and a turret fires twice a beat: about four rounds
+  // a second, per turret, off the same reserve the player is shooting out of. A
+  // build running QUORUM's three at once is spending twelve rounds a second on
+  // them, which is the real price and is why the reserve cap matters to this
+  // pick more than to any other.
+  //
+  // AND OUT OF AMMUNITION IT KEEPS SHOOTING, at the ordinary number. That is
+  // the line that makes it safe to take blind: the worst case is the turret the
+  // player already had, never a turret that has stopped working - which is what
+  // a version that simply refused to fire would have been.
+  sharedMag: {
+    name: 'SHARED MAG',
+    max: 1,
+    theme: THEME.sharedMag,
+    effects: [['YOUR TURRETS FIRE FROM', NOTE], ['YOUR RESERVE FOR 3x DAMAGE', GOOD], ['OUT OF AMMO THEY FIRE NORMALLY', NOTE]],
+    apply: (mods, n) => { mods.sharedMag = 3 * n; mods.sharedMagCost = 1; },
+  },
+  // VENOM ROUNDS, IN THE DRUM. The turret was the one thing in the game that
+  // put damage in the room and carried nothing with it - every status the
+  // player owns rides their own bullets and stops at the muzzle. Four seconds
+  // of poison twice a beat is a body that stays poisoned for as long as the
+  // sentry can see it, which is worth more than the shot itself.
+  //
+  // THE PLAYER'S OWN POISON, through Player.dotHit, so it scales with the build
+  // and stacks under SECONDARY INFECTION exactly as the gun's does. A turret
+  // with a poison of its own would have been a fourth number nobody could find.
+  venomgrid: {
+    name: 'VENOMGRID',
+    max: 1,
+    theme: THEME.venomgrid,
+    effects: [['YOUR TURRETS POISON', GOOD], ['WHAT THEY HIT', NOTE]],
+    apply: (mods, n) => { mods.turretPoison = 1 * n; mods.turretPoisonTime = 4; },
+  },
+  // VENOMGRID'S TWIN, IN FIRE, and the two are deliberately the same pick
+  // wearing different damage: fire is short and fierce where poison is long and
+  // shallow (see the note at the top of status.js), so which of them a run is
+  // offered changes what its sentries are FOR - a poison grid wears a boss down
+  // and a burning one clears a crowd.
+  hellspitter: {
+    name: 'HELLSPITTER',
+    max: 1,
+    theme: THEME.hellspitter,
+    effects: [['YOUR TURRETS SET FIRE TO', GOOD], ['WHAT THEY HIT', NOTE]],
+    apply: (mods, n) => { mods.turretBurn = 1 * n; mods.turretBurnTime = 3; },
+  },
+
+  // ---- the floor, and what is lying on it ---------------------------------
+
+  // MONEY THAT AGES WELL. A percent a second against ORB_LIFETIME's twenty is a
+  // ceiling of +20%, reached by an orb nobody touched for the whole of its life
+  // - so the pick is small, certain, and completely unfarmable, which is the
+  // only shape a "leave it there" reward can honestly have.
+  //
+  // THE EXPLOIT IT IS PRICED AGAINST is hoarding, and it does not pay: an orb
+  // left more than twenty seconds is GONE, credits and all. A player holding
+  // back to ripen the floor is burning whole orbs to earn a fifth of the ones
+  // that survive. What it actually pays for is the money that was ALREADY going
+  // to sit there - the far side of the arena during a fight the player cannot
+  // leave - which is money that used to be worth nothing extra at all.
+  vintageOrbs: {
+    name: 'VINTAGE ORBS',
+    max: 1,
+    theme: THEME.vintageOrbs,
+    effects: [['ORBS GAIN +1% VALUE', GOOD], ['PER SECOND ON THE FLOOR', NOTE]],
+    apply: (mods, n) => { mods.vintage = 0.01 * n; },
+  },
+  // THE TOP OF EVERY WAVE, GUARANTEED. Three plates off the first three bodies,
+  // through the same table PINATA draws from - so it is ammunition when the
+  // reserve is thin, health when the bar is, a battery when the item slot has
+  // room, and the rarer buffs when none of those is wanted.
+  //
+  // AT THE START AND NOT AT THE END, which is the whole difference between this
+  // and CURTAIN CALL. That pick pays at the clear, into a shop; this pays into
+  // the fight, at the moment the player still has a wave in front of them and
+  // the drop can change how it goes.
+  //
+  // A REFUSED DROP DOES NOT SPEND ONE, on PINATA's terms: a floor already at
+  // MAX_ACTIVE_PICKUPS and a player full of everything the table can offer are
+  // both refusals that are not the player's fault, so the kill drops nothing
+  // and the next one tries again.
+  firstFruits: {
+    name: 'FIRST FRUITS',
+    max: 1,
+    theme: THEME.firstFruits,
+    effects: [["EACH WAVE'S FIRST 3 KILLS", NOTE], ['DROP A POWERUP', GOOD]],
+    apply: (mods, n) => { mods.firstFruits = 3 * n; },
+  },
+  // SCORCHED EARTH, IN ICE, AND OFF THE SPRINT RATHER THAN THE SLIDE. That is
+  // the difference worth stating: a slide is a second and a direction, so what
+  // it leaves is a WALL; a sprint is however long the bar lasts and wherever
+  // the player goes, so what this leaves is a floor they can draw on.
+  //
+  // IT SLOWS AND DOES NOT BURN. There is already one thing the player runs
+  // around laying down that deals damage, and a second would just be a worse
+  // version of it. A slow is what running away is actually for: the ice goes
+  // down BETWEEN the player and whatever is chasing them, which is the only
+  // pick in the pool that rewards breaking off.
+  //
+  // FRIENDLY CREEP, exactly like ash and the reload trail: standing in your own
+  // ice has to be visibly safe, or a player will simply never sprint.
+  coldFoot: {
+    name: 'COLD FOOT',
+    max: 1,
+    theme: THEME.coldFoot,
+    effects: [['SPRINTING LAYS ICE', GOOD], ['THAT SLOWS WHAT STANDS IN IT', NOTE]],
+    apply: (mods, n) => { mods.coldFoot = 1.6 * n; mods.coldFootRadius = 2.2; },
+  },
+
+  // ---- the item slot ------------------------------------------------------
+
+  // BEING HIT PAYS THE BUTTON. Three points a hit against a fifty-point item is
+  // seventeen hits for a press, which is most of a bad wave - so what it really
+  // does is guarantee that a fight going badly hands the player the one thing
+  // that can turn it round, whether or not they killed anything to earn it.
+  //
+  // ON A HIT AND NOT ON A TICK. Fire, poison and the lava floor bill through
+  // _hurtPlayerDot, several times a second, and paying that would make standing
+  // in a hazard the fastest way to charge an item in the game - a mechanic
+  // whose optimal play is "do not play". A blow that arrived from something in
+  // the room is what this counts, at most once per blow.
+  jumperCables: {
+    name: 'JUMPER CABLES',
+    max: 1,
+    theme: THEME.jumperCables,
+    effects: [['TAKING A HIT GRANTS', NOTE], ['+3 ITEM CHARGE', GOOD]],
+    apply: (mods, n) => { mods.hitCharge = 3 * n; },
+  },
+  // THE PRESS PAYS THE GUN. Twenty seconds is long enough to be a window the
+  // player plays inside rather than a flash, and +20% on a 5% base is a fivefold
+  // crit rate for the whole of it - the second largest step the crit family
+  // has, behind IRON LITURGY's, and unlike that one it costs no change of play
+  // at all.
+  //
+  // WHAT IT ACTUALLY REWARDS IS SPENDING THE ITEM. The meter refills off orbs
+  // and kills whether it is full or not (charge earned past the cap is simply
+  // lost), so a player banking a press is already wasting charge; this makes
+  // the waste visible by paying the alternative. BAILIFF and VITAL TRIGGER are
+  // the same shape, and all three are meant to be found by the same run.
+  //
+  // OFF THE PRESS, not off the item's own window - it lands the moment the
+  // charge is spent and whatever the item then does, so it is worth exactly as
+  // much to PAY TO WIN's free press as to LANCE's.
+  dimeNovel: {
+    name: 'DIME NOVEL',
+    max: 1,
+    theme: THEME.dimeNovel,
+    effects: [['USING YOUR ACTIVE ITEM', NOTE], ['GRANTS +20% CRIT CHANCE', GOOD], ['FOR 20s', NOTE]],
+    apply: (mods, n) => { mods.dimeCrit = 0.2 * n; mods.dimeTime = 20; },
   },
 };
 

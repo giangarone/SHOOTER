@@ -3920,3 +3920,534 @@ def _(c):
         for j in range(5):
             c.put(1 + j, int(y), E)
             c.put(1 + j, int(y) + 1, E)
+
+
+# ---- THE FOURTH POOL --------------------------------------------------------
+#
+# Twenty-seven drawings, on the two rules the whole set holds: the light is
+# always upper-left and applied by Canvas.shade(), and STRUCTURE is the object
+# while ENERGY is what the pick does to it.
+#
+# The group has one problem of its own worth stating. Three of these are
+# TURRETS, three are MAGAZINES and two are the health CRATE, and the catalogue
+# already had a turret, three magazines and two crates before they arrived - so
+# for every one of them the note says what it is drawn AGAINST, and in each case
+# the differentiator is the one element that names this pick rather than its
+# family. A turret is a turret; what tells the three apart is what is coming out
+# of the barrel.
+
+
+# ---- the music ------------------------------------------------------------
+
+
+@icon('syncopation')        # SYNCOPATION - one shot of damage a beat, at random
+def _(c):
+    # A ROW OF BEATS WITH ONE OFF THE LINE, AND THAT ONE IS HITTING SOMETHING.
+    # Against METRONOME (the tower) and ENCORE (two quavers): both of those say
+    # "music", and neither says the thing this pick actually does, which is that
+    # something lands BETWEEN the beats. The bar line with four even ticks is
+    # the rhythm; the fifth tick is raised off it with an impact on top, and the
+    # gap under that tick is the whole drawing.
+    c.rect(1.0, 19.4, 23.0, 21.4, S)                   # the bar
+    for x in (2.0, 8.0, 14.0, 20.0):                   # the beats on it
+        c.rect(x, 14.4, x + 2.2, 19.4, S)
+    # The off-beat, and it is placed BETWEEN two of them rather than over one -
+    # which is the whole word. Lifted clear of the bar as well, so the gap
+    # under it survives at totem size: a tick that touched the bar would simply
+    # be a fifth beat, and a fifth beat is not a syncopation.
+    c.rect(10.6, 9.6, 12.8, 15.4, E)
+    burst(c, 11.7, 6.2, 4.0, E)
+
+
+@icon('heartbeat')          # HEARTBEAT - 20% chance of 1 damage a downbeat
+def _(c):
+    # A HEART WITH THE PULSE GOING OUT OF IT. The set has five hearts already -
+    # BERSERKER's is broken, COLD BLOOD's is plated, WATERLINE's is filled to a
+    # line, GRAFT's is patched and PACE CAR's is a stamp at the foot of a pole -
+    # and not one of them RADIATES. The arcs are the differentiator and they are
+    # also the mechanic: what this pick does happens to the whole room at once,
+    # so the drawing has to leave the heart.
+    #
+    # THE ARCS ARE ON ONE SIDE. Rings all the way round read as a shockwave, and
+    # the set already has those; an open fan reads as something travelling
+    # outward from a source, which is what a pulse is.
+    c.disc(5.4, 7.2, 3.8, S)
+    c.disc(11.2, 7.2, 3.8, S)
+    c.poly([(1.2, 8.6), (15.4, 8.6), (8.3, 18.6)], S)
+    # The beat leaving it. Struck from the heart's own centre so the fan opens
+    # AWAY from the body rather than cutting back through it - three arcs
+    # centred anywhere left of the point would have crossed the shape, which is
+    # exactly what the first pass at this did.
+    for r in (10.0, 13.6, 17.2):
+        c.arc(8.3, 9.6, r, 2.0, 300, 60, E)
+
+
+# ---- the magazine, read as a number ---------------------------------------
+
+
+@icon('oddCouple')          # ODD COUPLE - +20% damage on an odd magazine
+def _(c):
+    # A MAGAZINE HOLDING A PAIR AND ONE OVER. Against EXTENDED MAG (an even
+    # stack of four) and HARM WANDS (a stack lit at the bottom): the question
+    # this pick asks is about a COUNT, so the rounds have to be countable and
+    # they have to be GROUPED - a pair together, then a gap, then the odd one
+    # out, which is the only member of the three that is lit.
+    c.rect(6.0, 2.0, 15.0, 4.0, S)                     # feed lips
+    c.rect(7.0, 4.0, 14.0, 21.0, S)
+    for y in (7.0, 10.0):                              # the couple
+        c.rect(8.0, y, 13.0, y + 1.8, DEEP)
+    c.rect(8.0, 16.0, 13.0, 17.8, E)                   # and the one over
+    # A tick out to the side marking it, so the odd round is findable even when
+    # the three inside the magazine have blurred into a stack.
+    c.rect(16.0, 16.0, 20.0, 17.8, E)
+
+
+@icon('evenBetter')         # EVEN BETTER - +20% damage on an even magazine
+def _(c):
+    # ODD COUPLE'S MIRROR, and it has to be legible AS the mirror: same
+    # magazine, same grain of round, and what differs is that the stack divides
+    # cleanly. Two pairs, evenly spaced, all four lit - no odd one out, no tick
+    # off to the side, and the gap between the pairs is what says "two of two"
+    # rather than "four".
+    c.rect(6.0, 2.0, 15.0, 4.0, S)                     # feed lips
+    c.rect(7.0, 4.0, 14.0, 21.0, S)
+    for y in (6.6, 9.4):                               # the first pair
+        c.rect(8.0, y, 13.0, y + 1.8, E)
+    for y in (15.0, 17.8):                             # and the second
+        c.rect(8.0, y, 13.0, y + 1.8, E)
+
+
+@icon('hotMag')             # HOT MAG - +1% fire rate per round in the magazine
+def _(c):
+    # A FULL MAGAZINE, ALIGHT AT THE TOP. Against HARM WANDS (the bottom lit,
+    # with speed lines) and EXTENDED MAG (rounds visible, nothing happening to
+    # them): this one is about the magazine being FULL, so every round is lit
+    # and the heat comes off the feed lips - the end the next round leaves by.
+    #
+    # THE MAGAZINE SITS LOW so there is room for the fire. A shape that filled
+    # the frame would leave the flames as two lit pixels on the top edge, which
+    # is the failure every burning icon in this set has had at least once.
+    c.rect(6.0, 9.0, 15.0, 11.0, S)                    # feed lips
+    c.rect(7.0, 11.0, 14.0, 23.0, S)
+    for y in (12.6, 15.4, 18.2, 21.0):                 # a full stack
+        c.rect(8.0, y, 13.0, y + 1.4, E)
+    for cx, h in ((8.2, 6.2), (13.8, 5.0)):            # and what that costs
+        flame(c, cx, 9.0, h * 0.34, h, E)
+
+
+@icon('pocketGrenade')      # POCKET GRENADE - the last round explodes for 3x
+def _(c):
+    # A MAGAZINE WITH NOTHING LEFT IN IT BUT THE BOTTOM ROUND, AND THAT ROUND IS
+    # GOING OFF. Against PRIMED MAG (a whole magazine with a grenade pin in it)
+    # and DETONATOR (a hit exploding): the pin says the magazine is the bomb and
+    # this says one ROUND is, so the stack has to be visibly EMPTY above it -
+    # the dark cells are as much of the drawing as the burst is.
+    c.rect(5.0, 1.0, 14.0, 3.0, S)                     # feed lips
+    c.rect(6.0, 3.0, 13.0, 17.0, S)
+    for y in (5.0, 8.0, 11.0):                         # spent
+        c.rect(7.0, y, 12.0, y + 1.4, DEEP)
+    burst(c, 12.0, 18.6, 5.4, E)                       # and the last one, going
+    bullet(c, 10.6, 15.0, 3.0, 5.0, S, E)
+
+
+@icon('prodigalRounds')     # PRODIGAL ROUNDS - 20% of misses come back
+def _(c):
+    # A ROUND PASSING WIDE OF A TARGET AND TURNING ROUND. Against BRASS ECHO
+    # (a round coming back off a hit) the whole difference is the MISS, so the
+    # target has to be in the frame and the round has to be visibly beside it
+    # rather than in it - the empty ring and the gap between it and the shot are
+    # what name this pick.
+    c.ring(17.4, 6.0, 5.2, 2.2, S)                     # what it did not hit
+    c.disc(17.4, 6.0, 1.4, S)
+    bullet(c, 9.8, 0.6, 3.4, 6.4, S, S)                # going past it
+    # AND TURNING ROUND. A half-turn arc into a straight shaft, rather than one
+    # curved arrow: `arrow` puts its head on the END of a straight line, so a
+    # head grafted onto an arc's last cell points along a chord and reads as a
+    # dart lying beside the curve. Drawn as a bend and then a run, the head is
+    # square to the shaft and the whole thing is one gesture.
+    c.arc(8.6, 14.0, 5.0, 2.2, 10, 180, E)
+    arrow(c, 3.6, 14.4, 3.6, 23.0, E, 2.2, 4.8)
+
+
+@icon('fullLoad')           # FULL LOAD - the reserve refills at every clear
+def _(c):
+    # A RACK OF THREE FULL ROUNDS UNDER A FILL LINE. Against AMMO HOARDER (one
+    # very large drum) and AMMO SURPLUS (a crate that will not shut): both of
+    # those are about CAPACITY, and this is about the rack being TOPPED UP - so
+    # the three are identical, all lit to the same height, and the bar across
+    # the top of them is where the filling stopped.
+    c.rect(2.0, 2.6, 22.0, 5.0, E)                     # the fill line
+    for x in (3.0, 10.0, 17.0):
+        bullet(c, x, 6.6, 4.0, 15.0, S, E)
+
+
+# ---- the butt of the rifle ------------------------------------------------
+
+
+@icon('longArm')            # LONG ARM - +100% melee reach
+def _(c):
+    # A STOCK, AND THE DISTANCE IT NOW COVERS. Against CROWBAR (a pry bar) and
+    # EVERYONE FELT THAT (a fist in a ring): those are about the BLOW and this
+    # is about a MEASUREMENT, so the drawing is a dimension line - the one
+    # notation in the catalogue - running from the weapon to the far edge.
+    #
+    # THE ARROW RUNS OFF THE FRAME'S EDGE, deliberately: what the pick sells is
+    # that the reach now goes further than the picture can show.
+    c.poly([(1.0, 6.0), (7.6, 4.4), (7.6, 13.6), (1.0, 15.0)], S)   # the stock
+    c.rect(7.6, 7.4, 12.0, 10.6, S)                    # the receiver
+    arrow(c, 12.6, 9.0, 23.0, 9.0, E, 2.0, 4.4)        # and where it lands now
+    for x in (13.2, 23.0):                             # the extent, ticked
+        c.rect(x - 1.0, 15.0, x + 1.0, 21.6, E)
+    c.rect(13.2, 17.4, 23.0, 19.2, E)
+
+
+@icon('scythe')             # SCYTHE - melee takes everything in the arc
+def _(c):
+    # THE TOOL. Nothing else in the catalogue is a scythe, and the shape is
+    # unmistakable at any size: a long curved blade on a snath. Against CROWBAR
+    # (a straight bent bar) and BLOODSPORT (a short blade): the ARC is the pick,
+    # because what it buys is a sweep rather than a strike.
+    #
+    # THE BLADE IS DRAWN AS AN ARC AND NOT AS A FILLED CRESCENT. A crescent at
+    # this size closes into a lozenge once the lighting pass has run, and a
+    # lozenge is not a blade.
+    c.line(19.0, 2.0, 9.0, 22.4, S, 2.6)               # the snath
+    c.rect(12.4, 12.0, 18.0, 14.2, S)                  # the grip
+    c.arc(11.0, 8.4, 10.2, 3.2, 180, 355, E)           # and the blade
+    c.erase(lambda px, py: py > 8.0 and px < 9.4)
+
+
+@icon('throatCut')          # THROAT CUT - melee kills anything under half
+def _(c):
+    # A HEALTH BAR HALF GONE, WITH A CUT THROUGH IT. Against LAST RITES (a skull
+    # and a flatline) and EXECUTIONER (a headsman's shape): both of those say
+    # DEATH, and what this pick actually says is a THRESHOLD - half, and below
+    # it you are finished. So the drawing is the bar, the half, and the stroke.
+    #
+    # THE MIDPOINT IS MARKED, with a tick above and below the bar. Without it
+    # this is a part-full bar with a line on it, and the reading the card needs
+    # is "at exactly this point".
+    c.rect(1.0, 8.0, 23.0, 16.0, S)
+    c.rect(2.6, 9.6, 11.6, 14.4, DEEP)                 # the half that is gone
+    for y in (4.6, 17.4):                              # the line it is gone to
+        c.rect(11.0, y, 13.0, y + 2.0, S)
+    c.line(2.0, 21.0, 21.0, 3.0, E, 2.6)               # and the cut
+
+
+# ---- the shield ------------------------------------------------------------
+
+
+@icon('ballastTanks')       # BALLAST TANKS - a 50 point shield every wave
+def _(c):
+    # TWO PRESSURE TANKS, FULL. Against pickShield (a hexagon) and SECOND SKIN
+    # (a body inside itself): both of those draw the shield as a THING AROUND
+    # YOU, and this pick is a SUPPLY of it that is topped up every wave - so it
+    # is drawn as tankage, with the level in it, which is a silhouette nothing
+    # else in the set has.
+    #
+    # THE FILL LINE IS NEAR THE TOP AND NOT AT IT. A tank filled to the brim has
+    # no line in it at all, and the line is the only part of this that says the
+    # tanks are full rather than merely present.
+    for x in (3.0, 13.0):
+        c.rect(x, 3.0, x + 8.0, 21.0, S)
+        c.disc(x + 4.0, 3.0, 4.0, S)                   # the domed ends
+        c.disc(x + 4.0, 21.0, 4.0, S)
+        c.rect(x + 1.4, 7.0, x + 6.6, 21.6, E)         # and what is in them
+    c.rect(2.0, 10.4, 22.0, 12.4, DEEP)                # the strap across both
+
+
+@icon('plasmaBag')          # PLASMA BAG - health crates also give 10 shield
+def _(c):
+    # THE SHIELD'S HEXAGON WITH THE HEALTH CROSS INSIDE IT. Against pickShield
+    # (a hexagon nested in a hexagon), pickHealth (a cross alone) and SLOW
+    # RELEASE (a drip bag): the pick is literally one pickup becoming the other,
+    # and the only way to draw that in one frame is to put one inside the other.
+    # A second bag in the catalogue would have been unreadable next to the first.
+    hexagon(c, 12.0, 12.0, 11.0, S)
+    hexagon(c, 12.0, 12.0, 8.2, DEEP)
+    c.rect(10.4, 6.6, 13.6, 17.4, E)                   # and the crate it came from
+    c.rect(6.6, 10.4, 17.4, 13.6, E)
+
+
+# ---- staying alive ---------------------------------------------------------
+
+
+@icon('flowReload')         # FLOW RELOAD - 1s of invulnerability per reload
+def _(c):
+    # A MAGAZINE INSIDE A RING. Against AEGIS (a dome over a figure) and HOLY
+    # MANTLE (a cloak): those protect a BODY, and this protects the moment the
+    # magazine goes in - so the thing inside the ring is the magazine, and the
+    # ring is broken at the bottom where it is being fed.
+    c.ring(12.0, 12.0, 11.0, 2.4, E)
+    c.erase(lambda px, py: py > 19.0 and 8.0 < px < 16.0)
+    c.rect(8.4, 5.6, 15.6, 7.2, S)                     # feed lips
+    c.rect(9.2, 7.2, 14.8, 19.4, S)
+    for y in (9.0, 12.0, 15.0):
+        c.rect(10.2, y, 13.8, y + 1.4, E)
+    arrow(c, 12.0, 23.2, 12.0, 20.4, E, 1.8, 3.4)      # going in
+
+
+@icon('bellows')            # BELLOWS - 15% less damage taken at full stamina
+def _(c):
+    # THE TOOL. Nothing else in the catalogue is a bellows, and it is the one
+    # object that means "air, held" - which is what a full stamina bar is.
+    # Against SECOND WIND (three gusts) and IRON LUNG (a respirator): those are
+    # the air MOVING and the air being kept OUT, and this is the air stored.
+    #
+    # DRAWN OPEN AND FULL. A closed bellows is a wedge, and a wedge in this set
+    # is BONESAW - so the two boards are held apart and the pleated body between
+    # them is what carries the reading.
+    c.poly([(2.4, 5.0), (16.0, 8.6), (16.0, 15.4), (2.4, 19.0)], S)  # the body
+    for i in range(3):                                 # the pleats
+        y = 8.4 + i * 2.4
+        c.line(3.6, y, 15.0, y + 1.6, DEEP, 1.2)
+    c.rect(1.0, 3.0, 4.0, 21.0, S)                     # the back board
+    c.rect(15.4, 9.8, 22.6, 14.2, E)                   # and the nozzle
+    c.rect(20.0, 10.8, 23.4, 13.2, E)
+
+
+@icon('sterileField')       # STERILE FIELD - any heal clears every status
+def _(c):
+    # A CROSS INSIDE A CLOSED RING, WITH WHAT WAS ON YOU OUTSIDE IT. Against
+    # WHITE CELL (a cell eating the dark) and HEALTHY CORE (a cross sealed in a
+    # shell): both of those are about what gets IN, and the whole of this pick
+    # is that something already on you is put OUT - so the four flecks are
+    # beyond the ring, at the corners, fleeing it.
+    c.ring(12.0, 12.0, 8.6, 2.2, S)
+    c.rect(10.6, 6.8, 13.4, 17.2, E)                   # the heal
+    c.rect(6.8, 10.6, 17.2, 13.4, E)
+    for px, py in ((2.4, 2.4), (21.6, 2.4), (2.4, 21.6), (21.6, 21.6)):
+        c.disc(px, py, 1.8, S)                         # and what it washed off
+
+
+@icon('crashCart')          # CRASH CART - crates heal 100 under 20 HP
+def _(c):
+    # A CROSS ON WHEELS. Nothing else in the catalogue has wheels, which is the
+    # entire reason this is the shape: pickHealth is a cross, TRAUMA KIT is a
+    # case and EMERGENCY RATIONS is a tin, and what separates this from all
+    # three is that it is a thing that ARRIVES - the trolley you get when it has
+    # already gone badly.
+    c.rect(2.6, 3.0, 21.4, 17.0, S)                    # the trolley
+    c.rect(4.4, 4.8, 19.6, 15.2, DEEP)                 # its face
+    c.rect(10.6, 6.2, 13.4, 13.8, E)                   # the cross on it
+    c.rect(8.0, 8.6, 16.0, 11.4, E)
+    c.rect(4.0, 17.0, 20.0, 18.8, S)                   # the frame under it
+    for x in (7.0, 17.0):                              # and the wheels
+        c.disc(x, 21.0, 2.6, S)
+        c.disc(x, 21.0, 1.0, DEEP)
+
+
+# ---- what your shots carry -------------------------------------------------
+
+
+@icon('bedbugs')            # BEDBUGS - 25% of a hit lands again two seconds on
+def _(c):
+    # A BUG, AND THE SECOND ONE BEHIND IT. Against APIARY (five bees leaving a
+    # cell): that is a SWARM and this is a repeat, so there are exactly two and
+    # the second is smaller and offset - which is the picture of one bite
+    # followed by a lesser one rather than of an infestation.
+    #
+    # SEEN FROM ABOVE. A bug in profile at this size is a blob with legs; from
+    # above it has a waist, a head and a symmetrical set of legs, and the waist
+    # is what makes it an insect instead of a beetle-shaped stone.
+    def bug(cx, cy, k, tone):
+        ellipse(c, cx, cy + 2.2 * k, 3.4 * k, 4.4 * k, tone)     # the abdomen
+        ellipse(c, cx, cy - 2.4 * k, 2.6 * k, 2.4 * k, tone)     # the thorax
+        c.disc(cx, cy - 5.4 * k, 1.8 * k, tone)                  # the head
+        for i in range(3):                                       # and the legs
+            y = cy - 2.0 * k + i * 2.6 * k
+            c.line(cx - 2.4 * k, y, cx - 6.0 * k, y - 1.4 * k, tone, 1.2)
+            c.line(cx + 2.4 * k, y, cx + 6.0 * k, y - 1.4 * k, tone, 1.2)
+    bug(17.4, 17.6, 0.60, S)                           # the bite still to come
+    bug(8.2, 8.0, 1.0, E)                              # and the one that landed
+
+
+@icon('splashback')         # SPLASHBACK - your own statuses ride your shots
+def _(c):
+    # SOMETHING STRIKING A SURFACE AND COMING STRAIGHT BACK OFF IT. Against
+    # STATUS CONDUIT (a hub wired to three bodies) and FOUR HUMOURS (a quartered
+    # round): those draw WHAT the effect is, and this draws the DIRECTION -
+    # which is the whole pick, because the effect in question is whatever
+    # happens to be on the player at the time.
+    #
+    # THE PLATE IS AT AN ANGLE. Struck square, the drop and the spray line up
+    # and the icon reads as a single stroke; at forty-five degrees the incoming
+    # and the outgoing are visibly two different directions.
+    # THE RAMP runs corner to corner so both directions have a clear half of the
+    # frame to live in - struck square, the incoming and the outgoing line up and
+    # the whole icon reads as one stroke.
+    c.poly([(0.6, 23.4), (0.6, 19.0), (22.0, 8.4), (22.0, 13.0)], S)
+    arrow(c, 2.4, 1.6, 10.4, 12.0, S, 2.2, 4.6)        # what arrived
+    for ax, ay, r in ((15.0, 3.2, 2.2), (19.6, 6.0, 1.8), (20.8, 1.4, 1.4)):
+        c.disc(ax, ay, r, E)                           # and what came off it
+    c.line(11.8, 11.4, 16.0, 5.0, E, 2.4)              # on the way out
+
+
+# ---- the turrets -----------------------------------------------------------
+#
+# Three drawings of one object, and that is deliberate: they ARE one object, and
+# what the player has to learn is which of the three things it can be doing. So
+# the gun is the same gun in all three - the same drum, the same barrel, the
+# same eye, at the same place in the frame - and the only thing that changes is
+# what is leaving the muzzle. A set that drew three different machines would be
+# teaching the wrong lesson.
+
+
+def _sentry(c, tone=S):
+    """LITTLE BROTHER's gun, at the size the three picks below share.
+
+    Drawn low and left so there is room at the muzzle for whatever each pick is
+    putting out of it - which is the only part of those three drawings that
+    differs, and so the only part that may be given the lit tone.
+    """
+    for dx in (-5.0, 0.0, 5.0):                        # the legs
+        c.line(8.6 + dx * 0.3, 15.8, 8.6 + dx, 23.0, tone, 2.4)
+    c.rect(2.6, 8.6, 14.6, 15.8, tone)                 # the drum
+    c.rect(13.6, 10.6, 19.4, 13.8, tone)               # the barrel
+    c.disc(6.4, 12.2, 2.4, DEEP)                       # and the eye
+
+
+@icon('sharedMag')          # SHARED MAG - turrets fire from your reserve, 3x
+def _(c):
+    # THE SENTRY, BELT-FED FROM A MAGAZINE. What names this one is that the
+    # ammunition is coming from somewhere OUTSIDE the gun - so the magazine sits
+    # apart from it, in the corner, with the belt running across the gap. The
+    # gap is the pick: the rounds are the player's.
+    _sentry(c)
+    c.rect(17.4, 1.0, 22.6, 2.6, E)                    # the feed lips
+    c.rect(18.2, 2.6, 21.8, 9.0, E)                    # the magazine
+    for i in range(4):                                 # and the belt off it
+        x = 19.6 - i * 1.9
+        y = 9.6 + i * 0.7
+        c.rect(x - 0.9, y, x + 0.9, y + 1.6, E)
+
+
+@icon('venomgrid')          # VENOMGRID - your turrets poison
+def _(c):
+    # THE SAME SENTRY, WITH A DROP COMING OUT OF THE BARREL. Against VENOM
+    # ROUNDS (a poisoned cartridge): that pick poisons what the PLAYER hits and
+    # this poisons what the turret does, so the drop has to be at the turret's
+    # muzzle rather than anywhere else in the frame.
+    _sentry(c)
+    for cx, cy, r in ((20.4, 6.4, 2.0), (21.0, 12.6, 2.8)):
+        drop(c, cx, cy, r, E)
+
+
+@icon('hellspitter')        # HELLSPITTER - your turrets set fire
+def _(c):
+    # VENOMGRID'S TWIN, IN FIRE, and it has to be read as the twin: same gun,
+    # same place, and the only difference is that what leaves the muzzle is a
+    # flame instead of a drop. Against INCENDIARY (a burning round) for the same
+    # reason VENOMGRID is drawn against VENOM ROUNDS.
+    _sentry(c)
+    flame(c, 20.0, 16.4, 2.4, 7.0, E)
+    flame(c, 22.0, 11.6, 1.6, 4.6, E)
+
+
+# ---- the floor, and what is lying on it ------------------------------------
+
+
+@icon('vintageOrbs')        # VINTAGE ORBS - orbs gain 1% value a second
+def _(c):
+    # A COIN THAT IS ALSO A CLOCK. Against HIGH INTEREST (a stack with an arrow
+    # off the top) and LONG HAUL (an hourglass mostly run): the first is money
+    # GROWING and the second is time PASSING, and this pick is the two of them
+    # being the same thing - so it is one object, not two side by side.
+    #
+    # THE HANDS ARE AT A DIAGONAL, not at twelve and three. A vertical hand
+    # merges with the rim's highlight on the lighting pass and the face reads as
+    # a coin with a scratch on it.
+    c.disc(12.0, 12.0, 10.6, S)
+    c.disc(12.0, 12.0, 8.4, DEEP)
+    for a in (0, 90, 180, 270):                        # the hours
+        r = math.radians(a)
+        c.line(12 + math.cos(r) * 5.6, 12 - math.sin(r) * 5.6,
+               12 + math.cos(r) * 7.4, 12 - math.sin(r) * 7.4, S, 1.6)
+    c.line(12.0, 12.0, 17.0, 8.0, E, 2.0)              # the hands
+    c.line(12.0, 12.0, 8.6, 17.4, E, 2.0)
+    c.disc(12.0, 12.0, 1.6, E)
+
+
+@icon('firstFruits')        # FIRST FRUITS - a wave's first 3 kills drop a plate
+def _(c):
+    # THREE OF THEM, ON THE STEM. Nothing else in the catalogue is fruit, and
+    # the count is the pick - so they are drawn as three separate round bodies
+    # with clear air between them rather than as a bunch, which at this size
+    # would be one lumpy silhouette with no number in it at all.
+    # THE AIR BETWEEN THEM IS THE COUNT. At four pixels of radius and ten
+    # apart they touched, the lighting pass welded the contact into one tone,
+    # and three fruits became one lumpy shape with no number in it - which is
+    # the only thing this drawing has to say.
+    for cx, cy in ((5.4, 14.4), (18.6, 14.4), (12.0, 20.4)):
+        c.disc(cx, cy, 3.6, E)
+    c.line(12.0, 1.6, 12.0, 11.0, S, 2.2)              # the stem
+    c.poly([(12.6, 3.2), (21.0, 1.6), (19.0, 7.4)], S)  # and the leaf
+
+
+@icon('coldFoot')           # COLD FOOT - sprinting lays ice that slows
+def _(c):
+    # A BOOT LEAVING, AND ICE STANDING WHERE IT WENT. Deliberately SCORCHED
+    # EARTH's composition - a ground line with something growing out of it -
+    # because the two picks are the same idea in the two elements, and the set
+    # already teaches that pairing (VENOM against INCENDIARY, CRYO against
+    # them both). What separates them at a glance is the colour, and what
+    # separates them in the drawing is the BOOT: a slide has no foot in it.
+    #
+    # THE SPIKES POINT UP AND THE TONGUES OF A FIRE DO NOT TAPER THE SAME WAY.
+    # Ice is drawn as hard triangles with flat bases; fire is drawn with a pinch
+    # and a bulge. At totem size that is the difference between a row of teeth
+    # and a row of flames, and it is enough.
+    c.rect(0.5, 18.6, 23.5, 20.6, S)                   # the floor
+    for cx, h in ((3.0, 5.6), (8.4, 8.4), (13.6, 6.2)):
+        c.poly([(cx - h * 0.34, 18.6), (cx + h * 0.34, 18.6), (cx, 18.6 - h)], E)
+    # The boot, mid-stride and already past them. Solid, not outlined: a
+    # one-pixel sole survives no lighting pass in this set.
+    c.poly([(16.0, 9.0), (20.0, 9.0), (20.0, 15.4), (23.4, 15.4),
+            (23.4, 18.6), (16.0, 18.6)], S)
+    c.rect(16.0, 8.0, 20.4, 10.2, S)                   # the cuff
+
+
+# ---- the item slot ---------------------------------------------------------
+
+
+@icon('jumperCables')       # JUMPER CABLES - a hit taken grants +3 item charge
+def _(c):
+    # TWO CLAMPS AND A SPARK BETWEEN THEM. Against TWIN CELL (two batteries),
+    # BAILIFF (a cell with an arrow back into it) and RAFFLE TICKET (a stub with
+    # a bolt on it): every one of those draws the METER, and this draws where
+    # the charge is coming FROM - which is the pick, because it is coming from
+    # being hit.
+    #
+    # THE JAWS ARE OPEN AND TOOTHED. A closed clamp is a lozenge on a string,
+    # and the catalogue has several of those; the notches and the gap are the
+    # whole silhouette.
+    # ONE CLAMP ABOVE, ONE BELOW, BOTH BITING TOWARD THE MIDDLE. The jaws are
+    # long triangles that MEET at a point, which is the only version of this
+    # shape that survives 24 pixels: an open clamp needs a gap, a hinge and two
+    # tapers, and at this size the gap closes under the outline pass anyway and
+    # what is left is an unreadable fork.
+    for cy, flip in ((5.2, 1), (18.8, -1)):
+        c.poly([(0.6, cy - 3.4 * flip), (15.0, cy), (0.6, cy - 0.4 * flip)], S)
+        c.poly([(0.6, cy + 3.4 * flip), (15.0, cy), (0.6, cy + 0.4 * flip)], S)
+        c.rect(0.0, cy - 1.2, 4.0, cy + 1.2, S)        # the lead into it
+    # THE JUMP, between the two points. Explicit vertices rather than two
+    # crossing strokes: the mitre where a zigzag turns back on itself fills in
+    # under the lighting pass and the bolt becomes a lit blob.
+    c.poly([(18.6, 4.2), (14.6, 12.4), (17.8, 12.4), (14.2, 20.4),
+            (22.4, 11.0), (19.0, 11.0)], E)
+
+
+@icon('dimeNovel')          # DIME NOVEL - using your item grants +20% crit
+def _(c):
+    # A PAPERBACK WITH A BULLSEYE ON THE COVER. Nothing else in the catalogue is
+    # a book, and the crit family is rings - so this is the one drawing in the
+    # set that is a ring on something else, which is exactly what the pick is: a
+    # crit bonus that comes from somewhere other than the gun.
+    #
+    # THE SPINE AND THE PAGE EDGE ARE BOTH DRAWN. Without them a cover is a
+    # rectangle with a ring on it, and the set has plenty of rectangles.
+    c.rect(4.0, 1.6, 20.4, 22.4, S)                    # the cover
+    c.rect(4.0, 1.6, 6.4, 22.4, DEEP)                  # the spine
+    c.rect(18.8, 3.0, 20.0, 21.0, DEEP)                # the page edge
+    c.ring(13.0, 12.0, 4.8, 1.8, E)                    # and what is on it
+    c.disc(13.0, 12.0, 1.6, E)

@@ -400,6 +400,43 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 #hp-box.low #hp-text { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
 #hp-box.low #hp-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
 
+/* ---- the shield ----------------------------------------------------------
+   The blue cap on the end of the health bar. BALLAST TANKS opens every wave
+   with fifty of these, PLASMA BAG adds ten a crate and SECOND SKIN twenty a
+   press - and before this none of them had any readout at all, so a player
+   holding seventy points of shield saw a full health bar and nothing else.
+
+   OUT OF FLOW AND OFFSET, NOT STACKED. `.seg > i` is a block at 100% height,
+   so a second one placed after the first would sit BELOW it and double the
+   frame's content height - exactly the trap #item-bar2 carries the note for.
+   Taken out of flow, it occupies the same cells; the translateX UI.setHealth
+   writes is what puts it to the RIGHT of the health it is protecting, which
+   is where it has to be: the shield is spent first, so the blue shrinking back
+   toward the green is the picture of what is actually happening.
+
+   CYAN, NOT A SECOND GREEN, AND NOT A NEW HUE EITHER. It is the value the
+   shield pickup, SECOND SKIN and the whole armour family already wear
+   (THEME.armor in upgrades.js), and the UI has no business inventing a colour
+   the world does not use - see the note on the palette.
+
+   IT IS THE SAME CYAN THE STAMINA BAR ONE ROW DOWN IS, which is worth stating
+   because it looks like a mistake and is not. What tells the two apart is not
+   hue, it is that they are different INSTRUMENTS: this fill is 20px tall on a
+   20-cell track and the stamina bar is 8px on a 40-cell one, a row below it.
+   Giving the shield a hue of its own would have cost more than it bought - a
+   player who has learned that cyan means "shield" from the pickup, the item and
+   the totem would meet a fourth colour for it here, on the one readout they
+   look at most. */
+#hp-shield {
+  position: absolute; inset: 0;
+  background: var(--cyan);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(78, 243, 255, 0.55);
+}
+/* THE LOW STATE DOES NOT TOUCH IT. `#hp-box.low` turns the health fill red
+   below a third, and a shield sitting on the end of a nearly-empty bar is the
+   one thing on screen saying the next hit is survivable - reddening it would
+   be the HUD lying about the best news the player has. */
+
 /* ---- stamina -------------------------------------------------------------
    The same instrument as the health bar at half the height and twice the cell
    count, which is the whole design: it is obviously the same KIND of readout

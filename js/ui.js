@@ -30,6 +30,7 @@ export class UI {
     this.enemies = $('enemies-left');
     this.hpBox = $('hp-box');
     this.hpBar = $('hp-bar');
+    this.hpShield = $('hp-shield');
     this.hpText = $('hp-text');
     this.stamBar = $('stam-bar');
     this.ammoNum = $('ammo-num');
@@ -200,24 +201,72 @@ export class UI {
     // NAMES the player and the band that marks their weapon teach each other.
     this.versusTag.style.color = PLAYER_INK[(n - 1) % PLAYER_INK.length];
   }
-  setHealth(h, max) {
-    // Keyed off the displayed number, not the clamped bar width, so overheal
-    // ticking back down to full still updates the readout.
+  /**
+   * The health bar, and the shield riding on the end of it.
+   *
+   * THE DENOMINATOR IS HEALTH PLUS SHIELD, not max health. Drawn against max
+   * health alone the shield has nowhere to go the moment the bar is full -
+   * which is precisely the state BALLAST TANKS puts the player in at the top of
+   * every wave, and SECOND SKIN in at the press of a button. Growing the
+   * denominator instead means a hundred health and fifty shield reads as two
+   * thirds green and one third blue, both full, and every point the player owns
+   * is on screen. A run with no shield at all divides by max health exactly as
+   * it always did, so nothing about the ordinary bar moves.
+   *
+   * IT IS NOT max(maxHealth, health) + shield BY ACCIDENT. The crate overheals
+   * past the cap by design (see Player.heal), and a bar whose denominator
+   * ignored that would draw 125/100 as a full bar and then appear to LOSE
+   * health for the first twenty-five points of damage taken.
+   *
+   * @param {number} shield  current shield points, 0 when there are none.
+   */
+  setHealth(h, max, shield = 0) {
+    // Keyed off the displayed numbers, not the clamped bar width, so overheal
+    // ticking back down to full still updates the readout - and so a shield
+    // being eaten on a full health bar moves the bar at all.
     const shown = Math.ceil(Math.max(0, h));
-    if (this._c.hp === shown) return;
+    const sh = Math.ceil(Math.max(0, shield));
+    if (this._c.hp === shown && this._c.shield === sh) return;
     this._c.hp = shown;
-    const p = Math.max(0, Math.min(100, (h / max) * 100));
+    this._c.shield = sh;
+    const live = Math.max(0, h);
+    const den = Math.max(max, live) + Math.max(0, shield);
     // The bar is cut into 20 cells by a mask on its TRACK, so the width here
     // is quantised to a whole cell: a fill that stops halfway through a cell
     // says the interface is drawing sub-pixels, which is the one thing this
     // HUD is built not to do.
-    const cells = Math.ceil((p / 100) * 20);
-    this.hpBar.style.transform = 'scaleX(' + (cells / 20) + ')';
+    let hpCells = Math.min(20, Math.ceil((live / den) * 20));
+    // THE SHIELD TAKES WHAT IS LEFT, and never a cell the health is using.
+    //
+    // ONE POINT IS STILL ONE CELL, and this is the line that makes that true:
+    // both fills round UP off their own fraction, so a hundred health and one
+    // point of shield rounds the health to all twenty cells and leaves the
+    // shield nothing - a reserve the player owns and cannot see is a reserve
+    // they will not spend. The health gives the cell back rather than the
+    // shield going unlit, because the health bar is the one the player can
+    // still read the exact figure of off the text beside it.
+    let shCells = 0;
+    if (shield > 0) {
+      shCells = Math.max(1, Math.ceil((shield / den) * 20));
+      if (hpCells + shCells > 20) hpCells = Math.max(0, 20 - shCells);
+      shCells = Math.min(shCells, 20 - hpCells);
+    }
+    this.hpBar.style.transform = 'scaleX(' + (hpCells / 20) + ')';
+    // TRANSLATED, THEN SCALED. `.seg > i` has transform-origin at the left
+    // edge, so the offset has to come first: written the other way round the
+    // scale would shrink the translation with it and the shield would slide
+    // left as it was spent.
+    this.hpShield.style.transform =
+      'translateX(' + (hpCells * 5) + '%) scaleX(' + (shCells / 20) + ')';
     // Colour and the beat on the readout are a CLASS now rather than three
     // inline writes: the low state is a state of the whole box, and the
     // stylesheet is where it belongs.
-    this.hpBox.classList.toggle('low', p < 30);
-    this.hpText.textContent = shown + ' / ' + max;
+    //
+    // MEASURED AGAINST MAX HEALTH AND NOT AGAINST THE GROWN DENOMINATOR: the
+    // warning is about the FLESH, and a player on twelve health behind a
+    // fifty-point shield is still one broken shield away from dying.
+    this.hpBox.classList.toggle('low', (h / max) * 100 < 30);
+    this.hpText.textContent = shown + ' / ' + max + (sh > 0 ? '  +' + sh : '');
   }
   /**
    * The stamina bar. `frac` is 0..1, `low` is whether there is too little left

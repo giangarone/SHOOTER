@@ -47,9 +47,23 @@ export const POWERUP_TYPES = {
      */
     apply: (player) => {
       const m = player.mods || {};
+      // CRASH CART. A hundred instead of the crate's own twenty-five, and only
+      // while the bar is at or under twenty points.
+      //
+      // FIRST, so everything below it treats the bigger number as though it had
+      // always been the crate's: FIRE SALE doubles it, SLOW RELEASE owes it
+      // over twenty seconds, GRISTLE tosses its coin. One crate, one payout,
+      // whichever size the crate turned out to be.
+      //
+      // A FLOOR AND NOT A MULTIPLIER. It does not scale with the build, the
+      // wave or healMult, which is what keeps it a rescue rather than a healing
+      // strategy - and the line it is measured against is a number of POINTS
+      // rather than a fraction of the bar, so the player can read which side of
+      // it they are on straight off the HUD.
+      const base = (m.crashCart > 0 && player.health <= m.crashCartAt) ? m.crashCart : 25;
       // FIRE SALE. Twice the crate, and the despawn that pays for it is on the
       // Powerup's own clock - see PICKUP_LIFETIME's use in update().
-      const amount = 25 * (m.lootMult || 1);
+      const amount = base * (m.lootMult || 1);
       if (m.slowRelease > 1) {
         // SLOW RELEASE. Twice as much again, owed rather than paid. It does
         // NOT go through the +25 overheal ceiling below, and cannot: the pool
@@ -67,6 +81,23 @@ export const POWERUP_TYPES = {
       // GRISTLE. One permanent point, three times in ten - see
       // Player.bankCrateHealth for why it has a bank of its own.
       player.bankCrateHealth();
+      // PLASMA BAG. Ten points of shield on top of whatever the crate healed,
+      // and the reason it is last is the reason GRISTLE's coin is: it is a
+      // question about the crate having been PICKED UP, not about how much of
+      // it landed. A player at full health walks over a crate for nothing today
+      // - the plate is withheld at a full bar precisely because it would be a
+      // drop that cannot be spent - and this is the pick that makes the walk
+      // worth taking whatever the bar is at, because a shield point has no
+      // ceiling to hit.
+      //
+      // ADDED, and the clock is cancelled, on SECOND SKIN's terms: a shield
+      // counting down on a timer somebody else started is the one behaviour a
+      // player could not predict, and taking the clock off is always the
+      // reading in their favour.
+      if (m.crateShield > 0) {
+        player.shield += m.crateShield;
+        player.shieldEnd = 0;
+      }
     },
     chance: 0.04,
     needy: 0.04,
@@ -285,6 +316,12 @@ function needScale(frac) {
  * walked over for nothing. The need term reads the same fraction, so the two
  * agree: at hpFrac 1 the roll is skipped outright.
  *
+ * ...UNLESS THE CRATE IS WORTH SOMETHING ANYWAY, which is exactly what PLASMA
+ * BAG makes it. The gate above is not a rule about health, it is the rule that
+ * a drop which cannot be SPENT should not be rolled - and a crate carrying ten
+ * points of shield can be spent on a full bar, because a shield point has no
+ * ceiling to hit. `crateShield` is the caller saying so.
+ *
  * @param {number} hpFrac    health / maxHealth
  * @param {number} ammoFrac  (reserve + mag) / maxReserve
  * @param {boolean} wantBattery false when the player is carrying no active item
@@ -295,13 +332,17 @@ function needScale(frac) {
  *   ammo as it should. An empty player killing a whole wave would otherwise
  *   carpet the floor in crates, all of one shape, most of them redundant by
  *   the time the second is collected.
+ * @param {boolean} crateShield true when the build owns PLASMA BAG, which
+ *   lifts the full-bar gate above. Defaults false, so every existing caller and
+ *   every fixture keeps exactly the behaviour it had.
  * @returns {string|null} a spawnable type key, or null for nothing at all -
  *   which is what most kills return.
  */
-export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
+export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
+  crateShield = false) {
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
     if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;
@@ -339,11 +380,12 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBatte
  *
  * @returns {string|null}
  */
-export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
+export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
+  crateShield = false) {
   let total = 0;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
     if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     total += def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
@@ -356,7 +398,7 @@ export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBat
   let r = Math.random() * total;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
     if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     r -= def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
@@ -367,7 +409,7 @@ export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBat
   for (let i = ROLL_ORDER.length - 1; i >= 0; i--) {
     const key = ROLL_ORDER[i];
     if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
     if (key === 'battery' && !wantBattery) continue;
     return key;
   }
@@ -379,11 +421,12 @@ export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBat
  * Exact rather than a sum: the categories are independent rolls, so this is
  * one minus the chance every one of them misses.
  */
-export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true) {
+export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
+  crateShield = false) {
   let miss = 1;
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1) continue;
+    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
     if (key === 'battery' && !wantBattery) continue;
     const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
     let p = def.chance;

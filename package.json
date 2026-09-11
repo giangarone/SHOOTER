@@ -23,6 +23,7 @@
     "test:active": "node test/active.mjs",
     "test:newpool": "node test/newpool.mjs",
     "test:thirdpool": "node test/thirdpool.mjs",
+    "test:fourthpool": "node test/fourthpool.mjs",
     "test:charge": "node test/charge.mjs",
     "test:money": "node test/money.mjs",
     "test:flawless": "node test/flawless.mjs",

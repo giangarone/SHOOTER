@@ -1281,6 +1281,315 @@ they are one gun at two prices. It carries its own flag and its own cap counted
 over the deployed list, so a run holding both gets both caps rather than one
 eating the other's.
 
+### The fourth pool
+
+Twenty-seven more max-1 picks, and what they have in common as a group is a
+change of **clock**. The three pools before this one all ultimately hang off the
+trigger: they answer "what did that shot do", "when is the gun better", "where
+were you standing when you fired". Three pools of that had quietly made the shot
+the only event in the game worth building around. This one mostly hangs off
+clocks the player does not own - **the beat, the wave boundary, a reload
+seating, a crate being walked over, a turret taking its own shot** - so a run
+carrying them is paid for the fight continuing rather than for firing faster.
+
+**The music**
+
+| Upgrade | Effect |
+| --- | --- |
+| SYNCOPATION | Once a beat, one of the player's own shots lands on a random enemy |
+| HEARTBEAT | On every downbeat, every enemy has a 20% chance of taking 1 damage |
+
+These are the first picks in the game that put damage in the room off the
+**music** rather than off the trigger, and both ride the pulse edge on the WHOLE
+beat - the sentries already fire twice a beat and the burn ticks on the upbeat,
+so a third thing landing on every pulse would have turned the beat into a wash
+of numbers instead of a rhythm. Once a beat is something the player can *hear*
+arriving, which is the only reason to hang either of them on the music at all.
+
+They are deliberately opposite shapes. SYNCOPATION scales with the build - it is
+worth one of the player's own shots through `Player.dotHit`, exactly as every
+other proc in the game is - and cannot be aimed, so it is worth most in a crowd
+and least in the one fight the player cares about. HEARTBEAT is the one number
+in the entire pool that does **not** scale with anything: a flat point, offered
+to every body in the room. That makes its value a fact about the SIZE of the
+wave rather than about the gun, which is why it is worth taking on a run that
+has drafted no damage at all and why a boss standing alone barely notices it.
+
+**The magazine, read as a number**
+
+| Upgrade | Effect |
+| --- | --- |
+| ODD COUPLE | +20% damage when the magazine holds an odd number of rounds |
+| EVEN BETTER | +20% damage when it holds an even number |
+| HOT MAG | +1% fire rate per round currently in the magazine |
+| POCKET GRENADE | The last round of every magazine explodes for 3x damage |
+| PRODIGAL ROUNDS | 20% of shots that miss return to the reserve |
+| FULL LOAD | Every wave ends with your ammunition refilled |
+
+The round count in the corner has been on screen since the first wave and has
+never once been a thing to *think* about. ODD COUPLE and EVEN BETTER are the
+same pick twice, and the joke is the point: whichever one you are offered, the
+other is out there, and a run that finds both has +20% on every shot it fires.
+Both read `magAtShot` - what the TRIGGER saw - and never the live count, for the
+reason FATAL RESERVE and HARM WANDS read it: by the time anything downstream
+looks the magazine has already been billed, by one round, or by three under
+TRIPLE TAP, or by none at all under BELT FEED.
+
+**The trap in that pair is that zero is an even number.** A round billed
+straight off the reserve (BELT FED DREAM) or bought with money (CASH CANNON)
+reports `magAtShot` 0, so without a gate EVEN BETTER would be a silent
+unconditional +20% to exactly the two builds with no magazine to read. There is
+an assertion for that alone in `test/fourthpool.mjs`.
+
+HOT MAG is HARM WANDS' exact opposite - fastest at the top of a magazine where
+that one is fastest at the bottom - so a build holding both fires at a rate that
+dips in the middle and peaks at either end. Alone it is a reason to reload
+EARLY, which nothing else in the pool asks for. It is the one rate mod in
+`effectiveFireRate` that reads the LIVE count, because the card says
+"currently", and it is refused outright under BELT FED DREAM where `mag` is a
+mirror of the reserve and a percent a round would read three hundred.
+
+POCKET GRENADE makes the worst round in the game the best one. The last round of
+a magazine is the one that starts a reload; this makes it a blast at wherever it
+stopped, worth three times the shot that became it - so it takes CANNONADE, the
+gamble, the cursed round and both parity picks with it. It goes off in a wall
+too: the round was spent either way, and a version that paid only on a hit would
+punish the miss twice.
+
+PRODIGAL ROUNDS is BRASS ECHO's mirror image. That one pays back a round that
+HIT and this one pays back a round that did not, and between them there is no
+shot in the game that is simply gone. Twenty per cent against BRASS ECHO's five,
+because a miss is worth less by definition - and because what it is really
+priced against is the scattergun, which misses more than anything else and pays
+the most ammunition for it.
+
+FULL LOAD fires **at the clear and not at the open**, which is the whole of why
+it is worth a draft pick rather than a convenience: the shop happens between the
+two, so a reserve filled here is money the player still has while the stations
+are standing. It is also the only free refill in the game that tops up the
+MAGAZINE - a flawless resupply deliberately does not, because that one is a
+reward for a wave taken perfectly and the reload is a second and a half the
+player can spend in a shop.
+
+**The butt of the rifle, which is now three picks deep**
+
+| Upgrade | Effect |
+| --- | --- |
+| LONG ARM | +100% melee reach |
+| SCYTHE | Melee strikes everything in the arc in front of you |
+| THROAT CUT | Melee instantly kills enemies under 50% health. Not bosses |
+
+Melee has been worth double at the kill since the beginning and four times that
+under CROWBAR, and almost none of it mattered, because 3.6 metres is the range a
+rusher is at when you have *run out of choices*. Seven metres is the range it is
+at when you DECIDE to swing. LONG ARM is a fraction of `MELEE_RANGE` rather than
+a flat number of metres, so the reach still grows with the target the way the
+base one does and a boss stays meleeable from outside its own surface.
+
+SCYTHE is the arc and not the room, which is what keeps EVERYONE FELT THAT - the
+item that hits every living body wherever it is standing - from becoming a worse
+version of it. What this sells is a DIRECTION: the same sixty degrees the swing
+was already tested against, at the same reach, so LONG ARM widens the sweep
+exactly as far as it lengthens the strike. Every body in it takes the full
+number the target took, not a share of it, and every one of them is tagged as a
+melee kill so the double bounty and BLOODSPORT's heal compose as they always do.
+
+THROAT CUT does not deal damage - it **writes the body out**. That is not a
+shortcut, it is the only reading under which "instantly kills" survives armour:
+`takeDamage` multiplies a blow by the type's plating before subtracting it, so
+the obvious `hurtEnemy(e, e.hp + 1)` leaves a Colossus standing on four fifths
+of what it had. It takes EXECUTIONER's route instead - health to zero, `dead`
+raised, and the frame's own death sweep books the bounty, the drop, the combo
+and the corpse exactly as it does for anything else. It reads the health the
+swing ARRIVED at, not the health after it, and it refuses a boss outright.
+
+**The shield, which finally has a bar**
+
+| Upgrade | Effect |
+| --- | --- |
+| BALLAST TANKS | Every wave starts with a 50 point shield |
+| PLASMA BAG | Health crates also give a 10 point shield |
+
+The shield has existed since the pickup shipped and SECOND SKIN has been selling
+twenty points of it for a full item charge, and **until now nothing on screen
+said so**. A player holding seventy points of shield saw a full health bar and
+no other difference. It is drawn now as a cyan cap on the end of the health bar
+itself - not a second plate, because a shield point is spent exactly where a
+health point is (`takeDamage` empties it first and fully) and it belongs on the
+same instrument.
+
+The bar's **denominator grows to hold it**: a hundred health and fifty shield
+reads as two thirds green and one third blue, both full. Drawn against max
+health alone the shield would have nowhere to go the moment the bar was full -
+which is precisely the state BALLAST TANKS puts the player in at the top of
+every single wave, and SECOND SKIN in at the press of a button. A run with no
+shield divides by max health exactly as it always did, so the ordinary bar does
+not move. A single point still lights a whole cell: a reserve the player owns
+and cannot see is a reserve they will not spend.
+
+BALLAST TANKS is a **floor and not a write**. `Math.max` is what stops the pick
+punishing the one build most likely to own it - SECOND SKIN's twenty points do
+not expire, so a player who walked into a wave holding sixty would otherwise be
+cut back to fifty by their own passive item. It does not compound either: the
+fifty is SET every wave, so a wave cleared untouched banks nothing.
+
+PLASMA BAG lifts the rule that a health plate is withheld at a full bar. That
+gate was never about health - it is the rule that a drop which cannot be SPENT
+should not be rolled - and a crate carrying ten points of shield can be spent up
+there, because a shield point has no ceiling to hit.
+
+**Staying alive**
+
+| Upgrade | Effect |
+| --- | --- |
+| FLOW RELOAD | Every reload grants 1s of invulnerability |
+| BELLOWS | Take 15% less damage at full stamina |
+| STERILE FIELD | Any heal also clears every status on you |
+| CRASH CART | Health crates heal 100 HP while you are under 20 HP |
+
+The reload has never been anything but a cost - a second and a half standing
+there with no gun - and FLOW RELOAD turns it into cover. What it changes is
+*when* a magazine is changed: a reload taken while something is winding up is
+now the correct answer to it. It lands on the rounds ARRIVING, so a reload
+interrupted by a death buys nothing. **The exploit it is priced against is left
+open on purpose**: fire one round, reload, take the second, repeat. `startReload`
+refuses a full magazine, so every second of cover has to be bought with a
+trigger pull and a whole reload stood through, at a rate of fire far below
+simply shooting and with the reserve draining the whole time. A player who wants
+to be untouchable can have it, and they will not kill anything while they are.
+
+BELLOWS reads the top of the stamina bar, which nothing had ever treated as a
+RESOURCE - it was a permission to sprint and a lockout when it ran out, and that
+was all of it. RUNNING ON FUMES pays for the bottom of it and this pays for the
+top, and they are exact opposites. Full means full, on PACE CAR's terms: the
+moment a sprint, a slide or a dash takes anything off, the armour is gone. What
+makes that affordable rather than punishing is that stamina refills on its own -
+the guard is always a few seconds from coming back, which is not true of any
+other conditional guard in the pool.
+
+STERILE FIELD is WHITE CELL as a passive item, paid for with health the player
+had to spend anyway. It sits in `Player.heal`, the one door every heal in the
+game passes through, so a heal added later is covered without anybody having to
+remember it - and **the whole pick is the threshold**. Most healing in this game
+arrives as a rate times dt: NANOWEAVE's trickle, DIG IN's, SLOW RELEASE's drip,
+HEALTHY CORE's. A cleanse that fired on a hundredth of a point would not be a
+cleanse at all, it would be IRON LUNG - nothing could ever land on a run
+carrying any regeneration. So it asks for a whole point: a heal the player can
+SEE arriving, and a trickle stays a trickle.
+
+CRASH CART is a floor and nothing else. Twenty-five health is a quarter of a
+fresh run's bar and a rounding error on one that has banked forty points of max
+HP; a hundred is a whole life, and it is only ever paid to a player twenty
+points from losing one. It replaces the crate's own heal rather than adding to
+it and goes through the same door, so FIRE SALE still doubles it, SLOW RELEASE
+still owes it over twenty seconds and GRISTLE still tosses its coin.
+
+**What your shots carry**
+
+| Upgrade | Effect |
+| --- | --- |
+| BEDBUGS | 25% of every hit's damage lands again two seconds later |
+| SPLASHBACK | Your shots apply every status effect you are carrying |
+
+BEDBUGS is a flat +25% to anything that lives two seconds and nothing at all to
+anything that does not, so it is worth most against the big slow types and a
+boss and least against the rushers it would have been strongest against if it
+paid immediately. **The bite cannot bite.** It is booked once where the round
+lands and paid through `hurtEnemy`, which does not come back through the shot
+path - so a hit can never schedule a hit that schedules a hit, which is the one
+way a percentage-of-damage effect becomes infinite. It also dies with the body
+it was owed to, on DELAYED FUSE's terms: what is owed to a corpse would arrive
+as an unattributable number over an empty floor.
+
+SPLASHBACK makes being afflicted a weapon. STATUS CONDUIT makes a status on the
+player reach the bodies standing near them; this puts it on the AMMUNITION, so
+it has a longer reach and a chosen target and costs a shot rather than a radius.
+It carries only what an enemy can actually hold - burning, poison, the chill and
+fear exist on both sides of the fight - and WEAKNESS and CURSE simply do not
+transfer, because there is nothing on an enemy for them to become and inventing
+one would be a second meaning for a word the player already knows from their own
+HUD. The power is the player's own shot through `dotHit`, and the duration is
+what is LEFT on the player: eight fresh seconds of poison off a burn with half a
+second left would be manufacturing an affliction rather than passing one on.
+
+**The turrets, which were one item and are now a family**
+
+| Upgrade | Effect |
+| --- | --- |
+| SHARED MAG | Your turrets fire from your reserve for 3x damage; out of ammo they fire normally |
+| VENOMGRID | Your turrets poison what they hit |
+| HELLSPITTER | Your turrets set fire to what they hit |
+
+The turret was the one thing in the game that put damage in the room and carried
+nothing with it - every status the player owns rides their own bullets and stops
+at the muzzle. All three read the player's mods **live** inside `Turret.update`,
+which is the exact opposite of what the turret does with its DAMAGE: that is
+snapshotted at the throw, because the thing was built out of the gun in hand and
+a turret that got stronger because a totem was claimed while it was standing
+would be a second weapon nobody is aiming. These are not the turret - they are
+the belt it is fed from and what is in the rounds, and both of those belong to
+the player right now. Two rules four lines apart, and both halves are asserted.
+
+SHARED MAG costs a round a shot and a turret fires twice a beat, so a QUORUM
+build running three at once is spending twelve rounds a second on them. **Out of
+ammunition it keeps shooting at the ordinary number**, and that line is what
+makes the pick safe to take blind: the worst case is the turret the player
+already had, never a turret that has stopped working.
+
+VENOMGRID and HELLSPITTER are the same pick in the two elements, and which one a
+run is offered changes what its sentries are FOR - fire is short and fierce
+where poison is long and shallow, so a poison grid wears a boss down and a
+burning one clears a crowd.
+
+**The floor, and the item slot**
+
+| Upgrade | Effect |
+| --- | --- |
+| VINTAGE ORBS | Orbs gain +1% value per second they are left on the floor |
+| FIRST FRUITS | Each wave's first 3 kills drop a powerup |
+| COLD FOOT | Sprinting lays ice that slows whatever stands in it |
+| JUMPER CABLES | Taking a hit grants +3 item charge |
+| DIME NOVEL | Using your active item grants +20% crit chance for 20s |
+
+VINTAGE ORBS is small, certain and completely unfarmable, which is the only
+shape a "leave it there" reward can honestly have. A percent a second against
+`ORB_LIFETIME`'s twenty is a **ceiling of +20%**, and the clamp is in the code
+rather than left to the despawn sweep's timing. **The exploit it is priced
+against** is hoarding, and it does not pay for the same reason MOVING DAY's does
+not: an orb left more than twenty seconds is gone, credits and all, so a player
+hoarding on purpose is burning whole orbs to earn a fifth of the ones that
+survive. What it actually pays for is the money that was already going to sit
+there - the far side of the arena during a fight you cannot leave.
+
+FIRST FRUITS draws from PINATA's table, so it is ammunition when the reserve is
+thin, health when the bar is, a battery when the item slot has room and the
+rarer buffs when none of those is wanted. It pays into the FIGHT where CURTAIN
+CALL pays into a shop, and a refused drop does not spend one of the three - a
+floor already full and a player full of everything the table can offer are both
+refusals that are not the player's fault.
+
+COLD FOOT is SCORCHED EARTH in ice and off the SPRINT rather than the slide, and
+the difference matters: a slide is a second and a direction, so what it leaves
+is a wall; a sprint is however long the bar lasts and wherever the player
+chooses to go, so what this leaves is a floor they can draw on. It slows and
+does not burn - there is already one thing the player lays behind them that
+deals damage - which makes it the only pick in the pool that rewards breaking
+off, because the ice goes down BETWEEN the player and whatever is chasing them.
+
+JUMPER CABLES pays on a **blow and not on a tick**, and that line is the whole
+difference between a pick and an exploit. Fire, poison and the lava floor bill
+through `_hurtPlayerDot` several times a second, and paying those would make
+standing in a hazard the fastest way to charge an item in the game - a mechanic
+whose optimal play is to stop playing.
+
+DIME NOVEL rewards SPENDING the item. The meter refills off orbs and kills
+whether it is full or not and charge earned past the cap is simply lost, so a
+player banking a press is already wasting charge; this makes the waste visible
+by paying the alternative. It lands the moment the charge is spent and whatever
+the item then does, so it is worth exactly as much to PAY TO WIN's free press as
+to LANCE's - and it is the same shape BAILIFF and VITAL TRIGGER are, which is
+why all three are meant to be found by the same run.
+
 ### Active items
 
 **One slot, one button, no menu.** Everything else a run collects is a number

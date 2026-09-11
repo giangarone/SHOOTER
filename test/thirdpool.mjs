@@ -116,7 +116,15 @@ try {
     // ---- 1. THE GUN, AND THE MOMENTS IT IS BETTER --------------------------
 
     // CROWBAR. The swing, and the rounds it pays for.
+    //
+    // THE CRIT IS TAKEN OFF FIRST, and it is not cosmetic: _meleeStrike rolls
+    // one per swing off the base 5%, so about one run in ten measured a plain
+    // swing at 1.5x or a crowbar swing at 6x and reported the ratio as broken.
+    // A suite that fails on a dice roll is worse than no suite. The crit family
+    // has its own block further down this file and its own assertions.
+    const noCrit = () => { P.mods.critChance = 0; };
     bare();
+    noCrit();
     clearField();
     const cbTarget = spawn('chaser', 0, -2);
     P.yaw = 0;                                   // -sin/-cos: facing -Z
@@ -126,6 +134,7 @@ try {
     o.meleePlain = cbBefore - cbTarget.hp;
     o.meleePlainAmmo = P.reserveAmmo - 10;
     bare();
+    noCrit();
     clearField();
     const cbTarget2 = spawn('chaser', 0, -2);
     P.yaw = 0;
@@ -229,14 +238,20 @@ try {
     bare();
     give('redHarvest');
     P.health = P.maxHealth - 40;
+    // FOUR THOUSAND AND NOT FOUR HUNDRED. A coin toss sampled four hundred
+    // times has a standard deviation of 2.5 points, so the +-6 band this is
+    // read against was barely two sigma wide and the assertion failed on a
+    // clean build roughly one run in twenty. Ten times the samples is a tenth
+    // of the spread and costs a millisecond.
+    const HARVEST_N = 4000;
     let harvested = 0;
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < HARVEST_N; i++) {
       const before = P.health;
       g._critHeal(true);
       if (P.health > before) harvested++;
       P.health = Math.min(P.health, P.maxHealth - 40);
     }
-    o.harvestRate = harvested / 400;
+    o.harvestRate = harvested / HARVEST_N;
     // A NON-CRIT NEVER PAYS.
     P.health = P.maxHealth - 40;
     for (let i = 0; i < 200; i++) g._critHeal(false);
@@ -392,9 +407,14 @@ try {
     give('gristle');
     P.crateHp = 0;
     const maxBefore = P.maxHealth;
+    // FOUR THOUSAND, for the reason RED HARVEST's sample carries above: at
+    // four hundred the +-5 point band this is read against was two sigma, and
+    // a suite that fails on a dice roll one run in thirty is a suite people
+    // learn to re-run rather than to read.
+    const GRISTLE_N = 4000;
     let banked = 0;
-    for (let i = 0; i < 400; i++) if (P.bankCrateHealth()) banked++;
-    o.gristleRate = banked / 400;
+    for (let i = 0; i < GRISTLE_N; i++) if (P.bankCrateHealth()) banked++;
+    o.gristleRate = banked / GRISTLE_N;
     o.gristleMax = P.maxHealth - maxBefore;
     o.gristleIsBank = P.crateHp;
     // THE POINT OF THE WHOLE FIELD: a totem claimed afterwards must not hand

@@ -255,6 +255,9 @@ export class MoneyOrbs {
     // against - kept as a field rather than read out of the uniform so the
     // despawn test below and the blink can never be looking at two numbers.
     this.life = ORB_LIFETIME;
+    // VINTAGE ORBS' rate, published every frame by main.js - see setVintage.
+    // Zero is "not owned", which is what _worth tests for.
+    this.vintage = 0;
     // Set to true by anything that writes a position; the upload is skipped
     // entirely on a frame where every orb is asleep.
     this._dirty = false;
@@ -287,6 +290,41 @@ export class MoneyOrbs {
     if (this.life === v) return;
     this.life = v;
     this.mat.uniforms.uLife.value = v;
+  }
+
+  /**
+   * VINTAGE ORBS' rate, as a fraction of an orb's own value per second.
+   *
+   * A FIELD HERE RATHER THAN A READ OF THE PLAYER, for the reason setLifetime
+   * is one: this module is a leaf - it has no player, no mods and no game - and
+   * the whole of what it needs to know is one number main.js publishes onto it
+   * every frame, exactly as it publishes the fuse and the house colour.
+   */
+  setVintage(rate) {
+    this.vintage = Math.max(0, rate) || 0;
+  }
+
+  /**
+   * WHAT ONE ORB IS WORTH RIGHT NOW, which is its face value plus whatever age
+   * has added to it.
+   *
+   * ONE METHOD RATHER THAN THE ARITHMETIC AT THREE CALL SITES. An orb can be
+   * collected by the player walking onto it, by the magnet pulling it in, or by
+   * the MAGPIE picking it up (see collectAt), and a pick that paid on two of
+   * those and not the third would be a bird that quietly steals a fifth of the
+   * money it fetches.
+   *
+   * CLAMPED AT THE FUSE. `age` cannot exceed `life` in practice - an orb older
+   * than that is removed on the frame it crosses it - but the clamp is what
+   * makes the CEILING a fact about the code rather than a fact about the
+   * despawn sweep's timing, and the ceiling (+20% at the default twenty
+   * seconds) is the whole reason the pick is not farmable. See its entry in
+   * upgrades.js for what hoarding actually costs.
+   */
+  _worth(i) {
+    if (!this.vintage) return this.value[i];
+    const age = Math.min(this.life, Math.max(0, this.time - this.born[i]));
+    return this.value[i] * (1 + this.vintage * age);
   }
 
   /** The rainbow rim's phase. `c` is the rig's current house colour. */
@@ -456,8 +494,9 @@ export class MoneyOrbs {
       const dx = this.pos[i * 3] - x;
       const dz = this.pos[i * 3 + 2] - z;
       if (dx * dx + dz * dz > r2) continue;
-      value += this.value[i];
-      onCollect(this.value[i]);
+      const worth = this._worth(i);
+      value += worth;
+      onCollect(worth);
       this._remove(i--);
     }
     return value;
@@ -531,7 +570,7 @@ export class MoneyOrbs {
         const dz = this.pos[i3 + 2] - pz;
         const d2 = dx * dx + dz * dz;
         if (d2 < collect2) {
-          onCollect(this.value[i]);
+          onCollect(this._worth(i));
           collected++;
           this._remove(i--);
         } else if (d2 < magnet2) {

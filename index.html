@@ -75,7 +75,23 @@
           <span>VITALS</span>
           <span id="hp-text">100 / 100</span>
         </div>
-        <div id="hp-bar-bg" class="seg"><i id="hp-bar"></i></div>
+        <!-- THE SHIELD RIDES IN THE HEALTH BAR, not beside it. A shield point
+             is spent exactly where a health point is - takeDamage empties it
+             first and fully - so it belongs on the same instrument, and a
+             second plate for it would say the player has two bars to watch
+             when what they really have is one bar with a cap on the end.
+
+             THE BAR'S DENOMINATOR GROWS TO HOLD IT (see UI.setHealth): a
+             hundred health and fifty shield draw as two thirds green and one
+             third blue, both full, rather than the blue having nowhere to go
+             on a full bar - which is the state BALLAST TANKS puts the player
+             in at the top of every single wave.
+
+             It is declared AFTER the health fill and taken out of flow by the
+             stylesheet, for the reason #item-bar2 is: `.seg > i` is a block at
+             100% height, so a second one in flow would sit under the first and
+             double the frame. -->
+        <div id="hp-bar-bg" class="seg"><i id="hp-bar"></i><i id="hp-shield"></i></div>
         <!-- STAMINA, under the health it belongs with. VITALS already means
              "the state of your body" and this is the second half of it: same
              cell mask, same chamfer, half the height, so it reads as the

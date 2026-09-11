@@ -367,6 +367,64 @@ const DEFAULT_MODS = {
   quorumEvery: 0,       // Quorum: kills that summon a turret, which lives
   quorumLife: 0,        // this long, up to
   quorumMax: 0,         // this many at once
+
+  // ---- THE FOURTH POOL -----------------------------------------------------
+  //
+  // Twenty-seven more max-1 fields on the contract every block above holds:
+  // zero is "not owned" and every reader tests for it. What this block has in
+  // common as a GROUP is that most of them attach to a thing the game already
+  // does on its own schedule rather than to the trigger - the beat, the wave
+  // boundary, a reload finishing, a crate being walked over, a turret's shot -
+  // so the player is paid for the run continuing rather than for pressing
+  // anything extra. The two that DO ride the trigger (ODD COUPLE and EVEN
+  // BETTER) read the magazine the trigger saw, exactly as FATAL RESERVE and
+  // HARM WANDS do, and for the same reason.
+  syncopation: 0,       // Syncopation: damage dealt to one random enemy on
+                        // every whole beat, as a multiple of one of the
+                        // player's own shots - see Player.dotHit
+  hitCharge: 0,         // Jumper Cables: item charge granted by a hit TAKEN
+  dimeCrit: 0,          // Dime Novel: crit chance the active item buys, for
+  dimeTime: 0,          // this many seconds. The window is `dimeEnd` on the
+                        // player, where every other timed window lives.
+  oddCouple: 0,         // Odd Couple: damage gained when the magazine the
+                        // TRIGGER saw held an odd number of rounds, and
+  evenBetter: 0,        // Even Better: the same, for an even one. Both read
+                        // `magAtShot`, never the live count.
+  meleeReach: 0,        // Long Arm: extra melee reach, as a fraction of
+                        // MELEE_RANGE
+  scythe: 0,            // Scythe: the swing takes everything in the arc
+  throatCut: 0,         // Throat Cut: the HP fraction at or under which a
+                        // swing finishes a body outright. Never a boss.
+  waveShield: 0,        // Ballast Tanks: shield points every wave opens with
+  crateShield: 0,       // Plasma Bag: shield points a health crate also gives
+  bedbugs: 0,           // Bedbugs: fraction of a hit that lands a second time
+  bedbugsDelay: 0,      // this many seconds later
+  vintage: 0,           // Vintage Orbs: value an orb gains per second it is
+                        // left on the floor, as a fraction of its own worth
+  flowReload: 0,        // Flow Reload: seconds of invulnerability a finished
+                        // reload grants
+  pocketGrenade: 0,     // Pocket Grenade: multiplier on the round that emptied
+  pocketRadius: 0,      // the magazine, dealt as a blast over this radius
+  prodigal: 0,          // Prodigal Rounds: chance a shot that MISSED is paid
+                        // back into the reserve
+  firstFruits: 0,       // First Fruits: kills at the top of a wave that drop
+  coldFoot: 0,          // Cold Foot: seconds of slow the ice a sprint lays
+  coldFootRadius: 0,    // holds an enemy at, over this radius
+  splashback: 0,        // Splashback: a status ON THE PLAYER rides the shots
+  sterileField: 0,      // Sterile Field: a heal worth a whole point cleanses
+  sharedMag: 0,         // Shared Mag: multiplier on a turret's shot while the
+  sharedMagCost: 0,     // reserve can pay this many rounds for it
+  heartbeat: 0,         // Heartbeat: chance per enemy per DOWNBEAT of taking
+  heartbeatHit: 0,      // this much damage
+  turretPoison: 0,      // Venomgrid: poison a turret's shot applies, as a
+  turretPoisonTime: 0,  // multiple of one of the player's own shots
+  turretBurn: 0,        // Hellspitter: the same, in fire
+  turretBurnTime: 0,
+  bellowsGuard: 0,      // Bellows: damage taken reduced at FULL stamina
+  hotMag: 0,            // Hot Mag: fire rate gained per round in the magazine
+  fullLoad: 0,          // Full Load: the reserve, filled at every wave end
+  crashCart: 0,         // Crash Cart: HP a health crate heals instead of its
+  crashCartAt: 0,       // own, while the bar is at or under this many points
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -1272,6 +1330,20 @@ export class Player {
     this.floatFx = false;       // Updraft: true on any frame the float is
                                 // holding the player up, for the HUD and the
                                 // wisp main.js draws under their feet
+
+    // ---- THE FOURTH POOL'S STATE ------------------------------------------
+    //
+    // Three fields, and each is here rather than in `mods` for the reason every
+    // counter above is: rebuildMods() replays the owned list from
+    // DEFAULT_MODS on every draft pick, so a window an EVENT opened or a count
+    // an event spent would be handed back by the next totem the player claimed.
+    this.dimeEnd = 0;           // Dime Novel: game time the crit window closes
+    this.fruitsLeft = 0;        // First Fruits: kills left at the top of this
+                                // wave that still owe a plate. SET by
+                                // startWave, never added to - see armFruits.
+    this.flowFx = false;        // Flow Reload: one-shot, cleared by main.js.
+                                // A second of invulnerability with no tell is
+                                // a second the player cannot spend on purpose.
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1532,9 +1604,23 @@ export class Player {
     // RUNNING ON FUMES, off the LOCKOUT's own line - see staminaLow - so the
     // window the card promises is exactly the red the HUD draws.
     const fumes = this.mods.fumesRate > 0 && this.staminaLow ? 1 + this.mods.fumesRate : 1;
+    // HOT MAG, and it is the one rate mod in this getter that reads the LIVE
+    // magazine rather than `magAtShot` - deliberately, because the card says
+    // "currently in the magazine" and that is a number the player is watching
+    // in the corner. It climbs as a reload seats and falls with every round,
+    // so the gun is fastest at the top of a magazine and slowest at the
+    // bottom: HARM WANDS' exact opposite, which is why the two are worth
+    // owning together and why neither is worth much alone.
+    //
+    // REFUSED UNDER BELT FED DREAM. That pick has no magazine - `mag` is a
+    // mirror of the RESERVE, rewritten every frame (see update) - so a percent
+    // per round would read three hundred rounds and multiply the fire rate by
+    // four. The honest answer for a build with no magazine is nothing.
+    const hot = this.mods.hotMag > 0 && this.mods.beltFedDream <= 0
+      ? 1 + this.mods.hotMag * this.mag : 1;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
       * this.mods.fireRate * crouch * this.paceMult * spirit * hip
-      * wands * high * fumes;
+      * wands * high * fumes * hot;
   }
 
   /**
@@ -1593,6 +1679,19 @@ export class Player {
         this.mods.beltCap, this.mods.beltStep * Math.floor(this.balance / this.mods.beltPer)
       );
       if (belt > 0) k *= 1 - belt;
+    }
+    // BELLOWS. FULL means full, on PACE CAR's terms and for its reason: it is a
+    // thing the player protects rather than a band they drift through, and the
+    // stamina bar is the one meter in the game that refills on its own, so the
+    // guard is always a few seconds away from coming back however badly a
+    // fight is going. What it costs is the sprint, the slide and the dash -
+    // every one of those takes the bar off the top and the armour with it.
+    //
+    // `>=` against the max rather than an equality, for the reason paceMult
+    // uses one: the bar is a float refilled by a rate times dt, so a
+    // hundredth of a point short is full as far as anybody can see.
+    if (this.mods.bellowsGuard > 0 && this.stamina >= STAMINA_MAX) {
+      k *= 1 - this.mods.bellowsGuard;
     }
     return k;
   }
@@ -2060,6 +2159,31 @@ export class Player {
   }
 
   /**
+   * BALLAST TANKS and FIRST FRUITS, armed with the wave beside the ward and
+   * the salvo, because all four are the same kind of thing: a grant a WAVE
+   * makes, which a wave survived without spending does not bank a second set
+   * of. SET rather than added, which is that rule in two lines.
+   *
+   * THE SHIELD IS A FLOOR, NOT A WRITE. `max` is what stops the pick being a
+   * PUNISHMENT for the one build most likely to own it: SECOND SKIN's twenty
+   * points do not expire, so a player who walked into a wave holding sixty
+   * would otherwise be cut back to fifty by their own passive item. What the
+   * card promises is fifty at the top of every wave; anything above that was
+   * bought separately and is kept.
+   *
+   * AND IT CANCELS THE PICKUP'S CLOCK, on SECOND SKIN's terms and for its
+   * reason: a wave's own shield counting down on a timer somebody else started
+   * is the one behaviour a player could not predict.
+   */
+  armWaveGrants() {
+    if (this.mods.waveShield > 0) {
+      this.shield = Math.max(this.shield, this.mods.waveShield);
+      this.shieldEnd = 0;
+    }
+    this.fruitsLeft = this.mods.firstFruits;
+  }
+
+  /**
    * WHETHER A HIT CAN BE EATEN RIGHT NOW.
    *
    * The count above replaced a boolean, and this is what stops that being a
@@ -2138,6 +2262,12 @@ export class Player {
     // IRON LITURGY, off the aim flag rather than off the raise animation -
     // CHEEKWELD's rule, and the pair are meant to be found together.
     if (m.aimCrit > 0 && this.aiming) chance += m.aimCrit;
+    // DIME NOVEL. Twenty seconds off the button the player was going to press
+    // anyway, which is the whole shape of it: it asks for no change of play and
+    // pays a build that presses its item the moment the bar fills rather than
+    // banking it. Read off the frame clock published in update(), the way every
+    // other timed window on the player is.
+    if (m.dimeCrit > 0 && this.now < this.dimeEnd) chance += m.dimeCrit;
     // DOMINO. Spent whether or not it wins - it is the shot after a crit, and
     // there is only one of those.
     if (this.dominoNext) {
@@ -2385,6 +2515,10 @@ export class Player {
     this.jackpotFx = false;
     this.gristleFx = false;
     this.floatFx = false;
+    // The fourth pool's, likewise.
+    this.dimeEnd = 0;
+    this.fruitsLeft = 0;
+    this.flowFx = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -2663,6 +2797,27 @@ export class Player {
         // question the card does: was the gun run dry before it was fed.
         if (this.mods.bottomFeed > 0 && this.magOnReload <= 0) {
           this.bottomEnd = time + this.mods.bottomTime;
+        }
+        // FLOW RELOAD. A second in which nothing lands, on the same edge
+        // BOTTOM FEEDER's window opens on - the rounds ARRIVING, not the
+        // button being pressed, so an interrupted reload buys nothing.
+        //
+        // THE EXPLOIT IT IS PRICED AGAINST is obvious and is deliberately
+        // left open: fire one round, reload, take the second, repeat. It
+        // costs the whole gun to run - startReload refuses a full magazine,
+        // so every second of cover has to be bought with a trigger pull and a
+        // reload the player stands through, at a rate of fire far below what
+        // simply shooting would give. A build that wants to be untouchable
+        // can have it, and it will not kill anything while it is.
+        //
+        // `max` rather than a write: two reloads inside a second must not
+        // SHORTEN the window the first one opened.
+        if (this.mods.flowReload > 0) {
+          const until = time + this.mods.flowReload;
+          if (until > this.invulnEnd) {
+            this.invulnEnd = until;
+            this.flowFx = true;
+          }
         }
       }
     }
@@ -4028,6 +4183,23 @@ export class Player {
         this.addItemCharge(points);
       }
     }
+    // STERILE FIELD. Every burn, poison, chill, fear, weakness and curse on the
+    // player, gone - and here rather than at the twenty call sites for the
+    // reason HEALTHY CORE's refusal is: a heal added later is covered by the
+    // pick without anybody having to remember it.
+    //
+    // A WHOLE POINT, AND THE THRESHOLD IS THE ENTIRE DESIGN. Most healing in
+    // this game arrives as a rate times dt - Nanoweave's trickle, DIG IN's,
+    // SLOW RELEASE's drip, the core's - and a cleanse that fired on a
+    // hundredth of a point would not be a cleanse, it would be IRON LUNG:
+    // nothing could ever land on a build carrying any regeneration at all.
+    // What the pick is meant to buy is the crate, the kit, the vampiric kill -
+    // a heal the player can SEE arriving - so that is exactly what it tests
+    // for, and a trickle stays what it is.
+    //
+    // AFTER the bar has moved, so a heal that healed nothing because the bar
+    // was already full still cleanses: the player spent it either way.
+    if (this.mods.sterileField > 0 && amount >= 1) this.clearStatuses();
     return landed;
   }
 
