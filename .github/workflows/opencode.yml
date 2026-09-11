@@ -27,7 +27,7 @@ env:
   MODEL: tokenrouter/z-ai/glm-5.3-free
   VARIANT: max
   OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "131072"
-  CHUNK_MINUTES: "10"
+  CHUNK_MINUTES: "310"
 
 jobs:
   initial:
