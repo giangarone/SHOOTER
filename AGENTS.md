@@ -44,8 +44,8 @@ reason not to, and `icons` is the one that catches an item with no artwork,
 which is a crash the first time it is rolled and twenty minutes into a run.
 
 Some suites take an argument - `node test/boss.mjs ember,rime` pins the themes
-under test instead of walking all ten, which is much faster when you only care
-about one.
+under test instead of walking every one of them, which is much faster when you
+only care about one.
 
 ### The one thing not to do
 
@@ -116,13 +116,14 @@ There is no list to update.
 
 - `js/main.js` is the loop, the waves and the run state. Most systems are
   reached from here.
-- `js/enemies/` is one file per theme, ten of them, registered by `index.js`.
-  `shared.js` holds what more than one theme needs — the geometry and material
-  caches, the status tables, the steering helpers, and `ENEMY_TYPES` itself.
-- The ten themes are interchangeable by design. `test/themes.mjs` holds the
+- `js/enemies/` is one file per theme, registered by `index.js`. `shared.js`
+  holds what more than one theme needs — the geometry and material caches, the
+  status tables, the steering helpers, and `ENEMY_TYPES` itself.
+- The themes are interchangeable by design. `test/themes.mjs` holds the
   balance law: every role filled, no type in two themes, every stat block
-  inside the envelope its role shares across all ten. Adding an enemy means
-  satisfying that, not just making it fun.
+  inside the envelope its role shares across all of them. Adding an enemy
+  means satisfying that, not just making it fun. Adding a whole theme has its
+  own section below.
 - Anything on a rhythm hangs off `Music.pulse`, the half-beat edge — not a
   timer of its own.
 - Pools are everywhere: projectiles, particles, decals, telegraph handles. If
@@ -132,6 +133,95 @@ There is no list to update.
 - `js/pixelicons.js` is GENERATED (see `tools/pixelart`). Every offer needs a
   drawing and every drawing an offer — `npm run test:icons` is the check, and
   it runs in milliseconds.
+
+## Adding a wave theme
+
+A theme is one file in `js/enemies/`: six enemies, one per role, plus a boss.
+It is a self-contained unit of the game — a block of five waves, four of the
+six enemies and then the boss — and everything it has to agree with is listed
+here. **You do not need to read the other themes to write one.** Read ONE end
+to end for the house style — `js/enemies/plague.js` is the shortest complete
+example, with `test/plague.mjs` as its suite — and then work from this list.
+
+### What the theme owns, and what it does not
+
+It owns seven bodies: their models, their AI, their stat blocks. It does not
+own the schedule or the scaling. `js/themes.js` deals the deck — one five-wave
+block per theme, in a random order per run — and `js/waves.js` scales counts
+and stats by wave number for every theme alike. There is no per-theme wave
+curve to write, and a theme that tries to have one is a theme that plays
+differently depending on when a run happens to meet it, which is the one thing
+the schedule exists to prevent.
+
+The one scheduling dial a theme may touch is `ADD_PRESSURE` in `js/waves.js`:
+how many adds its boss fight carries, if that boss needs fewer or more than
+the default four.
+
+### The balance law
+
+`test/themes.mjs` is the law, in executable form, and it costs a tenth of a
+second to run. It asserts:
+
+- **Every role filled, exactly once.** `rusher`, `gunner`, `brute`,
+  `artillery`, `support`, `flier` — the six are `ROLE_KEYS` in `js/themes.js`
+  — plus one boss. No type may appear in two themes and no boss may be
+  shared.
+- **Every stat block inside its role's envelope.** A rusher's hp, damage and
+  speed have to sit in the same band as every other theme's rusher. The suite
+  prints the current envelope per role when it runs, which is the fastest way
+  to see what you have to hit.
+- **The afflictor rule.** A type that leaves a status on the player — poison,
+  fire, slow — takes the LOWER half of its role's damage band. The status is
+  what it is paying for. A type that dealt a full role hit AND applied a
+  status would simply be a better version of that role, and the envelope
+  exists so that no theme gets one.
+
+Check the head of that suite for counts written as literals — `ten themes`,
+`sixty slots` — and move them onto the table's own length rather than bumping
+them by one. A number that has to be edited by hand every time the game grows
+is a number that will eventually be wrong.
+
+### Registering one — the whole list
+
+1. `js/enemies/<theme>.js` — the `build*` and `ai*` functions, and a `TYPES`
+   object `Object.assign`ed into `ENEMY_TYPES` at the bottom of the file.
+2. `js/enemies/index.js` — one `export *` line, alphabetical.
+3. `js/themes.js` — the theme block: `name`, `color`, `boss`, and the six
+   `roles`.
+4. `package.json` — a `test:<theme>` script.
+5. `js/enemies/shared.js` — only if the theme wants its own materials. Give
+   the family one body material and one lit-accent material, the way
+   `tankPlate` and `tankFurnace` do, so a status tint cannot make its enemies
+   stop reading as the theme's.
+
+That is all of it. Nothing in `js/main.js` or `js/enemy.js` needs a line for a
+theme as such — those only come into it if a mechanic needs something
+genuinely new from the engine, the way VERDANT's seed needed a spit kind that
+lands a mortar instead of a patch (`Spit._land` in `js/enemy.js`).
+
+### Its own suite
+
+`test/<theme>.mjs`, built on the shape of an existing per-theme suite, on a
+port nothing else uses. Assert each enemy's ONE idea as a difference — the
+thing with the mechanic against the thing without it — rather than asserting
+that it ran. `test:all` picks up new suites from the directory automatically.
+
+Two traps that have cost real time in these suites:
+
+- **Do not count spawns by watching an array's length against a high-water
+  mark.** Projectiles expire, the count falls back, and whole volleys go
+  unseen. Track the objects themselves, or compare frame to frame.
+- **Read a boss's armour with its window shut.** An open weak-point window is
+  a flat 1 by design, so a ladder measured during one measures the window
+  three times and says nothing about the plates.
+
+### The order that works
+
+Seven stat blocks and the registration first, then `npm run test:themes` —
+before any mechanic is written, because that is the suite that tells you
+whether the shape is legal at all. Then the AI, then the theme's own suite.
+Commit as soon as the theme loads and `test:themes` is green; the interesting
+half of this job is long, and it should not be sitting only on a runner.
 
 ## House style
 
