@@ -688,6 +688,177 @@ try {
     out.dashNeedsNoPassive = !P.mods.dashCharges;
     P.pos.set(0, 0, z0);
 
+    // ---- PANIC BUTTON: the whole floor runs, and cannot attack while it does
+    clearField();
+    const run1 = spawn('chaser', 3, 0);
+    const run2 = spawn('chaser', -6, 4);
+    useItem('itemPanic');
+    out.panicFearedAll = run1.status.fear > 0 && run2.status.fear > 0;
+    // A feared chaser runs from the player: the movement the fear status
+    // already owns (see the terror branch in Enemy.update), not a new one
+    // the item bolted on. Run the frames and watch it actually leave.
+    const flee0 = run1.pos.distanceTo(P.pos);
+    tick(40);
+    out.panicRetreats = run1.pos.distanceTo(P.pos) > flee0;
+    // ...and it EXPIRES. Eight seconds of frames, then the floor is calm.
+    tick(160);
+    out.panicExpires = run1.status.fear <= 0 && run2.status.fear <= 0;
+    clearField();
+
+    // ---- FOOD POISONING: everything is poisoned, and the clock outlives the press
+    clearField();
+    const sick1 = spawn('chaser', 3, 0);
+    const sick2 = spawn('chaser', -6, 4);
+    useItem('itemPlague');
+    out.plaguePoisonedAll = sick1.status.poison > 0 && sick2.status.poison > 0;
+    // LONG AND SHALLOW, against BRIMSTONE's short and fierce: after the whole
+    // three seconds that item's window lasts, this one is still ticking.
+    tick(60);
+    out.plagueOutlastsBrimstone = sick1.status.poison > 4;
+    // ...and the poison actually BITES. The tick needs the pulse, which tick()
+    // drives; a poisoned body must have lost health to the status alone.
+    const sickHp = sick1.hp;
+    tick(30);
+    out.plagueBites = sick1.hp < sickHp;
+    clearField();
+
+    // ---- MOLOTOV: a bottle, then a circle of fire that holds its ground
+    clearField();
+    P.pos.set(0, 0, 8);
+    P.yaw = 0;
+    useItem('itemMolotov');
+    out.molotovDeployed = g._deployed.length >= 1;
+    // The bottle flies on the throw's own arc; run the flight out so it
+    // shatters, then stand a chaser in the circle and watch it burn. The
+    // deployed list has to be driven by hand here - tick() covers the enemy
+    // step and the fire patches, not the deployables.
+    const drive = (n) => {
+      for (let i = 0; i < n; i++) {
+        g.time += 0.05;
+        g.music.sample(0.05);
+        g._updateDeployed(0.05);
+        g._updateEnemies(0.05);
+      }
+    };
+    drive(100);
+    out.molotovShattered = g._deployed.length === 0 || g._deployed[0].armed;
+    const pool = g._deployed[0];
+    const burner = spawn('chaser', pool.x, pool.z);
+    burner.speed = 0;
+    const fireHp = burner.hp;
+    drive(60);
+    out.molotovBurns = burner.status.burn > 0 && burner.hp < fireHp;
+    // ...and it is GONE with the fight, like every deployable.
+    g._clearDeployed();
+    out.molotovCleared = g._deployed.length === 0;
+    clearField();
+
+    // ---- BLOOD TRANSFUSION: the floor becomes medicine ----
+    clearField();
+    const spawnPickup = (kind, x, z) => {
+      const at = new g.player.pos.constructor(x, 0, z);
+      const p = g.__spawnDropAt(kind, at, g.scene, g.effects.glowTex,
+        g.time, g.arena.obstacles);
+      g.powerups.push(p);
+      return p;
+    };
+    // Two pickups that are NOT health, one that already is, and one mid-flight
+    // to the player on a wave-clear sweep - the absorbing one must be left
+    // alone, because its effect was banked the moment it left the live list.
+    const ammoP = spawnPickup('ammo', 4, 0);
+    const rageP = spawnPickup('damageBoost', -4, 0);
+    const healthP = spawnPickup('health', 8, 0);
+    const flyingP = spawnPickup('shield', 0, 12);
+    flyingP.absorbing = true;
+    g.powerups.splice(g.powerups.indexOf(flyingP), 1);
+    g._absorbing.push(flyingP);
+    const before = g.powerups.length;
+    useItem('itemTransfusion');
+    // Every pickup on the live list is now a health pickup; the count is
+    // unchanged (a swap, not a collect); nothing was granted - the player
+    // still has to walk to them.
+    out.transfusionSwapped = g.powerups.every((p) => p.typeKey === 'health');
+    out.transfusionCountHeld = g.powerups.length === before;
+    // The health plate that was already lying there is the SAME OBJECT: a
+    // swap that replaced it would have reset its despawn clock for no reason.
+    out.transfusionKeepsHealth = g.powerups.includes(healthP);
+    // The one in flight was left exactly as it was - banked is banked.
+    out.transfusionLeavesFlight = g._absorbing.includes(flyingP)
+      && !g.powerups.includes(flyingP);
+    // And the swap was NOT a reskin: collecting one heals through the
+    // ordinary funnel, at the health plate's own sum.
+    const hpBefore = P.health;
+    P.health -= 25;
+    g.powerups[0].type.apply(P, g.time);
+    out.transfusionHeals = P.health === hpBefore;
+    clearField();
+    g.powerups.length = 0;
+    g._absorbing.length = 0;
+
+    // ---- ENCORE: every shot fires twice, the second free ----
+    clearField();
+    P.upgrades = {};
+    P.rebuildMods();
+    // NO CRIT DICE: each trigger pull rolls its own, and a crit on one pull
+    // but not the other would read as the item under-delivering. The volley
+    // is what is under test here, not the dice.
+    P.mods.critChance = 0;
+    P.weapon.spread = 0;
+    P.pos.set(0, 0, 8);
+    P.vel.set(0, 0, 0);
+    // Dead ahead, stationary, and FAT: the second round has to have health
+    // left to land on, or the assertion measures overkill instead of a volley.
+    const target = spawn('chaser', 0, 4);
+    target.speed = 0;
+    target.maxHp = 2000;
+    target.hp = 2000;
+    // AIMED AT THE BODY, not straight ahead: a level ray at eye height can
+    // pass over the body sphere or land in the head depending on where the
+    // body happens to be standing, and the aim is not what is under test.
+    // Same recipe the box/totem shots above use (see aimAt) - settle the
+    // camera, then flush the matrices, because shoot() raycasts against the
+    // previous frame's and nothing renders here to refresh them.
+    {
+      const t = new g.player.pos.constructor();
+      target.hitbox.getWorldPosition(t);
+      const eye = P.eyeInto(new g.player.pos.constructor());
+      const dx = t.x - eye.x, dy = t.y - eye.y, dz = t.z - eye.z;
+      P.yaw = Math.atan2(-dx, -dz);
+      P.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      P.update(0.016, g.input, g.arena.obstacles, g.time, true);
+      g.scene.updateMatrixWorld(true);
+      g.camera.updateMatrixWorld(true);
+    }
+    const hpOnce = target.hp;
+    // One trigger pull with no ENCORE: the number the second round doubles.
+    P.mag = 30;
+    P.fireCd = 0;
+    g.shoot();
+    const oneShot = hpOnce - target.hp;
+    // Same pull with ENCORE running: both rounds from one round of magazine.
+    const hpTwice = target.hp;
+    useItem('itemEncore');
+    P.mag = 30;
+    P.fireCd = 0;
+    g.shoot();
+    const encoreShot = hpTwice - target.hp;
+    out.encoreDoubles = oneShot > 0 && encoreShot >= oneShot * 1.9;
+    // The raw pair, so a failure says WHICH half broke: a oneShot of zero is
+    // an aim that missed, an encoreShot under 1.9x is the volley.
+    out.encorePair = [oneShot, encoreShot];
+    // THE SECOND ROUND IS FREE: one trigger pull, one round off the magazine,
+    // however many volleys left the barrel.
+    out.encoreOneRound = P.mag === 29;
+    // ...and the window closes, handing the field back. The running list has
+    // to be driven by hand here - tick() covers enemies and fire patches, not
+    // running items (the pool-wide loop drives it the same way).
+    for (let i = 0; i < 180; i++) {
+      g.time += 0.05;
+      g.running.update(g, 0.05);
+    }
+    out.encoreEnds = P.itemEncore === 0;
+    clearField();
+
     // ---- and the charge costs are what the pool says ----
     out.chargeCosts = Object.fromEntries(
       Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.charge])
@@ -718,6 +889,7 @@ try {
       itemTakenMult: P.itemTakenMult,
       itemRateMult: P.itemRateMult,
       itemHoming: P.itemHoming,
+      itemEncore: P.itemEncore,
       elementCycle: P.elementCycle,
       statusLockEnd: P.statusLockEnd > g.time ? 1 : 0,
     });
@@ -725,9 +897,9 @@ try {
       // leechShots is deliberately NOT here. HAEMOPHAGE has no duration any
       // more - twenty hits that keep until they are spent - so a count still
       // standing when the frames run out is the item working, not leaking. It
-      // is a mark on the run like hpBanked, and it is cleared below with it.
+      // is a mark on the run like hpBanked, and is cleared below with it.
       { itemDamageMult: 1, itemTakenMult: 1, itemRateMult: 1, itemHoming: 0,
-        elementCycle: -1, statusLockEnd: 0 }
+        itemEncore: 0, elementCycle: -1, statusLockEnd: 0 }
     );
     out.leaked = [];
     out.threw = [];
@@ -1284,6 +1456,26 @@ try {
   ok('aegis ends', m.invulnEnds);
   ok('blink drive moves you', m.dashArmed && m.dashMoved);
   ok('the dash needs no passive item behind it', m.dashNeedsNoPassive);
+
+  // ---- the five NEW items ----
+  ok('panic button fears the whole floor', m.panicFearedAll);
+  ok('a feared enemy actually flees', m.panicRetreats);
+  ok('panic button expires', m.panicExpires);
+  ok('food poisoning sickens the whole floor', m.plaguePoisonedAll);
+  ok('the poison outlives brimstone', m.plagueOutlastsBrimstone);
+  ok('the poison bites', m.plagueBites);
+  ok('molotov reaches the arena', m.molotovDeployed);
+  ok('the bottle shatters where it lands', m.molotovShattered);
+  ok('the burning circle burns', m.molotovBurns);
+  ok('molotov goes with the fight', m.molotovCleared);
+  ok('transfusion swaps the floor to health', m.transfusionSwapped);
+  ok('transfusion is a swap, not a collect', m.transfusionCountHeld);
+  ok('an existing health plate is left alone', m.transfusionKeepsHealth);
+  ok('a pickup in flight is left alone', m.transfusionLeavesFlight);
+  ok('a swapped plate heals through the ordinary funnel', m.transfusionHeals);
+  ok('encore doubles the shot', m.encoreDoubles);
+  ok('the second round is free', m.encoreOneRound);
+  ok('encore closes with its window', m.encoreEnds);
   // THE RULE, not a snapshot of it. This used to name five costs as literals,
   // which tested that nobody had tuned the table rather than that the table is
   // usable - and it failed the moment anybody did. What has to hold is that

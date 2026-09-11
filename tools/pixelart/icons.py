@@ -964,6 +964,19 @@ def _(c):
             (8.5, 10.5)], S)
 
 
+@icon('pickBattery')        # the battery - the active item's meter, filled
+def _(c):
+    # A CELL WITH THE CHARGE STILL IN IT. The terminal on top, the case in
+    # structure tone, and the bolt down the middle in ENERGY tone because the
+    # bolt is what the plate promises. TWIN CELL is the pair of these and
+    # borrows the shape; this one stays a single cell, because the pickup
+    # fills what is there rather than adding a second.
+    c.rect(8.5, 2.0, 15.5, 4.5, S)                  # the terminal
+    c.rect(5.5, 4.5, 18.5, 20.5, S)                # the case
+    c.poly([(13.4, 6.4), (8.6, 12.6), (11.6, 12.6), (9.4, 18.6),
+            (15.4, 11.4), (12.4, 11.4), (14.8, 6.4)], E)   # the bolt
+
+
 @icon('pickMagnet')         # sweeps every money orb on the floor to you
 def _(c):
     # A horseshoe magnet, and the ONE place in the set where that shape is
@@ -2935,3 +2948,123 @@ def _(c):
         c.disc(12.0 + math.cos(a) * 7.9, 13.0 - math.sin(a) * 7.9, 1.2, E)
     c.disc(4.1, 18.4, 1.2, E)
     c.disc(19.9, 18.4, 1.2, E)
+
+
+# ---- the third pool ---------------------------------------------------------
+#
+# Five more, under every rule the blocks above carry: light from the upper
+# left, STRUCTURE is the object and ENERGY is the payload, and each drawing
+# names the icon it was drawn AGAINST - the set is past a hundred now, and the
+# only way two of them do not end up sharing a silhouette is if the newest one
+# says what it is not.
+
+
+@icon('itemPanic')           # PANIC BUTTON - every enemy flees for 8s
+def _(c):
+    # Against FEAR AURA (rings going out from a small figure) and VITAL
+    # TRIGGER (a domed key with a cross): THE BUTTON ITSELF, seen face-on and
+    # PRESSED - a wide collar, a big disc sunk into it, and the dent the press
+    # left. No figure, no rings: the item is the one press that empties the
+    # room, and the sunk disc is the only icon in the set whose centre is
+    # lower than its rim.
+    c.disc(12.0, 12.0, 11.0, S)                     # the collar
+    c.ring(12.0, 12.0, 11.4, 2.0, D)
+    c.disc(12.0, 12.0, 7.4, D)                      # the well the key sits in
+    c.disc(12.0, 12.6, 6.0, E)                      # the key, pressed home
+    c.disc(9.6, 10.0, 1.8, P)                       # the one highlight
+    # THREE TICKS OFF THE RIM, drawn as the motion LEAVING rather than as
+    # arrows: FEAR AURA owns arrows and TECTONIC owns the outward pair, so
+    # this is a scatter - small dashes thrown wide of the button, the debris
+    # of the press.
+    for dx, dy in ((-10.6, 8.0), (10.6, 8.0), (0.0, -11.8)):
+        c.line(12.0 + dx * 0.78, 12.0 + dy * 0.78, 12.0 + dx, 12.0 + dy, E, 1.4)
+
+
+@icon('itemPlague')         # FOOD POISONING - poison all enemies for 8s
+def _(c):
+    # Against VENOM (a poisoned cartridge), statusPoison (a droplet) and
+    # BRIMSTONE (three skulls under one flame): A PLATE. The one serving in
+    # the set, and the fish on it is X-ed out - the meal is what did it, which
+    # is the whole joke of the name and the only icon in the catalogue that
+    # says "poison" without saying "bottle".
+    c.disc(12.0, 17.4, 7.6, S)                      # the plate
+    c.disc(12.0, 17.4, 5.6, D)
+    # THE FISH, belly-up on it. One body, one tail, one eye - the fin on the
+    # back is what stops it reading as a lemon.
+    c.poly([(5.4, 16.2), (14.6, 13.4), (16.4, 16.0), (14.6, 18.6), (5.4, 17.6)], E)
+    c.poly([(16.4, 16.0), (20.4, 13.0), (20.4, 19.2)], E)
+    c.disc(7.6, 15.8, 0.8, DEEP)
+    # THE SKULL-AND-BONES above the plate, in the bubbles' place: the poison
+    # rising off the serving. Two dots and two bars - at this size a full
+    # skullface on top of a fish would be two objects fighting for 24 pixels.
+    c.disc(12.0, 5.2, 3.4, S)
+    c.disc(10.9, 4.6, 0.8, DEEP)
+    c.disc(13.1, 4.6, 0.8, DEEP)
+    c.line(4.6, 8.4, 9.4, 10.4, E, 1.8)
+    c.line(14.6, 10.4, 19.4, 8.4, E, 1.8)
+
+
+@icon('itemMolotov')        # MOLOTOV - a burning circle where it shatters
+def _(c):
+    # Against SHORT FUSE (a sphere with a lit fuse) and HELLFIRE (a boot on a
+    # trail): THE BOTTLE. The silhouette nobody else has - a long thin neck
+    # over a squat full body - and the rag in the neck is the lit thing,
+    # because the rag is what makes it a molotov rather than a jar.
+    #
+    # THE FIRE IS IN THE BOTTOM, not just on the rag: the payload is the
+    # burning circle it becomes, and a bottle with nothing in it would be a
+    # promise the drawing never keeps.
+    c.poly([(8.6, 10.0), (15.4, 10.0), (16.6, 15.0), (15.6, 22.4),
+            (8.4, 22.4), (7.4, 15.0)], S)           # the body
+    c.rect(9.8, 4.0, 14.2, 10.0, S)                 # the neck
+    flame(c, 12.0, 20.0, 4.0, 8.0, E)               # what it is full of
+    # THE RAG, drawn in the pale tone rather than the energy one - it is cloth,
+    # and the flame on the rag is one spark, not the fire itself.
+    c.rect(9.0, 1.4, 15.0, 4.6, P)
+    c.disc(12.0, 1.0, 1.4, E)
+
+
+@icon('itemTransfusion')   # BLOOD TRANSFUSION - every pickup becomes health
+def _(c):
+    # Against OPEN VEIN (a bag feeding a magazine on a line) and pickHealth
+    # (a cross): THE STAND. A transfusion is a bag on a pole, and the hook is
+    # the one silhouette in the whole set that hangs something from a corner -
+    # OPEN VEIN's bag sits at the top of its icon on nothing, and the pole is
+    # what says this one is already plugged in.
+    #
+    # THE CROSS ON THE BAG is small and off-centre, where a nurse would write
+    # the type: the payload is what the bag HOLDS, and the bag is the object.
+    c.rect(11.0, 6.0, 13.0, 23.0, S)                # the pole
+    c.line(11.0, 4.2, 17.6, 4.2, S, 2.0)            # the hook
+    c.poly([(6.6, 5.4), (17.2, 5.4), (18.2, 14.0), (5.6, 14.0)], S)   # the bag
+    c.disc(11.9, 9.8, 1.0, E)                       # the cross, drawn small
+    c.line(8.4, 9.8, 15.4, 9.8, E, 1.6)
+    c.line(11.9, 6.6, 11.9, 13.0, E, 1.6)
+    # THE LINE DOWN and the drop coming off it - the transfusion happening,
+    # not a bag waiting. OPEN VEIN's line is vertical and thick; this one
+    # curves off the bag's foot, so the two never rhyme.
+    c.line(11.0, 14.0, 9.0, 18.4, E, 1.6)
+    c.disc(8.8, 20.0, 1.6, E)
+
+
+@icon('itemEncore')         # ENCORE - every shot fires twice for 8s
+def _(c):
+    # Against TWENTY/TWENTY (one shot forking into two rounds) and ECHO
+    # CHAMBER (a round and its ghost): THE CURTAIN. The encore is a
+    # performance being asked to happen again, and the curtain is the one
+    # object in the world that means exactly that - nothing else in the set is
+    # hung from a rail, and the swag is the silhouette nobody can borrow.
+    #
+    # THE TWO ROUNDS STANDING IN THE GAP are abreast and IDENTICAL, where
+    # TWENTY/TWENTY's are separated in angle and ECHO's are different sizes:
+    # the second round here is not a ghost and not a fork, it is the same
+    # round again, which is the item.
+    c.rect(0.5, 1.4, 23.5, 3.4, S)                  # the rail
+    # The swag: three scallops, drawn as arcs hanging off the rail.
+    for cx in (5.0, 12.0, 19.0):
+        c.arc(cx, 3.6, 5.2, 1.8, 190, 350, S)
+    c.rect(0.5, 3.4, 2.6, 12.0, S)                 # the gathered side
+    c.rect(21.4, 3.4, 23.5, 12.0, S)
+    bullet(c, 6.4, 13.0, 4.4, 9.6, E, E, 0.4)      # the round...
+    bullet(c, 13.6, 13.0, 4.4, 9.6, E, E, 0.4)      # ...and the same round again
+    c.rect(4.6, 21.4, 19.4, 23.4, D)               # the boards it stands on

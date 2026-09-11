@@ -696,6 +696,44 @@ export class SFX {
     this.tone({ f: 140, f2: 260, t: 0.3, type: 'triangle', v: 0.2 });
   }
 
+  // PANIC BUTTON. Every other crowd answer in the set is a thump or a blast -
+  // this one is the room LEAVING, so the shape is reversed: nothing but a
+  // falling wash, no attack at all, the one sound in the set that gets
+  // smaller. The scatter of little clicks under it is the crowd going.
+  itemPanic() {
+    this.tone({ f: 900, f2: 90, t: 0.3, type: 'sine', v: 0.3 });
+    this.tone({ f: 450, f2: 55, t: 0.34, type: 'triangle', v: 0.16, delay: 0.02 });
+    for (let i = 0; i < 5; i++) {
+      this.noise({
+        t: 0.04, v: 0.1, f: 3000, mode: 'highpass', delay: 0.06 + i * 0.045,
+      });
+    }
+  }
+
+  // FOOD POISONING. A wet rattle low in the band, so it is never mistaken for
+  // the pickup chime's brightness or for BRIMSTONE's dry crack - the two
+  // sounds a whole-room status could most easily rhyme with. The wobble on
+  // the body IS the sickness; a steady tone would be a machine.
+  itemPoison() {
+    this.noise({ t: 0.3, v: 0.26, f: 800, f2: 240, mode: 'bandpass', q: 1.6 });
+    for (let i = 0; i < 4; i++) {
+      this.tone({
+        f: 190 + (i % 2) * 60, t: 0.07, type: 'sawtooth', v: 0.1, delay: i * 0.075,
+      });
+    }
+    this.tone({ f: 120, f2: 70, t: 0.3, type: 'sine', v: 0.16 });
+  }
+
+  // MOLOTOV, breaking. Glass first and the fire under it, in that order - a
+  // burst whose fire led would read as a bomb going off, and the whole point
+  // of the item is that it does not go off, it lands. Nothing else in the set
+  // leads with a bright dry shatter.
+  itemMolotov() {
+    this.noise({ t: 0.09, v: 0.34, f: 6500, f2: 2400, mode: 'highpass' });
+    this.noise({ t: 0.3, v: 0.2, f: 700, f2: 260, mode: 'lowpass', delay: 0.02 });
+    this.tone({ f: 150, f2: 60, t: 0.26, type: 'triangle', v: 0.16, delay: 0.02 });
+  }
+
   /**
    * ONE CLASH OF THE CYMBALS, and the only sound in the game that is a MUSICAL
    * INSTRUMENT rather than a machine or a body. That is the whole brief: it

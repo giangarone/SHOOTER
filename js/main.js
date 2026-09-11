@@ -99,6 +99,7 @@ import {
 const THEME_MARK = THEME.weakPoint;
 const THEME_CANNON = THEME.cannonade;
 const THEME_ECHO = THEME.echoChamber;
+const THEME_ENC = THEME.encore;
 const THEME_CHAIN = THEME.chainFeed;
 const THEME_FUSE = THEME.delayedFuse;
 const THEME_OVERKILL = THEME.overkill;
@@ -1267,7 +1268,7 @@ class Game {
     // them together would put a branch in a hot loop that is wrong half the
     // time it runs.
     this._hazard = [];
-    // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the thirty-seven do not
+    // ACTIVE ITEMS THAT ARE STILL RUNNING. Sixteen of the forty-seven do not
     // finish on the frame they are pressed; this is the list that ticks them
     // and, more importantly, the list that ENDS them. See RunningItems.
     this.running = new RunningItems();
@@ -1476,6 +1477,10 @@ class Game {
       this.__poolForTest = shuffledPool;
       // The Enemy class, so a test can stand one up without a wave.
       this.__EnemyForTest = Enemy;
+      // And the pickup spawner, for the same reason: an item that touches the
+      // floor (BLOOD TRANSFUSION) has to be tested against real plates, which
+      // only the game's own spawn path can put in the arena.
+      this.__spawnDropAt = spawnDropAt;
       /**
        * WAIT ON THE GAME CLOCK, not on the wall clock. For test/*.mjs.
        *
@@ -5698,6 +5703,27 @@ class Game {
       }
       this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
     }
+    // ENCORE. While the window runs, EVERY trigger pull fires the pattern a
+    // second time - the echo's own trick at full strength and on a clock
+    // rather than every fourth shot. The second round is free by construction:
+    // tryShoot billed the first, and nothing here touches the magazine.
+    //
+    // The dedup sets are NOT cleared, exactly as they are not between ECHO
+    // CHAMBER's two volleys and for the same reason: both rounds are one
+    // trigger pull, so a body caught by both takes one dose of status and
+    // sets off one DETONATOR blast. The crit is shared too, so both rounds
+    // crit together - the second round is the first one again, not a fresh
+    // roll.
+    if (this.player.itemEncore > 0) {
+      for (let v = 0; v < mods.volley; v++) {
+        for (let i = 0; i < w.pellets; i++) {
+          if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) {
+            hitAny = true;
+          }
+        }
+      }
+      this.effects.burst(muzzle, THEME_ENC, 8, 3.5, 1.8, 0.26);
+    }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
     }
@@ -6561,7 +6587,7 @@ class Game {
    * Raises the mystery box. EVERY shop, unconditionally.
    *
    * The row this replaced came up on a count of shops, so a run met four active
-   * items out of thirty-seven and most of the catalogue was unreachable. The
+   * items out of the whole pool and most of the catalogue was unreachable. The
    * box is always there and is limited by MONEY instead - which is a limit the
    * player can do something about, and the reason the schedule is gone rather
    * than merely shortened. See the header of mysterybox.js.

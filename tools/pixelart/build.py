@@ -26,6 +26,7 @@ NOTE = {
     'pickRate': 'FIRE RATE PICKUP - a bolt.',
     'pickShield': 'SHIELD PICKUP.',
     'pickMagnet': 'MAGNET PICKUP - every orb on the floor comes to you.',
+    'pickBattery': 'BATTERY PICKUP - the active item meter, filled in one step. A cell with the charge still in it: the terminal on top, the case in structure tone, and the bolt down the middle in ENERGY tone because the bolt is what the plate promises.',
     'hollowPoint': 'HOLLOW POINT - more damage, smaller magazine. Nose-on.',
     'steadyAim': 'STEADY AIM - damage while you do not move. Planted.',
     'glassCannon': 'GLASS CANNON - all damage, no health. Already cracked.',
@@ -201,6 +202,11 @@ NOTE = {
     'trueStrike': 'TRUE STRIKE - a fletched shaft already arrived.',
     'domino': 'DOMINO - the tile. It means "this sets off the next" everywhere.',
     'luckyStreak': 'LUCKY STREAK - a horseshoe, its nail holes climbing one arm.',
+    'itemPanic': 'PANIC BUTTON - the key, pressed home. The room leaves.',
+    'itemPlague': 'FOOD POISONING - the plate, the fish, the skull above it.',
+    'itemMolotov': 'MOLOTOV - the bottle. The fire is already inside it.',
+    'itemTransfusion': 'BLOOD TRANSFUSION - the bag on its stand, already dripping.',
+    'itemEncore': 'ENCORE - the curtain. The same round, standing in the gap twice.',
 }
 
 

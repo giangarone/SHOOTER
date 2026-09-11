@@ -1,10 +1,11 @@
 // THINGS THE PLAYER PUTS IN THE ARENA AND THEN STOPS OWNING.
 //
-// Seven of the active items do not do something to the world, they LEAVE
+// Eight of the active items do not do something to the world, they LEAVE
 // something in it: a turret that picks its own targets, a mine that waits, a
-// wall that burns, a singularity that pulls, five bees, a bomb on a fuse, and
-// a sky full of rocks. What they have in common is that the player has already
-// walked away by the time they matter.
+// wall that burns, a singularity that pulls, five bees, a bomb on a fuse, a
+// sky full of rocks, and a circle of fire that holds its ground. What they
+// have in common is that the player has already walked away by the time they
+// matter.
 //
 // THE CONTRACT IS THE PROJECTILE'S, because the game already had one and a
 // second one would be a second thing to keep in step. Every class here is:
@@ -803,6 +804,241 @@ const MONKEY_EYE = 0.55;
 // The arms at rest and how far the clash opens them, in radians.
 const MONKEY_ARM_SHUT = 0.16;
 const MONKEY_ARM_OPEN = 0.85;
+
+// ---------------------------------------------------------------------------
+// MOLOTOV - the burning circle
+// ---------------------------------------------------------------------------
+//
+// A CIRCLE, WHERE FIREBREAK IS A LINE - and that is the whole reason it is a
+// second fire item rather than a longer FIREBREAK. A wall says "not through
+// here"; a pool says "not here", which is a different answer to give and the
+// one a thrown thing can give: it lands wherever the fight is densest and
+// holds that ground for twenty seconds, which is longer than any other fire
+// in the game holds anything. What the player is buying is a PLACE the crowd
+// cannot stand in, thrown at the moment they are standing there.
+//
+// THE BOTTLE FLIES AND THE FIRE STANDS UP WHERE IT BREAKS. Two phases under
+// one contract, like the Monkey: the flight is the Bomb's own arc - same 11
+// forward, same 6.5 up, same 22 down, for the reason THE THROW spells out - and
+// the landing is not a blast but a zone. No fuse, no telegraph: a telegraph is
+// a warning the PLAYER answers by moving, and the player is the one who threw
+// this. The ring on the ground is not a countdown, it is the footprint - the
+// same reading a mine's ring has, drawn in the fire's own colour.
+//
+// TWENTY SECONDS, NOT EIGHT. FIREBREAK is pressed against your own feet and
+// has to be gone before the fight moves; this is thrown across the room, and
+// a circle that expired as the crowd walked back into it would be a sparker
+// rather than a wall. The burn it applies is the player's own dotHit at the
+// fixed 1.5x FIREBREAK carries, refreshed for as long as a body is inside and
+// running down the moment it leaves - one fire system, one rhythm.
+export const MOLOTOV_LIFE = 20;
+export const MOLOTOV_RADIUS = 4.5;
+
+export class Molotov {
+  /**
+   * @param {object} game
+   * @param {THREE.Vector3} from   the muzzle, so it leaves the gun
+   * @param {THREE.Vector3} dir    flattened facing
+   * @param {number} burn          one tick of the burn, snapshotted at the throw
+   */
+  constructor(game, from, dir, burn) {
+    this.pos = new THREE.Vector3(from.x, from.y, from.z);
+    this.vel = new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar(11);
+    this.vel.y = 6.5;
+    this.burn = burn;
+    this.dead = false;
+    this.armed = false;
+    // A ceiling on the flight, not a fuse - the bottle lands when it lands and
+    // this is only here so a throw that somehow never touches down cannot
+    // become a permanent resident of the deployed list.
+    this.life = 4;
+    this.spin = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+
+    // THE BOTTLE. Glass and a rag: a squat cylinder with a bright wick sprite,
+    // so the thing reads as thrown and breakable rather than as another bomb.
+    // The wick is the only lit pixel at range, same rule the mine's lamp
+    // follows - the object is dark, the hazard is bright.
+    this.group = new THREE.Group();
+    this.geos = [];
+    this.mats = [];
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0x7a8b3a, roughness: 0.25, metalness: 0.1,
+    });
+    this.wick = glow(game.effects.glowTex, 0xff9d2e, 0.55, 0.9);
+    this.wick.position.y = 0.42;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.3, 8), glass);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 8), glass);
+    neck.position.y = 0.2;
+    const rag = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.09), glass);
+    rag.position.y = 0.4;
+    this.group.add(body, neck, rag, this.wick);
+    this.geos.push(body.geometry, neck.geometry, rag.geometry);
+    this.mats.push(glass, this.wick.material);
+    this.group.position.copy(this.pos);
+    game.scene.add(this.group);
+    this.effects = game.effects;
+  }
+
+  update(dt, ctx) {
+    if (!this.armed) return this._fly(dt, ctx);
+    return this._burn(dt, ctx);
+  }
+
+  // The flight. The Bomb's arc and the Bomb's ground test, for the reason at
+  // the top of the class: a throw that flew differently from every other
+  // thrown thing in the game would read as different physics rather than as a
+  // different payload.
+  _fly(dt, ctx) {
+    this.life -= dt;
+    this.vel.y -= 22 * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    this.group.rotation.x += this.spin.x * dt * 9;
+    this.group.rotation.z += this.spin.z * dt * 9;
+    // BACKS OUT OF WHAT IT HIT rather than passing through it: a throw into a
+    // pillar breaks at the pillar's face, which is where the player can see it
+    // land. Same test the Bomb uses, for the same reason.
+    if (pointInObstacle(this.pos, ctx.obstacles)) {
+      this.pos.addScaledVector(this.vel, -dt);
+      this.shatter(ctx);
+      return 'alive';
+    }
+    if (this.pos.y <= 0.1 || this.life <= 0) {
+      this.shatter(ctx);
+      return 'alive';
+    }
+    this.group.position.copy(this.pos);
+    this.wick.material.opacity = 0.7 + 0.3 * Math.sin(this.life * 30);
+    return 'alive';
+  }
+
+  // WHERE IT STANDS UP. Clamped inside the arena so a throw at a wall still
+  // burns somewhere the fight can reach, and resolved onto whatever surface
+  // the bottle broke on - the same query standOn runs for a mine or a turret,
+  // against the ctx's own obstacle list.
+  shatter(ctx) {
+    const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.x));
+    const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, this.pos.z));
+    this.x = x;
+    this.z = z;
+    this.y = groundSurface(
+      { x, y: this.pos.y + 0.4, z }, 0.4, ctx.obstacles, 1.2
+    );
+    this.armed = true;
+    this.life = MOLOTOV_LIFE;
+    this.drip = 0;
+    // THE BOTTLE IS GONE. The group stays (it carries the fire now), but the
+    // bottle itself is hidden rather than left lying in the flames: glass
+    // sitting in the middle of the burn for twenty seconds reads as a prop
+    // that forgot to leave, and the pool is what the player is looking at.
+    for (const o of this.group.children) o.visible = false;
+    // AND THE GROUP MOVES TO THE ORIGIN. The flight carried it around by
+    // position; the fire is placed at WORLD coordinates, so leaving the group
+    // at the bottle's last position would offset the whole pool by wherever
+    // the throw happened to break.
+    this.group.position.set(0, 0, 0);
+    this.group.rotation.set(0, 0, 0);
+    // THE SCORCH IS THE POOL'S OWN MESH, NOT A POOLED CREEP - same rule a
+    // mine's ring follows. Twenty seconds is half again as long as the whole
+    // creep pool's other users combined; a pool held on a shared slot for that
+    // long would eventually leave a magma trail unable to draw.
+    this.scorchMat = new THREE.MeshBasicMaterial({
+      color: 0xdd2c00, transparent: true, opacity: 0.2,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.scorch = new THREE.Mesh(
+      new THREE.RingGeometry(MOLOTOV_RADIUS * 0.82, MOLOTOV_RADIUS, 48),
+      this.scorchMat
+    );
+    this.scorch.rotation.x = -Math.PI / 2;
+    this.scorch.position.set(x, this.y - 0.04, z);
+    this.group.add(this.scorch);
+    this.geos.push(this.scorch.geometry);
+    this.mats.push(this.scorchMat);
+
+    // THE FLAMES. Nine tongues in a ring rather than a filled disc: the same
+    // rule FIREBREAK's eleven sprites follow, with the same trap waiting -
+    // nine additive sprites overlapping in the middle is nine layers of light
+    // on the same pixels, so each one is small and dim and the pool reads by
+    // being a RING of separate tongues, not by being bright.
+    this.flames = [];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const r = MOLOTOV_RADIUS * (0.55 + 0.35 * Math.sin(i * 2.7));
+      const f = glow(this.effects.glowTex, i % 2 ? 0xff9d2e : 0xdd2c00, 1.3, 0.32);
+      f.position.set(
+        x + Math.cos(a) * r, this.y + 0.55, z + Math.sin(a) * r
+      );
+      f.userData.phase = Math.random() * Math.PI * 2;
+      this.group.add(f);
+      this.flames.push(f);
+      this.mats.push(f.material);
+    }
+    // The break itself: one splash of glass and fire, and a clunk under it.
+    // The blast family's noise would read as a bomb; this is a bottle.
+    this.effects.burst(this.pos, 0xffe9a8, 14, 7, 3, 0.5);
+    this.effects.burst(this.pos, 0xff6f00, 22, 5, 4, 0.7);
+    this.effects.shockwave(this.pos, 0xff6f00, MOLOTOV_RADIUS, 0.45);
+    ctx.sfx.itemMolotov();
+  }
+
+  // The standing fire. Same shape as _updateFire's patches in main.js: the
+  // burn is REFRESHED for as long as a body is inside and runs down once it
+  // walks out - applyStatus refreshes rather than stacking, so this tops the
+  // timer up rather than adding to it.
+  _burn(dt, ctx) {
+    this.life -= dt;
+    const fade = Math.min(1, this.life / 1.5);
+    if (this.life <= 0) return 'dead';
+    for (const f of this.flames) {
+      f.userData.phase += dt * 8;
+      const w = 0.75 + 0.35 * Math.sin(f.userData.phase);
+      f.scale.setScalar(1.3 * w * fade);
+      f.material.opacity = 0.32 * fade * (0.7 + 0.3 * w);
+      f.position.y = this.y + 0.5 + 0.12 * Math.sin(f.userData.phase * 0.7);
+    }
+    this.scorchMat.opacity = 0.2 * fade * (0.8 + 0.2 * Math.sin(this.life * 3.7));
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      const dx = e.pos.x - this.x;
+      const dz = e.pos.z - this.z;
+      const rr = MOLOTOV_RADIUS + e.radius;
+      if (dx * dx + dz * dz > rr * rr) continue;
+      // TWO SECONDS, THE SAME TOP-UP FIREBREAK USES: long enough that a body
+      // crossing the pool at a run still takes a tick or two of it on the way
+      // through, short enough that the fire is gone the moment they leave.
+      e.applyStatus('burn', 2, this.burn);
+    }
+    // ONE EMBER AT A TIME, at the pool's rate. A held flame at nine tongues
+    // already has the ring to read by; what the drip is for is the smoke
+    // reading as ongoing rather than as a decal, and a third the trail's rate
+    // keeps eight of these inside the particle budget.
+    this.drip -= dt;
+    if (this.drip <= 0) {
+      this.drip = 0.5;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * MOLOTOV_RADIUS;
+      this.effects.burst(
+        this._dripAt(this.x + Math.cos(a) * r, this.y + 0.3, this.z + Math.sin(a) * r),
+        0xdd2c00, 2, 1.4, 1.6, 0.8
+      );
+    }
+    return 'alive';
+  }
+
+  // The drip point. Allocated once, like every other scratch in this file -
+  // the burn runs for twenty seconds and a burst a frame would be a thousand
+  // vectors long.
+  _dripAt(x, y, z) {
+    if (!this._at) this._at = new THREE.Vector3();
+    return this._at.set(x, y, z);
+  }
+
+  destroy() {
+    this.group.parent?.remove(this.group);
+    for (const g of this.geos) g.dispose();
+    for (const m of this.mats) m.dispose();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // FIREBREAK - the wall

@@ -37,8 +37,10 @@ import * as THREE from 'three';
 import { THEME } from './upgrades.js';
 import {
   Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE,
+  Molotov,
 } from './deploy.js';
 import { BOUND } from './arena.js';
+import { spawnDropAt } from './powerups.js';
 
 // Scratch vectors. Every one of these functions runs at most once per button
 // press, but they run inside the render loop and the game allocates nothing
@@ -107,7 +109,7 @@ const NOTE = 0;
 // be weighing what they do, and a printed "20s" makes that a sum instead.
 
 /**
- * The pool. Thirty-seven.
+ * The pool. Forty-seven.
  *
  * IT USED TO BE FIVE, and the note here used to say that five was the point:
  * few enough that a player learnt all of them inside two runs and a swap was a
@@ -116,7 +118,8 @@ const NOTE = 0;
  * and taking a second item throws the first away - which is unchanged - and the
  * row still comes up only every third shop, so a run still sees three or four
  * offers however deep the pool is. Five meant a player saw the same three items
- * every run. Thirty-seven means the offer is a thing that happens TO a run
+ * every run. Thirty-seven meant that, and forty-seven means it more: the
+ * offer is a thing that happens TO a run
  * rather than a menu it works through, and the decision at the box is the
  * same one it always was: is this better than what I am carrying.
  *
@@ -334,6 +337,37 @@ export const ACTIVE_ITEMS = {
     },
   },
 
+  itemPlague: {
+    name: 'FOOD POISONING',
+    charge: 40,
+    theme: THEME.foodPoison,
+    // BRIMSTONE'S SIBLING, and the comparison is the whole design. Burn is
+    // short and fierce (3s, twice a shot a tick); poison is long and shallow -
+    // 8s at the same per-tick rate, ticking twice a beat to half the beats,
+    // which is the shape poison has everywhere else in the game (see
+    // _tickStatus). One is a reason to break contact; the other is a clock
+    // the crowd dies on while the player is somewhere else, and that is the
+    // trade the identical charge asks them to think about.
+    //
+    // TWICE ONE OF THE PLAYER'S OWN SHOTS PER TICK, snapshotted at the press
+    // like every other payload in this file - so it scales with the build
+    // instead of falling off it.
+    effects: [['POISON ALL ENEMIES', GOOD], ['FOR 8s', NOTE]],
+    use: (game) => {
+      let n = 0;
+      const hit = game.player.dotHit * 2;
+      for (const e of game.enemies) {
+        if (e.dead) continue;
+        e.applyStatus('poison', 8, hit);
+        game.effects.impact(e.pos, 0x39d353, 6, 2, 2, 0.5);
+        n++;
+      }
+      game.effects.shockwave(game.player.pos, THEME.foodPoison, 30, 0.9);
+      if (n) game.effects.addShake(0.2);
+      game.sfx.itemPoison();
+    },
+  },
+
   itemArc: {
     name: "JACOB'S LADDER",
     charge: 40,
@@ -397,6 +431,36 @@ export const ACTIVE_ITEMS = {
       }
       game.effects.shockwave(game.player.pos, THEME.executioner, 26, 0.8);
       game.sfx.itemRites();
+    },
+  },
+
+  itemPanic: {
+    name: 'PANIC BUTTON',
+    charge: 30,
+    theme: THEME.panicButton,
+    // FEAR, ALREADY ON THE SHELF. TERROR applies it per hit, FEAR AURA holds it
+    // in a radius the player carries, and the Howler inflicts it on the PLAYER
+    // - the status, its tint, its particles and its "no attacking" rule all
+    // exist. What none of them offers is the whole floor at once, bought at the
+    // one second it is needed, which is what a panic button IS.
+    //
+    // EIGHT SECONDS, NOT FIVE. FEAR AURA gets five because it re-arms for free
+    // every half a minute; this one is spent at thirty points and has to buy
+    // a whole room's worth of quiet - long enough to leave, to reload, to
+    // collect the health drop that is lying somewhere dangerous. A boss
+    // downgrades it to a stagger through fearMode 'stagger', exactly as it
+    // does a TERROR hit, which is correct for the same reason CRYO PULSE is:
+    // an item that stopped a boss dead would be the only boss strategy there
+    // is.
+    effects: [['EVERY ENEMY FLEES FROM YOU', GOOD], ['FOR 8s', NOTE]],
+    use: (game) => {
+      for (const e of game.enemies) {
+        if (e.dead) continue;
+        e.applyStatus('fear', 8);
+        game.effects.impact(e.pos, 0xb06bff, 5, 3, 2.5, 0.4);
+      }
+      game.effects.shockwave(game.player.pos, THEME.panicButton, 30, 0.9);
+      game.sfx.itemPanic();
     },
   },
 
@@ -675,6 +739,32 @@ export const ACTIVE_ITEMS = {
       game.sfx.itemSurge();
     },
     end: (game) => { game.player.itemHoming = 0; },
+  },
+
+  itemEncore: {
+    name: 'ENCORE',
+    charge: 30,
+    theme: THEME.encore,
+    // THE SECOND ROUND IS FREE, and that is the item's whole shape. The shot
+    // path in main.js fires the pellet pattern a second time per trigger pull
+    // while this runs, off no magazine at all - the same trick ECHO CHAMBER
+    // pulls every fourth shot, moved onto a clock and made every shot. At
+    // thirty points for eight seconds it is the cheapest damage window in the
+    // pool per press, and it should be: it is also the only one that costs
+    // AMMUNITION, because twice the shots is twice the reloads.
+    //
+    // ONE DOSE OF STATUS PER TRIGGER PULL, exactly as TWENTY/TWENTY and ECHO
+    // CHAMBER keep theirs: both rounds are one pull, so a body caught by both
+    // still takes one burn and sets off one DETONATOR. The dedup set is not
+    // cleared between the two.
+    effects: [['EVERY SHOT FIRES TWICE', GOOD], ['THE SECOND ROUND IS FREE', GOOD]],
+    duration: 8,
+    use: (game) => {
+      game.player.itemEncore = 1;
+      game.effects.shockwave(game.player.pos, THEME.encore, 6, 0.55);
+      game.sfx.itemSurge();
+    },
+    end: (game) => { game.player.itemEncore = 0; },
   },
 
   itemLeech: {
@@ -1171,6 +1261,41 @@ export const ACTIVE_ITEMS = {
     },
   },
 
+  itemMolotov: {
+    name: 'MOLOTOV',
+    charge: 20,
+    theme: THEME.molotov,
+    // THE CHEAPEST THING LEFT IN THE ARENA, next to FIREBREAK's twelve, and
+    // the comparison is honest: the wall burns for eight seconds across a
+    // four-metre LINE, and this burns for twenty over a four-and-a-half-metre
+    // CIRCLE. What the eight extra points buy is GROUND - a place the crowd
+    // cannot stand for most of a wave, thrown at the densest part of it.
+    //
+    // THE FIRE IS THE PLAYER'S OWN, at FIREBREAK's fixed 1.5x of dotHit,
+    // snapshotted at the throw like every other fire in the pool. Incendiary
+    // may not be owned - most runs it is not - and an item whose card was a
+    // lie without an unrelated passive would be the only such item in the
+    // catalogue.
+    //
+    // THE CARD DOES NOT PRINT THE LIFE, because it is the one duration in the
+    // pool that equals its own charge: "FOR 20s" on a twenty-point item would
+    // hand the player the number the meter is meant to teach by being carried
+    // - see WHAT AN ITEM'S READOUT DOES NOT SAY at the top of this file. The
+    // scorch ring on the floor and the fire standing in it carry the length;
+    // the card carries the shape.
+    effects: [
+      ['THROW IT - A BURNING CIRCLE', GOOD],
+      ['WHEREVER IT SHATTERS', NOTE],
+    ],
+    use: (game) => {
+      const p = game.player;
+      p.muzzleInto(_v);
+      facing(game);
+      game.deploy(new Molotov(game, _v, _dir, p.dotHit * 1.5));
+      game.sfx.itemDeploy();
+    },
+  },
+
   itemWall: {
     name: 'FIREBREAK',
     charge: 12,
@@ -1279,6 +1404,52 @@ export const ACTIVE_ITEMS = {
       game.effects.shockwave(game.player.pos, THEME.lodestone, 12, 0.7);
       game.sfx.pickupMagnet();
       game.sfx.itemSurge();
+    },
+  },
+
+  itemTransfusion: {
+    name: 'BLOOD TRANSFUSION',
+    charge: 20,
+    theme: THEME.transfusion,
+    // THE FLOOR BECOMES MEDICINE, and only what is ON it. Every pickup lying in
+    // the arena - the ammo crate, the rage, the shield, the battery - is
+    // swapped in place for a health plate, and the swap is the whole payload:
+    // it does not collect them, it does not buff them, it just says "what is
+    // lying there is now the thing you are missing".
+    //
+    // WHICH IS WHY IT IS THE CHEAPEST SWEEP IN THE POOL. LODESTAR pulls in
+    // every orb and pickup at sixty points, and this is twenty, because the
+    // player still has to WALK to what it made. The press is a decision about
+    // TIMING: best on the corpse of something big, at the health the floor
+    // cannot otherwise fix, which is the same moment BLOOD FROM STONE is
+    // asking about and a different question - that one converts what you
+    // EARN, this one converts what is LYING THERE.
+    //
+    // THE OLD PLATE IS DESTROYED, NOT RESKINNED. The pickup's core and glow
+    // share one material per type (rule 2 at the top of powerups.js), so
+    // tinting an ammo crate green would tint every crate in the next wave
+    // green; a fresh Powerup in the old one's place, full lifetime restored,
+    // is the only swap that leaves the shared caches untouched.
+    effects: [['EVERY PICKUP ON THE FLOOR', GOOD], ['BECOMES A HEALTH PICKUP', GOOD]],
+    use: (game) => {
+      for (let i = game.powerups.length - 1; i >= 0; i--) {
+        const p = game.powerups[i];
+        if (p.dead || p.absorbing) continue;
+        if (p.typeKey === 'health') continue;
+        const at = p.pos.clone();
+        p.destroy();
+        game.powerups.splice(i, 1);
+        game.powerups.push(
+          spawnDropAt('health', at, game.scene, game.effects.glowTex,
+            game.time, game.arena.obstacles)
+        );
+        game.effects.burst(at, THEME.transfusion, 8, 3, 2, 0.4);
+      }
+      game.effects.shockwave(game.player.pos, THEME.transfusion, 12, 0.7);
+      // ONE CHIME WHETHER OR NOT THERE WAS ANYTHING TO SWAP. A press into an
+      // empty room did its work - there was simply no work - and the denial
+      // voice is reserved for a press the item REFUSED, which this never is.
+      game.sfx.itemHeal2();
     },
   },
 
@@ -1538,7 +1709,7 @@ export const HUMOURS = [
 // THE RUNNING LIST
 // ---------------------------------------------------------------------------
 //
-// Fourteen of the thirty-seven items do not finish on the frame they start.
+// Sixteen of the forty-seven items do not finish on the frame they start.
 // This is the four lines that make that possible, and it is deliberately the
 // smallest thing that could: a list of activations, each holding the item that
 // made it, its own scratch object and a clock. No registry, no ids to keep in
@@ -1728,7 +1899,7 @@ export const ITEM_BAR_MAX_CELLS = 12;
  * even to be a whole number of points.
  *
  * THE NUMBERS DID NOT MOVE WHEN THE UNIT DID. This used to be seconds, and the
- * costs are the same thirty-seven figures they always were - what changed is
+ * costs are the same figures they always were - what changed is
  * what fills them, so the segmenting is untouched along with the ratios.
  *
  * @param {number} charge  points to fill
@@ -1743,8 +1914,8 @@ export function itemCells(charge) {
  *
  * NEVER THE ITEM ALREADY CARRIED. A box that can hand back what is already in
  * the slot is a box that can charge two thousand dollars for nothing, and there
- * is no way for the player to see that coming. With thirty-seven items and one
- * carried there are always thirty-six left, so this can never come up empty.
+ * is no way for the player to see that coming. With forty-seven items and one
+ * carried there are always forty-six left, so this can never come up empty.
  *
  * THE EXCLUSION IS PER PLAYER AND COSTS NOTHING TO MAKE SO. Versus is hot seat:
  * one Player instance whose whole run - `item` included - is snapshotted and

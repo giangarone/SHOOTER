@@ -1085,6 +1085,7 @@ export class Player {
     this.itemTakenMult = 1;    // RED MIST's other half
     this.itemRateMult = 1;     // RED LINE
     this.itemHoming = 0;       // BIRD DOG: Seeker's cone, on a clock
+    this.itemEncore = 0;       // ENCORE: each trigger pull fires twice, the second free
     this.leechShots = 0;       // HAEMOPHAGE: landed shots still owed a heal
     this.elementCycle = -1;    // FOUR HUMOURS: -1 off, else the next element
     this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
@@ -2092,6 +2093,7 @@ export class Player {
     this.itemTakenMult = 1;
     this.itemRateMult = 1;
     this.itemHoming = 0;
+    this.itemEncore = 0;
     this.leechShots = 0;
     this.elementCycle = -1;
     this.orbHealEnd = 0;

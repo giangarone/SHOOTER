@@ -1033,7 +1033,7 @@ An active item does nothing until it is fired, and firing it is a decision made
 at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
 pad.
 
-Forty of them, in five groups by what they actually reach for.
+Forty-seven of them, in five groups by what they actually reach for.
 
 **Instant, on the room:**
 
@@ -1043,8 +1043,10 @@ Forty of them, in five groups by what they actually reach for.
 | CRYO PULSE | Freeze every enemy for 5s | 40 |
 | WHITE CELL | Clear every negative effect, then 2s immune | 20 |
 | BRIMSTONE | Burn all enemies for 3s | 40 |
+| FOOD POISONING | Poison all enemies for 8s | 40 |
 | JACOB'S LADDER | Lightning arcs through the 5 nearest, 2x bullet damage each | 40 |
 | LAST RITES | Execute everything under 30% health, bosses included | 40 |
+| PANIC BUTTON | Every enemy on the floor flees from you for 8s | 30 |
 | TECTONIC | Hurl everything within 9m back, for bullet damage | 20 |
 | MARTYR | 20x bullet damage over 16m. Leaves you at 10 HP | 60 |
 | FALLING SKY | 12 telegraphed meteors over 3s, 3x bullet damage each | 60 |
@@ -1064,6 +1066,7 @@ Forty of them, in five groups by what they actually reach for.
 | HAEMOPHAGE | The next 20 hits heal 1 HP each, no time limit | 60 |
 | BLOOD FROM STONE | Credit orbs also heal 1 HP for 8s | 30 |
 | SWEET SPOT | Every shot crits for 8s | 60 |
+| ENCORE | Every shot fires twice for 8s. The second round is free | 30 |
 
 **The health bar:**
 
@@ -1075,6 +1078,7 @@ Forty of them, in five groups by what they actually reach for.
 | SIX CHAMBERS | 50/50: full health, or one | 36 |
 | GRAFT | +3 max health, permanently | 60 |
 | BANDOLIER | +30 reserve rounds | 40 |
+| BLOOD TRANSFUSION | Every pickup on the floor becomes a health pickup | 20 |
 
 **Getting out of somewhere:**
 
@@ -1092,6 +1096,7 @@ Forty of them, in five groups by what they actually reach for.
 | --- | --- | --- |
 | WELCOME MAT | A proximity mine. 5x bullet damage over 6m | 30 |
 | SHORT FUSE | A thrown bomb on a 3s fuse. 180 over 8m | 30 |
+| MOLOTOV | A burning circle, 4.5m, wherever the bottle shatters. 20s | 20 |
 | FIREBREAK | A wall of fire that burns and stops shots | 12 |
 | LITTLE BROTHER | An auto-turret, for 15s | 40 |
 | APIARY | Five hunting bees, for 24s | 45 |
@@ -1151,7 +1156,63 @@ that proves the shape: it cannot touch the player, because every telegraph in
 this game is a question answered by moving, and a dozen rocks landing at random
 where the player did not aim them would be a question with no answer.
 
-**Fifteen of them run for a window** rather than finishing on the frame they are
+**PANIC BUTTON is the fourth answer to being surrounded, and the only one that
+moves nothing.** The dash, TECTONIC's shove, FIREBREAK's line and ORGAN
+GRINDER's decoy each change where somebody IS; this one changes what the room
+does, for eight seconds, through the `fear` status TERROR and the Howler already
+carry - so no enemy type, no `ai()` and no boss was told the item exists, and a
+boss downgrades it to a stagger through the `fearMode: 'stagger'` block it
+already owns. The comparison the identical-looking CRYO PULSE invites is real
+and deliberate: one stops the room for five seconds and costs forty, the other
+empties it for eight and costs thirty, because a frozen enemy is a target and a
+fleeing one is merely gone - damage dealt during the window is the whole
+difference between them.
+
+**FOOD POISONING is BRIMSTONE's sibling, and the trade between them is the
+point.** Both poison-or-burn the whole floor at twice one of the player's own
+shots a tick, through the same `applyStatus` a venom or incendiary round uses.
+Burn is three seconds of fierce - break contact now; poison is eight of shallow,
+ticking on the beat to half the beats, which is the shape poison has everywhere
+else in the game. One is a reason to push, the other is a clock the crowd dies
+on while the player is somewhere else, and the identical charge asks which of
+the two this particular fight needs.
+
+**MOLOTOV is a circle where FIREBREAK is a line.** A wall says "not through
+here"; a pool says "not here" - and a thrown one says it wherever the fight is
+densest, which the wall pressed at your own feet cannot. The bottle flies on
+the same arc every other thrown thing in the game flies (11 forward, 6.5 up, 22
+down), shatters without a fuse or a telegraph - the player is the one who threw
+it, so there is nobody to warn - and the circle it leaves burns for twenty
+seconds at the player's own `dotHit` at FIREBREAK's fixed 1.5x, refreshed for as
+long as a body is inside and running down the moment it walks out. The scorch
+ring under it is its own mesh rather than a pooled creep slot, for the same
+reason a mine's ring is: twenty seconds is longer than any other patch in the
+game, and a pool slot held that long would starve the trails.
+
+**BLOOD TRANSFUSION converts the floor, and collects nothing.** Every pickup on
+the live list is swapped in place for a health plate - the same 25 HP the health
+crate carries, full lifetime restored - and the player still has to walk to what
+it made, which is why it is twenty points where LODESTAR's sweep is sixty. The
+swap is a destroy-and-respawn rather than a reskin: a pickup's core and glow
+share one material per type across every instance (rule 2 in `powerups.js`), so
+tinting an ammo crate green in place would tint every crate in the next wave
+green. A plate already in flight to the player on a wave-clear sweep is left
+alone - its effect was banked the moment it left the live list - and a health
+plate already lying there is the SAME object after the press, because a swap
+that replaced it would have reset its despawn clock for no reason.
+
+**ENCORE is ECHO CHAMBER on a clock.** The passive item fires the pattern a
+second time every fourth trigger pull at half strength; the item fires it a
+second time on every pull, at full strength, for eight seconds - and the second
+round is free by construction, because `tryShoot` billed the first and nothing
+in the second touches the magazine. Both volleys are one trigger pull under the
+dedup rules TWENTY/TWENTY set: a body caught by both takes one dose of status
+and sets off one DETONATOR blast, and the crit is shared, so the second round is
+the first one again rather than a fresh roll. It is the only damage window in
+the pool that costs ammunition as well as charge - twice the shots is twice the
+reloads - which is what keeps thirty points honest.
+
+**Sixteen of them run for a window** rather than finishing on the frame they are
 pressed, which needed the one piece of machinery this system did not have. An
 item may declare a `duration`, a `tick` and an `end` alongside its `use`, and
 `RunningItems` in `js/items.js` is the whole of it: a list of activations, each
@@ -1169,13 +1230,14 @@ which belong to the RAGE and FIRE RATE pickups and carry their expiry: an item
 borrowing those would either cancel a pickup or be cancelled by one, where
 multiplying means a player holding both gets both.
 
-**Seven of them leave something in the arena.** `js/deploy.js` holds a turret, a
-mine, a bomb, a wall, a singularity, a bee and a meteor, all under the contract
-`Projectile` and `Grenade` in `js/enemy.js` already established - a constructor
-that adds meshes, an `update(dt, ctx)` returning `'alive'` or `'dead'`, and a
-`destroy()`. `main.js` drives that list with the same eight lines it drives the
-projectiles with, and `_clearHazards()` sweeps it alongside the pools, so
-nothing the player left standing outlives the fight it was deployed into.
+**Eight of them leave something in the arena.** `js/deploy.js` holds a turret, a
+mine, a bomb, a wall, a singularity, a bee, a meteor and a burning circle, all
+under the contract `Projectile` and `Grenade` in `js/enemy.js` already
+established - a constructor that adds meshes, an `update(dt, ctx)` returning
+`'alive'` or `'dead'`, and a `destroy()`. `main.js` drives that list with the
+same eight lines it drives the projectiles with, and `_clearHazards()` sweeps it
+alongside the pools, so nothing the player left standing outlives the fight it
+was deployed into.
 Damage still goes through `_blast` and `hurtEnemy`; the one argument a
 deployable chooses for itself is whether its blast can reach the player.
 

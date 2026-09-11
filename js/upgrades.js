@@ -234,6 +234,23 @@ export const THEME = {
   trueStrike: 0xf06292,      // the shot taken after a pause
   domino: 0xc2185b,          // one crit leaning on the next
   luckyStreak: 0xff5c8a,     // one body, hit and hit and hit
+
+  // ---- THE FIVE THAT CAME IN WITH THE THIRD POOL --------------------------
+  //
+  // Same rule as the forty-one above: the colour is what the item does, and a
+  // payload a family already owns takes a SHADE of that family's hue rather
+  // than a hue of its own - but never the family's exact hex, because the
+  // theme colour is the one thing identifying an item on a chip or a reel
+  // flash, and two items sharing a colour would be two items nobody could tell
+  // apart by the only reading that works at arena range. So PANIC BUTTON sits
+  // beside `fear`'s violet, FOOD POISONING beside `poison`'s green, MOLOTOV in
+  // the hellfire reds, and ENCORE one shade paler than ECHO CHAMBER - same
+  // family, same idea at a different clock, different swatch.
+  panicButton: 0x9c6ade,     // PANIC BUTTON: the room leaves, violet like fear
+  foodPoison: 0x6abf4b,      // FOOD POISONING: poison, but from the kitchen
+  molotov: 0xff5722,         // MOLOTOV: fire, thrown
+  transfusion: 0xd5006d,     // BLOOD TRANSFUSION: the floor, paid out in blood
+  encore: 0xffab91,          // ENCORE: a rate-orange one shade paler than ECHO
 };
 
 

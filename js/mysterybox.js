@@ -8,7 +8,8 @@
 //
 // WHY THIS REPLACED THE PEDESTAL. That row rose every third shop and handed
 // over one item free, with a doubling reroll beside it. Two consequences, both
-// bad: a run met four active items out of thirty-seven, so most of the
+// bad: a run met four active items out of the pool however deep it was, so
+// most of the
 // catalogue was unreachable by anyone who was not lucky; and the one mechanism
 // for chasing a particular item priced itself out after two tries. The box
 // inverts both. It is there every shop, it can be rolled as many times as the
@@ -26,10 +27,10 @@
 //   1. NO NEW PointLights. Every glow in here is an additive mesh or sprite.
 //      One more light in the scene recompiles every material in the game.
 //   2. NOTHING IS ALLOCATED AFTER STARTUP. The box, the lid, the two canvases
-//      and ALL THIRTY-SEVEN item icons are built in the constructor and shown
+//      and ALL FORTY-SEVEN item icons are built in the constructor and shown
 //      or hidden thereafter. This matters more here than anywhere else in the
 //      game: the reel swaps icons forty times in four seconds, and building
-//      them on demand would allocate thirty-seven geometries during an
+//      them on demand would allocate forty-seven geometries during an
 //      animation whose whole job is to feel smooth.
 //   3. TEXTURES ARE COUNTED. Two are spent here - the card and the question
 //      mark - against a hard cap the smoke test holds the whole game to. The
@@ -664,7 +665,7 @@ export class MysteryBox {
 
   _buildIcons() {
     // Every item's icon, plus the question mark, built now and never again.
-    // Thirty-eight merged geometries at startup, against the alternative of
+    // One merged geometry per icon at startup, against the alternative of
     // building them during the one animation in the game that cannot afford a
     // hitch. buildPixelIcon caches geometry per (key, colour) globally, so the
     // cost here is paid once for the whole session.
