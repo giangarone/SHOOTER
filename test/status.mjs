@@ -60,7 +60,14 @@ try {
       }
       // A wave with an empty queue clears on the frame it starts, which sinks
       // the shop in and generates a fresh layout halfway through whatever is
-      // being measured. One entry that never spawns holds it open instead.
+      // being measured. One entry that never spawns holds it open instead -
+      // and the queue is EMPTIED first, because the real cast is still in it
+      // at the top of this evaluate and goes on arriving one at a time
+      // throughout. Every measurement below reads the player's health, and a
+      // chaser that walked up mid-burn landed its hits in the total: the
+      // "stacked" window came back at exactly double the rate once in three
+      // runs, on code that was working.
+      g.queue.length = 0;
       g.waveState = 'active';
       if (!g.queue.length) g.queue.push('chaser');
       g.spawnTimer = 1e9;
@@ -72,11 +79,14 @@ try {
     // The bot drives the player and shoots; every measurement below is about
     // what the PLAYER does, so it has to be switched off first. The arena is
     // cleared for the same reason - an enemy landing a hit mid-measurement
-    // would be counted as the burn.
+    // would be counted as the burn - and held open by clearArena() for the
+    // REST of the evaluate, not just inside one block, or the wave's real
+    // cast keeps arriving behind the clear.
     g.autoTest = false;
-    g._clearEntities();
     g.input.shoot = false;
     g.input.shootFresh = false;
+    g._clearEntities();
+    clearArena();
 
     const clean = () => {
       p.clearStatuses();
@@ -249,21 +259,29 @@ try {
   ok('an effect is on the moment it is applied', out.fearOnAtStart && out.fracAtStart === 1);
   ok('and off when its clock runs out', !out.fearOffAfter && out.fracAfter === 0);
 
-  // 7 dps over 3.2s of GAME time is 22.4, billed in whole points, minus
-  // whatever the last partial point never reached. Still a window rather than
-  // an equality - the billing is what makes it one - but a much narrower window
-  // than it used to need, because the measurement is no longer at the mercy of
-  // the frame rate.
-  ok('fire costs health at about its rate', out.burn.lost >= 20 && out.burn.lost <= 23,
-    `${out.burn.lost.toFixed(1)} over ${out.burn.secs.toFixed(1)}s`);
-  // Both windows now burn for the same amount of game time and neither expires
-  // inside it, so anything past a point or two apart is the statuses stacking.
-  // The second half is the check the name is actually about: stacking would not
-  // be a near miss, it would be a multiple.
+  // 7 dps, billed in whole points, so what was lost is 7 * the game time the
+  // window actually ran, minus the last partial point that never reached one.
+  // THE WINDOW IS THE MEASURED GAME TIME, not the 3.2 asked for: the loop
+  // below exits on a WALL-CLOCK guard when the host cannot render, and a
+  // runner through software GL has been seen to serve seven frames a second
+  // - at which dt is clamped at 0.05 and 20 wall seconds buy only 2.8 of
+  // game. That is the host being slow, not the fire being weak: the correct
+  // bill for 2.8s is 19.6, and the old fixed window of 20-23 read it as a
+  // failure. The rate, not the total, is the property - anything under ~6.4/s
+  // is a fire that lost its tick, and the stacking check below catches
+  // anything over it by comparing the two runs against each other.
+  const burnRate = out.burn.lost / out.burn.secs;
+  ok('fire costs health at about its rate',
+    burnRate >= 6.4 && burnRate <= 7.2,
+    `${out.burn.lost.toFixed(1)} over ${out.burn.secs.toFixed(1)}s (${burnRate.toFixed(2)}/s)`);
+  // Both windows burn for the same RATE and neither expires inside it, so
+  // what is left between them is the whole-point billing - worth at most a
+  // point against a tenth of the rate. The check the name is about:
+  // stacking would not be a near miss, it would be a multiple.
+  const stackedRate = out.burnStacked / out.stackedSecs;
   ok('re-applying it refreshes rather than stacks',
-    Math.abs(out.burnStacked - out.burn.lost) <= 2
-      && out.burnStacked < out.burn.lost * 1.5,
-    `${out.burnStacked.toFixed(1)} vs ${out.burn.lost.toFixed(1)}`);
+    stackedRate >= burnRate * 0.9 && stackedRate <= burnRate * 1.1,
+    `${out.burnStacked.toFixed(1)} over ${out.stackedSecs.toFixed(1)}s (${stackedRate.toFixed(2)}/s)`);
 
   ok('a clean player shoots', out.shootsWhenClean === 'shot', String(out.shootsWhenClean));
   ok('a frightened one does not', out.shootsWhenAfraid === 'feared', String(out.shootsWhenAfraid));

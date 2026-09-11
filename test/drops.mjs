@@ -160,6 +160,16 @@ try {
   // ---- boss bleeds at its thresholds ----
   const boss = await page.evaluate(async () => {
     const g = window.__game;
+    // PIN THE THEME THE FIGHT IS DEALT FROM. Which boss wave 5 is depends on
+    // the run's random deal, and two of the ten bosses CHANGE `parts` while
+    // the health bar falls: SCHISM splits at half health (parts[0] dies, the
+    // bar refills to full as its children arrive whole), and the CHOIR stands
+    // up as three bodies on its first frame. Both leave this walk writing to
+    // a part that is no longer the bar - SCHISM reported bled=2 for a
+    // mechanic that was working, once per run in ten. COLOSSUS neither splits
+    // nor raises, so its parts list is the one this walk assumed all along.
+    // Same pin boss.mjs uses for the fights it needs by name.
+    g.setTheme('rust');
     g.wave = 4;
     g.enemies.forEach((e) => { e.dead = true; });
     g.queue.length = 0;
@@ -202,6 +212,8 @@ try {
     }
     g._placeDrop = orig;
     clearInterval(alive);
+    // The pin was for this walk; later blocks go back to the run's own deal.
+    g.setTheme(null);
     return { seen, bled, thresholds: g.bossFight ? g.bossFight.bleedAt : -1 };
   });
   check('boss bleeds once per threshold', boss.bled === 3,

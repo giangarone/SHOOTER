@@ -208,28 +208,49 @@ try {
         g.arena.ground.length = 0;
         g.arena.obstacles.push(box);
         g.arena.ground.push(box);
+        // AND THE NAV GRID IS REBAKED AGAINST IT. clean() empties the arena
+        // lists but nothing re-bakes the grid, so the tank below would be
+        // steered by a bake of a layout that is no longer standing - one that
+        // sometimes aimed it straight into the box (blocked, test passes) and
+        // sometimes routed it around a wall that wasn't there (crossed, test
+        // fails), on the roll of the run's seed. The box is the only thing in
+        // the room; the tank should be steered by the room that is.
+        g.nav.rebake(g.arena.obstacles);
         const e = put(type, 14, 0);
         px = 0;
         pz = 0;
         let crossed = false;
         let minX = 99;
+        // WHETHER THE BODY WAS EVER INSIDE THE BOX ITSELF, which is the
+        // resolver's actual contract and the only thing that separates the
+        // two types. Reaching the far side proves nothing on its own: a tank
+        // that steers round the box is the nav grid WORKING, not the wall
+        // failing - the old assertion read exactly that detour as a leak, on
+        // the runs where the stale bake happened to route one. A body inside
+        // the footprint is a body the resolver never pushed back out, and
+        // only a type that phases can be there.
+        let through = false;
         for (let i = 0; i < 1400; i++) {
           await step();
           minX = Math.min(minX, e.pos.x);
+          if (e.pos.x > 4 && e.pos.x < 7 && e.pos.z > -3 && e.pos.z < 3) through = true;
           // Through means out the far side of the box.
           if (e.pos.x < 3.5) { crossed = true; break; }
         }
-        return { crossed, minX: +minX.toFixed(1) };
+        return { crossed, minX: +minX.toFixed(1), through };
       };
       const mono = await runThrough('monolith');
-      res.monoCrossed = mono.crossed;
+      res.monoCrossed = mono.crossed && mono.through;
       res.monoMinX = mono.minX;
       // The control. A tank is the monolith's role-mate and steers by the same
-      // grid; if IT gets through, the box is not a wall and the test above
-      // proves nothing at all.
+      // grid; if it is ever inside the footprint, the resolver let a body that
+      // does not phase stand in solid geometry, and the test above proves
+      // nothing at all. Whether it grinds into the near face or walks round
+      // the end is the pathfinder's business, not the wall's.
       const tank = await runThrough('tank');
-      res.tankBlocked = !tank.crossed;
+      res.tankBlocked = !tank.through;
       res.tankMinX = tank.minX;
+      res.tankThrough = tank.through;
       clean();
     }
 
@@ -309,9 +330,10 @@ try {
     out.warpShotFromRift < 1.5 && out.warpShotFromSelf > 4,
     `rift+${out.warpShotFromRift}m self+${out.warpShotFromSelf}m`);
 
-  ok('a monolith walks through solid cover', out.monoCrossed, `reached x=${out.monoMinX}`);
+  ok('a monolith walks through solid cover', out.monoCrossed,
+    `reached x=${out.monoMinX}`);
   ok('and its role-mate is stopped by the same box',
-    out.tankBlocked, `tank reached x=${out.tankMinX}`);
+    out.tankBlocked, `tank reached x=${out.tankMinX}, inside=${out.tankThrough}`);
 
   ok('a well is laid on the floor', out.wellPlaced > 0);
   ok('it drags the player toward it', out.wellPulledIn, `closed ${out.wellMoved}m`);
