@@ -323,8 +323,6 @@ export const _hexTo = new THREE.Vector3();
 // every enemy asks for one every frame.
 export const _steer = { x: 0, z: 0 };
 
-export const _latchFwd = new THREE.Vector3();
-
 // Time constant of the walking-heading blend, in seconds. Short enough that a
 // corner is still taken at full speed; long enough that a single disagreeing
 // frame cannot turn a body around.

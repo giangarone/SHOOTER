@@ -51,11 +51,11 @@ import {
   ARENA_HALF, BALLOON_RISE, BODY_BASE_INTENSITY, BODY_FLASH_HEX,
   BODY_FLASH_INTENSITY, CONDUIT_RESIST, CONDUIT_SPEED, ENEMY_TYPES, FLARE_BURST,
   FLARE_BURST_REACH, FLARE_BURST_SPREAD, FLY_MAX_Y, FLY_RATE_DEFAULT,
-  FREEZE_VULN, GROUND_FALL,
-  GULP_HANG, HAIL_RING_GAP, HAIL_RING_N, HAIL_RING_R, MELEE_REACH_Y,
+  FREEZE_VULN, GROUND_FALL, HAIL_RING_GAP, HAIL_RING_N, HAIL_RING_R,
+  MELEE_REACH_Y,
   NAV_TURN, PLATE_HEX, SHARED_MATS, SLOW_FACTOR, SPORE_DAMAGE, SPORE_RADIUS,
   SPORE_SPROUT, STATUS_FX, STATUS_INTENSITY, STATUS_ORDER, STATUS_TINT,
-  STEP_EASE, WARD_STONE, _dripAt, _latchFwd, _steer, _wraithEnd, buildChaser,
+  STEP_EASE, WARD_STONE, _dripAt, _steer, _wraithEnd, buildChaser,
   geo, landHit, nextEnemyId,
 } from './enemies/index.js';
 export { ENEMY_TYPES } from './enemies/index.js';
@@ -243,9 +243,6 @@ export class Enemy {
     // the next hit that lands and then gone, and it OUTLIVES the capacitor
     // that put it on, which is the whole difference between the two supports.
     this.plated = false;
-    // Riding the player - BRINE's gulper, and nothing else. See the snap in
-    // update() and aiGulper for the two inputs that shake it off.
-    this.latched = false;
     this.colorHex = def.color;
     this.eyeBase = def.eye;
     this.pos = pos.clone();
@@ -1049,20 +1046,7 @@ export class Enemy {
     // the OBSTACLE resolve is skipped. And blockedBy is forced to zero for it,
     // because everything that reads that field is asking "did I slam into
     // something", and the answer for a phasing body is always no.
-    if (this.latched && ctx.player) {
-      // LATCHED. Snapped AFTER the move, the wall clamp, the ground and the
-      // obstacle resolve, because none of those have anything to say about a
-      // body that is being carried - and doing it before any of them would
-      // have the floor push a gulper off the player every time they walked up
-      // a step. Held just in front of them and low: the player's own position
-      // is the one place a first-person camera can never look.
-      ctx.player.forwardInto(_latchFwd);
-      this.pos.x = ctx.player.pos.x + _latchFwd.x * GULP_HANG;
-      this.pos.z = ctx.player.pos.z + _latchFwd.z * GULP_HANG;
-      this.pos.y = ctx.player.pos.y;
-      this.phase = false;
-      this.blockedBy = 0;
-    } else if (this.phase) {
+    if (this.phase) {
       this.phase = false;
       this.blockedBy = 0;
     } else {

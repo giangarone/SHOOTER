@@ -307,14 +307,14 @@ context. The start screen says so, and one click anywhere fixes it.
   pull and gets one round back for it), **Lenses** (burn a line across the
   floor toward you, slowly and forever - you outrun it, you do not dodge it),
   **Halos** (no attack; inside their field your crosshair and hit markers are
-  simply gone) and **Shrikes** (circle, tell, dive). **BRINE**, the theme of things that WILL NOT LET GO - every other theme asks you to be
-  somewhere else, and this one takes being somewhere else away: **Gulpers**
-  (latch on and RIDE you, draining until you shake them off with a melee swing
-  or a dash - the one enemy in the game that cannot be answered with the gun,
-  because it is at the one position a first-person crosshair can never point
-  at), **Anglers** (hang at the back of the room behind a lure and throw slow
-  homing bubbles that CAN BE SHOT OUT OF THE AIR - the only enemy round in the
-  game that is itself a target, and what it costs you is the bullet),
+   simply gone) and **Shrikes** (circle, tell, dive). **BRINE**, the theme of things that WILL NOT LET GO - every other theme asks you to be
+   somewhere else, and this one takes being somewhere else away: **Gulpers**
+   (rear up and LUNGE down a line they cannot steer - faster than your walk,
+   so the strike arrives - and a landed bite FEEDS them: they heal by the
+   health the mouthful took, then deliberately back off slower than you
+   close, and that back-step is the kill window), **Anglers** (hang at the back of the room behind a lure and throw slow
+   homing bubbles that CAN BE SHOT OUT OF THE AIR - the only enemy round in
+   the game that is itself a target, and what it costs you is the bullet),
   **Barnacles** (root themselves and drag you in on a current, so the plates
   are facing you whether you wanted to be in front of them or not - the only
   brute in the game that cover is the counter to), **Vents** (erupt a scalding
@@ -1598,11 +1598,11 @@ test/tempest.mjs    TEMPEST end to end - and every assertion in it is a pair,
                     against one that was not, the plate's first hit against
                     its second
 test/brine.mjs      BRINE end to end, and every assertion in it is a pair for
-                    the same reason TEMPEST's are - four of its six are
-                    invisible when broken rather than obviously wrong: the
-                    gulper held AND let go, the vent walled AND the wall came
-                    down, the current pulled AND cover stopped it, the choir
-                    stood up as three AND on one bar
+                     the same reason TEMPEST's are - four of its six are
+                     invisible when broken rather than obviously wrong: the
+                     gulper struck AND fed, the vent walled AND the wall came
+                     down, the current pulled AND cover stopped it, the choir
+                     stood up as three AND on one bar
 test/plague.mjs     PLAGUE end to end - and its headline assertion is a
                     deliberate MISS, because a lesion round that only rotted
                     the floor where it CONNECTED would be an ordinary gunner
