@@ -176,10 +176,10 @@ second to run. It asserts:
   status would simply be a better version of that role, and the envelope
   exists so that no theme gets one.
 
-Check the head of that suite for counts written as literals — `ten themes`,
-`sixty slots` — and move them onto the table's own length rather than bumping
-them by one. A number that has to be edited by hand every time the game grows
-is a number that will eventually be wrong.
+Counts in that suite derive from the table's own length, so a new theme needs
+nothing there — do not reintroduce a literal. The only hand-authored numbers
+it holds are the role envelopes, and those ARE deliberate: editing one is a
+reviewable change to the game's balance, not a number that follows the table.
 
 ### Registering one — the whole list
 
