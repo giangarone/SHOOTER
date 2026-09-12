@@ -29,6 +29,11 @@ env:
   OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "131072"
   CHUNK_MINUTES: "310"
 
+  # IMPORTANT:
+  # Tell `opencode github run` to use the GitHub Actions GITHUB_TOKEN directly
+  # instead of trying to exchange an OIDC token for an OpenCode GitHub App token.
+  USE_GITHUB_TOKEN: "true"
+
 jobs:
   initial:
     if: |
@@ -52,7 +57,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -126,7 +130,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
 
     outputs:
       state: ${{ steps.agent.outputs.state }}
@@ -226,7 +229,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
 
     steps:
       # Again, obtain a trusted copy of the helper before restoring agent files.

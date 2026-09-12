@@ -110,29 +110,10 @@ make_final_summary() {
   fi
 }
 
-mint_app_token() {
-  local request_url sep oidc_json oidc token_json token
-  request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:?OIDC request URL is unavailable}"
-  sep='?'
-  [[ "$request_url" == *'?'* ]] && sep='&'
-
-  oidc_json="$(curl -fsSL \
-    -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?OIDC request token is unavailable}" \
-    "${request_url}${sep}audience=opencode-github-action")"
-  oidc="$(jq -r '.value' <<<"$oidc_json")"
-
-  token_json="$(curl -fsSL -X POST \
-    -H "Authorization: Bearer $oidc" \
-    https://api.opencode.ai/exchange_github_app_token)"
-  token="$(jq -r '.token // empty' <<<"$token_json")"
-  [[ -n "$token" ]] || { echo "Failed to obtain OpenCode GitHub App token" >&2; return 1; }
-  printf '%s' "$token"
-}
-
 github_api() {
   local method="$1" url="$2" data="${3:-}"
   local args=(curl -fsSL -X "$method"
-    -H "Authorization: Bearer $APP_TOKEN"
+    -H "Authorization: Bearer ${GITHUB_TOKEN:?GITHUB_TOKEN is unavailable}"
     -H "Accept: application/vnd.github+json"
     -H "X-GitHub-Api-Version: 2022-11-28")
   if [[ -n "$data" ]]; then
@@ -142,10 +123,10 @@ github_api() {
   "${args[@]}"
 }
 
-configure_git_for_app() {
+configure_git_for_token() {
   local basic
   strip_git_credentials
-  basic="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"
+  basic="$(printf 'x-access-token:%s' "${GITHUB_TOKEN:?GITHUB_TOKEN is unavailable}" | base64 -w0)"
   git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $basic"
 }
 
@@ -172,7 +153,7 @@ remove_working_reaction() {
     delete_base="https://api.github.com/repos/$GITHUB_REPOSITORY/issues/comments/$comment_id/reactions"
   fi
 
-  reaction_id="$(github_api GET "$list_url" | jq -r '[.[] | select(.content=="eyes" and .user.login=="opencode-agent[bot]")][0].id // empty' || true)"
+  reaction_id="$(github_api GET "$list_url" | jq -r '[.[] | select(.content=="eyes" and (.user.login=="opencode-agent[bot]" or .user.login=="github-actions[bot]"))][0].id // empty' || true)"
   if [[ -n "$reaction_id" ]]; then
     github_api DELETE "$delete_base/$reaction_id" >/dev/null || true
   fi
@@ -189,9 +170,8 @@ finalize_to_github() {
   [[ -n "$ORIGINAL_ACTOR" ]] || ORIGINAL_ACTOR="opencode-agent"
   export ORIGINAL_ACTOR
 
-  APP_TOKEN="$(mint_app_token)"
-  export APP_TOKEN
-  configure_git_for_app
+  : "${GITHUB_TOKEN:?GITHUB_TOKEN is unavailable}"
+  configure_git_for_token
 
   # Ensure any unfinished local edits are part of the final push.
   commit_if_needed
@@ -236,7 +216,7 @@ finalize_to_github() {
     base_branch="$(github_api GET "https://api.github.com/repos/$GITHUB_REPOSITORY" | jq -r '.default_branch')"
 
     existing_pr="$(curl -fsSL -G \
-      -H "Authorization: Bearer $APP_TOKEN" \
+      -H "Authorization: Bearer ${GITHUB_TOKEN:?GITHUB_TOKEN is unavailable}" \
       -H "Accept: application/vnd.github+json" \
       -H "X-GitHub-Api-Version: 2022-11-28" \
       --data-urlencode "head=${owner}:${expected_branch}" \
@@ -262,11 +242,6 @@ finalize_to_github() {
   fi
 
   strip_git_credentials
-  curl -fsSL -X DELETE \
-    -H "Authorization: Bearer $APP_TOKEN" \
-    -H "Accept: application/vnd.github+json" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    https://api.github.com/installation/token >/dev/null 2>&1 || true
 }
 
 case "$MODE" in
