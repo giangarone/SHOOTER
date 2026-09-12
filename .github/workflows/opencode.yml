@@ -43,8 +43,10 @@ jobs:
         contains(github.event.comment.body, ' /opencode') ||
         startsWith(github.event.comment.body, '/opencode')
       )
+
     runs-on: ubuntu-latest
     timeout-minutes: 350
+
     permissions:
       actions: write
       contents: write
@@ -118,9 +120,13 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.continuation == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 350
+
     permissions:
       actions: write
-      contents: read
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
 
     outputs:
       state: ${{ steps.agent.outputs.state }}
@@ -175,6 +181,7 @@ jobs:
         id: agent
         env:
           TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
           STATE_DIR: ${{ runner.temp }}/opencode-state
         run: bash "$RUNNER_TEMP/opencode-chunk.sh" continue
@@ -194,6 +201,7 @@ jobs:
           CURRENT_CHUNK: ${{ inputs.chunk }}
         run: |
           next_chunk=$((CURRENT_CHUNK + 1))
+
           payload=$(jq -n \
             --arg ref "${{ github.event.repository.default_branch }}" \
             --arg previous_run_id "${GITHUB_RUN_ID}" \
@@ -212,6 +220,7 @@ jobs:
     if: needs.continuation.outputs.state == 'finished'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     permissions:
       actions: read
       contents: write
@@ -247,5 +256,7 @@ jobs:
 
       - name: Push changes and post final result
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATE_DIR: ${{ runner.temp }}/opencode-state
         run: bash "$RUNNER_TEMP/opencode-chunk.sh" finalize
