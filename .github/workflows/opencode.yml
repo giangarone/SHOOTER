@@ -62,7 +62,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       # Copy the trusted helper out of the worktree before OpenCode can edit it.
       - name: Copy continuation helper
