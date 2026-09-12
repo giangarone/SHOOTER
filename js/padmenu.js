@@ -92,14 +92,12 @@ export function cap(name, cls = '') {
 // and now has its place back: FULLSCREEN, a real binding nothing else on the
 // screen mentions, and the pad's D-PAD, which is how a controller walks the
 // menus it is reading this sheet in.
-export const KBM_CONTROLS = [
-  ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
-  ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
-  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['Q', 'ITEM'],
-  ['C', 'CROUCH'], ['SHIFT C', 'SLIDE'], ['E', 'USE'],
-  ['TAB', 'STATS'], ['F', 'FULLSCREEN'], ['ESC', 'PAUSE'],
-];
-
+//
+// KEYS ARE DEFAULTS ONLY. This list is the fallback for a call with no sheet;
+// the live keyboard sheet is built by js/keybind.js and passed in, so a rebind
+// reaches the caps without this module learning where bindings are stored.
+// The PAD's sheet is fixed text - a controller has no rebindable keys in this
+// game, and its bindings are printed on its plastic.
 export const PAD_CONTROLS = [
   ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
   ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
@@ -108,15 +106,31 @@ export const PAD_CONTROLS = [
   ['TOUCH PAD', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
 ];
 
+// The keyboard sheet AS SHIPPED. Defaults only - see the note above.
+export const KBM_CONTROLS = [
+  ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
+  ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
+  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['Q', 'ITEM'],
+  ['C', 'CROUCH'], ['SHIFT C', 'SLIDE'], ['E', 'USE'],
+  ['TAB', 'STATS'], ['F', 'FULLSCREEN'], ['ESC', 'PAUSE'],
+];
+
 /**
  * Rewrites the control sheet in place. Called only when the input mode
  * actually changes, not per frame.
+ *
+ * The KEYBOARD sheet is passed in rather than read from a constant here: the
+ * caps are the binding table's to answer for, and a rebind has to reach them
+ * without this module learning where bindings are stored. `kbm` is the
+ * fifteen [key, action] pairs - see Keybinds.sheet().
+ *
  * @param {HTMLElement} el the `.controls` panel
  * @param {boolean} pad true for the controller sheet
+ * @param {?Array.<[string, string]>} kbm the keyboard sheet, or null for pad
  */
-export function renderControls(el, pad) {
+export function renderControls(el, pad, kbm = null) {
   for (const old of el.querySelectorAll('.ctl')) old.remove();
-  for (const [key, label] of (pad ? PAD_CONTROLS : KBM_CONTROLS)) {
+  for (const [key, label] of (pad ? PAD_CONTROLS : (kbm || KBM_CONTROLS))) {
     const ctl = document.createElement('div');
     ctl.className = 'ctl';
     ctl.innerHTML = cap(key, 'key') + '<span>' + label + '</span>';
