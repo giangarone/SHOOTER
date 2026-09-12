@@ -554,23 +554,55 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 
 /* CHARGED. The bar takes its glow, the name comes up to white and the icon to
    full - legible in peripheral vision without reading a word, which is the
-   whole point, because it becomes true in the middle of a firefight. */
+   whole point, because it becomes true in the middle of a firefight.
+
+   THE READY STATE IS A WHITE OUTLINE, and it is drawn on both halves of the
+   slot. Brightness and glow are levels, and a level has to be compared against
+   something to be read; an edge is read as a shape, which is the one thing the
+   eye picks up from the corner without resolving the slot at all. The icon
+   takes a one-pixel ring of drop-shadows (the pixel-art equivalent of the
+   generated outline every drawing already carries - see pixelicons.js), the
+   bar a one-pixel inset trim, INSIDE the lit cells because the cell mask is on
+   the track and paints nothing outside them - a ring around the meter would
+   be cut to nothing by the very mask that segments it. */
 #item-box:not(.ready) #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(0.72); }
 #item-box.ready #item-name { color: #fff; }
-#item-box.ready #item-bar { box-shadow: 0 0 8px var(--item); }
+#item-box.ready #item-art {
+  filter:
+    drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff)
+    drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)
+    drop-shadow(2px 2px 0 var(--ink));
+}
+#item-box.ready #item-bar { box-shadow: inset 0 0 0 1px #fff, 0 0 8px var(--item); }
 /* BOTH CHARGES BANKED. The whole slot goes to white rather than the second bar
    glowing on its own: a player holding two presses should be able to see it
-   from the corner of their eye without resolving a bar. */
+   from the corner of their eye without resolving a bar. The outline stays - two
+   charges banked is more ready than one, not a different state. */
 #item-box.spare #item-bar2 { box-shadow: 0 0 10px #fff; }
-#item-box.spare #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(1.18); }
+#item-box.spare #item-art {
+  filter:
+    drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff)
+    drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)
+    drop-shadow(2px 2px 0 var(--ink)) brightness(1.18);
+}
 
 /* The moment it fills, once. Restarted from JS by removing and re-adding the
    class - the same trick #ammo-res.refund uses, and for the same reason: a
    second charge inside the animation has to play again rather than ride the
    first one out. */
 #item-box.charged #item-art { animation: item-charged 0.4s steps(3, end) 1; }
+/* The 0% frame carries the READY outline too: this animation runs on the very
+   frame the charge completes, and a ring that blinked out for the pop would
+   spend its whole life arriving. The 100% frame names no filter, so it lands
+   on whatever the slot's own state says - the ring, once the class is gone. */
 @keyframes item-charged {
-  0%   { transform: scale(1.22); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
+  0%   {
+    transform: scale(1.22);
+    filter:
+      drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff)
+      drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)
+      drop-shadow(2px 2px 0 var(--ink)) brightness(2.4);
+  }
   100% { transform: none; }
 }
 /* AEGIS - THE SHIELD. Both damage sinks return in silence while the window is
