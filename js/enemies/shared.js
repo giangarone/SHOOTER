@@ -180,6 +180,18 @@ export const SHARED_MATS = {
     color: 0xb06bff, emissive: 0xb06bff, emissiveIntensity: 0.8,
     roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.5,
   }),
+  // ---- HIVE ---------------------------------------------------------------
+  // One body material and one lit accent, the tank's contract: the family's
+  // enemies read as HIVE through the lit amber sac each carries, and the sac
+  // keeps its own colour while the body under it is tinted by a status - so
+  // a frozen tick is still recognisably carrying honey. hiveChitin is the
+  // dark plate the armoured halves wear (the borer's plough, the boss's
+  // thorax), the way tankPlate is RUST's.
+  hiveSac: new THREE.MeshStandardMaterial({
+    color: 0xffb300, emissive: 0xffb300, emissiveIntensity: 1.2,
+    roughness: 0.35, metalness: 0.1, transparent: true, opacity: 0.88,
+  }),
+  hiveChitin: new THREE.MeshStandardMaterial({ color: 0x3a2c10, roughness: 0.5, metalness: 0.45 }),
   magmaVent: new THREE.MeshStandardMaterial({
     color: 0xff7a18, emissive: 0xff5a00, emissiveIntensity: 1.6,
     roughness: 0.4, metalness: 0.1,

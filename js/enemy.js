@@ -247,6 +247,13 @@ export class Enemy {
     // frame and counted down in _tickStatus, so it lapses on its own the frame
     // after the conduit dies - no reference to clean up.
     this.buffT = 0;
+    // A nurse's carapace, as a fraction of damage taken OFF. NOT a timer like
+    // buffT: it is stacked on (see aiNurse) up to a cap and never comes off,
+    // which is the whole difference between the two supports - a conduit's
+    // buff dies with the conduit and a carapace is bought with the bullets
+    // that were clearing the room. Read once, in takeDamage, beside buffT's
+    // own read, for the same reason buffT is: the enemy cannot see the player.
+    this.carapace = 0;
     // Warden's dome, in seconds remaining. Same refresh-and-lapse contract as
     // buffT above; while it is positive this enemy cannot be damaged at all.
     this.wardT = 0;
@@ -1261,6 +1268,12 @@ export class Enemy {
         : (typeof def.armorDefault === 'function' ? def.armorDefault(this) : def.armorDefault);
     }
     if (this.buffT > 0) d *= CONDUIT_RESIST;
+    // Carapace, beside the conduit's line for the reason the field's own
+    // comment gives: a stacked reduction that outlives its source. NOT applied
+    // to silent ticks, the plate's rule - carapace is a shell, and what seeps
+    // is not stopped by one, which keeps burn and poison builds the patient
+    // answer to a stacked crowd.
+    if (this.carapace > 0 && !silent) d *= 1 - this.carapace;
     // WEAK POINT. Last of the multipliers and above nothing, because the card
     // says "from all sources": armour, the freeze bonus and the Conduit's
     // resistance have all had their say, and this lifts whatever survived them.

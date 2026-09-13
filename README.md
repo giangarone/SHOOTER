@@ -283,7 +283,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Sixty enemy types, in ten themes of six** - one per role per theme, and every one of them built:
+- **Sixty-six enemy types, in eleven themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -414,7 +414,29 @@ context. The start screen says so, and one click anywhere fixes it.
   whole wave if you never walk underneath - the only genuinely OPTIONAL enemy
   in the game, and a decision about ammunition rather than about danger. Walk
   under one and it comes down like a dropped block, and then it is on the floor
-  and unarmoured). **BRINE** the deep - **Howlers** (a scream that takes your
+  and unarmoured). **HIVE**, the theme of the SWARM SPENT AS CURRENCY - every
+  other theme spends ground, information, health or position, and this one
+  spends BODIES, so the question it asks is not what to kill but in what order
+  and where: **Ticks** (rushers that die onto a patch of burning honey wherever
+  you chose to fight them, so the ground a crowd of them was cleared on is the
+  ground the next crowd fights on), **Spitters** (fire a simultaneous FAN of
+  three rather than a stream - a wall for one moment, answered by a step across
+  the lane and not a sprint away from the enemy), **Borers** (a brute in two
+  halves: a plough of chitin at the front that eats two thirds of what lands
+  on it and a naked abdomen behind that swells as the bar falls - kill it slow
+  and it is a walking wall, kill it fast and it BURSTS, and you pick which),
+  **Ovigers** (the only artillery in the game whose landing is a BODY: an egg
+  arcs in under a filling circle and hatches into a grub that grows on the spot
+  and fights, so the answer is the carrion's - kill it first, or fight what it
+  keeps making), **Nurses** (no attack; they hand out CARAPACE - a stacking,
+  capped, PERMANENT damage reduction that visibly swells the body carrying it
+  and heals a slice with every stack. A conduit's buff lapses when the conduit
+  dies and a carapace is bought with the same bullets that were clearing the
+  room, so the answer is to find the nurse before the stacks land, not after)
+  and **Weepers** (the high line: they hold a wide orbit, drift down, and
+  sweep a slow amber sightline across the floor for over a second before
+  firing a single lance along the arc - one long readable line from the sky,
+  answered by stepping off the arc it is drawing). **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -448,9 +470,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the ten themes owns a boss, and the block a theme lands in is where its
+  of the eleven themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All ten exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All eleven exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -496,26 +518,41 @@ context. The start screen says so, and one click anywhere fixes it.
   rounds at once in every direction after a wind-up, and splits three times
   over - two halves, then four, then eight, so it gets more dangerous as it
   comes apart), **Maw** (drags you in and rolls rings you have to jump) and the
-  **Herald** (blinks, volleys, and enrages under 30%). Regular enemies keep
+  **Herald** (blinks, volleys, and enrages under 30%). **THE BROODMOTHER**,
+  HIVE's, is a nursery: she is slow and nearly harmless in herself - a melee
+  swing, a bite, nothing more - and everything dangerous in the room is
+  something she made. Grubs arc in on a timer, land under a filling circle
+  and fight as ordinary rushers once they are down, three at most, refilled
+  for as long as she lives. Her back bulbs swell toward the next refill and
+  FLARE before she throws the volley - the spitter's own fan at boss scale,
+  so the player already knows how to read it. And every so often she stops,
+  the floor around her pulses, and a gapped ring of honey is laid where she
+  stands: she walks on and the ring stays behind, so over a fight the room
+  fills with pockets of burning honey exactly where she has been. Under a
+  quarter of the bar she EATS her own brood for a burst of speed - the only
+  enrage in the game that costs the boss something the player can watch it
+  pay, and a player who kept the brood cleared takes nothing from the phase
+  but the speed. Regular enemies keep
   arriving throughout; killing the boss ends the wave and pays out. It does NOT
   refill your health or ammo - the payout is large and the stations are right
   there, so coming out of a boss in trouble is a real state to be in and what
   you spend the money on is a real decision.
 - **Wave composition is fixed; which theme fills it is dealt.** Every wave has
   the same number of enemies and the same mix of ROLES in every run - that is
-  what keeps two runs comparable - but the run is TEN BLOCKS OF FIVE WAVES and
-  each block is one THEME. A theme is six enemies, one per role, and a boss;
-  the ten are shuffled into a deck at the start of a run, so waves 1-50 meet
-  each of them exactly once and one run opens on EMBER where the next opens on
-  BRINE. Past fifty the deck is re-dealt rather than repeated.
+  what keeps two runs comparable - but the run is A BLOCK OF FIVE WAVES PER
+  THEME and each block is one THEME. A theme is six enemies, one per role, and
+  a boss; the themes are shuffled into a deck at the start of a run, so one
+  pass through the deck meets each of them exactly once and one run opens on
+  EMBER where the next opens on BRINE. Past the deck the cards are re-dealt
+  rather than repeated.
 - **A theme has no wave, so difficulty cannot come from it.** It comes from the
   per-wave health, speed and damage multipliers alone, which are pure functions
   of the wave number - a theme dealt into waves 26-30 arrives with the same
   enemies as one dealt into 1-5 and five times the health. The price is that
   every theme's stat blocks have to be normalised against every other theme's,
-  role by role: ten rushers that are interchangeable, ten brutes that are
+  role by role: every theme's rushers interchangeable, its brutes
   interchangeable. `test/themes.mjs` holds the envelope each role has to sit
-  in, because nobody can hold sixty stat blocks in their head.
+  in, because nobody can hold sixty-odd stat blocks in their head.
 - **Each block teaches itself.** The per-type unlock table is gone - a wave gate
   on EMBER's rusher means nothing when EMBER may be wave 1 or wave 41 - and
   what it did is done by the block instead: a block opens on its theme's line
@@ -2120,13 +2157,13 @@ js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         the Enemy class, the four projectile kinds, the damage sinks
-js/enemies/         the sixty types, one file per theme
+js/enemies/         the sixty-six types, one file per theme
   shared.js         what more than one theme (or the class) needs: the geometry
                     and material caches, the faceted primitives, the status
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
-  index.js          imports the ten themes, which is what registers them
+  index.js          imports the themes, which is what registers them
   rust.js  void.js  ember.js  rime.js  verdant.js
-  strata.js  tempest.js  brine.js  plague.js  solar.js
+  strata.js  tempest.js  brine.js  plague.js  solar.js  hive.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
 js/effects.js       particle pool, tracers, muzzle flash, shake
@@ -2138,7 +2175,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the ten themes, their six enemies each, and the run's deck
+js/themes.js        the eleven themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -2162,7 +2199,7 @@ test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
 test/themes.mjs     the theme table and the balance law: every role filled, no
                     type in two themes, and every stat block inside the
-                    envelope its role has to share across all ten
+                    envelope its role has to share across every theme
 test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     bellows lighting the crowd, the ashwing's line, and the
                     Forge-Tyrant heating up and venting
@@ -2203,6 +2240,14 @@ test/solar.mjs      SOLAR end to end - three of its four reach into the
                     the flash fired close AND not far, the crosshair went
                     inside the field AND came back outside it, the plate
                     turned the shot AND stopped once it was spent
+test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
+                    assertion is a trade measured both ways: the honey
+                    burning AND free again once expired, the borer's front
+                    half plated AND its back half not, killed slow AND killed
+                    fast, the carapace cheaper through AND still stacked
+                    after the nurse is dead, the weeper's arc costing on the
+                    line AND nothing off it, and the Broodmother eating her
+                    own brood to panic
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

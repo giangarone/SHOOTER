@@ -665,6 +665,11 @@ const MAX_BILE = 14;
 // carrying most of this on its own and the number is really "how long a trail
 // one lens may have behind it".
 const MAX_GLARE = 20;
+// HIVE's honey. Ticks die onto it a whole rusher wave's worth at a time, so
+// the cap sits with the frost's: high enough that clearing a crowd leaves
+// the ground beneath it marked, low enough that one theme's corpses cannot
+// evict another theme's pools out of the shared thirty creep slots.
+const MAX_HIVEBLOOD = 12;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -720,6 +725,13 @@ const CREEP_BILE = 0x39d353;
 // heat and because the player has to be able to tell a lens's line from a
 // magma's trail in the half-second they have to step off one of them.
 const CREEP_GLARE = 0xffe08a;
+// HIVE's honey. No status, so it wears the theme's own amber rather than a
+// status colour - the shock's rule, for the shock's reason: the patch and any
+// HUD chip have nothing to agree about, so the colour says WHOSE ground it is
+// instead. Deep amber rather than the glare's pale yellow, because the player
+// has to tell burning honey from a lens's line in the half-second they have
+// to step off one of them.
+const CREEP_HIVEBLOOD = 0xffb300;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -863,6 +875,16 @@ const HAZARD_KINDS = {
     color: CREEP_BILE, cap: MAX_BILE, poisonous: true,
     status: 'poison', secs: GAS_POISON_SECONDS, carve: true,
   },
+  // HIVE's honey. No status and no tail - it burns while the player stands
+  // in it and stops the instant they are out, which is the entire difference
+  // between it and lava: lava is ground that has been burning for a while
+  // (the magma's trail) and honey is ground that is burning NOW, left where
+  // something died (the tick's corpse, the borer's rush penalty, the
+  // Broodmother's rings). A patch with no tail has to bite hard enough to
+  // move somebody in the second they are deciding whether to bother.
+  hiveblood: {
+    color: CREEP_HIVEBLOOD, cap: MAX_HIVEBLOOD,
+  },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
 // queues twelve on its own and APIARY five, so this is not a limit anybody
@@ -928,6 +950,7 @@ const BOSS_NAMES = {
   schism: 'SCHISM',
   maw: 'MAW',
   herald: 'HERALD',
+  broodmother: 'THE BROODMOTHER',
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 
@@ -4699,15 +4722,19 @@ class Game {
     bf.addTimer -= dt;
     if (bf.addTimer > 0) return;
     bf.addTimer = bf.addInterval;
-    // Turrets and anchors are the boss's own attack, not adds, and must not eat
-    // the trickle budget: three of them standing would otherwise stop the wave
-    // sending anything else at all. It matters more for the Pale Crown's
-    // anchors than it ever did for Colossus's turrets - the anchors are up for
-    // most of that fight, so counting them would mean the Crown's shell phases
-    // were also its quiet phases, which is the opposite of the intent.
+    // Turrets, anchors, pylons and grubs are the boss's own attack, not
+    // adds, and must not eat the trickle budget: three of them standing
+    // would otherwise stop the wave sending anything else at all. It matters
+    // more for the Pale Crown's anchors than it ever did for Colossus's
+    // turrets - the anchors are up for most of that fight, so counting them
+    // would mean the Crown's shell phases were also its quiet phases, which
+    // is the opposite of the intent. A grub is here for the same reason: a
+    // Broodmother refilling her brood should never silence the wave's own
+    // trickle, and neither should an oviger's eggs.
     let adds = this.enemies.length - bf.parts.length;
     for (const e of this.enemies) {
-      if (e.type === 'turret' || e.type === 'anchor' || e.type === 'pylon') adds--;
+      if (e.type === 'turret' || e.type === 'anchor' || e.type === 'pylon'
+        || e.type === 'grub') adds--;
     }
     if (adds >= bf.maxAdds) return;
     this.spawnEnemy(pickAddType(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme));

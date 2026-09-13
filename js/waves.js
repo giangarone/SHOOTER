@@ -15,11 +15,11 @@
 // unrelated silhouettes standing in the same room with nothing to say to each
 // other.
 //
-// The run is now TEN BLOCKS OF FIVE WAVES and each block is ONE THEME (see
-// themes.js). A block's four ordinary waves are filled entirely from that
-// theme's six enemies - one per role, so the role decides the type outright -
-// and its fifth wave is that theme's boss. The blocks are dealt in a random
-// order per run, so one run opens on EMBER and the next on BRINE.
+// The run is now A BLOCK OF FIVE WAVES PER THEME and each block is ONE THEME
+// (see themes.js). A block's four ordinary waves are filled entirely from
+// that theme's six enemies - one per role, so the role decides the type
+// outright - and its fifth wave is that theme's boss. The blocks are dealt
+// in a random order per run, so one run opens on EMBER and the next on BRINE.
 //
 // SO THE ROLL MOVED UP A LEVEL. It happens once per block instead of once per
 // slot, and what it decides is the whole character of five waves rather than
@@ -34,13 +34,13 @@
 //
 // The price is paid on the other side: because a theme can land anywhere,
 // every theme's base stat blocks must be normalised against every other
-// theme's, role by role. Ten rushers that are interchangeable, ten brutes that
-// are interchangeable. That is the same role-parity rule this file has always
-// had, widened from six pools to a ten-by-six grid, and it is enforced in
+// theme's, role by role. Every theme's rushers interchangeable, its brutes
+// interchangeable. That is the same role-parity rule this file has always
+// had, widened from six pools to a theme-by-role grid, and it is enforced in
 // test/themes.mjs rather than by good intentions.
 
 import {
-  THEMES, ROLE_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
+  THEMES, ROLE_KEYS, THEME_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
 } from './themes.js';
 
 // ---- bosses --------------------------------------------------------------
@@ -88,6 +88,7 @@ const ADD_PRESSURE = {
   schism: 3,
   choir: 3,
   overgrowth: 3,   // it cannot move, so its adds ARE its reach
+  broodmother: 3,  // the brood already takes up the floor
   colossus: 4,
   maw: 4,
   palecrown: 4,
@@ -98,11 +99,14 @@ const ADD_PRESSURE = {
 };
 const ADD_PRESSURE_DEFAULT = 4;
 
-// `cycle` is which pass through the ten-theme deck this is - it climbs once
-// every fifty waves rather than every twenty-five, because the deck is ten
-// blocks long now instead of five.
+// `cycle` is which pass through the theme deck this is - it climbs once
+// every pass, i.e. every THEME_KEYS.length blocks of five, rather than on a
+// literal. Derived off the table's own length so adding a theme moves the
+// boundary for free instead of leaving a stale number behind.
+const DECK_WAVES = THEME_KEYS.length * 5;
+
 function bossPressure(n, bossKey) {
-  const cycle = Math.floor((n - 1) / 50);
+  const cycle = Math.floor((n - 1) / DECK_WAVES);
   const base = ADD_PRESSURE[bossKey] || ADD_PRESSURE_DEFAULT;
   return {
     maxAdds: Math.min(7, base + cycle),

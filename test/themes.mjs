@@ -96,11 +96,12 @@ ok(`${N_THEMES} distinct bosses`,
 // can never be scheduled - dead content that still costs a model, a geometry
 // and a slot against the smoke test's ceilings.
 //
-// The deliberate exceptions: things a BOSS puts in the arena rather than
-// things a wave rolls. Colossus throws its turrets and the Pale Crown drives
-// in its anchors; nothing rolls either, pickAddType will never return one, and
-// neither is in a role.
-const NOT_IN_A_THEME = new Set(['turret', 'anchor', 'pylon']);
+// The deliberate exceptions: things a BOSS or one of the theme's own enemies
+// puts in the arena rather than things a wave rolls. Colossus throws its
+// turrets and the Pale Crown drives in its anchors; an oviger lobs its eggs
+// and the Broodmother throws her brood, and both are grubs. Nothing rolls
+// any of these, pickAddType will never return one, and none is in a role.
+const NOT_IN_A_THEME = new Set(['turret', 'anchor', 'pylon', 'grub']);
 
 const homeless = Object.keys(ENEMY_TYPES).filter((k) => {
   if (NOT_IN_A_THEME.has(k)) return false;
