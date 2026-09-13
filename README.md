@@ -1871,6 +1871,18 @@ whole or empty**: the fill is floored onto a cell boundary, and floored rather
 than rounded, because a cell is a unit of charge and rounding would light the
 last one before the item could actually be fired.
 
+**Ready is a white outline on both halves of the slot.** The icon takes a
+one-pixel white ring - the same generated outline every pixel drawing carries
+in black, worn in white - and the bar a one-pixel white trim inside its lit
+cells, drawn on the fill because the cell mask lives on the track and would
+cut a ring painted around the meter to nothing. Brightness and glow are
+levels, and a level has to be compared against something to be read; an edge
+is read as a shape, which the eye picks up from the corner of the screen
+without resolving the slot - and the moment it becomes true is mid-firefight,
+which is exactly when nobody is reading the name. TWIN CELL's second banked
+charge keeps the outline and brightens over it: two charges ready is more
+ready, not a different state.
+
 **The dash used to be a passive item.** DOUBLE DASH held two charges on a 2.5s
 timer and was reached by double-tapping W, a binding that existed because the
 game had no spare finger - and an active item slot IS a spare finger. So it
@@ -2094,8 +2106,10 @@ the row rises on the third shop and no other, that a reroll is not a new shop,
 that an item arrives fully charged and that a second one replaces the first,
 that the pedestal never offers what is already carried, that kills fill the bar
 and neither wave time nor the shop fills anything while the button still works
-in both, that each of the five effects actually lands, that both consoles
-charge what they say, and that all eleven converted passive items are reachable
+in both, that the ready outline is on the icon and the bar at the whole charge
+and off at every point before it, that each of the five effects actually lands,
+that both consoles charge what they say, and that all eleven converted passive
+items are reachable
 on a free totem - a pick that is in the map, has a drawing, passes every other
 check and can still never be offered is the one failure nothing else would
 see. `test:crouch` covers the third movement gear

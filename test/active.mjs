@@ -495,6 +495,12 @@ try {
     out.segments = {};
     out.partialFills = [];
     out.chargeCostLeaks = [];
+    // THE READY OUTLINE, on both halves of the slot. The `ready` class is only
+    // half the feature - a stylesheet path that stopped matching would leave
+    // the class toggling with nothing painted off it - so the computed styles
+    // are read, not the class list.
+    out.readyOutlineWhenPartFilled = [];
+    out.readyOutlineMissing = [];
     // The charge costs as the pool actually states them, so the segment check
     // below can test itemCells()'s RULE rather than a snapshot of the table.
     out.chargeCosts = Object.fromEntries(
@@ -525,8 +531,31 @@ try {
           out.partialFills.push(`${key} at ${c.toFixed(1)}s -> ${v}`);
           break;
         }
+        // THE OUTLINE IS OFF UNTIL THE CHARGE IS WHOLE. Sampled inside the
+        // same walk rather than once per item, because "not ready" is most of
+        // the charge range and a single sample can only prove one point of it.
+        // The colours are matched in their COMPUTED form - Chrome rewrites
+        // #fff to rgb(255, 255, 255) - and the bar's not-ready shadow is
+        // literally 'none', so 'inset' alone separates the two states.
+        if (v < 1) {
+          const art = getComputedStyle(document.getElementById('item-art')).filter;
+          const bar = getComputedStyle(document.getElementById('item-bar')).boxShadow;
+          if (art.includes('rgb(255, 255, 255)') || bar.includes('inset')) {
+            out.readyOutlineWhenPartFilled.push(`${key} at ${c.toFixed(1)}`);
+          }
+        }
       }
       P.itemCharge = def.charge;
+      // At the whole charge the outline is on both halves: a white ring on the
+      // icon, a white inset trim on the bar's lit cells.
+      g._updateHud();
+      {
+        const art = getComputedStyle(document.getElementById('item-art')).filter;
+        const bar = getComputedStyle(document.getElementById('item-bar')).boxShadow;
+        if (!art.includes('rgb(255, 255, 255)') || !bar.includes('inset')) {
+          out.readyOutlineMissing.push(key);
+        }
+      }
       // Every string this item can put on screen, against the number it must
       // never contain.
       //
@@ -1713,6 +1742,10 @@ try {
   }
   ok('the meter never renders a part-lit segment',
     r.partialFills.length === 0, r.partialFills.join(' | '));
+  ok('the ready outline is on at the whole charge, on icon and bar',
+    r.readyOutlineMissing.length === 0, r.readyOutlineMissing.join(', '));
+  ok('and it is off at every point before it',
+    r.readyOutlineWhenPartFilled.length === 0, r.readyOutlineWhenPartFilled.join(' | '));
   ok('the charge cost is printed nowhere',
     r.chargeCostLeaks.length === 0, r.chargeCostLeaks.join(' | '));
 
