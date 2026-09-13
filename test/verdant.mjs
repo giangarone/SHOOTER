@@ -32,7 +32,8 @@
 //   4. Standing next to a bramblehide costs health without it swinging.
 //   5. A heartwood heals a hurt neighbour, and stops when it dies.
 //   6. A mothcap flies low and leaves a cloud that outlives it.
-//   7. The Overgrowth never moves, opens only when the player is close, and
+//   7. The Overgrowth never moves, opens when the player is close - and now
+//      from beyond its thorn band, which pins the doubled window - and
 //      answers range with a creeper.
 import { launchBrowser, startServer } from './harness.mjs';
 
@@ -390,6 +391,17 @@ try {
         res.ogCreeperOrdered = ordered;
       }
 
+      // Mid range, in the band the doubled window bought. Twelve metres is
+      // outside the swing (six) and the ring's thorn band (out to nine), and
+      // under the old eight-metre window this position was shut and armoured.
+      // This is the assertion that pins the doubling: a revert of OG_WINDOW
+      // fails HERE, while the 4m check below would pass either way.
+      px = e.pos.x - 12;
+      pz = 0;
+      await simSteps(1);
+      res.ogOpenMid = e.bs.open;
+      res.ogArmorMid = armorNow();
+
       // Close in: the canopy opens and it takes full damage.
       px = e.pos.x - 4;
       pz = 0;
@@ -442,6 +454,8 @@ try {
     out.ogShutFar && out.ogArmorFar > 0 && out.ogArmorFar < 1, `armor=${out.ogArmorFar}`);
   ok('it answers range with a creeper', out.ogCreeper > 1, `thorns=${out.ogCreeper}`);
   ok('and the creeper marches outward', out.ogCreeperOrdered);
+  ok('the window opens from outside the thorn band',
+    out.ogOpenMid && out.ogArmorMid === 1, `armor=${out.ogArmorMid} at 12m`);
   ok('coming close opens the canopy',
     out.ogOpenNear && out.ogArmorNear === 1 && out.ogCanopyMoved, `armor=${out.ogArmorNear}`);
   ok('and it never takes a step', out.ogMoved < 0.01, `moved=${out.ogMoved}m`);
