@@ -19,9 +19,9 @@ import {
 // What the Overgrowth's shut canopy takes off a hit. Up here with the other
 // two for the same reason - it is read inside the ENEMY_TYPES literal below.
 // Low, because unlike every other gate in the game this one is entirely the
-// player's to open: they are not waiting for it, they are deciding whether the
-// eight metres is worth it, and a shut canopy has to make that a real question
-// rather than a formality.
+// player's to open: they are not waiting for it, they are deciding whether
+// coming inside sixteen metres is worth it, and a shut canopy has to make
+// that a real question rather than a formality.
 export const OVERGROWTH_ARMOR = 0.22;
 
 // VERDANT's five. Every number here is a DELAY - the theme's whole idea is
@@ -497,9 +497,14 @@ export function aiMothcap(e, a) {
 }
 
 // ---- the Overgrowth ---------------------------------------------------------
-// Inside this, the canopy is open and the boss takes full damage. It is also
-// exactly where its rings land, which is the entire fight.
-export const OG_WINDOW = 8;
+// Inside this, the canopy is open and the boss takes full damage. Doubled from
+// eight, where the only positions that opened it sat in the ring's thorn band
+// or the swing's reach - the shield was priced at point-blank, on the one boss
+// whose answer to close players is mortars. The ring bites to just under nine
+// metres (OG_RING_R plus a thorn radius), so the doubled window opens a band
+// beyond both where the boss takes full damage and cannot answer - that band
+// is the nerf.
+export const OG_WINDOW = 16;
 
 // The ring it lays when the player is inside the window. Gapped, like every
 // other ring in the game, because a closed one around a player who has chosen
@@ -753,11 +758,13 @@ const TYPES = {
   // standing - and rings itself with them when they come near.
   //
   // AND THE PLAYER CHOOSES THE WINDOW. Its canopy is shut and armoured at any
-  // distance, and OPENS when they come inside eight metres. There is no clock
+  // distance, and OPENS when they come inside sixteen metres. There is no clock
   // on it at all: unlike the Forge, which decides when it is vulnerable, and
   // the Pale Crown, whose anchors decide, this one is decided entirely by
-  // where the player stands - and inside eight metres is exactly where the
-  // rings land. The whole fight is that one trade, priced in seconds.
+  // where the player stands. The rings bite to just under nine metres and the
+  // swing to just past four, so the outer band of the window - roughly nine to
+  // sixteen - is full damage from beyond both: the trade that used to be the
+  // price of admission is now one the player can decline.
   overgrowth: {
     head: { r: 0.42, y: 1.5 },
     hp: 3500, speed: 0, damage: 26, value: 6500, color: 0x7ea63c, eye: 0xd6ff8a,
@@ -765,9 +772,10 @@ const TYPES = {
     hitbox: { r: 0.76, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    // It cannot chase, so it swings at anything that comes to it - which is
-    // the same eight metres the canopy opens at. Standing in the window is
-    // meant to cost something even when the thorns are not up.
+    // It cannot chase, so it swings at anything that comes to it. The swing's
+    // reach sits in the innermost part of the window - aiOvergrowth gates it
+    // at six - so standing that deep costs the melee even when the thorns
+    // are not up.
     melee: { windup: 0.7, start: 3.4, hit: 4.2, cd: 2.2 },
     // Open when the player is near. NOT a state it sets itself - `bs.open` is
     // recomputed from range every frame in aiOvergrowth, so the armour and the

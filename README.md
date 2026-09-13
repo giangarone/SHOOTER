@@ -469,9 +469,9 @@ context. The start screen says so, and one click anywhere fixes it.
   closing in instead - creepers of thorns marching outward along the ground
   toward wherever they are standing. And the player chooses its damage window,
   which no other boss allows: its canopy is shut and armoured at any range and
-  OPENS when they come inside eight metres, which is exactly where it rings
-  itself with thorns. There is no clock on it at all - the whole fight is that
-  one trade, priced in seconds. **THE PALE CROWN**, RIME's, is the one fight in
+  OPENS when they come inside sixteen metres - its rings bite to nine and its
+  swing to four, so the band beyond nine is full damage from outside everything
+  it can do. There is no clock on it at all. **THE PALE CROWN**, RIME's, is the one fight in
   the rotation that is not about the boss: it spends most of itself inside a
   shell that takes NOTHING at all, and the way in is never the boss - three
   anchors go into the floor with the shell, and breaking all three is what
