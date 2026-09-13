@@ -244,6 +244,45 @@ finalize_to_github() {
   strip_git_credentials
 }
 
+write_summary_failure_recovery_response() {
+  local log_file="$1"
+  local changed
+
+  changed="$(git status --short || true)"
+
+  {
+    echo "OpenCode completed the requested work, but its built-in final-summary step failed before it could push/create the PR."
+    echo "The workflow recovered the completed workspace and created this PR automatically."
+    if [[ -n "$changed" ]]; then
+      echo
+      echo "Files changed at recovery time:"
+      echo '```'
+      printf '%s\n' "$changed"
+      echo '```'
+    fi
+    echo
+    echo "Original OpenCode failure: Failed to get summary from agent."
+  } > "$STATE_DIR/final-response.txt"
+}
+
+ensure_safe_recovery_branch() {
+  local event_file="$STATE_DIR/original-event.json"
+  local current expected default_branch number
+
+  current="$(git branch --show-current)"
+  expected="$(cat "$STATE_DIR/expected-branch.txt" 2>/dev/null || true)"
+  default_branch="$(jq -r '.repository.default_branch // empty' "$event_file" 2>/dev/null || true)"
+
+  # For issue-triggered runs, never let recovery push directly to the default branch.
+  if [[ "$(jq -r '.pull_request != null or .issue.pull_request != null' "$event_file" 2>/dev/null || echo false)" != "true" ]]; then
+    if [[ -z "$expected" || "$expected" == "$default_branch" || "$current" == "$default_branch" ]]; then
+      number="$(jq -r '.issue.number // empty' "$event_file")"
+      [[ -n "$number" ]] || number="run"
+      printf 'opencode/recovery-%s-%s\n' "$number" "$GITHUB_RUN_ID" > "$STATE_DIR/expected-branch.txt"
+    fi
+  fi
+}
+
 case "$MODE" in
   initial)
     install_latest_opencode
@@ -261,6 +300,24 @@ case "$MODE" in
     fi
 
     if [[ $status -ne 124 ]]; then
+      # OpenCode can finish all coding work and then fail inside its own GitHub
+      # wrapper while generating the final summary. That failure happens before
+      # OpenCode pushes the branch or creates the PR, so recover it here instead
+      # of throwing the completed workspace away.
+      if grep -Fq "Failed to get summary from agent" "$log_file"; then
+        echo "OpenCode final-summary step failed; recovering completed changes..." >&2
+
+        session_id="$(find_session_id "$log_file")"
+        [[ -n "$session_id" ]] || { echo "Could not find the OpenCode session ID for recovery." >&2; exit 1; }
+
+        save_state "$session_id"
+        ensure_safe_recovery_branch
+        write_summary_failure_recovery_response "$log_file"
+        finalize_to_github
+        set_output state finished
+        exit 0
+      fi
+
       echo "OpenCode failed before the continuation timeout (exit $status)." >&2
       exit "$status"
     fi
