@@ -203,11 +203,14 @@ try {
     // texture for the whole system is the point of it - the alternative was a
     // canvas per number, uploaded per hit, dozens of times a second.
     //
+    // And to EIGHTEEN for the MUZZLE BLAST's fire contour: one canvas shared
+    // by every blast slot (fireball and petals alike).
+    //
     // It is a BUDGET, not a leak canary: the check above ('non-decreasing') is
     // what catches a texture being allocated per wave. This one catches the
     // budget being spent without anyone noticing, which is why raising it is a
     // deliberate edit with a list attached rather than a nudge.
-    ['texture count bounded', peak.textures <= 17],
+    ['texture count bounded', peak.textures <= 18],
   ];
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);

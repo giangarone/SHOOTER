@@ -211,8 +211,11 @@ export class Turret {
       this.pos.z - Math.cos(this.yaw) * 0.5
     );
     _v.copy(target.pos).setY(target.pos.y + 0.9);
+    // A turret has a barrel like any gun: full blast, smaller (0.7) so its
+    // report reads as a pop against the player's own fire.
+    _v2.subVectors(_v, this.muzzle).normalize();
     ctx.effects.tracer(this.muzzle, _v);
-    ctx.effects.flash(this.muzzle);
+    ctx.effects.blast(this.muzzle, _v2, 0.7);
     // ---- THE THREE TURRET PICKS --------------------------------------------
     //
     // All three read `ctx.player.mods` LIVE rather than being snapshotted with

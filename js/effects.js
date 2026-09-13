@@ -5,7 +5,9 @@
 //   - particles: two THREE.Points pools - big sparks and small bullet
 //     impacts - each written through a ring buffer. An overflowing burst
 //     overwrites the oldest particles in its own pool.
-//   - tracers: a small fixed pool of lines, reusing the first free one.
+//   - tracers: a small fixed pool of burn streaks, tail anchored to the
+//     live muzzle and rebuilt every frame in update().
+//   - muzzle blasts: fireball + crossed petals + smoke per shot, pooled.
 //   - shockwave rings: the same pool trick with flat discs, scaled and faded.
 //   - flash: a single PointLight, moved and re-lit per shot. It counts toward
 //     the scene's fixed light budget (see arena.js).
@@ -112,9 +114,105 @@ const CORPSE_UP = 3.4;
 // Points along a homing tracer. Enough that the bend reads as a curve rather
 // than as two straight lines meeting at an angle.
 const ARC_SEGMENTS = 12;
-// How long a homing arc stays up. Longer than a straight tracer's 0.07s: the
+// How long a homing arc stays up. Longer than a comet's clamped life: the
 // curve is the whole message and it has to survive long enough to be seen.
 const ARC_LIFE = 0.14;
+
+// TRACERS - the numbers of the burn in flight.
+// Pool depth: a held trigger keeps ~2 live at the rifle's rate; 16 covers a
+// magazine held down before the oldest slot is recycled.
+const TRACER_POOL = 16;
+// Vertices down the streak; the resolution of the colour gradient.
+const TRACER_SEGMENTS = 12;
+// Apparent speed of the round on screen, m/s. Not a real muzzle velocity -
+// it sets how fast the fire reads as travelling.
+const TRACER_SPEED = 140;
+// Lit metres of streak behind the round. Longer would weld neighbouring
+// shots into one sheet of light.
+const TRACER_STREAK = 2.5;
+// Life = flight time, clamped so a point-blank hit still shows and an
+// arena-length miss does not outlive its own impact particles.
+const TRACER_MIN_LIFE = 0.06;
+const TRACER_MAX_LIFE = 0.16;
+// No head sprite, on purpose: the light at the front of a shot belongs at
+// the barrel, as the muzzle blast below.
+
+// MUZZLE BLAST - the explosion at the tip of the barrel.
+// Pool depth: ~3 live at full auto; 4 covers a magazine. Oldest recycles.
+const BLAST_SLOTS = 4;
+// Life, and the fraction of it spent as fire (the rest is smoke tail).
+const BLAST_LIFE = 0.07;
+const BLAST_FIRE = 0.5;
+// Fireball size in metres at scale 1, and the per-shot jitter band.
+const BLAST_BALL = 0.55;
+const BLAST_JITTER = 0.22;
+// Petal styles a shot rolls between: reach relative to the fireball,
+// forward offset relative to its size.
+const BLAST_PETALS = [
+  { reach: 1.15, out: 0.9 },
+  { reach: 1.45, out: 0.55 },
+  { reach: 0.95, out: 1.25 },
+];
+// Smoke puff size relative to the fireball.
+const BLAST_SMOKE = 0.3;
+
+// The fireball texture: ONE unified ragged contour, not a scatter of dots -
+// scattered gradients read as circles however they overlap. A circle bent
+// by three harmonics (lean, swell, flank bite), refilled at shrinking
+// scales so the falloff follows the shape's own edge. The contour is
+// asymmetric so the per-shot roll (blast's `b.roll`) shows a different
+// silhouette every shot without redrawing the texture.
+// Not quantised: light is not form (see makeGlowTexture).
+let FIRE_TEX = null;
+function makeFireTexture() {
+  if (FIRE_TEX) return FIRE_TEX;
+  const size = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const cx = size / 2, cy = size / 2;
+  // The contour as radius(angle). Only three harmonics - more turns
+  // "ragged" into "furry". The first bulges toward -x, the petal's long
+  // axis, so the cone's mass leans down its length.
+  const base = size * 0.36;
+  const R = (a) => base * (
+    1
+    + 0.2 * Math.cos(a + Math.PI)
+    + 0.13 * Math.cos(2 * a + 0.7)
+    + 0.09 * Math.cos(3 * a + 2.9)
+  );
+  // The same contour refilled at shrinking scales builds the falloff; no
+  // circular gradient edge survives anywhere.
+  const fills = [
+    [1.0, 0.5],
+    [0.82, 0.35],
+    [0.64, 0.4],
+    [0.46, 0.5],
+    [0.28, 0.7],
+  ];
+  for (const [s, alpha] of fills) {
+    ctx.beginPath();
+    const steps = 64;
+    for (let i = 0; i <= steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const r = R(a) * s;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fill();
+  }
+  // White-hot core, buried inside the contour so its circular edge never shows.
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.16);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  FIRE_TEX = new THREE.CanvasTexture(cv);
+  return FIRE_TEX;
+}
 
 // LIGHTNING. Joints in one bolt, how high it starts, and how long it hangs
 // there. Longer-lived than a tracer by an order of magnitude: a tracer says a
@@ -574,27 +672,94 @@ export class Effects {
     this._initParticles();
     this._initDamageNumbers();
 
-    // Tracer pool. Each is a two-vertex line whose endpoints are rewritten on
-    // use; frustum culling is off because the endpoints move without the
-    // bounding volume being recomputed.
+    // TRACERS - a tapered streak per round, rebuilt every frame in update().
+    // The tail vertex is the LIVE muzzle marker (see tracer/_drawTracer) so
+    // the streak stays attached to the recoiling barrel; no head sprite, the
+    // muzzle blast owns the light at the gun.
     this.tracers = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < TRACER_POOL; i++) {
       const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-      const m = new THREE.LineBasicMaterial({ color: 0x9ff3ff, transparent: true, opacity: 0 });
+      g.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array((TRACER_SEGMENTS + 1) * 3), 3)
+      );
+      // The taper rides in vertex RGB on an additive line (a black vertex
+      // draws nothing); the material's opacity stays the end-of-life fade.
+      const cols = new Float32Array((TRACER_SEGMENTS + 1) * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      const m = new THREE.LineBasicMaterial({
+        vertexColors: true, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
       const line = new THREE.Line(g, m);
       line.visible = false;
+      // Endpoints move every frame without the bounding volume being
+      // recomputed.
       line.frustumCulled = false;
       scene.add(line);
-      this.tracers.push({ line, life: 0 });
+      // Flight path written once at fire time; `anchor` null (turret,
+      // passive-item hops) means the tail is simply the fire point.
+      this.tracers.push({
+        line, life: 0, maxLife: 0,
+        fx: 0, fy: 0, fz: 0, tx: 0, ty: 0, tz: 0,
+        anchor: null, dist: 0,
+      });
+    }
+
+    // THE MUZZLE BLAST POOL. Each slot: a fireball sprite, two crossed flame
+    // petals, and a smoke puff - billboards, built once, repositioned and
+    // re-rolled per shot.
+    this.blasts = [];
+    const blastTex = makeFireTexture();
+    for (let i = 0; i < BLAST_SLOTS; i++) {
+      const parts = [];
+      const ballMat = new THREE.SpriteMaterial({
+        map: blastTex, color: 0xffe6b0, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const ball = new THREE.Sprite(ballMat);
+      ball.frustumCulled = false;
+      ball.visible = false;
+      scene.add(ball);
+      parts.push(ball);
+      // THE PETALS, CROSSED. Two quads at right angles along the barrel: one
+      // reads face on, the other edge on, so the flame cone has volume. Same
+      // texture as the fireball, so the cone is the blast's own mass thrown
+      // downrange. Opacity is faded with the fire in _drawBlast.
+      const petalMat = new THREE.SpriteMaterial({
+        map: blastTex, color: 0xffb066, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const p0 = new THREE.Sprite(petalMat);
+      const p1 = new THREE.Sprite(petalMat);
+      for (const ps of [p0, p1]) {
+        ps.frustumCulled = false;
+        ps.visible = false;
+        scene.add(ps);
+        parts.push(ps);
+      }
+      // The smoke: NOT additive - residue occludes, it does not glow.
+      const smokeMat = new THREE.SpriteMaterial({
+        map: this.glowTex, color: 0x6a6f7c, transparent: true, opacity: 0,
+        depthWrite: false,
+      });
+      const smoke = new THREE.Sprite(smokeMat);
+      smoke.frustumCulled = false;
+      smoke.visible = false;
+      scene.add(smoke);
+      parts.push(smoke);
+      this.blasts.push({
+        parts, ball, petals: [p0, p1], smoke, smat: smokeMat,
+        ballMat, petalMat, life: 0,
+      });
     }
 
     // ARCS. Curved tracers for shots that homed onto a target. Same pooling as
     // the straight tracers, but each is a polyline rather than a segment,
     // because the curve IS the feedback: without seeing the bend, a player
     // whose crosshair was off would just see a miss register as a hit and have
-    // no idea why. They also live twice as long as a straight tracer - four
-    // frames is enough to read a line and not enough to read a shape.
+    // no idea why. They also outlive a straight tracer: four frames is enough
+    // to read a line and not enough to read a shape.
     this.arcs = [];
     for (let i = 0; i < 6; i++) {
       const g = new THREE.BufferGeometry();
@@ -828,6 +993,9 @@ export class Effects {
     }
     this._beamCount = 0;
 
+    // Scratch, allocated once - nothing in this file allocates at runtime.
+    this._tracerAt = new THREE.Vector3();
+
     this.flashLight = new THREE.PointLight(0xffc36b, 0, 7);
     scene.add(this.flashLight);
     this.flashT = 0;
@@ -920,7 +1088,17 @@ export class Effects {
     }
   }
 
-  tracer(from, to) {
+  /**
+   * Books a round's burn from `from` to `to`. The streak itself is drawn by
+   * update() each frame so the tail can ride the live muzzle. No colour
+   * argument: the burn's colour is a temperature (see _drawTracer), every
+   * gun's rounds burn the same.
+   *
+   * @param {THREE.Vector3} from   where the round left, world space
+   * @param {THREE.Vector3} to     where it stopped, world space
+   * @param {THREE.Object3D|null} anchor  the muzzle marker to glue the tail to
+   */
+  tracer(from, to, anchor = null) {
     let t = this.tracers[0];
     for (const cand of this.tracers) {
       if (cand.life <= 0) {
@@ -928,13 +1106,129 @@ export class Effects {
         break;
       }
     }
-    const a = t.line.geometry.attributes.position;
-    a.setXYZ(0, from.x, from.y, from.z);
-    a.setXYZ(1, to.x, to.y, to.z);
-    a.needsUpdate = true;
+    t.fx = from.x; t.fy = from.y; t.fz = from.z;
+    t.tx = to.x; t.ty = to.y; t.tz = to.z;
+    t.dist = Math.max(0.001, Math.hypot(t.tx - t.fx, t.ty - t.fy, t.tz - t.fz));
+    // Life = flight time, so every round has one apparent speed on screen.
+    t.maxLife = t.life = Math.max(TRACER_MIN_LIFE, Math.min(TRACER_MAX_LIFE, t.dist / TRACER_SPEED));
+    t.anchor = anchor;
     t.line.visible = true;
-    t.line.material.opacity = 0.85;
-    t.life = 0.07;
+    // Birth pose drawn now, and the opacity reset with it - a recycled
+    // slot's is wherever its last flight died.
+    this._drawTracer(t, 0);
+    t.line.material.opacity = 0.9;
+  }
+
+  /**
+   * Builds one streak for this frame. Vertex 0 - the tail - is the anchor's
+   * LIVE world position (the whole fix: the old tracer froze it at fire
+   * time and the recoiling barrel walked away from it). Only the
+   * TRACER_STREAK metres behind the hot end are lit; the taper is in
+   * metres behind the head, not in vertex position, so the lit length is
+   * constant whatever the flight's length this frame.
+   */
+  _drawTracer(t, travel) {
+    const pos = t.line.geometry.attributes.position;
+    const col = t.line.geometry.attributes.color;
+    const hn = Math.min(1, travel / t.dist);
+    const hx = t.fx + (t.tx - t.fx) * hn;
+    const hy = t.fy + (t.ty - t.fy) * hn;
+    const hz = t.fz + (t.tz - t.fz) * hn;
+    // Tail: the live muzzle when anchored, else the fire point.
+    let tx = t.fx, ty = t.fy, tz = t.fz;
+    if (t.anchor) {
+      t.anchor.getWorldPosition(this._tracerAt);
+      tx = this._tracerAt.x; ty = this._tracerAt.y; tz = this._tracerAt.z;
+    }
+    const len = Math.hypot(hx - tx, hy - ty, hz - tz) || 0.001;
+    for (let i = 0; i <= TRACER_SEGMENTS; i++) {
+      const u = i / TRACER_SEGMENTS;
+      pos.setXYZ(i,
+        tx + (hx - tx) * u,
+        ty + (hy - ty) * u,
+        tz + (hz - tz) * u
+      );
+      // The taper: brightness falls with metres behind the hot end. Colour
+      // is heat in blackbody order - red held, green fades through gold,
+      // blue dies first - so the streak cools from white-hot to ember red.
+      const behind = (1 - u) * len;
+      const b = Math.max(0, 1 - behind / TRACER_STREAK);
+      const br = b * b;
+      col.setXYZ(i, br, br * Math.pow(b, 0.7), br * Math.pow(b, 2.2));
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+  }
+
+  /**
+   * The explosion at the tip of the barrel, on the frame of the shot:
+   * fireball, crossed flame petals, smoke puff, and the PointLight (flash).
+   * Each shot rolls its own contour roll, petal style and size jitter so no
+   * two blasts look alike - the rolls live on the slot, not re-rolled per
+   * frame, or the blast would shimmer rather than bloom.
+   *
+   * @param {THREE.Vector3} from  the muzzle, world space
+   * @param {THREE.Vector3} dir   the shot direction, unit length
+   * @param {number} scale        size multiplier; 1 is the rifle
+   */
+  blast(from, dir, scale = 1) {
+    let b = this.blasts[0];
+    for (const cand of this.blasts) {
+      if (cand.life <= 0) {
+        b = cand;
+        break;
+      }
+    }
+    b.life = BLAST_LIFE;
+    b.roll = Math.random() * Math.PI * 2;
+    b.petal = BLAST_PETALS[(Math.random() * BLAST_PETALS.length) | 0];
+    b.size = BLAST_BALL * scale * (1 - BLAST_JITTER * 0.5 + Math.random() * BLAST_JITTER);
+    b.dx = dir.x; b.dy = dir.y; b.dz = dir.z;
+    b.sx = from.x; b.sy = from.y; b.sz = from.z;
+    // Fireball at the muzzle; petals thrown forward along the shot
+    // direction; smoke hanging slightly behind the flame.
+    b.ball.position.copy(from);
+    const off = b.size * b.petal.out;
+    b.petals[0].position.set(from.x + dir.x * off, from.y + dir.y * off, from.z + dir.z * off);
+    b.petals[1].position.copy(b.petals[0].position);
+    b.smoke.position.set(from.x - dir.x * 0.05, from.y - dir.y * 0.05, from.z - dir.z * 0.05);
+    for (const p of b.parts) p.visible = true;
+    // Birth pose at t=0 - fraction of life SPENT. (t=1 here once drew the
+    // dead pose on the shot's own frame: the blast arrived a frame late.)
+    this._drawBlast(b, 0);
+    // No particles ride out of the blast - the streak leaving the muzzle
+    // already carries the direction downrange.
+    this.flash(from);
+  }
+
+  /**
+   * Poses and scales one blast's parts. `t` is the fraction of life spent,
+   * 0 at the shot: fire (with its collapse) until BLAST_FIRE, then smoke.
+   */
+  _drawBlast(b, t) {
+    // Fire: born near full size, a short swell, then collapse back into the
+    // barrel - the time course a propellant burn has.
+    const fire = Math.max(0, 1 - t / BLAST_FIRE);
+    const grow = 0.8 + 0.2 * Math.min(1, t / 0.2);
+    const reach = grow * (2 - fire) * 0.5;
+    // The roll spins the fireball's contour so the same asymmetric texture
+    // shows a different silhouette every shot.
+    b.ball.scale.setScalar(b.size * grow * (0.4 + 0.6 * fire));
+    b.ballMat.opacity = Math.min(1, fire * 2);
+    b.ballMat.rotation = b.roll;
+    // Petals: long along the barrel, thin across it, crossed at right
+    // angles, faded with the fire.
+    const px = b.size * b.petal.reach * reach;
+    const py = b.size * 0.45 * reach;
+    for (const ps of b.petals) ps.scale.set(px, py, 1);
+    b.petals[0].material.rotation = b.roll;
+    b.petals[1].material.rotation = b.roll + Math.PI / 2;
+    b.petals[0].material.opacity = b.petals[1].material.opacity = Math.min(1, fire * 1.6) * 0.75;
+    // Smoke: born as the fire dies, on its own eased curve.
+    const smokeT = Math.max(0, (t - BLAST_FIRE * 0.5) / (1 - BLAST_FIRE * 0.5));
+    const smokeLife = 1 - smokeT;
+    b.smoke.scale.setScalar(b.size * BLAST_SMOKE * 2 * (0.7 + 0.3 * smokeT));
+    b.smat.opacity = 0.5 * smokeLife * smokeLife;
   }
 
   /**
@@ -1816,11 +2110,31 @@ export class Effects {
       }
     }
     for (const t of this.tracers) {
-      if (t.life > 0) {
-        t.life -= dt;
-        t.line.material.opacity = Math.max(0, (t.life / 0.07) * 0.85);
-        if (t.life <= 0) t.line.visible = false;
+      if (t.life <= 0) continue;
+      t.life -= dt;
+      if (t.life <= 0) {
+        t.line.visible = false;
+        t.anchor = null;
+        continue;
       }
+      // Travel is the life's share of the path, holding the apparent speed
+      // at TRACER_SPEED whatever the life clamp did to the duration.
+      const spent = 1 - t.life / t.maxLife;
+      this._drawTracer(t, spent * t.dist);
+      // Held bright then dropped, not linearly faded - same reasoning as
+      // the arcs above.
+      const o = Math.max(0, Math.min(1, (t.life / t.maxLife) * 2.4));
+      t.line.material.opacity = o * 0.9;
+    }
+    // Blasts: posed once in blast(), run down their time courses here.
+    for (const b of this.blasts) {
+      if (b.life <= 0) continue;
+      b.life -= dt;
+      if (b.life <= 0) {
+        for (const p of b.parts) p.visible = false;
+        continue;
+      }
+      this._drawBlast(b, 1 - b.life / BLAST_LIFE);
     }
     this._stepCorpses(dt);
     this._stepPool(this.sparks, dt);

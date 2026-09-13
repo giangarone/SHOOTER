@@ -21,6 +21,11 @@
 //   5. HAIR TRIGGER charges for its rate in both currencies - a much stronger
 //      kick than it used to have, a flat widening the player can see before
 //      they fire, and a far bigger cone at full bloom.
+//   6. The TRACER rides the gun: tail at the live muzzle, lit part is a
+//      streak not the whole line, the burn stays warm (green<=red,
+//      blue<=green - cyan cannot pass), and the pool drains. The BLAST:
+//      born hot and fully visible on the shot's own frame, rolled per shot,
+//      pool drains.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8232;
@@ -216,7 +221,151 @@ try {
     t('the kick decays on its own', p.recoilPitch < kicked * 0.2,
       kicked.toFixed(3) + ' -> ' + p.recoilPitch.toFixed(3));
 
-    // ---- 5. HAIR TRIGGER ---------------------------------------------------
+    // ---- 5. the tracer rides the gun ----------------------------------------
+    // The streak's tail must be the LIVE muzzle, not the fire-time pose -
+    // the whole point of the anchored tracer.
+    await rest();
+    set({ shoot: true });
+    await secs(0.12);
+    // Tail check: distance, not equality - the muzzle moves within a frame.
+    const live = g.effects.tracers.filter((x) => x.life > 0);
+    const mzl = p.muzzle.getWorldPosition(g._muzzle);
+    let worst = -1;
+    let anyAnchored = false;
+    for (const tr of live) {
+      if (!tr.anchor) continue;
+      anyAnchored = true;
+      const pos = tr.line.geometry.attributes.position;
+      worst = Math.max(worst, Math.hypot(
+        pos.getX(0) - mzl.x, pos.getY(0) - mzl.y, pos.getZ(0) - mzl.z
+      ));
+    }
+    t('a held volley keeps tracers on the board', live.length > 0, 'live=' + live.length);
+    t("the tracer's tail is the live muzzle", anyAnchored && worst < 0.05,
+      'tail offset ' + worst.toFixed(3));
+    // Warmth and taper, on a hand-booked tracer with a known 8m flight.
+    {
+      const THREE = await import('three');
+      const A = new THREE.Vector3(mzl.x, 1.2, mzl.z);
+      const B = new THREE.Vector3(mzl.x, 1.2, mzl.z - 8);
+      g.effects.tracer(A, B, p.muzzle);
+      // The fresh booking is the slot still at full life.
+      const tr = g.effects.tracers.find((x) => x.life > 0 && x.life === x.maxLife);
+      // Warmth at every lit vertex: green never above red, blue never above
+      // green. Cyan cannot pass this; white-hot equality at the head can.
+      let warm = null;
+      if (tr) {
+        const c = tr.line.geometry.attributes.color;
+        const n = c.count - 1;
+        let rOK = true;
+        let lit = 0;
+        for (let i = 0; i <= n; i++) {
+          const r = c.getX(i), gr = c.getY(i), b = c.getZ(i);
+          if (r + gr + b < 0.01) continue;
+          lit++;
+          if (gr > r + 1e-6 || b > gr + 1e-6) rOK = false;
+        }
+        warm = rOK && lit > 3;
+      }
+      t('and the burn cools warm - never cyan',
+        warm === true,
+        warm == null ? 'no booked tracer' : (warm ? 'red>=green>=blue throughout' : 'cold vertex found'));
+      // Taper: at half the flight the head is 4m out, so the mid-line
+      // vertex is past the streak length and dark while the head is hot.
+      // Waited on the slot's own life, not on frames.
+      let taper = null;
+      if (tr) {
+        const wall = performance.now();
+        while (tr.life > tr.maxLife / 2 && performance.now() - wall < 3000) {
+          await step();
+        }
+        const c = tr.line.geometry.attributes.color;
+        const n = c.count - 1;
+        taper = [c.getY(n), c.getY(Math.floor(n / 2)), c.getY(0)];
+      }
+      t('the lit part is a streak, not the whole line',
+        taper != null && taper[0] > 0.5 && taper[1] < 0.05,
+        taper
+          ? 'head ' + taper[0].toFixed(2) + ' mid ' + taper[1].toFixed(2) + ' tail ' + taper[2].toFixed(2)
+          : 'no booked tracer');
+    }
+    set({ shoot: false });
+    // Pool drain, with a wall-clock guard against a hang.
+    {
+      const t0 = g.effects.tracers.filter((x) => x.life > 0).length;
+      const wall = performance.now();
+      while (g.effects.tracers.some((x) => x.life > 0) && performance.now() - wall < 3000) {
+        clear();
+        await step();
+      }
+      const left = g.effects.tracers.filter((x) => x.life > 0).length;
+      const vis = g.effects.tracers.filter((x) => x.line.visible).length;
+      t('the tracer pool drains', left === 0 && vis === 0,
+        t0 + ' -> live=' + left + ' visible=' + vis);
+    }
+
+    // ---- 5b. the blast at the barrel's tip ----------------------------------
+    {
+      // One real shot: a live blast with all parts visible.
+      await rest();
+      set({ shoot: true });
+      await step();
+      set({ shoot: false });
+      const afterShot = g.effects.blasts.filter((x) => x.life > 0);
+      t('a shot births a blast at the muzzle',
+        afterShot.length > 0 && afterShot[0].parts.every((x) => x.visible),
+        afterShot.length + ' live, all parts visible');
+      // Hot at birth, read on a directly-booked blast so no frame has
+      // ticked (dt clamps to 0.05 against a 0.07 life - one step is 71%
+      // dead). The fresh booking is whichever slot's life went up.
+      {
+        const THREE = await import('three');
+        const o = new THREE.Vector3(mzl.x, 1.2, mzl.z);
+        const d = new THREE.Vector3(0, 0, -1);
+        const before = g.effects.blasts.map((x) => x.life);
+        g.effects.blast(o, d, 1);
+        const i = g.effects.blasts.findIndex((x, k) => x.life > before[k]);
+        const b = i >= 0 ? g.effects.blasts[i] : null;
+        t('the blast is hot on its own frame',
+          b != null && b.ballMat.opacity > 0.9
+            && b.ball.scale.x > b.size * 0.5 && b.petals[0].scale.x > b.size * 0.4
+            && b.petals[0].material.opacity > 0.5,
+          b
+            ? 'ball ' + b.ballMat.opacity.toFixed(2) + ', scale ' + b.ball.scale.x.toFixed(2)
+              + ', petal ' + b.petals[0].scale.x.toFixed(2)
+              + ' @ ' + b.petals[0].material.opacity.toFixed(2)
+            : 'no fresh blast');
+      }
+      // Per-shot rolls: two bookings, different rolls each time.
+      const THREE = await import('three');
+      const d = new THREE.Vector3(0, 0, -1);
+      const o = new THREE.Vector3(mzl.x, 1.2, mzl.z);
+      g.effects.blast(o, d, 1);
+      const r1 = g.effects.blasts.filter((x) => x.life > 0).map((x) => x.roll.toFixed(3));
+      g.effects.blast(o, d, 1);
+      const r2 = g.effects.blasts.filter((x) => x.life > 0).map((x) => x.roll.toFixed(3));
+      const same = r1.length === r2.length
+        && r1.length > 1
+        && r1.some((v, i) => v === r2[i]);
+      t('consecutive blasts roll differently', r1.length > 0 && !same,
+        r1.length + ' rolls, identical=' + !!same);
+      // Pool drain.
+      {
+        const wall = performance.now();
+        while (g.effects.blasts.some((x) => x.life > 0) && performance.now() - wall < 3000) {
+          clear();
+          await step();
+        }
+        const left = g.effects.blasts.filter((x) => x.life > 0).length;
+        const vis = g.effects.blasts.reduce(
+          (n, x) => n + x.parts.filter((q) => q.visible).length, 0
+        );
+        t('the blast pool drains', left === 0 && vis === 0,
+          'live=' + left + ' parts visible=' + vis);
+      }
+    }
+
+    // ---- 6. HAIR TRIGGER ---------------------------------------------------
     // One trigger pull of a fixed length, measured before and after the card,
     // so the two readings differ by the passive item and by nothing else.
     const trial = async () => {
