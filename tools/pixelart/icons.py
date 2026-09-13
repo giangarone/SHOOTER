@@ -4451,3 +4451,110 @@ def _(c):
     c.rect(18.8, 3.0, 20.0, 21.0, DEEP)                # the page edge
     c.ring(13.0, 12.0, 4.8, 1.8, E)                    # and what is on it
     c.disc(13.0, 12.0, 1.6, E)
+
+
+# ---- THE FIFTH POOL ---------------------------------------------------------
+
+
+@icon('deskJob')            # DESK JOB - +20% damage, -20% taken, never sprint
+def _(c):
+    # A CHAIR, SEEN FROM BEHIND. The pick takes the legs away from the RUN and
+    # the drawing takes them away from the player: there is no other seat in
+    # the catalogue, and a desk with a chair would be two shapes arguing about
+    # which one the pick is. The backrest is drawn wide and solid because it is
+    # the silhouette - at totem distance the arms vanish and this has to read
+    # as furniture on their own.
+    #
+    # THE LIT PART IS THE SEAT, which is the part the pick is about: sitting
+    # down is the whole trade, and the drawing says so before the card does.
+    c.rect(3.4, 2.0, 20.6, 10.4, S)                   # the backrest
+    c.rect(5.8, 4.4, 18.2, 8.0, DEEP)                 # the slat hole
+    c.rect(7.6, 10.4, 16.4, 15.2, S)                  # the seat, solid
+    c.rect(8.8, 11.6, 15.2, 14.0, E)                  # ...and lit
+    c.line(8.6, 15.2, 8.6, 21.6, S, 2.2)              # the legs, splayed
+    c.line(15.4, 15.2, 15.4, 21.6, S, 2.2)
+    c.line(9.6, 21.6, 14.4, 21.6, S, 1.8)             # the floor stay
+
+
+@icon('pureHeart')          # PURE OF HEART - no pickups, +20% damage, +20 max HP
+def _(c):
+    # A HEART WITH NOTHING IN IT. The set draws pickups as filled containers -
+    # drums, crates, cells - and the one thing this pick does to all of them is
+    # empty the floor. So the heart is an OUTLINE, thick-walled and hollow at
+    # the middle, which nothing else in the catalogue is: a heart that is
+    # genuinely empty reads as the shape and as the trade at once.
+    #
+    # THE LIT PART IS THE CLEAN BAR: one line across the top lobes, the twenty
+    # health the pick pays, sitting over a cavity that will never have a
+    # plate dropped into it again.
+    hx, hy = 12.0, 10.2
+    # The lobes, as thick rings rather than discs.
+    c.disc(hx - 4.0, hy - 1.0, 4.4, S)
+    c.disc(hx + 4.0, hy - 1.0, 4.4, S)
+    c.poly([(hx - 7.8, hy - 0.4), (hx + 7.8, hy - 0.4),
+            (hx + 1.6, hy + 10.0), (hx, hy + 11.0), (hx - 1.6, hy + 10.0)], S)
+    # Hollowed, leaving a wall at least two pixels thick all the way round.
+    c.disc(hx - 4.0, hy - 1.4, 2.4, DEEP)
+    c.disc(hx + 4.0, hy - 1.4, 2.4, DEEP)
+    c.poly([(hx - 5.4, hy - 0.4), (hx + 5.4, hy - 0.4),
+            (hx + 0.6, hy + 7.6), (hx, hy + 8.6), (hx - 0.6, hy + 7.6)], DEEP)
+    c.line(hx - 5.0, hy - 1.6, hx + 5.0, hy - 1.6, E, 1.8)
+
+
+@icon('possum')             # POSSUM - below 15% HP the room believes you dead
+def _(c):
+    # A BODY ON THE FLOOR, AND THE EYES OPEN. Against every skull in the set -
+    # which are dead and read dead - this is the one drawing whose whole point
+    # is that it is NOT: the X the dead wear is replaced by two open eyes, which
+    # at totem distance is the difference between a corpse and a trick.
+    #
+    # LAID FLAT AND SLIGHTLY CURLED, not sprawled: a sprawl is a shape the
+    # lighting pass welds into a puddle at this size, and the curled pose keeps
+    # a limb and a tail in the silhouette. The tail is the possum's own - the
+    # one thing that names the animal.
+    ellipse(c, 12.0, 15.4, 7.6, 3.4, S)               # the body, on its side
+    c.disc(6.8, 13.6, 3.0, S)                         # the head, propped
+    c.poly([(19.0, 15.8), (23.2, 13.4), (23.4, 17.0)], S)   # the tail
+    c.disc(6.0, 12.8, 0.95, E)                        # the open eye...
+    c.disc(8.2, 12.8, 0.95, E)                        # ...the other one
+    c.rect(9.0, 18.2, 18.0, 19.4, DEEP)              # the ground shadow
+
+
+@icon('deathStare')         # DEATH STARE - melee attackers that hit you petrify
+def _(c):
+    # A FIST, STOPPED, AND STONED WHERE IT STANDS. The set already has a fist -
+    # RAGE's, which is lit and flying - so this is that shape turned to the
+    # stone family's grey and given the crack: what the card names is the
+    # attacker's blow arriving and never leaving.
+    #
+    # THE CRACK IS THE LIT PART, deliberately: PETRIFY's own icon is a statue
+    # in this same tone and the two must read as the same effect wearing
+    # different silhouettes, so the energy of this one is not motion but the
+    # line the stone split along.
+    fx, fy = 12.0, 11.4
+    c.rect(fx - 5.6, fy - 6.4, fx + 5.6, fy + 4.6, S)  # the fist, knuckles up
+    for x in (-3.4, -0.8, 1.8):                        # the fingers
+        c.rect(fx + x - 1.15, fy - 6.4, fx + x + 1.15, fy - 2.4, S)
+    c.rect(fx - 5.6, fy + 4.6, fx - 2.0, fy + 8.0, S)  # the wrist
+    c.line(fx - 4.6, fy - 4.2, fx - 1.6, fy + 1.0, E, 1.6)   # the crack
+    c.line(fx - 1.6, fy + 1.0, fx + 3.2, fy - 0.8, E, 1.2)
+    c.disc(fx - 1.6, fy + 1.0, 1.1, E)
+
+
+@icon('southpaw')           # SOUTHPAW - single rounds mid-reload, at 20% rate
+def _(c):
+    # ONE ROUND LEAVING A MAGAZINE THAT IS OUT OF THE GUN. The set draws a
+    # magazine as a box with rounds showing through it (EXTENDED MAG) and a
+    # reload as the whole cylinder (SPEED LOADER); this is neither - the box is
+    # TIPPED, mid-swap, and the single round under it is what the trigger can
+    # still reach.
+    #
+    # THE TIP IS THE WHOLE SILHOUETTE. A second upright box would read as
+    # EXTENDED MAG's; rotated off the vertical it reads as a magazine in the
+    # other hand, which is the name of the pick.
+    c.poly([(2.4, 6.4), (9.6, 2.4), (16.8, 12.8), (9.6, 16.8)], S)  # the tipped box
+    for t in (0.3, 0.55, 0.8):                        # rounds showing through
+        x = 2.4 + (16.8 - 2.4) * t
+        y = 6.4 + (12.8 - 6.4) * t
+        c.disc(x * 0.98, y * 0.98, 1.4, DEEP)
+    bullet(c, 17.2, 12.8, 4.8, 10.0, S, E)            # the off-hand round

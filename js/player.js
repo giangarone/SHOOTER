@@ -425,6 +425,28 @@ const DEFAULT_MODS = {
   fullLoad: 0,          // Full Load: the reserve, filled at every wave end
   crashCart: 0,         // Crash Cart: HP a health crate heals instead of its
   crashCartAt: 0,       // own, while the bar is at or under this many points
+
+  // ---- THE FIFTH POOL ------------------------------------------------------
+  //
+  // Five more max-1 fields on the contract every block above holds: zero is
+  // "not owned" and every reader tests for it. What this block has in common as
+  // a group is that four of the five are questions about a state the run is IN
+  // rather than about the trigger - seated at a desk, playing dead, mid-reload
+  // - and the fifth takes a verb away. The counters and windows those states
+  // need live on the Player (see reset()), not here, for the reason every
+  // other block gives: mods are replayed from DEFAULT_MODS on every draft pick,
+  // so anything an EVENT wrote here is handed back by the next totem.
+  noSprint: 0,          // Desk Job: the sprint button does nothing
+  noPickups: 0,          // Pure of Heart: no pickup may be placed, by any door
+  possumAt: 0,          // Possum: the HP fraction at or below which the
+  possumTime: 0,        // playing-dead window opens, for this long. The one-
+                         // shot tell and the window's own deadline live on the
+                         // Player (`possumFx`, `possumEnd`) - see the state
+                         // block in the constructor for why.
+  deathStare: 0,        // Death Stare: seconds of petrify an attacker that
+                         // LANDED a melee blow is frozen for
+  southpawRate: 0,      // Southpaw: the fraction of the fire rate at which a
+                         // single round may leave the gun mid-reload
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -1339,11 +1361,32 @@ export class Player {
     // an event spent would be handed back by the next totem the player claimed.
     this.dimeEnd = 0;           // Dime Novel: game time the crit window closes
     this.fruitsLeft = 0;        // First Fruits: kills left at the top of this
-                                // wave that still owe a plate. SET by
-                                // startWave, never added to - see armFruits.
+                                 // wave that still owe a plate. SET by
+                                 // startWave, never added to - see armFruits.
     this.flowFx = false;        // Flow Reload: one-shot, cleared by main.js.
-                                // A second of invulnerability with no tell is
-                                // a second the player cannot spend on purpose.
+                                 // A second of invulnerability with no tell is
+                                 // a second the player cannot spend on purpose.
+    // ---- THE FIFTH POOL'S STATE -------------------------------------------
+    //
+    // POSE's window and its recharge, here rather than in `mods` for the
+    // reason every counter above is: a window an EVENT opened would be handed
+    // back by the next totem the player claimed.
+    //
+    // `possumEnd` is a deadline and is rebased across a versus handoff (see
+    // PLAYER_CLOCKS in versus.js) like every other one; `possumReady` is a
+    // boolean because an empty 0 deadline sits in the past, which for this one
+    // field would read as "playing dead" - the same trap BACKORDER's parcel
+    // flag exists for.
+    this.possumEnd = 0;         // Possum: game time the window closes at
+    this.possumReady = false;   // and whether it may open at all. SET by the
+                                 // recharge below, never by the window.
+    this.possumFx = false;      // one-shot, cleared by main.js on the frame
+                                 // the window opens - player.js has no banner
+    this.offHand = false;       // SOUTHPAW: the last trigger pull was fired
+                                 // mid-reload, one round from the reserve. A
+                                 // one-frame handshake with main.js, which
+                                 // reads it and clears it in the same breath -
+                                 // see shoot() there.
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -2519,6 +2562,11 @@ export class Player {
     this.dimeEnd = 0;
     this.fruitsLeft = 0;
     this.flowFx = false;
+    // The fifth pool's, likewise.
+    this.possumEnd = 0;
+    this.possumReady = false;
+    this.possumFx = false;
+    this.offHand = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -2763,6 +2811,37 @@ export class Player {
       this.lastBreathUsed = true;
       this.reserveAmmo = this.maxReserve;
       this.ammoFx = true;
+    }
+    // POSE. Below the line the room believes the run is over for ten seconds,
+    // and the trick can be played again only once the bar has been brought ALL
+    // the way back.
+    //
+    // TWO RULES AND BOTH ARE THE PICK. The window opens only on a bar that is
+    // UNDER the line while the trick is charged - and the recharge is FULL
+    // means full, on PACE CAR's terms, so the second performance costs a whole
+    // health bar the first one nearly spent. Crossing the line while already
+    // spent does nothing, and hovering at 14% for a minute is still only the
+    // one window the crossing bought.
+    //
+    // NOT GATED ON COMBAT, for LIFELINE's reason: the recharge has to be able
+    // to land in a wave break or the pick would demand the player stand in a
+    // live room at full health waiting for a shop to close.
+    if (this.mods.possumAt > 0) {
+      if (this.possumEnd > 0 && this.possumEnd <= time) {
+        this.possumEnd = 0;
+      }
+      if (this.possumReady
+        && this.health > 0 && this.health <= this.maxHealth * this.mods.possumAt) {
+        this.possumReady = false;
+        this.possumEnd = time + this.mods.possumTime;
+        this.possumFx = true;
+      }
+      // THE RECHARGE. `>=` against the max rather than an equality, for the
+      // reason paceMult uses one: health is a float and a hundredth of a point
+      // of regen short is full as far as anybody can see.
+      if (this.possumEnd === 0 && !this.possumReady && this.health >= this.maxHealth) {
+        this.possumReady = true;
+      }
     }
 
     // Returned to the caller so main.js can fire Reload Burst on exactly the
@@ -3623,7 +3702,13 @@ export class Player {
   _updateSprint(dt, input, f, s) {
     const moving = (f !== 0 || s !== 0);
     const wants = !!input.sprint && moving;
+    // DESK JOB, at the ONE gate every sprint passes through - which takes the
+    // slide with it, for the reason the upgrade's own note gives: a slide is
+    // entered out of a sprint and there is no earlier state left to slide out
+    // of. The dash and the jump are untouched, and a held sprint key is simply
+    // a walk rather than a lockout the HUD has to explain.
     this.sprinting = wants
+      && this.mods.noSprint <= 0
       && !this.staminaLocked
       && this.stamina > 0
       && !input.shoot
@@ -3968,7 +4053,57 @@ export class Player {
     // first shot of a burst wait for the next beat rather than leaving on a
     // beat that went by while the player was reloading. See Music.pulseWhole.
     const metro = this.mods.metronome > 0;
-    if (this.reloading > 0) return null;
+    // SOUTHPAW. The one state in the game the trigger was locked out of: the
+    // reload is a second and a half of nothing, and this hands the player back
+    // a single round of it at a time. Everything about the branch is the WORST
+    // gun in the game on purpose - one round, a fifth of the rate, billed to
+    // the reserve because the magazine is out of the gun - so a reload stays
+    // what it always was and the player merely stops being unarmed for its
+    // length.
+    //
+    // THE RELOAD ITSELF IS NOT TOUCHED. It runs to its own seating, arms
+    // BREACH ROUND and tops the magazine exactly as before; the off-hand
+    // rounds neither pause it nor count as its first. `magAtShot` is zero,
+    // the BELT FED DREAM reading, which gates the parity picks the same way
+    // their own trap comment spells out.
+    if (this.reloading > 0) {
+      if (this.mods.southpawRate <= 0) return null;
+      // METRONOME still holds the trigger to the beat, even in the other hand:
+      // the pick hands the player back a shot, not an exception to the music.
+      if (metro ? !this.beatShot : this.fireCd > 0) return null;
+      if (this.status.fear > 0) return 'feared';
+      if (!w.auto && !triggerFresh) return null;
+      if (this.reserveAmmo <= 0) return 'empty';
+      this.reserveAmmo--;
+      this.lastShotCost = 1;
+      this.magAtShot = 0;
+      // Marks this trigger pull as the OFF HAND'S, so main.js fires one pellet
+      // through it rather than the weapon's whole pattern - the card says
+      // single rounds, and TWENTY/TWENTY's double volley is a question about
+      // the magazine the gun is busy not having. Cleared by shoot() on the
+      // frame it reads it, exactly like the magazine it stands in for.
+      this.offHand = true;
+      // A FIFTH OF THE RATE. `fireCd` is what the cooldown runs on everywhere
+      // else, so dividing the interval is the whole of the rate cut - and the
+      // shared fire-rate getter is deliberately not read, because it folds in
+      // HOT MAG's live magazine (out of the gun) and every posture the player
+      // is not holding for this one round.
+      this.fireCd = 1 / (this.weapon.fireRate * this.mods.fireRate
+        * this.fireRateMult * this.itemRateMult * this.mods.southpawRate);
+      this.kick = w.kick * 0.6;
+      this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
+      this.recoilPitch +=
+        (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
+      this._bloomShot();
+      // A trigger pull is a trigger pull - ECHO CHAMBER, MACHINE SPIRIT and
+      // TRUE STRIKE all count it - but CANNONADE's question is about a
+      // MAGAZINE and this round came from neither, so the fresh one stays
+      // armed for the first round that actually leaves it.
+      const fresh = this.magFresh;
+      this._noteShot();
+      this.magFresh = fresh;
+      return 'shot';
+    }
     if (metro ? !this.beatShot : this.fireCd > 0) return null;
     // FEAR. The trigger, and only the trigger: reload, melee, dash and jump
     // all still work, so the window is one to move in rather than one to

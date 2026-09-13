@@ -283,6 +283,11 @@ NOTE = {
     'coldFoot': 'COLD FOOT - a boot leaving, and ice standing where it went.',
     'jumperCables': 'JUMPER CABLES - two clamps and the jump between them.',
     'dimeNovel': 'DIME NOVEL - a paperback with a bullseye on the cover.',
+    'deskJob': 'DESK JOB - a chair, seen from behind. The legs are the trade.',
+    'pureHeart': 'PURE OF HEART - a heart with nothing in it, and the bar it leaves.',
+    'possum': 'POSSUM - a body on the floor, and the eyes open.',
+    'deathStare': 'DEATH STARE - a fist, stoned where it swung.',
+    'southpaw': 'SOUTHPAW - one round leaving a magazine that is out of the gun.',
 }
 
 
