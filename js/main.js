@@ -8586,11 +8586,18 @@ class Game {
     this._closeStats();
     this.pad.stopRumble();
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
-    this.ui.buildDebug(this._debugPassiveDefs(), this._debugActiveDefs(), {
+    // THE THEME ROW IS DEALT OFF THE TABLE ITSELF rather than off a list kept
+    // for this screen: themes are landing one a time, and a panel that carried
+    // its own list would be one more thing to edit per theme - the exact chore
+    // this row exists to remove. setTheme is the same hook the tests drive, so
+    // a pin made here and a pin made by a suite cannot drift apart.
+    this.ui.buildDebug(this._debugPassiveDefs(), this._debugActiveDefs(),
+      Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, color: t.color })), {
       passive: (id) => this._debugGivePassive(id),
       dropPassive: (id) => this._debugDropPassive(id),
       active: (id) => this._debugGiveActive(id),
       wave: (n) => this._debugJumpToWave(n),
+      theme: (key) => this._debugSetTheme(key),
     });
     this._debugRefresh();
     this.ui.showDebug();
@@ -8636,7 +8643,7 @@ class Game {
   }
 
   _debugRefresh() {
-    this.ui.refreshDebug(this.player.upgrades, this.player.item, this.wave);
+    this.ui.refreshDebug(this.player.upgrades, this.player.item, this.wave, this._forcedTheme);
   }
 
   // A TIER AT A TIME, through the player's own takeUpgrade - so a stacking
@@ -8738,6 +8745,18 @@ class Game {
   setTheme(key) {
     this._forcedTheme = key && THEMES[key] ? key : null;
     return this._forcedTheme;
+  }
+
+  // The panel's click on a theme button. REFRESH RATHER THAN JUMP: the pin is
+  // a setting, not a command - it says which theme the NEXT block is, not
+  // that one should start now - so it takes effect on whatever wave opens next
+  // (this one, if you jump). Refreshing is what lights the button, and the
+  // sound is the menu's own move tick rather than a fanfare for a click that
+  // changed nothing you can see yet.
+  _debugSetTheme(key) {
+    this.setTheme(key);
+    this._debugRefresh();
+    this.sfx.menuMove();
   }
 
   // The safety net, and the only pickup that is not dropped by something dying.
