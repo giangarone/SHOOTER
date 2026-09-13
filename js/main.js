@@ -68,7 +68,7 @@ import {
   setShareHook, setPoisonStackCap, projStats, projLook,
 } from './enemy.js';
 import { Effects } from './effects.js';
-import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
+import { CrtPass } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
@@ -142,6 +142,9 @@ const THEME_SPLASHBACK = THEME.splashback;
 const THEME_FRUITS = THEME.firstFruits;
 const THEME_JUMPER = THEME.jumperCables;
 const THEME_DIME = THEME.dimeNovel;
+// The fifth pool's, for the flashes each of them throws.
+const THEME_POSSUM = THEME.possum;
+const THEME_STARE = THEME.deathStare;
 // COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
 // player's own CHILLED chip is drawn in - one colour for one effect, wherever
 // it is coming from, which is the rule STATUS_TINT exists to hold.
@@ -446,16 +449,6 @@ function viewportAspect() {
 const SHAKE_PIPS = 8;
 const SHAKE_MAX = 2;
 const SHAKE_STEP = SHAKE_MAX / SHAKE_PIPS;
-
-// How coarsely the arena is drawn - an index into PIXEL_STEPS in crt.js. The
-// game's icons, HUD and money orbs have always been pixel art; this is what
-// lets the 3D half of it join in, by rendering the scene into a smaller buffer
-// and letting the tube pass magnify it with no filtering.
-//
-// SUBTLE by default. FULL is the strongest look and it is a real cost to a
-// player trying to identify an enemy across a 23m arena, so the game ships at
-// the step that reads as pixel art without arguing with the aiming.
-const PIXEL_DEFAULT = 1;
 
 // --- economy ---
 // Seconds a kill chain survives without a new kill.
@@ -1089,22 +1082,6 @@ class Game {
         this._setShakeScale(Math.max(0, Math.min(SHAKE_MAX, Math.round(n / SHAKE_STEP) * SHAKE_STEP)));
       }
     } catch {}
-    // Pixel size, read before the first frame so the arena is never shown once
-    // at the wrong coarseness on the way in. Same null-versus-zero care as the
-    // shake above, and for the same reason: index 0 is OFF, which is a real
-    // choice a player can have made.
-    this._pixelStep = PIXEL_DEFAULT;
-    try {
-      const raw = localStorage.getItem('va-pixel');
-      const n = Number(raw);
-      if (raw !== null && raw !== '' && Number.isInteger(n) && n >= 0 && n < PIXEL_STEPS.length) {
-        this._pixelStep = n;
-      }
-    } catch {}
-    this.crt.setPixelScale(this._pixelStep);
-    // The orbs were sized a few lines above against the full-size buffer, and
-    // the setting just changed what that is. Same reason _stepPixel re-sizes.
-    this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
     // ---- the controller ---------------------------------------------------
     //
     // The pad is POLLED, not listened to (the Gamepad API has no events), so
@@ -1562,6 +1539,11 @@ class Game {
     // once a frame in _updateDeployed and read in exactly two places - the LURE
     // block in _updateEnemies, and nowhere else.
     this._lure = null;
+    // POSE'S CORPSE, while the window runs. Same lifecycle as the lure's
+    // decoy - rebuilt at each opening, dropped when the window closes - but
+    // it is built by _updateEnemies itself, because the moment it opens is a
+    // frame the enemy sweep is already in.
+    this._possumDecoy = null;
     // The pets, one fixed slot per species: 0 is the MAGPIE, 1 the LAMPREY.
     // See _syncCompanions.
     this._companions = [null, null];
@@ -2035,28 +2017,6 @@ class Game {
     });
     this._syncShake();
 
-    // Pixel size. The same stepper as the screenshake above, down to the pips
-    // being built once - see there for why.
-    this._pixelPips = [];
-    const pixRow = document.getElementById('pixel-pips');
-    for (let i = 0; i < PIXEL_STEPS.length - 1; i++) {
-      const pip = document.createElement('i');
-      pixRow.appendChild(pip);
-      this._pixelPips.push(pip);
-    }
-    this._pixelVal = document.getElementById('pixel-val');
-    this._pixelDown = document.getElementById('btn-pixel-down');
-    this._pixelUp = document.getElementById('btn-pixel-up');
-    this._pixelDown.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepPixel(-1);
-    });
-    this._pixelUp.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepPixel(1);
-    });
-    this._syncPixel();
-
     // ---- the controller rows ------------------------------------------------
     //
     // Hidden until a DualSense has been seen (body.pad-seen, set in
@@ -2256,7 +2216,8 @@ class Game {
       this.renderer.setSize(innerWidth, innerHeight);
       this.crt.setSize(innerWidth, innerHeight);
       // Orb point sizes are in pixels, so they scale off the height of the
-      // buffer the scene lands in - which the pixel setting can shrink.
+      // buffer the scene lands in - the low-resolution one the tube pass
+      // magnifies, which a resize re-derives from the panel.
       this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
     });
   }
@@ -2475,36 +2436,6 @@ class Game {
     this._shakeVal.classList.toggle('off', v === 0);
     this._shakeDown.disabled = v <= 0;
     this._shakeUp.disabled = v >= SHAKE_MAX;
-  }
-
-  // Pixel size, applied immediately for the same reason the shake is: the
-  // setting is reachable from the pause screen mid-run, and the whole way to
-  // choose between four steps of this is to watch the arena change behind the
-  // menu while pressing the key.
-  _stepPixel(dir) {
-    const next = Math.max(0, Math.min(PIXEL_STEPS.length - 1, this._pixelStep + dir));
-    if (next === this._pixelStep) return;
-    this._pixelStep = next;
-    this.crt.setPixelScale(next);
-    // Coarser buffer, fewer pixels to an orb. Anything measured in pixels has
-    // to be told, or the orbs keep the size they had at the old resolution and
-    // come out scaled by the ratio between the two.
-    this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
-    try { localStorage.setItem('va-pixel', String(next)); } catch {}
-    this._syncPixel();
-  }
-
-  _syncPixel() {
-    const v = this._pixelStep;
-    for (let i = 0; i < this._pixelPips.length; i++) {
-      // Three pips for four steps, because OFF is no pips lit rather than one
-      // - the same reading the screenshake's OFF gets.
-      this._pixelPips[i].className = i < v ? (i >= this._pixelPips.length - 1 ? 'on hot' : 'on') : '';
-    }
-    this._pixelVal.textContent = PIXEL_LABELS[v];
-    this._pixelVal.classList.toggle('off', v === 0);
-    this._pixelDown.disabled = v <= 0;
-    this._pixelUp.disabled = v >= PIXEL_STEPS.length - 1;
   }
 
   // The sub-screens are LAYERED over whichever menu opened them - the start
@@ -6359,7 +6290,10 @@ class Game {
           // which is the trade, and it pays for one round.
           if (!this._reflected) {
             this._reflected = true;
-            this._spawnProjectile(h.point.x, h.point.y, h.point.z, 'aegis', 1);
+            // Aimed at the REAL player, through _spawnProjectile's aim
+            // override: this is the player's own round coming back, not an
+            // enemy's, and it does not care what the crowd believes it sees.
+            this._spawnProjectile(h.point.x, h.point.y, h.point.z, 'aegis', 1, 0, this.player);
             if (this.sfx) this.sfx.impact();
           }
           hitProp = true;
@@ -6576,46 +6510,57 @@ class Game {
     this._shotCrit.clear();
     this._blastHit = false;
     this._shotWasCrit = false;
-    // Twenty/Twenty fires the whole pellet pattern twice off one round. The
-    // dedup set is NOT cleared between volleys - both barrels are one trigger
-    // pull, so an enemy caught by both still takes one dose of status.
-    for (let v = 0; v < mods.volley; v++) {
-      for (let i = 0; i < w.pellets; i++) {
-        if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
-      }
-    }
-    // ECHO CHAMBER. Every fourth trigger pull fires the pattern a second time
-    // at half strength, off no magazine at all.
-    //
-    // The dedup sets are NOT cleared between the shot and its echo, exactly as
-    // they are not cleared between TWENTY/TWENTY's two volleys and for the same
-    // reason: this is one trigger pull, so a body caught by both still takes
-    // one dose of status and sets off one DETONATOR blast.
-    if (mods.echoEvery > 0 && this.player.shotTally % mods.echoEvery === 0) {
-      for (let v = 0; v < mods.volley; v++) {
-        for (let i = 0; i < w.pellets; i++) {
-          if (this._firePellet(muzzle, targets, spread, w, dmgMult * mods.echoDamage, crit)) {
-            hitAny = true;
-          }
-        }
-      }
-      this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
-    }
-    // ENCORE. The whole pattern again, at full strength, off no magazine -
-    // ECHO CHAMBER's ghost with the every-fourth and the half-damage taken off
-    // it, which is exactly what the item is and why it rides the same lines.
-    //
-    // The dedup sets are NOT cleared between the shot and its encore, for the
-    // reason the echo above does not clear them and TWENTY/TWENTY's two
-    // volleys do not either: this is ONE trigger pull, so a body caught by
-    // both takes one dose of status and sets off one DETONATOR blast.
-    if (this.player.encore > 0) {
+    // SOUTHPAW'S OFF HAND. A trigger pull answered mid-reload fires ONE pellet
+    // and none of the duplicate patterns - the card says single rounds, and a
+    // TWENTY/TWENTY volley or an ECHO of one off-hand round is a question about
+    // a magazine the gun is busy not having. Read and cleared in the same
+    // breath, like the magazine it stands in for.
+    const offHand = this.player.offHand;
+    this.player.offHand = false;
+    if (offHand) {
+      if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
+    } else {
+      // Twenty/Twenty fires the whole pellet pattern twice off one round. The
+      // dedup set is NOT cleared between volleys - both barrels are one trigger
+      // pull, so an enemy caught by both still takes one dose of status.
       for (let v = 0; v < mods.volley; v++) {
         for (let i = 0; i < w.pellets; i++) {
           if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
         }
       }
-      this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
+      // ECHO CHAMBER. Every fourth trigger pull fires the pattern a second time
+      // at half strength, off no magazine at all.
+      //
+      // The dedup sets are NOT cleared between the shot and its echo, exactly as
+      // they are not cleared between TWENTY/TWENTY's two volleys and for the same
+      // reason: this is one trigger pull, so a body caught by both still takes
+      // one dose of status and sets off one DETONATOR blast.
+      if (mods.echoEvery > 0 && this.player.shotTally % mods.echoEvery === 0) {
+        for (let v = 0; v < mods.volley; v++) {
+          for (let i = 0; i < w.pellets; i++) {
+            if (this._firePellet(muzzle, targets, spread, w, dmgMult * mods.echoDamage, crit)) {
+              hitAny = true;
+            }
+          }
+        }
+        this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
+      }
+      // ENCORE. The whole pattern again, at full strength, off no magazine -
+      // ECHO CHAMBER's ghost with the every-fourth and the half-damage taken off
+      // it, which is exactly what the item is and why it rides the same lines.
+      //
+      // The dedup sets are NOT cleared between the shot and its encore, for the
+      // reason the echo above does not clear them and TWENTY/TWENTY's two
+      // volleys do not either: this is ONE trigger pull, so a body caught by
+      // both takes one dose of status and sets off one DETONATOR blast.
+      if (this.player.encore > 0) {
+        for (let v = 0; v < mods.volley; v++) {
+          for (let i = 0; i < w.pellets; i++) {
+            if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
+          }
+        }
+        this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
+      }
     }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
@@ -7156,6 +7101,26 @@ class Game {
     // What LANDED, not what was thrown: curse is applied inside takeDamage.
     // Books the damage and breaks the flawless streak - see _noteDamage.
     this._noteDamage();
+    // DEATH STARE. The body that landed this blow, stoned where it stands.
+    //
+    // AFTER the dodge and the ward, so an attacker that got away with it is
+    // the one case the pick does not pay - a hit the mantle ate never reached
+    // the player, and petrifying on a whiff would make the pick a shield
+    // rather than a retaliation.
+    //
+    // A SOURCE is the whole test for "melee attacker". Projectiles reach the
+    // player through the _projCtx lambda with no owner named, so a gunner's
+    // round across the room does nothing - only a body that came close enough
+    // to touch you pays for it. A boss pays through applyStatus's own
+    // resistance block, which downgrades a freeze to a heavy slow rather than
+    // letting three seconds of stone land on the one enemy that cannot afford
+    // it - the same answer CRYO PULSE already gets.
+    if (this.player.mods.deathStare > 0 && source && !source.dead) {
+      source.applyStatus('freeze', this.player.mods.deathStare);
+      this.effects.shockwave(source.pos, THEME_STARE, 3.2, 0.4);
+      this.effects.burst(source.pos, THEME_STARE, 10, 4, 1.8, 0.4);
+      this.sfx.impact();
+    }
     this._shockwave();
     this.effects.addShake(0.25);
     this.effects.burst(pos, 0xff3b30, 12, 4, 1.5, 0.4);
@@ -7209,9 +7174,18 @@ class Game {
   // a caller fires a FAN: three rounds from one muzzle at -a, 0 and +a diverge
   // with range, where three muzzles all aiming at the player would converge and
   // either all hit or all miss.
-  _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1, spreadRad = 0) {
+  //
+  // THE TARGET IS THE ENEMY CONTEXT'S PLAYER, not the real one. Under ORGAN
+  // GRINDER and POSSUM the ctx holds a decoy, and a shooter has to fire at
+  // what it is looking at - the monkey, or the corpse it believes it has -
+  // rather than at whoever is really standing in the room; the monkey's own
+  // doc says its rounds "fly to the monkey", and this is the line that keeps
+  // that true. The one exception is the MIRROR's reflected round, which is
+  // not an enemy's shot at all: the player fired it, so it aims back at the
+  // player through the `aim` argument.
+  _spawnProjectile(x, y, z, type = 'shooter', speedScale = 1, spreadRad = 0, aim = null) {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
-    const t = this.player.eyeInto(this._aimTarget);
+    const t = (aim || this._enemyCtx.player).eyeInto(this._aimTarget);
     if (spreadRad) {
       const dx = t.x - x;
       const dz = t.z - z;
@@ -7237,7 +7211,9 @@ class Game {
 
   _spawnGrenade(x, y, z, damage) {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
-    const t = this.player.eyeInto(this._aimTarget);
+    // The ctx's player, for the reason _spawnProjectile gives: a grenade
+    // throws at what the thrower believes is the target.
+    const t = this._enemyCtx.player.eyeInto(this._aimTarget);
     const speed = Math.min(18, 12 + this.wave * 0.2);
     const dmg = Math.min(28, damage + this.wave * 0.5);
     this.projectiles.push(new Grenade(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
@@ -7261,7 +7237,10 @@ class Game {
   // sprinting player by metres.
   _spawnSpit(x, y, z, kind = 'pool') {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
-    const p = this.player;
+    // The ctx's player, for the reason _spawnProjectile gives: the spit leads
+    // what the SPITTER believes it is aiming at, decoy included - a corpse
+    // does not move, so the lead falls out to zero on its own.
+    const p = this._enemyCtx.player;
     const SPEED = 14;
     const LEAD = 0.9;
     let tx = p.pos.x;
@@ -8875,6 +8854,13 @@ class Game {
    * quietly wrong about the two spawners that exist precisely because the
    * player is in trouble.
    *
+   * PURE OF HEART is gated HERE rather than at the three callers, for exactly
+   * that reason: the relief net, the boss bleed, PINATA, FIRST FRUITS,
+   * CURTAIN CALL and the ordinary roll are six doors and a seventh is one
+   * totem away from being added. Money orbs are NOT pickups and never pass
+   * through here - the pick takes the recovery off the floor and leaves the
+   * economy standing.
+   *
    * The blink rides the clock it always did (see Powerup.update), so a plate
    * on a shortened fuse spends its last five seconds blinking exactly like any
    * other - which is the only warning the player gets and is worth more, not
@@ -8882,6 +8868,7 @@ class Game {
    */
   _addPickup(p) {
     if (!p) return p;
+    if (this.player.mods.noPickups > 0) return p;
     const k = this.player.mods.lootDespawn;
     if (k < 1) p.despawnTime *= k;
     this.powerups.push(p);
@@ -9173,16 +9160,53 @@ class Game {
     // resolve still slides them along whatever they walk into.
     const lure = this._findLure();
     this._lure = lure;
-    ctx.player = lure ? lure.decoy : this.player;
-    ctx.onHitPlayer = lure ? NO_HIT : this._onHitPlayer;
-    ctx.applyPlayerStatus = lure ? NO_STATUS : this._onPlayerStatus;
-    ctx.pullPlayer = lure ? NO_PULL : this._onPullPlayer;
-    ctx.nav = lure ? null : this.nav;
-    ctx.navBig = lure ? null : this.navBig;
+    // ---- POSE -------------------------------------------------------------
+    //
+    // The other thing that can hold the crowd's attention, and it is the
+    // monkey's trick pointed at the player's own body: while the window runs,
+    // the room believes it is AIMING AT A CORPSE. The stand-in is frozen where
+    // the player stood when the window opened - so the crowd converges on the
+    // body, exactly as the monkey's does on the toy - and the player is free
+    // to walk out from under it. The three player hooks are swapped to no-ops
+    // on the monkey's terms: "ignoring you" has to mean the whole surface,
+    // or a rusher that reached the spot would swing at whoever is standing in
+    // it.
+    //
+    // THE DECOY IS A COMPLETE STAND-IN, on the monkey's terms and for the
+    // monkey's reason: the wraith that reads `ctx.player.forwardInto` through
+    // a local alias is one grep away from being missed again.
+    //
+    // ROUNDS IN THE AIR ARE NOT RECALLED - see the possum entry in
+    // js/upgrades.js. A bullet does not know who it was for.
+    const possum = this.player.possumEnd > this.time;
+    if (possum && !this._possumDecoy) {
+      const P = this.player;
+      const at = new THREE.Vector3(P.pos.x, P.pos.y, P.pos.z);
+      const yaw = P.yaw;
+      this._possumDecoy = {
+        pos: at,
+        vel: new THREE.Vector3(),
+        yaw,
+        eyeH: 0,
+        eyeInto: (v) => v.copy(at).setY(0.4),
+        forwardInto: (v) => v.set(-Math.sin(yaw), 0, -Math.cos(yaw)),
+      };
+    } else if (!possum && this._possumDecoy) {
+      this._possumDecoy = null;
+    }
+    ctx.player = lure ? lure.decoy : (possum ? this._possumDecoy : this.player);
+    ctx.onHitPlayer = (lure || possum) ? NO_HIT : this._onHitPlayer;
+    ctx.applyPlayerStatus = (lure || possum) ? NO_STATUS : this._onPlayerStatus;
+    ctx.pullPlayer = (lure || possum) ? NO_PULL : this._onPullPlayer;
+    ctx.nav = (lure || possum) ? null : this.nav;
+    ctx.navBig = (lure || possum) ? null : this.navBig;
 
     // Refresh the route to the player once for the whole list, before anyone
     // reads it. The grid throttles itself; this call is cheap on most frames.
-    if (!lure) {
+    // Skipped under POSE as well, for the same reason the lure skips it: the
+    // grid is handed to nobody, and flooding it is work for a crowd that is
+    // walking toward a corpse.
+    if (!lure && !possum) {
       // Feet, not eyes - player.pos.y is the surface being stood on. The
       // flood is seeded from the player's cell and a cell picked at the wrong
       // height is a cell nothing can reach, which empties the whole field.
@@ -10662,6 +10686,18 @@ class Game {
         this.player.flowFx = false;
         this.effects.shockwave(this.player.pos, THEME_FLOW, 5, 0.5);
         this.sfx.pickupShield();
+      }
+      // POSE. The window opens at the worst moment a run has, and ten seconds
+      // of enemies walking past has to read as a reprieve rather than as the
+      // crowd having lost interest for no reason. A BANNER, unlike FLOW
+      // RELOAD's quiet ring, because this one opens once per health bar rather
+      // than once per magazine.
+      if (this.player.possumFx) {
+        this.player.possumFx = false;
+        this.ui.banner('PLAYING DEAD');
+        this.effects.shockwave(this.player.pos, THEME_POSSUM, 7, 0.6);
+        this.sfx.death(0.35);
+        this.pad.rumble(0.5, 0.5, 190, 3);
       }
       // UPDRAFT. A wisp under the feet on every frame the float is holding, so
       // the stamina the player is spending is visible where they are looking.

@@ -37,13 +37,13 @@ const TIMEOUT = Number(process.env.TIMEOUT || 300) * 1000;
 const WEIGHTS = {
   'accuracy.mjs': 23, 'active.mjs': 19, 'afflict.mjs': 33, 'aim.mjs': 21,
   'boss.mjs': 88, 'brine.mjs': 87, 'charge.mjs': 8, 'crouch.mjs': 52,
-  'drops.mjs': 15, 'ember.mjs': 46, 'flawless.mjs': 9, 'headshot.mjs': 7,
-  'hive.mjs': 60, 'icons.mjs': 1, 'melee.mjs': 76, 'money.mjs': 49,
-  'newpool.mjs': 38,
+  'drops.mjs': 15, 'ember.mjs': 46, 'fifthpool.mjs': 35, 'flawless.mjs': 9,
+  'fourthpool.mjs': 40, 'headshot.mjs': 7, 'hive.mjs': 60,
+  'icons.mjs': 1, 'melee.mjs': 76, 'money.mjs': 49, 'newpool.mjs': 38,
   'pad.mjs': 27, 'plague.mjs': 47, 'rime.mjs': 46, 'seeker.mjs': 8,
   'rebind.mjs': 35, 'smoke.mjs': 71, 'solar.mjs': 46, 'sprint.mjs': 56, 'status.mjs': 20,
   'strata.mjs': 46, 'tempest.mjs': 83, 'terrain.mjs': 14, 'themes.mjs': 1,
-  'verdant.mjs': 50, 'versus.mjs': 210, 'void.mjs': 73,
+  'thirdpool.mjs': 35, 'verdant.mjs': 50, 'versus.mjs': 210, 'void.mjs': 73,
 };
 const AVERAGE = 40;
 

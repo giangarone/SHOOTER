@@ -155,7 +155,7 @@ function makeTileTexture() {
   // seen at a grazing angle puts hundreds of texels into one screen pixel, and
   // nearest-sampling that crawls and sparkles as the camera moves - badly
   // enough to be the first thing you notice. The low-resolution buffer the
-  // pixel setting turns on makes it worse, not better. Mipmaps average the
+  // arena renders through makes it worse, not better. Mipmaps average the
   // distance down to something stable, and anisotropy keeps the ground ahead
   // from smearing to mush while it does.
   tex.magFilter = THREE.NearestFilter;

@@ -693,7 +693,7 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 159 upgrades and **the draw is flat** - every one of them has exactly
+The pool is 164 upgrades and **the draw is flat** - every one of them has exactly
 the same chance of appearing. It used to be weighted three ways, with rares
 locked out before wave 2 and cursed before wave 3, and two things were wrong
 with that: the player could not see it (the totem stopped printing a rarity line
@@ -1642,6 +1642,76 @@ the item then does, so it is worth exactly as much to PAY TO WIN's free press as
 to LANCE's - and it is the same shape BAILIFF and VITAL TRIGGER are, which is
 why all three are meant to be found by the same run.
 
+### The fifth pool
+
+Five more max-1 picks, and what holds them together is that each one answers a
+question about the **player** rather than about the gun: where they are sitting,
+what they refuse to carry, how close the run is to over, who just touched them,
+and what the other hand is holding. Four of the five take something the player
+already owns and change what it is WORTH, which is the trade the whole pool
+runs on.
+
+| Upgrade | Effect |
+| --- | --- |
+| DESK JOB | +20% damage, take 20% less. You can never sprint |
+| PURE OF HEART | No pickups appear, not ever. +20% damage, +20 max HP |
+| POSSUM | Below 15% health, enemies ignore you for 10s. Recharges at full health |
+| DEATH STARE | Melee attackers that hit you are petrified for 3s |
+| SOUTHPAW | During a reload you can keep firing single rounds at 20% rate |
+
+DESK JOB takes a **verb**. LEAD BALLOON takes the jump and the sprint is the
+one movement left whose absence changes how every room in the game is crossed -
+so +20% damage and -20% taken is priced at a life for a life, and the refusal
+sits at the ONE gate every sprint passes through (`Player._updateSprint`), which
+takes the slide with it, because a slide is entered out of a sprint. The dash
+and the jump keep working: taking the run is meant to change how the room is
+crossed, not to nail the player to the floor.
+
+PURE OF HEART empties the floor. Every pickup in the game - the kill roll, the
+relief net, the boss bleed, PINATA, FIRST FRUITS, CURTAIN CALL, the items that
+scatter and transmute - passes through **one door** (`Game._addPickup`), and
+this stands in it, so the whole recovery economy is switched off at the source
+rather than hunted door by door. **Money orbs are not pickups** and never pass
+through the door: the pick takes the health, the ammunition, the charge and the
+buffs off the floor and leaves the economy standing, which means the only way
+back to any of them is the shop and the streak.
+
+POSSUM is ORGAN GRINDER's trick pointed at the player's own body. Below an
+eighth of the bar the room believes the run is over: the crowd is handed a
+**stand-in frozen where the player stood** - the same complete decoy the monkey
+is, on the monkey's terms - so forty behaviours walk toward a corpse and
+nothing an enemy does can reach the player for ten seconds. Rounds already in
+the air are not recalled, because a bullet does not know who it was for. The
+window opens on the way DOWN through the line (hovering at 14% is still only
+the one window), and recharges only once the bar has been brought **all the way
+back** - the second performance costs the whole health bar the first one nearly
+spent. In two-player the deadline rides the versus snapshot like every other
+clock, so a benched player does not come back to a room that stopped believing
+them ten seconds ago.
+
+DEATH STARE is PETRIFY turned around: not a chance on a round but a certainty
+on a body. It pays **on the hit landing**, after the dodge and the ward - an
+attacker that got away with it is the one case where the pick does nothing,
+because petrifying on a whiff would make it a shield rather than a retaliation.
+A `source` is the whole test for "melee attacker": a gunner's round crosses the
+room through the projectile hook with no owner named, so only a body that came
+close enough to touch you pays for it. Bosses downgrade the stone to a heavy
+slow through the same resistance block CRYO PULSE hits - a boss that could be
+stopped outright for three seconds on every swing would be the only boss
+strategy there is.
+
+SOUTHPAW fills the one second in this game the trigger was locked out of. While
+a reload runs, **single rounds** still leave the muzzle at a fifth of the fire
+rate, billed to the reserve because the magazine is out of the gun - and
+everything about the branch is deliberately the worst gun in the game, because
+a full pattern from a half-loaded magazine would make the reload the strongest
+state to fight from rather than the weakest. The reload itself is untouched: it
+runs to its own seating, arms BREACH ROUND and tops the magazine exactly as
+before. The off-hand round reports no magazine at all (`magAtShot` zero, the
+BELT FED DREAM reading), which gates the parity picks the same way their own
+trap comment spells out, and it does not spend CANNONADE's armed first round -
+that one belongs to the first round that actually leaves the fresh magazine.
+
 ### Active items
 
 **One slot, one button, no menu.** Everything else a run collects is a number
@@ -2085,6 +2155,8 @@ npm run test:crouch
 npm run test:active
 npm run test:newpool
 npm run test:thirdpool
+npm run test:fourthpool
+npm run test:fifthpool
 ```
 
 The targeted suites, because the smoke test's bot rarely survives past the
