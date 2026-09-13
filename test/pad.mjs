@@ -30,7 +30,9 @@
 //    9. Vibration reaches the actuator, and stops when it is turned off.
 //   10. A pad unplugged mid-run pauses instead of leaving the player standing.
 //   11. CREATE opens the debug panel, which parks the run and dims the beam
-//       like every other screen with small caps to read.
+//       like every other screen with small caps to read. Its theme row pins
+//       the schedule - the two-click path to any theme at any wave that the
+//       one-at-a-time roster makes necessary.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8212;
@@ -553,12 +555,48 @@ try {
     // wall of small caps, which is a state, not an exception - nothing throws
     // and the panel itself works perfectly. `body.reading` is the class every
     // other screen sets, so it is what is asserted, not the opacity.
+    //
+    // The THEME ROW is exercised here too, end to end, because its whole
+    // reason to exist is that a theme that cannot be reached in two clicks
+    // is a theme that only the suites ever see: the row is dealt off the
+    // theme table, a click pins the schedule through the same setTheme() the
+    // suites drive, and OFF hands the order back. Asserted on the SCHEDULE
+    // ITSELF - which block themeForWave deals for the next wave - rather
+    // than on the button's class, which would pass with the wiring broken
+    // in exactly the way that matters.
     await tap(B.CREATE);
     t('create opens the debug panel',
       !g.ui.debugPanel.classList.contains('hidden'), g.state);
     t('the panel parks the run in paused', g.state === 'paused', g.state);
     t('the beam is down while the panel is up',
       document.body.classList.contains('reading'));
+    {
+      // One theme button per theme, plus OFF. Counted from the table the
+      // buttons were dealt from, not a literal - a theme landing is the row
+      // growing, and the suite should not have to be told.
+      const { THEMES, themeForWave } = await import('./js/themes.js');
+      const btns = g.ui.debugThemes.querySelectorAll('button');
+      const off = btns[0];
+      t('the theme row carries every theme plus OFF',
+        btns.length === Object.keys(THEMES).length + 1,
+        'buttons ' + btns.length + ' themes ' + Object.keys(THEMES).length);
+      // The schedule itself, read the way the wave builder will read it:
+      // whichever theme the next block draws, whatever the deck dealt. This,
+      // not the button's class, is the thing the row exists to change.
+      const nextBlockTheme = () => themeForWave(g._themeSeed, g.wave + 1, g._forcedTheme);
+      t('unpinned, the deck owns the schedule', g._forcedTheme === null);
+      const emberBtn = [...btns].find((b) => b.textContent === 'EMBER');
+      emberBtn.click();
+      t('a click pins the schedule to that theme',
+        g._forcedTheme === 'ember' && nextBlockTheme() === 'ember',
+        'forced=' + g._forcedTheme + ' next=' + nextBlockTheme());
+      t('the pin is drawn on the row',
+        emberBtn.classList.contains('pinned') && !off.classList.contains('pinned'));
+      off.click();
+      t('OFF hands the order back to the deck',
+        g._forcedTheme === null, 'forced=' + g._forcedTheme);
+      t('and the row says so', off.classList.contains('pinned'));
+    }
     await tap(B.CREATE);
     t('create closes it again', g.ui.debugPanel.classList.contains('hidden'));
     t('and the run resumes', g.state === 'playing', g.state);

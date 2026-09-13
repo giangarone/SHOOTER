@@ -1991,6 +1991,38 @@ body.pad-mode #game canvas { cursor: none; }
    is not "have I got this", so it is the one that gets a fill. */
 .dwave.now { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 
+/* ---- the theme row ------------------------------------------------------ */
+
+/* The wave row's twin, one button per theme plus the OFF that un-pins. Names
+   rather than numbers - TEMPEST is the word the room will be called by - on
+   the same line-wrapping grid, so the two rows read as one control: pick a
+   block of five, then pick which theme it is. */
+#debug-themes {
+  display: grid; gap: var(--u);
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 21), 1fr));
+}
+.dtheme {
+  font: inherit; font-size: 8px; cursor: pointer;
+  color: var(--text); background: var(--fill);
+  border: 2px solid var(--line);
+  padding: calc(var(--u) * 1.5) 0;
+  overflow-wrap: anywhere;
+}
+.dtheme:hover { border-color: var(--cyan); color: var(--cyan); }
+.dtheme.off { color: var(--dim); }
+/* OFF PINNED IS GOLD, because unpinned is the ordinary state of a real run
+   and the row should say so as plainly as it says a theme is held. A theme
+   pinned draws in its OWN colour - the same hue rig.js washes the arena with
+   - so the button that is held reads as the five waves it is about to deal. */
+.dtheme.off.pinned { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.dtheme.pinned {
+  background:
+    linear-gradient(0deg, color-mix(in srgb, var(--tint) 22%, transparent), transparent),
+    var(--fill);
+  color: var(--tint);
+  border-color: var(--tint);
+}
+
 /* ---- the item cards ---------------------------------------------------- */
 
 /* WIDE ENOUGH FOR THE WORDS. The tiles used to be icon-and-name squares

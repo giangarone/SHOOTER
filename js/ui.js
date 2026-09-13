@@ -99,11 +99,13 @@ export class UI {
     this.debugPassives = $('debug-passives');
     this.debugActives = $('debug-actives');
     this.debugWaves = $('debug-waves');
+    this.debugThemes = $('debug-themes');
     this.debugWaveNow = $('debug-wave-now');
     this.debugWaveInput = $('debug-wave-input');
     this.debugWaveGo = $('debug-wave-go');
     this._debugTiles = null;
     this._debugWaveEls = null;
+    this._debugThemeEls = null;
     this._c = {};        // last value written per HUD field
     this._buffEls = {};  // lazily created buff icons, keyed by buff name
     // Which active-item chips were drawn last frame - see setItemBuffs. The
@@ -1022,13 +1024,19 @@ export class UI {
   // and every open after it only rewrites the `on` class and the tier count.
   //
   // `passives` and `actives` are [{ id, name, theme, effects }]; `on` carries
-  // the four things a click can mean. Nothing here knows what a wave or an
+  // the five things a click can mean. Nothing here knows what a wave or an
   // upgrade IS - main.js owns all of that, and this owns which pixel was
   // clicked.
-  buildDebug(passives, actives, on) {
+  //
+  // `themes` is the THEME table's own order, [{ key, name, color }] - dealt
+  // in here once so a theme landing in the table is a theme this row grows
+  // without either file being edited, which is the whole reason the panel
+  // does not carry its own list of them.
+  buildDebug(passives, actives, themes, on) {
     if (this._debugTiles) return;
     this._debugTiles = {};
     this._debugWaveEls = [];
+    this._debugThemeEls = [];
     for (const def of passives) {
       this.debugPassives.appendChild(this._debugTile(def, on.passive, on.dropPassive));
     }
@@ -1044,6 +1052,28 @@ export class UI {
       b.addEventListener('click', () => on.wave(n));
       this.debugWaves.appendChild(b);
       this._debugWaveEls.push(b);
+    }
+    // The wave row's twin. OFF first, because it is the row's way back to the
+    // run the deck dealt and should read as one of the choices rather than as
+    // an undo: a theme that is pinned stays pinned across jumps, and the way
+    // out has to be as near as the way in.
+    const off = document.createElement('button');
+    off.className = 'dtheme off';
+    off.textContent = 'OFF';
+    off.addEventListener('click', () => on.theme(null));
+    this.debugThemes.appendChild(off);
+    this._debugThemeEls.push(off);
+    for (const t of themes) {
+      const b = document.createElement('button');
+      b.className = 'dtheme';
+      // The tint is the theme's own room colour - the same one rig.js washes
+      // the arena with - handed to the stylesheet rather than written into
+      // it, the same handoff --tint makes for an owned item card.
+      b.style.setProperty('--tint', '#' + t.color.toString(16).padStart(6, '0'));
+      b.textContent = t.name;
+      b.addEventListener('click', () => on.theme(t.key));
+      this.debugThemes.appendChild(b);
+      this._debugThemeEls.push(b);
     }
     const jump = () => {
       const n = Math.max(1, Math.min(999, Math.floor(+this.debugWaveInput.value || 1)));
@@ -1113,8 +1143,10 @@ export class UI {
    * @param {object} owned  { [passive id]: stacks } - the player's own map
    * @param {string|null} item  the carried active item's id
    * @param {number} wave   the wave the run is currently in
+   * @param {string|null} theme  the theme every block is pinned to, or null
+   *   when the run's dealt order owns the schedule
    */
-  refreshDebug(owned, item, wave) {
+  refreshDebug(owned, item, wave, theme) {
     if (!this._debugTiles) return;
     for (const [id, t] of Object.entries(this._debugTiles)) {
       const n = id === item ? 1 : (owned[id] || 0);
@@ -1132,6 +1164,15 @@ export class UI {
     this.debugWaveInput.value = w;
     for (let i = 0; i < this._debugWaveEls.length; i++) {
       this._debugWaveEls[i].classList.toggle('now', i + 1 === w);
+    }
+    // The pinned theme lights its button and every other one goes quiet,
+    // including OFF - so a pin is visible from across the room rather than
+    // remembered from the click that made it. Index 0 is OFF by construction
+    // (see buildDebug), which is why the pinned key's own comparison against
+    // null is the whole test.
+    for (let i = 0; i < this._debugThemeEls.length; i++) {
+      this._debugThemeEls[i].classList.toggle('pinned',
+        (i === 0) === (theme === null));
     }
   }
 
