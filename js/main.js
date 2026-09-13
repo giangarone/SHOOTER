@@ -68,7 +68,7 @@ import {
   setShareHook, setPoisonStackCap, projStats, projLook,
 } from './enemy.js';
 import { Effects } from './effects.js';
-import { CrtPass, PIXEL_STEPS, PIXEL_LABELS } from './crt.js';
+import { CrtPass } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
@@ -446,16 +446,6 @@ function viewportAspect() {
 const SHAKE_PIPS = 8;
 const SHAKE_MAX = 2;
 const SHAKE_STEP = SHAKE_MAX / SHAKE_PIPS;
-
-// How coarsely the arena is drawn - an index into PIXEL_STEPS in crt.js. The
-// game's icons, HUD and money orbs have always been pixel art; this is what
-// lets the 3D half of it join in, by rendering the scene into a smaller buffer
-// and letting the tube pass magnify it with no filtering.
-//
-// SUBTLE by default. FULL is the strongest look and it is a real cost to a
-// player trying to identify an enemy across a 23m arena, so the game ships at
-// the step that reads as pixel art without arguing with the aiming.
-const PIXEL_DEFAULT = 1;
 
 // --- economy ---
 // Seconds a kill chain survives without a new kill.
@@ -1066,22 +1056,6 @@ class Game {
         this._setShakeScale(Math.max(0, Math.min(SHAKE_MAX, Math.round(n / SHAKE_STEP) * SHAKE_STEP)));
       }
     } catch {}
-    // Pixel size, read before the first frame so the arena is never shown once
-    // at the wrong coarseness on the way in. Same null-versus-zero care as the
-    // shake above, and for the same reason: index 0 is OFF, which is a real
-    // choice a player can have made.
-    this._pixelStep = PIXEL_DEFAULT;
-    try {
-      const raw = localStorage.getItem('va-pixel');
-      const n = Number(raw);
-      if (raw !== null && raw !== '' && Number.isInteger(n) && n >= 0 && n < PIXEL_STEPS.length) {
-        this._pixelStep = n;
-      }
-    } catch {}
-    this.crt.setPixelScale(this._pixelStep);
-    // The orbs were sized a few lines above against the full-size buffer, and
-    // the setting just changed what that is. Same reason _stepPixel re-sizes.
-    this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
     // ---- the controller ---------------------------------------------------
     //
     // The pad is POLLED, not listened to (the Gamepad API has no events), so
@@ -2012,28 +1986,6 @@ class Game {
     });
     this._syncShake();
 
-    // Pixel size. The same stepper as the screenshake above, down to the pips
-    // being built once - see there for why.
-    this._pixelPips = [];
-    const pixRow = document.getElementById('pixel-pips');
-    for (let i = 0; i < PIXEL_STEPS.length - 1; i++) {
-      const pip = document.createElement('i');
-      pixRow.appendChild(pip);
-      this._pixelPips.push(pip);
-    }
-    this._pixelVal = document.getElementById('pixel-val');
-    this._pixelDown = document.getElementById('btn-pixel-down');
-    this._pixelUp = document.getElementById('btn-pixel-up');
-    this._pixelDown.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepPixel(-1);
-    });
-    this._pixelUp.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._stepPixel(1);
-    });
-    this._syncPixel();
-
     // ---- the controller rows ------------------------------------------------
     //
     // Hidden until a DualSense has been seen (body.pad-seen, set in
@@ -2233,7 +2185,8 @@ class Game {
       this.renderer.setSize(innerWidth, innerHeight);
       this.crt.setSize(innerWidth, innerHeight);
       // Orb point sizes are in pixels, so they scale off the height of the
-      // buffer the scene lands in - which the pixel setting can shrink.
+      // buffer the scene lands in - the low-resolution one the tube pass
+      // magnifies, which a resize re-derives from the panel.
       this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
     });
   }
@@ -2452,36 +2405,6 @@ class Game {
     this._shakeVal.classList.toggle('off', v === 0);
     this._shakeDown.disabled = v <= 0;
     this._shakeUp.disabled = v >= SHAKE_MAX;
-  }
-
-  // Pixel size, applied immediately for the same reason the shake is: the
-  // setting is reachable from the pause screen mid-run, and the whole way to
-  // choose between four steps of this is to watch the arena change behind the
-  // menu while pressing the key.
-  _stepPixel(dir) {
-    const next = Math.max(0, Math.min(PIXEL_STEPS.length - 1, this._pixelStep + dir));
-    if (next === this._pixelStep) return;
-    this._pixelStep = next;
-    this.crt.setPixelScale(next);
-    // Coarser buffer, fewer pixels to an orb. Anything measured in pixels has
-    // to be told, or the orbs keep the size they had at the old resolution and
-    // come out scaled by the ratio between the two.
-    this.money.setViewport(this.crt.sceneHeight, this.camera.fov);
-    try { localStorage.setItem('va-pixel', String(next)); } catch {}
-    this._syncPixel();
-  }
-
-  _syncPixel() {
-    const v = this._pixelStep;
-    for (let i = 0; i < this._pixelPips.length; i++) {
-      // Three pips for four steps, because OFF is no pips lit rather than one
-      // - the same reading the screenshake's OFF gets.
-      this._pixelPips[i].className = i < v ? (i >= this._pixelPips.length - 1 ? 'on hot' : 'on') : '';
-    }
-    this._pixelVal.textContent = PIXEL_LABELS[v];
-    this._pixelVal.classList.toggle('off', v === 0);
-    this._pixelDown.disabled = v <= 0;
-    this._pixelUp.disabled = v >= PIXEL_STEPS.length - 1;
   }
 
   // The sub-screens are LAYERED over whichever menu opened them - the start
