@@ -10,10 +10,9 @@
 // barrel used here nothing gives the seam away.
 //
 // Four passes per frame, in order:
-//   1. the scene, into a half-float target - AT A LOWER RESOLUTION than the
-//      canvas when the pixel setting asks for it, which is what makes the
-//      arena itself pixel art rather than a smooth 3D game with pixel art
-//      hanging in it
+//   1. the scene, into a half-float target - at a fixed lower resolution than
+//      the canvas, which is what makes the arena itself pixel art rather than
+//      a smooth 3D game with pixel art hanging in it
 //   2. a bright-pass extract into a quarter-res target
 //   3. two separable blurs of that, ping-ponged
 //   4. the composite: barrel warp, radial aberration, glow, dither, edge mask
@@ -52,16 +51,18 @@ const LEVELS = 16;
 // to be a halo, and running it at full res costs sixteen times the fill for a
 // result nobody can tell apart.
 const GLOW_SCALE = 4;
-// The vertical resolutions the pixel setting steps through. 0 is off - the
-// scene renders at the panel's own resolution, the way it always did.
+// The vertical resolution the scene is drawn at, in lines - SUBTLE, the
+// coarseness the game has always shipped at, fixed here now that it is no
+// longer a setting. Stronger steps exist in the git history if the look is
+// ever revisited.
 //
-// TARGETS, NOT EXACT SIZES. A fraction of the panel would give a 4K monitor
-// art-pixels four times the size of a laptop's, so these are stated as line
-// counts - but the buffer is NOT sized to them directly. See setSize: the
-// scale factor is rounded to a whole number first and the resolution follows
-// from that, because a fractional one is worse than a wrong one.
-export const PIXEL_STEPS = [0, 720, 540, 360];
-// Multisamples on the scene buffer while the pixel setting is on.
+// A TARGET, NOT AN EXACT SIZE. A fraction of the panel would give a 4K monitor
+// art-pixels four times the size of a laptop's, so this is stated as a line
+// count - but the buffer is NOT sized to it directly. See setSize: the scale
+// factor is rounded to a whole number first and the resolution follows from
+// that, because a fractional one is worse than a wrong one.
+const SCENE_LINES = 720;
+// Multisamples on the scene buffer.
 //
 // THIS IS NOT A CONTRADICTION OF THE PIXEL LOOK, and it is worth being clear
 // about why. MSAA anti-aliases WITHIN the low-resolution buffer: an art-pixel
@@ -73,7 +74,7 @@ export const PIXEL_STEPS = [0, 720, 540, 360];
 // a given art-pixel stops changing its mind every frame.
 //
 // It earns it on thin bright geometry, which is where the flicker was: with a
-// camera panning slowly past the wall light strips at the coarsest setting,
+// camera panning slowly past the wall light strips at this coarseness,
 // frame-to-frame jitter halved and the strips were DRAWN roughly twice as
 // often - most of the popping was a strip vanishing entirely between frames
 // rather than merely shimmering.
@@ -85,16 +86,11 @@ export const PIXEL_STEPS = [0, 720, 540, 360];
 // enough frame time on a software rasteriser to start tipping test/melee.mjs,
 // which is frame-rate sensitive - not a real regression, but a fair sign that
 // the last two samples were being paid for and not used.
-//
-// Only while the setting is ON. With it off the scene buffer is the full
-// device resolution, where the aliasing is far less visible and multisampling
-// a half-float 2560x1440 target costs tens of megabytes for it.
 const SCENE_SAMPLES = 2;
 // The coarsest an art-pixel is ever allowed to get, in device pixels. Only
 // reachable on a very tall panel, and it is a sanity rail rather than a taste
-// decision - past this the arena is unplayable at any setting.
+// decision - past this the arena is unplayable.
 const MAX_PIXEL = 8;
-export const PIXEL_LABELS = ['OFF', 'SUBTLE', 'MEDIUM', 'FULL'];
 
 const QUAD_VERT = /* glsl */ `
   varying vec2 vUv;
@@ -239,19 +235,24 @@ export class CrtPass {
     // Half float, because the scene arrives here tone-mapped but still linear
     // and an 8-bit hop would band every gradient the rig throws on a wall.
     //
+    // NEAREST, because the whole point is the magnification: the scene is
+    // drawn at a fixed 720 lines and blown up to the panel, and a texel has to
+    // come out with an edge rather than smeared. The glow targets below keep
+    // linear - they are blurs.
+    //
     // Note that the renderer's own `antialias: true` (main.js) has applied to
     // NOTHING since this pass existed: that flag multisamples the default
     // framebuffer, and the scene has been going into this target instead.
     // Anti-aliasing the scene is `samples` on here - see SCENE_SAMPLES.
     const opts = {
       type: THREE.HalfFloatType,
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
       depthBuffer: true,
     };
-    this._scene_rt = new THREE.WebGLRenderTarget(1, 1, opts);
-    this._glowA = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: false });
-    this._glowB = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: false });
+    this._scene_rt = new THREE.WebGLRenderTarget(1, 1, { ...opts, samples: SCENE_SAMPLES });
+    this._glowA = new THREE.WebGLRenderTarget(1, 1, { ...opts, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+    this._glowB = new THREE.WebGLRenderTarget(1, 1, { ...opts, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
 
     // toneMapped: false on every material here. The scene's own materials
     // already applied ACES on the way into the target; running it again on
@@ -292,11 +293,8 @@ export class CrtPass {
       depthWrite: false,
     });
 
-    // Which PIXEL_STEPS index is in force, and the CSS size last handed in.
-    // Both are kept because the setting can change without a resize and a
-    // resize can happen without the setting changing, and either one has to be
-    // able to rebuild the targets on its own.
-    this._step = 0;
+    // The CSS size last handed in, kept because a resize has to be able to
+    // rebuild the targets on its own.
     this._w = 1;
     this._h = 1;
 
@@ -306,7 +304,8 @@ export class CrtPass {
 
   /**
    * The height, in real pixels, of the buffer the SCENE is drawn into - which
-   * since the pixel setting existed is no longer the canvas height.
+   * is not the canvas height: the arena renders at 720 lines and the tube pass
+   * magnifies it.
    *
    * Anything sizing itself in pixels rather than in metres has to ask this
    * rather than the canvas, because gl_PointSize and friends are measured in
@@ -317,32 +316,8 @@ export class CrtPass {
     return this._scene_rt.height;
   }
 
-  /**
-   * Pick a step by INDEX into PIXEL_STEPS - not by line count, because the
-   * index is also the floor on the scale factor (see setSize). Safe to call at
-   * any time, including mid-run from the settings screen.
-   */
-  setPixelScale(step) {
-    if (step === this._step) return;
-    const wasOn = this._step > 0;
-    this._step = step;
-    if (wasOn !== (step > 0)) {
-      // The filter and the sample count both change with the mode, and a
-      // render target's texture is already on the GPU by now. Dropping it is
-      // the honest way to get either applied - three rebuilds it on the next
-      // bind, once.
-      const on = step > 0;
-      this._scene_rt.texture.magFilter = on ? THREE.NearestFilter : THREE.LinearFilter;
-      this._scene_rt.texture.minFilter = on ? THREE.NearestFilter : THREE.LinearFilter;
-      this._scene_rt.texture.generateMipmaps = false;
-      this._scene_rt.samples = on ? SCENE_SAMPLES : 0;
-      this._scene_rt.dispose();
-    }
-    this.setSize(this._w, this._h);
-  }
-
   // CSS pixels in; the targets are sized in device pixels, then divided down
-  // again by whatever the pixel setting asks for.
+  // to the art-pixel grid.
   setSize(width, height) {
     this._w = width;
     this._h = height;
@@ -353,8 +328,8 @@ export class CrtPass {
     // AN ART-PIXEL IS A WHOLE NUMBER OF DEVICE PIXELS, and this line is the
     // whole reason the pass looks the way it does.
     //
-    // Sizing the buffer to the step's line count directly is the obvious thing
-    // and it is wrong. 720 lines inside an 840-pixel-tall panel is a 1.167x
+    // Sizing the buffer to the line count directly is the obvious thing and it
+    // is wrong. 720 lines inside an 840-pixel-tall panel is a 1.167x
     // magnification, so a nearest-neighbour blow-up gives art-pixels that are
     // one device pixel wide six times and two device pixels wide once, in a
     // pattern that drifts across the screen. On a wall or a floor - anything
@@ -363,14 +338,9 @@ export class CrtPass {
     // there is exactly one cure: round the SCALE and derive the resolution from
     // it, rather than rounding the resolution and living with the scale.
     //
-    // The index is the floor, so the four steps stay four steps. Without it a
-    // small window rounds two different line counts to the same factor and the
-    // player presses + to no effect.
-    let scale = 1;
-    if (this._step > 0) {
-      const want = Math.round(dh / PIXEL_STEPS[this._step]);
-      scale = Math.max(this._step, Math.min(MAX_PIXEL, want));
-    }
+    // The floor of 1 is for a window shorter than the target itself: the scene
+    // goes back to full panel resolution rather than to a divide by a fraction.
+    const scale = Math.max(1, Math.min(MAX_PIXEL, Math.round(dh / SCENE_LINES)));
     const h = Math.max(1, Math.round(dh / scale));
     const w = Math.max(1, Math.round(dw / scale));
     this._scene_rt.setSize(w, h);
@@ -379,21 +349,16 @@ export class CrtPass {
     // grid. uPixel is the size of one art-pixel in device pixels; the Bayer
     // matrix in the composite divides gl_FragCoord by it. Get this wrong and
     // the 4x4 ordered dither runs several times inside a single art-pixel,
-    // speckling the one thing this whole setting exists to make solid.
+    // speckling the one thing this whole look exists to make solid.
     //
     // It has to be the WHOLE number above, not a measured ratio, and for the
     // sharper half of the same reason: bayer2 is mod(2x + 3y, 4), a diagonal
     // ramp, so a dither cell that does not divide the pixel grid evenly lays a
-    // second diagonal moire over the first one. With the setting off there is
-    // no art-pixel and this is the device pixel ratio it has always been.
-    // scale === 1 means the step asked for less than this panel already is, so
-    // there is no art-pixel to land on and the dither goes back to the device
-    // ratio - otherwise a SUBTLE that happens to be doing nothing would still
-    // dither differently from OFF.
+    // second diagonal moire over the first one.
     this._composite.uniforms.uPixel.value = scale > 1 ? scale : dpr;
 
     // Glow off the SCENE target rather than the canvas: the bloom is a halo
-    // around what was actually drawn, and at 360 lines a quarter-res blur of
+    // around what was actually drawn, and at 720 lines a quarter-res blur of
     // the panel would be four times the fill for a blur of an image that no
     // longer has that much in it.
     const gw = Math.max(1, Math.floor(w / GLOW_SCALE));
