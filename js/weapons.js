@@ -94,8 +94,9 @@ function buildPulseRifle() {
 // Deliberately a BAR and not a "P1" glyph. At this size, in a first-person
 // view, two characters are a smear; a solid band of one colour is legible in
 // peripheral vision, which is where it will actually be read. The HUD's own
-// P1/P2 readout is what names it - see UI.setVersus - and the two are the same
-// two colours, so the band is a colour the player has already been taught.
+// P1..P8 readout is what names it - see UI.setVersus - and the two read the
+// same seat's colour, so the band is a colour the player has already been
+// taught.
 const TAG_W = 0.006;
 const TAG_H = 0.05;
 const TAG_L = 0.17;

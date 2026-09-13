@@ -510,11 +510,18 @@ const HANDOFF_SWAP = 0.55;
 // The players, in the world. See PLAYER_INK in ui.js for the DOM's copy - the
 // two lists are read in step by index and must stay the same length.
 //
-// FOUR, AND IN THIS ORDER. The first two are the pair the mode shipped with,
-// so a two-player match still looks exactly as it did; the green and the amber
-// are picked to survive the CRT filter, which eats anything close to the
-// arena's own blue-grey - see crt.js.
-const PLAYER_COLOR = [0x4ef3ff, 0xff3b30, 0x00e676, 0xffb300];
+// EIGHT, AND IN THIS ORDER. The first two are the pair the mode shipped with,
+// so a two-player match still looks exactly as it did; the rest are picked to
+// survive the CRT filter, which eats anything close to the arena's own
+// blue-grey - see crt.js. Every seat has its own hue: with eight around one
+// screen the whole point of the band on the gun and the colour on the readout
+// is that no two people in the room share one, and a list shorter than the
+// menu would hand seats 5-8 the same colours as 1-4 while `label()` keeps
+// promising they are different people.
+const PLAYER_COLOR = [
+  0x4ef3ff, 0xff3b30, 0x00e676, 0xffb300,
+  0xff2fb0, 0xb14aed, 0x3d6bff, 0xff8a1f,
+];
 // Double Dash: how close together two presses of the SAME movement key have to
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
@@ -1637,6 +1644,12 @@ class Game {
       // The lid's height, for the UPDRAFT ceiling assertion - a test must not
       // hard-code a number the arena owns.
       this.__ceilForTest = CEIL_Y;
+      // The seat palette. Read through setPlayerTag rather than as data: the
+      // whole property worth testing is that every seat the menu offers has
+      // its own colour ON THE GUN, which a captured array alone cannot show -
+      // and main.js and ui.js each hold a copy, so the test needs this one to
+      // compare against the DOM's.
+      this.__playerColorsForTest = PLAYER_COLOR;
       /**
        * WAIT ON THE GAME CLOCK, not on the wall clock. For test/*.mjs.
        *
@@ -1908,8 +1921,8 @@ class Game {
       e.stopPropagation();
       onStart();
     });
-    // The second mode. It ASKS HOW MANY FIRST rather than starting: two,
-    // three and four are different games and the count cannot be changed once
+    // The second mode. It ASKS HOW MANY FIRST rather than starting: two
+    // through eight are different games and the count cannot be changed once
     // the first snapshot is taken.
     //
     // stopPropagation for the same reason every other button on this overlay
@@ -1920,8 +1933,10 @@ class Game {
       this._audioGesture();
       if (this.state === 'menu') this.ui.showPlayerCount();
     });
-    // One handler per count, off the button's own data-count, so adding a
-    // fifth seat one day is markup and a colour and nothing here.
+    // One handler per count, off the button's own data-count, so the seat
+    // cap is markup: the buttons below are the whole list of counts the game
+    // offers, and the only other thing that has to agree with them is the
+    // colour palette - PLAYER_COLOR / PLAYER_INK.
     for (const btn of document.querySelectorAll('#overlay-players [data-count]')) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2980,11 +2995,11 @@ class Game {
    * RESTART, from the button or from OPTIONS. One implementation because the
    * two must not disagree about what a finished VERSUS match restarts into.
    *
-   * A solo death goes straight back into a run - that is the arcade's own
-   * rhythm. A finished match goes back to the MENU instead: the next one needs
-   * two people ready with a controller between them, and dropping Player 1
-   * into wave 1 the instant someone reaches for the obvious button is not
-   * that.
+    * A solo death goes straight back into a run - that is the arcade's own
+    * rhythm. A finished match goes back to the MENU instead: the next one
+    * needs the room to agree on how many are playing, and dropping Player 1
+    * into wave 1 the instant someone reaches for the obvious button is not
+    * that.
    */
   _restartFromOver() {
     if (this.match) {
@@ -3348,7 +3363,7 @@ class Game {
     this.mode = mode;
     // VERSUS IS A MATCH, NOT A RUN. The wave counter below is still the one
     // the arena reads; the match owns whose wave it is and what is riding on
-    // it, and both players' saved runs hang off it.
+    // it, and every player's saved run hangs off it.
     this.match = mode === 'versus' ? new VersusMatch(count) : null;
     this.player.reset();
     this._clearEntities();
@@ -3387,7 +3402,7 @@ class Game {
     this.ui.resetCache();
     this.ui.showHud();
     if (this.match) {
-      // Both slots seeded off the same freshly reset player, so the first
+      // Every slot seeded off the same freshly reset player, so the first
       // handoff restores a snapshot exactly like every later one does rather
       // than being a special case that nothing else exercises.
       for (let i = 0; i < this.match.count; i++) {
@@ -3449,8 +3464,8 @@ class Game {
     this.pad.stopRumble();
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     // A MATCH ENDS WITH THE RUN THAT WAS ABANDONED. There is no half a versus
-    // match to come back to: both slots are the same run seen twice, and the
-    // player who did not press EXIT is in the room to argue about it.
+    // match to come back to: the slots are one run seen N times, and the
+    // players who did not press EXIT are in the room to argue about it.
     this.mode = 'solo';
     this.match = null;
     this._pass = false;
@@ -3600,7 +3615,7 @@ class Game {
     this.ui.setHandoffCount(Math.max(0, Math.ceil(this.interT)));
   }
 
-  /** The other player's run comes back, while nothing is looking at it. */
+  /** The incoming player's run comes back, while nothing is looking at it. */
   _swapRun() {
     const m = this.match;
     restoreRun(this, m.slots[m.active]);
@@ -4753,20 +4768,20 @@ class Game {
     // ORB_LIFETIME while the player shops. Delayed by the length of the arc so
     // the shower is still SEEN to land before it streams back in.
     this.money.vacuum(BOSS_ORB_SWEEP_DELAY);
-    // MIRRORED, AND SILENTLY. Only one of the two players is holding the
+    // MIRRORED, AND SILENTLY. Only one of the players is holding the
     // controller for a boss, and letting the bounty follow the controller
     // would make the run's largest single payout a matter of whose turn wave
-    // ten happened to be. The other player's balance is simply larger when
-    // they next look at it - announcing it would be telling them about a fight
-    // they did not have. Scaled by THEIR Midas and THEIR flawless streak, not
-    // this player's, which is why the snapshot caches both multipliers: a
-    // benched build is plain data, and neither number can be recomputed from
-    // it once the live Player belongs to somebody else.
-    // EVERY benched survivor, not just "the other one". With four players the
-    // boss is one turn in four, and a bounty that followed the controller
-    // would make the run's largest single payout a matter of whose turn wave
-    // ten happened to be - three times over. An eliminated slot is skipped
-    // because it is never restored: paying it is paying nobody.
+    // ten happened to be. The other players' balances are simply larger when
+    // they next look at them - announcing it would be telling them about a
+    // fight they did not have. Scaled by THEIR Midas and THEIR flawless
+    // streak, not this player's, which is why the snapshot caches both
+    // multipliers: a benched build is plain data, and neither number can be
+    // recomputed from it once the live Player belongs to somebody else.
+    // EVERY benched survivor, not just "the other one". With eight players
+    // the boss is one turn in eight, and a bounty that followed the
+    // controller would make the run's largest single payout a matter of whose
+    // turn wave ten happened to be - seven times over. An eliminated slot is
+    // skipped because it is never restored: paying it is paying nobody.
     if (this.match) {
       for (const i of this.match.alive) {
         if (i === this.match.active) continue;
@@ -5039,10 +5054,10 @@ class Game {
    * players still in it.
    *
    * WHY MONEY SCALES WITH IT. The wave counter goes up on every clear, so a
-   * player in a four-handed match plays roughly one wave in four - but the
+   * player in an eight-handed match plays roughly one wave in eight - but the
    * shop's prices are keyed to the WAVE, not to how many of them they fought
    * (see blockPrice in upgrades.js). Left alone they would meet wave-twenty
-   * prices on a quarter of a run's income, and the box would simply be out of
+   * prices on an eighth of a run's income, and the box would simply be out of
    * reach for the whole match. Paying each of them N times per kill puts a
    * full run's income against a full run's prices.
    *
@@ -5081,8 +5096,8 @@ class Game {
     //
     // What is RETURNED does not, because it is the item charge (see
     // _collectOrb), and charge is earned and spent inside a single fight.
-    // Multiplying it would not be compensating a four-handed player for the
-    // waves they never played - it would hand them four times the active-item
+    // Multiplying it would not be compensating a many-handed player for the
+    // waves they never played - it would hand them N times the active-item
     // uptime in the wave they are actually in, which is just being stronger.
     this.money.spawn(pos, split ? paid * this._playerMult() : paid,
       maxOrbs, spread, hold);

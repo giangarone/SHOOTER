@@ -345,11 +345,13 @@
        class change and CIRCLE, Escape and the click-through guard already know
        what to do with it.
 
-       THREE EQUAL BUTTONS AND NO DEFAULT. Two, three and four are different
-       games rather than a setting with a usual answer, and the count cannot be
-       changed once the match has taken its first snapshot - so this is the one
-       screen in the game where making the player choose is the point. The
-       count rides on data-count; main.js reads it off the button. -->
+       SEVEN EQUAL BUTTONS AND NO DEFAULT. Two through eight are different
+       games rather than a setting with a usual answer, and the count cannot
+       be changed once the match has taken its first snapshot - so this is the
+       one screen in the game where making the player choose is the point.
+       The count rides on data-count; main.js reads it off the button, and the
+       button list is the cap - a ninth seat is markup and a colour and
+       nothing else. -->
   <div id="overlay-players" class="overlay hidden">
     <div class="marquee plate">
       <h1>HOW MANY?</h1>
@@ -360,6 +362,10 @@
       <button class="opt-btn" data-count="2">2 PLAYERS</button>
       <button class="opt-btn" data-count="3">3 PLAYERS</button>
       <button class="opt-btn" data-count="4">4 PLAYERS</button>
+      <button class="opt-btn" data-count="5">5 PLAYERS</button>
+      <button class="opt-btn" data-count="6">6 PLAYERS</button>
+      <button class="opt-btn" data-count="7">7 PLAYERS</button>
+      <button class="opt-btn" data-count="8">8 PLAYERS</button>
     </div>
     <div class="opt-row">
       <button id="btn-players-back" class="opt-btn">BACK</button>
