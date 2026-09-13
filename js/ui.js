@@ -10,7 +10,7 @@ import { pixelIconCanvas } from './pixelicons.js';
 import { itemCells } from './items.js';
 import { controllerGlyph } from './padmenu.js';
 
-// The two player colours, as CSS. The world-space pair lives in main.js beside
+// The player colours, as CSS. The world-space pair lives in main.js beside
 // the code that lights the gun; these are the same hues written the way the
 // document needs them. TWO copies now, not three: the stylesheet used to carry
 // a #handoff.p1 / .p2 pair and it does not any more, because a palette that
@@ -18,8 +18,12 @@ import { controllerGlyph } from './padmenu.js';
 // that will be wrong in one of them. The caption's --pc is written from here.
 //
 // READ IN STEP WITH PLAYER_COLOR in main.js, by index. Same length, same
-// order.
-const PLAYER_INK = ['#4ef3ff', '#ff3b30', '#00e676', '#ffb300'];
+// order - and the length is the seat cap, so the menu may not offer more
+// players than this list has colours for.
+const PLAYER_INK = [
+  '#4ef3ff', '#ff3b30', '#00e676', '#ffb300',
+  '#ff2fb0', '#b14aed', '#3d6bff', '#ff8a1f',
+];
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 
 export class UI {
@@ -115,8 +119,8 @@ export class UI {
     // not torn down and redrawn every frame the key is held - pixelIconCanvas
     // walks 576 cells per icon and this panel can be showing a dozen.
     this._statsKey = '';
-    // Whose turn it is in versus, 1 or 2, or null in solo. It sits ABOVE the
-    // credits readout rather than replacing it - see setVersus.
+    // Whose turn it is in versus, as a seat number, or null in solo. It sits
+    // ABOVE the credits readout rather than replacing it - see setVersus.
     this._versus = null;
   }
 
@@ -834,7 +838,7 @@ export class UI {
   /**
    * Puts the pass caption up and starts the HUD sliding out.
    *
-   * @param {number} p    the INCOMING player, 1 or 2 - colours the caption
+   * @param {number} p    the INCOMING player's seat number - colours the caption
    * @param {string} who  their name
    * @param {string} stake the one line about the wave
    * @param {number} n    the first number on the countdown

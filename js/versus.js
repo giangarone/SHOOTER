@@ -31,7 +31,7 @@
  *
  *   THE LADDER is ordinary play. The wave counter is shared and goes up on
  *   EVERY clear, so the players climb alternating rungs of one ladder - with
- *   four of them your own curve steps four waves a turn, which is intended.
+ *   eight of them your own curve steps eight waves a turn, which is intended.
  *
  *   THE CONTEST is what a failure opens. The ladder stops, and every other
  *   player still alive attempts THAT WAVE, once each. The player who failed it
@@ -233,8 +233,8 @@ export class VersusMatch {
       line = 'WAVE ' + this.wave;
     }
     // HOW MANY ARE LEFT, once there is a field rather than an opponent. With
-    // four players nothing else on screen says how much of it is still in, and
-    // the people reading it are mostly spectators.
+    // four or more players nothing else on screen says how much of it is
+    // still in, and the people reading it are mostly spectators.
     if (this.count > 2 && this.winner < 0) {
       line += '  ·  ' + this.alive.length + ' LEFT';
     }
@@ -359,7 +359,7 @@ const GAME_FIELDS = [
   'waveDamageTaken', 'lastPerfect',
   // NO SHOP COUNTER. The active item row used to come up on every third shop
   // and each run counted its own; the mystery box stands in every wave break
-  // for both players, so there is no longer a schedule to carry. What IS
+  // for every player, so there is no longer a schedule to carry. What IS
   // carried, and is the whole of the per-player item rule, is `item` on the
   // Player - it falls out of the skip-list copy below like every other field,
   // which is why the box can never offer a player what they are already

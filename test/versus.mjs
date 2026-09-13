@@ -36,6 +36,17 @@
 //      stops dead on the pass caption, which is exactly where a player finds it.
 //      Asserted on the CLOCK rather than on frames, because a dead loop cannot
 //      serve the frames a rAF-based wait would be asking for.
+//   9. THE FULL SCENARIO TABLE at FOUR, and the eight-count DELTAS. Four
+//      walks every rule end to end - the ladder up on every clear, a failure
+//      PINNING the wave while everybody else attempts it, three clear/one
+//      fail and the amnesty, the last contestant winning on the wave. Eight
+//      is the mode's ceiling and the count the seat-cap pieces have to hold
+//      at: eight slots, a SEVEN-seat contest, a full-table elimination, and
+//      the resume seat wrapping the table past an eliminated head. Both are
+//      driven through the real game rather than through VersusMatch on its
+//      own, because the bug this is most likely to catch is not in the
+//      arithmetic - it is main.js and the match disagreeing about which wave
+//      the arena is building, or the menu offering a seat no colour covers.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8230;
@@ -409,22 +420,132 @@ try {
     t('4P: no passive item set was raised for the win', !g.totemArea.active,
       g.totemArea.active ? 'RAISED' : 'none');
 
+    // ---- 9b. EIGHT PLAYERS -------------------------------------------------
+    //
+    // The mode's ceiling, and deliberately NOT the whole table again. The
+    // ladder, the pinned wave, the amnesty and the last-contestant win are
+    // count-agnostic rules and section 9 walks every one of them at four -
+    // re-walking them at eight would double the suite's cost to prove
+    // arithmetic the 4P table already pins. What is asserted here is what is
+    // DIFFERENT at eight and only at eight: that the arrays hold eight, that
+    // one failure puts SEVEN seats on one wave, that a full-table contest
+    // closes with only the failer cut, and that the resume seat wraps the
+    // table past an eliminated head - P1 out, P8 last to play, so P2 is up.
+    // It is driven exactly like section 9 so a failure prints which rule
+    // gave. The WIN is not re-walked: wouldWin is `owed === 1 && alive > 1`,
+    // which has no count in it, and the 4P win above already drove it home.
+    g.beginGame('versus', 8);
+    t('8P: eight slots are seeded',
+      g.match.slots.filter(Boolean).length === 8,
+      String(g.match.slots.filter(Boolean).length));
+    t('8P: everyone is in, P1 up', g.match.alive.join() === '0,1,2,3,4,5,6,7'
+      && g.match.active === 0, 'alive=' + g.match.alive);
+
+    // ONE CONTEST AT THE FULL TABLE. Parked on wave 7 like the 4P scenarios,
+    // so the same debug-jump path a person takes is the one driven here.
+    const eight = async () => {
+      g.beginGame('versus', 8);
+      g.player.maxHealth = 9999; g.player.health = 9999;
+      g._debugJumpToWave(7);
+      g.match.wave = 7;
+      // Raw, for the reason in failTurn: this leaves a wave with a queue in
+      // it rather than one that is already clear.
+      await rawUntil(() => g.waveState === 'active');
+      g.player.maxHealth = 9999; g.player.health = 9999;
+    };
+    await eight();
+    t('8P: the debug jump moved BOTH counters',
+      g.wave === 7 && g.match.wave === 7, 'wave=' + g.wave + '/' + g.match.wave);
+    await failTurn();                       // P1 falls on wave 7
+    t('8P: a failure opens a contest, P2 up, wave pinned',
+      g.match.active === 1 && g.wave === 7 && g.match.wave === 7 && !!g.match.contest,
+      'active=' + g.match.active + ' wave=' + g.wave + '/' + g.match.wave);
+    // The eight-count shape of `owed`: every seat but the failer's, in seat
+    // order, with no wrap. A contest built with the old four-long lists in
+    // mind would come up short here.
+    t('8P: the contest owes the other seven',
+      g.match.contest.owed.join() === '1,2,3,4,5,6,7',
+      'owed=' + g.match.contest.owed);
+    // The stake line is the one place the interface counts the field out
+    // loud, and a line written for two would be reading '8 LEFT' wrong.
+    t('8P: the stake says how much of the field is left',
+      g.match.stake().includes('8 LEFT'), g.match.stake());
+    await clearTurn();                      // P2 clears inside it
+    t('8P: a CLEAR INSIDE A CONTEST does not move the wave',
+      g.wave === 7 && g.match.wave === 7 && g.match.alive.length === 8,
+      'wave=' + g.wave + '/' + g.match.wave);
+    for (let i = 0; i < 6; i++) await clearTurn();   // P3..P8 clear - closes
+    t('8P: seven clear, one fails -> the failer alone is out',
+      g.match.alive.join() === '1,2,3,4,5,6,7' && g.match.winner === -1,
+      'alive=' + g.match.alive);
+    t('8P: the ladder resumes ABOVE the contest wave',
+      g.match.wave === 8 && g.wave === 8, 'wave=' + g.wave + '/' + g.match.wave);
+    // THE SEAT AFTER THE LAST CONTESTANT, at a count where the wrap is the
+    // whole point: P8 was the last to play, so the ladder restarts with the
+    // first seat after P8 that is still in - P1 is out, which makes it P2.
+    t('8P: the seat wraps the table to the first survivor',
+      g.match.active === 1, 'active=' + g.match.active);
+
+    // ---- 9c. THE PALETTE COVERS EVERY SEAT ----------------------------------
+    //
+    // The seat cap is the MENU: the buttons below are what the game offers,
+    // and the colours are a separate list in each of two modules - main.js
+    // for the band on the gun, ui.js for the DOM. Nothing at runtime joins
+    // them to the button row, so a menu that offered more seats than either
+    // list has colours for would silently hand two players one colour while
+    // `label()` kept promising they were different people. The modulo in
+    // setVersus/showHandoff hides it from every path except this one.
+    const seatBtns = [...document.querySelectorAll('#overlay-players [data-count]')];
+    const counts = seatBtns.map((b) => Number(b.dataset.count));
+    const maxSeat = Math.max(...counts);
+    // EIGHT IS OFFERED. A regression that takes a button away fails here
+    // rather than at some later assertion that never reaches the count.
+    t('seats: the menu offers 2 through 8',
+      counts.length === 7 && counts.join() === '2,3,4,5,6,7,8',
+      counts.join());
+    // BOTH COPIES of the palette, read through the paths that spend them: the
+    // gun band through setPlayerTag and the caption's --pc through
+    // showHandoff, both addressed by seat NUMBER - so the eighth seat is the
+    // one that would wrap if either list were still four long.
+    g.beginGame('versus', maxSeat);
+    const faces = g.player.gun.getObjectByName('ptag').children[0].userData.faces;
+    const band = new Set();
+    const inks = new Set();
+    for (let i = 0; i < maxSeat; i++) {
+      const seat = i + 1;
+      // The world copy, from the game's own table - the test must not carry
+      // a second palette to fall out of step with.
+      g.player.setPlayerTag(g.__playerColorsForTest[i]);
+      band.add(faces[0].emissive.getHexString());
+      // The DOM copy, written where the pass caption reads it.
+      g.ui.showHandoff(seat, 'PLAYER ' + seat, 'WAVE 1', 3);
+      inks.add(document.getElementById('handoff').style.getPropertyValue('--pc'));
+      g.ui.hideHandoff();
+    }
+    t('seats: the palette covers every seat the menu offers',
+      band.size === maxSeat && inks.size === maxSeat,
+      'band=' + [...band].join('; ') + ' inks=' + [...inks].join('; '));
+    g.ui.setVersus(null);
+    g.player.setPlayerTag(null);
+
     // ---- 10. THE CREDIT SPLIT ---------------------------------------------
     //
     // Money scales with how many players are still in, because the wave
     // counter climbs on every clear and each of them therefore fights about a
-    // quarter of a four-handed run while paying its prices.
+    // fraction of a match's run while paying its prices.
     g.beginGame('solo');
     t('$: solo pays once', g._playerMult() === 1, String(g._playerMult()));
     g.beginGame('versus', 4);
     t('$: four players pay four times', g._playerMult() === 4, String(g._playerMult()));
+    g.beginGame('versus', 8);
+    t('$: eight players pay eight times', g._playerMult() === 8, String(g._playerMult()));
     g.match.alive = [0, 1];
-    t('$: and TWO after two are eliminated', g._playerMult() === 2, String(g._playerMult()));
+    t('$: and TWO after six are eliminated', g._playerMult() === 2, String(g._playerMult()));
 
     // THE ITEM-CHARGE GUARD. _dropMoney spawns the split figure and RETURNS
     // the unsplit one, because the return value is what becomes active-item
     // charge in _collectOrb - and charge is spent inside the wave it is earned
-    // in, so multiplying it is not compensation, it is four times the uptime.
+    // in, so multiplying it is not compensation, it is N times the uptime.
     // This is the assertion that catches the two being collapsed back into one.
     const spawn = g.money.spawn.bind(g.money);
     let spawned = 0;
@@ -433,24 +554,24 @@ try {
     g.player.rebuildMods();
     const soloRet = g._dropMoney(g.player.pos, 100, 4, 2);
     const soloSpawn = spawned;
-    g.beginGame('versus', 4);
+    g.beginGame('versus', 8);
     g.player.rebuildMods();
-    const fourRet = g._dropMoney(g.player.pos, 100, 4, 2);
-    const fourSpawn = spawned;
-    t('$: four players see 4x the money on the floor',
-      Math.abs(fourSpawn - soloSpawn * 4) < 1e-6, soloSpawn + ' -> ' + fourSpawn);
+    const eightRet = g._dropMoney(g.player.pos, 100, 4, 2);
+    const eightSpawn = spawned;
+    t('$: eight players see 8x the money on the floor',
+      Math.abs(eightSpawn - soloSpawn * 8) < 1e-6, soloSpawn + ' -> ' + eightSpawn);
     t('$: but the ITEM CHARGE figure is unchanged',
-      Math.abs(fourRet - soloRet) < 1e-6, soloRet + ' vs ' + fourRet);
+      Math.abs(eightRet - soloRet) < 1e-6, soloRet + ' vs ' + eightRet);
     // AND THE BOSS IS OUT OF IT, because it is already handed to everyone.
     g._dropMoney(g.player.pos, 100, 4, 2, undefined, false);
     t('$: an unsplit payout is paid at face value',
       Math.abs(spawned - soloSpawn) < 1e-6, soloSpawn + ' vs ' + spawned);
     g.money.spawn = spawn;
 
-    // THE BOSS MIRROR REACHES ALL THREE. Whoever draws the boss turn is not
-    // supposed to walk off with the run's largest single payout while three
-    // people watch.
-    g.beginGame('versus', 4);
+    // THE BOSS MIRROR REACHES EVERYONE ELSE. Whoever draws the boss turn is
+    // not supposed to walk off with the run's largest single payout while
+    // seven people watch.
+    g.beginGame('versus', 8);
     const before$ = g.match.slots.map((s) => s.game.credits);
     g._bossDeathPos = g.player.pos.clone();
     g._payBossBonus();
@@ -458,7 +579,7 @@ try {
     const paid = g.match.alive
       .filter((i) => i !== g.match.active)
       .every((i) => after$[i] > before$[i]);
-    t('$: every benched player is paid the boss bounty', paid,
+    t('$: at eight, every benched player is paid the boss bounty', paid,
       before$.join() + ' -> ' + after$.join());
     t('$: the player who fought it is not paid twice',
       after$[g.match.active] === before$[g.match.active],
