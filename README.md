@@ -180,6 +180,39 @@ it was and widens the cone around it, and the only answer to it is to stop
 firing. A weapon that only climbed could be mastered into a laser; one that
 only bloomed would feel broken rather than hot.
 
+**Every round leaves a burning streak, glued to the barrel.** The streak is
+a tapered burn travelling muzzle-to-impact at one apparent speed, so a held
+trigger reads as an evenly spaced stream of rounds rather than overlapping
+lines. Its tail vertex is the **live muzzle marker, re-read every frame**: the
+tracer used to freeze its endpoints at fire time, and under sustained fire the
+recoiling barrel walked away from them. Now the tail follows the barrel
+through the kick, the bob and the reload swing, so the fan of a held magazine
+visibly bends with the recoil. Only the last couple of metres behind the head
+are lit; the streak fades to black behind itself, and on an additive line
+black is nothing.
+
+**The streak is a burn, not a tint.** Its colour is a temperature: white-hot
+at the round, cooling through gold and ember red in blackbody order, with no
+blue anywhere — a tracer with blue in it reads as science fiction rather than
+ammunition. Every gun's rounds burn the same; the weapon's identity lives in
+the muzzle blast, the hitmarker and the model. There is no blob riding the
+front of the streak — the light at the front of a shot belongs at the barrel,
+as the blast.
+
+**The shot begins with an explosion at the barrel's tip.** The muzzle flash
+used to be a bare point light — it lit the room and put nothing *in* the
+world, so it read as a lamp flicking on and off. Each round now births a
+**muzzle blast**: an irregular mass of burning gas at the muzzle, a flame
+cone thrown downrange, a small puff of smoke, and the point light on top. The
+fireball is one unified ragged contour — a circle bent by three harmonics,
+refilled at shrinking scales so the falloff follows its own edge — never a
+star or any symmetric shape. Each blast rolls its own contour rotation, petal
+style and size, so no two shots look the same. The fire is at full size
+within the first frames and out in a twelfth of a second; the smoke lingers a
+moment as grey matter, deliberately *not* additive, because residue occludes
+rather than glows. Nothing flies out of it as particles — the streak already
+carries the direction downrange.
+
 The movement penalty scales continuously off live speed rather than switching
 on past a threshold: standing, walking and sprinting are three different guns,
 and a full sprint roughly doubles the standing cone. It used to be a flat
@@ -2088,7 +2121,12 @@ the gun fires through: that a held trigger opens it round by round and opens
 the crosshair with it, that it saturates rather than climbing forever, that it
 settles all the way back the moment the trigger comes up, that the same fire
 also kicks the pitch without either penalty moving where the player is aiming,
-and that Hair Trigger charges for its rate in both currencies. `test:active`
+and that Hair Trigger charges for its rate in both currencies. It also owns the
+tracer and the muzzle blast: that the streak's tail is the live muzzle, that
+only the last couple of metres behind the round are lit, that the burn stays
+warm (green never above red, blue never above green — cyan cannot pass), that
+the blast is born hot on its own frame with per-shot rolls, and that both
+pools drain. `test:active`
 covers the whole active item system and the pool merge that came with it: that
 the row rises on the third shop and no other, that a reroll is not a new shop,
 that an item arrives fully charged and that a second one replaces the first,

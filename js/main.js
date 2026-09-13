@@ -3976,10 +3976,11 @@ class Game {
       this.sfx.hit();
     }
     p.bumpStreak(hitAny);
-    // Everything that says "that was the whole magazine": the flash, a kick
-    // three times a normal shot's, and the reserve counter flaring because the
-    // number in the corner is where the player actually reads their ammunition.
-    this.effects.flash(muzzle);
+    // Everything that says "that was the whole magazine": a blast half as
+    // big again as a single round's, a kick three times a normal shot's,
+    // and the reserve counter flaring.
+    this.camera.getWorldDirection(this._killPos);
+    this.effects.blast(muzzle, this._killPos, 1.6);
     this.effects.burst(muzzle, 0xffab00, 34, 9, 3, 0.5);
     this.effects.addShake(0.55);
     p.kick = -0.26;
@@ -6319,7 +6320,8 @@ class Game {
     // Breach Round detonates wherever the shot stopped - an enemy, a wall or
     // the floor - so the last impact point is kept for the caller.
     this._lastImpact.copy(end);
-    this.effects.tracer(muzzle, end);
+    // The streak's tail is glued to the live muzzle marker (Effects.tracer).
+    this.effects.tracer(muzzle, end, this.player.muzzle);
     return damaged;
   }
 
@@ -6447,7 +6449,10 @@ class Game {
     this.pad.rumble(0.18 + w.shake * 1.4, 0.42, 55, 1);
 
     const muzzle = this.player.muzzleInto(this._muzzle);
-    this.effects.flash(muzzle);
+    // The blast rides the camera's forward, not any one pellet's ray - the
+    // blast is the gun's, the streaks draw the spread.
+    this.camera.getWorldDirection(this._killPos);
+    this.effects.blast(muzzle, this._killPos, 1);
     this.effects.addShake(w.shake);
 
     const targets = this._targets;
