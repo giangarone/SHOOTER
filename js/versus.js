@@ -294,6 +294,12 @@ const PLAYER_SKIP = new Set([
   'dashDX', 'dashDZ', 'dashStart', 'dashEnd', '_prevJump', 'jumpFx', 'dashFx',
   // Owned by the pass animation, not by either player - see Player.setHolster.
   'holster',
+  // SOUTHPAW's one-frame handshake with Game.shoot. It is read and cleared in
+  // the same breath on the frame the trigger answered mid-reload, so it is
+  // never meaningfully true at a handover - but a snapshotted `true` would
+  // hand the incoming player one free single-pellet volley, and skipping it
+  // costs nothing.
+  'offHand',
   // DERIVED, and deliberately never captured. mods is replayed from the owned
   // upgrade list by rebuildMods() - see the note at the top of upgrades.js.
   // Storing it would hand the other player a stat block that no longer agrees
@@ -324,6 +330,10 @@ const PLAYER_CLOCKS = [
   // Opening Salvo's window. A benched player must not come back to a window
   // that expired while someone else was shooting.
   'salvoEnd',
+  // POSE's window, on the same terms: a benched player must not come back to
+  // a room that stopped believing them ten seconds ago. `possumReady` is a
+  // plain boolean and rides in the general copy below.
+  'possumEnd',
   // LIFE INSURANCE's policy and BACKORDER's delivery. Both are deadlines the
   // benched player paid for out of their own charge meter, so both come back
   // with the time they had left rather than with a timestamp from a clock that

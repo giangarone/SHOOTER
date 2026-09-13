@@ -293,6 +293,17 @@ export const THEME = {
   pocketGrenade: 0xff5722,   // the round at the bottom of it, going off
   prodigalRounds: 0xc8b560,  // the shot that missed, come home
   fullLoad: 0xffc266,        // the reserve, filled at every clear
+  // ---- THE FIVE THAT CAME IN WITH THE FIFTH POOL ----------------------------
+  //
+  // Same rule as every block above: the colour is what the pick DOES. Two of
+  // these take a VERB away rather than a number, and they are deliberately the
+  // two heaviest shades in the set - LEAD BALLOON's brown for the legs that
+  // stopped working, and BLACKOUT's murk for the pickups that never appear.
+  deskJob: 0x996242,         // the chair, a deeper brown than the entrench family
+  pureHeart: 0xa5d6ff,       // a clean bar, in the pale end of `vitality`
+  possum: 0x616a70,          // playing dead, in `stone`'s grey family
+  deathStare: 0xb06bff,      // the attacker, stopped, in `fear`'s violet
+  southpaw: 0x7fd8c8,        // the off hand, a shade off `zero`'s ice
   // the butt of the rifle, three ways
   longArm: 0xa9744f,         // reach, in CROWBAR's own brown
   scythe: 0x7f8fa6,          // the sweep
@@ -3419,6 +3430,130 @@ export const UPGRADES = {
     theme: THEME.dimeNovel,
     effects: [['USING YOUR ACTIVE ITEM', NOTE], ['GRANTS +20% CRIT CHANCE', GOOD], ['FOR 20s', NOTE]],
     apply: (mods, n) => { mods.dimeCrit = 0.2 * n; mods.dimeTime = 20; },
+  },
+
+  // ---- THE FIFTH POOL ------------------------------------------------------
+  //
+  // Five more max-1 picks, and what holds them together is that each one
+  // answers a question about the player rather than about the gun: where they
+  // are standing (a desk), what they are carrying (nothing but a clean bar),
+  // how badly the run is going (nearly over), who just touched them, what they
+  // are holding in the other hand. Four of the five take something the player
+  // already owns and change what it is WORTH, which is the trade the whole
+  // pool runs on.
+
+  // A CHAIR, IN EXCHANGE FOR THE LEGS. LEAD BALLOON takes the jump and
+  // SURGICAL STAKES take the slide; the sprint is the one verb left whose
+  // absence changes how every room in the game is crossed, and this is the
+  // pick that takes it. +20% damage and -20% taken is a life for a life: the
+  // build hits harder and survives more of what comes back, and pays for both
+  // with the only thing in the game that gets you out of the way entirely.
+  //
+  // THE SLIDE GOES WITH IT, because a slide is entered out of a sprint - the
+  // refusal sits at the one gate every run passes through, so there is no
+  // earlier state left to slide out of. The dash and the jump keep working,
+  // on LEAD BALLOON's terms: taking the run is meant to change how the room
+  // is crossed, not to nail the player to the floor.
+  deskJob: {
+    name: 'DESK JOB',
+    max: 1,
+    theme: THEME.deskJob,
+    effects: [['+20% DAMAGE', GOOD], ['TAKE 20% LESS', GOOD], ['YOU CAN NEVER SPRINT', BAD]],
+    apply: (mods, n) => {
+      mods.damage *= 1 + 0.2 * n;
+      mods.damageTakenMult *= Math.pow(0.8, n);
+      mods.noSprint = n;
+    },
+  },
+  // THE CLEAN BAR AS A WEAPON. No plate, no battery, no magnet, no buff - the
+  // floor holds nothing but money, which the run already owns forty other
+  // ways. What that buys is twenty per cent off everything on the gun and
+  // twenty more points of bar, and the catch is that the only way back to
+  // health, ammunition and charge is the shop and the streak: the drop
+  // system's whole safety net - the need curve, the relief spawner, the boss
+  // bleed, the wave's own crates - is switched off at the source.
+  //
+  // ORBS ARE NOT PICKUPS. Money is the economy, not the recovery, and a pick
+  // that stopped the floor paying out would be a different and crueller game
+  // than the one this card describes.
+  pureHeart: {
+    name: 'PURE OF HEART',
+    max: 1,
+    theme: THEME.pureHeart,
+    effects: [
+      ['NO PICKUPS APPEAR', BAD],
+      ['NOT EVER', NOTE],
+      ['+20% DAMAGE', GOOD],
+      ['+20 MAX HP', GOOD],
+    ],
+    apply: (mods, n) => {
+      mods.noPickups = n;
+      mods.damage *= 1 + 0.2 * n;
+      mods.maxHpBonus += 20 * n;
+    },
+  },
+  // PLAYING DEAD. Below an eighth of the bar the room stops seeing you at all
+  // for ten seconds - the ORGAN GRINDER's trick, but the player's own body is
+  // the decoy and there is nothing to shoot instead. It buys the one thing a
+  // dying run actually needs, which is ten seconds of nobody swinging at it,
+  // and it can only be played again once the bar has been brought ALL the way
+  // back to the top - a second window costs the whole health bar the first one
+  // nearly spent.
+  //
+  // ROUNDS ALREADY IN THE AIR ARE NOT RECALLED, on the monkey's terms: a
+  // bullet does not know who it was for, and wandering through one is the one
+  // fair way the trick can still cost you.
+  possum: {
+    name: 'POSSUM',
+    max: 1,
+    theme: THEME.possum,
+    effects: [
+      ['BELOW 15% HEALTH:', NOTE],
+      ['ENEMIES IGNORE YOU', GOOD],
+      ['FOR 10s. RECHARGES', NOTE],
+      ['AT FULL HEALTH', NOTE],
+    ],
+    apply: (mods, n) => { mods.possumAt = 0.15 * n; mods.possumTime = 10 * n; },
+  },
+  // THE ATTACKER, STOPPED. PETRIFY is a chance on a round and this is a
+  // certainty on a body: the thing that swung at you stands where it swung,
+  // stoned, for three seconds - which is a damage window the player did not
+  // have to pay a trigger pull for, and the answer to the rusher the pool has
+  // otherwise always charged for.
+  //
+  // IT PAYS ON THE HIT LANDING, not on the swing starting: a blow the ward ate
+  // or the dodge evaded never reached the player, and an attacker that got
+  // away with it is the one case where the pick would read as broken.
+  deathStare: {
+    name: 'DEATH STARE',
+    max: 1,
+    theme: THEME.deathStare,
+    effects: [
+      ['MELEE ATTACKERS', NOTE],
+      ['THAT HIT YOU ARE', NOTE],
+      ['PETRIFIED FOR 3s', GOOD],
+    ],
+    apply: (mods, n) => { mods.deathStare = 3 * n; },
+  },
+  // THE OTHER HAND. A reload is the one second in this game the gun does
+  // nothing at all, and this fills it: single rounds leave the muzzle at a
+  // fifth of the fire rate while the magazine is out, so a reload stopped
+  // halfway is still a gun - just the worst gun in the game.
+  //
+  // SINGLE ROUNDS, not the volley: the point is that the trigger still answers
+  // during the dead second, and a full pattern from a half-loaded magazine
+  // would make the reload the strongest state to fight from rather than the
+  // weakest. The cost is the rate and the one round it spends.
+  southpaw: {
+    name: 'SOUTHPAW',
+    max: 1,
+    theme: THEME.southpaw,
+    effects: [
+      ['DURING A RELOAD YOU', NOTE],
+      ['STILL FIRE, AT 20%', GOOD],
+      ['OF THE FIRE RATE', NOTE],
+    ],
+    apply: (mods, n) => { mods.southpawRate = 0.2 * n; },
   },
 };
 
