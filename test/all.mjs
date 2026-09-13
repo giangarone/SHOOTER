@@ -40,7 +40,7 @@ const WEIGHTS = {
   'drops.mjs': 15, 'ember.mjs': 46, 'flawless.mjs': 9, 'headshot.mjs': 7,
   'icons.mjs': 1, 'melee.mjs': 76, 'money.mjs': 49, 'newpool.mjs': 38,
   'pad.mjs': 27, 'plague.mjs': 47, 'rime.mjs': 46, 'seeker.mjs': 8,
-  'smoke.mjs': 71, 'solar.mjs': 46, 'sprint.mjs': 56, 'status.mjs': 20,
+  'rebind.mjs': 35, 'smoke.mjs': 71, 'solar.mjs': 46, 'sprint.mjs': 56, 'status.mjs': 20,
   'strata.mjs': 46, 'tempest.mjs': 83, 'terrain.mjs': 14, 'themes.mjs': 1,
   'verdant.mjs': 50, 'versus.mjs': 107, 'void.mjs': 73,
 };

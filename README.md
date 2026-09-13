@@ -15,7 +15,7 @@ Open http://localhost:8123
 
 | Key | Action |
 | --- | --- |
-| WASD | Move. Double-tap W dashes, while BLINK DRIVE is the carried item |
+| WASD | Move. Double-tap forward dashes, while BLINK DRIVE is the carried item |
 | Shift | Sprint (hold). Costs stamina; you cannot aim or fire while running |
 | C / Left Ctrl | Crouch (toggle). At a sprint it SLIDES instead |
 | Mouse | Look (pointer lock) |
@@ -29,6 +29,21 @@ Open http://localhost:8123
 | Tab | Hold for the run summary: passive items owned, and the numbers behind the score |
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
+
+Every keyboard binding above except Esc — and the mouse pair — can be changed:
+SETTINGS has a KEY BINDINGS block with one row per action, showing the current
+key on a cap. Click it, press a new key, and the binding changes everywhere at
+once — the field, the prompts and the control sheet on the start screen. The
+bindings persist in localStorage, so they survive a restart, and one press of
+DEFAULTS puts the shipped table back.
+
+A key that already belongs to another action is taken from it if that action
+has a spare — crouch ships with two keys, so melee can take C and leave it the
+Ctrl — and refused with a shake when it does not, because an action left with
+no keys at all is a game that cannot be played. A shake also names the row
+that refused, which is the one the eye has to go to. Esc always cancels the
+capture and always pauses; the browser owns it for leaving pointer lock and
+fullscreen, and a rebind would hand one press two meanings.
 
 ### Sprinting
 
@@ -2133,6 +2148,8 @@ js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
 js/pad.js           the DualSense: polling, deadzones, button edges, rumble
 js/padmenu.js       button glyphs, the menu focus driver, the name keyboard
+js/keybind.js       the rebindable keyboard: the binding table, the save,
+                    the settings rows' labels
 js/utils.js         collision + misc helpers
 test/all.mjs        runs every suite in test/, serially, with a summary
 test/harness.mjs    the repo root, the Chrome, and the server spawn - the three

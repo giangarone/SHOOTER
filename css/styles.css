@@ -1497,6 +1497,43 @@ body.reading #crt::after {
 #pixel-val.off { color: var(--dim); }
 
 
+/* ---- the binding rows -----------------------------------------------------
+   Same shape as every other settings row - label, leader, control - because
+   the control IS the value here: a button wearing the key's name, in the
+   keycap cyan rather than the button cyan so the row reads as a keycap you
+   can change rather than as a button that does something. */
+.bind-slot { display: flex; }
+.overlay .bind-btn {
+  min-width: calc(var(--u) * 12);
+  padding: calc(var(--u) * 2) calc(var(--u) * 4);
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+/* CAPTURING. The row is waiting for the next key press, so it blinks - the
+   one control on this screen that is mid-conversation rather than resting.
+   A real keycap's blink, on the 4px grid: hard steps, no fade. */
+.overlay .bind-btn.listening {
+  animation: bind-listen 0.6s steps(2, end) infinite;
+  color: #ffe9a3;
+}
+@keyframes bind-listen {
+  0%, 49% { box-shadow: inset 0 0 0 2px var(--gold), 0 0 18px rgba(255, 179, 0, 0.35); }
+  50%, 100% { box-shadow: inset 0 0 0 2px rgba(255, 179, 0, 0.4); }
+}
+/* REFUSED. The key the player pressed belongs to another action, and the row
+   that owns it is where the answer has to land: one lateral shake on the 4px
+   grid, the same vocabulary the pause button uses when a press is denied. */
+.overlay .bind-btn.taken {
+  animation: bind-taken 0.18s steps(2, end) 3;
+  color: var(--red);
+  box-shadow: inset 0 0 0 2px var(--red);
+}
+@keyframes bind-taken {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(3px); }
+  100% { transform: translateX(-3px); }
+}
+
 /* ---- the wave a run reached ---------------------------------------------
    THE ONE NUMBER A RUN IS JUDGED ON. With the score gone this is the whole
    result, so it is set at four times the size of the strip beneath it and in

@@ -227,6 +227,7 @@ import { NavGrid } from './nav.js';
 import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './terrain.js';
 import { Pad, BTN } from './pad.js';
 import { MenuDriver, renderControls, cap } from './padmenu.js';
+import { Keybinds, KEY_ACTIONS } from './keybind.js';
 import { resolveCircle, BOSS_HEIGHT } from './utils.js';
 import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
@@ -1157,10 +1158,12 @@ class Game {
     // whenever the keyboard is what is driving - see the movement block in
     // player.js, which falls back to the booleans when they are.
     this.input = { forward: false, back: false, left: false, right: false, jump: false, shoot: false, shootFresh: false, melee: false, aim: false, sprint: false, crouch: false, moveF: null, moveS: null };
-    // Double Dash: the game time each movement key was last pressed FRESH, so
-    // a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed by
-    // e.code; a key held down never writes here (see _bind).
-    this._tapT = { KeyW: -99, KeyS: -99, KeyA: -99, KeyD: -99 };
+    // Double Dash: the game time each movement DIRECTION was last pressed
+    // FRESH, so a second press inside DOUBLE_TAP_WINDOW reads as a dash. Keyed
+    // by action id - forward/back/left/right, matching _tapMove - so the clock
+    // follows whatever the movement keys currently are; a key held down never
+    // writes here (see _bind).
+    this._tapT = { forward: -99, back: -99, left: -99, right: -99 };
     // Whether the held-TAB build sheet is up. Held, not toggled, so it has to
     // be released by keyup AND by blur - alt-tabbing away with it down would
     // otherwise leave it stuck over the fight on the way back.
@@ -1730,7 +1733,50 @@ class Game {
 
   _bind() {
     const canvas = this.renderer.domElement;
-    addEventListener('keydown', (e) => {
+    // The rebindable keyboard. Built before the listeners below so they can
+    // read it, and before the first prompt or control sheet is drawn.
+    this.keys = new Keybinds();
+
+    // ONE PATH IN, dispatched through the binding table rather than named in
+    // the case labels: the same press reads the same action everywhere, and a
+    // rebind changes what the keys do by changing one table. Held keys (move,
+    // sprint, crouch, melee) write booleans; tap keys call the same methods the
+    // pad calls, which is what keeps the two devices from drifting apart on
+    // what a button means.
+    const K = () => this.keys;
+    const PRESSED = {
+      forward: () => { this._tapMove('forward'); this.input.forward = true; },
+      back: () => { this._tapMove('back'); this.input.back = true; },
+      left: () => { this._tapMove('left'); this.input.left = true; },
+      right: () => { this._tapMove('right'); this.input.right = true; },
+      jump: () => { this.input.jump = true; },
+      sprint: () => { this.input.sprint = true; },
+      crouch: () => { this.input.crouch = true; },
+      melee: () => { this.input.melee = true; },
+      reload: () => this.tryReload(),
+      item: () => this.tryItem(),
+      use: () => this.tryUse(),
+      stats: () => { this._openStats(); },
+      fullscreen: () => this._toggleFullscreen(),
+    };
+    const RELEASED = {
+      forward: () => { this.input.forward = false; },
+      back: () => { this.input.back = false; },
+      left: () => { this.input.left = false; },
+      right: () => { this.input.right = false; },
+      jump: () => { this.input.jump = false; },
+      sprint: () => { this.input.sprint = false; },
+      crouch: () => { this.input.crouch = false; },
+      melee: () => { this.input.melee = false; },
+      stats: () => this._closeStats(),
+    };
+    // preventDefault is per-ACTION rather than per-key for the same reason it
+    // was per-case before: these listeners are on the window, and an un-
+    // prevented Space scrolls the page and an un-prevented Tab walks browser
+    // focus off the canvas and out of pointer lock.
+    const SWALLOW = new Set(['jump', 'stats']);
+
+    const onKeyDown = (e) => {
       // Guards any text input that ever ends up on screen: without this a
       // space would be swallowed by the jump binding's preventDefault, and R
       // and E would fire game actions mid-word.
@@ -1739,41 +1785,23 @@ class Game {
       // are the only authority on which device is in use, and this is what
       // they say.
       this._setInputMode('kbm');
+      // CAPTURING A REBIND, if that is what this press is. Checked before the
+      // dispatch so the new key cannot also act, and before preventDefault so
+      // the press still cannot scroll the page on its way into the row.
+      if (this._rebindCapture(e)) return;
+      for (const id in PRESSED) {
+        if (K().is(id, e.code)) {
+          PRESSED[id]();
+          if (SWALLOW.has(id)) e.preventDefault();
+          return;
+        }
+      }
+      // The one non-rebindable binding, and the only one that never reaches
+      // the player mid-run: Escape closes the screen on top. The browser also
+      // uses it to leave pointer lock and fullscreen, which is exactly why it
+      // is only ever read here - it can never reach into a live run and change
+      // anything.
       switch (e.code) {
-        case 'KeyW': this._tapMove(e.code, this.input.forward); this.input.forward = true; break;
-        case 'KeyS': this._tapMove(e.code, this.input.back); this.input.back = true; break;
-        case 'KeyA': this._tapMove(e.code, this.input.left); this.input.left = true; break;
-        case 'KeyD': this._tapMove(e.code, this.input.right); this.input.right = true; break;
-        case 'Space': this.input.jump = true; e.preventDefault(); break;
-        // SPRINT, on either shift. Held; the player never has to let go of it -
-        // see _updateSprint, which refuses the button rather than asking the
-        // player to stop pressing it.
-        case 'ShiftLeft': case 'ShiftRight': this.input.sprint = true; break;
-        case 'KeyR': this.tryReload(); break;
-        case 'KeyE': this.tryUse(); break;
-        // THE ACTIVE ITEM. Under the movement hand and one key off W, which is
-        // where a button pressed in the middle of a retreat has to be.
-        case 'KeyQ': this.tryItem(); break;
-        // MELEE. It used to be the right mouse button, which is now where the
-        // gun is raised from - see the mousedown handler. V is the key that
-        // button's owners reach for.
-        case 'KeyV': this.input.melee = true; break;
-        // CROUCH, and the slide out of a sprint. Held rather than latched
-        // here - player.js reads the EDGE and owns what a press means, so the
-        // keyboard and the pad cannot drift apart on the toggle. Both keys,
-        // because both are the one players reach for.
-        case 'KeyC': case 'ControlLeft': this.input.crouch = true; break;
-        // Fullscreen is bound on the window rather than to a button alone so
-        // it is reachable mid-run without giving up pointer lock to click.
-        case 'KeyF': this._toggleFullscreen(); break;
-        // Held, and preventDefault for the same reason Space gets it: these
-        // listeners are on the window, and an un-prevented Tab walks browser
-        // focus off the canvas and out of pointer lock.
-        case 'Tab': this._openStats(); e.preventDefault(); break;
-        // BACK, from the keyboard. The browser also uses Escape to leave
-        // pointer lock and fullscreen, which is exactly why it is only ever
-        // read here as "close the screen on top" - it can never reach into a
-        // live run and change anything.
         case 'Escape':
           if (this._debugOpen) this._closeDebug();
           else if (this._subScreenOpen()) this._closeSubScreen();
@@ -1791,21 +1819,19 @@ class Game {
         // the same thing about itself - see _openDebug.
         case 'Digit9': this._toggleDebug(); break;
       }
-    });
-    addEventListener('keyup', (e) => {
+    };
+    const onKeyUp = (e) => {
       if (this._typing(e.target)) return;
-      switch (e.code) {
-        case 'KeyW': this.input.forward = false; break;
-        case 'KeyS': this.input.back = false; break;
-        case 'KeyA': this.input.left = false; break;
-        case 'KeyD': this.input.right = false; break;
-        case 'Space': this.input.jump = false; break;
-        case 'ShiftLeft': case 'ShiftRight': this.input.sprint = false; break;
-        case 'KeyV': this.input.melee = false; break;
-        case 'KeyC': case 'ControlLeft': this.input.crouch = false; break;
-        case 'Tab': this._closeStats(); e.preventDefault(); break;
+      for (const id in RELEASED) {
+        if (K().is(id, e.code)) {
+          RELEASED[id]();
+          if (SWALLOW.has(id)) e.preventDefault();
+          return;
+        }
       }
-    });
+    };
+    addEventListener('keydown', onKeyDown);
+    addEventListener('keyup', onKeyUp);
     // Losing focus mid-key would otherwise leave the player running forever,
     // or reading a stat panel it can no longer be told to close.
     addEventListener('blur', () => {
@@ -2060,15 +2086,59 @@ class Game {
     this._syncPadBtns();
     this._syncSens();
 
+    // ---- the keyboard bindings ---------------------------------------------
+    //
+    // The rows are BUILT rather than authored, on the same one-source-of-
+    // truth rule as the control sheet: the table is the only list of what the
+    // keys do, so it is also the only list of what the settings screen shows.
+    // Built once here; only the cap VALUE is rewritten after that.
+    //
+    // data-pad-skip because the capture is a KEYBOARD conversation: CROSS can
+    // open it but the pad has no key to hand it, and a row the selection can
+    // land on but never finish is a trap. The pad sheet on the start screen
+    // says what the controller's buttons are, which is the pad's whole answer
+    // to "rebind my keys".
+    this._bindRows = {};
+    for (const act of KEY_ACTIONS) {
+      const row = document.getElementById('bind-' + act.id);
+      if (!row) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'opt-btn bind-btn';
+      btn.dataset.action = act.id;
+      btn.setAttribute('data-pad-skip', '');
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._rebindStart(btn, act.id);
+      });
+      row.appendChild(btn);
+      this._bindRows[act.id] = btn;
+    }
+    this._syncBindBtns();
+
+    this._resetKeysBtn = document.getElementById('btn-reset-keys');
+    this._resetKeysBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Back to the shipped table, felt rather than just read - the same
+      // nudge the pad's steppers give, because it is the same "a setting just
+      // landed" the player is holding the device for.
+      this.keys.reset();
+      this.pad.rumble(0.25, 0.2, 70, 1);
+      this._syncBindBtns();
+      this._syncKeyUi();
+    });
+
     // The on-screen keyboard, built once. It only ever appears in pad mode -
     // see the .pad-only rule - and it writes straight into the same field the
     // keyboard player types in, so there is one name and one save path.
     this._audioHint = document.getElementById('audio-hint');
     // ONE SOURCE OF TRUTH for the bindings on screen. The panel starts empty
     // in the markup and is filled here for the keyboard; _setInputMode swaps
-    // it for the pad sheet and back.
+    // it for the pad sheet and back. The keyboard sheet comes out of the
+    // binding table, so a rebind is in the caps the next time the player sees
+    // them.
     this._controlsEl = document.querySelector('.controls');
-    renderControls(this._controlsEl, false);
+    renderControls(this._controlsEl, false, this.keys.sheet());
 
     // Opening and closing the two sub-screens. The buttons that open them sit
     // on overlays that are themselves click-to-continue, so every one of these
@@ -2174,21 +2244,25 @@ class Game {
   // keydown at the OS repeat rate, which would otherwise read as a double-tap
   // the moment a player ran in a straight line. Only a fresh press is timed.
   //
-  // A SECOND WAY TO FIRE ONE ITEM, not a second binding. Double-tapping W is
-  // how the dash was reached for the whole time it was a passive item, and a
-  // player who learned it should not have to unlearn it - so it routes through
-  // tryItem() like Q does, and therefore does nothing at all unless BLINK
-  // DRIVE is what is in the slot.
-  _tapMove(code, held) {
-    if (held) return;
-    const last = this._tapT[code];
+  // A SECOND WAY TO FIRE ONE ITEM, not a second binding. Double-tapping
+  // forward is how the dash was reached for the whole time it was a passive
+  // item, and a player who learned it should not have to unlearn it - so it
+  // routes through tryItem() like the item key does, and therefore does
+  // nothing at all unless BLINK DRIVE is what is in the slot.
+  //
+  // Keyed by ACTION rather than by code: the forward key is whatever the
+  // player has bound to forward, and a rebind must not take the double-tap
+  // with it. `_clearInput` sweeps the same object, whatever the keys are.
+  _tapMove(id) {
+    if (this.input[id]) return;
+    const last = this._tapT[id];
     if (this.time - last < DOUBLE_TAP_WINDOW) {
-      if (code === 'KeyW' && this.player.item === 'itemDash') this.tryItem();
+      if (id === 'forward' && this.player.item === 'itemDash') this.tryItem();
       // Cleared so a third tap has to start a new pair rather than firing
       // again off the same timestamp.
-      this._tapT[code] = -99;
+      this._tapT[id] = -99;
     } else {
-      this._tapT[code] = this.time;
+      this._tapT[id] = this.time;
     }
   }
 
@@ -2408,6 +2482,8 @@ class Game {
     // The menu underneath was never hidden, so BACK is only ever this. Both
     // are taken down rather than the one that is up: it costs a class write
     // and it cannot get out of step with which screen was opened.
+    // A binding row left listening behind the closed screen is a press trap.
+    this._rebindCancel();
     this.ui.hideSubScreens();
   }
 
@@ -2442,8 +2518,14 @@ class Game {
     this.inputMode = mode;
     document.body.classList.toggle('pad-mode', mode === 'pad');
     // The control sheet on the start screen is the one piece of UI that is not
-    // rebuilt from the prompt path every frame, so it is rewritten here.
-    if (this._controlsEl) renderControls(this._controlsEl, mode === 'pad');
+    // rebuilt from the prompt path every frame, so it is rewritten here. The
+    // keyboard sheet is rebuilt rather than cached because a rebind through
+    // SETTINGS can change it while the start screen sits underneath.
+    if (this._controlsEl) {
+      renderControls(
+        this._controlsEl, mode === 'pad', mode === 'pad' ? null : this.keys.sheet()
+      );
+    }
     if (mode === 'pad') {
       // POINTER LOCK IS A MOUSE IDEA. Holding it through pad play would trap
       // the cursor for no reason and, worse, hand the browser a way to pause
@@ -2976,6 +3058,114 @@ class Game {
     set(this._assistBtn, this._aimAssist);
     set(this._rumbleBtn, this.pad.rumbleOn);
     set(this._invertBtn, this._invertLook);
+  }
+
+  // ---- the keyboard bindings --------------------------------------------------
+
+  // Rewrites every binding cap on the settings screen. Called on build, on
+  // every rebind and on reset - the rows are built once and only their VALUE
+  // changes, on the same no-teardown rule as the shake pips.
+  _syncBindBtns() {
+    for (const id in this._bindRows) {
+      const btn = this._bindRows[id];
+      btn.textContent = this.keys.label(id);
+      btn.classList.toggle('listening', false);
+    }
+  }
+
+  // Everything on screen that names a key: the settings rows above, the
+  // control sheet on the start screen (which SETTINGS sits over, so a rebind
+  // made inside it has to reach the sheet underneath) and the sheets the
+  // prompt path builds from _useLead. The prompt itself is rebuilt every frame
+  // it is up, so it needs no push.
+  _syncKeyUi() {
+    if (this._controlsEl && this.inputMode !== 'pad') {
+      renderControls(this._controlsEl, false, this.keys.sheet());
+    }
+  }
+
+  /**
+   * Puts a binding row into its capture state: the next key press becomes the
+   * binding, Escape cancels, and the row itself says so. There is no timeout
+   * by design - a player reaching to look at their keyboard is not a player
+   * who wants the row to have changed its mind when they get back.
+   */
+  _rebindStart(btn, id) {
+    this._audioGesture();
+    if (this._rebindId != null) this._rebindCancel();
+    this._rebindId = id;
+    this._rebindBtn = btn;
+    btn.classList.add('listening');
+    btn.textContent = 'PRESS A KEY';
+    // The click that opened the capture left the button FOCUSED, and a focused
+    // button is live to Space and Enter - the keyup after binding jump onto
+    // Space would click the row again and put it straight back into capture.
+    // Nothing else is lost: the pad never selects these rows (data-pad-skip)
+    // and the mouse does not need the focus ring to find one again.
+    btn.blur();
+  }
+
+  // OUT of the capture state without a binding. Called by the next rebind
+  // press, by Escape, and by taking the settings screen down - a row left
+  // listening behind a closed screen is a booby trap for the next run.
+  _rebindCancel() {
+    if (this._rebindId == null) return;
+    this._rebindId = null;
+    if (this._rebindBtn) this._rebindBtn.classList.remove('listening');
+    this._rebindBtn = null;
+    this._syncBindBtns();
+  }
+
+  /**
+   * THE REBIND ITSELF, on the keydown path. Returns true when the press was
+   * consumed here, so the game must not also act on it.
+   *
+   * Escape is cancel rather than a bindable key: the browser already owns it
+   * for leaving pointer lock and fullscreen, and a settings screen the player
+   * cannot get out of with the one universal "close" key would be a trap.
+   * The modifier FAMILY codes bind normally - pressing either shift binds
+   * "SHIFT", either ctrl "CTRL" - via normCode inside Keybinds.
+   *
+   * A TAKEN KEY is refused with a shake rather than reassigned by force:
+   * the row that lost its key is where the eye has to go, so the refusal
+   * names it. Crouch's second key can be spared automatically - see the
+   * comment on Keybinds.bind - which is the case the message exists for.
+   */
+  _rebindCapture(e) {
+    if (this._rebindId == null) return false;
+    // Swallowed whichever way it lands: the press is spoken for, and an
+    // un-prevented F5 or / would hand it to the browser as well.
+    e.preventDefault();
+    if (e.code === 'Escape') { this._rebindCancel(); return true; }
+    // The OS's own chord keys are not bindings. Meta is the browser's, and a
+    // modifier held on its way to a real key press is not a press of the
+    // modifier - it is the start of one, and binding it would leave the row
+    // listening forever with nothing the player can press. Numpad keys are
+    // excluded too: headless test machines may have none and the movement
+    // hand does not live there.
+    if (e.code === 'MetaLeft' || e.code === 'MetaRight' || e.key === 'Meta'
+      || e.code.startsWith('Numpad')) return true;
+    const id = this._rebindId;
+    this._rebindCancel();
+    const stolen = this.keys.bind(id, e.code);
+    if (stolen) {
+      // The row that owns the key the player wanted is where the answer is.
+      const btn = this._bindRows[stolen];
+      btn.classList.add('taken');
+      setTimeout(() => {
+        btn.classList.remove('taken');
+        // The label may have changed again in the meantime; rebuild from the
+        // table rather than remembering what it was.
+        this._syncBindBtns();
+      }, 700);
+      this.sfx.denied();
+      this.pad.rumble(0.4, 0.3, 140, 2);
+      return true;
+    }
+    this._syncBindBtns();
+    this._syncKeyUi();
+    this.pad.rumble(0.25, 0.2, 70, 1);
+    return true;
   }
 
   _loadPadPrefs() {
@@ -8190,7 +8380,7 @@ class Game {
    * button that does it is already named on the control sheet.
    */
   _useLead() {
-    if (this.inputMode !== 'pad') return '<b>SHOOT</b> / <b>E</b> ';
+    if (this.inputMode !== 'pad') return '<b>SHOOT</b> / <b>' + this.keys.label('use') + '</b> ';
     return cap('R2') + ' / ' + cap('triangle') + ' ';
   }
 

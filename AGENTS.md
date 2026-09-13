@@ -32,6 +32,7 @@ Grep for the thing you touched if it is not here; these are the common ones.
 | an upgrade's numbers | `newpool` `thirdpool` `fourthpool` `icons`, plus whatever it modifies |
 | an enemy, or a theme's table | `themes` `icons`, that theme's own suite, `boss` |
 | movement - sprint, crouch, slide, dash, jump | `crouch` `sprint` `pad` |
+| a key binding, the input path, the key table | `rebind` `pad` `crouch` `sprint` `aim` |
 | the weapon, the cone, recoil, reload | `accuracy` `aim` `seeker` `headshot` |
 | money, prices, payouts, the streak | `money` `charge` `flawless` `drops` |
 | a boss, or its telegraphs | `boss` `drops` `charge` |
@@ -126,6 +127,11 @@ There is no list to update.
   own section below.
 - Anything on a rhythm hangs off `Music.pulse`, the half-beat edge — not a
   timer of its own.
+- The keyboard's meanings live in `js/keybind.js` - the binding table, the
+  save, the labels. Nothing else may name a `KeyboardEvent.code` for what it
+  DOES (the Escape and debug cases in `js/main.js` are the deliberate
+  exceptions: they are not rebindable). A mechanic that needs a key goes
+  through `KEY_ACTIONS` there, which is also the settings rows' order.
 - Pools are everywhere: projectiles, particles, decals, telegraph handles. If
   you take a handle, release it on every path out, including the one where the
   thing dies early. Several suites assert pools drain precisely because that
