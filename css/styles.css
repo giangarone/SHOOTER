@@ -1794,6 +1794,26 @@ body.pad-seen .set-row.pad-only,
 body.pad-seen .set-head.pad-only { display: flex !important; }
 body.pad-seen p.pad-only { display: block !important; }
 
+/* The keyboard's own rows, hidden while the pad is what is being played on
+   RIGHT NOW and never otherwise. The two device blocks of KEY BINDINGS are
+   a pair with the sheet on the start screen: whichever device is in the
+   hands is the one whose bindings the screen shows, and a mode swap trades
+   them in one class write. Keyed on pad-mode and not pad-seen on purpose -
+   a pad on the desk is not a pad in the hands, and thirteen rows of keys a
+   pad player cannot press are noise in the middle of the one screen that
+   configures the pad. */
+body.pad-mode .kbm-only { display: none !important; }
+.pad-now { display: none !important; }
+body.pad-mode .set-row.pad-now,
+body.pad-mode .set-head.pad-now { display: flex !important; }
+body.pad-mode p.pad-now { display: block !important; }
+
+/* A pad cap inside a bind button: the glyph's own 12px box sits inline with
+   the button's letterforms, so the row reads as one keycap rather than a
+   word next to a drawing. */
+.overlay .bind-btn .gl { display: inline-block; margin: 0; vertical-align: -2px; }
+.overlay .bind-btn .pad-cap.wide { font-size: 8px; letter-spacing: 0.08em; }
+
 /* No cursor over a game being played on a pad. Pointer lock normally hides it
    and pad play does not use pointer lock - see _setInputMode in main.js - so
    without this the arrow sits in the middle of the arena all run. */

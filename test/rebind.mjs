@@ -24,6 +24,10 @@
 //      (movement), in the HUD prompts (the USE lead names the rebound key),
 //      and in the double-tap clock, which follows the forward ACTION and not
 //      the physical W.
+//   7. THE SCREEN FOLLOWS THE HANDS. The settings screen carries a second
+//      block of rows for the controller, and the input mode picks which one
+//      the eye gets - asserted here for the swap itself; the pad rows' own
+//      rebind behaviour is test/pad.mjs's, on a synthetic DualSense.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8245;
@@ -142,10 +146,14 @@ try {
   ok('the start screen sheet shows the rebind', sheetOk === true);
 
   // ---- 2. the screen agrees with the table ---------------------------------
+  // The KEYBOARD rows only - this suite runs on the keyboard, the pad rows
+  // are behind the mode's back (offsetParent is null for them) and are the
+  // pad suite's to assert on.
   const rowsOk = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
     for (const el of document.querySelectorAll('.bind-btn')) {
+      if (el.offsetParent === null) continue;
       const id = el.dataset.action;
       if (el.textContent !== g.keys.label(id)) return id;
     }
@@ -370,10 +378,33 @@ try {
   ok('real key events still reach the game',
     realKeys.dDown === true && realKeys.sprint === true);
 
+  // ---- 7. the screen follows the hands ---------------------------------------
+  // The same settings screen carries the CONTROLLER's rows, hidden on a
+  // keyboard and swapped in by the input mode - the one behavior this suite
+  // can assert without a pad in the room, because the mode is what drives
+  // it and the mode can be moved directly. The pad rows' own behaviour is
+  // test/pad.mjs's, with a synthetic DualSense behind it.
+  const swapOk = await page.evaluate(() => {
+    const g = window.__game;
+    g._openSettings();
+    const kbRow = document.getElementById('bind-forward');
+    const padRow = document.getElementById('pbind-jump');
+    const kbVisible = () => kbRow.offsetParent !== null && padRow.offsetParent === null;
+    const padVisible = () => padRow.offsetParent !== null && kbRow.offsetParent === null;
+    const before = kbVisible();
+    g._setInputMode('pad');
+    const after = padVisible();
+    g._setInputMode('kbm');
+    return before && after && kbVisible();
+  });
+  ok('the binding rows swap with the input mode', swapOk === true);
+  await page.evaluate(() => window.__game._closeSubScreen());
+
   // Leave the store clean for whichever suite runs after this one.
   await page.evaluate(() => {
     window.__game.keys.reset();
     localStorage.removeItem('va-keys');
+    localStorage.removeItem('va-pad-keys');
   });
 
   console.log('CONSOLE ERRORS', JSON.stringify(errors));

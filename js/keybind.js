@@ -9,6 +9,8 @@
 // travels with the player's hands rather than with whatever the OS keyboard
 // layout says the key prints.
 
+import { BTN_NAMES } from './pad.js';
+
 // ---- the labels -------------------------------------------------------------
 
 // Modifiers are read as FAMILIES, not sides. Sprint has always been "either
@@ -79,11 +81,72 @@ export const KEY_ACTIONS = [
   { id: 'fullscreen', label: 'FULLSCREEN', keys: ['KeyF'] },
 ];
 
+// ---- the pad -------------------------------------------------------------------
+//
+// THE CONTROLLER'S HALF OF THE TABLE. Ten actions, one button each - the
+// keyboard's fourteen minus five the hardware does not offer, plus the two
+// the mouse owns on a keyboard (SHOOT and AIM, which on a pad are triggers).
+// Until now this half was the fixed PAD_CONTROLS sheet in padmenu.js: the
+// buttons were right but they were plastic, and a player who wanted R1 for
+// jump had nowhere to say so.
+//
+// A pad binding is a NAME, not an index: 'cross', 'R1', 'TOUCH PAD'. The names
+// come from BTN_NAMES in pad.js and are what the caps draw (a face button as
+// its glyph, everything else as the word printed on the plastic), so a
+// binding is legible in the store, in the settings rows and on the sheet
+// without ever being translated back into a number.
+//
+// WHY THE MISSING FIVE ARE MISSING:
+//   forward/back/left/right - the left stick is not four buttons. A stick is
+//     one analogue input, and a rebind that offered it four ways would be
+//     offering the same axis four times.
+//   fullscreen - OPTIONS is the pause button and every other button is
+//     spent; a browser's controller button for fullscreen does not exist.
+//
+// THE ONES THAT READ DIFFERENTLY ON A PAD, though the table does not care:
+// sprint is a TOGGLE (clicking a stick is not something to hold for the
+// length of a retreat), crouch is a HELD boolean that player.js turns into a
+// toggle-or-slide, and shoot is a trigger with an analogue value, whose edge
+// reading stays in _padPlay where it always was. The table only speaks in
+// which button means which action; the shape of the press is the game's.
+// The buttons NO ACTION may take. Exported because the capture in main.js
+// has to tell a fixed press (swallowed, the row keeps listening) from a
+// bindable one - the same distinction _rebindCapture makes for Meta and the
+// numpad on the keyboard.
+const PAD_FIXED = {
+  // The pad's own OS/menu buttons, and the D-pad the menus walk. Fixed for
+  // the same class of reason Escape is on the keyboard: a rebind onto them
+  // would strand the menus themselves, and there is nothing else to give.
+  CREATE: null, OPTIONS: null, PS: null,
+  UP: null, DOWN: null, LEFT: null, RIGHT: null,
+};
+export const isPadFixed = (name) => Object.prototype.hasOwnProperty.call(PAD_FIXED, name);
+
+// The row order the settings screen shows them in: the same order as the pad
+// sheet, so a row and its cap on the start screen are never more than a
+// screen apart.
+export const PAD_ACTIONS = [
+  { id: 'jump', label: 'JUMP', btn: 'cross' },
+  { id: 'crouch', label: 'CROUCH', btn: 'circle' },
+  { id: 'reload', label: 'RELOAD', btn: 'square' },
+  { id: 'use', label: 'TAKE', btn: 'triangle' },
+  { id: 'aim', label: 'AIM', btn: 'L2' },
+  { id: 'shoot', label: 'SHOOT', btn: 'R2' },
+  { id: 'item', label: 'ITEM', btn: 'R1' },
+  { id: 'melee', label: 'MELEE', btn: 'R3' },
+  { id: 'sprint', label: 'SPRINT', btn: 'L3' },
+  { id: 'stats', label: 'STATS', btn: 'TOUCH PAD' },
+];
+
 const STORE = 'va-keys';
+const PAD_STORE = 'va-pad-keys';
 // A stored entry must look like a code. Anything else - a hand-edited store,
 // a half-written one - falls back to that row's default rather than shipping
 // a binding no switch can ever press.
 const CODE_OK = /^[A-Za-z][A-Za-z0-9]*$/;
+// The same test for a stored pad name. 'TOUCH PAD' has a space, which CODE_OK
+// would refuse, so the rule is spelled for the pad's own vocabulary instead.
+const PAD_NAME_OK = /^[A-Za-z][A-Za-z ]*$/;
 
 function defaults() {
   const map = {};
@@ -105,9 +168,37 @@ function load() {
   return map;
 }
 
+function padDefaults() {
+  const map = {};
+  for (const a of PAD_ACTIONS) map[a.id] = a.btn;
+  return map;
+}
+
+// The pad's load, on the same rule as the keyboard's: one button per action,
+// a bad entry falls back to the default, and PAD_FIXED is the whole refusal
+// list - a name that is fixed cannot be a binding, so it is rejected here
+// rather than bound and stranded.
+function padLoad() {
+  const map = padDefaults();
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(PAD_STORE) || 'null'); } catch {}
+  if (!raw || typeof raw !== 'object') return map;
+  for (const a of PAD_ACTIONS) {
+    const v = raw[a.id];
+    if (typeof v === 'string' && PAD_NAME_OK.test(v)
+      && !Object.prototype.hasOwnProperty.call(PAD_FIXED, v)) {
+      map[a.id] = v;
+    }
+  }
+  return map;
+}
+
 export class Keybinds {
   constructor() {
     this.map = load();
+    // The pad table, loaded beside the keyboard one because the actions are
+    // shared and so is the save - one class, two devices, one row order.
+    this.padMap = padLoad();
   }
 
   save() {
@@ -157,6 +248,79 @@ export class Keybinds {
     this.map[id] = [code];
     this.save();
     return null;
+  }
+
+  // ---- the pad -------------------------------------------------------------
+  //
+  // ONE BUTTON PER ACTION, so there is no pair to spare and no steal: a
+  // pad bind is a SWAP with whichever action already owns the button. That
+  // is the only polite answer on ten buttons and ten actions - refusing
+  // would strand the player on a layout they have already said is wrong,
+  // and a swap is what a player holding both buttons means.
+
+  /** True when `name` - a BTN_NAMES entry - is `id`'s pad binding. */
+  padIs(id, name) {
+    return this.padMap[id] === name;
+  }
+
+  /** The button name `id` is bound to on the pad. */
+  padBtn(id) {
+    return this.padMap[id] || '';
+  }
+
+  /**
+   * Rebinds a pad action, SWAPPING with the action that owns the button.
+   * Returns null - there is no refusal, and no action is ever left empty,
+   * because the previous owner takes the button being given up. A name that
+   * is not a pad button at all is ignored rather than bound: it could only
+   * come from a hand-edited store or a stale version, and the row keeps the
+   * binding it had.
+   */
+  padBind(id, name) {
+    if (!this.padMap.hasOwnProperty(id)) return null;
+    if (!BTN_NAMES.includes(name) || PAD_FIXED.hasOwnProperty(name)) return null;
+    if (this.padMap[id] === name) return null;
+    for (const other of PAD_ACTIONS) {
+      if (other.id !== id && this.padMap[other.id] === name) {
+        this.padMap[other.id] = this.padMap[id];
+      }
+    }
+    this.padMap[id] = name;
+    this.savePad();
+    return null;
+  }
+
+  /** The row label: the button's name, for a cap or a row. */
+  padLabel(id) {
+    return this.padBtn(id);
+  }
+
+  padReset() {
+    this.padMap = padDefaults();
+    this.savePad();
+  }
+
+  savePad() {
+    try { localStorage.setItem(PAD_STORE, JSON.stringify(this.padMap)); } catch {}
+  }
+
+  /**
+   * THE PAD SHEET for the start screen, in the same fifteen-row shape as
+   * sheet(): a fixed frame around the ten rebindable rows. The five rows a
+   * pad cannot change - MOVE, LOOK, MENU, PAUSE and the D-pad - are the
+   * hardware's own, printed on its plastic, and they stay in the order the
+   * keyboard sheet put them in so the two sheets read as one list.
+   */
+  padSheet() {
+    const P = (id) => this.padBtn(id);
+    return [
+      ['L STICK', 'MOVE'], [P('sprint'), 'SPRINT'], ['R STICK', 'LOOK'],
+      [P('shoot'), 'SHOOT'], [P('aim'), 'AIM'], [P('melee'), 'MELEE'],
+      [P('item'), 'ITEM'], [P('jump'), 'JUMP'], [P('reload'), 'RELOAD'],
+      [P('crouch'), 'CROUCH'], [P('sprint') + ' ' + P('crouch'), 'SLIDE'],
+      [P('use'), 'TAKE'], [P('stats'), 'STATS'], ['D-PAD', 'MENU'],
+      ['OPTIONS', 'PAUSE'],
+    ];
   }
 
   reset() {

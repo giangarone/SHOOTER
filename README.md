@@ -45,6 +45,23 @@ that refused, which is the one the eye has to go to. Esc always cancels the
 capture and always pauses; the browser owns it for leaving pointer lock and
 fullscreen, and a rebind would hand one press two meanings.
 
+**The controller's buttons rebind too.** The same screen, the same one-press
+capture: on a pad the KEY BINDINGS block is replaced by CONTROLLER BINDINGS,
+because the settings screen follows the player's hands exactly as the start
+screen's control sheet always has. Ten actions — jump, crouch, reload, take,
+aim, shoot, item, melee, sprint and stats — and one button each, so a bind is
+always a **swap** with whichever action owned the button: there is no spare
+to take and nothing to refuse, and no action is ever left empty. Cross,
+Circle and Options cancel the capture rather than binding — Cross is the
+click that opened the row, and the pad's confirm button can never also be the
+binding it is confirming with — and the sticks, the D-pad, Options and Create
+are fixed, for the same reason Esc is on the keyboard. The caps on the pad
+rows are drawn as glyphs, not spelled, and a rebind reaches the field, the
+prompts and the start screen's sheet the same frame. DEFAULTS puts the
+shipped layout back on both devices at once, and the two saves are separate
+(`va-keys`, `va-pad-keys`) so a keyboard player's table and a pad player's
+never fight over one store.
+
 ### Sprinting
 
 Holding sprint puts the player in a second gear at 1.5x speed and empties a
@@ -259,6 +276,10 @@ screen is one the player is actually holding.
 | Options | Pause, resume, and start a run from the menu |
 | D-pad | Walk the menus; Cross confirms |
 
+Every row in the table above except the sticks, the D-pad, Options and Create
+is a binding in the pad half of the table (`js/keybind.js`), and the shipped
+layout is only the default — see the rebinding section above the sprint notes.
+
 Circle is still BACK on every menu. It only means crouch inside a live arena,
 where there is nothing to go back from — and TAKE is its own button rather than
 being made contextual, because a crouch that silently failed to happen while
@@ -283,8 +304,9 @@ three buttons in a row.
 
 Picking the pad up switches the interface with it: the prompts name buttons
 instead of keys, the control sheet on the start screen becomes the one above,
-and the menus grow a selection the D-pad walks. Touching the keyboard or moving
-the mouse switches it straight back. Nothing has to be enabled and nothing is
+the menus grow a selection the D-pad walks — and the binding rows in SETTINGS
+become the controller's. Touching the keyboard or moving the mouse switches
+every one of those straight back. Nothing has to be enabled and nothing is
 remembered — the game follows the player's hands.
 
 SETTINGS grows a CONTROLLER block once a pad has been seen: two sensitivities
@@ -292,7 +314,9 @@ on one eight-step scale — LOOK for the hip and AIM for the gun up, blended by
 `aimT` rather than switched between — plus aim assist, vibration and inverted
 look, all stored in localStorage. The mouse has no slider; it keeps its own
 feel and is scaled by a fixed 0.6 while aiming, the standard zoom-relative
-ratio that carries muscle memory through the zoom.
+ratio that carries muscle memory through the zoom. The CONTROLLER BINDINGS
+block beside them follows the input mode rather than the connection — a pad on
+the desk is not a pad in the hands.
 
 Aim assist is two things. **Slowdown** drops the stick's turn rate while the
 reticle is already over a target, so the player's own correction is finest
@@ -2295,8 +2319,9 @@ js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations
 js/pad.js           the DualSense: polling, deadzones, button edges, rumble
 js/padmenu.js       button glyphs, the menu focus driver, the name keyboard
-js/keybind.js       the rebindable keyboard: the binding table, the save,
-                    the settings rows' labels
+js/keybind.js       the rebindable keyboard AND controller: both binding
+                    tables, the two saves, the settings rows' labels and the
+                    two control sheets
 js/utils.js         collision + misc helpers
 test/all.mjs        runs every suite in test/, serially, with a summary
 test/harness.mjs    the repo root, the Chrome, and the server spawn - the three
@@ -2304,7 +2329,8 @@ test/harness.mjs    the repo root, the Chrome, and the server spawn - the three
 test/smoke.mjs      headless smoke test
 test/money.mjs      the orb economy conserves what a kill was worth
 test/icons.mjs      every offer has a drawing and every drawing an offer
-test/pad.mjs        controller support, driven by a synthetic DualSense
+test/pad.mjs        controller support, driven by a synthetic DualSense - the
+                    buttons, the menus, and the pad's own rebind rows
 test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
 test/themes.mjs     the theme table and the balance law: every role filled, no
