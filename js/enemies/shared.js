@@ -212,6 +212,16 @@ export const SHARED_MATS = {
   shrikeEdge: new THREE.MeshStandardMaterial({
     color: 0x9aa8c4, roughness: 0.2, metalness: 0.9,
   }),
+  // ---- CATHEDRAL ----------------------------------------------------------
+  // One body material and one lit accent, the tank's contract: the family's
+  // enemies read as CATHEDRAL through the pale brass lamp each carries, and
+  // the lamp keeps its own colour while the body under it is tinted by a
+  // status - so a frozen penitent is still recognisably carrying a light.
+  cathStone: new THREE.MeshStandardMaterial({ color: 0x4a4636, roughness: 0.6, metalness: 0.3 }),
+  cathGilt: new THREE.MeshStandardMaterial({
+    color: 0xd8bd6a, emissive: 0xc0a860, emissiveIntensity: 1.1,
+    roughness: 0.35, metalness: 0.7,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 

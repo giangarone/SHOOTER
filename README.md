@@ -316,7 +316,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Sixty-six enemy types, in eleven themes of six** - one per role per theme, and every one of them built:
+- **Seventy-three enemy types, in twelve themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -466,10 +466,34 @@ context. The start screen says so, and one click anywhere fixes it.
   and heals a slice with every stack. A conduit's buff lapses when the conduit
   dies and a carapace is bought with the same bullets that were clearing the
   room, so the answer is to find the nurse before the stacks land, not after)
-  and **Weepers** (the high line: they hold a wide orbit, drift down, and
-  sweep a slow amber sightline across the floor for over a second before
-  firing a single lance along the arc - one long readable line from the sky,
-  answered by stepping off the arc it is drawing). **BRINE** the deep - **Howlers** (a scream that takes your
+   and **Weepers** (the high line: they hold a wide orbit, drift down, and
+   sweep a slow amber sightline across the floor for over a second before
+   firing a single lance along the arc - one long readable line from the sky,
+   answered by stepping off the arc it is drawing). **CATHEDRAL**, the theme
+   of THE SANCTUARY AND THE TOLL - nearly everything in it is harmless while
+   you are watching and worse the moment you look away: **Penitents** (kneel,
+   and are UNTOUCHABLE while they do - the kneel is the tell for a hard hit at
+   wherever they are, so they are free to ignore while they walk and a waste
+   of ammunition to shoot at while they are down; kill them on the rise or
+   leave them, those are the two answers), **Curates** (fire SLOW rounds that
+   pass straight through cover - the only gunner in the game a pillar cannot
+   answer, and the tell is the lantern they carry dimming as the charge
+   builds), **Pallbearers** (carry their own grave: every round that lands on
+   the walking body is swallowed and COUNTED, and on death the grave opens
+   and pays the whole count out at once, on the spot, with a ring of
+   consecrated ground over the corpse - the brute that is least dangerous at
+   full health and most dangerous at a sliver, so where you finish one is the
+   decision), **Thuribles** (walk a veil of incense across the floor that
+   costs no health at all and takes your SIGHT - the drifter's ink, walked
+   rather than thrown, so the answer is noticing which way it is walking),
+   **Sacristans** (no attack; while one lives, every enemy that dies near it
+   TOLLS, and the toll chills you wherever you are - the one support in the
+   game paid by the kill rather than by the minute, and the ring on the floor
+   is exactly the radius the bell is heard at) and **Vigils** (the light in
+   the tower: they hold station and draw a beam that SLOWS whoever it
+   watches, then lock the bearing and fire a lance along it - standing off
+   the beam is free, which makes it the weeper's question turned on its
+   side). **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -503,9 +527,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the eleven themes owns a boss, and the block a theme lands in is where its
+  of the twelve themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All eleven exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All twelve exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -562,14 +586,25 @@ context. The start screen says so, and one click anywhere fixes it.
   the floor around her pulses, and a gapped ring of honey is laid where she
   stands: she walks on and the ring stays behind, so over a fight the room
   fills with pockets of burning honey exactly where she has been. Under a
-  quarter of the bar she EATS her own brood for a burst of speed - the only
-  enrage in the game that costs the boss something the player can watch it
-  pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. Regular enemies keep
-  arriving throughout; killing the boss ends the wave and pays out. It does NOT
-  refill your health or ammo - the payout is large and the stations are right
-  there, so coming out of a boss in trouble is a real state to be in and what
-  you spend the money on is a real decision.
+   quarter of the bar she EATS her own brood for a burst of speed - the only
+   enrage in the game that costs the boss something the player can watch it
+   pay, and a player who kept the brood cleared takes nothing from the phase
+   but the speed. **THE RELIQUARY**, CATHEDRAL's, is a shrine that walks -
+   and the fight is the FLOOR: every so often it stops, the ground around it
+   pulses, and a gapped ring of CONSECRATED GROUND is laid where it stands.
+   It walks on and the ring stays behind, so over a fight the room fills with
+   pockets of hallow exactly where the boss has been, and the floor the
+   player was kiting on goes away a piece at a time. Off its lantern it
+   throws the slow processional fan the curates already taught you - the
+   tell is the lantern flaring - and under two thirds of the bar its bell
+   tolls on its own, a chill that reaches wherever the player is standing.
+   The box itself is the health bar's argument: shut and armoured for most
+   of the fight, and under a third the lids go wide for good, the armour
+   comes off, and the last stretch is the fastest. Regular enemies keep
+   arriving throughout; killing the boss ends the wave and pays out. It does NOT
+   refill your health or ammo - the payout is large and the stations are right
+   there, so coming out of a boss in trouble is a real state to be in and what
+   you spend the money on is a real decision.
 - **Wave composition is fixed; which theme fills it is dealt.** Every wave has
   the same number of enemies and the same mix of ROLES in every run - that is
   what keeps two runs comparable - but the run is A BLOCK OF FIVE WAVES PER
@@ -2190,6 +2225,7 @@ npm run test:newpool
 npm run test:thirdpool
 npm run test:fourthpool
 npm run test:fifthpool
+npm run test:cathedral
 ```
 
 The targeted suites, because the smoke test's bot rarely survives past the
@@ -2285,7 +2321,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the eleven themes, their six enemies each, and the run's deck
+js/themes.js        the twelve themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -2358,6 +2394,16 @@ test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
                     after the nurse is dead, the weeper's arc costing on the
                     line AND nothing off it, and the Broodmother eating her
                     own brood to panic
+test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
+                    the assertions are about thresholds: the penitent taking
+                    NOTHING while it kneels AND the same blow landing when it
+                    stands, the curate's round passing through cover where a
+                    shooter's breaks, the pallbearer's grave paying out on
+                    the spot AND nothing two steps off, the veil of incense
+                    costing no health at all, the toll chilling for a death
+                    inside the ring AND not outside it, the vigil's lance
+                    costing on the locked beam AND nothing off it, and the
+                    Reliquary opening under a third
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

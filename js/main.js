@@ -663,6 +663,20 @@ const MAX_GLARE = 20;
 // the ground beneath it marked, low enough that one theme's corpses cannot
 // evict another theme's pools out of the shared thirty creep slots.
 const MAX_HIVEBLOOD = 12;
+// CATHEDRAL's hallow - consecrated ground, the rings a Reliquary lays and the
+// grave a pallbearer opens. Its own kind and not `hiveblood` for the eviction
+// argument that separates every other kind: a pallbearer's grave and a boss
+// ring are CIRCLES of patches, and sharing a queue with the ticks' corpses
+// would have each of them deleting the other's whole mechanic. The cap sits
+// with the honey's - two sources feed it, and each patch is short-lived so
+// the consecration is ground that is sanctified THIS MINUTE rather than a
+// permanent condition on the room.
+const MAX_HALLOW = 14;
+// CATHEDRAL's incense - a thurible's veil. Fewer and bigger than the bile:
+// each one is a curtain of sight rather than a splatter, and a floor full of
+// little patches of smoke would be a haze rather than the wall the mechanic
+// is. Capped against the cloud pool the gas and the ink already share.
+const MAX_INCENSE = 8;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -725,6 +739,19 @@ const CREEP_GLARE = 0xffe08a;
 // has to tell burning honey from a lens's line in the half-second they have
 // to step off one of them.
 const CREEP_HIVEBLOOD = 0xffb300;
+// CATHEDRAL's hallow. No status, so it wears the theme's own pale brass
+// rather than a status colour - the shock's rule, for the shock's reason: the
+// patch and any HUD chip have nothing to agree about, so the colour says WHOSE
+// ground it is instead. It burns only while the player stands in it, which
+// keeps it the honey's bargain - ground that is sanctified now, not a tail
+// that follows them off it.
+const CREEP_HALLOW = 0xc0a860;
+// CATHEDRAL's incense. Dim and desaturated on purpose, and nearer the ink's
+// economy than the gas's: what the veil takes is SIGHT, and a bright cloud
+// would be a thing the player can see perfectly well through. It hangs low
+// rather than standing tall - the stain on the floor is the veil's edge, the
+// cloud above it is what the player cannot look through.
+const CREEP_INCENSE = 0xa89a6a;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -878,6 +905,22 @@ const HAZARD_KINDS = {
   hiveblood: {
     color: CREEP_HIVEBLOOD, cap: MAX_HIVEBLOOD,
   },
+  // CATHEDRAL's hallow - consecrated ground. The honey's bargain in the
+  // church's coin: no status, no tail, and it stops the instant the player
+  // steps off it. What separates it from honey is WHOSE it is and where it
+  // comes from - a grave that opens, a ring that is laid - and the eviction
+  // queue is the reason it is a row of its own.
+  hallow: {
+    color: CREEP_HALLOW, cap: MAX_HALLOW,
+  },
+  // CATHEDRAL's incense - a thurible's veil. NO damage and NO status, the
+  // ink's economy walked rather than thrown: what the cloud takes is sight,
+  // and only while the player is inside it. The stain on the floor is where
+  // the veil ends - the one question a player standing in one needs answered
+  // - and the cloud above it is the whole payload.
+  incense: {
+    color: CREEP_INCENSE, cap: MAX_INCENSE, cloud: true,
+  },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
 // queues twelve on its own and APIARY five, so this is not a limit anybody
@@ -944,6 +987,7 @@ const BOSS_NAMES = {
   maw: 'MAW',
   herald: 'HERALD',
   broodmother: 'THE BROODMOTHER',
+  reliquary: 'THE RELIQUARY',
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 

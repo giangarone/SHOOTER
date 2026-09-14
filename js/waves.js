@@ -96,6 +96,7 @@ const ADD_PRESSURE = {
   conductor: 4,    // its pylons already take up the floor
   siege: 5,
   herald: 5,
+  reliquary: 5,  // its rings already take up the floor
 };
 const ADD_PRESSURE_DEFAULT = 4;
 
