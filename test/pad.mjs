@@ -31,6 +31,13 @@
 //   10. A pad unplugged mid-run pauses instead of leaving the player standing.
 //   11. CREATE opens the debug panel, which parks the run and dims the beam
 //       like every other screen with small caps to read.
+//   12. THE BUTTONS ARE REBINDABLE. The settings screen grows a CONTROLLER
+//       BINDINGS block in pad mode (and hides the keyboard's), a press on a
+//       listening row becomes the binding - swapping with whichever action
+//       owned the button - and the rebinding reaches the field, the prompt
+//       and the start screen's sheet. CROSS/CIRCLE/OPTIONS cancel a capture
+//       rather than binding, DEFAULTS puts the shipped layout back, and the
+//       save is real: a fresh table reads it.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8212;
@@ -481,6 +488,151 @@ try {
     t('sensitivity changes the turn rate', g._sensMult() > 0.4 && g._sensMult() <= 2,
       g._sensMult().toFixed(2));
     g._closeSubScreen();
+    await frames(2);
+
+    // ---- 6a. the buttons are rebindable ------------------------------------
+    //
+    // The pad half of the binding table, driven the way a player drives it:
+    // the settings screen, a row clicked open, a button pressed. The press
+    // goes through the synthetic pad's poll, so what is being measured is
+    // the whole path - hardware index to table to game - with nothing
+    // short-circuited.
+    g._openSettings();
+    await frames(2);
+    // THE BLOCKS SWAP WITH THE HANDS. The pad player sees the pad rows, the
+    // keyboard rows are gone, and the note says what cancels.
+    t('pad mode shows the pad rows',
+      document.getElementById('pbind-jump') && document.getElementById('pbind-jump').offsetParent !== null,
+      '');
+    t('and hides the keyboard rows',
+      document.getElementById('bind-forward').offsetParent === null, '');
+    // THE CAPS ARE DRAWN, not spelled: a face button is its glyph, which is
+    // the one thing a player holding a PlayStation pad reads before the
+    // word. JUMP defaults to CROSS.
+    const jumpCap = document.querySelector('#pbind-jump .bind-btn');
+    t('the default caps are glyphs',
+      !!jumpCap.querySelector('.g-cross'), jumpCap.innerHTML);
+    // The shipped defaults, off the table: JUMP cross / TAKE triangle.
+    t('the shipped pad table is the default',
+      g.keys.padBtn('jump') === 'cross' && g.keys.padBtn('use') === 'triangle',
+      g.keys.padBtn('jump') + ' / ' + g.keys.padBtn('use'));
+
+    // A REBIND, the whole path: click the JUMP row, press SQUARE. Square was
+    // RELOAD's, so the two swap - the pad's one-button-per-action rule - and
+    // the field obeys the next frame.
+    const pRow = document.querySelector('#pbind-jump .bind-btn');
+    pRow.click();
+    await frames(1);
+    const listeningPad = pRow.classList.contains('listening')
+      && pRow.textContent === 'PRESS A BUTTON';
+    set(B.SQUARE, true);
+    await frames(2);
+    const squareBound = g.keys.padBtn('jump') === 'square';
+    const reloadTook = g.keys.padBtn('reload') === 'cross';
+    const capSwapped = jumpCap.querySelector('.g-square') !== null
+      && document.querySelector('#pbind-reload .bind-btn').querySelector('.g-cross') !== null;
+    const closed = !pRow.classList.contains('listening');
+    set(B.SQUARE, false);
+    await frames(2);
+    t('the pad row says PRESS A BUTTON while it waits', listeningPad === true);
+    t('square binds jump', squareBound === true, g.keys.padBtn('jump'));
+    t('the swap hands reload the cross it displaced', reloadTook === true,
+      g.keys.padBtn('reload'));
+    t('both caps follow the swap', capSwapped === true);
+    t('the capture closes on the bind', closed === true);
+
+    // THE FIELD OBEYS. Square is jump now and cross is reload; a held square
+    // reads as a held jump, and a press of cross starts a reload. Needs the
+    // arena live - the settings screen is up and the run is paused under it,
+    // and every action method refuses a state that is not 'playing'.
+    g._closeSubScreen();
+    await frames(2);
+    g.state = 'playing';
+    clearField();
+    g.player.mag = 2;
+    set(B.SQUARE, true);
+    await frames(2);
+    const squareJumps = g.input.jump === true;
+    set(B.SQUARE, false);
+    await frames(2);
+    await tap(B.CROSS);
+    const crossReloads = g.player.reloading > 0;
+    t('square is jump in the field', squareJumps === true);
+    t('cross is reload after the swap', crossReloads === true,
+      g.player.reloading.toFixed(2));
+
+    // BACK TO THE SETTINGS SCREEN for the cancel and save trials - the rows
+    // only exist there, and the mode is still the pad's. The run is PAUSED
+    // first: the capture is read by _padMenu, and a live arena would spend
+    // the presses in the field instead.
+    g.pause();
+    await frames(2);
+    g._openSettings();
+    await frames(2);
+
+    // THE PROMPT AND THE SHEET follow the table, not the plastic: the lead
+    // names the bound buttons and the start screen's sheet swaps them in.
+    // TAKE is still on triangle here, so the lead is the shipped one - what
+    // is being asserted is that it is built from the table, which the swap
+    // on the rows above has already proven reaches the caps.
+    const leadAfter = g._useLead();
+    t('the take prompt still names triangle', leadAfter.includes('g-triangle'), leadAfter);
+    const sheetJump = g.keys.padSheet().find((r) => r[1] === 'JUMP')[0];
+    const sheetReload = g.keys.padSheet().find((r) => r[1] === 'RELOAD')[0];
+    t('the pad sheet carries the rebind',
+      sheetJump === 'square' && sheetReload === 'cross', sheetJump + ' / ' + sheetReload);
+
+    // CROSS CANCELS rather than binding. The click that opened the row and
+    // the press that means "confirm" are the same button, so CROSS can never
+    // be the binding it is confirming with.
+    document.querySelector('#pbind-jump .bind-btn').click();
+    await frames(1);
+    set(B.CROSS, true);
+    await frames(2);
+    const crossCanceled = !document.querySelector('#pbind-jump .bind-btn').classList.contains('listening')
+      && g.keys.padBtn('jump') === 'square';
+    set(B.CROSS, false);
+    await frames(2);
+    t('cross cancels the capture without binding', crossCanceled === true,
+      g.keys.padBtn('jump'));
+
+    // A FIXED press - the D-pad - closes the row and keeps the binding: the
+    // pad's one-word "no", the same answer Meta gets on the keyboard.
+    document.querySelector('#pbind-jump .bind-btn').click();
+    await frames(1);
+    set(B.DOWN, true);
+    await frames(2);
+    const dpadRefused = !document.querySelector('#pbind-jump .bind-btn').classList.contains('listening')
+      && g.keys.padBtn('jump') === 'square';
+    set(B.DOWN, false);
+    await frames(2);
+    t('the d-pad is refused as a binding', dpadRefused === true, g.keys.padBtn('jump'));
+
+    // THE SAVE IS REAL: a fresh table, the way a reloaded page would build
+    // one, comes up with the swap in place - and DEFAULTS puts the shipped
+    // layout back on both the table and the caps.
+    const rawPad = JSON.parse(localStorage.getItem('va-pad-keys'));
+    t('the pad bind is written to the store',
+      !!rawPad && rawPad.jump === 'square' && rawPad.reload === 'cross');
+    const freshPad = await (async () => {
+      const { Keybinds } = await import('./js/keybind.js');
+      const k = new Keybinds();
+      return k.padBtn('jump') === 'square';
+    })();
+    t('a fresh table reads the pad save', freshPad === true);
+    document.getElementById('btn-reset-keys').click();
+    await frames(1);
+    const padDefaultsBack = g.keys.padBtn('jump') === 'cross'
+      && g.keys.padBtn('reload') === 'square'
+      && !!document.querySelector('#pbind-jump .bind-btn .g-cross');
+    t('DEFAULTS restores the shipped pad layout', padDefaultsBack === true);
+    localStorage.removeItem('va-pad-keys');
+    g._closeSubScreen();
+    await frames(2);
+    // The section below walks the PAUSE screen's exit button, and the run was
+    // unpaused above to prove the rebinding in the field - back to the state
+    // the suite was in before this section touched anything.
+    g.pause();
     await frames(2);
 
     // ---- 6b. EXIT, and the question in front of it -------------------------

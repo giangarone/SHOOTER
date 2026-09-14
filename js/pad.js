@@ -37,7 +37,22 @@ export const BTN = {
   // why BUTTON_COUNT is 18 and not 17.
   TOUCHPAD: 17,
 };
-const BUTTON_COUNT = 18;
+// Exported because a rebind capture has to sweep every index to find the
+// frame's press - the poll is the only place a pad press exists.
+export const BUTTON_COUNT = 18;
+
+// What each index is CALLED once it leaves the device layer. The binding
+// table in keybind.js stores these names, the caps draw them (a face button
+// as its glyph - glyph() keys on the lowercase word - and everything else
+// as the word printed on the plastic), and a capture turns an index back
+// into one to ask the table what was just pressed. Index order, because
+// that is the direction both questions run in.
+export const BTN_NAMES = [
+  'cross', 'circle', 'square', 'triangle',
+  'L1', 'R1', 'L2', 'R2',
+  'CREATE', 'OPTIONS', 'L3', 'R3',
+  'UP', 'DOWN', 'LEFT', 'RIGHT', 'PS', 'TOUCH PAD',
+];
 
 // Sony's vendor id, and the two products that are a DualSense: 0ce6 is the
 // pad, 0df2 the Edge. Browsers spell the id string differently - Chrome writes
@@ -269,6 +284,18 @@ export class Pad {
   down(i) { return !!this._down[i] && !this._used[i]; }
   /** True only on the frame the button went down. */
   pressed(i) { return !!this._down[i] && !this._prev[i] && !this._used[i]; }
+  /**
+   * The first index freshly pressed this frame and not yet spent, or -1.
+   * A pad rebind capture has no event to read - the poll IS the pad's event -
+   * so it sweeps instead, and the sweep must skip what the menu already
+   * consumed: CROSS on the row that opened it is the click, not the binding.
+   */
+  pressedIndex() {
+    for (let i = 0; i < BUTTON_COUNT; i++) {
+      if (this._down[i] && !this._prev[i] && !this._used[i]) return i;
+    }
+    return -1;
+  }
   /** True only on the frame the button came up. */
   released(i) { return !this._down[i] && !!this._prev[i]; }
   /** Analogue value, 0..1. Triggers are the only buttons that give a range. */

@@ -132,6 +132,13 @@ There is no list to update.
   DOES (the Escape and debug cases in `js/main.js` are the deliberate
   exceptions: they are not rebindable). A mechanic that needs a key goes
   through `KEY_ACTIONS` there, which is also the settings rows' order.
+- The CONTROLLER's meanings live in the same file - `PAD_ACTIONS`, one
+  button per action, saved separately. Nothing else may name a `BTN` index
+  for what it DOES (the pause, menu and debug buttons in `js/main.js` are
+  the deliberate exceptions, exactly as Escape is on the keyboard). The
+  pad's settings rows and its control sheet are built from the table, so a
+  rebind reaches both; a pad bind is a swap with the action that owned the
+  button, never a refusal.
 - Pools are everywhere: projectiles, particles, decals, telegraph handles. If
   you take a handle, release it on every path out, including the one where the
   thing dies early. Several suites assert pools drain precisely because that

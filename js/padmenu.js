@@ -93,44 +93,27 @@ export function cap(name, cls = '') {
 // screen mentions, and the pad's D-PAD, which is how a controller walks the
 // menus it is reading this sheet in.
 //
-// KEYS ARE DEFAULTS ONLY. This list is the fallback for a call with no sheet;
-// the live keyboard sheet is built by js/keybind.js and passed in, so a rebind
-// reaches the caps without this module learning where bindings are stored.
-// The PAD's sheet is fixed text - a controller has no rebindable keys in this
-// game, and its bindings are printed on its plastic.
-export const PAD_CONTROLS = [
-  ['L STICK', 'MOVE'], ['L3', 'SPRINT'], ['R STICK', 'LOOK'],
-  ['R2', 'SHOOT'], ['L2', 'AIM'], ['R3', 'MELEE'],
-  ['R1', 'ITEM'], ['cross', 'JUMP'], ['square', 'RELOAD'],
-  ['circle', 'CROUCH'], ['L3 circle', 'SLIDE'], ['triangle', 'TAKE'],
-  ['TOUCH PAD', 'STATS'], ['D-PAD', 'MENU'], ['OPTIONS', 'PAUSE'],
-];
-
-// The keyboard sheet AS SHIPPED. Defaults only - see the note above.
-export const KBM_CONTROLS = [
-  ['WASD', 'MOVE'], ['SHIFT', 'SPRINT'], ['MOUSE', 'LOOK'],
-  ['LMB', 'SHOOT'], ['RMB', 'AIM'], ['V', 'MELEE'],
-  ['R', 'RELOAD'], ['SPACE', 'JUMP'], ['Q', 'ITEM'],
-  ['C', 'CROUCH'], ['SHIFT C', 'SLIDE'], ['E', 'USE'],
-  ['TAB', 'STATS'], ['F', 'FULLSCREEN'], ['ESC', 'PAUSE'],
-];
+// BOTH SHEETS ARE PASSED IN RATHER THAN OWNED HERE. The keyboard's comes out
+// of the binding table (Keybinds.sheet) and the pad's out of the same table's
+// pad half (Keybinds.padSheet) - the controller's buttons are rebindable now,
+// and a rebind made in SETTINGS has to reach these caps without this module
+// learning where bindings are stored. This file held the pad sheet as a
+// fixed constant until then: right, but plastic, and the player had nowhere
+// to say "I want R1 for jump".
 
 /**
  * Rewrites the control sheet in place. Called only when the input mode
  * actually changes, not per frame.
  *
- * The KEYBOARD sheet is passed in rather than read from a constant here: the
- * caps are the binding table's to answer for, and a rebind has to reach them
- * without this module learning where bindings are stored. `kbm` is the
- * fifteen [key, action] pairs - see Keybinds.sheet().
- *
  * @param {HTMLElement} el the `.controls` panel
- * @param {boolean} pad true for the controller sheet
- * @param {?Array.<[string, string]>} kbm the keyboard sheet, or null for pad
+ * @param {Array.<[string, string]>} sheet the fifteen [key, action] pairs -
+ *   Keybinds.sheet() for the keyboard, Keybinds.padSheet() for the pad
+ * @param {boolean} pad true for the controller sheet - keeps the `.pad`
+ *   class the wider caps are keyed on
  */
-export function renderControls(el, pad, kbm = null) {
+export function renderControls(el, pad, sheet) {
   for (const old of el.querySelectorAll('.ctl')) old.remove();
-  for (const [key, label] of (pad ? PAD_CONTROLS : (kbm || KBM_CONTROLS))) {
+  for (const [key, label] of sheet) {
     const ctl = document.createElement('div');
     ctl.className = 'ctl';
     ctl.innerHTML = cap(key, 'key') + '<span>' + label + '</span>';

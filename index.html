@@ -452,21 +452,40 @@
            key, done. The rows are BUILT by main.js out of the binding table
            rather than authored here, so the screen can never show a binding
            the table does not know about - the cap on each row is the only
-           hand-authored thing in the block. -->
-      <div class="set-head">KEY BINDINGS</div>
-      <div class="set-row"><span class="set-label">FORWARD</span><span class="bind-slot" id="bind-forward"></span></div>
-      <div class="set-row"><span class="set-label">BACK</span><span class="bind-slot" id="bind-back"></span></div>
-      <div class="set-row"><span class="set-label">LEFT</span><span class="bind-slot" id="bind-left"></span></div>
-      <div class="set-row"><span class="set-label">RIGHT</span><span class="bind-slot" id="bind-right"></span></div>
-      <div class="set-row"><span class="set-label">SPRINT</span><span class="bind-slot" id="bind-sprint"></span></div>
-      <div class="set-row"><span class="set-label">JUMP</span><span class="bind-slot" id="bind-jump"></span></div>
-      <div class="set-row"><span class="set-label">CROUCH</span><span class="bind-slot" id="bind-crouch"></span></div>
-      <div class="set-row"><span class="set-label">MELEE</span><span class="bind-slot" id="bind-melee"></span></div>
-      <div class="set-row"><span class="set-label">RELOAD</span><span class="bind-slot" id="bind-reload"></span></div>
-      <div class="set-row"><span class="set-label">ITEM</span><span class="bind-slot" id="bind-item"></span></div>
-      <div class="set-row"><span class="set-label">USE</span><span class="bind-slot" id="bind-use"></span></div>
-      <div class="set-row"><span class="set-label">STATS</span><span class="bind-slot" id="bind-stats"></span></div>
-      <div class="set-row"><span class="set-label">FULLSCREEN</span><span class="bind-slot" id="bind-fullscreen"></span></div>
+           hand-authored thing in the block.
+
+           TWO BLOCKS, one per device, and the INPUT MODE picks which one the
+           eye gets - the same rule the start screen's control sheet has always
+           followed, so the settings screen follows the hands too. The pad
+           block is built from the same table's pad half (Keybinds.padSheet
+           order) and its caps are glyphs rather than letters. -->
+      <div class="set-head kbm-only">KEY BINDINGS</div>
+      <div class="set-row kbm-only"><span class="set-label">FORWARD</span><span class="bind-slot" id="bind-forward"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">BACK</span><span class="bind-slot" id="bind-back"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">LEFT</span><span class="bind-slot" id="bind-left"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">RIGHT</span><span class="bind-slot" id="bind-right"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">SPRINT</span><span class="bind-slot" id="bind-sprint"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">JUMP</span><span class="bind-slot" id="bind-jump"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">CROUCH</span><span class="bind-slot" id="bind-crouch"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">MELEE</span><span class="bind-slot" id="bind-melee"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">RELOAD</span><span class="bind-slot" id="bind-reload"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">ITEM</span><span class="bind-slot" id="bind-item"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">USE</span><span class="bind-slot" id="bind-use"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">STATS</span><span class="bind-slot" id="bind-stats"></span></div>
+      <div class="set-row kbm-only"><span class="set-label">FULLSCREEN</span><span class="bind-slot" id="bind-fullscreen"></span></div>
+
+      <div class="set-head pad-now">CONTROLLER BINDINGS</div>
+      <div class="set-row pad-now"><span class="set-label">JUMP</span><span class="bind-slot" id="pbind-jump"></span></div>
+      <div class="set-row pad-now"><span class="set-label">CROUCH</span><span class="bind-slot" id="pbind-crouch"></span></div>
+      <div class="set-row pad-now"><span class="set-label">RELOAD</span><span class="bind-slot" id="pbind-reload"></span></div>
+      <div class="set-row pad-now"><span class="set-label">TAKE</span><span class="bind-slot" id="pbind-use"></span></div>
+      <div class="set-row pad-now"><span class="set-label">AIM</span><span class="bind-slot" id="pbind-aim"></span></div>
+      <div class="set-row pad-now"><span class="set-label">SHOOT</span><span class="bind-slot" id="pbind-shoot"></span></div>
+      <div class="set-row pad-now"><span class="set-label">ITEM</span><span class="bind-slot" id="pbind-item"></span></div>
+      <div class="set-row pad-now"><span class="set-label">MELEE</span><span class="bind-slot" id="pbind-melee"></span></div>
+      <div class="set-row pad-now"><span class="set-label">SPRINT</span><span class="bind-slot" id="pbind-sprint"></span></div>
+      <div class="set-row pad-now"><span class="set-label">STATS</span><span class="bind-slot" id="pbind-stats"></span></div>
+
       <!-- KEPT, even though the caps above are the honest default: a player who
            rebinds and regrets it has to dig through thirteen rows to undo
            them by hand otherwise. One press, everything back to the shipped
@@ -475,7 +494,8 @@
         <span class="set-label">RESET KEYS</span>
         <button id="btn-reset-keys" class="opt-btn">DEFAULTS</button>
       </div>
-      <p class="set-note">CLICK A KEY, PRESS A NEW ONE. ESC CANCELS. MOUSE BUTTONS AND ESC ARE FIXED</p>
+      <p class="set-note kbm-only">CLICK A KEY, PRESS A NEW ONE. ESC CANCELS. MOUSE BUTTONS AND ESC ARE FIXED</p>
+      <p class="set-note pad-now">CLICK A BUTTON, PRESS A NEW ONE. CROSS, CIRCLE AND OPTIONS CANCEL. STICKS, D-PAD, OPTIONS AND CREATE ARE FIXED</p>
     </div>
 
     <div class="primary-row"><button id="btn-settings-back">BACK</button></div>
