@@ -13,6 +13,7 @@
 
 export * from './shared.js';
 export * from './brine.js';
+export * from './cathedral.js';
 export * from './ember.js';
 export * from './hive.js';
 export * from './plague.js';

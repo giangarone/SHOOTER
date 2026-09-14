@@ -1438,6 +1438,13 @@ export class Projectile {
     // player cannot answer by walking, which is the whole reason the only one
     // in the game is also the only one that can be shot down.
     this.home = projLook(type).home || 0;
+    // Whether it ignores geometry ENTIRELY - walks through crates, pillars
+    // and the arena's own walls as though they were smoke. Zero for
+    // everything but CATHEDRAL's curate: a round that stops against a
+    // pillar would be an ordinary gunner with a rider on it, and the whole
+    // enemy is this one row. Its life is short enough (4s) that a ghost
+    // round cannot orbit the room forever.
+    this.ghost = !!projLook(type).ghost;
 
     const mats = projectileMats(type, glowTex);
     this.mesh = new THREE.Mesh(geo('projectile', () => new THREE.SphereGeometry(0.1, 8, 8)), mats.core);
@@ -1512,7 +1519,11 @@ export class Projectile {
         if (ctx.effects) ctx.effects.burst(this.pos, projLook(this.type).glow, 8, 3, 1, 0.3);
       }
     }
-    if (pointInObstacle(this.pos, ctx.obstacles)) return 'wall';
+    // A GHOST ROUND meets nothing. The wall test is skipped rather than
+    // hollowed, because the floor test above is what keeps a curate's shot
+    // from flying on into the ceiling for ever - the round dies on the
+    // ground it was aimed at, cover or no cover.
+    if (!this.ghost && pointInObstacle(this.pos, ctx.obstacles)) return 'wall';
     return 'alive';
   }
 }

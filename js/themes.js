@@ -227,6 +227,28 @@ export const THEMES = {
       flier: 'weeper',
     },
   },
+
+  // The sanctuary, and the toll for standing in it. Nearly everything here is
+  // harmless while it is watched and worse the moment the player looks away:
+  // a penitent they stop watching rises, a pallbearer they whittle down is
+  // becoming a corpse with their own shots banked in it, a sacristan they
+  // leave alive charges them by the kill. It is the theme of THRESHOLDS -
+  // the kneel, the veil, the bell, the grave - and of ground that is
+  // CONSECRATED rather than poisoned or frozen: standing in it costs health,
+  // and the room fills with it wherever the boss has been.
+  cathedral: {
+    name: 'CATHEDRAL',
+    color: 0xc0a860,
+    boss: 'reliquary',
+    roles: {
+      rusher: 'penitent',
+      gunner: 'curate',
+      brute: 'pallbearer',
+      artillery: 'thurible',
+      support: 'sacristan',
+      flier: 'vigil',
+    },
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
