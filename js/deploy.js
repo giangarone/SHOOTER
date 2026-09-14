@@ -121,7 +121,7 @@ export class Turret {
     // weapon nobody is aiming.
     this.damage = damage;
     // FIFTEEN, NOT TWENTY. Not a balance number: an item's readout must never
-    // state its charge time (see the note at the top of js/items.js), and a
+    // state its charge time (see the note at the top of js/items/active/index.js), and a
     // turret that lived exactly as long as its cooldown would print "FOR 20s"
     // on the box's card for a twenty-second item - which is the one number the
     // player is meant to learn by carrying the thing. Fifteen also means the
@@ -1087,7 +1087,7 @@ export class Singularity {
     this.life = 5;
     this.age = 0;
     // TWICE ONE OF THE PLAYER'S OWN SHOTS, snapshotted when the item was
-    // thrown - see EVENT HORIZON in js/items.js and the note on Turret.damage,
+    // thrown - see EVENT HORIZON in js/items/active/index.js and the note on Turret.damage,
     // which this follows for the same reason.
     this.damage = damage;
     // Where the pulse stood when the hole opened, so it eats on the next beat
@@ -1492,7 +1492,7 @@ export class Meteor {
     this.z = z;
     this.wait = delay;
     // THREE OF THE PLAYER'S OWN SHOTS, snapshotted at the press - see FALLING
-    // SKY in js/items.js. The flat 70 it used to carry was most of a chaser on
+    // SKY in js/items/active/index.js. The flat 70 it used to carry was most of a chaser on
     // wave three and a rounding error on wave thirty.
     this.damage = damage;
     this.fall = -1;

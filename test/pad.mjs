@@ -312,20 +312,20 @@ try {
     // R1 FIRES THE ACTIVE ITEM - the shoulder over the trigger finger, which is
     // where a button pressed mid-firefight has to be. It must not fire an item
     // that is not charged, and an empty slot must be harmless.
-    g.player.item = null;
-    g.player.itemCharge = 0;
+    g.player.activeItem = null;
+    g.player.activeItemCharge = 0;
     await tap(B.R1);
-    t('R1 with an empty slot does nothing', g.player.item === null);
+    t('R1 with an empty slot does nothing', g.player.activeItem === null);
 
-    g.player.giveItem('itemDash');
+    g.player.giveActiveItem('itemDash');
     g.player.dashEnd = -1;
     await tap(B.R1);
-    // NOT `itemCharge === 0`: the press spends the charge and the very next
+    // NOT `activeItemCharge === 0`: the press spends the charge and the very next
     // frame starts refilling it, so by the time tap() has released the button
     // the bar is already a tenth of a second up. What firing means is that the
     // effect landed and the item is no longer ready.
     t('R1 fires the active item',
-      !g.player.itemReady && g.player.dashEnd > g.time, String(g.player.itemCharge));
+      !g.player.activeItemReady && g.player.dashEnd > g.time, String(g.player.activeItemCharge));
 
     // ...and a second press, on an empty bar, spends nothing.
     g.player.dashEnd = -1;

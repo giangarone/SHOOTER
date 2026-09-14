@@ -232,7 +232,7 @@ const _hsl = { h: 0, s: 0, l: 0 };
 // It used to be the opposite: the wave break brought the lights UP, warm and
 // wide, the way a venue does when the set ends. It was the right idea for a
 // club and the wrong one for this game. What is standing in the room at a wave
-// break is three columns of coloured light with an upgrade in each, and a lit
+// break is three columns of coloured light with a passive item in each, and a lit
 // room is exactly what stops a shaft of light reading as bright - the offer
 // the whole break exists for was the dimmest thing on screen.
 //

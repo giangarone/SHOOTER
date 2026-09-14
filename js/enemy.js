@@ -1680,7 +1680,7 @@ export class Spit {
 
 // Reload Burst's shard. The one projectile the PLAYER owns: it flies flat and
 // outward, explodes on an enemy, an obstacle or a short fuse, and cannot hurt
-// the player - that is the whole promise of the upgrade, so there is no
+// the player - that is the whole promise of the passive item, so there is no
 // player-damage branch here to get wrong later.
 //
 // Damage is dealt through ctx.onBlast rather than inline: radial falloff and

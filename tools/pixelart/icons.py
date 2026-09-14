@@ -1,7 +1,7 @@
 """What each passive item DOES, drawn at 24x24.
 
 Nothing here looks at the 3D catalogue. Every shape was chosen from the
-upgrade's own effect text, which is why several of them are nothing like the
+passive item's own effect text, which is why several of them are nothing like the
 object that used to stand for them - VENOM ROUNDS is a poisoned cartridge and
 not a flask, because a flask says "poison" without saying that the AMMUNITION
 is what carries it.
@@ -10,7 +10,7 @@ Two rules hold across the whole set:
   * the light is always upper-left, applied by Canvas.shade() and never by hand
   * STRUCTURE is the object, ENERGY is what the passive item does to it - so
   * the
-    lit part of an icon is always the part that names the upgrade
+    lit part of an icon is always the part that names the passive item
 """
 import math
 from canvas import Canvas, G, EMPTY, STRUCT as S, SHADOW as D, ENERGY as E, PALE as P
@@ -162,7 +162,7 @@ def _(c):
 @icon('ammoHoarder')        # 2x max reserve
 def _(c):
     # A heap of loose rounds. Every container in this file is already spoken
-    # for - box, drum, belt, crate - and the upgrade is not a container anyway,
+    # for - box, drum, belt, crate - and the passive item is not a container anyway,
     # it is a quantity. Spaced two pixels apart, or the generated outline has
     # nothing to run between them and the heap fuses into one blob.
     for x in (8.9, 15.1):
@@ -221,7 +221,7 @@ def _(c):
 def _(c):
     # THE TRIGGER ITSELF, inside its guard, with the kick coming off it.
     # OVERCLOCK owns the dial - a second gauge would say "rate of fire" twice
-    # and never say "recoil" - so this is the part of the gun the upgrade
+    # and never say "recoil" - so this is the part of the gun the passive item
     # actually touches, and the two arrows are what it costs.
     c.rect(1.0, 2.0, 15.0, 4.8, S)                   # the receiver above it
     c.arc(8.0, 12.0, 7.2, 2.6, 190, 350, S)          # the guard, hung off it
@@ -235,7 +235,7 @@ def _(c):
 def _(c):
     # One round, and the arc it comes back along. The cartridge is the
     # structure and the return is the energy, so the lit half of the icon is
-    # the half that names the upgrade - the round coming BACK, not the round.
+    # the half that names the passive item - the round coming BACK, not the round.
     bullet(c, 13.6, 5.0, 6.4, 17.0, S, S, 0.42)
     c.arc(11.0, 14.0, 8.6, 2.6, 70, 250, E)          # up the left and over
     c.poly([(9.2, 3.6), (16.4, 5.2), (10.2, 9.6)], E)  # arriving at the case
@@ -274,7 +274,7 @@ def _(c):
 
 @icon('hollowPoint')        # +30% damage, -25% magazine
 def _(c):
-    # The round nose-on, opened out. The cavity is what the upgrade is named
+    # The round nose-on, opened out. The cavity is what the passive item is named
     # for, so the cavity is the shape - not a ring with a cross in it, which
     # is a first-aid symbol wearing the wrong colour.
     c.disc(12, 12, 9.2, S)
@@ -1981,7 +1981,7 @@ def _(c):
         c.disc(x, y, 2.4, S)
     # The charm it hangs on: a ring off the ankle, which is what makes it a
     # keepsake rather than an animal - and it is the lit part, because the LUCK
-    # is the upgrade and the foot is only where it is kept.
+    # is the passive item and the foot is only where it is kept.
     c.line(15.6, 20.4, 18.6, 18.0, E, 2.2)
     c.ring(20.0, 15.0, 3.4, 2.2, E)
 

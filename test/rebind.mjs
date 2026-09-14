@@ -70,7 +70,7 @@ try {
     const want = {
       forward: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
       sprint: ['ShiftAny'], jump: ['Space'], crouch: ['KeyC', 'ControlAny'],
-      melee: ['KeyV'], reload: ['KeyR'], item: ['KeyQ'], use: ['KeyE'],
+      melee: ['KeyV'], reload: ['KeyR'], activeItem: ['KeyQ'], use: ['KeyE'],
       stats: ['Tab'], fullscreen: ['KeyF'],
     };
     for (const id in want) {
@@ -79,6 +79,26 @@ try {
     return null;
   });
   ok('the shipped table is the default', defaultsOk === null, defaultsOk || '');
+
+  // The action used to be stored as `item`. Renaming the code must not reset a
+  // player's chosen key or shoulder button, so both loaders accept the old key
+  // and expose it only under the explicit active-item action.
+  const legacyItem = await page.evaluate(async () => {
+    const keyboard = localStorage.getItem('va-keys');
+    const pad = localStorage.getItem('va-pad-keys');
+    localStorage.setItem('va-keys', JSON.stringify({ item: ['KeyI'] }));
+    localStorage.setItem('va-pad-keys', JSON.stringify({ item: 'L1' }));
+    const { Keybinds } = await import('./js/keybind.js?legacy-active-item');
+    const keys = new Keybinds();
+    if (keyboard === null) localStorage.removeItem('va-keys');
+    else localStorage.setItem('va-keys', keyboard);
+    if (pad === null) localStorage.removeItem('va-pad-keys');
+    else localStorage.setItem('va-pad-keys', pad);
+    return { keyboard: keys.codes('activeItem'), pad: keys.padBtn('activeItem') };
+  });
+  ok('the old item binding migrates to activeItem',
+    legacyItem.keyboard[0] === 'KeyI' && legacyItem.pad === 'L1',
+    JSON.stringify(legacyItem));
 
   // ---- 1. the table is the one path ---------------------------------------
   const moveBefore = await page.evaluate(async () => {
@@ -335,8 +355,8 @@ try {
     const g = window.__game;
     g.state = 'playing';
     g.autoTest = false;
-    g.player.giveItem('itemDash');
-    g.player.itemCharge = 1e9;
+    g.player.giveActiveItem('itemDash');
+    g.player.activeItemCharge = 1e9;
     g.keys.bind('forward', 'KeyI');
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const fire = async (code) => {

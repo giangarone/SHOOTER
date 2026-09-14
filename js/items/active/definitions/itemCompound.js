@@ -1,0 +1,31 @@
+import { defineActiveItem } from '../shared.js';
+
+export const id = 'itemCompound';
+
+export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+    name: 'COMPOUND INTEREST',
+    charge: 20,
+    theme: THEME.power,
+    // GRAFT'S SIBLING, IN DAMAGE. One percent is deliberately almost nothing:
+    // pressed once it is invisible, and that is the point - this is the only
+    // item in the pool that is worth carrying rather than worth pressing, and
+    // a run that keeps it from wave four is a run that presses it twenty-odd
+    // times and finishes with a quarter more gun than it started with.
+    //
+    // TWENTY POINTS AND NOT SIXTY, unlike GRAFT. Three max health is a real
+    // number the moment it lands; one percent is not, and an item whose payout
+    // only exists in aggregate has to be affordable often enough to aggregate.
+    //
+    // COMPOUNDING, as the name promises: each press is a percent of what the
+    // last one left, so the gain accelerates very slightly. Over a run that is
+    // a rounding error, and it is the honest reading of the word.
+    effects: [['+1% DAMAGE', GOOD], ['PERMANENT, COMPOUNDS', NOTE]],
+    use: (game) => {
+      const p = game.player;
+      p.compoundMult *= 1.01;
+      game.effects.shockwave(p.pos, THEME.power, 5, 0.5);
+      game.effects.burst(p.eyeInto(_v), 0xe53935, 20, 5, 3, 0.6);
+      game.ui.banner('+1% DAMAGE');
+      game.sfx.itemGraft();
+    },
+}));

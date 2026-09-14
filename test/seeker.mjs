@@ -72,10 +72,10 @@ try {
       g.queue.length = 0;
       g.enemies.forEach((e) => { g.scene.remove(e.group); e.dispose(); });
       g.enemies.length = 0;
-      g.player.upgrades = {};
+      g.player.passiveItems = {};
       g.player.rebuildMods();
       if (opts.seeker) {
-        g.player.upgrades.seeker = 1;
+        g.player.passiveItems.seeker = 1;
         g.player.rebuildMods();
       }
       if (opts.pierce) {

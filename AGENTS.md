@@ -28,8 +28,8 @@ Grep for the thing you touched if it is not here; these are the common ones.
 
 | changed | run |
 |---|---|
-| a passive or active item, the pool, the box | `newpool` `thirdpool` `fourthpool` `active` `icons` |
-| an upgrade's numbers | `newpool` `thirdpool` `fourthpool` `icons`, plus whatever it modifies |
+| a passive or active item, the pool, the box | `item-modules` `newpool` `thirdpool` `fourthpool` `fifthpool` `active` `icons` |
+| a passive item's numbers | `newpool` `thirdpool` `fourthpool` `fifthpool` `icons`, plus whatever it modifies |
 | an enemy, or a theme's table | `themes` `icons`, that theme's own suite, `boss` |
 | movement - sprint, crouch, slide, dash, jump | `crouch` `sprint` `pad` |
 | a key binding, the input path, the key table | `rebind` `pad` `crouch` `sprint` `aim` |
@@ -117,6 +117,13 @@ There is no list to update.
 
 - `js/main.js` is the loop, the waves and the run state. Most systems are
   reached from here.
+- Items are directory-driven. Passive definitions live one per file in
+  `js/items/passive/definitions/`; active definitions live one per file in
+  `js/items/active/definitions/`. Do not add imports to either `index.js`:
+  `server.js` supplies the browser manifest and Node discovers the same files
+  directly. The filename, exported `id`, behavior and item-local
+  `icon` belong to the same module. This is deliberate: two worktrees adding
+  two items should add two unrelated paths and have nothing shared to merge.
 - `js/enemies/` is one file per theme, registered by `index.js`. `shared.js`
   holds what more than one theme needs — the geometry and material caches, the
   status tables, the steering helpers, and `ENEMY_TYPES` itself.
@@ -143,9 +150,41 @@ There is no list to update.
   you take a handle, release it on every path out, including the one where the
   thing dies early. Several suites assert pools drain precisely because that
   path is easy to miss.
-- `js/pixelicons.js` is GENERATED (see `tools/pixelart`). Every offer needs a
-  drawing and every drawing an offer — `npm run test:icons` is the check, and
-  it runs in milliseconds.
+- `js/pixelicons.js` is GENERATED (see `tools/pixelart`) and holds the legacy
+  icon catalogue plus non-item icons. A new item should export its own 24x24
+  `icon` array from its definition instead of editing that shared catalogue.
+  Every offer still needs a drawing and every drawing an offer —
+  `npm run test:icons` is the check, and it runs in milliseconds.
+
+## Adding an item without creating merge conflicts
+
+An item branch normally adds one definition file and one matching test fragment
+under `test/items/passive/` or `test/items/active/`. It does not edit a
+catalogue, manifest, import list, generated file, package script, or shared test.
+
+For a passive item, copy the shape of one file in
+`js/items/passive/definitions/`. Export a unique `id` that exactly matches the
+filename, a 24-row `icon`, and a default definition made with
+`definePassiveItem`. Passive state is `player.passiveItems`; the derived stat
+block is rebuilt by `Player.rebuildMods()`.
+
+The item-local drawing is `export const icon = [...]`: exactly 24 strings of
+24 tone characters. `.` is empty; `0` through `4` are the outline/shadow/body/
+energy/highlight ramp described in `js/pixelicons.js`.
+
+For an active item, do the same under `js/items/active/definitions/` with
+`defineActiveItem`. The carried slot is `player.activeItem`, its charge state
+uses the `activeItem*` fields and methods, and timed effects belong to
+`RunningActiveItems` rather than on the player. Shared helpers are available
+through the factory context; add a shared helper only when more than one item
+actually needs it.
+
+The discovery layer rejects filename/id mismatches, duplicate ids and missing
+definitions at startup. `test/icons.mjs` rejects a missing or malformed drawing.
+`test/item-modules.mjs` discovers every item test fragment and runs them in one
+browser; `npm run test:item-modules` needs no update when a fragment is added.
+Use that fragment for the item's own mechanic and run the existing area suites
+for shared machinery the item touches.
 
 ## Adding a wave theme
 

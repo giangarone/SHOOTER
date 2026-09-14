@@ -63,13 +63,13 @@ try {
     const g = window.__game;
     g.autoTest = false;
     const P = g.player;
-    const UP = g.__upgradesForTest;
+    const UP = g.__passiveItemsForTest;
     const o = {};
     const V = P.pos.constructor;
     const step = () => new Promise((res) => requestAnimationFrame(res));
 
     const bare = () => {
-      for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
+      for (const k of Object.keys(P.passiveItems)) delete P.passiveItems[k];
       P.rebuildMods();
       P.health = P.maxHealth;
       P.shield = 0;
@@ -86,7 +86,7 @@ try {
       P.dimeEnd = 0;
       P.fruitsLeft = 0;
       P.clearStatuses();
-      P.itemCharge = 0;
+      P.activeItemCharge = 0;
       // NO BLOOM. _shotSpread opens a cone from sustained fire, and several
       // assertions below fire six hundred rounds and read the MISS rate off
       // them - a cone that grew as the burst went on would make those a
@@ -97,7 +97,7 @@ try {
       g._ice.length = 0;
       g._iceLaying = false;
     };
-    const give = (id) => { P.upgrades[id] = 1; P.rebuildMods(); };
+    const give = (id) => { P.passiveItems[id] = 1; P.rebuildMods(); };
     const clearField = () => { g.enemies.length = 0; };
     // THE CAMERA IS THE RAY. `_firePellet` casts from the camera, not from the
     // player's yaw, and the camera is only brought into line with the player by
@@ -280,7 +280,7 @@ try {
     // reaches the damage at all.
     const shotAt = (mag, keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       const e = spawn('chaser', 0, -8);
@@ -311,7 +311,7 @@ try {
       const e = spawn('chaser', 0, -8);
       e.hp = 1e7;
       e.maxHp = 1e7;
-      P.upgrades.beltFedDream = 1;
+      P.passiveItems.beltFedDream = 1;
       P.rebuildMods();
       P.reserveAmmo = 300;
       P.pos.set(0, 0, 0);
@@ -325,7 +325,7 @@ try {
       const e = spawn('chaser', 0, -8);
       e.hp = 1e7;
       e.maxHp = 1e7;
-      P.upgrades.beltFedDream = 1;
+      P.passiveItems.beltFedDream = 1;
       P.rebuildMods();
       P.reserveAmmo = 300;
       P.pos.set(0, 0, 0);
@@ -347,7 +347,7 @@ try {
     o.hotHalf = P.effectiveFireRate / hotBase;
     // AND REFUSED WHERE THERE IS NO MAGAZINE. `mag` mirrors the reserve under
     // BELT FED DREAM, so a percent a round would read three hundred.
-    P.upgrades.beltFedDream = 1;
+    P.passiveItems.beltFedDream = 1;
     P.rebuildMods();
     P.mag = 300;
     o.hotBelted = P.effectiveFireRate / hotBase;
@@ -357,7 +357,7 @@ try {
     // assertion is that a SECOND body, one the shot never touched, is hurt.
     const lastRoundBlast = (mag, keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       const aim = spawn('chaser', 0, -8);
@@ -463,7 +463,7 @@ try {
     // only form of this that a mis-set constant cannot pass.
     const swingAt = (dist, keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       const e = spawn('chaser', 0, -dist);
@@ -485,7 +485,7 @@ try {
     // which is what separates it from SHARED PAIN.
     const sweep = (keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       // Three in the arc in front, one squarely behind.
@@ -513,7 +513,7 @@ try {
     // against a Colossus, whose plating is what breaks the naive version.
     const cutTest = (frac, type, keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       const e = spawn(type, 0, -2.4);
@@ -547,8 +547,8 @@ try {
     // AND IT REACHES EVERY BODY A SCYTHE SWEEP TOUCHED, not just the target.
     o.cutSweep = (() => {
       bare();
-      P.upgrades.throatCut = 1;
-      P.upgrades.scythe = 1;
+      P.passiveItems.throatCut = 1;
+      P.passiveItems.scythe = 1;
       P.rebuildMods();
       clearField();
       const arc = [spawn('chaser', 0, -2.6), spawn('chaser', -1.4, -2.4),
@@ -639,7 +639,7 @@ try {
       P.health = P.maxHealth;
       P.reserveAmmo = P.maxReserve;
       P.mag = P.magSize;
-      P.item = null;
+      P.activeItem = null;
       let n = 0;
       for (let i = 0; i < 300; i++) if (g._pinataKind() === 'health') n++;
       return n;
@@ -858,8 +858,8 @@ try {
     // its own counter only ever moves on a kill.
     const fireTurret = (keys, reserve) => {
       bare();
-      P.upgrades.quorum = 1;
-      for (const k of keys) P.upgrades[k] = 1;
+      P.passiveItems.quorum = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       clearField();
       for (const d of g._deployed) d.destroy();
@@ -1010,26 +1010,26 @@ try {
     // it a pick rather than a way to farm charge by standing in lava.
     bare();
     give('jumperCables');
-    P.item = 'itemHeal';
-    P.itemCharge = 0;
+    P.activeItem = 'itemHeal';
+    P.activeItemCharge = 0;
     P.health = P.maxHealth;
     g._hurtPlayer(5, new V(0, 1, 3));
-    o.cablesOnHit = P.itemCharge;
-    P.itemCharge = 0;
+    o.cablesOnHit = P.activeItemCharge;
+    P.activeItemCharge = 0;
     g._hurtPlayerDot(5);
-    o.cablesOnDot = P.itemCharge;
+    o.cablesOnDot = P.activeItemCharge;
     bare();
-    P.item = 'itemHeal';
-    P.itemCharge = 0;
+    P.activeItem = 'itemHeal';
+    P.activeItemCharge = 0;
     P.health = P.maxHealth;
     g._hurtPlayer(5, new V(0, 1, 3));
-    o.cablesUnowned = P.itemCharge;
+    o.cablesUnowned = P.activeItemCharge;
 
     // DIME NOVEL. Off the PRESS, and the window is read at the roll.
     bare();
     give('dimeNovel');
-    P.item = 'itemHeal';
-    P.itemCharge = 999;
+    P.activeItem = 'itemHeal';
+    P.activeItemCharge = 999;
     P.dimeEnd = 0;
     P.aiming = false;
     P.trueStrikeLeft = 0;
@@ -1040,7 +1040,7 @@ try {
       return hits / 20000;
     };
     o.dimeBefore = rollRate();
-    g.tryItem();
+    g.tryActiveItem();
     o.dimeArmed = P.dimeEnd - g.time;
     o.dimeAfter = rollRate();
     // AND IT ENDS. The window is read off the frame clock, so winding the clock
@@ -1076,7 +1076,7 @@ try {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
-    for (const [k, d] of Object.entries(g.__itemsForTest)) {
+    for (const [k, d] of Object.entries(g.__activeItemsForTest)) {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
@@ -1103,7 +1103,7 @@ try {
     // trail, the bite sweep, the melee sweep, the turret and the per-hit path
     // are all exercised together rather than each being poked in isolation.
     bare();
-    for (const k of NEWKEYS) P.upgrades[k] = 1;
+    for (const k of NEWKEYS) P.passiveItems[k] = 1;
     P.rebuildMods();
     clearField();
     // FAR ENOUGH TO CLOSE, NOT CLOSE ENOUGH TO SWARM: what is under test is
@@ -1114,8 +1114,8 @@ try {
     P.sprinting = true;
     P.mag = 3;
     P.reserveAmmo = 200;
-    P.item = 'itemHeal';
-    P.itemCharge = 999;
+    P.activeItem = 'itemHeal';
+    P.activeItemCharge = 999;
     g.input.shoot = true;
     g.state = 'playing';
     for (let i = 0; i < 90; i++) await step();

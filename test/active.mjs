@@ -40,8 +40,8 @@ try {
     const g = window.__game;
     const out = {};
     const P = g.player;
-    const UP = g.__upgradesForTest;
-    const ITEMS = g.__itemsForTest;
+    const UP = g.__passiveItemsForTest;
+    const ITEMS = g.__activeItemsForTest;
 
     // dismiss() starts a SINK, and nothing here runs frames for it to finish
     // in, so the furniture has to be forced hidden between visits or every
@@ -153,10 +153,10 @@ try {
 
     // --- TAKING IT: full charge, and the box stays ---
     const firstId = out.landed;
-    P.item = null;
+    P.activeItem = null;
     g._grabBox();
-    out.carried = P.item === firstId;
-    out.arrivesCharged = P.itemReady && P.itemCharge === ITEMS[firstId].charge;
+    out.carried = P.activeItem === firstId;
+    out.arrivesCharged = P.activeItemReady && P.activeItemCharge === ITEMS[firstId].charge;
     // Taking it does NOT end the wave break - the passive item pick still
     // does.
     out.totemsStillUp = g.totemArea.active && !g.totemArea.claimed;
@@ -212,12 +212,12 @@ try {
     g._buyBoxRoll();
     const stranded = spin();
     out.strandedLanded = !!stranded;
-    P.item = null;
+    P.activeItem = null;
     // Ten seconds and a bit, at a coarse step - the descent is continuous and
     // nothing here depends on the frame rate.
     for (let i = 0; i < 260; i++) { g.time += 0.05; g.mysteryBox.update(0.05, g.time, P.pos); }
     out.strandedGone = g.mysteryBox.offered === null;
-    out.strandedNotGranted = P.item === null;
+    out.strandedNotGranted = P.activeItem === null;
     out.buyableAfterStranding = g.mysteryBox.canBuy;
     // ...and a grab one frame before the deadline still works, so the window is
     // the ten seconds it says it is rather than nine and a bit.
@@ -227,7 +227,7 @@ try {
     out.stillOfferedLate = !!g.mysteryBox.offered;
     const lateId = g.mysteryBox.offered;
     g._grabBox();
-    out.lateGrabWorks = P.item === lateId;
+    out.lateGrabWorks = P.activeItem === lateId;
 
     // --- THE POOL NEVER CONTAINS WHAT IS CARRIED ---
     // Not merely "never wins": the carried item must not even flash past on the
@@ -236,8 +236,8 @@ try {
     let poolWrongSize = 0;
     const everRolled = new Set();
     for (let i = 0; i < 400; i++) {
-      const pool = g.__poolForTest(P.item);
-      if (pool.includes(P.item)) carriedOnReel++;
+      const pool = g.__poolForTest(P.activeItem);
+      if (pool.includes(P.activeItem)) carriedOnReel++;
       if (pool.length !== Object.keys(ITEMS).length - 1) poolWrongSize++;
       for (const k of pool) everRolled.add(k);
     }
@@ -245,7 +245,7 @@ try {
     out.poolAlwaysFull = poolWrongSize;
     out.poolSize = everRolled.size;
     out.poolTotal = Object.keys(ITEMS).length;
-    out.poolMissesCarried = !everRolled.has(P.item);
+    out.poolMissesCarried = !everRolled.has(P.activeItem);
     // An EMPTY slot excludes nothing - the whole catalogue is on the reel.
     out.emptySlotPool = g.__poolForTest(null).length;
 
@@ -256,11 +256,11 @@ try {
     g.credits = 100000;
     g._buyBoxRoll();
     const secondId = spin();
-    out.secondIsDifferent = secondId !== P.item;
+    out.secondIsDifferent = secondId !== P.activeItem;
     g._grabBox();
-    out.replaced = P.item === secondId;
-    out.oneSlotOnly = !!P.item && typeof P.item === 'string';
-    out.replacementCharged = P.itemReady;
+    out.replaced = P.activeItem === secondId;
+    out.oneSlotOnly = !!P.activeItem && typeof P.activeItem === 'string';
+    out.replacementCharged = P.activeItemReady;
 
     // --- THE CHARGE IS PAID IN WAVE PROGRESS AND NOWHERE ELSE ---
     // TIME BUYS NOTHING NOW, in the shop OR in the fight. That second half is
@@ -279,52 +279,52 @@ try {
     // assertions with nothing actually broken. Everything below is stated as a
     // distance from `cost` so it follows items.js wherever it goes.
     const cost = ITEMS.itemHeal.charge;
-    P.giveItem('itemHeal');
-    P.itemCharge = 0;
+    P.giveActiveItem('itemHeal');
+    P.activeItemCharge = 0;
     runFrames(40, false);     // two seconds of SHOP
-    out.shopChargesNothing = P.itemCharge === 0;
+    out.shopChargesNothing = P.activeItemCharge === 0;
     runFrames(400, true);     // twenty seconds of WAVE
-    out.timeChargesNothing = P.itemCharge === 0;
+    out.timeChargesNothing = P.activeItemCharge === 0;
     // Points are the only thing that moves it.
     P.addItemCharge(2);
-    out.pointsCharge = P.itemCharge === 2;
+    out.pointsCharge = P.activeItemCharge === 2;
     // The ready flag is one-shot: set on the call it fills, and never again.
     // Half a point short of the cost, then a push that clears it outright.
-    P.itemCharge = 0;
-    P.itemReadyFx = false;
+    P.activeItemCharge = 0;
+    P.activeItemReadyFx = false;
     P.addItemCharge(cost - 0.5);
-    out.notReadyEarly = !P.itemReadyFx && !P.itemReady;
+    out.notReadyEarly = !P.activeItemReadyFx && !P.activeItemReady;
     P.addItemCharge(5);
-    out.readyFired = P.itemReadyFx;
+    out.readyFired = P.activeItemReadyFx;
     // The overflow is dropped rather than banked - see addItemCharge.
-    out.chargeCaps = P.itemCharge === cost;
-    P.itemReadyFx = false;
+    out.chargeCaps = P.activeItemCharge === cost;
+    P.activeItemReadyFx = false;
     P.addItemCharge(5);
-    out.readyFiresOnce = !P.itemReadyFx;
+    out.readyFiresOnce = !P.activeItemReadyFx;
     // An empty slot swallows charge instead of saving it for the next item.
-    P.item = null;
-    P.itemCharge = 0;
+    P.activeItem = null;
+    P.activeItemCharge = 0;
     P.addItemCharge(10);
-    out.noSlotNoCharge = P.itemCharge === 0;
+    out.noSlotNoCharge = P.activeItemCharge === 0;
 
     // --- FIRING IT ---
     g.state = 'playing';
     // USABLE IN THE SHOP, even though the charge is not earned there.
     g.waveState = 'intermission';
-    P.giveItem('itemHeal');
+    P.giveActiveItem('itemHeal');
     P.health = P.maxHealth - 50;
     const hpBefore = P.health;
-    g.tryItem();
-    out.firesInShop = P.health === hpBefore + 25 && P.itemCharge === 0;
+    g.tryActiveItem();
+    out.firesInShop = P.health === hpBefore + 25 && P.activeItemCharge === 0;
     // ...and an uncharged press spends nothing.
     const hp2 = P.health;
-    g.tryItem();
-    out.uncharged = P.health === hp2 && P.itemCharge === 0;
+    g.tryActiveItem();
+    out.uncharged = P.health === hp2 && P.activeItemCharge === 0;
     // An EMPTY SLOT is silent and harmless.
-    P.item = null;
-    P.itemCharge = 0;
-    g.tryItem();
-    out.emptySlotSafe = P.item === null;
+    P.activeItem = null;
+    P.activeItemCharge = 0;
+    g.tryActiveItem();
+    out.emptySlotSafe = P.activeItem === null;
     g.waveState = 'active';
 
     // --- THE SHOOT AND E PATHS ---
@@ -365,7 +365,7 @@ try {
         g.mysteryBox.update(0.016, g.time, g.player.pos);
       }
     };
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     P.health = P.maxHealth;
     // Spread is not what these tests are about - a pellet that wandered off a
@@ -384,7 +384,7 @@ try {
     stage();
     const box = g.mysteryBox;
     standAt(box.pos.x, box.pos.z - 4);
-    P.item = null;
+    P.activeItem = null;
     g.credits = 100000;
     const cb = g.credits;
     const shotQuote = g._boxCost();
@@ -409,7 +409,7 @@ try {
     const cb3 = g.credits;
     aimAt(box.hit);
     fire();
-    out.shotTookItem = P.item === heldId;
+    out.shotTookItem = P.activeItem === heldId;
     out.shotTakeWasFree = g.credits === cb3;
 
     // A free totem is still free, and still starts the wave.
@@ -446,7 +446,7 @@ try {
     stage();
     const keyBox = g.mysteryBox;
     standAt(keyBox.pos.x, keyBox.pos.z - 1.2);
-    P.item = null;
+    P.activeItem = null;
     g.credits = 100000;
     const use = g._useTarget();
     out.promptNamesBox = !!use && use.kind === 'box';
@@ -466,7 +466,7 @@ try {
     out.promptTextNamesItem =
       g._usePrompt(use2)[0].includes(ITEMS[keyHeld].name);
     g.tryUse();
-    out.keyTookItem = P.item === keyHeld;
+    out.keyTookItem = P.activeItem === keyHeld;
 
     // A BROKE PLAYER GETS A BLOCKED PROMPT, not a silent one - the price is the
     // reason and it has to be on screen.
@@ -501,7 +501,7 @@ try {
       Object.entries(ITEMS).map(([k, d]) => [k, d.charge])
     );
     for (const [key, def] of Object.entries(ITEMS)) {
-      P.giveItem(key);
+      P.giveActiveItem(key);
       g._updateHud();
       const n = Number(
         getComputedStyle(document.getElementById('item-bar-bg'))
@@ -512,7 +512,7 @@ try {
       // boundary. This is the rendered fill, not the rule behind it: a rounding
       // slip anywhere between the charge and the transform shows up here.
       for (let c = 0; c <= def.charge; c += 0.1) {
-        P.itemCharge = c;
+        P.activeItemCharge = c;
         g._updateHud();
         const v = parseFloat(
           document.getElementById('item-bar').style.transform.match(/[\d.]+/)[0]
@@ -526,7 +526,7 @@ try {
           break;
         }
       }
-      P.itemCharge = def.charge;
+      P.activeItemCharge = def.charge;
       // Every string this item can put on screen, against the number it must
       // never contain.
       //
@@ -546,7 +546,7 @@ try {
           return a ? [a.name, ...a.effects.map((e) => e[0])] : [];
         })(),
       ];
-      P.item = null;
+      P.activeItem = null;
       for (const line of strings) {
         if (line.includes(secs)) out.chargeCostLeaks.push(key + ': ' + line);
       }
@@ -567,7 +567,7 @@ try {
     g.wave = 10;
     const rolledUp = new Set();
     for (let i = 0; i < 4000; i++) {
-      P.upgrades = {};
+      P.passiveItems = {};
       for (const o of g._buildOffers()) rolledUp.add(o.id);
     }
     out.convertedUnreachable = [...wanted].filter((k) => !rolledUp.has(k));
@@ -584,9 +584,9 @@ try {
     const P = g.player;
     const out = {};
     const take = (id) => {
-      P.upgrades = {};
+      P.passiveItems = {};
       P.rebuildMods();
-      P.upgrades[id] = 1;
+      P.passiveItems[id] = 1;
       P.rebuildMods();
       P.health = P.maxHealth;
     };
@@ -614,14 +614,14 @@ try {
       }
     };
     const useItem = (id) => {
-      P.giveItem(id);
-      g.tryItem();
+      P.giveActiveItem(id);
+      g.tryActiveItem();
     };
 
     g.state = 'playing';
     g.waveState = 'active';
     take('darkPower');
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
 
     // ---- TRAUMA KIT: 25 HP, and no overheal ----
@@ -672,7 +672,7 @@ try {
     out.invulnEnds = P.health < 100;
 
     // ---- BLINK DRIVE: the dash moves you, with no passive item behind it ----
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     P.dashEnd = 0;
     const z0 = P.pos.z;
@@ -690,13 +690,13 @@ try {
 
     // ---- and the charge costs are what the pool says ----
     out.chargeCosts = Object.fromEntries(
-      Object.entries(g.__itemsForTest).map(([k, d]) => [k, d.charge])
+      Object.entries(g.__activeItemsForTest).map(([k, d]) => [k, d.charge])
     );
     // Whether each item can refuse itself. Read alongside the cost because the
     // two together are the rule below: an item is either bought with enemies
     // or it gates itself on something else.
     out.hasReady = Object.fromEntries(
-      Object.entries(g.__itemsForTest).map(([k, d]) => [k, typeof d.ready === 'function'])
+      Object.entries(g.__activeItemsForTest).map(([k, d]) => [k, typeof d.ready === 'function'])
     );
 
     // ======================================================================
@@ -733,9 +733,9 @@ try {
     out.threw = [];
     out.neverRan = [];
     out.stillRunning = [];
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
-    for (const key of Object.keys(g.__itemsForTest)) {
+    for (const key of Object.keys(g.__activeItemsForTest)) {
       clearField();
       // A crowd to act on, and a boss, so the paths that walk the enemy list
       // are exercised rather than skipped for an empty arena - and so LAST
@@ -757,8 +757,8 @@ try {
         out.threw.push(key + ': ' + e.message);
         continue;
       }
-      const def = g.__itemsForTest[key];
-      if (def.duration > 0 && !g.running.list.some((r) => r.id === key)) {
+      const def = g.__activeItemsForTest[key];
+      if (def.duration > 0 && !g.runningActiveItems.list.some((r) => r.id === key)) {
         out.neverRan.push(key);
       }
       try {
@@ -766,7 +766,7 @@ try {
         // window in the pool.
         for (let i = 0; i < 500; i++) {
           g.time += 0.05;
-          g.running.update(g, 0.05);
+          g.runningActiveItems.update(g, 0.05);
           g._updateDeployed(0.05);
           P.update(0.05, g.input, g.arena.obstacles, g.time, true);
         }
@@ -774,7 +774,7 @@ try {
         out.threw.push(key + ' (running): ' + e.message);
         continue;
       }
-      if (g.running.list.some((r) => r.id === key)) out.stillRunning.push(key);
+      if (g.runningActiveItems.list.some((r) => r.id === key)) out.stillRunning.push(key);
       if (JSON.stringify(NEUTRAL()) !== CLEAN) {
         out.leaked.push(key + ': ' + JSON.stringify(NEUTRAL()));
       }
@@ -808,7 +808,7 @@ try {
       P.backordered = false;
       P.insuredEnd = 0;
       P.insuranceFx = false;
-      g.running.clear(g);
+      g.runningActiveItems.clear(g);
       g._clearDeployed();
     }
     // MARTYR could not be allowed to matter here - it leaves the player at 10 -
@@ -822,37 +822,37 @@ try {
     // in a run: re-firing must refresh rather than stack (two BLOOD TAXes
     // would be nine times damage through a multiplier neither could hand
     // back), clear() must run every end(), and a duration must actually end.
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     useItem('itemPact');
     const pactMult = P.itemDamageMult;
     useItem('itemPact');
     out.refreshDoesNotStack = P.itemDamageMult === pactMult
-      && g.running.list.filter((r) => r.id === 'itemPact').length === 1;
-    g.running.clear(g);
-    out.clearRunsEnd = P.itemDamageMult === 1 && g.running.list.length === 0;
+      && g.runningActiveItems.list.filter((r) => r.id === 'itemPact').length === 1;
+    g.runningActiveItems.clear(g);
+    out.clearRunsEnd = P.itemDamageMult === 1 && g.runningActiveItems.list.length === 0;
 
     // BODY COUNT counts kills, and only while it is running.
     useItem('itemTally');
     const tallyBase = P.itemDamageMult;
-    g.running.onKill(g);
-    g.running.onKill(g);
+    g.runningActiveItems.onKill(g);
+    g.runningActiveItems.onKill(g);
     out.tallyStacks = +(P.itemDamageMult - tallyBase).toFixed(2);
-    g.running.clear(g);
-    g.running.onKill(g);
+    g.runningActiveItems.clear(g);
+    g.runningActiveItems.onKill(g);
     out.tallyStopsWhenDone = P.itemDamageMult === 1;
 
     // LANCE refuses itself when the rounds are not there, and does not spend
     // the charge doing it - which is the whole reason `ready` exists.
-    P.giveItem('itemLance');
+    P.giveActiveItem('itemLance');
     P.mag = 0;
     P.reserveAmmo = 5;
-    const chargeBefore = P.itemCharge;
-    g.tryItem();
-    out.lanceRefused = P.itemCharge === chargeBefore && P.reserveAmmo === 5;
+    const chargeBefore = P.activeItemCharge;
+    g.tryActiveItem();
+    out.lanceRefused = P.activeItemCharge === chargeBefore && P.reserveAmmo === 5;
     P.reserveAmmo = 300;
     P.mag = 30;
-    g.tryItem();
+    g.tryActiveItem();
     out.lanceSpends = P.mag + P.reserveAmmo === 300;
 
     // WHITE CELL clears what is on the player AND refuses the next one.
@@ -862,7 +862,7 @@ try {
     P.now = g.time;
     out.purified = !P.hasStatus('fire') && !P.hasStatus('poison');
     out.purifyLocks = P.applyStatus('fire', 5) === false;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     P.now = g.time;
     out.purifyLockLifts = P.applyStatus('fire', 5) === true;
     P.clearStatuses();
@@ -898,10 +898,10 @@ try {
     // refused before the charge is spent.
     g.totemArea.dismiss();
     for (const t of g.totemArea.totems) { t.state = 'hidden'; t.claimed = false; }
-    P.giveItem('itemReroll');
-    const chargeWas = P.itemCharge;
-    g.tryItem();
-    out.rerollRefusedOffShop = P.itemCharge === chargeWas;
+    P.giveActiveItem('itemReroll');
+    const chargeWas = P.activeItemCharge;
+    g.tryActiveItem();
+    out.rerollRefusedOffShop = P.activeItemCharge === chargeWas;
 
     // ---- HAEMOPHAGE IS A COUNT, AND THE COUNT HAS NO CLOCK ----
     //
@@ -915,17 +915,17 @@ try {
     // Which means the same rule is now checked from the other side: nothing is
     // left running, and the twenty hits survive frames that would have expired
     // any window in the pool.
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     P.leechShots = 0;
     useItem('itemLeech');
     out.leechGrantsTwenty = P.leechShots === 20;
-    out.leechRunsNothing = g.running.list.length === 0
-      && g.running.chips([]).length === 0;
+    out.leechRunsNothing = g.runningActiveItems.list.length === 0
+      && g.runningActiveItems.chips([]).length === 0;
     for (let i = 0; i < 600; i++) {
       g.time += 0.05;
-      g.running.update(g, 0.05);
+      g.runningActiveItems.update(g, 0.05);
     }
     out.leechOutlivesEveryClock = P.leechShots === 20;
     P.leechShots = 0;
@@ -956,7 +956,7 @@ try {
     P.damageMult = 1;
     P.fireRateBoostEnd = 0;
     P.fireRateMult = 1;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
 
     // A DEPLOYABLE IS AN ENTITY, and it goes when the fight does.
     clearField();
@@ -971,7 +971,7 @@ try {
     for (let i = 0; i < 200; i++) useItem('itemMine');
     out.deployCapped = g._deployed.length <= 40;
     g._clearDeployed();
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     P.health = P.maxHealth;
 
       // ---- ...AND THE GAME LOOP ACTUALLY DRIVES THEM ----
@@ -984,19 +984,19 @@ try {
     g.state = 'playing';
     g.waveState = 'active';
     clearField();
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     g._clearDeployed();
-    P.giveItem('itemCharge');   // 0.4s window
-    g.tryItem();
-    P.giveItem('itemBomb');     // a 3s fuse, and then it is gone
-    g.tryItem();
-    out.loopStartRunning = g.running.list.length;
+    P.giveActiveItem('itemCharge');   // 0.4s window
+    g.tryActiveItem();
+    P.giveActiveItem('itemBomb');     // a 3s fuse, and then it is gone
+    g.tryActiveItem();
+    out.loopStartRunning = g.runningActiveItems.list.length;
     out.loopStartDeployed = g._deployed.length;
 
   // ---- THE ELEVEN ----
     //
     // BONESAW was fired into the loop above and its dash is invulnerable for
-    // the length of the movement (see js/items.js), so the window is still
+    // the length of the movement (see js/items/active/index.js), so the window is still
     // open on this frame. Every check below is a hit that has to land.
     P.invulnEnd = 0;
     take('darkPower');
@@ -1092,7 +1092,7 @@ try {
     out.executionerCost = 100 - P.maxHealth;
     P.rebuildMods();
     out.executionerSurvivesRebuild = 100 - P.maxHealth === 50;
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     out.executionerRefunded = P.maxHealth === 100;
     take('executioner');
@@ -1103,7 +1103,7 @@ try {
     const withIt = g.bossFight.parts[0].maxHp;
     clearField();
     g.bossFight = null;
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     g._spawnBoss('colossus');
     const without = g.bossFight.parts[0].maxHp;
@@ -1129,9 +1129,9 @@ try {
     // most here: all five outlive the press, which means all five can be
     // silently wiped by a rebuildMods(), a wave boundary or a handover, and
     // none of those failures shows up on the frame it is caused.
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     g._clearDeployed();
     clearField();
     P.moveLoss = 1;
@@ -1157,7 +1157,7 @@ try {
     // unkillable for the price of a heal.
     g._hurtPlayer(500, P.pos, null);
     out.insuredOnlyOnce = P.health === 0;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     P.health = P.maxHealth;
     P.insuranceFx = false;
     // IT COVERS THE GROUND AS WELL AS THE GUN. Burning to death is the failure
@@ -1167,7 +1167,7 @@ try {
     useItem('itemInsurance');
     g._hurtPlayerDot(40);
     out.insuredCoversDot = P.health === 21;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
 
     // ---- SECOND SKIN: twenty points of shield, and no clock on it ----
     P.shield = 0;
@@ -1252,9 +1252,9 @@ try {
     // pattern goes out twice, and the pattern leaving the muzzle is exactly
     // what _firePellet counts.
     clearField();
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     const realPellet = g._firePellet;
     let pellets = 0;
     g._firePellet = function (...args) {
@@ -1276,7 +1276,7 @@ try {
     P.fireCd = 0;
     g.shoot();
     out.encoreIsFree = P.mag === 39;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     pellets = 0;
     P.mag = 40;
     P.fireCd = 0;
@@ -1286,12 +1286,12 @@ try {
 
     // ---- MAG DUMP: the whole magazine, and never an empty one ----
     P.mag = 0;
-    P.giveItem('itemMagDump');
-    const dumpCharge = P.itemCharge;
-    g.tryItem();
-    out.dumpRefusesEmpty = P.itemCharge === dumpCharge;
+    P.giveActiveItem('itemMagDump');
+    const dumpCharge = P.activeItemCharge;
+    g.tryActiveItem();
+    out.dumpRefusesEmpty = P.activeItemCharge === dumpCharge;
     P.mag = 24;
-    g.tryItem();
+    g.tryActiveItem();
     out.dumpSpendsTheMagazine = P.mag === 0;
 
     // ---- PICKPOCKET and HEAD COUNT: paid by the head ----
@@ -1388,7 +1388,7 @@ try {
     const creepHeld = g._lavaCreep.length;
     for (let i = 0; i < 40; i++) {
       g.time += 0.05;
-      g.running.update(g, 0.05);
+      g.runningActiveItems.update(g, 0.05);
     }
     out.lavaBurnsTheFloor = grounded.status.burn > 0;
     out.lavaSparesTheHigh = upstairs.status.burn === 0;
@@ -1399,13 +1399,13 @@ try {
     P.pos.y = 3;
     for (let i = 0; i < 40; i++) {
       g.time += 0.05;
-      g.running.update(g, 0.05);
+      g.runningActiveItems.update(g, 0.05);
     }
     out.lavaSparesYouUpThere = P.health === P.maxHealth && P.status.fire === 0;
     out.lavaHeldCreep = creepHeld > 0;
     for (let i = 0; i < 400; i++) {
       g.time += 0.05;
-      g.running.update(g, 0.05);
+      g.runningActiveItems.update(g, 0.05);
     }
     // THE STAMPS COME BACK. The creep pool is thirty deep and shared with every
     // hazard in the game; nine leaked per press would empty it inside four.
@@ -1442,7 +1442,7 @@ try {
     const bigHit = 100000 - struck.hp;
     out.meleeFive = Math.abs(bigHit - plainHit * 5) < 0.001;
     out.meleeShared = Math.abs((100000 - bystander.hp) - bigHit) < 1;
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     struck.hp = 100000;
     bystander.hp = 100000;
     P.meleeCd = 0;
@@ -1452,7 +1452,7 @@ try {
     P.rollCrit = realCrit;
 
     // ---- LIFE SENTENCE and COMPOUND INTEREST: the two permanent marks ----
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     P.moveLoss = 1;
     P.compoundMult = 1;
@@ -1468,11 +1468,11 @@ try {
     // A TOTEM MUST NOT HAND EITHER OF THEM BACK. Both live on the player rather
     // than in `mods` precisely because rebuildMods() replays the owned list
     // from fresh defaults after every pick.
-    P.upgrades = { overclock: 1 };
+    P.passiveItems = { overclock: 1 };
     P.rebuildMods();
     out.marksSurviveRebuild = Math.abs(P.moveLoss - 0.81) < 1e-9
       && Math.abs(P.compoundMult - 1.01) < 1e-9;
-    P.upgrades = {};
+    P.passiveItems = {};
     P.rebuildMods();
     P.moveLoss = 1;
     P.compoundMult = 1;
@@ -1483,7 +1483,7 @@ try {
     out.backorderPending = P.backordered && P.backorderAt > g.time;
     // The running list being torn down is exactly what a wave clear does, and
     // it must not take the parcel with it.
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     g._clearHazards();
     out.backorderSurvivesTheWave = P.backordered;
     for (let i = 0; i < 40; i++) {
@@ -1526,14 +1526,14 @@ try {
     for (let i = 0; i < 5; i++) spawn('chaser', -8 + i * 3, 10);
     g.queue.push('chaser', 'chaser');
     g.credits = 4000;
-    P.giveItem('itemParachute');
-    const parachuteCharge = P.itemCharge;
-    g.tryItem();
-    out.parachuteNeedsTheMoney = P.itemCharge === parachuteCharge
+    P.giveActiveItem('itemParachute');
+    const parachuteCharge = P.activeItemCharge;
+    g.tryActiveItem();
+    out.parachuteNeedsTheMoney = P.activeItemCharge === parachuteCharge
       && g.enemies.length === 5;
     g.credits = 9000;
     g.money.clear();
-    g.tryItem();
+    g.tryActiveItem();
     out.parachuteCleared = g.enemies.length === 0 && g.queue.length === 0;
     out.parachutePaid = g.credits === 4000;
     // NOTHING IT REMOVED PAID OUT, which is the only thing standing between
@@ -1542,19 +1542,19 @@ try {
     out.parachutePaysNothingBack = g.credits === 4000;
     // ...and it will not touch a boss wave, which is EXECUTIVE DECISION's job.
     g.bossFight = { parts: [spawn('chaser', 0, 12)], key: 'test', note: '' };
-    P.giveItem('itemParachute');
-    const bossWaveCharge = P.itemCharge;
-    g.tryItem();
-    out.parachuteRefusesABoss = P.itemCharge === bossWaveCharge
+    P.giveActiveItem('itemParachute');
+    const bossWaveCharge = P.activeItemCharge;
+    g.tryActiveItem();
+    out.parachuteRefusesABoss = P.activeItemCharge === bossWaveCharge
       && g.enemies.length === 1;
 
     // ---- EXECUTIVE DECISION: one boss, and only when there is one ----
     clearField();
     g.bossFight = null;
-    P.giveItem('itemExecutive');
-    const execCharge = P.itemCharge;
-    g.tryItem();
-    out.executiveNeedsABoss = P.itemCharge === execCharge;
+    P.giveActiveItem('itemExecutive');
+    const execCharge = P.activeItemCharge;
+    g.tryActiveItem();
+    out.executiveNeedsABoss = P.activeItemCharge === execCharge;
     const target = spawn('chaser', 0, 10);
     target.boss = true;
     target.hp = 90000;
@@ -1563,7 +1563,7 @@ try {
     // one must not: at a hundred and twenty points the press cannot be a maybe.
     target.wardT = 99;
     g.bossFight = { parts: [target], key: 'test', note: '' };
-    g.tryItem();
+    g.tryActiveItem();
     out.executiveKilled = target.dead && target.hp === 0;
     g.bossFight = null;
     clearField();
@@ -1593,7 +1593,7 @@ try {
     await sleep(250);
   }
   const loop = await page.evaluate(() => ({
-    running: window.__game.running.list.map((r) => r.id),
+    running: window.__game.runningActiveItems.list.map((r) => r.id),
     deployed: window.__game._deployed.length,
     itemDamageMult: window.__game.player.itemDamageMult,
   }));

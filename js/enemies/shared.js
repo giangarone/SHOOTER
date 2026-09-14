@@ -22,7 +22,7 @@ import * as THREE from 'three';
 // A TYPE IS A STAT BLOCK PLUS TWO FUNCTIONS. `build(e, group, s)` adds the
 // parts that make it look like itself; `ai(e, a)` decides what it does with a
 // frame. Both live on the entry rather than in a `type === ...` chain, the
-// same shape WEAPONS.build() and UPGRADES.apply() already use: with fifteen
+// same shape WEAPONS.build() and PASSIVE_ITEMS.apply() already use: with fifteen
 // types a chain is scanned top to bottom every frame and, worse, splits one
 // enemy's definition across three distant parts of the file.
 //
@@ -238,7 +238,7 @@ export const BODY_FLASH_INTENSITY = 0.9;
 export const BODY_BASE_INTENSITY = 0.18;
 
 // ---- status effects ------------------------------------------------------
-// Applied by the single-tier passive items in upgrades.js. A hit REFRESHES a
+// Applied by the single-tier passive items in items/passive/index.js. A hit REFRESHES a
 // status, it never stacks one: passive items have no second level, so there
 // is no stronger poison to express. Duration is seconds remaining, counted
 // down in update().

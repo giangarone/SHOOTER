@@ -14,19 +14,19 @@
 
 import * as THREE from 'three';
 import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
-import { UPGRADES } from './upgrades.js';
+import { PASSIVE_ITEMS } from './items/passive/index.js';
 import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 // UPDRAFT climbs, and the room is a closed box - see the ceiling clamp in
 // update(). This is the only thing player.js wants from the arena.
 import { CEIL_Y } from './arena.js';
-import { ACTIVE_ITEMS } from './items.js';
+import { ACTIVE_ITEMS } from './items/active/index.js';
 
-// Every stat an upgrade is allowed to touch, at its un-upgraded value.
+// Every stat a passive item is allowed to touch, at its un-upgraded value.
 //
-// rebuildMods() resets to a copy of this and replays the whole owned-upgrade
-// list on top, so an upgrade's apply() always starts from a clean slate. Add a
-// field here before referencing it from upgrades.js, and read it at the point
+// rebuildMods() resets to a copy of this and replays the whole owned passive-item
+// list on top, so a passive item's apply() always starts from a clean slate. Add a
+// field here before referencing it from items/passive/index.js, and read it at the point
 // of use rather than caching it - a draft pick can change any of these
 // mid-run, between any two waves.
 const DEFAULT_MODS = {
@@ -78,7 +78,7 @@ const DEFAULT_MODS = {
   steady: 0,            // extra damage fraction while standing still
 
   // PASSIVE ITEM FIELDS. These are the single-tier picks - each is set by
-  // exactly one upgrade with max: 1, so they are flags and rates rather than
+  // exactly one passive item with max: 1, so they are flags and rates rather than
   // multipliers that stack. Zero means the passive item is not owned, which is
   // what every hook in main.js tests.
   poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of one of
@@ -131,7 +131,7 @@ const DEFAULT_MODS = {
   // IT LIVES IN DEFAULT_MODS, not on the Player, precisely BECAUSE it has a
   // non-zero default: rebuildMods() replaces the whole mods object from this
   // template on every draft pick, so a base written anywhere else would be
-  // wiped by the next totem. See the contract at the top of upgrades.js.
+  // wiped by the next totem. See the contract at the top of items/passive/index.js.
   critChance: 0.05,
   critMult: 1.5,
   dotPower: 1,          // Malady: multiplier on poison and burn damage
@@ -157,7 +157,7 @@ const DEFAULT_MODS = {
 
   // THE ELEVEN CONVERTED PICKS. These were sold for max health at a second
   // row that no longer exists; they are ordinary passive items now (see the
-  // note above their block in upgrades.js) and always were ordinary mods - set
+  // note above their block in items/passive/index.js) and always were ordinary mods - set
   // by an apply() and replayed by rebuildMods() like everything above. Only
   // Executioner still charges health, through maxHpFlat below.
   carnageStep: 0,       // Carnage: damage gained per kill, lost on any hit
@@ -205,8 +205,8 @@ const DEFAULT_MODS = {
   crouchRate: 0,        // Crouchfire: fire rate gained while crouched
   meleeHeal: 0,         // Bloodsport: HP healed per melee KILL
   warChest: 0,          // War Chest: flat damage per $1,000 of balance
-  itemChargeCap: 1,     // Twin Cell: active-item charges the slot may BANK.
-                        // Deliberately not `itemCharges`, which is the Player
+  activeItemChargeCap: 1,     // Twin Cell: active-item charges the slot may BANK.
+                        // Deliberately not `activeItemCharges`, which is the Player
                         // getter for how many are banked right now - a cap and
                         // a count sharing a name across two files is a bug
                         // waiting for someone to read the wrong one.
@@ -262,7 +262,7 @@ const DEFAULT_MODS = {
   sharedPain: 0,        // Shared Pain: every blow is split over the whole room
   mono: 0,              // Gray Matter: the world, in grey
   sacrifice: 0,         // Sacrifice: flag only - the removal happens once, at
-                        // the pick, in takeUpgrade
+                        // the pick, in takePassiveItem
   bottomFeed: 0,        // Bottom Feeder: damage gained by reloading from empty
   bottomTime: 0,        // and how long it lasts
   killCredits: 0,       // Payday: credits per kill
@@ -464,7 +464,7 @@ const BASE_RESERVE = 300;
 const JUMP_V = 9;
 const AIR_JUMP_V = 11;
 // BLINK DRIVE: how long a dash lasts and its PEAK speed. What it costs to
-// fire again is the item's charge, not the dash's - see js/items.js.
+// fire again is the item's charge, not the dash's - see js/items/active/index.js.
 //
 // THE ENVELOPE IS THE WHOLE FEATURE. The first version held a flat 26 m/s for
 // 0.18s and then dropped the player back to a walk on a single frame, which is
@@ -635,11 +635,11 @@ function ease(x) {
 const PLAYER_HEIGHT = 1.8;
 // Evasion's window after a successful dodge, and what it multiplies speed by.
 // Short on purpose: it is an escape from the hit you just avoided, not a
-// standing movement upgrade.
+// standing movement passive item.
 const DODGE_TIME = 1.5;
 const DODGE_SPEED = 1.4;
 // Horizontal speed at which Steady Aim's bonus has fully decayed. Well under
-// BASE_SPEED: the upgrade pays for standing your ground, not for strolling.
+// BASE_SPEED: the passive item pays for standing your ground, not for strolling.
 const STILL_SPEED = 3;
 
 // ---- aiming down the sights ------------------------------------------------
@@ -1021,9 +1021,9 @@ export class Player {
     // only this and _equipModel() have to change.
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
-    // Owned upgrades as id -> stack count, and the stat block derived from
+    // Owned passive items as id -> stack count, and the stat block derived from
     // them. Both are cleared by reset(), so a run never inherits a build.
-    this.upgrades = {};
+    this.passiveItems = {};
     this.mods = { ...DEFAULT_MODS };
     this.health = 100;
     this.reserveAmmo = 90;
@@ -1043,21 +1043,21 @@ export class Player {
     this.invulnEnd = 0;
 
     // THE ACTIVE ITEM SLOT. One at a time, by id into ACTIVE_ITEMS
-    // (js/items.js), or null - a run starts carrying nothing. `itemCharge` is
+    // (js/items/active/index.js), or null - a run starts carrying nothing. `activeItemCharge` is
     // points banked toward the item's cost; it is filled to the top the moment
     // an item is taken, so a pedestal never hands over something the player has
     // to wait to use. It is NOT cleared between waves - a cost above WAVE_CHARGE
     // is meant to carry, which is the only way an item can cost more than one
     // wave is worth.
-    this.item = null;
-    this.itemCharge = 0;
+    this.activeItem = null;
+    this.activeItemCharge = 0;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
-    // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
+    // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
     // One-shot, read and cleared by main.js on the frame the bar fills - the
     // same split jumpFx and dashFx use, and for the same reason: player.js has
     // no audio to reach for.
-    this.itemReadyFx = false;
+    this.activeItemReadyFx = false;
     // Absolute Zero's drawback: the player cannot move until this time.
     this.frozenUntil = 0;
     // Game time, written once per frame by update(). getEffectiveDamage() has
@@ -1081,7 +1081,7 @@ export class Player {
     // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
     this.magAtShot = 0;
     // Rounds left in the magazine the reload now running is discarding. See
-    // startReload, and PRIMED MAG in js/upgrades.js.
+    // startReload, and PRIMED MAG in js/items/passive/index.js.
     this.magOnReload = 0;
     // AIMING. `_aimRaw` is the linear 0..1 timer and `aimT` the eased curve
     // everything else reads - see the ADS block above. `aiming` is what the
@@ -1223,7 +1223,7 @@ export class Player {
     //
     // Written by the running-item list in items.js and read by the shot
     // pipeline, the damage sinks and the pickup hooks. DELIBERATELY NOT IN
-    // `mods`: rebuildMods() replays the owned upgrade list from fresh defaults
+    // `mods`: rebuildMods() replays the owned passive item list from fresh defaults
     // after every totem pick, so anything an item wrote there would be handed
     // back by the next passive item the player walked into.
     //
@@ -1253,7 +1253,7 @@ export class Player {
     this.meleeShare = 0;       // ...and 1 while every body takes what it dealt
     this.pinataLeft = 0;       // PINATA: kills still owed a guaranteed drop
     // BACKORDER'S PARCEL. A deadline rather than a running window, because the
-    // running list is torn down at every wave clear (see RunningItems.clear)
+    // running list is torn down at every wave clear (see RunningActiveItems.clear)
     // and a delivery cancelled by the wave ending under it would read as the
     // item having failed.
     //
@@ -1273,7 +1273,7 @@ export class Player {
     // ---- THE TWO PERMANENT MARKS AN ITEM CAN LEAVE ---------------------
     //
     // Beside hpBanked rather than in `mods`, and for hpBanked's exact reason:
-    // rebuildMods() replays the owned upgrade list from fresh defaults after
+    // rebuildMods() replays the owned passive item list from fresh defaults after
     // every totem claimed, so anything an item wrote into the block would be
     // handed back by the next pick. These outlive the build.
     //
@@ -1427,7 +1427,7 @@ export class Player {
     this.livesUsed = 0;
     // No-Hit Bonus: waves cleared without taking a point of damage since the
     // passive item was picked up. It lives on the PLAYER rather than in mods
-    // because mods are rebuilt from the upgrade list on every draft pick, and
+    // because mods are rebuilt from the passive item list on every draft pick, and
     // anything written into them by an event would be wiped by the next one.
     this.noHitStacks = 0;
     // UNTOUCHED and SCAR TISSUE. Max HP earned at wave ends and kept for the
@@ -1453,7 +1453,7 @@ export class Player {
     this.streak = 0;
     // Double Jump state; `jumpsLeft` refills on landing. The DASH kept its
     // motion but lost its bookkeeping: it is an active item now (BLINK DRIVE,
-    // js/items.js) and the item's charge bar IS the gate on firing it again,
+    // js/items/active/index.js) and the item's charge bar IS the gate on firing it again,
     // so nothing here counts charges any more. That bar is filled by kills.
     this.jumpsLeft = 0;
     this.dashStart = 0;
@@ -1545,7 +1545,7 @@ export class Player {
 
   // Derived stats. These are getters, not fields, because a draft pick can
   // change the underlying mods at any wave boundary - anything that cached
-  // them would silently keep the pre-upgrade value for the rest of the run.
+  // them would silently keep the pre-item value for the rest of the run.
   // Executioner's fifty and the console's purchases both come off AFTER the
   // build's own bonuses, so the price is the same fifty points whether or not
   // the player later picks up Overhealth - a flat subtraction, not a share of
@@ -1744,16 +1744,16 @@ export class Player {
     return Math.round(BASE_RESERVE * this.mods.reserveMult);
   }
 
-  // Rebuilds the whole stat block from the owned upgrade list. Always a full
+  // Rebuilds the whole stat block from the owned passive item list. Always a full
   // replay from DEFAULT_MODS rather than an incremental apply - see the note
-  // at the top of upgrades.js for why that matters.
+  // at the top of items/passive/index.js for why that matters.
   rebuildMods() {
     this.mods = { ...DEFAULT_MODS };
-    for (const [id, n] of Object.entries(this.upgrades)) {
-      const def = UPGRADES[id];
+    for (const [id, n] of Object.entries(this.passiveItems)) {
+      const def = PASSIVE_ITEMS[id];
       if (def && n > 0) def.apply(this.mods, n);
     }
-    // No-Hit Bonus is applied AFTER the upgrade replay, because it multiplies
+    // No-Hit Bonus is applied AFTER the passive item replay, because it multiplies
     // whatever the build ended up with rather than being part of it. Additive
     // and clamped at NO_HIT_CAP: it is a bonus the player can finish earning,
     // not an open-ended multiplier on a run that was already going well.
@@ -1775,7 +1775,7 @@ export class Player {
     this.streak = Math.max(-m.streakFloor, Math.min(m.streakCap, next));
   }
 
-  // BLINK DRIVE's motion. Fired by the item (js/items.js) rather than by a
+  // BLINK DRIVE's motion. Fired by the item (js/items/active/index.js) rather than by a
   // passive item, so there is no charge to check here any more - the caller
   // has already spent the item's charge by the time this runs.
   //
@@ -1828,19 +1828,19 @@ export class Player {
     return this.noHitStacks;
   }
 
-  // Adds one stack of an upgrade. Returns false when it is already maxed, so
+  // Adds one stack of a passive item. Returns false when it is already maxed, so
   // callers can refuse the pick rather than silently wasting it.
-  takeUpgrade(id) {
-    const def = UPGRADES[id];
+  takePassiveItem(id) {
+    const def = PASSIVE_ITEMS[id];
     if (!def) return false;
-    const n = (this.upgrades[id] || 0) + 1;
+    const n = (this.passiveItems[id] || 0) + 1;
     if (n > def.max) return false;
-    this.upgrades[id] = n;
+    this.passiveItems[id] = n;
     // SACRIFICE eats one of the others, ONCE, here at the pick.
     //
     // It cannot live in an apply(): rebuildMods() replays the whole owned list
     // from fresh defaults after every draft pick, so an apply() that dropped an
-    // upgrade would drop a second one the next time the player took anything at
+    // passive item would drop a second one the next time the player took anything at
     // all, and a third after that. This is the one thing in either pool that
     // changes the LIST rather than the stats built from it, which is exactly
     // why it happens where the list is written.
@@ -1849,18 +1849,18 @@ export class Player {
     // leaves the rest - the whole entry goes, which is what "removes one random
     // passive item" says. A run holding nothing else simply gets the stats.
     if (id === 'sacrifice') {
-      const others = Object.keys(this.upgrades).filter((k) => k !== id && this.upgrades[k] > 0);
+      const others = Object.keys(this.passiveItems).filter((k) => k !== id && this.passiveItems[k] > 0);
       if (others.length) {
         const gone = others[(Math.random() * others.length) | 0];
-        delete this.upgrades[gone];
-        this.sacrificed = UPGRADES[gone] ? UPGRADES[gone].name : gone;
+        delete this.passiveItems[gone];
+        this.sacrificed = PASSIVE_ITEMS[gone] ? PASSIVE_ITEMS[gone].name : gone;
       }
     }
     this.rebuildMods();
     // A max-health change must not leave the player over the new cap or at a
     // stale value; clamp immediately so the HUD never shows 120/100.
     this.health = Math.min(this.health, this.maxHealth);
-    // A magazine-shrinking upgrade must not leave the gun holding more rounds
+    // A magazine-shrinking passive item must not leave the gun holding more rounds
     // than it can now carry.
     this.mag = Math.min(this.mag, this.magSize);
     return true;
@@ -1875,37 +1875,37 @@ export class Player {
   // swap. Nothing names the swap any more - there is one slot, so what became
   // of the old item was never in question - and a return value with no reader
   // is a contract waiting to be got wrong.
-  giveItem(id) {
-    this.item = id;
-    this.itemCharge = ACTIVE_ITEMS[id].charge;
-    this.itemReadyFx = false;
+  giveActiveItem(id) {
+    this.activeItem = id;
+    this.activeItemCharge = ACTIVE_ITEMS[id].charge;
+    this.activeItemReadyFx = false;
   }
 
   // Whether the carried item can be fired right now. Nothing carried is not
   // ready, so every caller can ask this one question.
-  get itemReady() {
-    return !!this.item && this.itemCharge >= ACTIVE_ITEMS[this.item].charge;
+  get activeItemReady() {
+    return !!this.activeItem && this.activeItemCharge >= ACTIVE_ITEMS[this.activeItem].charge;
   }
 
   /**
    * THE CHARGE METER IS ONE NUMBER, AND TWIN CELL IS ITS CEILING.
    *
    * It would have been the obvious thing to give the second charge a field of
-   * its own - `itemCharge2`, filled once the first is full - and it is wrong
+   * its own - `activeItemCharge2`, filled once the first is full - and it is wrong
    * in three places at once: two fields have to agree about which one is being
    * spent, the HUD has to be told about both, and every reset, snapshot and
    * clamp in the game becomes two lines that can drift. There is one meter,
    * and the passive item makes it twice as deep. Everything else falls out:
-   * `itemReady` is unchanged because one charge is still one charge, spending
+   * `activeItemReady` is unchanged because one charge is still one charge, spending
    * SUBTRACTS a charge instead of zeroing, and the second bar the HUD draws is
    * a second reading of the same number rather than a second number.
    *
    * `charges` and `chargeFrac` below are the two readings, and they are the
    * only thing ui.js is ever handed.
    */
-  get itemChargeMax() {
-    if (!this.item) return 0;
-    return ACTIVE_ITEMS[this.item].charge * Math.max(1, this.mods.itemChargeCap);
+  get activeItemChargeMax() {
+    if (!this.activeItem) return 0;
+    return ACTIVE_ITEMS[this.activeItem].charge * Math.max(1, this.mods.activeItemChargeCap);
   }
 
   /**
@@ -1913,16 +1913,16 @@ export class Player {
    *
    * AN ITEM THAT COSTS NOTHING IS ALWAYS AT ONE. PAY TO WIN's charge is zero -
    * it is paid for in credits instead - and every reading below divides by the
-   * cost, so the zero has to be answered once, here and in itemChargeFrac,
+   * cost, so the zero has to be answered once, here and in activeItemChargeFrac,
    * rather than by every caller checking. One rather than infinity because
-   * `itemCharges` is a count the HUD and the chime both read, and a free item
+   * `activeItemCharges` is a count the HUD and the chime both read, and a free item
    * has exactly one press available at all times.
    */
-  get itemCharges() {
-    if (!this.item) return 0;
-    const one = ACTIVE_ITEMS[this.item].charge;
+  get activeItemCharges() {
+    if (!this.activeItem) return 0;
+    const one = ACTIVE_ITEMS[this.activeItem].charge;
     if (one <= 0) return 1;
-    return Math.floor(this.itemCharge / one);
+    return Math.floor(this.activeItemCharge / one);
   }
 
   /**
@@ -1935,14 +1935,14 @@ export class Player {
    * at the same rate the first did, so a player who has taken Twin Cell sees
    * the same bar speed they had before it - twice.
    */
-  itemChargeFrac(n = 0) {
-    if (!this.item) return 0;
-    const one = ACTIVE_ITEMS[this.item].charge;
-    // A free item's meter is full and stays full - see itemCharges. The HUD
+  activeItemChargeFrac(n = 0) {
+    if (!this.activeItem) return 0;
+    const one = ACTIVE_ITEMS[this.activeItem].charge;
+    // A free item's meter is full and stays full - see activeItemCharges. The HUD
     // does not draw the bar at all in that case, but `frac >= 1` is also what
     // lights the slot's ready state, and a free item is always ready.
     if (one <= 0) return n === 0 ? 1 : 0;
-    return Math.max(0, Math.min(1, (this.itemCharge - one * n) / one));
+    return Math.max(0, Math.min(1, (this.activeItemCharge - one * n) / one));
   }
 
   // Spends ONE charge. The EFFECT is not here - it lives on the item's own
@@ -1951,10 +1951,10 @@ export class Player {
   // Subtracts rather than zeroing, which is the whole of Twin Cell at the
   // spending end: a player holding two charges fires one and is still ready,
   // and one holding a full charge and a part-filled second keeps the part.
-  spendItem() {
-    if (!this.item) return;
-    this.itemCharge = Math.max(0, this.itemCharge - ACTIVE_ITEMS[this.item].charge);
-    this.itemReadyFx = false;
+  spendActiveItem() {
+    if (!this.activeItem) return;
+    this.activeItemCharge = Math.max(0, this.activeItemCharge - ACTIVE_ITEMS[this.activeItem].charge);
+    this.activeItemReadyFx = false;
   }
 
   // Banks charge points toward the carried item. THE ONLY WAY THE METER MOVES,
@@ -1966,7 +1966,7 @@ export class Player {
   // clamp is at the top only, so an item already full silently drops the rest -
   // the alternative is a hidden overflow that makes the next charge instant.
   addItemCharge(points) {
-    if (!this.item || !(points > 0)) return;
+    if (!this.activeItem || !(points > 0)) return;
     // RAFFLE TICKET. Every box roll the run has ever paid for makes the meter
     // fill faster, and it rides HERE because this is the only door charge comes
     // through - so the kills, the battery plate, OVERDRAW's spill and BAILIFF's
@@ -1977,11 +1977,11 @@ export class Player {
     }
     // COUNTED, not merely tested. Without Twin Cell this is the same boolean
     // edge it always was; with it, the chime has to fire on the SECOND charge
-    // arriving as well, and a `was ? : ` on `itemReady` would be true either
+    // arriving as well, and a `was ? : ` on `activeItemReady` would be true either
     // side of that and say nothing.
-    const was = this.itemCharges;
-    this.itemCharge = Math.min(this.itemChargeMax, this.itemCharge + points);
-    if (this.itemCharges > was) this.itemReadyFx = true;
+    const was = this.activeItemCharges;
+    this.activeItemCharge = Math.min(this.activeItemChargeMax, this.activeItemCharge + points);
+    if (this.activeItemCharges > was) this.activeItemReadyFx = true;
   }
 
 
@@ -2487,10 +2487,10 @@ export class Player {
   // Back to a fresh-run state. Called on every new game, so anything added to
   // the constructor that changes during play must be reset here too.
   reset() {
-    // Upgrades are cleared first: maxHealth and magSize are derived from
+    // Passive items are cleared first: maxHealth and magSize are derived from
     // mods, so reading them before the wipe would seed the new run with the
     // last one's stats.
-    this.upgrades = {};
+    this.passiveItems = {};
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.
     this.noHitStacks = 0;
@@ -2521,8 +2521,8 @@ export class Player {
     this.carnageStacks = 0;
     this.invulnEnd = 0;
     this.frozenUntil = 0;
-    this.item = null;
-    this.itemCharge = 0;
+    this.activeItem = null;
+    this.activeItemCharge = 0;
     // The second pool's counters, all of them - see the block in the
     // constructor for why they are here rather than in mods.
     this.firingFor = 0;
@@ -2568,9 +2568,9 @@ export class Player {
     this.possumFx = false;
     this.offHand = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
-    // heal(). Zeroed everywhere itemCharge is, because it is the same meter.
+    // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
-    this.itemReadyFx = false;
+    this.activeItemReadyFx = false;
     // The active-item runtime, back to neutral. main.js clears the RUNNING
     // list separately; these are the marks it leaves on the player, and a new
     // run inheriting a triple-damage window would be born mid-buff.
@@ -2654,7 +2654,7 @@ export class Player {
     // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
     this.magAtShot = 0;
     // Rounds left in the magazine the reload now running is discarding. See
-    // startReload, and PRIMED MAG in js/upgrades.js.
+    // startReload, and PRIMED MAG in js/items/passive/index.js.
     this.magOnReload = 0;
     this.onGround = false;
     this.lastHurt = -99;
@@ -3703,7 +3703,7 @@ export class Player {
     const moving = (f !== 0 || s !== 0);
     const wants = !!input.sprint && moving;
     // DESK JOB, at the ONE gate every sprint passes through - which takes the
-    // slide with it, for the reason the upgrade's own note gives: a slide is
+    // slide with it, for the reason the passive item's own note gives: a slide is
     // entered out of a sprint and there is no earlier state left to slide out
     // of. The dash and the jump are untouched, and a held sprint key is simply
     // a walk rather than a lockout the HUD has to explain.

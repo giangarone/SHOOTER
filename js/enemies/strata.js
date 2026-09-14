@@ -22,7 +22,7 @@ import {
 // A TYPE IS A STAT BLOCK PLUS TWO FUNCTIONS. `build(e, group, s)` adds the
 // parts that make it look like itself; `ai(e, a)` decides what it does with a
 // frame. Both live on the entry rather than in a `type === ...` chain, the
-// same shape WEAPONS.build() and UPGRADES.apply() already use: with fifteen
+// same shape WEAPONS.build() and PASSIVE_ITEMS.apply() already use: with fifteen
 // types a chain is scanned top to bottom every frame and, worse, splits one
 // enemy's definition across three distant parts of the file.
 //

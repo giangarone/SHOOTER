@@ -945,7 +945,7 @@ const TYPES = {
   // rotating wedge of ground you cannot be on, and the rate it turns at is the
   // track. It is the one enemy in the game you can hear coming.
   //
-  // On Music.pulse rather than a timer of its own, for the reason upgrades.js
+  // On Music.pulse rather than a timer of its own, for the reason items/passive/index.js
   // states outright: nothing rhythmic in this game runs on a private clock. A
   // sweep on a 0.4s interval next to a soundtrack at 144bpm would beat against
   // it and read as broken rather than as fast.

@@ -2,7 +2,7 @@
 //
 // Everything else the player owns is a number, a window or a piece of
 // furniture. A turret is a gun with a cooldown, the bees are a cloud on a
-// timer, and every passive item in upgrades.js is a multiplier that applies
+// timer, and every passive item in items/passive/index.js is a multiplier that applies
 // itself without being watched. These two are neither: they are around for the
 // whole run, they decide where to go by themselves, and the player will look at
 // them.

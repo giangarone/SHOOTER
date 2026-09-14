@@ -35,6 +35,8 @@
 //   to rewrite this file. Hand-editing a row here will be overwritten.
 
 import * as THREE from 'three';
+import { PASSIVE_ITEMS, PASSIVE_ITEM_ICONS } from './items/passive/index.js';
+import { ACTIVE_ITEMS, ACTIVE_ITEM_ICONS } from './items/active/index.js';
 
 export const GRID = 24;
 // One art-pixel in metres. 24 of them come to ~0.62m, matching the size the
@@ -7448,6 +7450,14 @@ const PIXEL_ICONS = {
     '........................',
   ],
 };
+
+// Item-local drawings win over the legacy generated catalogue. This is the
+// worktree-safe extension path: a new definition exports `icon` beside its
+// behavior, and no shared art registry changes with it.
+for (const id of Object.keys(ACTIVE_ITEMS)) {
+  if (PASSIVE_ITEMS[id]) throw new Error(`item id exists in both catalogues: ${id}`);
+}
+Object.assign(PIXEL_ICONS, PASSIVE_ITEM_ICONS, ACTIVE_ITEM_ICONS);
 
 export const PIXEL_ICON_KEYS = Object.keys(PIXEL_ICONS);
 

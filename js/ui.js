@@ -7,7 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
-import { itemCells } from './items.js';
+import { itemCells } from './items/active/index.js';
 import { controllerGlyph } from './padmenu.js';
 
 // The player colours, as CSS. The world-space pair lives in main.js beside
@@ -425,8 +425,8 @@ export class UI {
       this.itemBar2.style.transform = 'scaleX(' + lit2 + ')';
     }
     const ready = frac >= 1;
-    if (this._c.itemReady !== ready) {
-      this._c.itemReady = ready;
+    if (this._c.activeItemReady !== ready) {
+      this._c.activeItemReady = ready;
       this.itemBox.classList.toggle('ready', ready);
     }
     const spare = frac2 >= 1;
@@ -550,7 +550,7 @@ export class UI {
    * what `_itemChipKeys` is for: it remembers what was drawn last frame and
    * zeroes anything missing from this one.
    *
-   * @param {Array} chips  from RunningItems.chips()
+   * @param {Array} chips  from RunningActiveItems.chips()
    */
   setItemBuffs(chips) {
     for (let i = 0; i < chips.length; i++) {
@@ -963,7 +963,7 @@ export class UI {
   // wave, kills, accuracy, damage taken, a dozen live counters - and every one
   // of those numbers was either already on the HUD or was trivia. What it never
   // showed was the one thing a build sheet is for: what the passive items the
-  // player has been walking into all run actually DO. A player six upgrades
+  // player has been walking into all run actually DO. A player six passive items
   // deep could not find out what any of them was without dying.
   //
   // So it is an inventory now. Icon, name, and the same effect lines the totem
@@ -1025,7 +1025,7 @@ export class UI {
   //
   // `passives` and `actives` are [{ id, name, theme, effects }]; `on` carries
   // the five things a click can mean. Nothing here knows what a wave or an
-  // upgrade IS - main.js owns all of that, and this owns which pixel was
+  // passive item IS - main.js owns all of that, and this owns which pixel was
   // clicked.
   //
   // `themes` is the THEME table's own order, [{ key, name, color }] - dealt
@@ -1223,7 +1223,7 @@ export class UI {
     // Array.isArray, not a truthiness check: a passive item's `effects` can be
     // a FUNCTION of the stack count - see effectLines() - and a function is
     // truthy and not iterable, which is how this threw the moment a player
-    // opened the sheet owning a tiered upgrade. main.js resolves them before
+    // opened the sheet owning a tiered passive item. main.js resolves them before
     // they get here; this is the net under that.
     for (const [text, sign] of Array.isArray(def.effects) ? def.effects : []) {
       const line = document.createElement('div');

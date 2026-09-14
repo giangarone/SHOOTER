@@ -394,11 +394,11 @@ try {
       return { idle, cone, recoil };
     };
     const before = await trial();
-    p.takeUpgrade('hairTrigger');
-    p.takeUpgrade('hairTrigger');
+    p.takePassiveItem('hairTrigger');
+    p.takePassiveItem('hairTrigger');
     await frames(4);
     const after = await trial();
-    t('Hair Trigger stacks to its max', p.upgrades.hairTrigger === 2, p.upgrades.hairTrigger);
+    t('Hair Trigger stacks to its max', p.passiveItems.hairTrigger === 2, p.passiveItems.hairTrigger);
     t('it widens the RESTING cone, before a shot is fired',
       after.idle > before.idle * 1.2,
       before.idle.toFixed(4) + ' -> ' + after.idle.toFixed(4));

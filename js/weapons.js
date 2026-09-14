@@ -1,13 +1,13 @@
 // Weapon definitions and their first-person models.
 //
-// Pure data plus model builders: no game state. Like ENEMY_TYPES and UPGRADES,
+// Pure data plus model builders: no game state. Like ENEMY_TYPES and PASSIVE_ITEMS,
 // everything a weapon is lives in one table entry, so a second gun is a stat
 // block plus a build() rather than changes spread across the codebase.
 //
 // ONE GUN
 //   The run carries the Pulse Rifle and nothing else. The table shape is kept
 //   because the rest of the code reads stats through it, and because the whole
-//   point of the mod system is that upgrades multiply BASE values here - a
+//   point of the mod system is that passive items multiply BASE values here - a
 //   second entry would need no changes outside this file and player.slots.
 //
 // MODELS ARE BUILT ONCE

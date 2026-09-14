@@ -75,7 +75,7 @@ export const KEY_ACTIONS = [
   { id: 'crouch', label: 'CROUCH', keys: ['KeyC', 'ControlAny'] },
   { id: 'melee', label: 'MELEE', keys: ['KeyV'] },
   { id: 'reload', label: 'RELOAD', keys: ['KeyR'] },
-  { id: 'item', label: 'ITEM', keys: ['KeyQ'] },
+  { id: 'activeItem', label: 'ACTIVE ITEM', keys: ['KeyQ'] },
   { id: 'use', label: 'USE', keys: ['KeyE'] },
   { id: 'stats', label: 'STATS', keys: ['Tab'] },
   { id: 'fullscreen', label: 'FULLSCREEN', keys: ['KeyF'] },
@@ -132,7 +132,7 @@ export const PAD_ACTIONS = [
   { id: 'use', label: 'TAKE', btn: 'triangle' },
   { id: 'aim', label: 'AIM', btn: 'L2' },
   { id: 'shoot', label: 'SHOOT', btn: 'R2' },
-  { id: 'item', label: 'ITEM', btn: 'R1' },
+  { id: 'activeItem', label: 'ACTIVE ITEM', btn: 'R1' },
   { id: 'melee', label: 'MELEE', btn: 'R3' },
   { id: 'sprint', label: 'SPRINT', btn: 'L3' },
   { id: 'stats', label: 'STATS', btn: 'TOUCH PAD' },
@@ -146,7 +146,7 @@ const PAD_STORE = 'va-pad-keys';
 const CODE_OK = /^[A-Za-z][A-Za-z0-9]*$/;
 // The same test for a stored pad name. 'TOUCH PAD' has a space, which CODE_OK
 // would refuse, so the rule is spelled for the pad's own vocabulary instead.
-const PAD_NAME_OK = /^[A-Za-z][A-Za-z ]*$/;
+const PAD_NAME_OK = /^[A-Za-z][A-Za-z0-9 ]*$/;
 
 function defaults() {
   const map = {};
@@ -160,7 +160,9 @@ function load() {
   try { raw = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch {}
   if (!raw || typeof raw !== 'object') return map;
   for (const a of KEY_ACTIONS) {
-    const v = raw[a.id];
+    // `item` was the old ambiguous name. Read it once for existing players;
+    // the next save writes only the explicit active-item action.
+    const v = raw[a.id] ?? (a.id === 'activeItem' ? raw.item : undefined);
     if (Array.isArray(v) && v.length && v.every((c) => typeof c === 'string' && CODE_OK.test(c))) {
       map[a.id] = v.map(normCode);
     }
@@ -184,7 +186,7 @@ function padLoad() {
   try { raw = JSON.parse(localStorage.getItem(PAD_STORE) || 'null'); } catch {}
   if (!raw || typeof raw !== 'object') return map;
   for (const a of PAD_ACTIONS) {
-    const v = raw[a.id];
+    const v = raw[a.id] ?? (a.id === 'activeItem' ? raw.item : undefined);
     if (typeof v === 'string' && PAD_NAME_OK.test(v)
       && !Object.prototype.hasOwnProperty.call(PAD_FIXED, v)) {
       map[a.id] = v;
@@ -316,7 +318,7 @@ export class Keybinds {
     return [
       ['L STICK', 'MOVE'], [P('sprint'), 'SPRINT'], ['R STICK', 'LOOK'],
       [P('shoot'), 'SHOOT'], [P('aim'), 'AIM'], [P('melee'), 'MELEE'],
-      [P('item'), 'ITEM'], [P('jump'), 'JUMP'], [P('reload'), 'RELOAD'],
+      [P('activeItem'), 'ACTIVE ITEM'], [P('jump'), 'JUMP'], [P('reload'), 'RELOAD'],
       [P('crouch'), 'CROUCH'], [P('sprint') + ' ' + P('crouch'), 'SLIDE'],
       [P('use'), 'TAKE'], [P('stats'), 'STATS'], ['D-PAD', 'MENU'],
       ['OPTIONS', 'PAUSE'],
@@ -355,7 +357,7 @@ export class Keybinds {
     return [
       [moveStr, 'MOVE'], [L('sprint'), 'SPRINT'], ['MOUSE', 'LOOK'],
       ['LMB', 'SHOOT'], ['RMB', 'AIM'], [L('melee'), 'MELEE'],
-      [L('reload'), 'RELOAD'], [L('jump'), 'JUMP'], [L('item'), 'ITEM'],
+      [L('reload'), 'RELOAD'], [L('jump'), 'JUMP'], [L('activeItem'), 'ACTIVE ITEM'],
       [L('crouch'), 'CROUCH'], [L('sprint') + ' ' + keyLabel(this.codes('crouch')[0]), 'SLIDE'],
       [L('use'), 'USE'], [L('stats'), 'STATS'], [L('fullscreen'), 'FULLSCREEN'],
       ['ESC', 'PAUSE'],

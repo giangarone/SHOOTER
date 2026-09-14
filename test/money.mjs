@@ -137,7 +137,7 @@ try {
   // ---- the magnet radius is a stat Lodestone moves ----
   const magnet = await page.evaluate(async () => {
     const { BASE_MAGNET_RADIUS } = await import('./js/money.js');
-    const { UPGRADES } = await import('./js/upgrades.js');
+    const { PASSIVE_ITEMS } = await import('./js/items/passive/index.js');
     const g = window.__game;
     const origDrop = g._dropMoney;
     g._dropMoney = () => {};
@@ -173,13 +173,13 @@ try {
       p.pos.z = pinZ;
       p.health = p.maxHealth;
     };
-    // Radius per tier, run through the upgrade's own apply() rather than a
+    // Radius per tier, run through the passive item's own apply() rather than a
     // copy of its formula - the point is that the CATALOGUE moves the radius,
     // so a retune there has to show up here.
     const radii = [];
     for (let n = 0; n <= 3; n++) {
       g.player.mods.magnetMult = 1;
-      if (n > 0) UPGRADES.lodestone.apply(g.player.mods, n);
+      if (n > 0) PASSIVE_ITEMS.lodestone.apply(g.player.mods, n);
       radii.push(+g._magnetRadius().toFixed(3));
     }
     g.player.mods.magnetMult = 1;
@@ -208,7 +208,7 @@ try {
     const just_outside = BASE_MAGNET_RADIUS + 1.2;
     drop(just_outside);
     const ignored = await settle(0.9);
-    UPGRADES.lodestone.apply(g.player.mods, 1);
+    PASSIVE_ITEMS.lodestone.apply(g.player.mods, 1);
     drop(just_outside);
     const taken = await settle(1.5);
     g.player.mods.magnetMult = 1;

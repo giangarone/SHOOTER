@@ -28,7 +28,7 @@ try {
   // Poll while the game plays so transient spikes in the caps are caught, not
   // just whatever happens to be on screen at the end. Sixty seconds rather
   // than thirty: the bot walks to a totem every wave, which costs it time, and
-  // it has to reach wave 4 before the upgrade assertions below stop being
+  // it has to reach wave 4 before the passive item assertions below stop being
   // vacuous. A longer run also gives the leak canaries more to work with.
   //
   // SIXTY SECONDS OF GAME, NOT SIXTY SECONDS OF STANDING HERE. This used to
@@ -74,7 +74,7 @@ try {
   console.log('PROGRAM SERIES', samples.map((r) => r.programs).join(','));
   console.log('TEXTURE SERIES', samples.map((r) => r.textures).join(','));
   console.log('WAVE SERIES', samples.map((r) => r.wave).join(','));
-  console.log('UPGRADE SERIES', samples.map((r) => r.upgradeCount).join(','));
+  console.log('PASSIVE ITEM SERIES', samples.map((r) => r.passiveItemCount).join(','));
   // The shared caches are filled lazily, the first time each enemy or
   // projectile type appears, so only the steady state is meaningful.
   const early = samples[Math.floor(samples.length * 2 / 3)];
@@ -94,14 +94,14 @@ try {
     ['spawned enemies', rep.spawned > 0],
     ['fired shots', rep.shots > 0],
     ['landed hits', rep.hits > 0],
-    // Every wave clear grants one random upgrade, so a run past wave 1 must
-    // have banked credits and gained an upgrade. Without these the wave-clear
+    // Every wave clear grants one random passive item, so a run past wave 1 must
+    // have banked credits and gained a passive item. Without these the wave-clear
     // reward could stop firing entirely and every other check would still pass.
     ['earned credits', rep.credits > 0],
     // The bot claims a totem every wave, so anything past wave 3 must have
-    // banked upgrades - the guard fires on a normal run rather than passing
+    // banked passive items - the guard fires on a normal run rather than passing
     // vacuously, which earlier revisions of it did.
-    ['granted upgrades', rep.wave < 3 || rep.upgradeCount > 0],
+    ['granted passive items', rep.wave < 3 || rep.passiveItemCount > 0],
     // The flawless streak is the run's only credit multiplier now, so the
     // guard is that its two halves agree: a bot that gets hit constantly may
     // legitimately finish on a streak of nothing, but the multiplier must

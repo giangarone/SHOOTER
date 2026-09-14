@@ -66,8 +66,8 @@ try {
     g.bossFight = null;
     g._startWaveCharge();
     g.money.clear();
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     window.__delivered = 0;
     let value = 0;
     let orbs = 0;
@@ -131,8 +131,8 @@ try {
       g.bossFight = null;
       g._startWaveCharge();
       g.money.clear();
-      g.player.giveItem('itemHeal');
-      g.player.itemCharge = 0;
+      g.player.giveActiveItem('itemHeal');
+      g.player.activeItemCharge = 0;
       g.player.mods.creditMult = creditMult;
       g.player.flawlessStreak = streak;
       let credits = 0;
@@ -174,8 +174,8 @@ try {
     g.bossFight = null;
     g._startWaveCharge();
     g.money.clear();
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     // A tank: 300 value, so 3 points, paid as $75.
     g._bankKillCharge(300, 75);
     window.__delivered = 0;
@@ -197,8 +197,8 @@ try {
     g.bossFight = null;
     g._startWaveCharge();
     g.money.clear();
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     // A child as main.js builds one: value zeroed, a flat $1.50 bounty instead.
     const paid = g._dropMoney({ x: 0, y: 0.5, z: 0 }, 1.5);
     g._bankKillCharge(0, paid);
@@ -219,14 +219,14 @@ try {
 
   // ---- a boss wave's trickle is capped, not just paced ----
   const boss = await page.evaluate(async () => {
-    const { BOSS_ADD_CHARGE_CAP } = await import('./js/items.js');
+    const { BOSS_ADD_CHARGE_CAP } = await import('./js/items/active/index.js');
     const g = window.__game;
     g.wave = 10;
     g._cfg = (await import('./js/waves.js')).waveConfig(10);
     g._startWaveCharge();
     g.money.clear();
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     // Stand in for a live boss so the add branch is the one taken.
     g.bossFight = { key: 'siege', parts: [], totalMaxHp: 1000 };
     window.__delivered = 0;
@@ -254,8 +254,8 @@ try {
     const { ENEMY_TYPES } = await import('./js/enemy.js');
     const g = window.__game;
     g._startWaveCharge();
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     const part = { hp: 1000 };
     g.bossFight = { key: 'siege', parts: [part], totalMaxHp: 1000 };
     window.__delivered = 0;
@@ -285,13 +285,13 @@ try {
   // ---- and time itself buys nothing ----
   const idle = await page.evaluate(() => {
     const g = window.__game;
-    g.player.giveItem('itemHeal');
-    g.player.itemCharge = 0;
+    g.player.giveActiveItem('itemHeal');
+    g.player.activeItemCharge = 0;
     for (let i = 0; i < 1200; i++) {   // a full minute of COMBAT, standing still
       g.time += 0.05;
       g.player.update(0.05, g.input, g.arena.obstacles, g.time, true);
     }
-    return g.player.itemCharge;
+    return g.player.activeItemCharge;
   });
   check('a minute of combat standing still charges nothing', idle === 0,
     `charge=${idle}`);

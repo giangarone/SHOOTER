@@ -52,18 +52,19 @@
 <script type="module">
 import * as THREE from 'three';
 import { buildPixelIcon, resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
-import { UPGRADES } from './js/upgrades.js';
+import { PASSIVE_ITEMS } from './js/items/passive/index.js';
+import { ACTIVE_ITEMS } from './js/items/active/index.js';
 
 import { POWERUP_TYPES, AMMO_PICKUP } from './js/powerups.js';
 import { PLAYER_STATUS } from './js/status.js';
 
-// EVERYTHING IN THE TABLE THAT IS NOT AN UPGRADE. The four stations are typed
+// EVERYTHING IN THE TABLE THAT IS NOT AN PASSIVE ITEM. The four stations are typed
 // out because nothing else in the game names them; the pickups and the
 // player's status effects are read off the modules that own them instead.
 //
 // That is not tidiness - it is the bug this file had. Both viewers were
-// written when the only non-upgrade drawings were the stations, and the day
-// the pickups and the six player statuses arrived, `UPGRADES[key] || EXTRA[key]`
+// written when the only non-passive item drawings were the stations, and the day
+// the pickups and the six player statuses arrived, `PASSIVE_ITEMS[key] || EXTRA[key]`
 // started returning undefined halfway down the list and the whole sheet threw
 // before it painted a single cell. Derived entries cannot go stale that way: a
 // seventh pickup or status shows up here the moment it exists.
@@ -85,7 +86,7 @@ for (const def of Object.values(PLAYER_STATUS)) {
 // A drawing nothing claims still gets a cell, named after its key. `npm run
 // test:icons` is what fails on an orphan; a contact sheet that refused to draw
 // would only hide the thing it exists to show.
-const meta = (k) => UPGRADES[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
+const meta = (k) => PASSIVE_ITEMS[k] || ACTIVE_ITEMS[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
 
 const pick = document.getElementById('pick');
 for (const k of PIXEL_ICON_KEYS) {

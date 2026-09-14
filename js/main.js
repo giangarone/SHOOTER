@@ -6,7 +6,7 @@
 // Only 'playing' simulates. The loop still runs and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
 //
-// NO MENU EVER OPENS. The wave-end upgrade choice is three totems that rise
+// NO MENU EVER OPENS. The wave-end passive item choice is three totems that rise
 // out of the arena floor - walk into one or shoot it anywhere - and credits
 // are spent at two stations beside them. The player keeps their hands on the
 // controls and the camera stays where it was; a modal at the wave boundary
@@ -91,11 +91,11 @@ import {
 } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS, ORB_LIFETIME } from './money.js';
 import {
-  UPGRADES, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
-} from './upgrades.js';
+  PASSIVE_ITEMS, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
+} from './items/passive/index.js';
 
 // THE SECOND POOL'S COLOURS, where a pick has an effect in the arena rather
-// than only a number in the stat block. Read off the upgrade table rather than
+// than only a number in the stat block. Read off the passive item table rather than
 // written out again, so a totem, its icon and the flash its effect makes in the
 // world can never end up three different colours - which is the whole reason
 // THEME exists.
@@ -218,9 +218,9 @@ const PIP_SIZE = 0.75;
 const PIP_GROW = 0.35;
 import { TotemArea, ARM_TIME_ITEM, ROW_Z as TOTEM_ROW_Z } from './totems.js';
 import {
-  ACTIVE_ITEMS, shuffledPool, RunningItems, HUMOURS,
+  ACTIVE_ITEMS, shuffledPool, RunningActiveItems, HUMOURS,
   CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
-} from './items.js';
+} from './items/active/index.js';
 // PRIMED MAG throws the Bomb; PANIC TURRET stands the Turret up. Both are
 // deployables main.js makes itself, for the same reason: they are PASSIVE
 // items, and js/deploy.js's other callers are all active items.
@@ -287,7 +287,7 @@ const SPAWN_RETRY = 2;
 // Raised again for bosses, and SPLIT. Herald throws five-shot volleys on top
 // of whatever the adds are firing, and with one shared ceiling a boss wave
 // could hold the pool full for seconds at a time - which would silently
-// cancel Reload Burst, an upgrade the player paid for. Enemies stop at
+// cancel Reload Burst, a passive item the player paid for. Enemies stop at
 // MAX_ENEMY_PROJECTILES, so eight slots are always there for the shards.
 //
 // Raised once more for Schism's radial volley: at its last tier there are
@@ -1448,8 +1448,8 @@ class Game {
     this._lavaTick = 0;
     // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the sixty-six do not
     // finish on the frame they are pressed; this is the list that ticks them
-    // and, more importantly, the list that ENDS them. See RunningItems.
-    this.running = new RunningItems();
+    // and, more importantly, the list that ENDS them. See RunningActiveItems.
+    this.runningActiveItems = new RunningActiveItems();
     // Reused every frame by the HUD - chips() fills it rather than allocating.
     this._itemChips = [];
     // WHAT THE PLAYER HAS LEFT IN THE ARENA - turrets, mines, bees, a bomb on
@@ -1525,7 +1525,7 @@ class Game {
       bossEvent: (kind, enemy) => this._bossEvent(kind, enemy),
       // `mods` is deliberately absent here: rebuildMods() swaps the object on
       // every draft pick, so anything captured at construction goes stale on
-      // the first upgrade. _updateEnemies() sets it fresh each frame, before
+      // the first passive item. _updateEnemies() sets it fresh each frame, before
       // any enemy reads it.
       effects: this.effects,
       sfx: this.sfx,
@@ -1670,10 +1670,10 @@ class Game {
       this._dir = 0;
       this.beginGame();
       window.__game = this;
-      // The upgrade table and the item pool, for tests that read either as
+      // The passive item table and the item pool, for tests that read either as
       // data. Autotest only, like everything else in this block.
-      this.__upgradesForTest = UPGRADES;
-      this.__itemsForTest = ACTIVE_ITEMS;
+      this.__passiveItemsForTest = PASSIVE_ITEMS;
+      this.__activeItemsForTest = ACTIVE_ITEMS;
       // The box's reel pool, as a function rather than a snapshot: the whole
       // property worth testing is that it depends on what the player is
       // CARRYING at the moment it is asked, which a captured array cannot show.
@@ -1743,8 +1743,8 @@ class Game {
         credits: this.credits,
         flawlessStreak: this.player.flawlessStreak,
         flawlessMult: this.flawlessMult(),
-        upgrades: { ...this.player.upgrades },
-        upgradeCount: Object.values(this.player.upgrades).reduce((a, b) => a + b, 0),
+        passiveItems: { ...this.player.passiveItems },
+        passiveItemCount: Object.values(this.player.passiveItems).reduce((a, b) => a + b, 0),
         weapon: this.player.weapon.name,
         maxHealth: this.player.maxHealth,
         magSize: this.player.magSize,
@@ -1816,7 +1816,7 @@ class Game {
       crouch: () => { this.input.crouch = true; },
       melee: () => { this.input.melee = true; },
       reload: () => this.tryReload(),
-      item: () => this.tryItem(),
+      activeItem: () => this.tryActiveItem(),
       use: () => this.tryUse(),
       stats: () => { this._openStats(); },
       fullscreen: () => this._toggleFullscreen(),
@@ -2315,7 +2315,7 @@ class Game {
   // A SECOND WAY TO FIRE ONE ITEM, not a second binding. Double-tapping
   // forward is how the dash was reached for the whole time it was a passive
   // item, and a player who learned it should not have to unlearn it - so it
-  // routes through tryItem() like the item key does, and therefore does
+  // routes through tryActiveItem() like the item key does, and therefore does
   // nothing at all unless BLINK DRIVE is what is in the slot.
   //
   // Keyed by ACTION rather than by code: the forward key is whatever the
@@ -2325,7 +2325,7 @@ class Game {
     if (this.input[id]) return;
     const last = this._tapT[id];
     if (this.time - last < DOUBLE_TAP_WINDOW) {
-      if (id === 'forward' && this.player.item === 'itemDash') this.tryItem();
+      if (id === 'forward' && this.player.activeItem === 'itemDash') this.tryActiveItem();
       // Cleared so a third tap has to start a new pair rather than firing
       // again off the same timestamp.
       this._tapT[id] = -99;
@@ -2707,7 +2707,7 @@ class Game {
     // where a button pressed in the middle of a firefight has to be. The
     // triggers are aim and fire, so R1 is the nearest thing to them that is
     // not one of them.
-    if (pad.pressed(PB('item'))) this.tryItem();
+    if (pad.pressed(PB('activeItem'))) this.tryActiveItem();
     // THE BUILD SHEET is HELD, exactly as TAB is: the sheet costs the player
     // the seconds they spend reading it and the arena keeps running under it.
     // It moved off Triangle when Triangle became TAKE - the summary is the one
@@ -3645,7 +3645,7 @@ class Game {
   _endTurn(cleared) {
     const m = this.match;
     // THE RUNNING ITEMS GO BEFORE THE SNAPSHOT IS TAKEN. An item can be fired
-    // in the shop - see the note in tryItem - so a player can hand over with a
+    // in the shop - see the note in tryActiveItem - so a player can hand over with a
     // window still open, and everything a window writes (itemDamageMult and its
     // neighbours) is an ordinary player field that captureRun will copy. The
     // incoming player would then inherit a triple-damage multiplier with no
@@ -3653,7 +3653,7 @@ class Game {
     //
     // A wave clear already clears these; this is the shop-fired case, which is
     // the only one that reaches here with anything still running.
-    this.running.clear(this);
+    this.runningActiveItems.clear(this);
     this._clearDeployed();
     if (cleared) m.slots[m.active] = captureRun(this);
     m.advance(cleared);
@@ -3762,7 +3762,7 @@ class Game {
     this.rig.setEnraged(false);
     this.ui.setPrompt(null, false);
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
-    this.sfx.upgrade();
+    this.sfx.passiveItem();
     this.ui.showMatchOver(m.label(m.winner), m.wave);
   }
 
@@ -3784,11 +3784,11 @@ class Game {
   // An empty slot is silent. A slot that is simply not full is not: a player
   // pressing the button in a fight has decided to spend it, and a press that
   // does nothing at all reads as a dropped input rather than as a cooldown.
-  tryItem() {
+  tryActiveItem() {
     if (this.state !== 'playing') return;
-    const id = this.player.item;
+    const id = this.player.activeItem;
     if (!id) return;
-    if (!this.player.itemReady) {
+    if (!this.player.activeItemReady) {
       this.sfx.denied();
       this.pad.rumble(0.15, 0.5, 60, 1);
       return;
@@ -3803,7 +3803,7 @@ class Game {
       this.pad.rumble(0.15, 0.5, 60, 1);
       return;
     }
-    this.player.spendItem();
+    this.player.spendActiveItem();
     // BAILIFF, and it is a REFUND rather than a discount: the meter empties
     // exactly as it always did and then a fifth of the cost lands back in it,
     // so what the player sees is the item fire and the bar jump. A free item -
@@ -3833,7 +3833,7 @@ class Game {
       this.player.dimeEnd = this.time + this.player.mods.dimeTime;
       this.effects.shockwave(this.player.pos, THEME_DIME, 4, 0.4);
     }
-    this.running.start(this, id, def);
+    this.runningActiveItems.start(this, id, def);
     this.sfx.itemUse();
     this.pad.rumble(0.6, 0.5, 200, 2);
   }
@@ -3919,7 +3919,7 @@ class Game {
    * not. Called every frame, and it does nothing at all on nearly all of them.
    *
    * DRIVEN OFF `mods` RATHER THAN OFF THE PICK, and that is what makes versus
-   * work for free: a handover replays the incoming player's upgrade list into
+   * work for free: a handover replays the incoming player's passive item list into
    * mods (see restoreRun), so the frame after a swap this reads a different
    * build and swaps the pets with it. Player one's magpie is removed and player
    * two's is created without either turn knowing the other exists.
@@ -4454,7 +4454,7 @@ class Game {
     this.wave++;
     // ADRENALINE. The stacks are what the LAST wave did to the player, and a
     // ramp that survived into a fresh fight would be a bonus the new wave never
-    // charged for - see the note on its entry in upgrades.js for why the reset
+    // charged for - see the note on its entry in items/passive/index.js for why the reset
     // is a wave boundary rather than a clock.
     this.player.adrenalineStacks = 0;
     this._cfg = waveConfig(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme);
@@ -5180,7 +5180,7 @@ class Game {
    * WHY MONEY SCALES WITH IT. The wave counter goes up on every clear, so a
    * player in an eight-handed match plays roughly one wave in eight - but the
    * shop's prices are keyed to the WAVE, not to how many of them they fought
-   * (see blockPrice in upgrades.js). Left alone they would meet wave-twenty
+   * (see blockPrice in items/passive/index.js). Left alone they would meet wave-twenty
    * prices on an eighth of a run's income, and the box would simply be out of
    * reach for the whole match. Paying each of them N times per kill puts a
    * full run's income against a full run's prices.
@@ -5959,7 +5959,7 @@ class Game {
    * would let one press turn a passive item the game balances at three tiers
    * into something that hits everything behind the player.
    *
-   * BIRD DOG's own figure is Seeker at full rank (see upgrades.js: 0.105 per
+   * BIRD DOG's own figure is Seeker at full rank (see items/passive/index.js: 0.105 per
    * tier, three tiers), so the item shows the passive item at its best rather
    * than at some fourth number nobody can compare it to.
    */
@@ -6075,7 +6075,7 @@ class Game {
     // player having spent a charge, and nothing in a build should be able to
     // argue with it. It sits on top of a DEAD CENTER run's halved chance rather
     // than replacing it, which is why it is a deadline on the player and not a
-    // write into `mods` - see itemCrit in js/items.js.
+    // write into `mods` - see itemCrit in js/items/active/index.js.
     let crit = rolled || this.time < this.player.itemCritEnd;
     // FATAL RESERVE. The bottom of the magazine, read off the count the
     // TRIGGER saw rather than off the live one: `mag` has already been billed
@@ -7444,9 +7444,9 @@ class Game {
   // a random cardinal direction. Only good enough to exercise the game.
   _autoInput() {
     // Claiming a totem takes priority over fighting, so the bot exercises the
-    // upgrade path every wave instead of ignoring it - and now that the next
+    // passive item path every wave instead of ignoring it - and now that the next
     // wave will not start until something is claimed, a bot that failed to
-    // claim would hang the run rather than merely skip an upgrade.
+    // claim would hang the run rather than merely skip a passive item.
     //
     // It SHOOTS the totem it wants. Shooting picks exactly the one it aimed at
     // and needs no proximity, and it walks toward the target at the same time
@@ -7478,7 +7478,7 @@ class Game {
 
     // Line up on the totem before firing at it. Until the bot is in position
     // it holds fire, because a shot from the wrong angle claims the wrong
-    // upgrade just as effectively as a good one claims the right one.
+    // passive item just as effectively as a good one claims the right one.
     const lined = seekTotem ? this._botLineUp(seekTotem) : false;
 
     // The totem outranks the nearest enemy as an aim point: it is the thing
@@ -8117,23 +8117,23 @@ class Game {
   }
 
   /**
-   * Puts each rolled upgrade into the shape a totem can draw.
+   * Puts each rolled passive item into the shape a totem can draw.
    *
    * @param {?Set<string>} seen  what this shop has already offered, excluded.
    *   Null - the default - is a roll against the whole pool, which is what the
    *   tests and any future caller with no shop behind it want.
    */
   _buildOffers(seen = null) {
-    const ids = rollTotems(this.player.upgrades, TOTEM_COUNT, seen);
+    const ids = rollTotems(this.player.passiveItems, TOTEM_COUNT, seen);
     return ids.map((id) => {
-      const def = UPGRADES[id];
-      const owned = this.player.upgrades[id] || 0;
+      const def = PASSIVE_ITEMS[id];
+      const owned = this.player.passiveItems[id] || 0;
       return {
         id,
         name: def.name,
         theme: def.theme,
         // Resolved against what the player already owns, so a stacking
-        // upgrade shows the tier it moves them from and the one it moves
+        // passive item shows the tier it moves them from and the one it moves
         // them to rather than the whole ladder.
         effects: effectLines(def, owned),
         note: owned > 0 ? 'OWNED ' + owned + ' / ' + def.max : '',
@@ -8158,7 +8158,7 @@ class Game {
   }
 
   // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
-  // five waves (see blockPrice in upgrades.js), so every place that shows or
+  // five waves (see blockPrice in items/passive/index.js), so every place that shows or
   // charges one has to ask for the current wave rather than read a constant -
   // these two are that ask, and nothing else in main.js may price a station.
   //
@@ -8173,7 +8173,7 @@ class Game {
   }
 
   // WHAT ONE ROLL OF THE BOX COSTS. Doubles with every roll already bought at
-  // this shop, on the same terms a reroll does - see boxCost in upgrades.js.
+  // this shop, on the same terms a reroll does - see boxCost in items/passive/index.js.
   // Read off the wave just CLEARED, the same as the two consoles: the box
   // rises during the intermission, before startWave() has counted the next.
   _boxCost() {
@@ -8187,7 +8187,7 @@ class Game {
   // decides - the coin is (see _gambleTill: the till waives the charge nine
   // times in ten and takes a bite out of the player the tenth). The card used
   // to keep printing $2000 while the wallet was never touched, which read as
-  // the run being about to be charged and made the one upgrade whose whole text
+  // the run being about to be charged and made the one passive item whose whole text
   // is "REROLLS & BOXES ARE FREE" look like it was not working.
   //
   // The COST is still what it was and still doubles underneath - nothing about
@@ -8262,7 +8262,7 @@ class Game {
       this.ui.banner('HIGH STAKES');
       // The hit is not billed against the flawless streak: nothing in the
       // arena touched the player, they pulled a lever. Same reading as an
-      // item's own health cost - see `pay` in js/items.js.
+      // item's own health cost - see `pay` in js/items/active/index.js.
     }
     return true;
   }
@@ -8307,7 +8307,7 @@ class Game {
     );
   }
 
-  // Grants the upgrade a totem is offering and sinks the whole set. Every
+  // Grants the passive item a totem is offering and sinks the whole set. Every
   // claim path - touch and shoot - funnels through here, so the guard against
   // double-claiming lives in exactly one place. The pick is confirmed by the
   // burst and the gun itself, not by a card: the totem the player walked into
@@ -8319,10 +8319,10 @@ class Game {
   _claimTotem(totem, byKey = false) {
     if (!(byKey ? totem.canUse() : totem.canClaim())) return;
     const offer = totem.offer;
-    if (!this.player.takeUpgrade(offer.id)) return;
+    if (!this.player.takePassiveItem(offer.id)) return;
     totem.claimed = true;
 
-    // SACRIFICE ate one of the others on the way in - see Player.takeUpgrade -
+    // SACRIFICE ate one of the others on the way in - see Player.takePassiveItem -
     // and it has to SAY WHICH. A pick that silently deleted part of the build
     // would read as a bug the next time the player opened the sheet, and by
     // then they would have no way to know what was gone.
@@ -8334,7 +8334,7 @@ class Game {
       this._killPos.set(totem.pos.x, 1.4, totem.pos.z), offer.theme, 30, 7, 2.5, 0.7
     );
     this.effects.addShake(0.1);
-    this.sfx.upgrade();
+    this.sfx.passiveItem();
     this.pad.rumble(0.5, 0.6, 220, 2);
     this.totemArea.dismiss();
     // The totem claim is the definitive one: it is what starts the next wave,
@@ -8405,7 +8405,7 @@ class Game {
     // reel - not merely fail to win. In versus this is automatically the ACTIVE
     // player's item: there is one Player instance and each run's slot is
     // snapshotted across the handoff. See shuffledPool in items.js.
-    box.roll(shuffledPool(this.player.item));
+    box.roll(shuffledPool(this.player.activeItem));
     this._refreshBox();
     this.sfx.boxOpen();
     this.pad.rumble(0.35, 0.5, 180, 2);
@@ -8432,7 +8432,7 @@ class Game {
     // The carried item is excluded from the reel, which at this instant is the
     // LOCKPICK itself - so the one thing a free roll can never hand back is
     // the thing that paid for it. See shuffledPool in items.js.
-    box.roll(shuffledPool(this.player.item));
+    box.roll(shuffledPool(this.player.activeItem));
     this._refreshBox();
     this.sfx.boxOpen();
     this.pad.rumble(0.35, 0.5, 180, 2);
@@ -8455,7 +8455,7 @@ class Game {
     const id = box.take();
     if (!id) return;
     const def = ACTIVE_ITEMS[id];
-    this.player.giveItem(id);
+    this.player.giveActiveItem(id);
 
     this._killPos.set(box.pos.x, 1.6, box.pos.z);
     this.effects.burst(this._killPos, def.theme, 34, 7, 2.5, 0.8);
@@ -8613,7 +8613,7 @@ class Game {
       ];
     }
     return [
-      lead + 'REROLL &nbsp;·&nbsp; NEW UPGRADES &nbsp;·&nbsp; '
+      lead + 'REROLL &nbsp;·&nbsp; NEW PASSIVE ITEMS &nbsp;·&nbsp; '
       + '<span class="prompt-cost">' + this._priceLabel(this._rerollCost()) + '</span>',
       false,
     ];
@@ -8663,7 +8663,7 @@ class Game {
   }
 
   // Buying ammo leaves the totems standing; rerolling redraws all three,
-  // because re-offering an upgrade the player just paid to replace makes the
+  // because re-offering a passive item the player just paid to replace makes the
   // reroll feel rigged.
   _useStation(st) {
     if (this._stationBlocked(st)) {
@@ -8796,12 +8796,12 @@ class Game {
   //
   // THE EFFECT LINES COME FROM THE POOL, not from a second table written for
   // this screen. A tiered passive's `effects` is a FUNCTION of the stack count
-  // (see effectLines in upgrades.js), and it is resolved at ONE stack here -
+  // (see effectLines in items/passive/index.js), and it is resolved at ONE stack here -
   // what taking it once does, which is the question the card is answering. A
   // readout that tracked the tier owned would be a second thing the panel had
   // to rebuild on every click, to say something the tier badge already says.
   _debugPassiveDefs() {
-    return Object.entries(UPGRADES).map(([id, def]) => ({
+    return Object.entries(PASSIVE_ITEMS).map(([id, def]) => ({
       id, name: def.name, theme: def.theme, effects: effectLines(def, 0),
     }));
   }
@@ -8813,15 +8813,15 @@ class Game {
   }
 
   _debugRefresh() {
-    this.ui.refreshDebug(this.player.upgrades, this.player.item, this.wave, this._forcedTheme);
+    this.ui.refreshDebug(this.player.passiveItems, this.player.activeItem, this.wave, this._forcedTheme);
   }
 
-  // A TIER AT A TIME, through the player's own takeUpgrade - so a stacking
+  // A TIER AT A TIME, through the player's own takePassiveItem - so a stacking
   // passive stacks, a maxed one refuses, and every clamp that comes with an
-  // upgrade (the health cap, the magazine) is applied exactly
+  // passive item (the health cap, the magazine) is applied exactly
   // as it is when a totem is walked into.
   _debugGivePassive(id) {
-    if (!this.player.takeUpgrade(id)) return;
+    if (!this.player.takePassiveItem(id)) return;
     // SACRIFICE ate something on the way in and left its name behind for the
     // totem's banner. There is no totem here, so the note is dropped rather
     // than left to fire on the next pick the player claims for real.
@@ -8835,10 +8835,10 @@ class Game {
   // this map, and an entry meaning "none" is a case every reader would have to
   // know about.
   _debugDropPassive(id) {
-    const n = this.player.upgrades[id] || 0;
+    const n = this.player.passiveItems[id] || 0;
     if (n <= 0) return;
-    if (n > 1) this.player.upgrades[id] = n - 1;
-    else delete this.player.upgrades[id];
+    if (n > 1) this.player.passiveItems[id] = n - 1;
+    else delete this.player.passiveItems[id];
     this.player.rebuildMods();
     this.player.health = Math.min(this.player.health, this.player.maxHealth);
     this.player.mag = Math.min(this.player.mag, this.player.magSize);
@@ -8847,12 +8847,12 @@ class Game {
   }
 
   // ONE SLOT, so picking a second item throws the first away - which is the
-  // rule the whole active-item system is built on, and giveItem is where it
+  // rule the whole active-item system is built on, and giveActiveItem is where it
   // lives. The panel does not get its own version of it.
   _debugGiveActive(id) {
-    this.player.giveItem(id);
+    this.player.giveActiveItem(id);
     this._debugRefresh();
-    this.sfx.itemReady();
+    this.sfx.activeItemReady();
   }
 
   /**
@@ -8875,7 +8875,7 @@ class Game {
     this._closeDebug();
     this._clearEntities();
     this._clearDeployed();
-    this.running.clear(this);
+    this.runningActiveItems.clear(this);
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
     this.totemArea.dismiss();
@@ -8986,7 +8986,7 @@ class Game {
     if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
     // RABBIT'S FOOT rides in as a multiplier on every category's chance, so it
     // lifts the need-adjusted odds in proportion rather than adding a flat
-    // fifteen points - see the note on its entry in upgrades.js.
+    // fifteen points - see the note on its entry in items/passive/index.js.
     const kind = rollDrop(
       this.player.health / this.player.maxHealth,
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
@@ -8996,7 +8996,7 @@ class Game {
       // item, or a meter already at its ceiling, and the category is skipped
       // outright rather than left to land as a plate the player walks over for
       // nothing - the same rule health holds at a full bar.
-      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax,
+      !!this.player.activeItem && this.player.activeItemCharge < this.player.activeItemChargeMax,
       // PLASMA BAG lifts the full-bar gate on the health plate. The gate is not
       // a rule about health - it is the rule that a drop which cannot be SPENT
       // should not be rolled - and a crate carrying ten points of shield can be
@@ -9023,7 +9023,7 @@ class Game {
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
       this._ammoActive() < MAX_ACTIVE_AMMO,
       this.player.mods.dropLuck,
-      !!this.player.item && this.player.itemCharge < this.player.itemChargeMax,
+      !!this.player.activeItem && this.player.activeItemCharge < this.player.activeItemChargeMax,
       this.player.mods.crateShield > 0
     );
   }
@@ -9319,7 +9319,7 @@ class Game {
     ctx.pulseWhole = this.music.pulseWhole;
     // Re-read every frame, never captured: rebuildMods() replaces the whole
     // mods object on each draft pick, so a reference taken once would be the
-    // pre-upgrade block for the rest of the run.
+    // pre-item block for the rest of the run.
     ctx.mods = this.player.mods;
 
     // ---- THE LURE ---------------------------------------------------------
@@ -9366,7 +9366,7 @@ class Game {
     // a local alias is one grep away from being missed again.
     //
     // ROUNDS IN THE AIR ARE NOT RECALLED - see the possum entry in
-    // js/upgrades.js. A bullet does not know who it was for.
+    // js/items/passive/index.js. A bullet does not know who it was for.
     const possum = this.player.possumEnd > this.time;
     if (possum && !this._possumDecoy) {
       const P = this.player;
@@ -9511,8 +9511,8 @@ class Game {
       if (!e.boss) this._bankKillCharge(e.value, paid);
       this.player.onKill(this.time);
       // BODY COUNT's stack, and anything else that ever counts kills. Walked
-      // rather than dispatched - see RunningItems.onKill.
-      this.running.onKill(this);
+      // rather than dispatched - see RunningActiveItems.onKill.
+      this.runningActiveItems.onKill(this);
       if (this.player.mods.ammoOnKill > 0) {
         this.player.reserveAmmo = Math.min(
           this.player.maxReserve,
@@ -9675,7 +9675,7 @@ class Game {
         this.effects.burst(at, 0xcfeaff, 22, 6, 3, 0.5);
       }
       // Ashen leaves a ZONE rather than another instant blast - the two
-      // upgrades above already own that shape.
+      // passive items above already own that shape.
       // A CHANCE, not a rule: with Incendiary running every corpse in a wave
       // is a burning one, and a cloud per death paved the arena.
       if (m.ashPower > 0 && this._deathBurn[i] && Math.random() < m.ashChance) {
@@ -10433,7 +10433,7 @@ class Game {
     // BLOOD TAX still multiplying damage across a wave boundary would be a
     // buff nobody was granted, and a turret firing into the shop would be
     // furniture the player has to wait out.
-    this.running.clear(this);
+    this.runningActiveItems.clear(this);
     this._clearDeployed();
     // Through _releaseHazard, not creepRelease: a gas cloud holds a handle on
     // the cloud pool as well, and a slot released here is a slot the next run
@@ -10668,18 +10668,18 @@ class Game {
       this.player.bottomEnd > this.time && this.player.mods.bottomTime > 0
         ? (this.player.bottomEnd - this.time) / this.player.mods.bottomTime : 0
     );
-    this.ui.setItemBuffs(this.running.chips(this._itemChips));
+    this.ui.setItemBuffs(this.runningActiveItems.chips(this._itemChips));
     this.ui.setStatuses(this.player);
     // THE ACTIVE ITEM SLOT. Hidden entirely while nothing is carried - an empty
     // frame in the corner is a permanent question about a system the player has
     // not met yet.
-    const item = this.player.item ? ACTIVE_ITEMS[this.player.item] : null;
+    const item = this.player.activeItem ? ACTIVE_ITEMS[this.player.activeItem] : null;
     // TWO FRACTIONS, ONE METER. Both come off the same number - see
-    // Player.itemChargeFrac - so a run without TWIN CELL simply passes a
+    // Player.activeItemChargeFrac - so a run without TWIN CELL simply passes a
     // second zero and the HUD has no idea the passive item exists.
     this.ui.setItem(
-      this.player.item, item,
-      this.player.itemChargeFrac(0), this.player.itemChargeFrac(1)
+      this.player.activeItem, item,
+      this.player.activeItemChargeFrac(0), this.player.activeItemChargeFrac(1)
     );
     // AEGIS holds its frame for the length of its window. Both damage sinks
     // return in silence while invulnEnd is ahead, so without this the strongest
@@ -10718,23 +10718,23 @@ class Game {
   // thing they are carrying, and the panel should agree.
   _statActive() {
     const p = this.player;
-    if (!p.item) return null;
-    const def = ACTIVE_ITEMS[p.item];
+    if (!p.activeItem) return null;
+    const def = ACTIVE_ITEMS[p.activeItem];
     return {
-      id: p.item,
+      id: p.activeItem,
       name: def.name,
       effects: def.effects,
       theme: def.theme,
     };
   }
 
-  // The owned build, in the order it was picked up, carrying each upgrade's own
+  // The owned build, in the order it was picked up, carrying each passive item's own
   // theme colour and its own effect lines so the list reads as the totems the
   // player has been walking into all run - and says what each of them did.
   _statPassives() {
     const out = [];
-    for (const [id, n] of Object.entries(this.player.upgrades)) {
-      const def = UPGRADES[id];
+    for (const [id, n] of Object.entries(this.player.passiveItems)) {
+      const def = PASSIVE_ITEMS[id];
       if (!def || n <= 0) continue;
       out.push({
         id,
@@ -10848,7 +10848,7 @@ class Game {
         this.player.gristleFx = false;
         this.ui.banner('+1 MAX HP');
         this.effects.shockwave(this.player.pos, THEME_GRISTLE, 4, 0.5);
-        this.sfx.upgrade();
+        this.sfx.passiveItem();
       }
       if (this.player.jackpotFx) {
         this.player.jackpotFx = false;
@@ -10928,9 +10928,9 @@ class Game {
       // is looking at the crosshair, the bar is in the corner, and the only
       // channel that reaches them without taking their eyes off the room is
       // their ears. The HUD plate flashes with it for anyone who does look.
-      if (this.player.itemReadyFx) {
-        this.player.itemReadyFx = false;
-        this.sfx.itemReady();
+      if (this.player.activeItemReadyFx) {
+        this.player.activeItemReadyFx = false;
+        this.sfx.activeItemReady();
         this.pad.rumble(0.2, 0.45, 90, 1);
         this.ui.flashItemReady();
       }
@@ -11048,7 +11048,7 @@ class Game {
       // ENGINE heals or BODY COUNT is multiplying is already true for the
       // frame the enemies are updated in - and so an item that expires this
       // frame has handed its multiplier back before a shot can read it.
-      this.running.update(this, dt);
+      this.runningActiveItems.update(this, dt);
       // BACKORDER's parcel and LIFE INSURANCE's receipt. After the running
       // list, because the running list is where LIFE INSURANCE's window is
       // ended - so a claim and the window closing on the same frame are drawn

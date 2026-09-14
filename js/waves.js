@@ -56,7 +56,7 @@ export function isBossWave(n) {
  * Boss stat multipliers for wave n. Applied to the base block in ENEMY_TYPES
  * the same way hpScale and friends are applied to a normal enemy.
  *
- * HP flattens after wave 30 and damage does not, on purpose. The upgrade pool
+ * HP flattens after wave 30 and damage does not, on purpose. The passive item pool
  * is finite, so a player's damage plateaus somewhere near four times the
  * starting rifle; a health bar that kept climbing linearly past that would
  * turn a wave-55 boss into eighty seconds of holding the trigger. Late-game

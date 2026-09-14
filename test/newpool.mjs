@@ -43,21 +43,21 @@ try {
     const g = window.__game;
     g.autoTest = false;
     const P = g.player;
-    const UP = g.__upgradesForTest;
-    const ITEMS = g.__itemsForTest;
+    const UP = g.__passiveItemsForTest;
+    const ITEMS = g.__activeItemsForTest;
     const o = {};
     const step = () => new Promise((res) => requestAnimationFrame(res));
 
     // A clean build. rebuildMods replays the owned list from DEFAULT_MODS, so
     // emptying the list is the whole reset.
     const bare = () => {
-      for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
+      for (const k of Object.keys(P.passiveItems)) delete P.passiveItems[k];
       P.rebuildMods();
       P.adrenalineStacks = 0;
       P.itemCritEnd = 0;
       P.balance = 0;
     };
-    const give = (id, n = 1) => { P.upgrades[id] = n; P.rebuildMods(); };
+    const give = (id, n = 1) => { P.passiveItems[id] = n; P.rebuildMods(); };
     // A body to shoot at, standing where the test puts it. Not on the roster -
     // nothing here wants the wave logic or the death sweep involved.
     const V = g.player.pos.constructor;
@@ -125,9 +125,9 @@ try {
     // SWEET SPOT: the window crits everything, and it does NOT overwrite the
     // build's own multiplier - a DEAD CENTER run presses this and gets 3x.
     give('deadCenter');
-    P.item = 'itemCrit';
-    P.itemCharge = ITEMS.itemCrit.charge;
-    g.running.start(g, 'itemCrit', ITEMS.itemCrit);
+    P.activeItem = 'itemCrit';
+    P.activeItemCharge = ITEMS.itemCrit.charge;
+    g.runningActiveItems.start(g, 'itemCrit', ITEMS.itemCrit);
     {
       const e = dummy();
       g._shotCrit.clear();
@@ -135,7 +135,7 @@ try {
       o.sweetSpotMult = g._hitMult(e, true);
       g._shotCrit.clear();
     }
-    g.running.clear(g);
+    g.runningActiveItems.clear(g);
     o.sweetSpotEnded = P.itemCritEnd === 0;
     bare();
 
@@ -218,27 +218,27 @@ try {
     o.dropLuck = +P.mods.dropLuck.toFixed(3);
     bare();
 
-    // TWIN CELL. One number, twice as deep - see Player.itemChargeMax.
-    P.giveItem('itemHeal');
+    // TWIN CELL. One number, twice as deep - see Player.activeItemChargeMax.
+    P.giveActiveItem('itemHeal');
     const cost = ITEMS.itemHeal.charge;
-    o.oneCharge = { max: P.itemChargeMax, charges: P.itemCharges, ready: P.itemReady };
+    o.oneCharge = { max: P.activeItemChargeMax, charges: P.activeItemCharges, ready: P.activeItemReady };
     P.addItemCharge(cost);
-    o.overflowDropped = P.itemCharge === cost;
+    o.overflowDropped = P.activeItemCharge === cost;
     give('twinCell');
-    o.twinMax = P.itemChargeMax === cost * 2;
+    o.twinMax = P.activeItemChargeMax === cost * 2;
     P.addItemCharge(cost);
-    o.twinBanked = { charges: P.itemCharges, first: P.itemChargeFrac(0), second: P.itemChargeFrac(1) };
-    P.spendItem();
-    o.afterOneSpend = { charges: P.itemCharges, ready: P.itemReady, second: P.itemChargeFrac(1) };
-    P.spendItem();
-    o.afterTwoSpends = { charges: P.itemCharges, ready: P.itemReady };
+    o.twinBanked = { charges: P.activeItemCharges, first: P.activeItemChargeFrac(0), second: P.activeItemChargeFrac(1) };
+    P.spendActiveItem();
+    o.afterOneSpend = { charges: P.activeItemCharges, ready: P.activeItemReady, second: P.activeItemChargeFrac(1) };
+    P.spendActiveItem();
+    o.afterTwoSpends = { charges: P.activeItemCharges, ready: P.activeItemReady };
     // Half a charge on top of a full one: the first bar reads full and the
     // second reads half, which is the whole of what the HUD is handed.
-    P.itemCharge = cost * 1.5;
-    o.halfSpare = { first: P.itemChargeFrac(0), second: P.itemChargeFrac(1) };
+    P.activeItemCharge = cost * 1.5;
+    o.halfSpare = { first: P.activeItemChargeFrac(0), second: P.activeItemChargeFrac(1) };
     bare();
-    P.item = null;
-    P.itemCharge = 0;
+    P.activeItem = null;
+    P.activeItemCharge = 0;
 
     // ---- 5. BLOODSPORT, through the real kill sweep ------------------------
     give('bloodsport');
@@ -306,9 +306,9 @@ try {
     g._clearDeployed();
     P.pos.set(0, 0, 0);
     P.yaw = 0;
-    P.item = 'itemMonkey';
-    P.itemCharge = ITEMS.itemMonkey.charge;
-    g.tryItem();
+    P.activeItem = 'itemMonkey';
+    P.activeItemCharge = ITEMS.itemMonkey.charge;
+    g.tryActiveItem();
     o.monkeyThrown = g._deployed.length === 1 && g._deployed[0].lure === true;
     {
       const mk = g._deployed[0];
@@ -369,13 +369,13 @@ try {
 
     // ---- 8. BANDOLIER ------------------------------------------------------
     P.reserveAmmo = 10;
-    P.item = 'itemAmmo';
-    P.itemCharge = ITEMS.itemAmmo.charge;
-    g.tryItem();
+    P.activeItem = 'itemAmmo';
+    P.activeItemCharge = ITEMS.itemAmmo.charge;
+    g.tryActiveItem();
     o.bandolier = P.reserveAmmo;
     P.reserveAmmo = P.maxReserve;
-    P.itemCharge = ITEMS.itemAmmo.charge;
-    g.tryItem();
+    P.activeItemCharge = ITEMS.itemAmmo.charge;
+    g.tryActiveItem();
     o.bandolierCapped = P.reserveAmmo === P.maxReserve;
 
     // ---- 9. THE POOL ITSELF ------------------------------------------------
@@ -413,7 +413,7 @@ try {
     for (const k of o.newPassives.length ? [] : ['magpie', 'lamprey', 'deadeye',
       'assassin', 'telltale', 'longshot', 'pointBlank', 'adrenaline',
       'bloodMoney', 'crouchfire', 'rabbitsFoot', 'bloodsport', 'warChest',
-      'twinCell', 'deadCenter', 'marksman']) P.upgrades[k] = 1;
+      'twinCell', 'deadCenter', 'marksman']) P.passiveItems[k] = 1;
     P.rebuildMods();
     g.state = 'playing';
     for (let i = 0; i < 30; i++) await step();
@@ -554,11 +554,11 @@ try {
     out.opened = g.match.active === 0;
 
     // PLAYER ONE takes the pets, the crit build and some adrenaline.
-    for (const k of ['magpie', 'lamprey', 'assassin', 'deadeye']) P.upgrades[k] = 1;
-    P.upgrades.adrenaline = 1;
+    for (const k of ['magpie', 'lamprey', 'assassin', 'deadeye']) P.passiveItems[k] = 1;
+    P.passiveItems.adrenaline = 1;
     P.rebuildMods();
     P.adrenalineStacks = 6;
-    P.giveItem('itemMonkey');
+    P.giveActiveItem('itemMonkey');
     g._syncCompanions();
     out.p1Pets = !!g._companions[0] && !!g._companions[1];
     out.p1Crit = g.player.mods.critChance;
@@ -572,16 +572,16 @@ try {
     out.p2NoPets = !g._companions[0] && !g._companions[1];
     out.p2Crit = g.player.mods.critChance;
     out.p2NoAdrenaline = g.player.adrenalineStacks === 0;
-    out.p2NoItem = g.player.item !== 'itemMonkey';
+    out.p2NoItem = g.player.activeItem !== 'itemMonkey';
 
     // Player two takes their OWN new-pool build, deliberately different.
     g.player.maxHealth = 9999;
     g.player.health = 9999;
-    for (const k of ['twinCell', 'warChest', 'bloodMoney']) g.player.upgrades[k] = 1;
+    for (const k of ['twinCell', 'warChest', 'bloodMoney']) g.player.passiveItems[k] = 1;
     g.player.rebuildMods();
-    g.player.giveItem('itemCrit');
+    g.player.giveActiveItem('itemCrit');
     g.player.addItemCharge(1000);
-    out.p2TwoCharges = g.player.itemCharges === 2;
+    out.p2TwoCharges = g.player.activeItemCharges === 2;
     g.credits = 7000;
     g.player.balance = g.credits;
     out.p2WarChest = g.player.getEffectiveDamage(g.player.weapon.damage);
@@ -598,9 +598,9 @@ try {
     // snapshot has been written back - so neither player can ever start a wave
     // holding the other's ramp, or their own last one's.
     out.p1AdrenalineReset = g.player.adrenalineStacks === 0;
-    out.p1ItemBack = g.player.item === 'itemMonkey';
+    out.p1ItemBack = g.player.activeItem === 'itemMonkey';
     // ...and none of player two's.
-    out.p1NoTwinCell = g.player.mods.itemChargeCap === 1;
+    out.p1NoTwinCell = g.player.mods.activeItemChargeCap === 1;
     out.p1NoWarChest = g.player.mods.warChest === 0;
     return out;
   });
@@ -644,8 +644,8 @@ try {
     const P = g.player;
     const V = P.pos.constructor;
     const out = {};
-    for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
-    P.upgrades.delayedFuse = 1;
+    for (const k of Object.keys(P.passiveItems)) delete P.passiveItems[k];
+    P.passiveItems.delayedFuse = 1;
     P.rebuildMods();
 
     // A round parked in the chest, exactly where a player aiming at the core

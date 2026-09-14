@@ -416,7 +416,7 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 
    CYAN, NOT A SECOND GREEN, AND NOT A NEW HUE EITHER. It is the value the
    shield pickup, SECOND SKIN and the whole armour family already wear
-   (THEME.armor in upgrades.js), and the UI has no business inventing a colour
+   (THEME.armor in items/passive/shared.js), and the UI has no business inventing a colour
    the world does not use - see the note on the palette.
 
    IT IS THE SAME CYAN THE STAMINA BAR ONE ROW DOWN IS, which is worth stating
@@ -632,7 +632,7 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 /* RED BELOW ONE FULL MAGAZINE. Measured against the magazine rather than a flat
    number because the magazine is what a reserve is FOR: the moment the reserve
    can no longer refill the gun once is the moment the run is on a clock, and
-   that moment moves as the player takes magazine upgrades. */
+   that moment moves as the player takes magazine passive items. */
 #ammo-res.low  { color: var(--red); }
 #ammo-res.out  { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
 /* BRASS ECHO paying out. The reserve is a 12px number in the corner of the

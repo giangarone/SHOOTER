@@ -337,7 +337,7 @@ export class SFX {
     this.tone({ f: 550, f2: 1100, t: 0.15, type: 'triangle', v: 0.28 });
     this.tone({ f: 820, f2: 1640, t: 0.1, type: 'sine', v: 0.2, delay: 0.08 });
   }
-  upgrade() {
+  passiveItem() {
     this.tone({ f: 440, f2: 880, t: 0.18, type: 'triangle', v: 0.3 });
     this.tone({ f: 660, f2: 1320, t: 0.2, type: 'sine', v: 0.25, delay: 0.09 });
     this.tone({ f: 990, f2: 1760, t: 0.26, type: 'sine', v: 0.2, delay: 0.18 });
@@ -412,7 +412,7 @@ export class SFX {
 
   // THE REEL LANDS. The one moment the box is allowed to be loud.
   //
-  // It is the upgrade chime opened out: the same three ascending partials, but
+  // It is the passive item chime opened out: the same three ascending partials, but
   // spread over twice the time, with a noise swell underneath that arrives
   // BEFORE the first note. The swell is what makes it feel like the flash and
   // the shockwave rather than like a chime that happens to coincide with them.
@@ -443,7 +443,7 @@ export class SFX {
     this.tone({ f: 70, t: 0.22, type: 'sine', v: 0.22, delay: 0.02 });
   }
 
-  // An item taken. The upgrade chime with a mechanical seat under it, so it
+  // An item taken. The passive item chime with a mechanical seat under it, so it
   // reads as the same KIND of event as taking a totem while still saying that
   // something has been LOADED rather than learned.
   itemTake() {
@@ -465,7 +465,7 @@ export class SFX {
   // the only thing that says a button the player has been waiting on is live.
   // A cue nobody hears is a cue that is not there - and unlike the orb blip
   // there is no risk of fatigue, because it plays at most once per cooldown.
-  itemReady() {
+  activeItemReady() {
     this.tone({ f: 1320, t: 0.08, type: 'sine', v: 0.34 });
     this.tone({ f: 1980, t: 0.13, type: 'sine', v: 0.28, delay: 0.06 });
     // A triangle on the top note, for the reason the coin has one: harmonics
@@ -651,7 +651,7 @@ export class SFX {
 
   // BONESAW. Grit and a rising body, cut short - the dash is 0.4s and the
   // sound must not still be going when the player has stopped.
-  itemCharge() {
+  activeItemCharge() {
     this.noise({ t: 0.22, v: 0.26, f: 1200, f2: 3200, mode: 'bandpass', q: 2 });
     this.tone({ f: 180, f2: 420, t: 0.2, type: 'sawtooth', v: 0.2 });
   }

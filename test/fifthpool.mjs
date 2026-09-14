@@ -51,13 +51,13 @@ try {
     const g = window.__game;
     g.autoTest = false;
     const P = g.player;
-    const UP = g.__upgradesForTest;
+    const UP = g.__passiveItemsForTest;
     const o = {};
     const V = P.pos.constructor;
     const step = () => new Promise((res) => requestAnimationFrame(res));
 
     const bare = () => {
-      for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
+      for (const k of Object.keys(P.passiveItems)) delete P.passiveItems[k];
       P.rebuildMods();
       P.health = P.maxHealth;
       P.shield = 0;
@@ -80,7 +80,7 @@ try {
       g.powerups.length = 0;
       g.enemies.length = 0;
     };
-    const give = (id) => { P.upgrades[id] = 1; P.rebuildMods(); };
+    const give = (id) => { P.passiveItems[id] = 1; P.rebuildMods(); };
     const dummy = (x = 0, z = 0) =>
       new g.__EnemyForTest('chaser', new V(x, 0, z), 1, 1, 1);
     const input = { forward: true, back: false, left: false, right: false,
@@ -98,7 +98,7 @@ try {
     // only difference between the two runs is the pick.
     const sprintTest = (keys) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       P.stamina = 100;
       P.staminaLocked = false;
@@ -260,7 +260,7 @@ try {
     // and every multiplier have had their say first.
     const stareTest = (keys, ward = false) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       P.health = P.maxHealth;
       P.invulnEnd = -1;
@@ -322,7 +322,7 @@ try {
     // and the gate has to be the pick's own.
     const southpawBurst = (keys, secs = 2.6) => {
       bare();
-      for (const k of keys) P.upgrades[k] = 1;
+      for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
       P.pos.set(0, 0, 0);
       P.mag = 1;
@@ -373,7 +373,7 @@ try {
       o.southKeepsFresh = P.magFresh;
       // AND THE PULL IS MARKED AS THE OFF HAND'S, so TWENTY/TWENTY's double
       // volley cannot fire out of a magazine that is out of the gun.
-      P.upgrades.twentyTwenty = 1;
+      P.passiveItems.twentyTwenty = 1;
       P.rebuildMods();
       P.fireCd = 0;
       P.tryShoot(true);
@@ -395,7 +395,7 @@ try {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
-    for (const [k, d] of Object.entries(g.__itemsForTest)) {
+    for (const [k, d] of Object.entries(g.__activeItemsForTest)) {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
@@ -414,7 +414,7 @@ try {
     // ---- 7. ALL FIVE AT ONCE, THROUGH A REAL LOOP -------------------------
 
     bare();
-    for (const k of NEWKEYS) P.upgrades[k] = 1;
+    for (const k of NEWKEYS) P.passiveItems[k] = 1;
     P.rebuildMods();
     P.health = P.maxHealth - 1;            // under no window, above no line
     g.enemies.length = 0;

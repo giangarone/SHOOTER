@@ -1,0 +1,16 @@
+import { definePassiveItem } from '../shared.js';
+
+export const id = 'marksman';
+
+export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+    name: 'MARKSMAN',
+    max: 1,
+    theme: THEME.marksman,
+    // The same pick, bigger. Two entries rather than one that
+    // stacks because the crit chance is a number with a CEILING that matters -
+    // past about half, a crit stops reading as a crit and starts reading as
+    // the damage number flickering - and a stacking entry would walk into that
+    // on its own. 5 + 15 + 25 is 45%, which is as far as the pool goes.
+    effects: [['+25% CRIT CHANCE', GOOD]],
+    apply: (mods, n) => { mods.critChance += 0.25 * n; },
+}));

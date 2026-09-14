@@ -1,0 +1,21 @@
+import { definePassiveItem } from '../shared.js';
+
+// THE CRATE, WORTH SOMETHING ON A FULL BAR. A health plate is withheld
+// outright at full health (see rollDrop) precisely because it would be a drop
+// that cannot be used; this is the pick that makes the ten points a crate
+// carries worth having whatever the bar is at, because a shield point does
+// not have a ceiling to hit.
+//
+// ON TOP OF THE HEAL RATHER THAN INSTEAD OF IT. It is the smallest number in
+// the shield family by a distance, and it has to be: a crate is a thing the
+// player walks over several times a wave, where BALLAST TANKS is once and
+// SECOND SKIN costs a full item charge.
+export const id = 'plasmaBag';
+
+export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+    name: 'PLASMA BAG',
+    max: 1,
+    theme: THEME.plasmaBag,
+    effects: [['HEALTH CRATES ALSO', NOTE], ['GIVE A 10 SHIELD', GOOD]],
+    apply: (mods, n) => { mods.crateShield = 10 * n; },
+}));

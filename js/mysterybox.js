@@ -42,7 +42,7 @@ import {
   HIT_GEOM, HIT_MAT, SUNK_Y, RISE_SECONDS, USE_RADIUS, ICON_Y, PANEL_R,
   SIGN_COLOR, DIM_TEXT, ROW_Z,
 } from './totems.js';
-import { ACTIVE_ITEMS, ACTIVE_ITEM_KEYS } from './items.js';
+import { ACTIVE_ITEMS, ACTIVE_ITEM_KEYS } from './items/active/index.js';
 import { makeGlowTexture } from './effects.js';
 import { buildPixelIcon } from './pixelicons.js';
 
@@ -760,7 +760,7 @@ export class MysteryBox {
   /**
    * Starts a spin. The caller has already taken the money.
    *
-   * @param {string[]} pool  from shuffledPool(player.item) in items.js. The box
+   * @param {string[]} pool  from shuffledPool(player.activeItem) in items.js. The box
    *   WALKS this and never rolls against it, so the player's carried item -
    *   which is not in it - cannot even flash past on the reel, let alone win.
    */

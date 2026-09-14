@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,11 +26,51 @@ const TYPES = {
 // ~80MB: without this the browser has to hold the entire file before the
 // <audio> element can play, and seeking within it does not work at all.
 const RANGED = new Set(['.m4a']);
+const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
+
+const itemModuleToken = (kind, file) => createHash('sha256')
+  .update(`${kind}/${file}`)
+  .digest('hex');
+
+async function itemDefinitions(kind) {
+  const dir = path.join(root, 'js', 'items', kind, 'definitions');
+  const files = (await readdir(dir)).filter((name) => ITEM_DEFINITION.test(name)).sort();
+  return files.map((file) => ({ file, token: itemModuleToken(kind, file), dir }));
+}
 
 http
   .createServer(async (req, res) => {
     try {
       let p = new URL(req.url, 'http://local').pathname;
+      // Item catalogues are directory-driven so two worktrees can add two
+      // definitions without both editing a central import list. Browsers
+      // cannot enumerate a directory themselves. The manifest pairs each
+      // filename with an opaque module token: item names such as `magpie`
+      // otherwise trip URL-based content blockers before our code can load.
+      const itemManifest = /^\/__item_manifest__\/(passive|active)$/.exec(p);
+      if (itemManifest) {
+        const definitions = await itemDefinitions(itemManifest[1]);
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify(definitions.map(({ file, token }) => ({ file, token }))));
+        return;
+      }
+      // Keep this virtual path one directory below the item kind so imports
+      // of ../shared.js inside a definition still resolve without rewriting
+      // its source. Only the server ever maps the token back to a filename.
+      const itemModule = /^\/js\/items\/(passive|active)\/modules\/([a-f0-9]{64})\.js$/.exec(p);
+      if (itemModule) {
+        const definitions = await itemDefinitions(itemModule[1]);
+        const definition = definitions.find(({ token }) => token === itemModule[2]);
+        if (!definition) {
+          res.writeHead(404);
+          res.end('not found');
+          return;
+        }
+        const data = await readFile(path.join(definition.dir, definition.file));
+        res.writeHead(200, { 'content-type': TYPES['.js'], 'cache-control': 'no-store' });
+        res.end(data);
+        return;
+      }
       if (p === '/') p = '/index.html';
       const file = path.normalize(path.join(root, p));
       if (!file.startsWith(root)) {

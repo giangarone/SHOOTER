@@ -2,16 +2,16 @@
 // a well-formed 24x24.
 //
 // The old 3D catalogue needed this test to police "one shape per offer": icons
-// were named by a separate `icon:` field, so two upgrades could quietly point
+// were named by a separate `icon:` field, so two passive items could quietly point
 // at the same shape, and a typo fell back to a generic shard without an error.
-// Neither is possible now - the catalogue is keyed by upgrade id, so a
+// Neither is possible now - the catalogue is keyed by passive item id, so a
 // collision cannot be expressed and a typo is a missing key rather than a
 // silent substitution - which leaves three things worth checking:
 //
-//   1. An upgrade with NO drawing. buildPixelIcon() throws on an unknown key,
-//      so this is a crash the first time that upgrade is rolled, in a run the
+//   1. A passive item with NO drawing. buildPixelIcon() throws on an unknown key,
+//      so this is a crash the first time that passive item is rolled, in a run the
 //      player has already spent twenty minutes on.
-//   2. A drawing nothing uses. Harmless at runtime, but it means an upgrade
+//   2. A drawing nothing uses. Harmless at runtime, but it means a passive item
 //      was renamed or removed and its art was left behind - so the next person
 //      to look at the catalogue is reading a shape for something that is gone.
 //   3. A malformed map. The rows are generated, but they are generated into a
@@ -19,15 +19,15 @@
 //
 // Pure data - no browser, no renderer - so it runs in milliseconds and can be
 // the thing that fails first.
-import { UPGRADES } from '../js/upgrades.js';
-import { ACTIVE_ITEMS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items.js';
+import { PASSIVE_ITEMS } from '../js/items/passive/index.js';
+import { ACTIVE_ITEMS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items/active/index.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PLAYER_STATUS } from '../js/status.js';
 import { PIXEL_ICON_KEYS, resolveIcon, GRID } from '../js/pixelicons.js';
 
-// Icons used by things that are not upgrades. Stations, the mystery box and
-// weapons name their icon explicitly - they have no upgrade id to key off - so
+// Icons used by things that are not passive items. Stations, the mystery box and
+// weapons name their icon explicitly - they have no passive item id to key off - so
 // they are the only entries that can drift.
 const STATION_ICONS = {
   AMMO_STATION: 'ammoBox',
@@ -37,7 +37,7 @@ const STATION_ICONS = {
   // drawing out of this catalogue, so there is no key here to drift.
 };
 
-// The pickups. Unlike an upgrade, a pickup names its drawing explicitly
+// The pickups. Unlike a passive item, a pickup names its drawing explicitly
 // (`icon` on its entry in powerups.js), so these can drift the same way the
 // stations can - and a pickup with no drawing is a crash the first time an
 // enemy dies, which is the worst place in the game to find one.
@@ -50,7 +50,7 @@ const ok = (name, cond, extra = '') => {
 
 const drawn = new Set(PIXEL_ICON_KEYS);
 const users = {};
-for (const id of Object.keys(UPGRADES)) users[id] = UPGRADES[id].name;
+for (const id of Object.keys(PASSIVE_ITEMS)) users[id] = PASSIVE_ITEMS[id].name;
 for (const [name, icon] of Object.entries(STATION_ICONS)) users[icon] = name;
 for (const [key, def] of Object.entries(POWERUP_TYPES)) users[def.icon] = 'PICKUP ' + key;
 users[AMMO_PICKUP.icon] = 'PICKUP ammo';
@@ -59,7 +59,7 @@ users[AMMO_PICKUP.icon] = 'PICKUP ammo';
 // throws - waits at the other end of it.
 for (const [key, def] of Object.entries(PLAYER_STATUS)) users[def.icon] = 'STATUS ' + key;
 for (const w of Object.values(WEAPONS)) if (w.icon) users[w.icon] = 'WEAPON ' + w.name;
-// The active items. Keyed by id exactly the way the upgrades are, so the same
+// The active items. Keyed by id exactly the way the passive items are, so the same
 // two failures apply: an item with no drawing crashes the first pedestal that
 // offers it, and a drawing nothing uses is art left behind by a rename.
 for (const key of Object.keys(ACTIVE_ITEMS)) users[key] = 'ITEM ' + ACTIVE_ITEMS[key].name;
@@ -95,11 +95,11 @@ const empty = [...drawn].filter(
 ok('no drawing is blank', empty.length === 0, empty.join(', '));
 
 // THE RARITY CHECK IS GONE ALONG WITH RARITY. The pool is drawn flat - see
-// rollTotems in js/upgrades.js - so there is no longer a field here that a
+// rollTotems in js/items/passive/index.js - so there is no longer a field here that a
 // typo could put out of range.
 
 // An item with no `use` is a button that does nothing, which the game has no
-// way to notice: tryItem() would spend the charge and call undefined.
+// way to notice: tryActiveItem() would spend the charge and call undefined.
 //
 // THE COST MAY BE ZERO. It used to have to be positive, and PAY TO WIN is the
 // one item that is paid for in CREDITS rather than in dead enemies - so what
@@ -164,7 +164,7 @@ ok('at twelve points or under a segment is one point',
   notPerPoint.length === 0, notPerPoint.map(([cd]) => 'cost ' + cd).join(', '));
 
 console.log(
-  `\n${Object.keys(users).length} offers (${Object.keys(UPGRADES).length} upgrades + ` +
+  `\n${Object.keys(users).length} offers (${Object.keys(PASSIVE_ITEMS).length} passive items + ` +
   `${Object.keys(STATION_ICONS).length} stations + ` +
   `${Object.keys(POWERUP_TYPES).length + 1} pickups + ` +
   `${Object.keys(PLAYER_STATUS).length} statuses + ` +

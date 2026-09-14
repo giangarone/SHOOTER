@@ -59,7 +59,7 @@ try {
     const g = window.__game;
     g.autoTest = false;
     const P = g.player;
-    const UP = g.__upgradesForTest;
+    const UP = g.__passiveItemsForTest;
     const o = {};
     const V = P.pos.constructor;
     const step = () => new Promise((res) => requestAnimationFrame(res));
@@ -69,7 +69,7 @@ try {
     // player and deliberately survive it, which is what several of the
     // assertions below are about, so they are cleared by hand.
     const bare = () => {
-      for (const k of Object.keys(P.upgrades)) delete P.upgrades[k];
+      for (const k of Object.keys(P.passiveItems)) delete P.passiveItems[k];
       P.rebuildMods();
       P.health = P.maxHealth;
       P.stamina = 100;
@@ -86,7 +86,7 @@ try {
       P.healRate = 0;
       P.quorumKills = 0;
     };
-    const give = (id) => { P.upgrades[id] = 1; P.rebuildMods(); };
+    const give = (id) => { P.passiveItems[id] = 1; P.rebuildMods(); };
     const clearField = () => { g.enemies.length = 0; };
     const spawn = (type = 'chaser', x = 2, z = 2) => {
       const e = new g.__EnemyForTest(type, new V(x, 0, z), 40, 1, 1);
@@ -508,15 +508,15 @@ try {
 
     // RAFFLE TICKET. The charge rate, per box bought.
     bare();
-    P.giveItem('itemHeal');
-    P.itemCharge = 0;
+    P.giveActiveItem('itemHeal');
+    P.activeItemCharge = 0;
     P.addItemCharge(10);
-    o.raffleBare = P.itemCharge;
+    o.raffleBare = P.activeItemCharge;
     give('raffleTicket');
     P.boxesBought = 4;
-    P.itemCharge = 0;
+    P.activeItemCharge = 0;
     P.addItemCharge(10);
-    o.raffleFour = P.itemCharge;
+    o.raffleFour = P.activeItemCharge;
     // ...and the count is a RUN total, not a shop's.
     give('overclock');
     o.raffleSurvives = P.boxesBought === 4;
@@ -714,7 +714,7 @@ try {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
-    for (const [k, d] of Object.entries(g.__itemsForTest)) {
+    for (const [k, d] of Object.entries(g.__activeItemsForTest)) {
       if (names[d.name]) o.nameClashes.push(d.name + ': ' + names[d.name] + '/' + k);
       names[d.name] = k;
     }
@@ -747,7 +747,7 @@ try {
     // turret and the per-hit path are all exercised together rather than each
     // being poked in isolation.
     bare();
-    for (const k of NEWKEYS) P.upgrades[k] = 1;
+    for (const k of NEWKEYS) P.passiveItems[k] = 1;
     P.rebuildMods();
     clearField();
     // FAR ENOUGH TO CLOSE, NOT CLOSE ENOUGH TO SWARM. An earlier version put

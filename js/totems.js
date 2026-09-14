@@ -1,7 +1,7 @@
-// Wave-end upgrade totems and the two stations beside them.
+// Wave-end passive item totems and the two stations beside them.
 //
 // Three marks of light appear on the floor when a wave is cleared, each with
-// one upgrade's icon turning over it. The player takes one by shooting it
+// one passive item's icon turning over it. The player takes one by shooting it
 // ANYWHERE - the mark and the icon above it are one target - or by
 // pressing E beside it. An unclaimed set simply stays lit until the wave after
 // it is cleared, when a fresh set replaces it.
@@ -19,7 +19,7 @@
 //   the burst that was already flying.
 //
 // THE WHOLE TOTEM IS THE TARGET
-//   An earlier revision made only a small floating core claim the upgrade, so
+//   An earlier revision made only a small floating core claim the passive item, so
 //   that a shot which missed an enemy standing behind a totem could not pick a
 //   build for you. It cost more than it saved: hitting a wobbling 27cm orb
 //   mid-fight is a marksmanship test nobody asked for, and the totem reads as
@@ -31,12 +31,12 @@
 // EACH OFFER HAS ITS OWN COLOUR AND ICON
 //   `theme` tints the floor mark, the card and the icon; the icon itself
 //   is a 24x24 pixel-art plate from pixelicons.js, looked up by the offer's own
-//   id, that says what the upgrade does before the text is legible - a flame
+//   id, that says what the passive item does before the text is legible - a flame
 //   for Incendiary, a snowflake for Cryo. Both come straight off the offer, so
-//   this file still knows nothing about upgrades.
+//   this file still knows nothing about passive items.
 //
 //   ONE ICON PER OFFER, GUARANTEED BY THE KEY. The catalogue is keyed by
-//   upgrade id, so two upgrades cannot end up wearing one shape however the
+//   passive item id, so two passive items cannot end up wearing one shape however the
 //   pool is edited - the failure the old 3D catalogue needed a test to catch
 //   is now unrepresentable. test/icons.mjs checks the other direction, that
 //   every id has a drawing.
@@ -58,7 +58,7 @@
 //      ever discarded.
 //   3. Icons are built on first sight and KEPT, one per offer id per totem,
 //      hidden rather than thrown away. That bounds them by the size of the
-//      upgrade pool instead of by the number of waves survived, and the
+//      passive item pool instead of by the number of waves survived, and the
 //      geometry behind them is cached per (offer, colour) inside pixelicons.js,
 //      so three totems showing the same offer across three waves share one
 //      buffer rather than building three.
@@ -66,7 +66,7 @@
 import * as THREE from 'three';
 import { buildPixelIcon } from './pixelicons.js';
 import { makeGlowTexture } from './effects.js';
-// A totem draws whatever it is handed. It knows nothing about upgrades or
+// A totem draws whatever it is handed. It knows nothing about passive items or
 // weapons - main.js normalises both into the same `offer` shape, which is why
 // putting a weapon on a totem needed no changes here.
 
@@ -122,7 +122,7 @@ const RISE_TIME = 0.7;
 export const SUNK_Y = -3.4;
 export const RISE_SECONDS = RISE_TIME;
 
-// Effect-line colours, keyed by the sign in an upgrade's `effects` entry.
+// Effect-line colours, keyed by the sign in a passive item's `effects` entry.
 //
 // SATURATED, NOT TASTEFUL. These three colours are the fastest thing on the
 // card: the player reads GREEN and RED before they read a single word, and
@@ -575,7 +575,7 @@ export function makePanel(w, h, scaleX, scaleY) {
 
 export class Totem {
   constructor(x, scene, z = ROW_Z) {
-    this.upgradeId = null;
+    this.passiveItemId = null;
     this.offer = null;
     this.pos = new THREE.Vector3(x, 0, z);
     // -1 sunk, 0..1 rising, 1 fully up. Drives both the Y offset and whether
@@ -591,7 +591,7 @@ export class Totem {
     this.group.position.set(x, SUNK_Y, z);
     this.group.visible = false;
 
-    // Per-instance because each mark wears its own upgrade's theme.
+    // Per-instance because each mark wears its own passive item's theme.
     this.mark = makeMark(this.group);
     // NO SECOND RING. A totem used to be able to stand an ACTIVE ITEM as well
     // as a passive item, and wore a doubled rim when it did. Active items come
@@ -602,7 +602,7 @@ export class Totem {
 
     // The claim volume, covering the pillar and the icon in front of it. It is
     // the only raycast target a totem contributes, so a pellet that lands
-    // anywhere on the totem takes the upgrade and stops there.
+    // anywhere on the totem takes the passive item and stops there.
     this.hit = new THREE.Mesh(HIT_GEOM, HIT_MAT);
     this.hit.position.set(0, 1.6, 0);
     // How main.js tells a totem hit from an ordinary wall hit.
@@ -632,7 +632,7 @@ export class Totem {
     scene.add(this.group);
   }
 
-  // Assigns an upgrade and starts the rise. `owned` is the player's current
+  // Assigns a passive item and starts the rise. `owned` is the player's current
   // stack count for it, shown so a repeat offer is not mistaken for a new one.
   /**
    * Assigns an offer and starts the rise.
@@ -642,7 +642,7 @@ export class Totem {
    */
   present(offer, armTime = ARM_TIME) {
     this.offer = offer;
-    this.upgradeId = offer.id;
+    this.passiveItemId = offer.id;
     this.claimed = false;
     tintMark(this.mark, offer.theme);
     this._showIcon(offer);
@@ -655,7 +655,7 @@ export class Totem {
 
   // Swaps in this offer's icon, building it the first time this totem is asked
   // for it. The offer's id is both the cache key and the icon key - the
-  // catalogue is keyed by upgrade id, so there is no second name to keep in
+  // catalogue is keyed by passive item id, so there is no second name to keep in
   // step and no way for two offers to collide on one drawing.
   _showIcon(offer) {
     let icon = this._icons.get(offer.id);
@@ -700,7 +700,7 @@ export class Totem {
     // front of the player: a common that fits the build beats a rare that does
     // not, and printing COMMON over it only ever argued the other way. The
     // field itself is gone as of the flat draw - see rollTotems in
-    // js/upgrades.js - so the card and the roll now agree that every pick is
+    // js/items/passive/index.js - so the card and the roll now agree that every pick is
     // as likely as every other. The theme bar above and the effect lines below
     // are what the pick is actually made on.
     c.textAlign = 'center';
@@ -748,7 +748,7 @@ export class Totem {
   // end up here, so an offer cannot be taken twice or taken before it has
   // finished coming out of the floor.
   canUse() {
-    return this.state === 'up' && !this.claimed && this.upgradeId !== null;
+    return this.state === 'up' && !this.claimed && this.passiveItemId !== null;
   }
 
   // A SHOT additionally has to wait out the arm delay, because a burst fired
@@ -780,7 +780,7 @@ export class Totem {
         this.rise = 0;
         this.state = 'hidden';
         this.group.visible = false;
-        this.upgradeId = null;
+        this.passiveItemId = null;
         this.offer = null;
         return;
       }
@@ -898,7 +898,7 @@ export class Station {
     this.iconAnchor.scale.setScalar(ST_ICON_SCALE);
     // A crate of rounds, a pair of chasing arrows, a heart. Stations are the
     // only things here that name their icon explicitly - an offer's icon is
-    // its own id - because a console is not an upgrade and has no id to use.
+    // its own id - because a console is not a passive item and has no id to use.
     //
     // The two rerolls SHARE the arrows deliberately. One shape means one thing
     // is the rule the icon catalogue is built on, and these two do the same
@@ -1050,9 +1050,9 @@ export class TotemArea {
     // Box rolls bought at the CURRENT shop, on the same terms and reset at the
     // same moment. Its OWN counter rather than a share of `rerolls`: a reroll
     // and a box roll are different purchases, and alternating between them
-    // should not price either out - see boxCost in upgrades.js.
+    // should not price either out - see boxCost in items/passive/index.js.
     this.boxRolls = 0;
-    // EVERY UPGRADE THIS SHOP HAS ALREADY SHOWN, over all its sets. A reroll is
+    // EVERY PASSIVE ITEM THIS SHOP HAS ALREADY SHOWN, over all its sets. A reroll is
     // the player saying "not these three", and a set that hands one of them
     // back is the console charging an escalating price for the answer it has
     // already given - which is exactly the moment a paid reroll stops feeling

@@ -319,7 +319,7 @@ export class MoneyOrbs {
    * makes the CEILING a fact about the code rather than a fact about the
    * despawn sweep's timing, and the ceiling (+20% at the default twenty
    * seconds) is the whole reason the pick is not farmable. See its entry in
-   * upgrades.js for what hoarding actually costs.
+   * items/passive/index.js for what hoarding actually costs.
    */
   _worth(i) {
     if (!this.vintage) return this.value[i];

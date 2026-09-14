@@ -290,7 +290,7 @@ const PLAYER_SKIP = new Set([
   '_gunOffX', '_gunOffY', '_gunOffZ', '_gunOffRX', '_gunOffRY', '_gunOffRZ',
   // A dash IN FLIGHT. Restoring one would resume a lunge the incoming player
   // never started, which is a repositioning by another name. The ITEM that pays
-  // for it (item, itemCharge) and jumpsLeft are captured normally.
+  // for it (item, activeItemCharge) and jumpsLeft are captured normally.
   'dashDX', 'dashDZ', 'dashStart', 'dashEnd', '_prevJump', 'jumpFx', 'dashFx',
   // Owned by the pass animation, not by either player - see Player.setHolster.
   'holster',
@@ -301,7 +301,7 @@ const PLAYER_SKIP = new Set([
   // costs nothing.
   'offHand',
   // DERIVED, and deliberately never captured. mods is replayed from the owned
-  // upgrade list by rebuildMods() - see the note at the top of upgrades.js.
+  // passive item list by rebuildMods() - see the note at the top of items/passive/index.js.
   // Storing it would hand the other player a stat block that no longer agrees
   // with their build the moment either of them picks anything up.
   'mods',
@@ -447,7 +447,7 @@ export function restoreRun(game, snap) {
     if (cur && typeof cur.copy === 'function' && v && typeof v.clone === 'function') {
       cur.copy(v);
     } else if (cur && typeof cur === 'object' && !Array.isArray(cur) && v && typeof v === 'object') {
-      // status / statusFull / upgrades - same reasoning, one level down.
+      // status / statusFull / passive items - same reasoning, one level down.
       for (const kk of Object.keys(cur)) delete cur[kk];
       Object.assign(cur, v);
     } else {

@@ -699,12 +699,12 @@ context. The start screen says so, and one click anywhere fixes it.
   rather than spinning: a flat plate on a spin is edge-on twice a revolution.
   The newest of them is the **MAGNET**, which sweeps every money orb on the
   floor to you at once, wherever they are.
-- **Upgrade totems**: clearing a wave raises three pillars near the arena
-  centre, each showing one upgrade as short colour-coded lines - benefits
+- **Passive Item totems**: clearing a wave raises three pillars near the arena
+  centre, each showing one passive item as short colour-coded lines - benefits
   green, drawbacks red - with its own theme colour and a pixel-art icon
   that orbits round to whatever side you are standing on: a flame for
   Incendiary, an icicle for Cryo, a coin for Midas Touch. Walk into one or
-  shoot it anywhere to take it. Upgrades are permanent for the run and stack,
+  shoot it anywhere to take it. Passive items are permanent for the run and stack,
   so no two runs build the same way.
 - **The next wave waits for your pick.** No menu opens and the camera never
   leaves your hands, but the run holds at the boundary until a totem is taken.
@@ -728,7 +728,7 @@ context. The start screen says so, and one click anywhere fixes it.
   every credit now has to be collected. What clearing a wave unhurt pays is a
   SHOWER of orbs at your feet, and a boss dies in a floor full of them.
 - Escalating waves with per-wave HP / speed / damage scaling
-- **One gun**, the full-auto **Pulse Rifle**. Every upgrade in the pool applies
+- **One gun**, the full-auto **Pulse Rifle**. Every passive item in the pool applies
   to it, so a run's identity comes from the build rather than from the weapon.
 - Particle bursts for hits and kills, hit markers, damage vignette, screen shake
 - Reloading shows twice over: the gun drops out of frame and rolls through the
@@ -780,7 +780,7 @@ context. The start screen says so, and one click anywhere fixes it.
   same loot - drops are rolled per kill now - but the RATES are pinned down,
   in `test/drops.mjs`. 
 
-## Upgrades
+## Passive items
 
 **No menu ever opens.** The choice is three totems standing in the arena, and
 credits are spent at stations beside them with a keypress. A modal at the wave
@@ -794,37 +794,43 @@ they never got one. The hold costs no tension, because the cleared wave's
 enemies are already dead when it starts, and the player keeps their hands on
 the controls throughout.
 
-Upgrades live in `js/upgrades.js`. Each one is a pure function of its stack
-count, and the whole owned list is replayed from scratch onto a fresh stat
+Passive items live one per file in `js/items/passive/definitions/`; the
+directory-driven catalogue is exposed by `js/items/passive/index.js`. There is
+no hand-edited registry or import list. The browser gets a sorted filename
+manifest from `server.js`, while Node discovers the same directory directly,
+so two worktrees adding different items add different files and merge without
+meeting in a shared catalogue.
+
+Each passive item is a pure function of its stack count, and the whole owned list is replayed from scratch onto a fresh stat
 block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
-absolute values rather than accumulate. Every stat an upgrade may touch is
+absolute values rather than accumulate. Every stat a passive item may touch is
 declared in `DEFAULT_MODS` in `js/player.js`.
 
-Each upgrade carries a `theme` colour describing what it DOES (gold ammo,
+Each passive item carries a `theme` colour describing what it DOES (gold ammo,
 orange fire rate, cyan armour, blue mobility...) and an `effects` list of short
 signed lines - `1` benefit drawn green, `-1` drawback drawn red, `0` a dim
 qualifier. The sign is about good versus bad, not arithmetic: `-30% RELOAD
 TIME` is a benefit. Keep each line under about 24 characters; it is read at a
 glance, mid-run, from across the arena.
 
-An upgrade that stacks writes `effects` as a function of the stacks already
+A passive item that stacks writes `effects` as a function of the stacks already
 owned, and its lines read `current → next` (`CHANCE 50% → 75%`, `FIRE RATE
 +20% → +40%`) so a pick always says what it moves you from and to. The first
 pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 164 upgrades and **the draw is flat** - every one of them has exactly
+The pool is 191 passive items and **the draw is flat** - every one of them has exactly
 the same chance of appearing. It used to be weighted three ways, with rares
 locked out before wave 2 and cursed before wave 3, and two things were wrong
 with that: the player could not see it (the totem stopped printing a rarity line
 long ago), and the labels had stopped describing the pool anyway, because nearly
 every passive item added since the pool doubled got filed `rare` or `cursed` on
-feel. A specific upgrade turns up in under 2% of totem sets, so a run sees a
+feel. A specific passive item turns up in under 2% of totem sets, so a run sees a
 slice of the pool rather than all of it - that is the point, but it means a new
-upgrade only matters if it is worth taking on sight, without a partner card.
+passive item only matters if it is worth taking on sight, without a partner card.
 
-**A reroll never shows you the same upgrade twice.** `TotemArea.shopSeen` holds
+**A reroll never shows you the same passive item twice.** `TotemArea.shopSeen` holds
 everything the current shop has offered across all of its sets, and `rollTotems`
 draws around it; it is emptied when a fresh shop opens, not when a set is
 rerolled. Paying an escalating price for the answer the console already gave is
@@ -837,7 +843,7 @@ Every run has had a crit since its first magazine - 5% for 1.5x, in
 player has already seen by the time anything offers to change it. Six entries
 now take it somewhere, and no two of them are the same pick:
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | DEADEYE | +15% crit chance |
 | MARKSMAN | +25% crit chance |
@@ -920,7 +926,7 @@ exactly what the eye keeps looking at, and the player has a fight to watch.
 
 ### The rest
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | BLOOD MONEY | $2 per point of damage taken, per stack |
 | RABBIT'S FOOT | +15% on every drop chance, per stack |
@@ -942,7 +948,7 @@ reloading a nearly full one, aiming, crouched, unhurt - and pays only then. A
 pool made entirely of flat multipliers is one where the build is decided at the
 totem and the fight is arithmetic.
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | FATAL RESERVE | The last 5 rounds of every magazine always crit |
 | PRIMED MAG | Reloading throws the spent magazine as a grenade: 20 damage per round left in it, and those rounds are spent |
@@ -1017,7 +1023,7 @@ were hit on, the wave boundary. The pool above is mostly "how much"; this is
 mostly "when", which is the axis a player can actually play around once they
 have learnt it.
 
-Every one of them weighs itself. A free upgrade in a flat draw is a totem the
+Every one of them weighs itself. A free passive item in a flat draw is a totem the
 player never has to think at, so the ones that are simply strong - HEAVY HAND,
 BLOOD OATH, BONE MARROW, GRAY MATTER - are sold for something the build actually
 wanted, and the ones that are conditional are allowed to be unconditionally good
@@ -1025,7 +1031,7 @@ inside their condition.
 
 **Rate of fire**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | MACHINE SPIRIT | +5% fire rate per second of held trigger, to +50%. Let go and it is gone |
 | OVERWOUND | +40% fire rate, -30% reload speed |
@@ -1043,7 +1049,7 @@ beat rather than leaving on one that went by during a reload.
 
 **Damage**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | CANNONADE | The first shot of every magazine deals 10x |
 | HEAVY HAND | +60% damage, -40% fire rate |
@@ -1072,14 +1078,14 @@ after armour, after the Conduit's resistance - because the card says "from all
 sources".
 
 SACRIFICE is the only entry in either pool that changes the LIST rather than the
-stats built from it, so the removal happens once in `Player.takeUpgrade` and not
-in an `apply()`. An `apply()` that dropped an upgrade would drop another one
+stats built from it, so the removal happens once in `Player.takePassiveItem` and not
+in an `apply()`. An `apply()` that dropped a passive item would drop another one
 every time the player took anything at all, because `rebuildMods()` replays the
 whole owned list from fresh defaults after every pick.
 
 **Ammunition and money**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | PAYDAY | +$100 per kill, -10% damage |
 | AMMO SURPLUS | Ammo pickups grant 30% more rounds |
@@ -1105,7 +1111,7 @@ LODESTONE and AUTO-LOOT never see.
 
 **Staying alive**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | IRON LUNG | Immune to every status effect, -30% healing |
 | LIFELINE | At 25 HP or below, regenerate 5 HP/s |
@@ -1127,7 +1133,7 @@ switches off.
 
 **What happens around you**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | PANIC TURRET | Taking damage drops a turret for 10s, up to 5 at once |
 | DELAYED FUSE | Shots stick and explode 2 seconds later for their own damage over a small area. A round in a body that dies first is lost with it |
@@ -1181,7 +1187,7 @@ the sentence come out even would be a second mechanic nobody asked for.
 
 **The crit family, three more**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | TRUE STRIKE | +10% crit damage; 2 seconds off the trigger loads 4 guaranteed crits |
 | DOMINO | A crit gives the next shot +30% crit chance |
@@ -1210,7 +1216,7 @@ direction nobody notices, because the number is only ever slightly too small.
 
 **The gun, and the moments it is better**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | CROWBAR | Melee deals 4x damage and a swing that connects grants 10 reserve rounds |
 | HARM WANDS | The last 15 rounds of every magazine fire 50% faster |
@@ -1237,7 +1243,7 @@ threshold at a round number that happens to look similar.
 
 **The crit family, three more**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | IRON LITURGY | +25% crit chance while aiming down sights |
 | PITY PARTY | After 5 consecutive landed non-crits, the next shot is a guaranteed 5x crit |
@@ -1253,7 +1259,7 @@ family would be the one line in the pool a player cannot check.
 
 **Damage, and what it is measured against**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | FEVER DREAM | +100% damage while YOU are poisoned |
 | LONG HAUL | +2% damage to a boss for every 5s the fight has lasted, uncapped |
@@ -1292,7 +1298,7 @@ fifth of it for nothing would make that one strictly worse.
 
 **Staying alive**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | COLD BLOOD | -30% damage taken below 25% health |
 | FRESH BANDAGES | Reloading at half health or below heals 2 HP |
@@ -1339,7 +1345,7 @@ which three crates are worth nothing.
 
 **Money, and what it buys that is not in the shop**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | HIGH INTEREST | Banked credits earn 20% interest at every wave end, compounding |
 | PAPER TRAIL | +1% damage per $1,000 the run has ever spent, permanently |
@@ -1384,7 +1390,7 @@ CELL is the CEILING; a run holding both banks two charges and fills them faster.
 
 **Movement, and what happens around you**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | UPDRAFT | Hold jump to fly upward. It spends stamina |
 | JACKPOT | Every ground jump has a 1% chance of full health and a full reserve |
@@ -1467,7 +1473,7 @@ carrying them is paid for the fight continuing rather than for firing faster.
 
 **The music**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | SYNCOPATION | Once a beat, one of the player's own shots lands on a random enemy |
 | HEARTBEAT | On every downbeat, every enemy has a 20% chance of taking 1 damage |
@@ -1490,7 +1496,7 @@ has drafted no damage at all and why a boss standing alone barely notices it.
 
 **The magazine, read as a number**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | ODD COUPLE | +20% damage when the magazine holds an odd number of rounds |
 | EVEN BETTER | +20% damage when it holds an even number |
@@ -1546,7 +1552,7 @@ player can spend in a shop.
 
 **The butt of the rifle, which is now three picks deep**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | LONG ARM | +100% melee reach |
 | SCYTHE | Melee strikes everything in the arc in front of you |
@@ -1578,7 +1584,7 @@ swing ARRIVED at, not the health after it, and it refuses a boss outright.
 
 **The shield, which finally has a bar**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | BALLAST TANKS | Every wave starts with a 50 point shield |
 | PLASMA BAG | Health crates also give a 10 point shield |
@@ -1613,7 +1619,7 @@ there, because a shield point has no ceiling to hit.
 
 **Staying alive**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | FLOW RELOAD | Every reload grants 1s of invulnerability |
 | BELLOWS | Take 15% less damage at full stamina |
@@ -1659,7 +1665,7 @@ still owes it over twenty seconds and GRISTLE still tosses its coin.
 
 **What your shots carry**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | BEDBUGS | 25% of every hit's damage lands again two seconds later |
 | SPLASHBACK | Your shots apply every status effect you are carrying |
@@ -1687,7 +1693,7 @@ second left would be manufacturing an affliction rather than passing one on.
 
 **The turrets, which were one item and are now a family**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | SHARED MAG | Your turrets fire from your reserve for 3x damage; out of ammo they fire normally |
 | VENOMGRID | Your turrets poison what they hit |
@@ -1716,7 +1722,7 @@ burning one clears a crowd.
 
 **The floor, and the item slot**
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | VINTAGE ORBS | Orbs gain +1% value per second they are left on the floor |
 | FIRST FRUITS | Each wave's first 3 kills drop a powerup |
@@ -1772,7 +1778,7 @@ and what the other hand is holding. Four of the five take something the player
 already owns and change what it is WORTH, which is the trade the whole pool
 runs on.
 
-| Upgrade | Effect |
+| Passive Item | Effect |
 | --- | --- |
 | DESK JOB | +20% damage, take 20% less. You can never sprint |
 | PURE OF HEART | No pickups appear, not ever. +20% damage, +20 max HP |
@@ -1840,6 +1846,20 @@ folded into the stat block that then applies itself forever without being asked.
 An active item does nothing until it is fired, and firing it is a decision made
 at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
 pad.
+
+Active items use the same worktree-safe layout: one file per item in
+`js/items/active/definitions/`, discovered by `js/items/active/index.js` with no
+central registry. A module owns its id, card data and behavior. New modules may
+also export their 24x24 `icon` rows beside the behavior, which avoids editing
+the legacy generated art catalogue when two branches add items in parallel.
+The carried slot is `player.activeItem`; charge and readiness use the
+`activeItem*` state and methods, while timed activations are owned by
+`RunningActiveItems`.
+
+Item mechanic tests follow the same rule. A branch adds
+`test/items/passive/<id>.mjs` or `test/items/active/<id>.mjs`; the shared
+`test/item-modules.mjs` runner discovers the fragments and uses one real browser
+for all of them. Adding a test does not change a registry or package script.
 
 Sixty-six of them, in six groups by what they actually reach for.
 
@@ -1946,7 +1966,7 @@ wrong inside it, and the claim is paid in `Player.takeDamage` rather than in
 `_hurtPlayer` - the one place every source of damage in the game converges, so
 a policy cannot be walked through by standing in lava. BACKORDER is a deadline
 on the player rather than an entry in the running list, because the running
-list is torn down at every wave clear (`RunningItems.clear`, from
+list is torn down at every wave clear (`RunningActiveItems.clear`, from
 `_clearHazards`) and a parcel silently cancelled by the wave ending under it
 would read as the item having failed. MEDICAL DEBT bills at the wave clear, and
 bills AFTER the flawless resupply - before it, a clean wave would refill the
@@ -2028,7 +2048,7 @@ where the player did not aim them would be a question with no answer.
 **Fifteen of them run for a window** rather than finishing on the frame they are
 pressed, which needed the one piece of machinery this system did not have. An
 item may declare a `duration`, a `tick` and an `end` alongside its `use`, and
-`RunningItems` in `js/items.js` is the whole of it: a list of activations, each
+`RunningActiveItems` in `js/items/active/index.js` is the whole of it: a list of activations, each
 holding the item that made it, a scratch object and a clock. Re-firing refreshes
 rather than stacks - the same rule `Player.applyStatus` follows, and for the
 same reason, since two BLOOD TAXes at once would be nine times damage through a
@@ -2036,7 +2056,7 @@ multiplier neither of them could correctly hand back.
 
 What a running item writes on the player lives in its OWN fields -
 `itemDamageMult`, `itemTakenMult`, `itemRateMult` and their neighbours - and not
-in `mods`, because `rebuildMods()` replays the owned upgrade list from fresh
+in `mods`, because `rebuildMods()` replays the owned passive item list from fresh
 defaults after every totem pick and would hand back anything an item had
 written there. They are also separate from `damageMult` and `fireRateMult`,
 which belong to the RAGE and FIRE RATE pickups and carry their expiry: an item
@@ -2057,7 +2077,7 @@ deployable chooses for itself is whether its blast can reach the player.
 the first away, so a run carries an answer to ONE problem - the health bar, the
 crowd, the boss, the corner you got caught in - and swapping is a real loss
 rather than an inventory chore. There is no drop, no swap-back and no stash, for
-the same reason there is no upgrade menu: nothing in this game opens. **Nothing
+the same reason there is no passive item menu: nothing in this game opens. **Nothing
 names the swap**, on either surface. The pedestal used to carry a "REPLACES
 <name>" line and the claim banner used to repeat it; with one slot in the game,
 replacing what you are carrying is the only thing taking an item can mean, so
@@ -2134,7 +2154,7 @@ it up - the rise, the arm delay, the orbiting icon, the single invisible claim
 box - is the totem's, because the two are picked up identically and the pillar
 should not have to be relearned.
 
-Where a new upgrade's hook goes, by what it reacts to:
+Where a new passive item's hook goes, by what it reacts to:
 
 | Reacts to | Hook |
 | --- | --- |
@@ -2160,7 +2180,7 @@ since the rise - a timer alone does nothing for someone who never stepped off
 the spot the pillar came up in, which was the whole problem.
 
 **The whole totem claims it.** One invisible box wraps the pillar and its icon,
-so a hit anywhere on the thing takes the upgrade. An earlier revision made only
+so a hit anywhere on the thing takes the passive item. An earlier revision made only
 a small floating core claim, so a shot that missed an enemy standing behind a
 totem could not pick a build for you - but hitting a 27cm orb mid-fight is a
 marksmanship test nobody asked for, and a totem that is half inert reads as a
@@ -2168,7 +2188,7 @@ bug. The floating label panel above is deliberately outside the box: it hangs
 wide and high over the arena, and a stray shot up there stays a miss.
 
 Each offer's icon is a 24x24 pixel-art plate from `js/pixelicons.js`, looked up
-by the upgrade's own id - entries do not name an icon, so two passive items
+by the passive item's own id - entries do not name an icon, so two passive items
 cannot end up wearing one shape however the pool is edited. The art is flat and
 2D; the object is not, carrying three pixels of extrusion behind the face so it
 reads as a thick cutout turning in the light rather than a sticker. Each plate
@@ -2177,11 +2197,14 @@ it is a single draw call and takes no light - the shading is painted into the
 tones. Four of the five tones are derived from the offer's `theme`, so one
 drawing works for any colour. A totem builds an icon the first time it shows
 one and keeps it hidden afterwards, which bounds the count by the size of the
-upgrade pool rather than by how many waves have passed.
+passive item pool rather than by how many waves have passed.
 
-The drawings themselves live in `tools/pixelart/`, not in the JS: shapes in
-`icons.py`, a shared lighting pass in `canvas.py`, and `build.py` to regenerate
-the table. The lighting pass is the point - it puts the shadow on the lower
+The legacy drawings live in `tools/pixelart/`: shapes in `icons.py`, a shared
+lighting pass in `canvas.py`, and `build.py` to regenerate the table. A newly
+added item instead exports its finished 24-row `icon` beside its definition,
+so item branches do not rewrite one generated catalogue. `js/pixelicons.js`
+combines both sources at load time, with an item-local drawing taking
+precedence. The lighting pass is the point - it puts the shadow on the lower
 right and the highlight on the upper left of every form in the catalogue, so
 sixty-five icons look like one set instead of sixty-five decisions about where
 the light is. `pixel-icon-sheet.html` shows all of them at once, which is the
@@ -2226,9 +2249,9 @@ the foot of the platform rather than losing the route entirely.
 ## Weapons
 
 `js/weapons.js` is a data table in the same shape as `ENEMY_TYPES` and
-`UPGRADES`: a second gun would be a stat block plus a `build()`. The run
+`PASSIVE_ITEMS`: a second gun would be a stat block plus a `build()`. The run
 carries only the Pulse Rifle. The stats there are BASE values that
-`player.mods` multiplies, so every upgrade in the pool already applies to it -
+`player.mods` multiplies, so every passive item in the pool already applies to it -
 that is the point of the table.
 
 The viewmodel is built once at startup and parented to the camera. Building one
@@ -2377,8 +2400,12 @@ js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
 js/themes.js        the thirteen themes, their six enemies each, and the run's deck
-js/upgrades.js      upgrade pool, totem roll, ammo purchase
-js/items.js         the active items, and the mystery box that offers them
+js/items/discover.js           shared browser/Node directory discovery
+js/items/passive/index.js      passive catalogue, totem roll, shop prices
+js/items/passive/definitions/  one file per passive item
+js/items/active/index.js       active catalogue and timed-item runtime
+js/items/active/definitions/   one file per active item
+js/mysterybox.js               the box that offers active items
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep

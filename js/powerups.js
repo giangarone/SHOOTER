@@ -191,7 +191,7 @@ export const POWERUP_TYPES = {
     emissive: 0xffd54f,
     chance: 0.005,
     icon: 'pickBattery',
-    apply: (player) => { player.addItemCharge(player.itemChargeMax); },
+    apply: (player) => { player.addItemCharge(player.activeItemChargeMax); },
     sfx: 'pickupBuff',
   },
 };
