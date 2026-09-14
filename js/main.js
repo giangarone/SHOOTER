@@ -4548,6 +4548,8 @@ class Game {
   _spawnBoss(key) {
     const sc = bossScale(this.wave);
     const def = ENEMY_TYPES[key];
+    // New themes carry their boss's display name with their own stat block.
+    const name = def.name || BOSS_NAMES[key] || key.toUpperCase();
     // The farthest spawn point, not the first clear one. A boss appearing at
     // the edge of vision is an entrance; one appearing at arm's length is an
     // ambush the player had no way to read.
@@ -4575,7 +4577,7 @@ class Game {
 
     this.bossFight = {
       key,
-      name: BOSS_NAMES[key],
+      name,
       parts: [boss],
       totalMaxHp: boss.maxHp,
       addTimer: 3,
@@ -4593,7 +4595,7 @@ class Game {
     this.effects.burst(at, def.color, 40, 8, 3, 1.0);
     this.effects.shockwave(at, def.color, 8, 0.7);
     this.effects.addShake(0.4);
-    this.ui.banner(BOSS_NAMES[key]);
+    this.ui.banner(name);
     this.sfx.wave();
     this.rig.setEnraged(false);
   }

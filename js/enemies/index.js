@@ -12,6 +12,7 @@
 // there is nothing for them to shadow.
 
 export * from './shared.js';
+export * from './bone.js';
 export * from './brine.js';
 export * from './cathedral.js';
 export * from './ember.js';

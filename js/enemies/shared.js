@@ -109,6 +109,12 @@ export const SPLITTER_BODY = 0xd6329a;
 export const SPLITTER_EYE = 0xffb0e8;
 
 export const SHARED_MATS = {
+  // Ivory joints and living marrow keep BONE readable through a status tint.
+  boneIvory: new THREE.MeshStandardMaterial({ color: 0xe5d6b5, roughness: 0.85, metalness: 0.05 }),
+  boneMarrow: new THREE.MeshStandardMaterial({
+    color: 0xff796f, emissive: 0xff554f, emissiveIntensity: 1.15,
+    roughness: 0.5, metalness: 0.05,
+  }),
   gunmetal: new THREE.MeshStandardMaterial({ color: 0x2a2f3d, roughness: 0.4, metalness: 0.6 }),
   tankPlate: new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 0.5, metalness: 0.6 }),
   // The furnace in a tank's chest. Emissive and NOT tinted by status, so the

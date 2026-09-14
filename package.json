@@ -43,7 +43,8 @@
     "test:plague": "node test/plague.mjs",
     "test:solar": "node test/solar.mjs",
     "test:hive": "node test/hive.mjs",
-    "test:cathedral": "node test/cathedral.mjs"
+    "test:cathedral": "node test/cathedral.mjs",
+    "test:bone": "node test/bone.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"
