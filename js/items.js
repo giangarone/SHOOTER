@@ -285,7 +285,7 @@ export const ACTIVE_ITEMS = {
     // and an item whose whole payload expires before the button finishes being
     // pressed is one the player will call broken. Two seconds is enough to
     // walk out of what put it on you, which is the actual answer.
-    effects: [['CLEAR ALL NEGATIVE EFFECTS', GOOD], ['AND 2s IMMUNE TO THEM', GOOD]],
+    effects: [['CLEAR ALL STATUS ON YOU', GOOD], ['THEN 2s IMMUNE', GOOD]],
     duration: 2,
     hud: true,
     use: (game) => {
@@ -350,7 +350,7 @@ export const ACTIVE_ITEMS = {
     // through getEffectiveDamage the way BOOTSTRAP's blast is - so a flat 45
     // that had stopped mattering by wave ten is now five hits that are still
     // worth a slot at wave thirty.
-    effects: [['LIGHTNING ARCS THROUGH', GOOD], ['THE 5 NEAREST ENEMIES', NOTE]],
+    effects: [['ZAP THE 5 NEAREST', GOOD], ['ENEMIES, CHAINED', NOTE]],
     use: (game) => {
       const p = game.player;
       const dmg = p.getEffectiveDamage(p.weapon.damage) * 2;
@@ -387,7 +387,7 @@ export const ACTIVE_ITEMS = {
     // fight's charge spent on the third of a health bar the player was already
     // going to win, and a finisher that refuses at the one moment a finisher
     // is worth pressing is a finisher nobody presses.
-    effects: [['EXECUTE EVERY ENEMY', GOOD], ['UNDER 30% HEALTH', NOTE]],
+    effects: [['KILL EVERY ENEMY', GOOD], ['BELOW 30% HEALTH', NOTE]],
     use: (game) => {
       for (const e of game.enemies) {
         if (e.dead) continue;
@@ -415,7 +415,7 @@ export const ACTIVE_ITEMS = {
     // is visibly thrown out over half a second instead of being found already
     // scattered on the next frame. That half second IS the item: what the
     // player bought is the walk back, and they have to be able to watch it.
-    effects: [['HURL EVERY NEARBY ENEMY BACK', GOOD], ['AND DEAL BULLET DAMAGE', GOOD]],
+    effects: [['KNOCK EVERY NEARBY', GOOD], ['ENEMY FLYING, WITH DAMAGE', GOOD]],
     use: (game) => {
       const p = game.player;
       const dmg = p.getEffectiveDamage(p.weapon.damage);
@@ -452,7 +452,7 @@ export const ACTIVE_ITEMS = {
     // It cannot kill you. A button that ends the run is not a decision, it is
     // a misclick - and the ten HP left is the item's real cost, because the
     // next thing that touches you finishes the job.
-    effects: [['DETONATE YOURSELF', GOOD], ['LEAVES YOU AT 10 HP', NOTE]],
+    effects: [['HUGE BLAST AT YOUR FEET', GOOD], ['LEAVES YOU AT 10 HP', NOTE]],
     use: (game) => {
       const p = game.player;
       _v.set(p.pos.x, 0, p.pos.z);
@@ -484,7 +484,7 @@ export const ACTIVE_ITEMS = {
     // in this game is a question answered by moving, and it can be answered
     // because the player knows who threw it. A dozen rocks THEY called down
     // from nowhere in particular would be a question with no answer.
-    effects: [['METEORS STRIKE THE ARENA', GOOD], ['FOR 3s', NOTE]],
+    effects: [['SHOWER THE ARENA', GOOD], ['WITH 12 METEORS, 3s', NOTE]],
     use: (game) => {
       // THREE OF THE PLAYER'S OWN SHOTS PER ROCK, snapshotted at the press for
       // the same reason a turret's is: the shower was called down by the gun
@@ -556,7 +556,7 @@ export const ACTIVE_ITEMS = {
     // Both halves are the ITEM's multipliers rather than the shared ones, so a
     // rage pickup and this one stack instead of overwriting each other, and a
     // Blood Pact's damageTakenMult is not silently replaced by the two.
-    effects: [['3x DAMAGE FOR 10s', GOOD], ['BUT YOU TAKE 2x', NOTE]],
+    effects: [['3x DAMAGE FOR 10s', GOOD], ['YOU TAKE 2x DAMAGE', NOTE]],
     duration: 10,
     use: (game) => {
       const p = game.player;
@@ -644,7 +644,7 @@ export const ACTIVE_ITEMS = {
     // It cycles per SHOT and not per pellet, so one trigger pull is one
     // element however many pellets were in it - the same rule Hot Streak and
     // Devil's Gamble already follow.
-    effects: [['EVERY SHOT CYCLES', GOOD], ['FIRE, ICE, VENOM, ARC FOR 8s', NOTE]],
+    effects: [['SHOTS CYCLE FIRE, ICE,', GOOD], ['POISON, ARC, FOR 8s', NOTE]],
     duration: 8,
     use: (game) => {
       game.player.elementCycle = 0;
@@ -667,7 +667,7 @@ export const ACTIVE_ITEMS = {
     // shot path takes the wider of the two cones, so owning Seeker makes this
     // item a dead press rather than a double one, which is the honest
     // behaviour.
-    effects: [['YOUR SHOTS FIND THEIR MARK', GOOD], ['FOR 10s', NOTE]],
+    effects: [['SHOTS HOME IN ON', GOOD], ['TARGETS FOR 10s', NOTE]],
     duration: 10,
     use: (game) => {
       game.player.itemHoming = 1;
@@ -703,6 +703,7 @@ export const ACTIVE_ITEMS = {
     // by the shot path in main.js, and it is cleared with the rest of the run
     // on a death or a restart (see Player.reset).
     effects: [['NEXT 20 HITS HEAL 1 HP', GOOD], ['NO TIME LIMIT', NOTE]],
+
     use: (game) => {
       game.player.leechShots = 20;
       game.effects.shockwave(game.player.pos, THEME.blood, 6, 0.5);
@@ -722,7 +723,7 @@ export const ACTIVE_ITEMS = {
     // Eight seconds, not five. Five almost never overlaps an actual payout:
     // orbs arrive on a kill and are picked up over the following few seconds,
     // and a window shorter than the collection is a window that mostly misses.
-    effects: [['CREDITS ALSO HEAL 1 HP', GOOD], ['FOR 8s', NOTE]],
+    effects: [['CREDITS PICKED UP', GOOD], ['ALSO HEAL 1 HP, 8s', NOTE]],
     duration: 8,
     use: (game) => {
       game.player.orbHealEnd = game.time + 8;
@@ -745,7 +746,7 @@ export const ACTIVE_ITEMS = {
     // on a forty-second timer, and that is the only place it is the best item in
     // the pool. Forty seconds, because an item that is dead weight two thirds of
     // the time has to be there when the third arrives.
-    effects: [['HEAL UP TO HALF HEALTH', GOOD], ['NOTHING ABOVE IT', NOTE]],
+    effects: [['HEAL TO HALF HEALTH', GOOD], ['NO EFFECT ABOVE HALF', NOTE]],
     use: (game) => {
       const p = game.player;
       const line = p.maxHealth * 0.5;
@@ -830,7 +831,7 @@ export const ACTIVE_ITEMS = {
     // changing; held for a beat with a cylinder turning under it, it is a
     // gamble the player watches land. Nothing else in the game asks them to
     // wait for an answer.
-    effects: [['HALF: FULL HEALTH', GOOD], ['HALF: ONE HEALTH', NOTE]],
+    effects: [['COIN TOSS:', NOTE], ['FULL HEAL OR 1 HP', GOOD]],
     duration: 0.6,
     hud: false,
     use: (game, s) => {
@@ -922,7 +923,7 @@ export const ACTIVE_ITEMS = {
     // Thirty seconds. An escape that is not there when you need it
     // is not an escape, and this one commits the player to an arc they cannot
     // steer out of, which is its own price.
-    effects: [['LAUNCH YOURSELF SKYWARD', GOOD], ['AND SCORCH THE GROUND', GOOD]],
+    effects: [['JUMP STRAIGHT UP,', GOOD], ['BLASTING THE GROUND', GOOD]],
     use: (game) => {
       const p = game.player;
       _v.set(p.pos.x, 0, p.pos.z);
@@ -954,7 +955,7 @@ export const ACTIVE_ITEMS = {
     // same as being safe: the room has to be given time to notice, and one
     // second is roughly a frame more than a chaser needs to close the gap it
     // was already closing.
-    effects: [['TELEPORT TO OPEN GROUND', GOOD], ['AND 1.5s INVINCIBLE', GOOD]],
+    effects: [['TELEPORT TO OPEN GROUND', GOOD], ['1.5s INVINCIBLE', GOOD]],
     use: (game) => {
       const p = game.player;
       let best = null;
@@ -1027,7 +1028,7 @@ export const ACTIVE_ITEMS = {
     // Player.dash), so the envelope, the window and the hand-back are still
     // BLINK DRIVE's to the frame, and the two items are still the same
     // movement with different things happening on the way.
-    effects: [['DASH THROUGH ENEMIES', GOOD], ['3x BULLET DAMAGE, AND UNTOUCHABLE', GOOD]],
+    effects: [['DASH THROUGH ENEMIES,', GOOD], ['DEALING 3x DAMAGE, SAFE', GOOD]],
     duration: 0.7,
     hud: false,
     use: (game, s) => {
@@ -1075,7 +1076,7 @@ export const ACTIVE_ITEMS = {
     // the charge and fired nothing would be the worst failure in the pool, and
     // the denial noise is one the player has already learnt from pressing an
     // uncharged item.
-    effects: [['ONE SHOT, 30x DAMAGE', GOOD], ['PIERCES ALL - COSTS 30 AMMO', NOTE]],
+    effects: [['ONE MASSIVE SHOT', GOOD], ['30x DMG, 30 AMMO', NOTE]],
     ready: (game) => game.player.mag + game.player.reserveAmmo >= 30,
     use: (game) => {
       const p = game.player;
@@ -1111,7 +1112,7 @@ export const ACTIVE_ITEMS = {
     // which made an item whose entire decision is WHERE into one with no
     // decision at all. Now it goes where it is aimed - across the room, behind
     // the crowd - which is the only place a second gun is worth having.
-    effects: [['THROW AN AUTO-TURRET', GOOD], ['FOR 15s', NOTE]],
+    effects: [['THROW AN AUTO-TURRET,', GOOD], ['IT FIRES FOR 15s', NOTE]],
     use: (game) => {
       const p = game.player;
       p.muzzleInto(_v);
@@ -1139,7 +1140,7 @@ export const ACTIVE_ITEMS = {
     // Thirty seconds, so the player can lay a line of them across the way in
     // during a lull - which is the item, and it is a completely different item
     // from pressing it once when something is already on top of you.
-    effects: [['THROW A PROXIMITY MINE', GOOD], ['THE BLAST DOES NOT KNOW YOU', NOTE]],
+    effects: [['THROW A MINE: BIG BLAST', GOOD], ['ON ENEMIES ONLY', NOTE]],
     use: (game) => {
       const p = game.player;
       p.muzzleInto(_v);
@@ -1161,7 +1162,7 @@ export const ACTIVE_ITEMS = {
     //
     // It hurts the player for exactly that reason. A bomb that could be
     // dropped underfoot for free would never be thrown anywhere else.
-    effects: [['THROW A BOMB - 3s FUSE', GOOD], ['THE BLAST DOES NOT KNOW YOU', NOTE]],
+    effects: [['THROW A BOMB, 3s FUSE', GOOD], ['HURTS YOU TOO', NOTE]],
     use: (game) => {
       const p = game.player;
       p.muzzleInto(_v);
@@ -1184,7 +1185,7 @@ export const ACTIVE_ITEMS = {
     // IT STOPS ENEMY ROUNDS, which is the half that makes it a wall rather
     // than a long thin lava patch, and the half a player discovers by standing
     // behind one during a shooter volley.
-    effects: [['RAISE A WALL OF FIRE', GOOD], ['IT BURNS, AND IT STOPS SHOTS', GOOD]],
+    effects: [['RAISE A FIRE WALL', GOOD], ['BLOCKS SHOTS AND BURNS', GOOD]],
     use: (game) => {
       const p = game.player;
       facing(game);
@@ -1211,7 +1212,7 @@ export const ACTIVE_ITEMS = {
     // Forty-five seconds, not sixty-four. Sixty-four is longer than most waves
     // last, which means the item would frequently be uncastable in the fight
     // it was taken for.
-    effects: [['RELEASE FIVE HUNTING BEES', GOOD], ['FOR 24s', NOTE]],
+    effects: [['RELEASE 5 HUNTING BEES', GOOD], ['24s OF CHAOS', NOTE]],
     use: (game) => {
       const p = game.player;
       for (let i = 0; i < 5; i++) {
@@ -1236,7 +1237,7 @@ export const ACTIVE_ITEMS = {
     // pull that cannot be fought is the one thing in this game that takes the
     // movement away, and taking the movement away from the player who spent a
     // slot on the item is not a drawback, it is a bug with a rationale.
-    effects: [['THROW A SINGULARITY', GOOD], ['IT DRAGS THEM IN AND EATS THEM', GOOD]],
+    effects: [['THROW A BLACK HOLE', GOOD], ['PULLS ENEMIES IN, CRUSHES', GOOD]],
     use: (game) => {
       const p = game.player;
       p.muzzleInto(_v);
@@ -1267,7 +1268,7 @@ export const ACTIVE_ITEMS = {
     //
     // Thirty seconds. It pays nothing on a clean floor, so it has to be there
     // on the frame the floor is covered.
-    effects: [['PULL IN EVERY ORB', GOOD], ['AND EVERY PICKUP', GOOD]],
+    effects: [['PULL EVERYTHING', GOOD], ['ON THE FLOOR TO YOU', NOTE]],
     use: (game) => {
       game.money.vacuum();
       // `true` applies buff pickups NOW rather than banking them for the next
@@ -1488,7 +1489,7 @@ export const ACTIVE_ITEMS = {
     // thirty. Against a crowd that is real money well spent; against one boss
     // it is two shots for a thousand dollars, which is the bad buy the name
     // promises.
-    effects: [['$1,000 PER USE', NOTE], ['2x YOUR DAMAGE TO EVERY', GOOD], ['ENEMY IN THE ARENA', GOOD]],
+    effects: [['$1,000 PER PRESS', NOTE], ['2x DAMAGE TO ALL ENEMIES', GOOD]],
     // The one item refused for want of MONEY rather than charge. Same voice an
     // uncharged press gets, because it is the same message - not now.
     ready: (game) => game.credits >= PAY_TO_WIN_COST,
@@ -1564,7 +1565,7 @@ export const ACTIVE_ITEMS = {
     // game ends up - a bullet, a burn, a lava patch, a corpse blast - because
     // a policy that only covered bullets would be a policy the player finds
     // the edge of by dying to a pool.
-    effects: [['THE HIT THAT WOULD KILL YOU', GOOD], ['LEAVES YOU AT 1 HP AND HEALS 20', GOOD]],
+    effects: [['SURVIVE ONE KILLING BLOW', GOOD], ['AT 1 HP + HEAL 20, 10s', GOOD]],
     duration: 10,
     use: (game) => {
       const p = game.player;
@@ -1599,7 +1600,7 @@ export const ACTIVE_ITEMS = {
     //
     // A DEATH CANCELS IT, which needs no code at all: the run is over, and
     // Player.reset clears the field with everything else.
-    effects: [['A 25 HP HEAL SHIPS', GOOD], ['IN 10 SECONDS', NOTE]],
+    effects: [['HEAL 25 HP', GOOD], ['ARRIVES IN 10s', NOTE]],
     use: (game) => {
       const p = game.player;
       p.backordered = true;
@@ -1629,7 +1630,7 @@ export const ACTIVE_ITEMS = {
     // THE BILL IS COLLECTED IN main.js, at the wave clear, and NOT by an
     // end() here: a running item's window is torn down when the wave ends,
     // which is the exact moment this is supposed to fire.
-    effects: [['HEAL 40 HP NOW', GOOD], ['TAKE 30 WHEN THE WAVE ENDS', NOTE], ['AND IT STACKS', NOTE]],
+    effects: [['HEAL 40 HP NOW', GOOD], ['PAY 30 AT WAVE END', NOTE]],
     use: (game) => {
       const p = game.player;
       p.heal(40);
@@ -1660,7 +1661,7 @@ export const ACTIVE_ITEMS = {
     // rather than a mod, for the same reason GRAFT's three health is: a
     // rebuildMods() on the next totem claimed would wipe anything written into
     // the block, and this is meant to outlive the build.
-    effects: [['HEAL TO FULL HEALTH', GOOD], ['PERMANENTLY 10% SLOWER', NOTE]],
+    effects: [['HEAL TO FULL', GOOD], ['10% SLOWER, FOREVER', NOTE]],
     use: (game) => {
       const p = game.player;
       p.health = p.maxHealth;
@@ -1689,7 +1690,7 @@ export const ACTIVE_ITEMS = {
     // COMPOUNDING, as the name promises: each press is a percent of what the
     // last one left, so the gain accelerates very slightly. Over a run that is
     // a rounding error, and it is the honest reading of the word.
-    effects: [['+1% DAMAGE', GOOD], ['PERMANENTLY, AND IT COMPOUNDS', GOOD]],
+    effects: [['+1% DAMAGE', GOOD], ['PERMANENT, COMPOUNDS', NOTE]],
     use: (game) => {
       const p = game.player;
       p.compoundMult *= 1.01;
@@ -1716,7 +1717,7 @@ export const ACTIVE_ITEMS = {
     // it is TECTONIC's nine plus a step, so a player who owns both learns one
     // distance. Nothing is consumed - the enemies are not harmed and not
     // moved - which is what keeps this a heal rather than a crowd answer.
-    effects: [['HEAL 2 HP PER ENEMY', GOOD], ['STANDING WITHIN 10m', NOTE]],
+    effects: [['HEAL 2 HP PER ENEMY', GOOD], ['WITHIN 10m', NOTE]],
     use: (game) => {
       const p = game.player;
       let n = 0;
@@ -1754,7 +1755,7 @@ export const ACTIVE_ITEMS = {
     // rounds a body against a full wave is more than an ammo crate, and there
     // is otherwise no way at all to buy rounds in the middle of a fight except
     // OPEN VEIN, which costs fifty health to do it.
-    effects: [['PER ENEMY ALIVE:', NOTE], ['HEAL 1 HP AND GAIN 5 AMMO', GOOD]],
+    effects: [['PER LIVING ENEMY:', NOTE], ['HEAL 1, GAIN 5 AMMO', GOOD]],
     use: (game) => {
       const p = game.player;
       let n = 0;
@@ -1792,7 +1793,7 @@ export const ACTIVE_ITEMS = {
     // the game, so it takes MIDAS and the flawless streak and is swept up by
     // the magnet - a payout that went straight into the balance would be the
     // one source none of those ever saw.
-    effects: [['GAIN $100 PER ENEMY ALIVE', GOOD]],
+    effects: [['GAIN $100 PER ENEMY', GOOD], ['ALIVE RIGHT NOW', NOTE]],
     use: (game) => {
       const p = game.player;
       let n = 0;
@@ -1830,7 +1831,7 @@ export const ACTIVE_ITEMS = {
     // pool reads getEffectiveDamage; this one deliberately does not, because
     // the number IS the health bar - a build multiplier on top would make the
     // card's promise a lie in the one direction the player cannot check.
-    effects: [['DEAL YOUR MISSING HEALTH', GOOD], ['TO EVERY ENEMY', GOOD]],
+    effects: [['YOUR MISSING HP,', GOOD], ['DEALT TO ALL ENEMIES', GOOD]],
     use: (game) => {
       const p = game.player;
       const dmg = Math.max(0, p.maxHealth - p.health);
@@ -1933,7 +1934,7 @@ export const ACTIVE_ITEMS = {
     // NOT BOSSES, and this one is a hard exemption rather than a resistance:
     // a boss is a fight with a floor pattern, and lifting it off the floor for
     // five seconds does not weaken it, it deletes the fight.
-    effects: [['THE 5 NEAREST ENEMIES FLOAT', GOOD], ['HELPLESS FOR 5s - NOT BOSSES', NOTE]],
+    effects: [['BALLOON THE 5 NEAREST', GOOD], ['ENEMIES UP, 5s, NOT BOSSES', NOTE]],
     use: (game) => {
       let n = 0;
       for (const e of nearestEnemies(game, 5)) {
@@ -1968,7 +1969,7 @@ export const ACTIVE_ITEMS = {
     //
     // IT DOES NOT STACK WITH ITSELF and cannot: re-firing refreshes, like
     // every other window in the running list.
-    effects: [['EVERY SHOT FIRES TWICE', GOOD], ['FOR 8s - THE SECOND IS FREE', NOTE]],
+    effects: [['EVERY SHOT FIRES TWICE', GOOD], ['FOR 8s, NO EXTRA AMMO', NOTE]],
     duration: 8,
     use: (game) => {
       game.player.encore = 1;
@@ -1998,7 +1999,7 @@ export const ACTIVE_ITEMS = {
     // trigger pull uses - so every passive item in the build, every status on
     // the ammunition and every crit rule applies to all of them, and nothing
     // here has an opinion about damage at all.
-    effects: [['FIRE YOUR WHOLE MAGAZINE', GOOD], ['AT ONCE, AS A WIDE CONE', NOTE]],
+    effects: [['EMPTY YOUR MAGAZINE', GOOD], ['AS ONE WIDE BLAST', NOTE]],
     // A press on an empty gun would spend the charge and fire nothing, which
     // is the failure LANCE's gate exists to prevent - same voice, same reason.
     ready: (game) => game.player.mag > 0,
@@ -2029,7 +2030,7 @@ export const ACTIVE_ITEMS = {
     // because the player knows who threw it. The one item that DOES burn its
     // own thrower is FLOOR IS LAVA, and there the whole point is that the
     // floor is gone.
-    effects: [['THROW A BOTTLE - IT LEAVES', GOOD], ['BURNING GROUND FOR 20 SECONDS', NOTE]],
+    effects: [['THROW A FIRE BOMB:', GOOD], ['BURNING GROUND, 20 SEC', NOTE]],
     use: (game) => {
       const p = game.player;
       p.muzzleInto(_v);
@@ -2062,7 +2063,7 @@ export const ACTIVE_ITEMS = {
     // cannot climb, and the ones that fly are above it anyway - so what the
     // player is buying is ten seconds in which the room's own geometry is the
     // only safe thing in it, and they are the only one who knows that.
-    effects: [['THE WHOLE FLOOR BURNS FOR 10s', GOOD], ['YOU BURN TOO - GET HIGH', NOTE]],
+    effects: [['THE WHOLE FLOOR BURNS', GOOD], ['FOR 10s - YOU TOO, GET UP', NOTE]],
     duration: 10,
     use: (game) => {
       game._lavaFloorStart();
@@ -2097,7 +2098,7 @@ export const ACTIVE_ITEMS = {
     // AND THE MELEE KILL DOUBLE RIDES ON TOP, untouched: everything this kills
     // with the swing is tagged the way any melee kill is, so a crowd taken
     // down by one hit pays a crowd's worth of doubled bounties.
-    effects: [['MELEE DEALS 5x DAMAGE FOR 8s', GOOD], ['AND EVERY ENEMY TAKES IT', GOOD]],
+    effects: [['MELEE: 5x DMG FOR 8s,', GOOD], ['HITS EVERY ENEMY', NOTE]],
     duration: 8,
     use: (game) => {
       const p = game.player;
@@ -2135,7 +2136,7 @@ export const ACTIVE_ITEMS = {
     // about to blink out. Moving them to the player would make this a heal
     // with extra steps; leaving them where they are is what keeps it a thing
     // that happened to the ARENA.
-    effects: [['EVERY PICKUP ON THE FLOOR', NOTE], ['BECOMES A HEALTH PICKUP', GOOD]],
+    effects: [['ALL PICKUPS BECOME', GOOD], ['HEALTH PICKUPS', NOTE]],
     use: (game) => {
       const n = game._transfuse();
       const p = game.player;
@@ -2169,7 +2170,7 @@ export const ACTIVE_ITEMS = {
     // stops this being a bank: an item that let the player stockpile health
     // around the map would make the wave break the safest time to press it,
     // and the wave break is exactly when it should be worth least.
-    effects: [['SPAWN 3 HEALTH PICKUPS', GOOD], ['SOMEWHERE IN THE ARENA', NOTE]],
+    effects: [['SPAWN 3 HEALTH PICKUPS', GOOD], ['AROUND THE ARENA', NOTE]],
     use: (game) => {
       game._scatterHealth(3);
       game.effects.shockwave(game.player.pos, THEME.vitality, 8, 0.6);
@@ -2198,7 +2199,7 @@ export const ACTIVE_ITEMS = {
     // boss pays out by bleeding at health thresholds, and letting the counter
     // spend itself on the one body that is already a payout would be five
     // drops the player never sees.
-    effects: [['THE NEXT 5 ENEMIES YOU KILL', NOTE], ['ARE GUARANTEED TO DROP', GOOD]],
+    effects: [['NEXT 5 KILLS', NOTE], ['ALWAYS DROP LOOT', GOOD]],
     use: (game) => {
       game.player.pinataLeft = 5;
       game.effects.shockwave(game.player.pos, THEME.salvage, 7, 0.6);
@@ -2229,7 +2230,7 @@ export const ACTIVE_ITEMS = {
     // balance and a balance is a number the player can read off the corner of
     // the screen; multiplying it by the build would make the one item in the
     // pool with a checkable promise the one item whose promise is wrong.
-    effects: [['SPEND EVERY CREDIT YOU HAVE', NOTE], ['DEAL THAT MUCH TO EVERY ENEMY', GOOD]],
+    effects: [['SPEND ALL YOUR CREDITS', NOTE], ['AS DAMAGE TO EVERY ENEMY', GOOD]],
     use: (game) => {
       const p = game.player;
       const spent = Math.floor(game.credits);
@@ -2275,7 +2276,7 @@ export const ACTIVE_ITEMS = {
     // the ordinary clear - the flawless streak, the resupply, the shop, all of it.
     // A player who takes no damage buying their way out has still cleared the
     // wave without being touched, which is the honest reading.
-    effects: [['$5,000 PER USE', NOTE], ['CLEAR THE WAVE INSTANTLY', GOOD], ['NOT ON A BOSS WAVE', NOTE]],
+    effects: [['$5,000 PER PRESS', NOTE], ['END THE WAVE NOW, NO BOSSES', GOOD]],
     // TWO REFUSALS, in one line and in the same voice an uncharged press gets.
     //
     // THE MONEY is PAY TO WIN's rule exactly: the second item in the pool
@@ -2319,7 +2320,7 @@ export const ACTIVE_ITEMS = {
     // GOLDEN PARACHUTE, which cannot pay or it refunds itself - because a boss
     // bounty is a fixed sum that no amount of pressing this can farm: there is
     // exactly one boss per boss wave.
-    effects: [['INSTANTLY KILL A BOSS', GOOD]],
+    effects: [['KILL A BOSS INSTANTLY', GOOD]],
     // REFUSED WHERE THERE IS NO BOSS, on SECOND OPINION's terms: a press that
     // spent two waves of charge on an empty room would be the worst failure in
     // the pool by a distance.
@@ -2356,7 +2357,7 @@ export const ACTIVE_ITEMS = {
     // expire on somebody else's timer, which is the one behaviour a player
     // could not predict; taking the clock off is the reading that is always
     // in the player's favour and is always the same.
-    effects: [['+20 SHIELD', GOOD], ['IT DOES NOT EXPIRE', GOOD]],
+    effects: [['+20 SHIELD', GOOD], ['NEVER EXPIRES', GOOD]],
     use: (game) => {
       const p = game.player;
       p.shield += 20;
