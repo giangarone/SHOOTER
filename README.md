@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Seventy-three enemy types, in twelve themes of six** - one per role per theme, and every one of them built:
+- **Seventy-eight enemies, in thirteen themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -517,7 +517,26 @@ context. The start screen says so, and one click anywhere fixes it.
    the tower: they hold station and draw a beam that SLOWS whoever it
    watches, then lock the bearing and fire a lance along it - standing off
    the beam is free, which makes it the weeper's question turned on its
-   side). **BRINE** the deep - **Howlers** (a scream that takes your
+   side). **BONE**, the skeleton spent as weapons: **Knucklers** run on huge
+   knuckles, coil over a marked lane, then lunge along that locked bearing.
+   Step sideways during the tell and punish the recovery. **Ribshots** open
+   their ribcages and fire five small bone rounds; their missing ribs expose
+   marrow for 1.15 seconds, taking 40% extra damage until the cage regrows.
+   **Ribguards** carry two frontal bone plates, reducing incoming shots by
+   50%, then 25%, then nothing as health crosses two thirds and one third.
+   Flanks and damage over time bypass the plates, and healing never restores
+   a broken one. **Ossuaries** plant three filling circles along your captured
+   position, then erupt a spine through them in order. Leave the lane; it
+   never follows you. **Marrows** channel a visible red tether for 1.2 seconds
+   to mend one wounded ally by 14% of its maximum health. Hit the healer,
+   break the tether's nine-metre range, or put cover between the two to cancel
+   it. They cannot heal bosses or other Marrows. **Skullwings** descend,
+   commit to a straight strafing run, and shed three separately marked teeth
+   along their flight before climbing to recover. All share open ivory ribs,
+   blunt joints, skulls with dark sockets, and coral-red marrow that keeps its
+   color through status effects. Ground teeth cannot reach the catwalks;
+   killing their caster cancels unspent eruptions.
+   **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -551,9 +570,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the twelve themes owns a boss, and the block a theme lands in is where its
+  of the thirteen themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All twelve exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All thirteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -624,7 +643,17 @@ context. The start screen says so, and one click anywhere fixes it.
    tolls on its own, a chill that reaches wherever the player is standing.
    The box itself is the health bar's argument: shut and armoured for most
    of the fight, and under a third the lids go wide for good, the armour
-   comes off, and the last stretch is the fastest. Regular enemies keep
+   comes off, and the last stretch is the fastest. **OSSARCH**, BONE's crowned
+   skeleton, cycles through three attacks: a telegraphed radial rib volley
+   with an escape sector, a sequential spine through your captured position,
+   and a jaw charge down a marked lane. The charge commits to its bearing;
+   solid cover stops it. Every attack ends in a 1.6-second recovery with the
+   ribcage open and the marrow fully vulnerable. Outside those windows, two
+   mantle plates reduce damage to 55%, then 75%, then full damage as its bar
+   crosses two thirds and one third. The first break adds two branches to the
+   spine, and the last tightens the rib volley while preserving its escape
+   sector. Warnings retain their full duration as the fight scales; the walk
+   between attacks gets shorter. Regular enemies keep
    arriving throughout; killing the boss ends the wave and pays out. It does NOT
    refill your health or ammo - the payout is large and the stations are right
    there, so coming out of a boss in trouble is a real state to be in and what
@@ -2250,6 +2279,7 @@ npm run test:thirdpool
 npm run test:fourthpool
 npm run test:fifthpool
 npm run test:cathedral
+npm run test:bone
 ```
 
 The targeted suites, because the smoke test's bot rarely survives past the
@@ -2327,13 +2357,14 @@ js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         the Enemy class, the four projectile kinds, the damage sinks
-js/enemies/         the sixty-six types, one file per theme
+js/enemies/         the enemy roster, one file per theme
   shared.js         what more than one theme (or the class) needs: the geometry
                     and material caches, the faceted primitives, the status
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
   index.js          imports the themes, which is what registers them
   rust.js  void.js  ember.js  rime.js  verdant.js
   strata.js  tempest.js  brine.js  plague.js  solar.js  hive.js
+  cathedral.js  bone.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
 js/effects.js       particle pool, tracers, muzzle flash, shake
@@ -2345,7 +2376,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the twelve themes, their six enemies each, and the run's deck
+js/themes.js        the thirteen themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -2430,6 +2461,10 @@ test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
                     inside the ring AND not outside it, the vigil's lance
                     costing on the locked beam AND nothing off it, and the
                     Reliquary opening under a third
+test/bone.mjs       BONE end to end - locked lunges and spine lanes, spent-rib
+                    vulnerability, permanent plate shedding, interruptible
+                    healing, airborne tooth trails, all three Ossarch attacks,
+                    armor phases, cover, elevation and telegraph cleanup
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

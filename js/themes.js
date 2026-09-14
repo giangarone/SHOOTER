@@ -249,6 +249,20 @@ export const THEMES = {
       flier: 'vigil',
     },
   },
+  // A skeleton spent as weapons; every attack leaves its marrow exposed.
+  bone: {
+    name: 'BONE',
+    color: 0xe5d6b5,
+    boss: 'ossarch',
+    roles: {
+      rusher: 'knuckler',
+      gunner: 'ribshot',
+      brute: 'ribguard',
+      artillery: 'ossuary',
+      support: 'marrow',
+      flier: 'skullwing',
+    },
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
