@@ -25,22 +25,20 @@ import {
 // lit circle and is made weaker by leaving it. It is the theme of THRESHOLDS -
 // the arch, the grave, the veil - and every mechanic below is one crossing:
 //
-//   penitent  crosses itself and is UNTOUCHABLE for as long as it kneels -
-//             but it cannot move, and it rises to strike. A rusher you are
-//             free to ignore until it is ready, and punished for shooting at
-//             while it is down. Kill it on the rise or leave it: those are
-//             the two answers, and everything else is wasted ammunition.
+//   penitent  crosses itself and takes 30% LESS damage while it kneels - but
+//             it cannot move, and it rises to strike. The whole body folds
+//             visibly into the prayer rather than hiding its hood, so the
+//             quieter damage window and the coming stroke read as one pose.
 //   curate    fires SLOW rounds that pass straight through cover - the only
 //             gunner in the game that does. The answer is not to break line
 //             of sight, because there is none to break; it is to be somewhere
 //             the round arrives anyway or to kill the curate first. Its
 //             lantern dims as it charges, so the lane it is about to take
 //             from you is on the model.
-//   pallbearer  carries its own grave. Everything that lands on it while it
-//             walks is banked, and on death it goes down in one piece with
-//             the whole debt paid out at once - the first brute that is
-//             LEAST dangerous at full health and most dangerous at a
-//             sliver, which reverses the usual shape of finishing one.
+//   pallbearer  turns the coffin into a battering ram. It plants, hoists the
+//             coffin upright and paints the lane it has committed to before
+//             charging down it and slamming the burden into the floor. Step
+//             sideways, then punish the long recovery after the impact.
 //   thurible   swings a smoking censer that drags a slow veil of incense
 //             across the floor. The veil blinds like the drifter's ink but
 //             is walked rather than thrown: it goes where the thurible
@@ -64,10 +62,10 @@ import {
 // Where HIVE is the sac, CATHEDRAL is the LAMP HELD HIGH.
 //
 // SO IT IS THE THEME WHERE LOOKING AWAY IS THE MISTAKE. A penitent you stop
-// watching rises. A pallbearer you whittle down is becoming a corpse with your
-// own shots in it. A sacristan you leave alive is charging you by the kill. The
-// question it asks is the plague's question inverted: not what order to kill in,
-// but WHICH OF THEM IS STILL COUNTING.
+// watching rises. A pallbearer you fail to sidestep brings the whole grave
+// down on you. A sacristan you leave alive is charging you by the kill. The
+// question it asks is the plague's question inverted: not what order to kill
+// in, but WHICH OF THEM IS STILL COUNTING.
 
 // ---- the materials ---------------------------------------------------------
 // One body material and one lit accent, the tank's contract: the family reads
@@ -83,10 +81,8 @@ import {
 // THE KNEEL. How long the penitent stays down, how long the rise takes, and
 // the reach and cost of the stroke that ends it.
 //
-// Untouchable for as long as it kneels, via the armour rows on the stat block
-// - a hard zero, the pale crown's contract, because a kneel that leaked a
-// little would make shooting the kneeling body the correct play and the whole
-// enemy is the decision to wait.
+// The kneel reduces incoming damage by 30%. It is still a defensive posture,
+// but never a period where hits and ammunition simply disappear.
 export const PEN_KNEEL = 1.1;
 
 export const PEN_RISE = 0.42;
@@ -97,12 +93,39 @@ export const PEN_STROKE_CD = 1.4;
 
 export const PEN_TOUCH = 12;
 
+export const PEN_KNEEL_ARMOR = 0.7;
+
+function posePenitent(e, dt, target) {
+  if (!e.penUpper) return;
+  e.penPose = (e.penPose || 0) + (target - (e.penPose || 0)) * Math.min(1, dt * 12);
+  const k = e.penPose;
+  // THE BODY KNEELS, not the hat. Lowering the whole upper silhouette and
+  // folding both legs makes the state readable even when the small hood is
+  // hidden by a crowd or clipped against the top of the screen.
+  e.penUpper.position.set(0, -0.42 * e.scale * k, -0.1 * e.scale * k);
+  e.penUpper.rotation.x = -0.18 * k;
+  for (const leg of e.penLegs || []) {
+    leg.position.y = (0.24 - 0.09 * k) * e.scale;
+    leg.position.z = 0.15 * e.scale * k;
+    leg.rotation.x = 0.28 + 1.0 * k;
+  }
+  // The ray targets follow the visible body. Without this, kneeling would
+  // move the model while leaving an invisible standing target above it.
+  if (e.hitbox) {
+    if (e.penHitY === undefined) e.penHitY = e.hitbox.position.y;
+    e.hitbox.position.y = e.penHitY - 0.3 * e.scale * k;
+  }
+  if (e.head) {
+    if (e.penHeadY === undefined) e.penHeadY = e.head.position.y;
+    e.head.position.y = e.penHeadY - 0.42 * e.scale * k;
+  }
+}
+
 export function aiPenitent(e, a) {
   // pState: 'walk' | 'kneel' | 'rise'
   if (e.pState === undefined) {
     e.pState = 'walk';
     e.pT = 0.8 + Math.random() * 0.8;
-    e.pKneel = false;
   }
 
   // THE KNEEL, and it outranks the melee: the penitent kneels whether or not
@@ -110,6 +133,7 @@ export function aiPenitent(e, a) {
   // stroke rather than a swing of its own.
   if (e.pState === 'kneel') {
     e.pT -= a.dt;
+    posePenitent(e, a.dt, 1);
     // Frozen in place, in every sense: no movement, and any half-wound swing
     // is abandoned. The melee cycle's own windup test cannot fire here because
     // the branch never reaches it.
@@ -117,17 +141,16 @@ export function aiPenitent(e, a) {
     a.vz = 0;
     e.windup = 0;
     e.swing = 0;
-    if (e.pKneel) e._setEyeAlert(true);
+    e._setEyeAlert(true);
     if (e.pT > 0) return;
     e.pState = 'rise';
     e.pT = PEN_RISE;
-    e.pKneel = false;
-    if (e.penHood) e.penHood.visible = false;
     return;
   }
 
   if (e.pState === 'rise') {
     e.pT -= a.dt;
+    posePenitent(e, a.dt, Math.max(0, e.pT / PEN_RISE));
     // It walks through the rise, slowly: the whole tell is a kneeling thing
     // standing up, and it should read as approaching rather than as frozen.
     a.vx = a.px * a.sp * 0.4;
@@ -152,13 +175,12 @@ export function aiPenitent(e, a) {
   // distance rather than by damage: a penitent closes, kneels AT the player,
   // and the rise is the attack.
   aiMelee(e, a);
+  posePenitent(e, a.dt, 0);
   e.pT -= a.dt;
   if (e.pT <= 0) {
     if (a.dist < 9) {
       e.pState = 'kneel';
       e.pT = PEN_KNEEL;
-      e.pKneel = true;
-      if (e.penHood) e.penHood.visible = true;
       if (a.ctx.effects) {
         _blinkAt.set(e.pos.x, 0.2, e.pos.z);
         a.ctx.effects.shockwave(_blinkAt, 0xc0a860, 1.4, 0.3);
@@ -220,62 +242,149 @@ export function aiCurate(e, a) {
 
 // ---- the pallbearer ---------------------------------------------------------
 //
-// THE OPEN GRAVE, in hits rather than health. The engine's armour callback
-// sees the DIRECTION of a blow rather than its size (see takeDamage), so a
-// bank denominated in damage would have to be maintained somewhere outside
-// the one place damage is ever dealt. The pallbearer banks per ROUND instead
-// - the aegis's economy, arrived at from the other end: every round that
-// lands on the walking body is swallowed by the grave (a flat 0.85 of the
-// blow, so the bar barely moves) and COUNTED, and when the body finally goes
-// down the grave opens and pays the whole count out at once, scaled by the
-// wave's own damage.
-//
-// So it is the brute that is LEAST dangerous at full health and most
-// dangerous at a sliver, which reverses the usual shape of finishing one -
-// and the lids on the coffin part as the count grows, so the player can see
-// the debt accumulating on the model before they finish the job.
+// THE BURDEN. The pallbearer is fully vulnerable and turns its coffin into a
+// committed attack instead: stop, hoist it upright, show the lane, charge,
+// then slam it flat. The line is fixed when the tell begins, so the answer is
+// a sidestep rather than pouring more ammunition into hidden armour.
+export const PALL_TELL = 0.9;
 
-// How much of what lands on the walking body the grave swallows. Most of it:
-// a pallbearer on a full bar is nearly free to shoot, which is the bait.
-export const PALL_BANK = 0.85;
+export const PALL_CHARGE_TIME = 0.9;
 
-// How much each swallowed round adds to the debt, as a fraction of the
-// pallbearer's own hit. A late-wave pallbearer's grave is worse than an
-// early one's for the same number of rounds, which keeps the debt on the
-// difficulty curve the wave already owns.
-export const PALL_DEBT_PER_ROUND = 0.35;
+export const PALL_CHARGE_MUL = 3.8;
 
-// The grave's reach when it opens, and the ring it leaves. The ground the
-// corpse was carried to is consecrated for a few seconds - the theme's own
-// answer to the husk, paid in the theme's own coin.
-export const PALL_GRAVE_R = 3.0;
+export const PALL_CHARGE_CAP = 7;
 
-export const PALL_GRAVE_LIFE = 5.5;
+export const PALL_LANE_LEN = 6.4;
 
-export const PALL_GRAVE_DPS = 14;
+export const PALL_SLAM_R = 2.8;
 
-// THE GRAVE'S BITE, dealt in one piece on death: the count of rounds it
-// swallowed, priced at the debt rate, capped so that a whole magazine into
-// a walking body is a hard hit rather than a one-shot.
-export const PALL_GRAVE_CAP = 60;
+export const PALL_RECOVER = 1.15;
 
-export const _pallFrom = new THREE.Vector3();
+export const PALL_ATTACK_CD = 3.2;
 
-export const _pallTo = new THREE.Vector3();
+function facePallbearer(e) {
+  e.faceLocked = true;
+  e.group.rotation.y = Math.atan2(-e.palDX, -e.palDZ);
+}
+
+function posePallbearer(e, state, fill = 0) {
+  if (!e.palRig || !e.palCoffin) return;
+  let crouch = 0;
+  let lift = 0;
+  let impact = 0;
+  if (state === 'tell') { crouch = fill; lift = fill; }
+  else if (state === 'charge') { crouch = 1; lift = 1; }
+  else if (state === 'recover') { impact = fill; crouch = fill; }
+
+  // THE WHOLE SILHOUETTE COMMITS. The carrier drops its shoulders while the
+  // coffin rotates from a horizontal burden to a tall shield. At impact the
+  // coffin is visibly on the floor, then both it and the carrier stand back up.
+  e.palRig.position.y = -0.18 * e.scale * crouch;
+  e.palRig.rotation.x = -0.13 * crouch;
+  e.palCoffin.position.y = (0.9 + 0.34 * lift - 0.5 * impact) * e.scale;
+  e.palCoffin.position.z = -0.1 * e.scale * (lift + impact);
+  e.palCoffin.rotation.x = -1.22 * lift;
+}
+
+export function releasePallbearer(e) {
+  if (e.palMark >= 0 && e.palFx) e.palFx.markRelease(e.palMark);
+  e.palMark = -1;
+}
+
+function pallbearerSlam(e, a) {
+  e.palState = 'recover';
+  e.palT = PALL_RECOVER;
+  e.stepMul = 1.4;
+  a.vx = 0;
+  a.vz = 0;
+  const dy = Math.abs(a.ctx.player.pos.y - e.pos.y);
+  if (a.dist < PALL_SLAM_R && dy < 2.4) landHit(e, a.ctx);
+  if (a.ctx.effects) {
+    _blinkAt.set(e.pos.x, 0.12, e.pos.z);
+    a.ctx.effects.shockwave(_blinkAt, 0xc0a860, PALL_SLAM_R, 0.42);
+    a.ctx.effects.burst(_blinkAt, 0xe8d9a8, 18, 4.5, 1.8, 0.55);
+  }
+  if (a.ctx.sfx) a.ctx.sfx.impact();
+}
 
 export function aiPallbearer(e, a) {
+  e.stepMul = 1.4;
+  if (e.palState === undefined) {
+    e.palState = 'walk';
+    e.palT = 0;
+    e.palCd = 1.0 + Math.random() * 0.8;
+    e.palMark = -1;
+  }
+  if (e.palLamp) e.palLamp.rotation.y += a.dt * 0.8;
+
+  if (e.palState === 'tell') {
+    e.palT -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e.windup = 0;
+    e.swing = 0;
+    facePallbearer(e);
+    const fill = 1 - Math.max(0, e.palT) / PALL_TELL;
+    posePallbearer(e, 'tell', fill);
+    if (e.palMark >= 0 && e.palFx) {
+      e.palFx.markSet(
+        e.palMark,
+        e.pos.x + e.palDX * PALL_LANE_LEN * 0.5,
+        e.pos.z + e.palDZ * PALL_LANE_LEN * 0.5,
+        0.9, 0xc0a860, fill, PALL_LANE_LEN / 1.8,
+        Math.atan2(-e.palDX, -e.palDZ), 0.35
+      );
+    }
+    if (e.palT > 0) return;
+    releasePallbearer(e);
+    e.palState = 'charge';
+    e.palT = PALL_CHARGE_TIME;
+    e._setEyeAlert(false);
+    return;
+  }
+
+  if (e.palState === 'charge') {
+    e.palT -= a.dt;
+    e.stepMul = PALL_CHARGE_MUL;
+    facePallbearer(e);
+    posePallbearer(e, 'charge', 1);
+    // Preserve status slows while capping the base rush. Otherwise a late-wave
+    // speed multiplier would turn the announced six-metre lane into twelve.
+    const slow = Math.min(1, a.sp / Math.max(0.001, e.speed));
+    const sp = Math.min(PALL_CHARGE_CAP, e.speed * PALL_CHARGE_MUL) * slow;
+    a.vx = e.palDX * sp;
+    a.vz = e.palDZ * sp;
+    const ahead = a.nx * e.palDX + a.nz * e.palDZ > 0;
+    if ((ahead && a.dist < PALL_SLAM_R * 0.72) || e.palT <= 0 || e.blockedBy > 0.05) {
+      pallbearerSlam(e, a);
+    }
+    return;
+  }
+
+  if (e.palState === 'recover') {
+    e.palT -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    posePallbearer(e, 'recover', Math.max(0, e.palT) / PALL_RECOVER);
+    if (e.palT > 0) return;
+    e.palState = 'walk';
+    e.palCd = PALL_ATTACK_CD;
+    posePallbearer(e, 'walk');
+    return;
+  }
+
+  posePallbearer(e, 'walk');
   aiMelee(e, a);
-  // THE LIDS COME OFF as the debt grows - the bank made visible, so the
-  // player can see the grave opening before they finish the job and choose
-  // where to finish it.
-  const debt = e.palDebt || 0;
-  const k = Math.min(1, debt / 12);
-  if (e.palLidL) e.palLidL.rotation.z = 0.5 + k * 0.5;
-  if (e.palLidR) e.palLidR.rotation.z = -0.5 - k * 0.5;
-  // The lantern it carries is the whole silhouette at a distance: bright,
-  // pale brass, and steady.
-  if (e.palLamp) {
-    e.palLamp.rotation.y += a.dt * 0.8;
+  e.palCd -= a.dt;
+  if (e.palCd > 0 || a.dist < 4 || a.dist > 10 || e.windup > 0 || e.swing > 0) return;
+  e.palState = 'tell';
+  e.palT = PALL_TELL;
+  e.palDX = a.nx;
+  e.palDZ = a.nz;
+  e._setEyeAlert(true);
+  if (a.ctx.effects) {
+    e.palFx = a.ctx.effects;
+    e.palMark = a.ctx.effects.markAcquire();
   }
 }
 
@@ -488,32 +597,37 @@ export function aiVigil(e, a) {
 // ---- the models -------------------------------------------------------------
 
 // A kneeling figure under a hooded lantern. Narrow, deeply cowled, the lantern
-// held at the chest where the hood's shadow falls across it - the read is a
-// penitent at prayer, and the hood is the kneel's visible half: it comes
-// forward on the approach and drops for the rise.
+// held at the chest where the hood's shadow falls across it. The upper body is
+// one articulated assembly and the legs are separate joints, so the kneel is
+// a change in the whole outline rather than one triangle blinking out.
 export function buildPenitent(e, g, s) {
   const P = partsFor(e, g, s);
+  e.penUpper = new THREE.Group();
+  g.add(e.penUpper);
+  const U = partsFor(e, e.penUpper, s);
   // THE HOOD. Deep, forward-tilted, and the whole head - the face never
   // shows, which is the point of a penitent.
-  e.penHood = P('penHood', spike(0.3, 0.62, 6), { y: 1.18, z: 0.04, rx: -0.34 });
+  e.penHood = U('penHood', spike(0.3, 0.62, 6), { y: 1.18, z: 0.04, rx: -0.34 });
   // A narrow upright body under it, hands drawn in at the chest.
-  P('penTorso', prism(0.17, 0.24, 0.66, 5), { y: 0.82, rx: -0.08 });
+  U('penTorso', prism(0.17, 0.24, 0.66, 5), { y: 0.82, rx: -0.08 });
   // THE LANTERN, held low at the chest where the hood shades it. Pale brass,
   // and the one lit thing on the body.
-  P('penLamp', lump(0.11), {
+  U('penLamp', lump(0.11), {
     y: 0.86, z: -0.3, mat: SHARED_MATS.cathGilt, shadow: false,
   });
   // THE ARCH of the silhouette: two thin uprights and a spanner over the
   // head, so even the smallest CATHEDRAL body reads as a doorway walking.
   // In cathStone rather than the body material, so a status tint cannot
   // make the doorway stop reading as stone.
-  P('penArchL', slab(0.05, 0.92, 0.05), { x: -0.24, y: 0.74, rz: 0.08, mat: SHARED_MATS.cathStone });
-  P('penArchR', slab(0.05, 0.92, 0.05), { x: 0.24, y: 0.74, rz: -0.08, mat: SHARED_MATS.cathStone });
-  P('penArchTop', slab(0.56, 0.06, 0.07), { y: 1.24, mat: SHARED_MATS.cathStone });
+  U('penArchL', slab(0.05, 0.92, 0.05), { x: -0.24, y: 0.74, rz: 0.08, mat: SHARED_MATS.cathStone });
+  U('penArchR', slab(0.05, 0.92, 0.05), { x: 0.24, y: 0.74, rz: -0.08, mat: SHARED_MATS.cathStone });
+  U('penArchTop', slab(0.56, 0.06, 0.07), { y: 1.24, mat: SHARED_MATS.cathStone });
   // Legs that fold: short, and angled as though halfway down already.
-  P('penLeg', slab(0.1, 0.5, 0.11), { x: -0.14, y: 0.24, rx: 0.28 });
-  P('penLeg', slab(0.1, 0.5, 0.11), { x: 0.14, y: 0.24, rx: 0.28 });
-  eyes(P, { y: 1.02, x: 0.09, z: -0.3, r: 0.7, mat: e.eyeMat });
+  e.penLegs = [
+    P('penLeg', slab(0.1, 0.5, 0.11), { x: -0.14, y: 0.24, rx: 0.28 }),
+    P('penLeg', slab(0.1, 0.5, 0.11), { x: 0.14, y: 0.24, rx: 0.28 }),
+  ];
+  eyes(U, { y: 1.02, x: 0.09, z: -0.3, r: 0.7, mat: e.eyeMat });
 }
 
 // The tallest thin thing in the theme: a curate is a lantern on a pole that
@@ -545,7 +659,9 @@ export function buildCurate(e, g, s) {
 // lantern rides the yoke's crown. Read: it is carrying a threshold, and there
 // is a grave under it.
 export function buildPallbearer(e, g, s) {
-  const P = partsFor(e, g, s);
+  e.palRig = new THREE.Group();
+  g.add(e.palRig);
+  const P = partsFor(e, e.palRig, s);
   // THE YOKE. Two uprights at the shoulders and a spanner over the head -
   // the arch at its plainest, and the outline's whole width, in the stone
   // that keeps its colour under a tint.
@@ -556,12 +672,17 @@ export function buildPallbearer(e, g, s) {
   e.palLamp = P('palLamp', lump(0.14), {
     y: 1.6, z: 0.0, mat: SHARED_MATS.cathGilt, shadow: false,
   });
-  // THE COFFIN, slung under the yoke between the uprights. Two lids that
-  // part as the bar falls - the bank made visible, so the player can see the
-  // grave opening before they finish the job.
-  e.palLidL = P('palLidL', slab(0.3, 0.1, 0.9), { x: -0.17, y: 0.92, rz: 0.5 });
-  e.palLidR = P('palLidR', slab(0.3, 0.1, 0.9), { x: 0.17, y: 0.92, rz: -0.5 });
-  P('palBody', slab(0.34, 0.5, 0.8), { y: 0.9, rx: 0.06 });
+  // THE COFFIN IS HINGED AS ONE OBJECT. It rises upright through the tell,
+  // stays between the carrier and the player through the charge, and slams
+  // flat at ground level on impact. Separate static lids could never make
+  // those states legible at combat distance.
+  e.palCoffin = new THREE.Group();
+  e.palCoffin.position.y = 0.9 * s;
+  e.palRig.add(e.palCoffin);
+  const C = partsFor(e, e.palCoffin, s);
+  C('palLidL', slab(0.3, 0.1, 0.9), { x: -0.17, rz: 0.5 });
+  C('palLidR', slab(0.3, 0.1, 0.9), { x: 0.17, rz: -0.5 });
+  C('palBody', slab(0.34, 0.5, 0.8), { rx: 0.06 });
   // A low hooded head under the yoke's front edge.
   P('palHead', spike(0.14, 0.34, 5), { y: 1.2, z: -0.3, rx: -0.4 });
   // Four thick legs, planted - the brute posture, carrying weight.
@@ -954,26 +1075,20 @@ const TYPES = {
   // an arch, a grave, a beam.
   //
   // SO IT IS THE THEME WHERE LOOKING AWAY IS THE MISTAKE. A penitent you
-  // stop watching rises. A pallbearer you whittle down is becoming a corpse
-  // with your own shots banked in it. A sacristan you leave alive is
-  // charging you by the kill.
+  // stop watching rises. A pallbearer you do not sidestep brings its coffin
+  // down on you. A sacristan you leave alive is charging you by the kill.
 
-  // THE KNEEL AND THE RISE. Untouchable while it kneels, and the kneel is
-  // the tell: it crosses itself, drops its hood, and the next thing that
-  // happens is a hard hit at wherever it was kneeling. Free to ignore while
-  // it walks, dangerous to shoot at while it is down - the whole enemy is
-  // the decision about which of those two you are doing.
+  // THE KNEEL AND THE RISE. It visibly folds down and takes 30% less damage
+  // while it kneels; the next thing that happens is a hard hit at wherever
+  // it was praying. Shots still work throughout, while the posture makes the
+  // defensive window and the coming rise unmistakable.
   penitent: {
     head: { r: 0.3, y: 1.18 },
     hp: 38, speed: 3.2, damage: 10, value: 210, color: 0x7a6f4d, eye: 0xe8d9a8,
     scale: 1.0, radius: 0.48, mass: 1,
     melee: { windup: 0.4, start: 1.4, hit: 2.0, cd: 1.0 },
-    // NOTHING GETS THROUGH THE KNEEL. The hood comes down and the body is
-    // not there - a hard zero, the pale crown's contract, and for the same
-    // reason: a kneel that leaked would make shooting the penance the
-    // correct play and the rise a decoration.
-    armor: (e) => (e.pState === 'kneel' ? 0 : 1),
-    armorDefault: (e) => (e.pState === 'kneel' ? 0 : 1),
+    armor: (e) => (e.pState === 'kneel' ? PEN_KNEEL_ARMOR : 1),
+    armorDefault: (e) => (e.pState === 'kneel' ? PEN_KNEEL_ARMOR : 1),
     build: buildPenitent, ai: aiPenitent,
   },
 
@@ -997,55 +1112,16 @@ const TYPES = {
     build: buildCurate, ai: aiCurate,
   },
 
-  // THE OPEN GRAVE. A brute that swallows most of every round that lands on
-  // it while it walks, COUNTS them, and pays the whole count out at once when
-  // it dies - in one hard hit on the spot and a ring of consecrated ground
-  // over the corpse. Least dangerous at full health and most dangerous at a
-  // sliver, which reverses the usual shape of finishing a brute: the bait is
-  // a body that barely seems to take damage, and the bill is wherever the
-  // player chose to stand while shooting it.
+  // THE BURDEN CHARGE. Fully vulnerable in every state. It plants its feet,
+  // hoists the coffin into a shield-sized silhouette and paints the committed
+  // lane before rushing down it. The coffin hits the floor at the end, then
+  // stays there through a long recovery: sidestep, turn, punish.
   pallbearer: {
     head: { r: 0.32, y: 1.2 },
     hp: 150, speed: 1.5, damage: 16, value: 310, color: 0x6d6444, eye: 0xe8d9a8,
     scale: 1.4, radius: 0.62, mass: 2,
     melee: { windup: 0.8, start: 2.9, hit: 3.5, cd: 2.4 },
-    // THE BANK. The grave swallows most of every round that lands and keeps
-    // the count; the walking body takes a sliver. Directionless sources -
-    // a burn, a poison tick, a blast - fall to armorDefault and are NOT
-    // counted, the plate's rule: what seeps into a body is not a round the
-    // grave was ever given, and it keeps the patient builds the patient
-    // answer to a walking coffin.
-    armor: (e) => {
-      e.palDebt = (e.palDebt || 0) + 1;
-      return 1 - PALL_BANK;
-    },
-    armorDefault: 1,
-    onDeath: (e, ctx) => {
-      // THE GRAVE OPENS where the pallbearer stood: the debt paid out in one
-      // piece, and the ground consecrated for a few seconds after. A
-      // pallbearer finished at arm's length is the most expensive thing in
-      // the theme.
-      const rounds = e.palDebt || 0;
-      const bite = Math.min(PALL_GRAVE_CAP, rounds * PALL_DEBT_PER_ROUND * e.damage);
-      const p = ctx.player;
-      if (p && bite > 0) {
-        const d = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
-        if (d < PALL_GRAVE_R) {
-          // Falloff by how close they were to the grave, the mortar's shape:
-          // standing on the corpse pays the whole bill, the edge of the ring
-          // pays most of it, and two steps out pays nothing at all.
-          ctx.onHitPlayer(bite * (1 - d / PALL_GRAVE_R), e.pos, e);
-        }
-      }
-      ctx.addHazard(e.pos.x, e.pos.z, PALL_GRAVE_R, PALL_GRAVE_LIFE, PALL_GRAVE_DPS, 'hallow');
-      if (ctx.effects) {
-        _cathAt.set(e.pos.x, 0.9, e.pos.z);
-        ctx.effects.shockwave(_cathAt, 0xc0a860, PALL_GRAVE_R, 0.45);
-        ctx.effects.burst(_cathAt, 0xe8d9a8, 26, 5, 2.2, 0.8);
-      }
-      if (ctx.sfx) ctx.sfx.impact();
-    },
-    build: buildPallbearer, ai: aiPallbearer,
+    build: buildPallbearer, ai: aiPallbearer, cleanup: releasePallbearer,
   },
 
   // THE WALKING VEIL. It pours incense onto the floor along its whole walk,

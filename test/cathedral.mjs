@@ -4,15 +4,12 @@
 //   CATHEDRAL is the theme where LOOKING AWAY IS THE MISTAKE. Everything in
 //   it is a threshold, and every mechanic here is one crossing:
 //
-//     penitent    untouchable while it kneels - and the kneel is the tell
-//                 for a hard hit at wherever it is. Free to ignore while
-//                 it walks, dangerous to shoot at while it is down
+//     penitent    visibly folds into a kneel and takes 30% less damage there;
+//                 the kneel is still the tell for the hard hit on the rise
 //     curate      its round walks THROUGH cover. The answer is movement,
 //                 never geometry - the one gunner a pillar cannot answer
-//     pallbearer  the open grave: every round that lands on the walking
-//                 body is swallowed and COUNTED, and the grave pays the
-//                 whole count out at once where the player chose to finish
-//                 it. Least dangerous at full health, most at a sliver
+//     pallbearer  fully vulnerable; it hoists the coffin, marks a fixed lane,
+//                 charges down it and slams, then leaves a punish window
 //     thurible    walks a veil of incense that costs no health and takes
 //                 SIGHT - the ink's mechanic, walked rather than thrown
 //     sacristan   every enemy that dies near it TOLLS, and the toll chills
@@ -26,9 +23,8 @@
 //   suites use: the thing with the mechanic against the thing without it.
 //   A penitent is measured kneeling against standing; a curate's round is
 //   measured with a wall between it and the player and a shooter's round
-//   in the same place; a pallbearer's blow is measured at the grave and
-//   two steps off it; a vigil's lance is measured on the beam against off
-//   it.
+//   in the same place; a pallbearer's committed slam is measured on its lane
+//   and after a sidestep; a vigil's lance is measured on the beam against off it.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8247;
@@ -168,31 +164,32 @@ try {
       clean();
     }
 
-    // ---- 2. a penitent is untouchable while it kneels -------------------
+    // ---- 2. a penitent visibly kneels and reduces damage ----------------
     // THE BOTH-WAYS TEST. The same blow against the same penitent, kneeling
-    // and standing - what is measured is the health that came off. A kneel
-    // that leaked a little would make shooting the penance the correct play
-    // and the rise a decoration, which is the one thing the enemy exists
-    // to prevent.
+    // and standing - what is measured is the health that came off. The pose
+    // is asserted with it: changing an armour number while the hat blinks out
+    // would pass the arithmetic and preserve the bug this test exists for.
     {
       clean();
       const e = put('penitent', 6, 0);
       e.speed = 0;
       e.pState = 'kneel';
       e.pT = 10;          // held in the kneel past any rise
-      e.pKneel = true;
       px = 0;
       pz = 0;
-      await steps(4);
+      await simSteps(0.3);
+      res.penUpperDrop = +(-e.penUpper.position.y / e.scale).toFixed(2);
+      res.penLegFold = +(e.penLegs[0].rotation.x - 0.28).toFixed(2);
+      res.penHoodVisible = e.penHood.visible;
       const hp0 = e.hp;
-      e.takeDamage(30, false, 0, 1);
+      e.takeDamage(10, false, 0, 1);
       res.penKneelBlow = +(hp0 - e.hp).toFixed(2);
       // ...and standing, the same blow. The difference between the two is
       // the kneel and nothing else.
       e.pState = 'walk';
       e.pT = 10;
       const hp1 = e.hp;
-      e.takeDamage(30, false, 0, 1);
+      e.takeDamage(10, false, 0, 1);
       res.penStandBlow = +(hp1 - e.hp).toFixed(2);
       clean();
     }
@@ -286,11 +283,10 @@ try {
       clean();
     }
 
-    // ---- 5. the pallbearer's grave ---------------------------------------
-    // TWO ASSERTIONS IN ONE. The walking body swallows most of a round and
-    // counts it (the blow measured against a chaser's, both with direction)
-    // and the grave pays the count out at once - the player standing on the
-    // corpse pays the whole bill, and one two steps off pays nothing.
+    // ---- 5. the pallbearer's burden charge -------------------------------
+    // Fully vulnerable, with a committed line and a whole-model tell. Run the
+    // same attack twice: stay on the announced lane, then step sideways as
+    // soon as the coffin rises.
     {
       clean();
       const e = put('pallbearer', 8, 0);
@@ -299,65 +295,82 @@ try {
       pz = 0;
       await simSteps(0.4);
       e.speed = 0;
-      // THE SWALLOW. The same directional blow, against the pallbearer and
-      // against a clean brute of another theme.
+      // No hidden armour remains: a directional hit and a directionless hit
+      // both land at full value.
       const hp0 = e.hp;
       e.takeDamage(40, false, 0, 1);
-      res.pallSwallow = +(hp0 - e.hp).toFixed(2);
-      const tank = put('tank', -8, 0);
-      tank.speed = 0;
-      const t0 = tank.hp;
-      tank.takeDamage(40, false, 0, 1);
-      res.pallClean = +(t0 - tank.hp).toFixed(2);
-      // ...and the count is on the model, so the lids know it.
-      res.palCount = e.palDebt || 0;
-      // THE GRAVE. The pallbearer dies at arm's length and the bill arrives;
-      // then the same death two steps out, which has to cost nothing at all.
-      // Fresh bodies for each, so the count is the same in both.
-      const graveAt = async (dist) => {
+      res.pallDirected = +(hp0 - e.hp).toFixed(2);
+      const hp1 = e.hp;
+      e.takeDamage(20, true);
+      res.pallDot = +(hp1 - e.hp).toFixed(2);
+
+      const burden = async (sidestep) => {
         clean();
-        const q = put('pallbearer', dist, 0);
-        q.speed = 0;
+        // This assertion is about staying on or stepping off the committed
+        // lane. A procedural pillar in that lane correctly makes the charge
+        // slam early, but would turn the test into a roll of the room seed.
+        const heldObstacles = g.arena.obstacles.splice(0);
+        const q = put('pallbearer', 7, 0);
         px = 0;
         pz = 0;
-        await simSteps(0.4);
-        q.speed = 0;
-        // Two rounds into the walking body, so the grave has a count.
-        q.takeDamage(10, false, 0, 1);
-        q.takeDamage(10, false, 0, 1);
+        await steps(2);
+        q.palCd = 0;
         god = false;
         p.health = p.maxHealth;
         p.invulnEnd = -1;
         const h0 = p.health;
-        q.takeDamage(q.hp + 1, true);
-        await steps(20);
+        let sawTell = false;
+        let sawCharge = false;
+        let sawRecover = false;
+        let sawLane = false;
+        let lift = 0;
+        let floor = 99;
+        const until = g.time + 7;
+        while (g.time < until && !sawRecover) {
+          await step();
+          if (q.palState === 'tell') {
+            sawTell = true;
+            sawLane ||= q.palMark >= 0;
+            if (sidestep) pz = 6;
+          }
+          if (q.palState === 'charge') sawCharge = true;
+          if (q.palState === 'recover') {
+            sawRecover = true;
+            // One more frame lets the impact pose put the coffin on the floor.
+            await step();
+          }
+          lift = Math.max(lift, -q.palCoffin.rotation.x);
+          floor = Math.min(floor, q.palCoffin.position.y / q.scale);
+        }
         const lost = +(h0 - p.health).toFixed(2);
         god = true;
         p.health = p.maxHealth;
-        return lost;
+        g.arena.obstacles.push(...heldObstacles);
+        return {
+          lost, sawTell, sawCharge, sawRecover, sawLane,
+          lift: +lift.toFixed(2), floor: +floor.toFixed(2),
+          markReleased: q.palMark === -1,
+        };
       };
-      res.pallNearGrave = await graveAt(1.5);
-      res.pallFarGrave = await graveAt(9);
-      // ...and the consecrated ring it leaves behind is hallow, and it burns.
+      res.pallOnLane = await burden(false);
+      res.pallOffLane = await burden(true);
+
+      // Death is only death now: no banked retaliation and no consecrated
+      // patch appearing after the body has already been beaten.
       clean();
-      const h = put('pallbearer', 1.5, 0);
-      h.speed = 0;
+      const h = put('pallbearer', 1, 0);
       px = 0;
       pz = 0;
-      await simSteps(0.4);
-      h.takeDamage(10, false, 0, 1);
+      await steps(2);
+      god = false;
+      p.health = p.maxHealth;
+      p.invulnEnd = -1;
+      const deathHp = p.health;
       h.takeDamage(h.hp + 1, true);
-      await steps(12);
-      res.palHallow = g._hazard.some((x) => x.kind === 'hallow');
-      if (res.palHallow) {
-        const patch = g._hazard.find((x) => x.kind === 'hallow');
-        px = patch.x;
-        pz = patch.z;
-        res.palHallowCost = await measure(40, () => {});
-        // ...and once it has expired the same ground is free again.
-        await simSteps(patch.life + 1);
-        res.palHallowAfter = await measure(30, () => {});
-      }
+      await steps(10);
+      res.pallDeathCost = +(deathHp - p.health).toFixed(2);
+      res.pallDeathHallow = g._hazard.some((x) => x.kind === 'hallow');
+      god = true;
       clean();
     }
 
@@ -559,10 +572,13 @@ try {
     out.allBuilt && out.subjectsAlive === out.subjectsMade,
     `${out.subjectsAlive}/${out.subjectsMade} alive  ` + JSON.stringify(out.builtDetail));
 
-  ok('a penitent takes NOTHING while it kneels',
-    out.penKneelBlow === 0, `blow=${out.penKneelBlow} of 30`);
-  ok('and the same blow lands when it is standing',
-    out.penStandBlow > 0, `blow=${out.penStandBlow} of 30`);
+  ok('a penitent visibly lowers its whole body into the kneel',
+    out.penUpperDrop > 0.3 && out.penLegFold > 0.7 && out.penHoodVisible,
+    `drop=${out.penUpperDrop} fold=${out.penLegFold} hood=${out.penHoodVisible}`);
+  ok('a penitent takes 30% less damage while it kneels',
+    out.penKneelBlow === 7, `blow=${out.penKneelBlow} of 10`);
+  ok('and the same blow lands in full when it is standing',
+    out.penStandBlow === 10, `blow=${out.penStandBlow} of 10`);
   ok('a penitent kneels at the player and rises into a stroke',
     out.penKnelt && out.penRose, `knelt=${out.penKnelt} rose=${out.penRose}`);
   ok('and the stroke costs whoever is in reach of it',
@@ -573,19 +589,23 @@ try {
   ok('and a curate round walks THROUGH it',
     out.covCurateCost > 0, `lost=${out.covCurateCost}`);
 
-  ok('a pallbearer swallows most of what lands on it',
-    out.pallSwallow < out.pallClean * 0.5,
-    `swallowed=${out.pallSwallow} clean=${out.pallClean} of 40`);
-  ok('and counts every round it swallowed', out.palCount > 0, `count=${out.palCount}`);
-  ok('the grave pays the count out where the player stands',
-    out.pallNearGrave > 0, `lost=${out.pallNearGrave}`);
-  ok('and two steps off the grave costs nothing',
-    out.pallFarGrave === 0, `lost=${out.pallFarGrave}`);
-  ok('the grave leaves consecrated ground', out.palHallow);
-  ok('and the consecration burns whoever stands on it',
-    out.palHallowCost > 0, `lost=${out.palHallowCost}`);
-  ok('and the ground is free again once it has expired',
-    out.palHallowAfter === 0, `lost=${out.palHallowAfter}`);
+  ok('a pallbearer is fully vulnerable to direct and directionless damage',
+    out.pallDirected === 40 && out.pallDot === 20,
+    `direct=${out.pallDirected} dot=${out.pallDot}`);
+  ok('the pallbearer shows its tell, lane, charge and recovery',
+    out.pallOnLane.sawTell && out.pallOnLane.sawLane &&
+      out.pallOnLane.sawCharge && out.pallOnLane.sawRecover && out.pallOnLane.markReleased,
+    JSON.stringify(out.pallOnLane));
+  ok('and the coffin visibly rises before slamming to the floor',
+    out.pallOnLane.lift > 1 && out.pallOnLane.floor < 0.55,
+    `lift=${out.pallOnLane.lift} floor=${out.pallOnLane.floor}`);
+  ok('staying on the committed lane costs health',
+    out.pallOnLane.lost > 0, `lost=${out.pallOnLane.lost}`);
+  ok('and stepping sideways during the tell avoids the slam',
+    out.pallOffLane.lost === 0, `lost=${out.pallOffLane.lost}`);
+  ok('killing a pallbearer causes no retaliation or hallow patch',
+    out.pallDeathCost === 0 && !out.pallDeathHallow,
+    `lost=${out.pallDeathCost} hallow=${out.pallDeathHallow}`);
 
   ok('a thurible lays a veil of incense', out.thurVeil);
   ok('and the veil hangs a cloud, which is the whole mechanic', out.thurCloud);

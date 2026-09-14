@@ -663,14 +663,12 @@ const MAX_GLARE = 20;
 // the ground beneath it marked, low enough that one theme's corpses cannot
 // evict another theme's pools out of the shared thirty creep slots.
 const MAX_HIVEBLOOD = 12;
-// CATHEDRAL's hallow - consecrated ground, the rings a Reliquary lays and the
-// grave a pallbearer opens. Its own kind and not `hiveblood` for the eviction
-// argument that separates every other kind: a pallbearer's grave and a boss
-// ring are CIRCLES of patches, and sharing a queue with the ticks' corpses
-// would have each of them deleting the other's whole mechanic. The cap sits
-// with the honey's - two sources feed it, and each patch is short-lived so
-// the consecration is ground that is sanctified THIS MINUTE rather than a
-// permanent condition on the room.
+// CATHEDRAL's hallow - consecrated ground, laid in rings by the Reliquary.
+// Its own kind and not `hiveblood` for the eviction argument that separates
+// every other kind: boss rings are CIRCLES of patches, and sharing a queue
+// with the ticks' corpses would let another theme delete the boss's floor
+// mechanic. Each patch is short-lived, so the consecration is ground that is
+// sanctified THIS MINUTE rather than a permanent condition on the room.
 const MAX_HALLOW = 14;
 // CATHEDRAL's incense - a thurible's veil. Fewer and bigger than the bile:
 // each one is a curtain of sight rather than a splatter, and a floor full of

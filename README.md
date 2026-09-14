@@ -495,19 +495,17 @@ context. The start screen says so, and one click anywhere fixes it.
    firing a single lance along the arc - one long readable line from the sky,
    answered by stepping off the arc it is drawing). **CATHEDRAL**, the theme
    of THE SANCTUARY AND THE TOLL - nearly everything in it is harmless while
-   you are watching and worse the moment you look away: **Penitents** (kneel,
-   and are UNTOUCHABLE while they do - the kneel is the tell for a hard hit at
-   wherever they are, so they are free to ignore while they walk and a waste
-   of ammunition to shoot at while they are down; kill them on the rise or
-   leave them, those are the two answers), **Curates** (fire SLOW rounds that
+   you are watching and worse the moment you look away: **Penitents** (fold
+   their whole body into a visible kneel, taking 30% less damage while they do;
+   the kneel is the tell for a hard hit on the rise, but shots still work in
+   every state), **Curates** (fire SLOW rounds that
    pass straight through cover - the only gunner in the game a pillar cannot
    answer, and the tell is the lantern they carry dimming as the charge
-   builds), **Pallbearers** (carry their own grave: every round that lands on
-   the walking body is swallowed and COUNTED, and on death the grave opens
-   and pays the whole count out at once, on the spot, with a ring of
-   consecrated ground over the corpse - the brute that is least dangerous at
-   full health and most dangerous at a sliver, so where you finish one is the
-   decision), **Thuribles** (walk a veil of incense across the floor that
+   builds), **Pallbearers** (turn their coffin into a battering ram: they plant,
+   hoist it upright and paint the lane they have committed to before charging
+   down it and slamming the burden into the floor; sidestep the fixed line and
+   punish the long recovery, and every shot against them lands in full),
+   **Thuribles** (walk a veil of incense across the floor that
    costs no health at all and takes your SIGHT - the drifter's ink, walked
    rather than thrown, so the answer is noticing which way it is walking),
    **Sacristans** (no attack; while one lives, every enemy that dies near it
@@ -2482,11 +2480,11 @@ test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
                     line AND nothing off it, and the Broodmother eating her
                     own brood to panic
 test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
-                    the assertions are about thresholds: the penitent taking
-                    NOTHING while it kneels AND the same blow landing when it
-                    stands, the curate's round passing through cover where a
-                    shooter's breaks, the pallbearer's grave paying out on
-                    the spot AND nothing two steps off, the veil of incense
+                    the assertions are about thresholds: the penitent visibly
+                    kneeling and taking 30% less damage there, the curate's
+                    round passing through cover where a shooter's breaks, the
+                    pallbearer's fixed charge lane hitting straight ahead AND
+                    missing after a sidestep, the veil of incense
                     costing no health at all, the toll chilling for a death
                     inside the ring AND not outside it, the vigil's lance
                     costing on the locked beam AND nothing off it, and the
