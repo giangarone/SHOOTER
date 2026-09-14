@@ -30,7 +30,7 @@
 //   the arc against off it.
 import { launchBrowser, startServer } from './harness.mjs';
 
-const PORT = 8246;
+const PORT = 8251;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
