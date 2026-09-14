@@ -47,7 +47,7 @@ http
       // cannot enumerate a directory themselves. The manifest pairs each
       // filename with an opaque module token: item names such as `magpie`
       // otherwise trip URL-based content blockers before our code can load.
-      const itemManifest = /^\/__item_manifest__\/(passive|active)$/.exec(p);
+      const itemManifest = /^\/__item_manifest__\/(passive|active)\.json$/.exec(p);
       if (itemManifest) {
         const definitions = await itemDefinitions(itemManifest[1]);
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });

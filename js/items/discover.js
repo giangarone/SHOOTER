@@ -18,7 +18,11 @@ export async function discoverItems(kind, catalogueUrl) {
       .sort();
     moduleUrls = files.map((file) => new URL(`./definitions/${file}`, catalogueUrl).href);
   } else {
-    const response = await fetch(`/__item_manifest__/${kind}`);
+    // Three levels above either catalogue is the application root. Building
+    // from import.meta.url keeps this valid both at localhost / and at a
+    // project Pages URL such as /SHOOTER/.
+    const appRoot = new URL('../../../', catalogueUrl);
+    const response = await fetch(new URL(`__item_manifest__/${kind}.json`, appRoot));
     if (!response.ok) throw new Error(`could not load ${kind} item manifest`);
     const manifest = await response.json();
     if (!Array.isArray(manifest) || manifest.some((entry) =>
@@ -28,7 +32,8 @@ export async function discoverItems(kind, catalogueUrl) {
       throw new Error(`invalid ${kind} item manifest`);
     }
     files = manifest.map(({ file }) => file);
-    moduleUrls = manifest.map(({ token }) => `/js/items/${kind}/modules/${token}.js`);
+    moduleUrls = manifest.map(({ token }) =>
+      new URL(`js/items/${kind}/modules/${token}.js`, appRoot).href);
   }
 
   const modules = await Promise.all(moduleUrls.map((url) => import(url)));

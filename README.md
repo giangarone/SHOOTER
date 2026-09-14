@@ -796,10 +796,12 @@ the controls throughout.
 
 Passive items live one per file in `js/items/passive/definitions/`; the
 directory-driven catalogue is exposed by `js/items/passive/index.js`. There is
-no hand-edited registry or import list. The browser gets a sorted filename
-manifest from `server.js`, while Node discovers the same directory directly,
-so two worktrees adding different items add different files and merge without
-meeting in a shared catalogue.
+no hand-edited registry or import list. The local server discovers that
+directory at runtime; the GitHub Pages workflow generates the same manifest
+and opaque module paths in its deployment artifact. Node discovers the source
+directory directly. Two worktrees adding different items therefore add
+different files and merge without meeting in a shared catalogue or generated
+deployment file.
 
 Each passive item is a pure function of its stack count, and the whole owned list is replayed from scratch onto a fresh stat
 block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
@@ -2405,6 +2407,7 @@ js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
 js/items/active/index.js       active catalogue and timed-item runtime
 js/items/active/definitions/   one file per active item
+tools/build-pages.mjs          generates the static Pages artifact and item manifests
 js/mysterybox.js               the box that offers active items
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey

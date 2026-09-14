@@ -2,6 +2,7 @@
 .venv-beat/
 node_modules/
 server.log
+.pages/
 
 
 # smoke test screenshot artifact

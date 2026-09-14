@@ -1,17 +1,47 @@
 // Worktree-safe item checks. New item mechanics get one fragment under
 // test/items/{passive,active}/<id>.mjs; this suite discovers every fragment so
 // adding one never edits a shared test registry or package script.
-import { readdir } from 'node:fs/promises';
+import http from 'node:http';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchBrowser, ROOT, startServer } from './harness.mjs';
+import { buildPages } from '../tools/build-pages.mjs';
 
 const PORT = 8249;
+const PAGES_PORT = 8250;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
+function startPagesServer(root) {
+  const types = {
+    '.css': 'text/css; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json',
+    '.m4a': 'audio/mp4',
+    '.ttf': 'font/ttf',
+  };
+  return http.createServer(async (req, res) => {
+    try {
+      const pathname = new URL(req.url, 'http://local').pathname;
+      if (!pathname.startsWith('/SHOOTER/')) throw new Error('outside mount');
+      const relative = decodeURIComponent(pathname.slice('/SHOOTER/'.length)) || 'index.html';
+      const file = path.resolve(root, relative);
+      if (!file.startsWith(root + path.sep)) throw new Error('outside root');
+      const data = await readFile(file);
+      res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream' });
+      res.end(data);
+    } catch {
+      res.writeHead(404);
+      res.end('not found');
+    }
+  }).listen(PAGES_PORT);
+}
+
 let browser;
+let pagesServer;
 let fails = 0;
 const check = (name, condition, extra = '') => {
   console.log((condition ? '  ok   ' : '  FAIL ') + name + (extra ? '  ' + extra : ''));
@@ -70,8 +100,46 @@ try {
   }
 
   check('no console errors', errors.length === 0, errors.join(' | '));
+
+  const built = await buildPages();
+  pagesServer = startPagesServer(built.output);
+  await sleep(300);
+  const pagesPage = await browser.newPage();
+  const pagesErrors = [];
+  const pagesNamedRequests = [];
+  const pagesOpaqueRequests = [];
+  pagesPage.on('console', (message) => {
+    if (message.type() === 'error') pagesErrors.push(message.text());
+  });
+  pagesPage.on('pageerror', (error) => pagesErrors.push('PAGEERROR: ' + error.message));
+  pagesPage.on('request', (request) => {
+    const url = request.url();
+    if (/\/js\/items\/(passive|active)\/definitions\//.test(url)) pagesNamedRequests.push(url);
+    if (/\/js\/items\/(passive|active)\/modules\/[a-f0-9]{64}\.js$/.test(url)) {
+      pagesOpaqueRequests.push(url);
+    }
+  });
+  await pagesPage.goto(`http://127.0.0.1:${PAGES_PORT}/SHOOTER/?autotest`, {
+    waitUntil: 'load', timeout: 30000,
+  });
+  await sleep(1500);
+  const pagesCatalogue = await pagesPage.evaluate(() => ({
+    passive: Object.keys(window.__game.__passiveItemsForTest),
+    active: Object.keys(window.__game.__activeItemsForTest),
+  }));
+  check('the generated GitHub Pages site boots below a project path',
+    pagesCatalogue.passive.length === catalogue.passive.length
+      && pagesCatalogue.active.length === catalogue.active.length,
+    `${pagesCatalogue.passive.length} passive / ${pagesCatalogue.active.length} active`);
+  check('the Pages artifact uses only opaque item module URLs',
+    pagesNamedRequests.length === 0
+      && pagesOpaqueRequests.length === pagesCatalogue.passive.length + pagesCatalogue.active.length,
+    `${pagesNamedRequests.length} named / ${pagesOpaqueRequests.length} opaque`);
+  check('the generated Pages site has no console errors',
+    pagesErrors.length === 0, pagesErrors.join(' | '));
 } finally {
   if (browser) await browser.close();
+  if (pagesServer) pagesServer.close();
   server.kill();
 }
 
