@@ -2810,7 +2810,7 @@ def _(c):
     c.disc(19.0, 12.0, 2.4, E)
 
 
-@icon('healthyCore')        # regen 1 HP/s always; nothing else may heal
+@icon('healthyCore')        # regen 1 HP/s in combat; nothing else may heal
 def _(c):
     # A CROSS SEALED INSIDE A SHELL. The ring is unbroken all the way round,
     # which is the drawback drawn: this is the only way in, and there is no

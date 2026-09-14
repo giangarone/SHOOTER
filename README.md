@@ -1116,7 +1116,7 @@ LODESTONE and AUTO-LOOT never see.
 | IRON LUNG | Immune to every status effect, -30% healing |
 | LIFELINE | At 25 HP or below, regenerate 5 HP/s |
 | BONE MARROW | +100 max health, -50% healing |
-| HEALTHY CORE | Regenerate 1 HP/s always, and nothing else may heal you at all |
+| HEALTHY CORE | Regenerate 1 HP/s during combat, and nothing else may heal you at all |
 | EMERGENCY RATIONS | Every wave starts at exactly 50 HP. +50% healing |
 | FINAL DOSE | Reloading with exactly 1 round left heals 5 HP |
 | AIM OR BLEED | Hits heal 1 HP, misses cost 1 HP, never below 1 |
@@ -1393,7 +1393,7 @@ CELL is the CEILING; a run holding both banks two charges and fills them faster.
 | Passive Item | Effect |
 | --- | --- |
 | UPDRAFT | Hold jump to fly upward. It spends stamina |
-| JACKPOT | Every ground jump has a 1% chance of full health and a full reserve |
+| JACKPOT | During combat, every ground jump has a 1% chance of full health and a full reserve |
 | SCORCHED EARTH | Sliding leaves a trail of fire that burns enemies |
 | QUORUM | Every 10 kills summons a free sentry turret for 10s |
 
@@ -1441,10 +1441,12 @@ slab looking down through it.
 JACKPOT is the ground jump only. That branch is held-key - bunny-hopping down a
 corridor is movement the game already had - where the air jump is edge-triggered
 off a charge, and rolling on both would hand a DOUBLE JUMP build twice a plain
-one's odds for a reason nowhere on the card. The **sound is the whole tell**: a
-1% roll on a verb pressed a hundred times a wave lands while the player is aimed
-somewhere else, so `SFX.jackpot` is a rising major arpeggio built to interrupt -
-a machine counting out what it owes, which is what a jackpot is.
+one's odds for a reason nowhere on the card. It is gated to active-wave combat,
+so hopping in the safe shop cannot guarantee a refill before the next wave. The
+**sound is the whole tell**: a 1% roll on a verb pressed a hundred times a wave
+lands while the player is aimed somewhere else, so `SFX.jackpot` is a rising
+major arpeggio built to interrupt - a machine counting out what it owes, which
+is what a jackpot is.
 
 SCORCHED EARTH lays HELLFIRE's own patches off the slide instead of off the
 reload: one list, one cap, because they are the same object and a slide through

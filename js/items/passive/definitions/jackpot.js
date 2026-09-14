@@ -9,13 +9,19 @@ import { definePassiveItem } from '../shared.js';
 // THE GROUND JUMP ONLY. The air jump is edge-triggered off a charge and a
 // held key bunny-hops down a corridor at four hops a second; rolling on both
 // would make a DOUBLE JUMP build's odds twice a plain one's for no reason
-// anybody could read off the card.
+// anybody could read off the card. Active-wave combat only, because those same
+// free hops would otherwise turn a safe shop into a guaranteed refill station.
 export const id = 'jackpot';
 
 export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'JACKPOT',
     max: 1,
     theme: THEME.jackpot,
-    effects: [['EACH GROUND JUMP:', NOTE], ['1% CHANCE OF FULL', GOOD], ['HP & AMMO', NOTE]],
+    effects: [
+      ['EACH GROUND JUMP:', NOTE],
+      ['1% CHANCE OF FULL', GOOD],
+      ['HP & AMMO', NOTE],
+      ['IN COMBAT ONLY', NOTE],
+    ],
     apply: (mods, n) => { mods.jackpot = 0.01 * n; },
 }));

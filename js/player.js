@@ -282,7 +282,7 @@ const DEFAULT_MODS = {
   healBlock: 0,         // Healthy Core: nothing but coreRegen may heal at all
   lifelineAt: 0,        // Lifeline: the HP at or below which it regenerates
   lifelineRate: 0,
-  coreRegen: 0,         // Healthy Core: HP per second, always, combat or not
+  coreRegen: 0,         // Healthy Core: HP per second while combat is active
   rations: 0,           // Emergency Rations: the HP every wave opens on
   finalDose: 0,         // Final Dose: HP healed by reloading on one round
   aimHeal: 0,           // Aim or Bleed: HP per shot that connected
@@ -2787,8 +2787,10 @@ export class Player {
     }
     // HEALTHY CORE. Written straight into `health` rather than through heal(),
     // because heal() is the thing this pick switches OFF - see healBlock. It is
-    // the one heal in the game that is not a heal.
-    if (this.mods.coreRegen > 0 && this.health < this.maxHealth) {
+    // the one heal in the game that is not a heal. Combat gates it on the same
+    // terms as NANOWEAVE and AMMO FABRICATOR: a shop has no clock, so a trickle
+    // allowed there would make waiting for a full bar the correct move.
+    if (combat && this.mods.coreRegen > 0 && this.health < this.maxHealth) {
       this.health = Math.min(this.maxHealth, this.health + this.mods.coreRegen * dt);
     }
     // LIFELINE. Not gated on combat, unlike every other regeneration in the
@@ -3125,14 +3127,13 @@ export class Player {
       // branch is held-key (bunny-hopping down a corridor is movement the game
       // already had), the air jump is edge-triggered off a charge, and rolling
       // on both would hand a DOUBLE JUMP build twice a plain one's odds for a
-      // reason nowhere on the card. Four hops a second at 1% is still a thing
-      // that HAPPENS twice a run rather than a thing that is farmed, because
-      // what it pays out is a full bar and a full reserve - and a player who is
-      // already full has won nothing.
+      // reason nowhere on the card. Combat is the same gate the clock-driven
+      // refills use: without it, the safe shop turns four hops a second at 1%
+      // into a guaranteed full bar and reserve before every wave.
       //
       // One-shot flag, like jumpFx beside it: player.js has no sound and no
       // banner, and main.js clears it on the frame it reads it.
-      if (this.mods.jackpot > 0 && Math.random() < this.mods.jackpot) {
+      if (combat && this.mods.jackpot > 0 && Math.random() < this.mods.jackpot) {
         this.health = this.maxHealth;
         this.reserveAmmo = this.maxReserve;
         this.jackpotFx = true;
