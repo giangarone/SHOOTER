@@ -815,7 +815,9 @@ context. The start screen says so, and one click anywhere fixes it.
   between sessions.
 - The arena is an enclosed venue: a closed ceiling 16 units up, a truss rig
   hung under it, speaker stacks and truss towers where the crates and pillars used
-  to be.
+  to be, and a laser bank built from projectors mounted low on the perimeter
+  walls, firing UP so the fans rake the ceiling and the upper walls - the
+  centre floor stays clear, because that is where the fight is played.
 - **The lights run off the music.** An analyser reads the soundtrack's bass and
   the rig flashes on the actual kick - not on a timer. It is tapped upstream of
   both the mute and the muffle, so the room keeps dancing to the track even with
@@ -2474,7 +2476,8 @@ js/sfx.js           WebAudio synth sounds
 js/music.js         streaming soundtrack, lowpass, playback clock, beat
 js/beatmap.js       the pre-analysed beat grid and its lookup
 js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
-js/lasers.js        the laser bank: four fan projectors raking across the room
+js/lasers.js        the laser bank: six wall-mounted fan projectors raking the
+                    ceiling
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
 js/themes.js        the fifteen themes, their six enemies each, and the run's deck
@@ -2509,6 +2512,8 @@ test/active.mjs     the active item slot, its row, and the eleven that came in
 test/themes.mjs     the theme table and the balance law: every role filled, no
                     type in two themes, and every stat block inside the
                     envelope its role has to share across every theme
+test/lasers.mjs     the laser bank's placement law: it rakes the ceiling, and
+                    no ray descends onto the floor the fight is played on
 test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     bellows lighting the crowd, the ashwing's line, and the
                     Forge-Tyrant heating up and venting
