@@ -109,6 +109,10 @@ export const SPLITTER_BODY = 0xd6329a;
 export const SPLITTER_EYE = 0xffb0e8;
 
 export const SHARED_MATS = {
+  // Cream bands and peppermint trim preserve CANDY through status tints.
+  candyCream: new THREE.MeshStandardMaterial({ color: 0xffedcf, roughness: 0.25, metalness: 0.05 }),
+  candyMint: new THREE.MeshStandardMaterial({ color: 0x8cffe0, emissive: 0x43bfa1,
+    emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.05 }),
   // Wet peat and marsh lights remain recognisable beneath a status tint.
   swampPeat: new THREE.MeshStandardMaterial({ color: 0x39442b, roughness: 0.65, metalness: 0.1 }),
   swampAmber: new THREE.MeshStandardMaterial({ color: 0xffdc83, emissive: 0xd6aa40,

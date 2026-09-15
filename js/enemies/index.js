@@ -14,6 +14,7 @@
 export * from './shared.js';
 export * from './bone.js';
 export * from './brine.js';
+export * from './candy.js';
 export * from './cathedral.js';
 export * from './ember.js';
 export * from './hive.js';

@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Ninety-six enemies, in sixteen themes of six** - one per role per theme, and every one of them built:
+- **One hundred and two enemies, in seventeen themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -618,6 +618,28 @@ context. The start screen says so, and one click anywhere fixes it.
   and stalking pauses shorten; warnings and recovery stay full length.
   Rushes stop at cover and their speed is capped so later waves cannot outrun
   the warning. The bog's open side and the fan's gaps remain escape routes.
+- **CANDY: glossy sweets, cream stripes and peppermint light.**
+  **Taffies** plant their feet and stretch an arm along a marked strip; step
+  sideways, then punish the recoil. **Bonbons** unwrap a slow, shootable sweet
+  that can rebound once from an arena wall. Crates still stop it.
+  **Jawbreakers** permanently lose shell layers at two-thirds and one-third
+  health, trading resistance for faster melee recovery. Their wind-up stays
+  unchanged. **Poprocks** burst twice: a small first pop, then a larger blast
+  0.85 seconds later. The outer circle warns the full reach from the start.
+  **Sugarspinners** advance up to three nearby allies' attack cooldowns by
+  0.18 seconds on each musical half-beat. They need line of sight, cannot
+  boost bosses or one another, cannot stack on the same beat, and never
+  shorten a wind-up. **Cottonkites** fly a committed pass and drop a warned
+  sweet where the pass ends, then retreat while it counts down.
+  **THE CONFECTIONER** is a tiered cake golem with peppermint hands, an icing
+  crown and a hidden sugar heart. Crossing taffy strips ask for a diagonal
+  escape; its radial candy carousel leaves a quarter-turn safe sector; its
+  poprock clusters ask you to stay clear through both bursts. Each attack
+  ends in a 1.6-second heart window: the icing shutters part and full damage
+  gets through. At two-thirds and one-third health its shoulders crumble,
+  resistance falls, pauses shorten and the ranged patterns grow. Telegraphs
+  and heart windows retain their full duration. Killing a caster cancels
+  its unspent floor sweets and returns their warning handles.
 - **Every enemy is its own silhouette.** Types used to share one capsule body
   and differ only by colour, which falls apart exactly when it matters - a
   frozen or poisoned enemy is wearing the status tint, not its own colour. Each
@@ -642,9 +664,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the sixteen themes owns a boss, and the block a theme lands in is where its
+  of the seventeen themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All sixteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All seventeen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -2486,6 +2508,7 @@ js/enemies/         the enemy roster, one file per theme
                     and material caches, the faceted primitives, the status
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
   index.js          imports the themes, which is what registers them
+  candy.js          CANDY models, sweets, support pulses and the Confectioner
   rust.js  void.js  ember.js  rime.js  verdant.js
   strata.js  swamp.js  tempest.js  brine.js  plague.js  solar.js  hive.js
   cathedral.js  bone.js  obsidian.js  sapphire.js
@@ -2500,7 +2523,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the sixteen themes, their six enemies each, and the run's deck
+js/themes.js        the seventeen themes, their six enemies each, and the run's deck
 js/items/discover.js           shared browser/Node directory discovery
 js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
@@ -2538,6 +2561,7 @@ test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
                     the hoarfrost's field, and the Pale Crown's anchors
+test/candy.mjs      CANDY counterplay, musical support, shell loss and candy cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/verdant.mjs    VERDANT end to end - the thornling's committed charge, the
                     seed that is safe until it is not, the thorn band outside
