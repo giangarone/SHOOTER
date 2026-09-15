@@ -50,7 +50,9 @@
     "test:obsidian": "node test/obsidian.mjs",
     "test:candy": "node test/candy.mjs",
     "test:swamp": "node test/swamp.mjs",
-    "test:sapphire": "node test/sapphire.mjs"
+    "test:sapphire": "node test/sapphire.mjs",
+    "test:coral": "node test/coral.mjs",
+    "test:jungle": "node test/jungle.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

@@ -109,6 +109,12 @@ export const SPLITTER_BODY = 0xd6329a;
 export const SPLITTER_EYE = 0xffb0e8;
 
 export const SHARED_MATS = {
+  coralIvory: new THREE.MeshStandardMaterial({ color: 0xf6d3b9, roughness: 0.8, metalness: 0.05 }),
+  coralPolyp: new THREE.MeshStandardMaterial({ color: 0x79eee0, emissive: 0x36b8b0,
+    emissiveIntensity: 1.1, roughness: 0.3, metalness: 0.05 }),
+  jungleBark: new THREE.MeshStandardMaterial({ color: 0x583c29, roughness: 0.95, metalness: 0 }),
+  junglePollen: new THREE.MeshStandardMaterial({ color: 0xffc45c, emissive: 0xc98622,
+    emissiveIntensity: 1.1, roughness: 0.5, metalness: 0 }),
   // Cream bands and peppermint trim preserve CANDY through status tints.
   candyCream: new THREE.MeshStandardMaterial({ color: 0xffedcf, roughness: 0.25, metalness: 0.05 }),
   candyMint: new THREE.MeshStandardMaterial({ color: 0x8cffe0, emissive: 0x43bfa1,
@@ -779,3 +785,54 @@ export const _blinkAt = new THREE.Vector3();
 // The far end of the beam a wraith draws behind an arrival. Held separately
 // from _blinkAt because both ends of the line are needed at once.
 export const _blinkFrom = new THREE.Vector3();
+
+// CORAL and JUNGLE own their ground attacks until impact. Acquiring once at
+// creation (including failed slots) prevents a newly freed slot from turning
+// an unseen warning into a hit. Death, reset and natural expiry share cleanup.
+export function releasePattern(e) {
+  if (e.groundPattern) for (const p of e.groundPattern) e.patternFx.markRelease(p.mark);
+  e.groundPattern = null;
+}
+export function beginPattern(e, a, points, color) {
+  releasePattern(e);
+  e.patternFx = a.ctx.effects;
+  e.patternColor = color;
+  e.patternTime = 0;
+  e.groundPattern = points.map((p) => ({ ...p, mark: e.patternFx.markAcquire() }));
+}
+const patternAt = new THREE.Vector3();
+export function tickPattern(e, a) {
+  if (!e.groundPattern) return true;
+  e.patternTime += a.dt;
+  for (let i = e.groundPattern.length - 1; i >= 0; i--) {
+    const p = e.groundPattern[i];
+    e.patternFx.markSet(p.mark, p.x, p.z, p.radius, e.patternColor,
+      Math.min(1, e.patternTime / p.delay));
+    if (e.patternTime < p.delay) continue;
+    e.patternFx.markRelease(p.mark);
+    e.groundPattern.splice(i, 1);
+    if (p.mark < 0) continue;
+    patternAt.set(p.x, p.y ?? 0, p.z);
+    e.patternFx.shockwave(patternAt, e.patternColor, p.radius, 0.4);
+    e.patternFx.burst(patternAt, e.patternColor, 12, 4, 2, 0.5);
+    const target = a.ctx.player.pos, d = Math.hypot(target.x - p.x, target.z - p.z);
+    if (d < p.radius && Math.abs(target.y - (p.y ?? 0)) < 1.5 &&
+      !segBlocked(p.x, (p.y ?? 0) + 0.5, p.z, target.x, target.y + 0.8, target.z, a.ctx.obstacles)) {
+      a.ctx.onHitPlayer(p.damage * (1 - 0.35 * d / p.radius), patternAt, e);
+    }
+  }
+  if (e.groundPattern.length) return false;
+  releasePattern(e); return true;
+}
+// addProjectile aims at the live player; offset it back to the bearing that
+// was shown at wind-up, so a sidestep cannot drag a warned salvo onto itself.
+export function capturedShot(e, a, heading, spread = 0, height = 1) {
+  const live = Math.atan2(a.ctx.player.pos.z - e.pos.z, a.ctx.player.pos.x - e.pos.x);
+  a.ctx.addProjectile(e.pos.x, e.pos.y + height, e.pos.z, e.type,
+    e._projScale(), heading + spread - live);
+}
+export function contactReach(e, a, radius) {
+  return a.dist < radius && Math.abs(a.ctx.player.pos.y - e.pos.y) < (e.boss ? 3.6 : 1.4) &&
+    !segBlocked(e.pos.x, e.pos.y + 0.5, e.pos.z, a.ctx.player.pos.x,
+      a.ctx.player.pos.y + 0.8, a.ctx.player.pos.z, a.ctx.obstacles);
+}

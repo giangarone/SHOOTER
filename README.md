@@ -618,6 +618,54 @@ context. The start screen says so, and one click anywhere fixes it.
   and stalking pauses shorten; warnings and recovery stay full length.
   Rushes stop at cover and their speed is capped so later waves cannot outrun
   the warning. The bog's open side and the fan's gaps remain escape routes.
+- **CORAL: rose limestone, ivory branches and turquoise polyps.**
+  **Razorfins** scuttle toward you, then cut twice along two fixed floor circles;
+  cross the blades rather than backing through the second cut. **Needlepolyps**
+  unfold a five-needle fan that closes onto a captured bearing in three volleys.
+  **Clamguards** brace behind their shells, snap at the centre, then throw an
+  outer crown of fragments: the centre becomes safe after the first hit, and
+  the raised shell exposes the pearl during recovery. **Bloomcorals** erupt at
+  your old position before three petals burst around it. **Pearlnurses** channel
+  for one second to heal the most injured nearby ally by 12% of its maximum
+  health, capped at 18; breaking range or line of sight, or killing the nurse,
+  interrupts the channel. Bosses and other nurses cannot receive it.
+  **Reefrays** glide sideways over a fixed, staggered trail of three ground
+  impacts; turquoise-tipped reef branches and broad triangular fins identify
+  them overhead.
+  **THE REEF EMPRESS** is a giant reef crab with ivory pincers, a branching
+  antler crown and a shuttered turquoise pearl. Its four attacks are paired
+  pincer impacts followed by a delayed centre snap, two advancing reef rows,
+  three shifting pearl fans, and a crown of polyps with a wide open exit.
+  Each attack ends with 1.8 seconds of exposed pearl: the valves separate and
+  its 35% damage resistance drops. Below half health, pearl fans grow from
+  five to seven shots, the crown gains two polyps, and stalking pauses shorten.
+  Warning and recovery times remain unchanged, and the crown's exit stays open.
+- **JUNGLE: buttress roots, jade canopies and golden pollen.**
+  **Vinecats** prowl sideways before a straight, marked pounce that stops at
+  cover; sidestep the lane, then punish their recovery. **Quillmonkeys** plant
+  for a three-quill burst on a captured bearing, then bound sideways.
+  **Rootgorillas** raise their bark arms and brace before three root impacts
+  advance along a fixed line. **Seedpods** split a central seed into two
+  delayed diagonal impacts, leaving the old centre safe after it bursts.
+  **Orchidkeepers** channel pollen for 0.9 seconds, advancing one nearby ally's
+  attack cooldown by 1.5 seconds, then rest for five seconds. This does not
+  shorten attack warnings or recovery states; bosses and other orchids are
+  excluded, and cover, range or death can interrupt the channel.
+  **Sunfeathers** climb for a broad feather fan, then descend for a separately
+  warned single dart before climbing through recovery.
+  **THE CANOPY TITAN** carries three leaf crowns, hanging golden fruit and
+  trailing vines over a massive bark gorilla. Branching root waves leave a
+  central passage; a marked stampede commits to a straight lane; three seed
+  fans sweep across a captured bearing; and a canopy crash hits the old centre
+  before fruit falls around it. Every attack exposes its heartwood for 1.9
+  seconds, opening the bark valves and removing 35% damage resistance.
+  Below half health it spends less time stalking, fires seven seeds per fan
+  instead of five, and drops six outer fruit instead of four. Its warnings
+  stay full length. Stampede speed and damage are capped even in later waves,
+  and both cover and slows still work.
+  Both themes' ground patterns are shown in their own accent colour. Their
+  owned warnings are returned on death or reset; an attack that could not
+  acquire its warning skips that impact instead of dealing an invisible hit.
 - **CANDY: glossy sweets, cream stripes and peppermint light.**
   **Taffies** plant their feet and stretch an arm along a marked strip; step
   sideways, then punish the recoil. **Bonbons** unwrap a slow, shootable sweet
@@ -2510,7 +2558,7 @@ js/enemies/         the enemy roster, one file per theme
   index.js          imports the themes, which is what registers them
   candy.js          CANDY models, sweets, support pulses and the Confectioner
   rust.js  void.js  ember.js  rime.js  verdant.js
-  strata.js  swamp.js  tempest.js  brine.js  plague.js  solar.js  hive.js
+  strata.js  swamp.js  coral.js  jungle.js  tempest.js  brine.js  plague.js  solar.js  hive.js
   cathedral.js  bone.js  obsidian.js  sapphire.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
@@ -2563,6 +2611,8 @@ test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     the hoarfrost's field, and the Pale Crown's anchors
 test/candy.mjs      CANDY counterplay, musical support, shell loss and candy cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
+test/coral.mjs      CORAL captured patterns, healing, boss openings and warning ownership
+test/jungle.mjs     JUNGLE ambushes, pollen, boss attacks and warning ownership
 test/verdant.mjs    VERDANT end to end - the thornling's committed charge, the
                     seed that is safe until it is not, the thorn band outside
                     the swing, the heartwood's mending, and the Overgrowth's

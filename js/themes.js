@@ -308,6 +308,30 @@ export const THEMES = {
       flier: 'comet',
     },
   },
+  coral: {
+    name: 'CORAL', color: 0xf07891, boss: 'reefempress',
+    roles: {
+      rusher: 'razorfin',
+      gunner: 'needlepolyp',
+      brute: 'clamguard',
+      artillery: 'bloomcoral',
+      support: 'pearlnurse',
+      flier: 'reefray',
+    },
+  },
+
+  jungle: {
+    name: 'JUNGLE', color: 0x427c39, boss: 'canopytitan',
+    roles: {
+      rusher: 'vinecat',
+      gunner: 'quillmonkey',
+      brute: 'rootgorilla',
+      artillery: 'seedpod',
+      support: 'orchidkeeper',
+      flier: 'sunfeather',
+    },
+  },
+
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
