@@ -212,6 +212,21 @@ export const SHARED_MATS = {
   shrikeEdge: new THREE.MeshStandardMaterial({
     color: 0x9aa8c4, roughness: 0.2, metalness: 0.9,
   }),
+  // ---- SAPPHIRE -------------------------------------------------------------
+  // The family's one body material and one lit accent, the tank's contract:
+  // a dark blue-grey stone every body in the theme is cut from, and a
+  // blue-white light in the seam each was parted along. The accent keeps its
+  // own colour while the body under it is tinted by a status - so a frozen
+  // dart is still recognisably holding its note - and nothing in the theme
+  // may glow cyan, which is TEMPEST's and SOLAR's fliers' colour and would
+  // read as the wrong family from across the arena.
+  sapphireStone: new THREE.MeshStandardMaterial({
+    color: 0x3d5a6e, roughness: 0.35, metalness: 0.55,
+  }),
+  sapphireSeam: new THREE.MeshStandardMaterial({
+    color: 0x9ee8ff, emissive: 0x5bd0ff, emissiveIntensity: 1.3,
+    roughness: 0.25, metalness: 0.6, transparent: true, opacity: 0.9,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 

@@ -663,6 +663,12 @@ const MAX_GLARE = 20;
 // the ground beneath it marked, low enough that one theme's corpses cannot
 // evict another theme's pools out of the shared thirty creep slots.
 const MAX_HIVEBLOOD = 12;
+// SAPPHIRE's crystal. The lapidary's seeds and the Carillon's tolls, and the
+// one ground in the game that GROWS after it lands - the spread is the theme,
+// so the cap has to leave room for a lapidary's seeds and a boss's rings to
+// share the queue without one evicting the other's whole mechanic. Ten is two
+// seeds' worth in flight plus a ring, the scald's argument at a slower pace.
+const MAX_CRYSTAL = 10;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -725,6 +731,13 @@ const CREEP_GLARE = 0xffe08a;
 // has to tell burning honey from a lens's line in the half-second they have
 // to step off one of them.
 const CREEP_HIVEBLOOD = 0xffb300;
+// SAPPHIRE's crystal. No status, so it wears the theme's own blue rather than
+// a status colour - the shock's rule, for the shock's reason: the patch and
+// any HUD chip have nothing to agree about, so the colour says WHOSE ground it
+// is instead. Paler than the well's indigo and bluer than the frost's ice, so
+// the player can tell spreading glass from either in the half-second they have
+// to step off one of them.
+const CREEP_CRYSTAL = 0x5bd0ff;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -877,6 +890,21 @@ const HAZARD_KINDS = {
   // move somebody in the second they are deciding whether to bother.
   hiveblood: {
     color: CREEP_HIVEBLOOD, cap: MAX_HIVEBLOOD,
+  },
+  // SAPPHIRE's crystal, and the only ground in the game that GROWS. `spread`
+  // is how much past its LANDING size the patch reaches, as a fraction of its
+  // final radius, over `spreadSecs`: 0.76 means it lands at a little over half
+  // its final size and its edge walks out to the rest. Driven by
+  // _updateHazard, and the mortar or ring that placed it always drew the
+  // FINAL circle - so the ground being asked about was always the ground the
+  // patch is becoming, and the growth is the warning the player was already
+  // given, arriving. A FRACTION rather than metres deliberately: the
+  // lapidary's seeds and the Carillon's tolls share this kind at very
+  // different sizes, and an absolute spread would take a toll's small patch
+  // past zero.
+  crystal: {
+    color: CREEP_CRYSTAL, cap: MAX_CRYSTAL,
+    spread: 0.76, spreadSecs: 2.0,
   },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
@@ -1456,7 +1484,12 @@ class Game {
       applyPlayerStatus: this._onPlayerStatus,
       addHazard: (x, z, radius, life, dps, kind) =>
         this._addHazard(x, z, radius, life, dps, kind),
-      addMortar: (x, z, radius, delay, damage) => this._addMortar(x, z, radius, delay, damage),
+      // The `ground` payload is SAPPHIRE's lapidary seed: a delayed impact
+      // that leaves a patch behind, so the mortar telegraph doubles as the
+      // patch's own warning circle. Forwarded rather than re-implemented for
+      // the same reason every hook here is one line.
+      addMortar: (x, z, radius, delay, damage, ground) =>
+        this._addMortar(x, z, radius, delay, damage, ground),
       // Colossus throwing one of its turrets. It is a real enemy, spawned
       // mid-air with its flight already set - see _spawnTurret.
       addTurret: (fx, fy, fz, tx, tz) => this._spawnTurret(fx, fy, fz, tx, tz),
@@ -10200,7 +10233,19 @@ class Game {
       const fade = Math.min(1, h.life);
       const dx = this.player.pos.x - h.x;
       const dz = this.player.pos.z - h.z;
-      this.effects.creepSet(h.creep, h.x, h.z, h.radius, k.color, fade);
+      // THE ONE GROUND THAT GROWS. A spreading patch starts at a fraction of
+      // its final size and its radius walks out to the rest - the circle the
+      // mortar or ring drew - over the first spreadSecs of its life, eased so
+      // the edge reads as creeping rather than popping. The DAMAGE test below
+      // reads this same number, not h.radius: a patch that hurt at full
+      // extent while drawing small would be the game lying about where is
+      // safe, which is the one thing ground in this game may never do.
+      let radius = h.radius;
+      if (k.spread) {
+        const age = Math.min(1, Math.max(0, (h.maxLife - h.life) / k.spreadSecs));
+        radius = h.radius * (1 - k.spread * (1 - age * age));
+      }
+      this.effects.creepSet(h.creep, h.x, h.z, radius, k.color, fade);
       // The cloud rides the same fade as the stain under it, so the air
       // clearing and the floor clearing are one event. The player's distance
       // goes with it: a cloud thins out as it is walked into, or the inside of
@@ -10225,7 +10270,9 @@ class Game {
         this._pullPlayer(-dx, -dz, k.pull * fade);
       }
       const immune = k.poisonous && this.player.mods.poisonImmune > 0;
-      if (!immune && dx * dx + dz * dz < h.radius * h.radius && this.player.pos.y < 0.8) {
+      // `radius`, not h.radius: for the one kind that grows, the danger is
+      // where the drawing has reached - see the spread block above.
+      if (!immune && dx * dx + dz * dz < radius * radius && this.player.pos.y < 0.8) {
         // WHAT THE GROUND PUTS ON YOU. Lava sets you alight, gas poisons you,
         // frost chills you - and all three keep working after you leave, which
         // is the entire reason they are statuses and not just a damage tick.
@@ -10339,10 +10386,15 @@ class Game {
   // A telegraphed impact: a circle on the floor that fills, then detonates.
   // Not a projectile - it never touches the projectile pool - and it holds a
   // telegraph handle for its whole life, released when it goes off.
-  _addMortar(x, z, radius, delay, damage) {
+  _addMortar(x, z, radius, delay, damage, ground = null) {
     if (this._mortars.length >= MAX_MORTARS) return;
     this._mortars.push({
       x, z, radius, delay, damage, t: 0, mark: this.effects.markAcquire(),
+      // What the impact LEAVES, when the thrower named any - a SAPPHIRE seed
+      // is a delayed hit that lands as ground, so the ring it fills is the
+      // ground it is about to become. Null for every other mortar in the
+      // game, which stay pure delayed hits.
+      ground,
     });
   }
 
@@ -10367,6 +10419,17 @@ class Game {
       this.effects.shockwave(this._ashAt, 0xff5533, m.radius, 0.35);
       this.effects.burst(this._ashAt, 0xff7043, 20, 6, 2.5, 0.6);
       this.effects.addShake(0.14);
+      // AND WHAT IT LEAVES. A mortar that names ground lays it as it goes off,
+      // inside the ring it has been filling - so a SAPPHIRE seed's warning
+      // circle is the patch it becomes, drawn at the patch's FINAL size: the
+      // ground the player is being asked about is the ground it will reach,
+      // and the spread does the rest. The shockwave above stays red for every
+      // mortar; the ground's own splash is drawn in its own colour by
+      // _addHazard, which is the honest readout of whose floor it became.
+      if (m.ground) {
+        this._addHazard(m.x, m.z, m.ground.radius, m.ground.life,
+          m.ground.dps, m.ground.kind);
+      }
     }
   }
 

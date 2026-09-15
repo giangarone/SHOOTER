@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Sixty-six enemy types, in eleven themes of six** - one per role per theme, and every one of them built:
+- **Seventy-eight enemy types, in twelve themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -493,7 +493,36 @@ context. The start screen says so, and one click anywhere fixes it.
   and **Weepers** (the high line: they hold a wide orbit, drift down, and
   sweep a slow amber sightline across the floor for over a second before
   firing a single lance along the arc - one long readable line from the sky,
-  answered by stepping off the arc it is drawing). **BRINE** the deep - **Howlers** (a scream that takes your
+  answered by stepping off the arc it is drawing). **SAPPHIRE**, the theme of
+  ACCRUING RESONANCE - every other theme buys its pressure with something
+  that is spent, and this one spends NOTHING: its mechanic is the CLOCK, and
+  every enemy in it is quiet when it arrives and worse for every second it
+  is allowed to keep existing, so the question it asks is not what to kill
+  but HOW LONG HAS THAT BEEN ALLOWED TO RING: **Darts** (a rusher that runs
+  FASTER EVERY BEAT it survives, stepping its pace on the music's own
+  half-beat - a dart killed on sight is the cheapest thing in the theme and
+  a dart that reaches you at full ring is a rusher with a brute's pace, and
+  the only thing that made it slow was time you spent on something else),
+  **Facets** (fire a fan that is one round WIDER EVERY VOLLEY - the first
+  shot is a single dart to step off, the fifth is a wall with a gap in it
+  somewhere), **Cairns** (a brute that GROWS A SHELL out of the damage it
+  has already been hit with, each landed blow settling as permanent plate -
+  the cairn you broke on sight is a soft target and the cairn you ignored
+  for ten seconds is a wall, and burn and venom read it bare because the
+  shell is made of blows), **Lapidaries** (the only artillery in the game
+  whose patch ARRIVES SMALL AND GROWS: the seed lands under a circle drawn
+  at the patch's FINAL radius, and the crystal then spreads outward to it
+  for two more seconds - so the ground to give up is not the circle you
+  were shown arriving, it is the one you were shown full), **Attuners** (no
+  attack; they tune the wave to their own pitch - everything inside the
+  ring they draw on the floor moves faster, a stack at a time, capped - and
+  the stacks come OFF when the attuner dies, which is the third support in
+  the game and the one whose whole argument is the theme's: the wave is
+  ringing and this is what is ringing it) and **Comets** (a flier whose
+  PASSES QUICKEN - the shrike's circle-tell-dive-climb loop, but every dive
+  it lands makes the next faster and the wait for it shorter, so the second
+  half of its life is a much busier enemy than the first, and the climb after
+  every pass is the shot and it never gets shorter). **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -527,9 +556,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the eleven themes owns a boss, and the block a theme lands in is where its
+  of the twelve themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All eleven exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All twelve exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -589,7 +618,19 @@ context. The start screen says so, and one click anywhere fixes it.
   quarter of the bar she EATS her own brood for a burst of speed - the only
   enrage in the game that costs the boss something the player can watch it
   pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. Regular enemies keep
+  but the speed. **THE CARILLON**, SAPPHIRE's, is a tower of bells that
+  compounds every clock its own theme taught the player at once: the PEAL is
+  a spoke volley that starts with gaps to walk through and is one round wider
+  every time it fires, on a cooldown that shortens as the bar falls; the TOLL
+  lays a gapped ring of crystal where it stands, and the ring SPREADS
+  outward after it lands, so the room the fight started in is a different
+  room by the end of it; and the SWAY walks the whole tower in a slow arc
+  around the player, so the tolls ring from different bearings and the glass
+  is laid along a path the player can read and route around rather than in
+  one spot they have to give up. Under a third of the bar the RISING takes
+  the caps off - the peal comes faster and wider, the tolls double up, and
+  the fight's last movement is its loudest, which is the whole theme's
+  argument arrived at by the boss. Regular enemies keep
   arriving throughout; killing the boss ends the wave and pays out. It does NOT
   refill your health or ammo - the payout is large and the stations are right
   there, so coming out of a boss in trouble is a real state to be in and what
@@ -2291,7 +2332,7 @@ js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         the Enemy class, the four projectile kinds, the damage sinks
-js/enemies/         the sixty-six types, one file per theme
+js/enemies/         the seventy-eight types, one file per theme
   shared.js         what more than one theme (or the class) needs: the geometry
                     and material caches, the faceted primitives, the status
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
@@ -2309,7 +2350,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the eleven themes, their six enemies each, and the run's deck
+js/themes.js        the twelve themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -2384,6 +2425,15 @@ test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
                     after the nurse is dead, the weeper's arc costing on the
                     line AND nothing off it, and the Broodmother eating her
                     own brood to panic
+test/sapphire.mjs   SAPPHIRE end to end - the theme of accruing resonance, so
+                    every assertion is a PAIR: the dart's pace ringing up on
+                    the beat AND capped, the facet's fan one round AND then
+                    wider every volley, the cairn's shell settling blows AND
+                    reading burn bare, the lapidary's crystal small on
+                    landing AND grown two seconds later, the attuner stacking
+                    the wave AND un-stacking it on death, the comet landing a
+                    pass AND quickening, and the Carillon ringing all three
+                    of its clocks at once
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

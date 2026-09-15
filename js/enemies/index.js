@@ -18,6 +18,7 @@ export * from './hive.js';
 export * from './plague.js';
 export * from './rime.js';
 export * from './rust.js';
+export * from './sapphire.js';
 export * from './solar.js';
 export * from './strata.js';
 export * from './tempest.js';
