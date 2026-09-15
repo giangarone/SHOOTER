@@ -38,10 +38,10 @@ function ok(label, cond, detail = '') {
 const lasers = new Lasers(new THREE.Object3D(), new THREE.BoxGeometry(1, 1, 1));
 const banks = lasers.banks;
 
-// Force every pair lit the way the choreography would: playing from bar 0,
-// sustained, master's hand off the dimmer. bar() is the same gate the music
-// drives through.
-for (const b of banks) { b.playing = true; b.entry = 0; }
+// Force every pair lit the way the choreography would: playing every bar of
+// the phrase, sustained, master's hand off the dimmer. bar() is the same
+// gate the music drives through.
+for (const b of banks) { b.playing = true; b.mask = 0xF; }
 lasers.bar(0);
 
 const camPos = new THREE.Vector3(0, 1, 0);
@@ -184,6 +184,131 @@ for (let s = 0; s < SPREADS.length; s++) {
 }
 ok('every ray crosses the centre above boss height', worstCentreY > BOSS_HEIGHT,
   `lowest crossing at y=${worstCentreY.toFixed(2)} over r=${CENTRE_R}, bosses ${BOSS_HEIGHT}`);
+
+// ---- 4. every move obeys the placement law while it runs -------------------
+//
+// Sections 2 and 3 prove the law across the whole (roll, spread) space under
+// the bank's default SWEEP. The moves a phrase can cast produce their own
+// motion through that space - a blooming fan snaps to it, a rushing one
+// crosses it fast, and COUNTER and WEAVE roll each half of a pair somewhere
+// the other half never goes. No move may touch the aim or open past
+// SPREAD_MAX (the clamp in update() is what guarantees the second),
+// and this section is the executable proof: every move is driven through
+// sixteen simulated bars-by-beats-on-frames and every frame's rays are held
+// to the law. Violations are COUNTED, not minimised: a NaN slips through a
+// Math.min and fails a comparison.
+const ALL_MOVES = [0, 1, 2, 3, 4, 5, 6, 7];
+let moveViol = 0;
+let moveRays = 0;
+for (const mv of ALL_MOVES) {
+  // Cast the way phrase() casts: the pattern lives on the bank-of-banks and
+  // _castMove hands each playing pair its share of it. Half the rehearsals
+  // ripple, so the per-ray shimmer path is written too.
+  lasers._move = mv;
+  lasers._pulsing = false;
+  lasers._ripple = (mv & 1) === 1;
+  lasers._pendAmp = 0.8;
+  lasers._pendRate = 1.7;
+  for (let i = 0; i < banks.length; i++) {
+    const b = banks[i];
+    b.playing = true;
+    b.mask = 0xF;
+    b.barsOn = 0;
+    b.t = 0;
+    b.on = false;
+    lasers._castMove(b, i);
+  }
+  for (let barI = 0; barI < 4; barI++) {
+    lasers.bar(barI);
+    for (let beatI = 0; beatI < 4; beatI++) {
+      lasers.beat();
+      // 24 frames of 1/60s: about a beat's worth at the track's 145 BPM.
+      for (let f = 0; f < 24; f++) {
+        lasers.update(1 / 60, camPos, colour, 1, 1);
+        for (const b of banks) {
+          const pos = b._rayPos;
+          for (let q = 0; q < pos.length / 12; q++) {
+            const o = q * 12;
+            const ax = (pos[o] + pos[o + 3]) / 2;
+            const ay = (pos[o + 1] + pos[o + 4]) / 2;
+            const az = (pos[o + 2] + pos[o + 5]) / 2;
+            const bx = (pos[o + 6] + pos[o + 9]) / 2;
+            const by = (pos[o + 7] + pos[o + 10]) / 2;
+            const bz = (pos[o + 8] + pos[o + 11]) / 2;
+            moveRays++;
+            const dx = bx - ax, dz = bz - az;
+            const pitch = Math.asin((by - ay) / Math.hypot(dx, by - ay, dz));
+            if (!(pitch > 0.26)) moveViol++;
+            if (!(by >= mountMinY - 1e-6)) moveViol++;
+            if (Math.abs(bx) > BOUND + 1e-6 || Math.abs(bz) > BOUND + 1e-6
+              || by > CEIL_Y + 1e-6 || by < -1e-6) moveViol++;
+          }
+        }
+      }
+    }
+  }
+}
+ok('every move keeps every ray climbing and in the room, every frame',
+  moveViol === 0 && moveRays > 10000,
+  `${moveViol} violations over ${moveRays} rays across ${ALL_MOVES.length} moves x 16 bars`);
+
+// ---- 5. the formations' promises -------------------------------------------
+//
+// Run the phrase and bar gates the way the rig drives them, over hundreds of
+// cast phrases, and hold the promises the bank makes regardless of what
+// formation or moves were drawn:
+//
+//   - the CLOSE of a phrase is always lit while any pair still has light to
+//     give (every formation's masks cover bar 3, and a pair that entered
+//     late is a legitimate gap earlier in the phrase - those bars may be
+//     dark by design). A fully dark phrase is allowed exactly when every
+//     pair entered it spent: that is the bank catching its breath, and is
+//     what a unison is meant to be followed by;
+//   - no pair burns indefinitely: the sit-out rule bounds a run to one full
+//     phrase, and being dragged back in by the never-dark fallback can add
+//     one more - two phrases is the ceiling;
+//   - and the sit-out rule is actually firing: over this many phrases at
+//     least one pair must be spent at some boundary, or the cap is dead
+//     code wearing a comment.
+let barThreeDark = 0;
+let maxStreak = 0;
+let spentSeen = 0;
+let mixedPhrases = 0;
+const streak = banks.map(() => 0);
+for (let trial = 0; trial < 400; trial++) {
+  lasers.phrase();
+  const allSpent = banks.every((b) => b.spent);
+  if (banks.some((b) => b.spent)) spentSeen++;
+  // One pattern per phrase: every playing pair shares the move and the
+  // brightness behaviour. The formations vary WHEN pairs light; what they
+  // DO when lit is the phrase's single cast.
+  const playing = banks.filter((b) => b.playing);
+  if (playing.some((b) => b.move !== playing[0].move || b.pulsing !== playing[0].pulsing)) {
+    mixedPhrases++;
+  }
+  for (let barI = 0; barI < 4; barI++) {
+    lasers.bar(barI);
+    let any = false;
+    for (let i = 0; i < banks.length; i++) {
+      if (banks[i].on) {
+        any = true;
+        streak[i]++;
+        if (streak[i] > maxStreak) maxStreak = streak[i];
+      } else {
+        streak[i] = 0;
+      }
+    }
+    if (barI === 3 && !any && !allSpent) barThreeDark++;
+  }
+}
+ok('the close of a phrase is lit while any pair has light to give',
+  barThreeDark === 0, `${barThreeDark} dark closes over 400 phrases`);
+ok('no pair burns longer than two phrases', maxStreak <= 8,
+  `longest continuous run ${maxStreak} bars`);
+ok('the sit-out rule fires', spentSeen > 0,
+  `phrases containing a spent pair: ${spentSeen}`);
+ok('every phrase plays a single pattern', mixedPhrases === 0,
+  `${mixedPhrases} phrases had pairs on different casts`);
 
 console.log(fails ? '\nLASERS TEST FAIL' : '\nLASERS TEST PASS');
 process.exit(fails ? 1 : 0);

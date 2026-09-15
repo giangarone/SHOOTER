@@ -910,7 +910,17 @@ context. The start screen says so, and one click anywhere fixes it.
   hung under it, speaker stacks and truss towers where the crates and pillars used
   to be, and a laser bank built from projectors mounted low on the perimeter
   walls, firing UP so the fans rake the ceiling and the upper walls - the
-  centre floor stays clear, because that is where the fight is played.
+  centre floor stays clear, because that is where the fight is played. The
+  bank runs its own choreography: each phrase draws ONE move for the whole
+  bank (a slow sweep, a searchlight's pendulum, a fan that breathes open and
+  shut on the bars, one that blooms wide on the kick, one that spins up into
+  a rush, and three that split a mirrored pair on purpose - the two fans
+  rolling against each other, running half a ray-step apart so their lines
+  interleave, or trading the room bar by bar) and the three pairs share the
+  phrase's bars through a FORMATION - roaming on their own schedules, chasing
+  the room bar by bar, stacking in one per bar, answering even bars with odd
+  ones, and, rarely, burning all together in unison (which is always followed
+  by a dark phrase: the bank catching its breath).
 - **The lights run off the music.** An analyser reads the soundtrack's bass and
   the rig flashes on the actual kick - not on a timer. It is tapped upstream of
   both the mute and the muffle, so the room keeps dancing to the track even with
@@ -2571,7 +2581,8 @@ js/music.js         streaming soundtrack, lowpass, playback clock, beat
 js/beatmap.js       the pre-analysed beat grid and its lookup
 js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: six wall-mounted fan projectors raking the
-                    ceiling
+                    ceiling, and the choreography they do it with - the moves
+                    and formations cast per phrase
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
 js/themes.js        the seventeen themes, their six enemies each, and the run's deck
@@ -2607,7 +2618,11 @@ test/themes.mjs     the theme table and the balance law: every role filled, no
                     type in two themes, and every stat block inside the
                     envelope its role has to share across every theme
 test/lasers.mjs     the laser bank's placement law: it rakes the ceiling, and
-                    no ray descends onto the floor the fight is played on
+                    no ray descends onto the floor the fight is played on -
+                    held over every move the choreography can draw, plus the
+                    formations' promises: a phrase's close is always lit, no
+                    pair burns for more than two phrases, and every phrase
+                    plays a single pattern
 test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     bellows lighting the crowd, the ashwing's line, and the
                     Forge-Tyrant heating up and venting

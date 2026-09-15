@@ -9,10 +9,13 @@
 //
 // THE DIVISION OF LABOUR: the beams own the BEAT, and most of the lasers own
 // the MOVEMENT. A fan comes on, stays on for its bars, and turns the whole
-// time. A minority of them PULSE instead, so the beat is not something the
-// lasers are entirely deaf to - but they are the minority on purpose, because
-// four fans blinking on every kick next to four beams already stabbing is the
-// same event twice.
+// time. The occasional PHRASE pulses instead - the whole bank at once,
+// rarely, so the beat is not something the lasers are entirely deaf to - but
+// it stays the exception on purpose, because every fan blinking on every kick
+// next to four beams already stabbing is the same event twice. The beat-cued
+// move below answers the kick with MOTION instead of brightness: a fan that
+// OPENS on the kick is choreography, a fan that flashes on the kick is a
+// thinner beam.
 //
 // A FAN IS TWO THINGS AT ONCE: the RAYS, sharp and thin, and the SHEET between
 // them, which is the haze they are cutting lit from the side. Rays alone are a
@@ -26,10 +29,40 @@
 // on both vectors spanning the fan's plane; do it to only some of them and the
 // mirrored fan rolls the wrong way. Get the sign backwards, as this file did
 // once, and half the rig fires into the wall behind it and is silently eaten.
+// The moves that let the two halves diverge - COUNTER, WEAVE, ALTERNATE -
+// diverge ONLY in mirrored or bar-gridded ways, so the pair still reads as
+// one rig doing one thing with two hands.
 //
 // NOTHING STAYS ON. A pair plays for at most one phrase and then has to sit
 // out. Light that is always there stops being an event, and the room only has
 // moments if it also has gaps.
+//
+// THE VOCABULARY. What a pair DOES with its bars is a move: a slow sweep, a
+// searchlight's pendulum, a fan that breathes open and shut on the bars, one
+// that blooms wide on the kick and folds back, one that spins up through the
+// phrase into a rush - and three that let a pair's two projectors leave the
+// shared axis without ever leaving the choreography: COUNTER rolls the two
+// fans against each other, WEAVE runs them half a ray-step apart so their
+// lines interleave, and ALTERNATE hands the room from one projector to the
+// other bar by bar. How the three pairs SHARE the four bars is cast alongside
+// the move, from FORMATIONS: roam - each pair on its own schedule, the
+// default - a chase handing the room bar by bar, a stack of entries one per
+// bar, a call-and-answer split of even and odd bars, and, rarely and all
+// together, unison, which also locks every pair to one roll.
+//
+// ONE PATTERN AT A TIME. The move - and whether the phrase pulses or ripples
+// - is cast ONCE per phrase and shared by every playing pair. Two fans doing
+// two different dances at once is not a show, it is a rehearsal. What varies
+// within a phrase is only WHEN each pair is lit and which way it turns: the
+// texture of the phrase, never its dance.
+//
+// WHAT NO MOVE MAY DO. Every pattern in this file plays out in the fan's
+// roll, its spread, its shutter and its per-ray shimmer. None of them may
+// touch the AIM, and spread is clamped to SPREAD_MAX every frame. The
+// placement law in test/lasers.mjs sweeps roll across a full circle and
+// spread to its maximum, so every position any move can produce is one the
+// law has already covered - the vocabulary can grow without the floor of the
+// room ever being in doubt.
 //
 // EVERY RAY IN HERE BELONGS TO A FAN. There was a pool of loose single rays
 // for a while - fired off random beats, in random directions, from random
@@ -143,8 +176,11 @@ const EASE = 1.6;
 const SUSTAIN = 1.05;
 const PULSE = 1.4;
 const MAX_OP = 1.0;
-// Chance a pair pulses rather than sustains, decided per phrase.
-const PULSE_CHANCE = 0.3;
+// Chance the PHRASE pulses rather than sustains, cast once for the whole
+// bank: every lit pair on the kick, or none of them. Cut from the old
+// per-pair odds - a whole bank stabbing with the beams is a much bigger
+// statement than one fan doing it, so it has to be rarer to stay one.
+const PULSE_CHANCE = 0.22;
 // The soft wedge, against the rays' own brightness. Low both because it is
 // haze rather than another ray and because it covers a hundred times the
 // pixels, which is where the fill rate would go.
@@ -158,6 +194,94 @@ const APERTURE_FLOOR = 0.35;
 // A fan that is simply always on is not an event any more, and the ones that
 // arrive later in a phrase only read as arriving because something else left.
 const MAX_BARS = 4;
+
+// ---- the moves -------------------------------------------------------------
+// What the lit pairs DO with their bars: one move, cast once per phrase and
+// shared by every playing pair - see the ONE PATTERN AT A TIME note at the
+// top of this file. `pulse` marks a move as safe for a PULSING phrase: a
+// pulsing pair's shutter is dark most of each beat, which freezes its clock,
+// so only moves that integrate their own motion survive that - the pendulum's
+// absolute phase would jump once per beat, and it is the one move a pulsing
+// phrase never draws.
+const MOVE_SWEEP = 0;
+const MOVE_PENDULUM = 1;
+const MOVE_BREATHE = 2;
+const MOVE_BLOOM = 3;
+const MOVE_RUSH = 4;
+const MOVE_COUNTER = 5;
+const MOVE_ALTERNATE = 6;
+const MOVE_WEAVE = 7;
+const MOVES = [
+  { m: MOVE_SWEEP, w: 0.24, pulse: true },     // the classic: constant slow roll
+  { m: MOVE_PENDULUM, w: 0.16, pulse: false }, // a searchlight's swing across the ceiling
+  { m: MOVE_BREATHE, w: 0.14, pulse: true },   // open on one bar, shut on the next
+  { m: MOVE_BLOOM, w: 0.12, pulse: true },     // snapped open by the kick, easing shut
+  { m: MOVE_RUSH, w: 0.12, pulse: true },      // a wind-up across the phrase's bars
+  { m: MOVE_COUNTER, w: 0.10, pulse: true },   // the pair's two fans roll against each other
+  { m: MOVE_ALTERNATE, w: 0.07, pulse: true }, // the pair trades the room bar by bar
+  { m: MOVE_WEAVE, w: 0.05, pulse: true },     // half a ray-step apart, lines interlaced
+];
+// PENDULUM's swing: how far either side of its starting roll, and how fast in
+// radians a second. Slow - a sway periods of two to three bars, not a waggle.
+const PEND_AMP_MIN = 0.5, PEND_AMP_MAX = 1.05;
+const PEND_RATE_MIN = 1.3, PEND_RATE_MAX = 2.1;
+// BLOOM's resting spread. The kick snaps the fan to SPREAD_MAX and the usual
+// ease pulls it back here; it has to start narrow or there is nothing to
+// bloom from.
+const BLOOM_REST = 0.08;
+// RUSH's wind-up, the multiplier on SWEEP_RATE per bar of the phrase. The
+// last bar spins at four times the resting rate, and then the phrase ends -
+// a rush that never pays off its speed inside its own phrase is what the next
+// bank's entry is for.
+const RUSH_MUL = [0.6, 1.7, 2.8, 3.9];
+// ALTERNATE's dimmed projector: a floor, not a zero. A dark half of a pair
+// reads as a broken projector; a low one reads as waiting for its bar. SWAP
+// is how fast the trade crosses - time constant a sixth of a second, fast
+// enough to belong to the bar that cued it and slow enough not to flicker.
+const ALT_LOW = 0.12;
+const ALT_SWAP = 6;
+
+// ---- the formations --------------------------------------------------------
+// How the three pairs divide the four bars of a phrase. ROAM is the everyday
+// cast and keeps the weight: the rest are moments, and a moment every phrase
+// is not one.
+const FORM_ROAM = 0;
+const FORM_CHASE = 1;   // one pair per bar, handed around the room
+const FORM_STACK = 2;   // one entry per bar, a crescendo across the phrase
+const FORM_ANSWER = 3;  // even bars against odd bars
+const FORM_UNISON = 4;  // every pair, one cast of the dice, the stadium moment
+const FORMATIONS = [
+  { f: FORM_ROAM, w: 0.55 },
+  { f: FORM_CHASE, w: 0.14 },
+  { f: FORM_STACK, w: 0.12 },
+  { f: FORM_ANSWER, w: 0.11 },
+  { f: FORM_UNISON, w: 0.08 },
+];
+// Chance a ROAM pair plays its phrase - the same odds the bank was built with.
+const ROAM_PLAY = 0.66;
+
+// The RIPPLE: a shimmer running along a fan's rays in the spin's direction.
+// Brightness lives in the ray ribbons' vertex alpha, so the ripple is per-ray
+// even though the fan's lamp is one material.
+const RIPPLE_CHANCE = 0.35;
+const RIPPLE_RATE = 9;
+const RIPPLE_STEP = 0.85;
+const RIPPLE_DEPTH = 0.45;
+
+// Weighted pick from a {w} table, optionally restricted to the entries a
+// predicate allows. Used for the move a playing pair draws and the formation
+// the phrase takes.
+function pickWeighted(table, allow) {
+  let total = 0;
+  for (const e of table) if (!allow || allow(e)) total += e.w;
+  let r = Math.random() * total;
+  for (const e of table) {
+    if (allow && !allow(e)) continue;
+    r -= e.w;
+    if (r <= 0) return e;
+  }
+  return table[table.length - 1];
+}
 
 // ---- impacts ---------------------------------------------------------------
 // The spot where a ray lands. A laser in a real room is two things you see: the
@@ -260,16 +384,48 @@ class Bank {
     // once open away from each other instead of sliding along together.
     this.spin = 1;
     this.pulsing = false;
-    this.entry = 0;
     this.playing = false;
     this.on = false;
     this.barsOn = 0;
     // 0 or 1, never in between: see the note on the instant gate in update().
     this.gain = 0;
 
+    // ---- the choreography state --------------------------------------------
+    // Which move the pair is playing this phrase, the 4-bit mask of the
+    // phrase's bars it may light, and its clock within the phrase. The mask
+    // is the single source of truth for WHEN a pair is lit: formations write
+    // it, bar() reads it.
+    this.move = MOVE_SWEEP;
+    this.mask = 0xF;
+    this.t = 0;
+    this.spent = false;
+    // RUSH's wind-up, PENDULUM's swing, BREATHE's phase, and the two
+    // projectors' relative brightness - targets and eased values - for the
+    // moves that split a pair. All plain scalars cast by phrase() once per
+    // four bars.
+    this.rushMul = 1;
+    this.rollBase = this.roll;
+    this.pendAmp = 0;
+    this.pendRate = 0;
+    this.breathePhase = 0;
+    this.emGain0 = 1;
+    this.emGain1 = 1;
+    this.emTgt0 = 1;
+    this.emTgt1 = 1;
+    this.ripple = false;
+
     // ---- the rays: one camera-facing ribbon per ray -------------------------
     const quads = this.emitters.length * RAYS;
     this._rayPos = new Float32Array(quads * 4 * 3);
+    // Per-vertex colour so the ripple can run a shimmer ALONG the fan: every
+    // ray of a pair shares one material, so a ray-to-ray difference has to
+    // live on the vertices. r/g/b pin at 1; the alpha is rewritten per frame.
+    this._rayCol = new Float32Array(quads * 4 * 4);
+    for (let i = 0; i < quads * 4; i++) {
+      const c = i * 4;
+      this._rayCol[c] = 1; this._rayCol[c + 1] = 1; this._rayCol[c + 2] = 1;
+      this._rayCol[c + 3] = 1;
+    }
     const rayIdx = new Uint16Array(quads * 6);
     for (let i = 0; i < quads; i++) {
       const v = i * 4, k = i * 6;
@@ -278,13 +434,14 @@ class Bank {
     }
     this.rayGeo = new THREE.BufferGeometry();
     this.rayGeo.setAttribute('position', dynamic(this._rayPos, 3));
+    this.rayGeo.setAttribute('color', dynamic(this._rayCol, 4));
     this.rayGeo.setIndex(new THREE.BufferAttribute(rayIdx, 1));
     // The rays reach further than a bounding sphere inferred from any one
     // frame, and a wrong one frustum-culls the pair at the worst moment.
     this.rayGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 70);
 
     this.rayMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0,
+      color: 0xffffff, transparent: true, opacity: 0, vertexColors: true,
       blending: THREE.AdditiveBlending,
       // Depth TEST on, so a pillar cuts the ray. Depth WRITE off, or the rays
       // would occlude each other and the crossings - the best part - would go.
@@ -340,6 +497,18 @@ export class Lasers {
     const housingMat = new THREE.MeshBasicMaterial({ color: 0x0b0e14 });
     this.banks = RIG_POINTS.map((pt) => new Bank(parent, pt, boxGeo, apertureGeo, housingMat));
     this.banks.forEach((b, i) => { b.spin = i & 1 ? -1 : 1; });
+
+    // ---- the phrase's one cast ---------------------------------------------
+    // The move, its brightness behaviour and its shimmer are decided ONCE per
+    // phrase and shared by every playing pair (see the header). Only the
+    // formation - which bars each pair lights - is per-pair, and the spin,
+    // which alternates around the room and flips all at once when it flips.
+    this._move = MOVE_SWEEP;
+    this._pulsing = false;
+    this._ripple = false;
+    this._spreadTo = SPREAD_MAX;
+    this._pendAmp = 0;
+    this._pendRate = 0;
 
     // ---- the impact pool ---------------------------------------------------
     // Every ray in the room lands somewhere, so the pool is sized for all of
@@ -565,42 +734,218 @@ export class Lasers {
     }
   }
 
-  // A new four-bar phrase. Recasts every pair: whether it plays, when it comes
-  // in, and whether it sustains or pulses.
-  phrase() {
-    let playing = 0;
-    for (let i = 0; i < this.banks.length; i++) {
-      const b = this.banks[i];
-      // A pair that ran the whole of the last phrase has to sit this one out.
-      // Together with the cap in bar() this is what bounds any pair to four
-      // bars of continuous light.
-      const spent = b.barsOn >= MAX_BARS;
-      b.barsOn = 0;
-      b.playing = !spent && Math.random() < 0.66;
-      if (b.playing) playing++;
-      // Bar 0, 1 or 2 of the phrase. Never 3: a pair that arrives for the last
-      // bar has not entered, it has flickered.
-      b.entry = (Math.random() * 3) | 0;
-      b.pulsing = Math.random() < PULSE_CHANCE;
-      b.spreadTo = SPREAD_MIN + Math.random() * (SPREAD_MAX - SPREAD_MIN);
-      if (Math.random() < 0.4) b.spin = -b.spin;
-    }
-    // Never leave the room with nothing, unless every pair is genuinely spent.
-    if (!playing) {
-      for (let i = 0; i < this.banks.length; i++) {
-        const b = this.banks[i];
-        if (b.barsOn < MAX_BARS) { b.playing = true; b.entry = 0; break; }
-      }
+  // Hand a playing pair its share of the phrase's cast. The move, its
+  // pulsing and its ripple live on the BANK OF BANKS (this._move etc.) - the
+  // phrase's one pattern - and only the pieces that exist to differ DO:
+  // the breathing fans alternate phase by where they sit, and a pendulum
+  // starts from wherever its own fan happens to be.
+  _castMove(b, i) {
+    b.move = this._move;
+    b.pulsing = this._pulsing;
+    b.ripple = this._ripple;
+    // A pair leaving the phrase mid-trade could carry a dimmed projector
+    // into the next one; every cast of any move starts with both halves up.
+    b.emGain0 = 1;
+    b.emGain1 = 1;
+    b.emTgt0 = 1;
+    b.emTgt1 = 1;
+    b.spreadTo = this._spreadTo;
+    switch (b.move) {
+      case MOVE_PENDULUM:
+        // Swing from wherever the fan happens to be, so the phrase boundary
+        // never shows as a cut.
+        b.rollBase = b.roll;
+        b.pendAmp = this._pendAmp;
+        b.pendRate = this._pendRate;
+        break;
+      case MOVE_BREATHE:
+        // The pairs take their phase from their place in the room: banks 0
+        // and 2 open together, bank 1 answers - the breathing is an argument
+        // across the floor, not three unrelated lungs.
+        b.breathePhase = i & 1;
+        b.spread = (SPREAD_MIN + SPREAD_MAX) * 0.5;
+        b.spreadTo = b.spread;
+        break;
+      case MOVE_BLOOM:
+        b.spread = SPREAD_MIN + Math.random() * BLOOM_REST;
+        b.spreadTo = b.spread;
+        break;
+      case MOVE_RUSH:
+        b.rushMul = RUSH_MUL[0];
+        break;
     }
   }
 
-  // A downbeat. `index` is 0..3 through the phrase; a pair is in once its own
-  // entry bar has come round, and out again the moment it has had its four.
+  // A new four-bar phrase. First the FORMATION: which bars of the phrase
+  // each pair may light, as a 4-bit mask. Then the cast: what each playing
+  // pair DOES with those bars.
+  phrase() {
+    const n = this.banks.length;
+    let free = 0;
+    for (const b of this.banks) {
+      // A pair that ran the whole of the last phrase sits this one out.
+      // barsOn lags a bar behind the truth, though: the increment for a
+      // phrase's last bar lands at the NEXT bar() call, which is already the
+      // next phrase. A pair still lit at the boundary is therefore counted
+      // for the bar it is standing in - without that a four-bar run reads as
+      // three and the sit-out never fires. Together with the cap in bar()
+      // this is what bounds any pair's run of continuous light.
+      b.spent = b.barsOn + (b.on ? 1 : 0) >= MAX_BARS;
+      b.barsOn = 0;
+      // ...and the shutter is closed so bar(0)'s count does not credit the
+      // NEW phrase with the bar just accounted into `spent`. Left true, a
+      // pair playing through a boundary is charged five bars for four and
+      // dies one bar early, in the close of the phrase.
+      b.on = false;
+      b.t = 0;
+      b.playing = false;
+      b.mask = 0;
+      if (!b.spent) free++;
+    }
+
+    // When every pair is spent the phrase is dark, whatever the dice said -
+    // the bank catching its breath, which is what a unison is meant to be
+    // followed by. No formation overrides the sit-out rule.
+    const form = free > 0 ? pickWeighted(FORMATIONS).f : -1;
+    if (form === FORM_CHASE) {
+      // One pair per bar, the room handed around in a circle. With three
+      // pairs and four bars the first pair takes the last bar too - the hand
+      // that opened the phrase closes it.
+      let at = (Math.random() * n) | 0;
+      const step = Math.random() < 0.5 ? 1 : n - 1;
+      for (let bar = 0; bar < 4; bar++) {
+        let tries = 0;
+        while (tries < n && this.banks[at].spent) { at = (at + 1) % n; tries++; }
+        this.banks[at].playing = true;
+        this.banks[at].mask |= 1 << bar;
+        at = (at + step) % n;
+      }
+    } else if (form === FORM_STACK) {
+      // One entry per bar from a random pair onwards: by bar two the whole
+      // bank is up, and how it got there is the phrase's shape.
+      let e = 0;
+      const start = (Math.random() * n) | 0;
+      for (let k = 0; k < n; k++) {
+        const b = this.banks[(start + k) % n];
+        if (b.spent) continue;
+        b.playing = true;
+        b.mask = (0xF << e) & 0xF;
+        if (e < 3) e++;
+      }
+    } else if (form === FORM_ANSWER) {
+      // Even bars against odd: the outer pairs ask, the middle pair replies,
+      // or the other way round.
+      const lead = Math.random() < 0.5 ? 0x5 : 0xA;
+      for (let i = 0; i < n; i++) {
+        const b = this.banks[i];
+        if (b.spent) continue;
+        b.playing = true;
+        b.mask = (i & 1) === 0 ? lead : 0xF ^ lead;
+      }
+    } else if (form === FORM_UNISON) {
+      for (const b of this.banks) {
+        if (b.spent) continue;
+        b.playing = true;
+        b.mask = 0xF;
+      }
+    } else {
+      // FORM_ROAM: each pair on its own schedule, the everyday cast.
+      for (const b of this.banks) {
+        b.playing = !b.spent && Math.random() < ROAM_PLAY;
+        if (!b.playing) continue;
+        // Bar 0, 1 or 2 of the phrase, held to the end of it. Never 3: a
+        // pair that arrives for the last bar has not entered, it has
+        // flickered.
+        b.mask = (0xF << ((Math.random() * 3) | 0)) & 0xF;
+      }
+    }
+
+    // Never leave the room with nothing while any pair still has light to
+    // give. If every pair genuinely is spent the phrase stays dark - the bank
+    // catching its breath, which is what the phrase after a unison is.
+    let lit = false;
+    for (const b of this.banks) if (b.playing && b.mask) { lit = true; break; }
+    if (!lit) {
+      for (const b of this.banks) {
+        if (!b.spent) { b.playing = true; b.mask = 0xF; break; }
+      }
+    }
+
+    // The CLOSE of a phrase must land. Every formation above covers bar three
+    // by construction save one gap - an ANSWER whose only live pairs drew the
+    // even bars - so enforce it here rather than trust the case analysis:
+    // the suite in test/lasers.mjs holds it as law.
+    let closer = false;
+    for (const b of this.banks) if (b.playing && (b.mask & 8)) closer = true;
+    if (!closer) {
+      for (const b of this.banks) {
+        if (b.playing) { b.mask |= 8; break; }
+      }
+    }
+
+    // THE PHRASE'S ONE PATTERN. Pulsing is drawn first because a pulsing
+    // phrase freezes each pair's clock while its shutter is dark, which
+    // excludes the pendulum (its phase is absolute - see MOVES). UNISON is
+    // further restricted to the moves a shared roll can carry: the bar- and
+    // beat-cued ones would fire identically on every pair anyway, and three
+    // banks snapping open on the same kick three feet apart is one bloom.
+    this._pulsing = Math.random() < PULSE_CHANCE;
+    const unison = form === FORM_UNISON;
+    const uniOpts = this._pulsing
+      ? [MOVE_SWEEP, MOVE_BREATHE] : [MOVE_SWEEP, MOVE_PENDULUM, MOVE_BREATHE];
+    this._move = unison ? uniOpts[(Math.random() * uniOpts.length) | 0]
+      : pickWeighted(MOVES, (e) => !this._pulsing || e.pulse).m;
+    this._ripple = Math.random() < RIPPLE_CHANCE;
+    this._spreadTo = SPREAD_MIN + Math.random() * (SPREAD_MAX - SPREAD_MIN);
+    this._pendAmp = PEND_AMP_MIN + Math.random() * (PEND_AMP_MAX - PEND_AMP_MIN);
+    this._pendRate = PEND_RATE_MIN + Math.random() * (PEND_RATE_MAX - PEND_RATE_MIN);
+    // The spin flip - 40%, as it always was - now flips every pair at once:
+    // adjacent pairs still counter-rotate, and the room's handedness changing
+    // together is a cue, not a coincidence.
+    if (Math.random() < 0.4) for (const b of this.banks) b.spin = -b.spin;
+    // UNISON's extra lock: every pair starts from the same roll, so the fans
+    // are not just doing the same move but standing in the same shape.
+    const rollSeed = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const b = this.banks[i];
+      if (!b.playing) continue;
+      if (unison) b.roll = rollSeed;
+      this._castMove(b, i);
+    }
+  }
+
+  // A downbeat. `index` is 0..3 through the phrase; a pair lights on the bars
+  // its mask allows and goes out the moment it has had its four. The bar is
+  // also the cue two moves take: BREATHE changes its spread target on the
+  // phrase's own grid, and RUSH winds its spin up bar by bar.
   bar(index) {
     for (let i = 0; i < this.banks.length; i++) {
       const b = this.banks[i];
       if (b.on) b.barsOn++;
-      b.on = b.playing && index >= b.entry && b.barsOn < MAX_BARS;
+      b.on = b.playing && ((b.mask >> index) & 1) === 1 && b.barsOn < MAX_BARS;
+      if (b.move === MOVE_BREATHE) {
+        b.spreadTo = ((index + b.breathePhase) & 1) ? SPREAD_MIN : SPREAD_MAX;
+      } else if (b.move === MOVE_RUSH) {
+        b.rushMul = RUSH_MUL[index];
+      } else if (b.move === MOVE_ALTERNATE) {
+        // The pair trades on the bar grid: even bars belong to one
+        // projector, odd bars to the other, and every pair in the room
+        // trades together - the whole phrase is one call and answer.
+        const even = (index & 1) === 0;
+        b.emTgt0 = even ? 1 : ALT_LOW;
+        b.emTgt1 = even ? ALT_LOW : 1;
+      }
+    }
+  }
+
+  // A beat, called from the rig's beat edge. Only BLOOM answers it: snap
+  // straight to the widest fan and let update() ease it shut, which is what
+  // makes this a bloom rather than a second gate. Dark-safe, since a pair
+  // that is off takes its cues invisibly and simply arrives already open.
+  beat() {
+    for (let i = 0; i < this.banks.length; i++) {
+      const b = this.banks[i];
+      if (b.move === MOVE_BLOOM) b.spread = SPREAD_MAX;
     }
   }
 
@@ -637,8 +982,27 @@ export class Lasers {
       b.fillMat.color.copy(colour);
       b.aperture.color.copy(colour);
 
-      b.roll += SWEEP_RATE * dt * b.spin;
+      // The move's motion. Everything integrates except the pendulum, whose
+      // absolute phase is safe precisely because a pulsing pair - whose clock
+      // freezes whenever its shutter is dark - never draws it: see MOVES.
+      b.t += dt;
+      if (b.move === MOVE_PENDULUM) {
+        b.roll = b.rollBase + Math.sin(b.t * b.pendRate) * b.pendAmp * b.spin;
+      } else if (b.move === MOVE_RUSH) {
+        b.roll += SWEEP_RATE * b.rushMul * dt * b.spin;
+      } else {
+        b.roll += SWEEP_RATE * dt * b.spin;
+      }
+      if (b.move === MOVE_ALTERNATE) {
+        const swap = Math.min(1, dt * ALT_SWAP);
+        b.emGain0 += (b.emTgt0 - b.emGain0) * swap;
+        b.emGain1 += (b.emTgt1 - b.emGain1) * swap;
+      }
       b.spread += (b.spreadTo - b.spread) * ease;
+      // Not just tidiness: this ceiling is what the placement law proves
+      // against. No move may ever open wider than the sweep in
+      // test/lasers.mjs has covered.
+      if (b.spread > SPREAD_MAX) b.spread = SPREAD_MAX;
       this._write(b, camPos, lit * IMPACT_GAIN);
     }
 
@@ -659,22 +1023,41 @@ export class Lasers {
   }
 
   _write(b, camPos, spot) {
-    const ray = b._rayPos, fill = b._fillPos, far = b._far;
-    const cr = Math.cos(b.roll), sr = Math.sin(b.roll);
+    const ray = b._rayPos, col = b._rayCol, fill = b._fillPos, far = b._far;
     let o = 0, f = 0;
     for (let e = 0; e < b.emitters.length; e++) {
       const em = b.emitters[e];
-      // The fan's plane: the aim, and one vector rolled around it.
+      // The fan's plane: the aim, and one vector rolled around it. The two
+      // halves of a pair share a roll - EXCEPT under the moves that set them
+      // apart on purpose. COUNTER rolls the right projector backwards, which
+      // against its mirrored frame is the true mirror of the left's motion;
+      // WEAVE offsets it by half a ray-step, so its lines land exactly in
+      // the left fan's gaps however wide the fan is currently open.
+      let rollE = b.roll;
+      if (e === 1) {
+        if (b.move === MOVE_COUNTER) rollE = -rollE;
+        else if (b.move === MOVE_WEAVE) rollE += b.spread / (RAYS - 1);
+      }
+      const cr = Math.cos(rollE), sr = Math.sin(rollE);
       this._v.copy(em.p).multiplyScalar(cr).addScaledVector(em.q, sr);
       this._toCam.copy(camPos).sub(em.pos);
       const ax = em.pos.x, ay = em.pos.y, az = em.pos.z;
       const wa = Math.max(MIN_W, distance(ax, ay, az, camPos) * PX * WIDTH_PX);
+      // ALTERNATE's trade rides the same vertex-alpha channel the ripple
+      // does: this projector's share of the pair's light this bar.
+      const emGain = e === 0 ? b.emGain0 : b.emGain1;
 
       for (let r = 0; r < RAYS; r++) {
         const a = ((r / (RAYS - 1)) * 2 - 1) * b.spread;
         const ca = Math.cos(a), sa = Math.sin(a);
         this._d.copy(em.u).multiplyScalar(ca).addScaledVector(this._v, sa);
-        o = this._ribbon(ray, o, ax, ay, az, this._d, wa, camPos, far, r, spot);
+        // The ripple: a shimmer running along the fan in the spin's
+        // direction. The fan stays whole - the depth bottoms out well above
+        // a ray anyone could call missing.
+        const shim = (b.ripple
+          ? 1 - RIPPLE_DEPTH * (0.5 + 0.5 * Math.sin(b.t * RIPPLE_RATE + r * RIPPLE_STEP * b.spin))
+          : 1) * emGain;
+        o = this._ribbon(ray, col, o, ax, ay, az, this._d, wa, camPos, far, r, spot * shim, shim);
       }
 
       // The wedge: one triangle from the lens out to each adjacent pair of far
@@ -688,12 +1071,15 @@ export class Lasers {
       }
     }
     b.rayGeo.attributes.position.needsUpdate = true;
+    b.rayGeo.attributes.color.needsUpdate = true;
     b.fillGeo.attributes.position.needsUpdate = true;
   }
 
   // Writes one camera-facing ribbon and returns the new write offset. `far`,
   // when given, receives the ray's landing point for the fill to reuse.
-  _ribbon(buf, o, ax, ay, az, d, wa, camPos, far, slot, spot) {
+  // `alpha` is the ripple's per-ray brightness, shared with this ray's impact
+  // spot so a ray and its landing dot shimmer as one light.
+  _ribbon(buf, col, o, ax, ay, az, d, wa, camPos, far, slot, spot, alpha) {
     // _exit also records which of the six planes was struck; the decal below
     // reads its normal straight out of that.
     const t = this._exit(ax, ay, az, d.x, d.y, d.z);
@@ -714,6 +1100,10 @@ export class Lasers {
     buf[o + 3] = ax - sx * wa; buf[o + 4] = ay - sy * wa; buf[o + 5] = az - sz * wa;
     buf[o + 6] = bx - sx * wb; buf[o + 7] = by - sy * wb; buf[o + 8] = bz - sz * wb;
     buf[o + 9] = bx + sx * wb; buf[o + 10] = by + sy * wb; buf[o + 11] = bz + sz * wb;
+    // The ribbon's four vertices are one ray's share of the colour buffer:
+    // rgba each, sixteen floats, alpha everywhere and tint pinned at one.
+    const c = ((o / 12) | 0) * 16;
+    col[c + 3] = alpha; col[c + 7] = alpha; col[c + 11] = alpha; col[c + 15] = alpha;
     return o + 12;
   }
 }

@@ -137,8 +137,9 @@ const BEAM_DOWNBEAT = 1.35;
 // Each look says how much of each instrument is lit. They are all available at
 // any point in a run; only how hard they are driven follows the room's energy.
 // The laser bank runs its own choreography inside a phrase - which of its
-// three pairs play, when each comes in, whether it sustains or pulses - so a
-// look only says how much of the LASERS the room wants on top of that.
+// three pairs play which bars, what move each one works, whether it sustains
+// or pulses - so a look only says how much of the LASERS the room wants on
+// top of that.
 //
 // The four beams are not in the table. They used to be, and taking them out is
 // deliberate: they are the room's constant, the one thing always burning that
@@ -675,9 +676,11 @@ export class Rig {
         }
         this.lasers.bar(this._barsHeld);
       }
-      // Only the beams take a cue from a beat. The pairs that pulse read the
-      // envelope for themselves in the laser bank's own update.
+      // The beams take the beat as BRIGHTNESS; the laser bank takes it as
+      // MOTION - its blooming move is cued off this same edge and answers
+      // the kick by opening, never by flashing.
       this._cueBeams();
+      this.lasers.beat(s.bar);
       // The comet steps a fixed share of the wall on every beat. A lap takes a
       // whole number of BARS, so it passes the same corner on the same beat
       // every time round - which is what makes it read as counting the music
