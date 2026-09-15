@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Ninety enemies, in fifteen themes of six** - one per role per theme, and every one of them built:
+- **Ninety-six enemies, in sixteen themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -595,6 +595,29 @@ context. The start screen says so, and one click anywhere fixes it.
   **TEMPEST** has none of its own yet. A slot whose enemy is not built borrows
   RUST's for that role, so the whole rotation is playable while the roster is
   being made - `npm run test:themes` prints what is still borrowed.
+- **SWAMP: wet peat, reed crowns and amber marsh lights.** Six wetland
+  creatures share the palette but each asks for a different response:
+  **Mudskippers** inflate their throats before a straight, marked hop; their
+  bite briefly slows, and a side step beats the committed heading.
+  **Reedstalkers** plant their blowpipes, bracket a captured bearing with two
+  darts, then fire down the gap. **Peatbacks** tuck into their shells while a
+  circle fills, snap at anything still inside it, then recover without armour.
+  **Bubbletoads** swell before laying three staggered mud eruptions across
+  your old position; leave the bank instead of running along it.
+  **Fenlanterns** wash burn, poison and slow off one nearby ally every 4.5
+  seconds when needed. They cannot cleanse bosses, other lanterns or freeze,
+  and grant no immunity to the next application. **Marshwings** descend from
+  their high orbit, hover visibly before a paired dart shot, then climb and
+  retreat. Their four amber wings and long tails distinguish them overhead.
+  **THE MIRE SOVEREIGN** carries a drowned cypress grove on a vast crocodilian
+  back. It stalks between three attacks: a straight jaw rush down a marked
+  lane, a horseshoe of staggered bog eruptions around a captured position,
+  and a broad reed-dart fan. Every attack has a wind-up and ends with 1.8
+  seconds of exposed throat: the jaw drops, the amber throat swells, and its
+  35% damage resistance comes off. At half health the ranged patterns widen
+  and stalking pauses shorten; warnings and recovery stay full length.
+  Rushes stop at cover and their speed is capped so later waves cannot outrun
+  the warning. The bog's open side and the fan's gaps remain escape routes.
 - **Every enemy is its own silhouette.** Types used to share one capsule body
   and differ only by colour, which falls apart exactly when it matters - a
   frozen or poisoned enemy is wearing the status tint, not its own colour. Each
@@ -619,9 +642,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the fifteen themes owns a boss, and the block a theme lands in is where its
+  of the sixteen themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All fifteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All sixteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -2464,7 +2487,7 @@ js/enemies/         the enemy roster, one file per theme
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
   index.js          imports the themes, which is what registers them
   rust.js  void.js  ember.js  rime.js  verdant.js
-  strata.js  tempest.js  brine.js  plague.js  solar.js  hive.js
+  strata.js  swamp.js  tempest.js  brine.js  plague.js  solar.js  hive.js
   cathedral.js  bone.js  obsidian.js  sapphire.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
@@ -2477,7 +2500,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the fifteen themes, their six enemies each, and the run's deck
+js/themes.js        the sixteen themes, their six enemies each, and the run's deck
 js/items/discover.js           shared browser/Node directory discovery
 js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
@@ -2515,6 +2538,7 @@ test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
                     the hoarfrost's field, and the Pale Crown's anchors
+test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/verdant.mjs    VERDANT end to end - the thornling's committed charge, the
                     seed that is safe until it is not, the thorn band outside
                     the swing, the heartwood's mending, and the Overgrowth's

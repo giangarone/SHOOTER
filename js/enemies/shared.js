@@ -109,6 +109,10 @@ export const SPLITTER_BODY = 0xd6329a;
 export const SPLITTER_EYE = 0xffb0e8;
 
 export const SHARED_MATS = {
+  // Wet peat and marsh lights remain recognisable beneath a status tint.
+  swampPeat: new THREE.MeshStandardMaterial({ color: 0x39442b, roughness: 0.65, metalness: 0.1 }),
+  swampAmber: new THREE.MeshStandardMaterial({ color: 0xffdc83, emissive: 0xd6aa40,
+    emissiveIntensity: 1.2, roughness: 0.35, metalness: 0.1 }),
   // Ivory joints and living marrow keep BONE readable through a status tint.
   boneIvory: new THREE.MeshStandardMaterial({ color: 0xe5d6b5, roughness: 0.85, metalness: 0.05 }),
   boneMarrow: new THREE.MeshStandardMaterial({

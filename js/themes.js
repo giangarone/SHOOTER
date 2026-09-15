@@ -51,6 +51,11 @@ export const ROLE_KEYS = ['rusher', 'gunner', 'brute', 'artillery', 'support', '
 // `color` is the room's colour for that block: rig.js tints fixtures, beams
 // and fog toward it, the way it already does for a boss.
 export const THEMES = {
+  swamp: {
+    name: 'SWAMP', color: 0x8b9b45, boss: 'miresovereign',
+    roles: { rusher: 'mudskipper', gunner: 'reedstalker', brute: 'peatback',
+      artillery: 'bubbletoad', support: 'fenlantern', flier: 'marshwing' },
+  },
   // The original roster, kept together as one family rather than scattered.
   // It is the theme with no gimmick - it closes, it shoots, it soaks - which
   // is what makes it the yardstick every other theme's role parity is read

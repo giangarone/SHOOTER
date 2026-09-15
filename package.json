@@ -48,6 +48,7 @@
     "test:cathedral": "node test/cathedral.mjs",
     "test:bone": "node test/bone.mjs",
     "test:obsidian": "node test/obsidian.mjs",
+    "test:swamp": "node test/swamp.mjs",
     "test:sapphire": "node test/sapphire.mjs"
   },
   "dependencies": {

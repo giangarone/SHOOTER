@@ -24,6 +24,7 @@ export * from './rust.js';
 export * from './sapphire.js';
 export * from './solar.js';
 export * from './strata.js';
+export * from './swamp.js';
 export * from './tempest.js';
 export * from './verdant.js';
 export * from './void.js';
