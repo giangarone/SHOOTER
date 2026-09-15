@@ -1,5 +1,5 @@
-// The laser bank: three mirrored pairs of fan projectors hung on the truss,
-// firing down and across the room.
+// The laser bank: three mirrored pairs of fan projectors mounted low on the
+// perimeter walls, firing up and across the room.
 //
 // WHY THIS IS NOT MORE BEAMS. The beams in rig.js are soft textured cones that
 // fade along their length - light you can see the air in. A laser is the
@@ -33,10 +33,10 @@
 //
 // EVERY RAY IN HERE BELONGS TO A FAN. There was a pool of loose single rays
 // for a while - fired off random beats, in random directions, from random
-// points on the truss - on the theory that a room entirely on the grid reads
-// as a screensaver. It does not work. A lone ray with no fan behind it does
-// not read as a laser off doing its own thing; it reads as one that has come
-// adrift from the rig, and the rig is what the room is selling.
+// points around the rig - on the theory that a room entirely on the grid
+// reads as a screensaver. It does not work. A lone ray with no fan behind it
+// does not read as a laser off doing its own thing; it reads as one that has
+// come adrift from the rig, and the rig is what the room is selling.
 //
 // Nothing here allocates after construction, and no light is created - a laser
 // is geometry, so the rig's light-count contract is untouched.
@@ -48,28 +48,52 @@ import { BOUND, CEIL_Y } from './arena.js';
 // wall - the gaps between them are where the soft fill shows.
 const RAYS = 9;
 
-// WHERE THEY HANG. On the truss, under the ceiling, firing down and across.
-// Not on the walls at head height, which is where they used to be: from there
-// the rays left from nowhere in the player's own plane and read as an effect
-// drawn over the room rather than as fixtures in it.
-const HEIGHT = 12.4;
-// How steeply the aim drops. Shallow on purpose - at this pitch a ray from the
-// truss runs about 36 metres before it reaches the floor, so it crosses the
-// whole room on the way down instead of landing at the projector's feet.
-const DROP = 0.42;
+// WHERE THEY STAND. Low on the perimeter walls, firing up and across the
+// room. They used to hang on the truss and rake the whole floor, which was
+// the strongest look in the venue and also the problem: the centre is where
+// the fight lives, and a fan whose rays cross it puts nine moving lines
+// through the space the player is trying to read. From the floor the same
+// fans put those lines across the ceiling and the upper walls instead, and
+// the centre keeps only the short bright run off the lens, out at the
+// perimeter.
+const HEIGHT = 1.3;
+// HOW FAR OFF THE WALL, measured in from BOUND. The terrain grid stops at
+// +-20 (see GRID_CELL in terrain.js), so this lane is the one strip of floor
+// no wave can ever build in: nothing a layout generates can stand in front
+// of a projector, and no aim has to be tuned around cover that changes
+// every wave. Bodies still pass through the lane - the clamps let them -
+// but the mounts do not path, collide or read as furniture, so passing
+// through one now and then is invisible against a wall of doors and cables.
+const LANE = 0.8;
+// THE ONE NUMBER THIS MOVE HAS TO GET RIGHT. The fan's plane rolls around
+// the aim the whole time a pair is lit (see SWEEP_RATE), so over a bar the
+// lens fires every direction within SPREAD_MAX of the aim - including
+// spread BELOW the aim's own elevation. A ray aimed below horizontal from
+// 1.3m sails across the room at head height, which is exactly the
+// obstruction the bank was moved to the walls to end. So the aim's
+// elevation is held above the fan's own half-width plus a clearance: at
+// RISE 1.2 the shallowest ray any projector can fire still climbs at
+// about 17 degrees, is above a boss's head by the time it crosses the open
+// centre, and can only land on the ceiling or the upper reach of a wall.
+// test/lasers.mjs holds this as a law, over every roll and spread.
+const RISE = 1.2;
+// The three pairs, by where they sit along the walls. All six mount on the
+// +-x walls, mirrored through x = 0; the z spots -16, 16, 0 give the bank
+// its spread, and the old x offsets are gone: the mount is derived from
+// BOUND now, not tuned per pair.
 const RIG_POINTS = [
-  { x: 16, z: -16, aimZ: 0.55 },
-  { x: 16, z: 16, aimZ: -0.55 },
-  { x: 19.5, z: 0, aimZ: 0 },
+  { z: -16, aimZ: 0.55 },
+  { z: 16, aimZ: -0.55 },
+  { z: 0, aimZ: 0 },
 ];
 
 // WHERE A RAY STOPS. Not at a fixed length with the depth buffer cutting it -
-// that was the old way and it is what put a hard edge across the floor. Every
+// that was the old way and it is what put a hard edge across a surface. Every
 // ray is intersected with the room box and ends exactly where it lands, which
 // buys two things: the wedge's fade reaches zero AT the surface instead of
-// being sliced open at whatever brightness it happened to be, and a ray that
-// only travels twelve metres straight down fades over twelve metres rather
-// than being cut off a fifth of the way through its gradient.
+// being sliced open at whatever brightness it happened to be, and a short ray
+// fades over its own length rather than being cut off part-way through its
+// gradient.
 //
 // AND IT HANDLES THE TERRAIN TOO, now that there is terrain to handle. The
 // depth test always hid the part of a ray that had passed behind a platform,
@@ -186,9 +210,9 @@ function dynamic(array, itemSize) {
 // mesh, and the animation state they share.
 class Bank {
   constructor(parent, point, boxGeo, apertureGeo, housingMat) {
-    // The LEFT projector, at -x, aiming across to +x and downward. The right
+    // The LEFT projector, at -x, aiming across to +x and upward. The right
     // is this reflected, which is the factor `m` below.
-    const u = new THREE.Vector3(1, -DROP, point.aimZ).normalize();
+    const u = new THREE.Vector3(1, RISE, point.aimZ).normalize();
     const p = new THREE.Vector3(0, 1, 0);
     p.addScaledVector(u, -u.dot(p)).normalize();
     const q = new THREE.Vector3().crossVectors(u, p).normalize();
@@ -201,7 +225,11 @@ class Bank {
     this.emitters = [];
     for (const sx of [-1, 1]) {
       const m = -sx;
-      const pos = new THREE.Vector3(point.x * sx, HEIGHT, point.z);
+      // The mount: on one +-x wall, LANE in from the face. sx picks which
+      // side of the mirror this emitter sits on, and the same sign which
+      // way the pair aims - the right projector is the left one reflected,
+      // exactly as the fan vectors below it are.
+      const pos = new THREE.Vector3(sx * (BOUND - LANE), HEIGHT, point.z);
       const dir = new THREE.Vector3(u.x * m, u.y, u.z);
       this.emitters.push({
         pos, u: dir,
@@ -213,6 +241,13 @@ class Bank {
       body.scale.set(0.5, 0.5, 0.9);
       body.lookAt(pos.x + dir.x, pos.y + dir.y, pos.z + dir.z);
       parent.add(body);
+      // The mount arm: the housing read as bolted to nothing when it hung in
+      // the air by the wall. A short bar from the wall face into the
+      // housing's underside makes it a fixture.
+      const arm = new THREE.Mesh(boxGeo, housingMat);
+      arm.position.set(sx * (BOUND - 0.35), HEIGHT - 0.45, point.z);
+      arm.scale.set(0.95, 0.16, 0.22);
+      parent.add(arm);
       const lens = new THREE.Mesh(apertureGeo, this.aperture);
       lens.position.copy(pos);
       parent.add(lens);
@@ -450,10 +485,10 @@ export class Lasers {
         if (t0 > t1) continue;
       }
       // ax < 0 means the ray started inside the box on every axis it could be
-      // clipped on. Nothing to land on: the projectors hang at 12.4m and
-      // nothing generated reaches them, so this only ever happens to a
-      // degenerate ray, and letting it through is better than stopping it dead
-      // at zero length.
+      // clipped on. Nothing to land on: the projectors stand in the wall lane
+      // where nothing generated can reach them (see LANE above), so this only
+      // ever happens to a degenerate ray, and letting it through is better
+      // than stopping it dead at zero length.
       if (ax < 0 || t0 <= 0.6 || t0 >= t) continue;
       t = t0;
       axis = ax;

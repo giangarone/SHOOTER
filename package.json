@@ -35,6 +35,7 @@
     "test:status": "node test/status.mjs",
     "test:afflict": "node test/afflict.mjs",
     "test:themes": "node test/themes.mjs",
+    "test:lasers": "node test/lasers.mjs",
     "test:ember": "node test/ember.mjs",
     "test:rime": "node test/rime.mjs",
     "test:verdant": "node test/verdant.mjs",

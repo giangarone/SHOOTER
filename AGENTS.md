@@ -37,6 +37,7 @@ Grep for the thing you touched if it is not here; these are the common ones.
 | money, prices, payouts, the streak | `money` `charge` `flawless` `drops` |
 | a boss, or its telegraphs | `boss` `drops` `charge` |
 | the HUD, an overlay, a menu | `pad` `versus` `flawless` |
+| the rig, the laser bank, a venue fixture | `lasers` `smoke` |
 | `js/main.js` - the loop itself | whatever you changed, plus `smoke` |
 
 **`icons` and `themes` cost a tenth of a second each.** If a change goes
