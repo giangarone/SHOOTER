@@ -972,6 +972,7 @@ const BOSS_NAMES = {
   maw: 'MAW',
   herald: 'HERALD',
   broodmother: 'THE BROODMOTHER',
+  carillon: 'THE CARILLON',
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 

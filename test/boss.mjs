@@ -277,6 +277,11 @@ try {
         seen.hp.push(snap.hp);
         seen.parts.push(snap.parts);
         seen.adds.push(snap.adds);
+        // THE LATEST sample, so `barShown` reads the bar's settled state
+        // rather than one frame of it - but any sample proving it visible
+        // would do, so the flag is kept alongside rather than read off the
+        // snapshot alone.
+        seen.barShown = seen.barShown || snap.barHidden === false;
         seen.bar = snap;
       }
       if (seen.boss && !snap.boss) {
@@ -351,12 +356,18 @@ try {
     const hpSeen = seen.hp.filter((h) => h > 0);
     const hpFell = hpSeen.length > 1 && hpSeen[0] > hpSeen[hpSeen.length - 1];
     const marksLeaked = seen.after ? seen.after.marks > 0 : true;
-    const ok = seen.boss && cleared && hpFell && !marksLeaked && !errors.length;
+    // THE BAR HAS TO BE THERE. It is driven by BOSS_NAMES in main.js, which
+    // is a hand-kept table: a boss missing from it gets `name: undefined`,
+    // and setBoss treats a falsy name as "no fight on" - so the whole fight
+    // plays out with the bar hidden and nothing else looks wrong. That is
+    // not a hypothetical; it is exactly how SAPPHIRE's boss shipped.
+    const barShown = !!seen.barShown;
+    const ok = seen.boss && cleared && hpFell && !marksLeaked && barShown && !errors.length;
     if (!ok) bad++;
     console.log(
       `${ok ? 'ok  ' : 'FAIL'} ${themeKey.padEnd(8)} w${wave} boss=${seen.boss} cleared=${cleared} ` +
       `hp ${hpSeen[0]}->${hpSeen[hpSeen.length - 1]} maxParts=${maxParts} ` +
-      `maxAdds=${maxAdds} bar=${b.barHidden === false ? 'shown' : 'HIDDEN'} ` +
+      `maxAdds=${maxAdds} bar=${barShown ? 'shown' : 'HIDDEN'} ` +
       `note="${b.note || ''}" marksHeld=${seen.after ? seen.after.marks : '?'}`
     );
     for (const e of errors.slice(0, 4)) console.log('     ! ' + e);
