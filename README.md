@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Seventy-eight enemies, in thirteen themes of six** - one per role per theme, and every one of them built:
+- **Eighty-four enemies, in fourteen themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -534,7 +534,28 @@ context. The start screen says so, and one click anywhere fixes it.
    blunt joints, skulls with dark sockets, and coral-red marrow that keeps its
    color through status effects. Ground teeth cannot reach the catwalks;
    killing their caster cancels unspent eruptions.
-   **BRINE** the deep - **Howlers** (a scream that takes your
+   **OBSIDIAN**, the theme of
+  EDGES - dark glass with one hot cutting line, every mechanic committed to a
+  direction, and the one question the whole block asks is where the edge is
+  about to be: **Clasts** (lock a heading and LUNGE down it - a line they
+  cannot steer, telegraphed by the blade lifting, and the dodge is one step
+  off the lane after the commit), **Lancets** (fire a simultaneous wall of
+  three homing needles - the wall turns slowly toward you and each needle
+  can be shot out of the air, so the answer is to cross its line or spend
+  the bullet), **Masers** (a walking furnace in two halves: a cooled shell at
+  the front that eats two thirds of what lands on it and a burning heart in
+  the gap that is full price - the brute you aim at, and damage over time
+  ignores the shell entirely), **Knappers** (the only artillery whose landing
+  is a WALL: a solid blade of obsidian stands up out of the floor where you
+  were GOING, for three seconds - cover that is also an obstacle, and whose
+  it is depends on where you were heading), **Mirrors** (no attack at all;
+  they open a growing rift beside you that swells for a full second and then
+  cuts - the only support in the game whose pressure is a place rather than
+  a buff, answered by moving NOW) and **Glasswings** (the weeper's read with
+  an edge's promise: a thin crimson arc swept slowly across the floor for
+  over a second, then a glass shard dropped exactly along it - off the arc
+  costs nothing at all).
+  **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -568,9 +589,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the thirteen themes owns a boss, and the block a theme lands in is where its
+  of the fourteen themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All thirteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All fourteen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -627,35 +648,47 @@ context. The start screen says so, and one click anywhere fixes it.
   the floor around her pulses, and a gapped ring of honey is laid where she
   stands: she walks on and the ring stays behind, so over a fight the room
   fills with pockets of burning honey exactly where she has been. Under a
-   quarter of the bar she EATS her own brood for a burst of speed - the only
-   enrage in the game that costs the boss something the player can watch it
-   pay, and a player who kept the brood cleared takes nothing from the phase
-   but the speed. **THE RELIQUARY**, CATHEDRAL's, is a shrine that walks -
-   and the fight is the FLOOR: every so often it stops, the ground around it
-   pulses, and a gapped ring of CONSECRATED GROUND is laid where it stands.
-   It walks on and the ring stays behind, so over a fight the room fills with
-   pockets of hallow exactly where the boss has been, and the floor the
-   player was kiting on goes away a piece at a time. Off its lantern it
-   throws the slow processional fan the curates already taught you - the
-   tell is the lantern flaring - and under two thirds of the bar its bell
-   tolls on its own, a chill that reaches wherever the player is standing.
-   The box itself is the health bar's argument: shut and armoured for most
-   of the fight, and under a third the lids go wide for good, the armour
-   comes off, and the last stretch is the fastest. **OSSARCH**, BONE's crowned
-   skeleton, cycles through three attacks: a telegraphed radial rib volley
-   with an escape sector, a sequential spine through your captured position,
-   and a jaw charge down a marked lane. The charge commits to its bearing;
-   solid cover stops it. Every attack ends in a 1.6-second recovery with the
-   ribcage open and the marrow fully vulnerable. Outside those windows, two
-   mantle plates reduce damage to 55%, then 75%, then full damage as its bar
-   crosses two thirds and one third. The first break adds two branches to the
-   spine, and the last tightens the rib volley while preserving its escape
-   sector. Warnings retain their full duration as the fight scales; the walk
-   between attacks gets shorter. Regular enemies keep
-   arriving throughout; killing the boss ends the wave and pays out. It does NOT
-   refill your health or ammo - the payout is large and the stations are right
-   there, so coming out of a boss in trouble is a real state to be in and what
-   you spend the money on is a real decision.
+  quarter of the bar she EATS her own brood for a burst of speed - the only
+  enrage in the game that costs the boss something the player can watch it
+  pay, and a player who kept the brood cleared takes nothing from the phase
+  but the speed. **THE RELIQUARY**, CATHEDRAL's, is a shrine that walks -
+  and the fight is the FLOOR: every so often it stops, the ground around it
+  pulses, and a gapped ring of CONSECRATED GROUND is laid where it stands.
+  It walks on and the ring stays behind, so over a fight the room fills with
+  pockets of hallow exactly where the boss has been, and the floor the
+  player was kiting on goes away a piece at a time. Off its lantern it
+  throws the slow processional fan the curates already taught you - the
+  tell is the lantern flaring - and under two thirds of the bar its bell
+  tolls on its own, a chill that reaches wherever the player is standing.
+  The box itself is the health bar's argument: shut and armoured for most
+  of the fight, and under a third the lids go wide for good, the armour
+  comes off, and the last stretch is the fastest. **OSSARCH**, BONE's crowned
+  skeleton, cycles through three attacks: a telegraphed radial rib volley
+  with an escape sector, a sequential spine through your captured position,
+  and a jaw charge down a marked lane. The charge commits to its bearing;
+  solid cover stops it. Every attack ends in a 1.6-second recovery with the
+  ribcage open and the marrow fully vulnerable. Outside those windows, two
+  mantle plates reduce damage to 55%, then 75%, then full damage as its bar
+  crosses two thirds and one third. The first break adds two branches to the
+  spine, and the last tightens the rib volley while preserving its escape
+  sector. Warnings retain their full duration as the fight scales; the walk
+  between attacks gets shorter. **THE SMOKING MIRROR**, OBSIDIAN's, is the theme's whole
+  argument at boss scale: a cracked slab of volcanic glass standing on end
+  that drags itself about on three heavy legs, and every attack it has draws
+  a LINE across the room. The CRESCENT plants a telegraphed lane and then
+  sweeps down it, committed to the heading - baitable into a pillar for the
+  same long window Siege offers. The RAIN drops three telegraphed circles
+  around you at once, the widest question it asks. The WALLS drive two solid
+  blades out of the floor, one either side of the lane you were using - the
+  knapper's trick doubled, and the strip between them is the answer that was
+  offered. And under a third of the bar the FACE SPLITS: the seam down its
+  middle blazes open, every attack comes twice as often, and the open face
+  takes FULL damage where the shut face ate a third of it - the last third
+  of the fight is the window the whole fight was building to. Regular enemies keep
+  arriving throughout; killing the boss ends the wave and pays out. It does NOT
+  refill your health or ammo - the payout is large and the stations are right
+  there, so coming out of a boss in trouble is a real state to be in and what
+  you spend the money on is a real decision.
 - **Wave composition is fixed; which theme fills it is dealt.** Every wave has
   the same number of enemies and the same mix of ROLES in every run - that is
   what keeps two runs comparable - but the run is A BLOCK OF FIVE WAVES PER
@@ -2389,7 +2422,7 @@ js/enemies/         the enemy roster, one file per theme
   index.js          imports the themes, which is what registers them
   rust.js  void.js  ember.js  rime.js  verdant.js
   strata.js  tempest.js  brine.js  plague.js  solar.js  hive.js
-  cathedral.js  bone.js
+  cathedral.js  bone.js  obsidian.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
 js/effects.js       particle pool, tracers, muzzle flash, shake
@@ -2401,7 +2434,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the thirteen themes, their six enemies each, and the run's deck
+js/themes.js        the fourteen themes, their six enemies each, and the run's deck
 js/items/discover.js           shared browser/Node directory discovery
 js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
@@ -2495,6 +2528,18 @@ test/bone.mjs       BONE end to end - locked lunges and spine lanes, spent-rib
                     vulnerability, permanent plate shedding, interruptible
                     healing, airborne tooth trails, all three Ossarch attacks,
                     armor phases, cover, elevation and telegraph cleanup
+test/obsidian.mjs   OBSIDIAN end to end - every mechanic is a LINE, so every
+                    assertion is that line measured from both sides: the
+                    clast's lunge costing on the lane AND nothing a step off
+                    it, committed to its heading and free to be missed by,
+                    the lancet's wall of three turning after a player who
+                    stepped, the maser shelled in front AND full price behind,
+                    the knapper's blade real geometry in BOTH obstacle lists
+                    AND down again on its own, the mirror's rift cutting
+                    inside its final radius AND nothing outside it, the
+                    glasswing's arc costing on the line AND nothing off it,
+                    and the Smoking Mirror's face splitting under a third of
+                    the bar to take what the shut face did not
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

@@ -675,6 +675,12 @@ const MAX_HALLOW = 14;
 // little patches of smoke would be a haze rather than the wall the mechanic
 // is. Capped against the cloud pool the gas and the ink already share.
 const MAX_INCENSE = 8;
+// OBSIDIAN's edges - a knapper's blades and the Smoking Mirror's walls. Same
+// cap logic as the scald's: these are SOLID, so the number is really "how
+// much of the arena may be walled off at once". Three is a knapper's two in
+// flight plus one standing, and the boss's pair is laid on a cooldown slow
+// enough that it can never have two pairs up together.
+const MAX_EDGE = 6;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -750,6 +756,12 @@ const CREEP_HALLOW = 0xc0a860;
 // rather than standing tall - the stain on the floor is the veil's edge, the
 // cloud above it is what the player cannot look through.
 const CREEP_INCENSE = 0xa89a6a;
+// OBSIDIAN's edge. It deals no damage and applies no status - the wall IS
+// the whole payload, exactly as the scald's heat is only half of its - so it
+// wears the theme's own red rather than a status colour: the patch on the
+// floor says WHOSE wall this is, and the shape family says it will cost you
+// to walk through it.
+const CREEP_EDGE = 0xff3b30;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -919,6 +931,14 @@ const HAZARD_KINDS = {
   incense: {
     color: CREEP_INCENSE, cap: MAX_INCENSE, cloud: true,
   },
+  // OBSIDIAN's blade - a knapper's strike and the Smoking Mirror's walls.
+  // The second SOLID hazard in the game, and unlike the scald it has no dps
+  // at all: the wall is the entire payload, and whether it is cover or a
+  // problem depends entirely on where the player was going when it went up.
+  edge: {
+    color: CREEP_EDGE, cap: MAX_EDGE,
+    wall: { r: 1.0, h: 3.6 },
+  },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
 // queues twelve on its own and APIARY five, so this is not a limit anybody
@@ -986,6 +1006,7 @@ const BOSS_NAMES = {
   herald: 'HERALD',
   broodmother: 'THE BROODMOTHER',
   reliquary: 'THE RELIQUARY',
+  mirrorboss: 'THE SMOKING MIRROR',
 };
 const POISON_SPREAD_INTERVAL = 0.5;
 

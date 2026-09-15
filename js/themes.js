@@ -263,6 +263,24 @@ export const THEMES = {
       flier: 'skullwing',
     },
   },
+
+  // Volcanic glass. The theme of EDGES: dark bodies with one hot cutting
+  // line, every mechanic committing to a direction, and the one question
+  // the whole block asks is where the edge is about to be - answered with
+  // the feet, told in advance.
+  obsidian: {
+    name: 'OBSIDIAN',
+    color: 0xff3b30,
+    boss: 'mirrorboss',
+    roles: {
+      rusher: 'clast',
+      gunner: 'lancet',
+      brute: 'maser',
+      artillery: 'knapper',
+      support: 'mirror',
+      flier: 'glasswing',
+    },
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);

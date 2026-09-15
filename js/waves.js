@@ -89,6 +89,7 @@ const ADD_PRESSURE = {
   choir: 3,
   overgrowth: 3,   // it cannot move, so its adds ARE its reach
   broodmother: 3,  // the brood already takes up the floor
+  mirrorboss: 4,   // its walls already take up the floor
   colossus: 4,
   maw: 4,
   palecrown: 4,
