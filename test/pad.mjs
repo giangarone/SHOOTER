@@ -32,7 +32,9 @@
 //   11. CREATE opens the debug panel, which parks the run and dims the beam
 //       like every other screen with small caps to read. Its theme row pins
 //       the schedule - the two-click path to any theme at any wave that the
-//       one-at-a-time roster makes necessary.
+//       one-at-a-time roster makes necessary - and its SEARCH box narrows
+//       both item grids to the cards matching the query and drops a section
+//       that came up empty.
 //   12. THE BUTTONS ARE REBINDABLE. The settings screen grows a CONTROLLER
 //       BINDINGS block in pad mode (and hides the keyboard's), a press on a
 //       listening row becomes the binding - swapping with whichever action
@@ -748,6 +750,65 @@ try {
       t('OFF hands the order back to the deck',
         g._forcedTheme === null, 'forced=' + g._forcedTheme);
       t('and the row says so', off.classList.contains('pinned'));
+    }
+    {
+      // THE SEARCH BOX. Asserted on what is left STANDING, the same way the
+      // theme row is asserted on the schedule: a filter whose listener never
+      // ran, or whose match rule stopped agreeing with what a card says,
+      // passes nothing here. The queries are derived from the defs the panel
+      // itself was dealt, so a pool renaming survives without the suite being
+      // edited - and the haystack formula (the name and the effect lines,
+      // exactly what a card says) is restated here on purpose, because THAT
+      // is the contract.
+      const search = g.ui.debugSearch;
+      const type = (q) => {
+        search.value = q;
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const defs = [...g._debugPassiveDefs(), ...g._debugActiveDefs()];
+      const hayOf = (d) => (d.name + ' ' +
+        (Array.isArray(d.effects) ? d.effects.map((e) => e[0]).join(' ') : '')).toLowerCase();
+      const standing = () =>
+        [...g.ui.debugActives.children, ...g.ui.debugPassives.children]
+          .filter((el) => !el.classList.contains('filtered'));
+      const actSec = g.ui.debugActives.closest('.debug-sec');
+      const pasSec = g.ui.debugPassives.closest('.debug-sec');
+      // A NAME QUERY. Every word has to land on a card for the card to stay,
+      // so a full name should leave its own card plus only genuine overlaps.
+      const pick = g._debugPassiveDefs().find((d) =>
+        defs.filter((x) => d.name.toLowerCase().split(/\s+/).every((w) => hayOf(x).includes(w)))
+          .length < defs.length) || g._debugPassiveDefs()[0];
+      type(pick.name);
+      t('a query narrows both grids to the cards holding it',
+        standing().length > 0 && standing().length < defs.length,
+        `q="${pick.name}" ${standing().length}/${defs.length}`);
+      t('every card still standing says every word of it',
+        standing().every((el) =>
+          pick.name.toLowerCase().split(/\s+/).every((w) =>
+            el.textContent.toLowerCase().includes(w))));
+      // A PASSIVES-ONLY WORD: some word in a passive's name that no active's
+      // name or effect line contains. Typing it must leave the ACTIVE
+      // ITEM section with nothing to show - at which point the section hides
+      // rather than sitting over an empty grid, because a header over nothing
+      // reads as "the box is broken", not "no matches".
+      const actHay = g._debugActiveDefs().map(hayOf);
+      const passOnly = g._debugPassiveDefs()
+        .flatMap((d) => d.name.toLowerCase().split(/[^a-z]+/))
+        .filter(Boolean)
+        .find((w) => !actHay.some((h) => h.includes(w)));
+      type(passOnly || pick.name);
+      t('a section with no matches hides with its header',
+        actSec.classList.contains('hidden')
+        && !pasSec.classList.contains('hidden'),
+        'word=' + (passOnly || pick.name));
+      type('qqqq wwww');
+      t('a query nothing holds empties both sections',
+        actSec.classList.contains('hidden') && pasSec.classList.contains('hidden'));
+      type('');
+      t('and clearing the box puts every card back',
+        standing().length === defs.length
+        && !actSec.classList.contains('hidden') && !pasSec.classList.contains('hidden'),
+        `${standing().length}/${defs.length}`);
     }
     await tap(B.CREATE);
     t('create closes it again', g.ui.debugPanel.classList.contains('hidden'));

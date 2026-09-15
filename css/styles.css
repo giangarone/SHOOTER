@@ -1951,6 +1951,18 @@ body.pad-mode #game canvas { cursor: none; }
 }
 #debug-hint { font-size: 8px; color: var(--dim); }
 
+/* The filter. In the head rather than over a grid, because it reads BOTH item
+   sections at once. Typed into like the wave box, so it carries the same
+   data-pad-skip: CROSS has nothing to press here. */
+#debug-search {
+  flex: 0 1 calc(var(--u) * 70);
+  font: inherit; font-size: 10px;
+  color: var(--text); background: var(--fill);
+  border: 2px solid var(--line); padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5);
+}
+#debug-search:focus { outline: none; border-color: var(--cyan); }
+#debug-search::placeholder { color: var(--dim); }
+
 /* ONE SCROLLER, NOT THREE. Three panes that each scroll is three places to
    lose your position in; the whole sheet moving means a click and a scroll
    are the same gesture they are everywhere else - and it means the pad's
@@ -2063,6 +2075,12 @@ body.pad-mode #game canvas { cursor: none; }
   padding: calc(var(--u) * 2.5);
 }
 .dtile:hover { border-color: var(--line-hi); background: var(--fill); }
+/* FILTERED OUT BY THE SEARCH. display rather than a dim: the point of the
+   filter is to shrink the grid to the handful of cards it named, not to
+   quiet the rest. offsetParent goes null with it, which is also what drops
+   the card out of the pad's walk - the selection can never land on a card
+   the player cannot see. */
+.dtile.filtered { display: none; }
 /* ALWAYS ITS OWN COLOUR. See the header: the hue is half of what tells one
    icon from another, and an unowned card is dimmed as a WHOLE rather than
    drained - the drawing stays legible, it is just quieter. */

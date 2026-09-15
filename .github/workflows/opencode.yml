@@ -81,12 +81,10 @@ jobs:
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
-          TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "131072"
-          # test/harness.mjs reads this; without it the tests fall back to
-          # probing /usr/bin, which the setup-chrome action does not populate.
+          OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "65536"
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
         with:
-          model: tokenrouter/z-ai/glm-5.3-free
+          model: nvidia/moonshotai/kimi-k3
           variant: max

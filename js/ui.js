@@ -103,6 +103,7 @@ export class UI {
     this.debugWaveNow = $('debug-wave-now');
     this.debugWaveInput = $('debug-wave-input');
     this.debugWaveGo = $('debug-wave-go');
+    this.debugSearch = $('debug-search');
     this._debugTiles = null;
     this._debugWaveEls = null;
     this._debugThemeEls = null;
@@ -1096,6 +1097,9 @@ export class UI {
     this.debugWaveInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') jump();
     });
+    // The search filters live, a tile at a time. The same _typing guard means
+    // the 9 that would close the panel is just a character in the box.
+    this.debugSearch.addEventListener('input', () => this._debugFilter());
   }
 
   /**
@@ -1143,8 +1147,39 @@ export class UI {
         drop(def.id);
       });
     }
-    this._debugTiles[def.id] = { el, tier };
+    // What the search matches against is WHAT THE CARD SAYS - the name and
+    // the effect lines, nothing hidden - because the thing remembered about
+    // an item is as often what it does as what it is called: "ammo" has to
+    // find every card that says it, which a name-only search cannot.
+    const hay = (def.name + ' ' +
+      (Array.isArray(def.effects) ? def.effects.map(([text]) => text).join(' ') : '')
+    ).toLowerCase();
+    this._debugTiles[def.id] = { el, tier, hay };
     return el;
+  }
+
+  /**
+   * THE SEARCH. Every word of the query has to appear somewhere in the card's
+   * haystack - so "burn damage" is the cards holding both halves, which is
+   * the question being asked - and a card that fails any word is removed from
+   * the grid outright (see .filtered) rather than dimmed: the grid IS the
+   * answer, and a hundred quiet cards around the six wanted is not one.
+   *
+   * A section whose grid came up empty hides too, header and all - "ACTIVE
+   * ITEM" sitting over nothing says there were no matches only to someone who
+   * already knew there was nothing to find.
+   */
+  _debugFilter() {
+    if (!this._debugTiles) return;
+    const words = this.debugSearch.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    for (const t of Object.values(this._debugTiles)) {
+      t.el.classList.toggle('filtered',
+        words.length > 0 && !words.every((w) => t.hay.includes(w)));
+    }
+    for (const grid of [this.debugActives, this.debugPassives]) {
+      const any = [...grid.children].some((el) => !el.classList.contains('filtered'));
+      grid.closest('.debug-sec').classList.toggle('hidden', !any);
+    }
   }
 
   /**

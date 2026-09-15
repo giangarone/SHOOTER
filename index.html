@@ -208,11 +208,16 @@
        passives. Every tile is a button carrying its own icon - the same
        pixelicons.js drawing the totem and the build sheet use - and OWNED is
        the only state it has: colour for carried, grey for not. That is the
-       whole readout, so there is nothing to read. -->
+       whole readout, so there is nothing to read. The search box in the head
+       filters the two item grids by name and effect line - a hundred tiles
+       is past what the eye scans, and "give me the dash one" should not be
+       a hunt. -->
   <div id="debug-panel" class="hidden">
     <div id="debug-card" class="plate">
       <div id="debug-head">
         <span>DEBUG</span>
+        <input id="debug-search" type="text" placeholder="SEARCH ITEMS"
+               autocomplete="off" spellcheck="false" data-pad-skip>
         <span id="debug-hint">9 / ESC &nbsp;-&nbsp; PAD: CREATE OR CIRCLE</span>
       </div>
       <div id="debug-body">
