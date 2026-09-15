@@ -15,6 +15,7 @@ export * from './shared.js';
 export * from './brine.js';
 export * from './ember.js';
 export * from './hive.js';
+export * from './obsidian.js';
 export * from './plague.js';
 export * from './rime.js';
 export * from './rust.js';

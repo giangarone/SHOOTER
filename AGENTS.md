@@ -50,7 +50,7 @@ only care about one.
 
 ### The one thing not to do
 
-**On a CI runner, DO NOT run `npm run test:all`.** Thirty-one suites against a
+**On a CI runner, DO NOT run `npm run test:all`.** Thirty-seven suites against a
 real headless browser, and a runner has no GPU - it rasterizes every frame in
 software on a shared vCPU, so the set is about ninety minutes of work there
 against twenty on a developer machine. CI affords it by splitting the suites

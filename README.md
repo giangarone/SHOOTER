@@ -340,7 +340,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **Sixty-six enemy types, in eleven themes of six** - one per role per theme, and every one of them built:
+- **Seventy-two enemy types, in twelve themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -493,7 +493,28 @@ context. The start screen says so, and one click anywhere fixes it.
   and **Weepers** (the high line: they hold a wide orbit, drift down, and
   sweep a slow amber sightline across the floor for over a second before
   firing a single lance along the arc - one long readable line from the sky,
-  answered by stepping off the arc it is drawing). **BRINE** the deep - **Howlers** (a scream that takes your
+  answered by stepping off the arc it is drawing). **OBSIDIAN**, the theme of
+  EDGES - dark glass with one hot cutting line, every mechanic committed to a
+  direction, and the one question the whole block asks is where the edge is
+  about to be: **Clasts** (lock a heading and LUNGE down it - a line they
+  cannot steer, telegraphed by the blade lifting, and the dodge is one step
+  off the lane after the commit), **Lancets** (fire a simultaneous wall of
+  three homing needles - the wall turns slowly toward you and each needle
+  can be shot out of the air, so the answer is to cross its line or spend
+  the bullet), **Masers** (a walking furnace in two halves: a cooled shell at
+  the front that eats two thirds of what lands on it and a burning heart in
+  the gap that is full price - the brute you aim at, and damage over time
+  ignores the shell entirely), **Knappers** (the only artillery whose landing
+  is a WALL: a solid blade of obsidian stands up out of the floor where you
+  were GOING, for three seconds - cover that is also an obstacle, and whose
+  it is depends on where you were heading), **Mirrors** (no attack at all;
+  they open a growing rift beside you that swells for a full second and then
+  cuts - the only support in the game whose pressure is a place rather than
+  a buff, answered by moving NOW) and **Glasswings** (the weeper's read with
+  an edge's promise: a thin crimson arc swept slowly across the floor for
+  over a second, then a glass shard dropped exactly along it - off the arc
+  costs nothing at all).
+  **BRINE** the deep - **Howlers** (a scream that takes your
   trigger). **PLAGUE** rot - **Splitters** (break into three on death),
   **Husks** (burst into gas over their own corpse) and **Vitriols** (a cloud
   that keeps costing after you are out of it). **SOLAR** radiance - **Snipers**
@@ -527,9 +548,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the eleven themes owns a boss, and the block a theme lands in is where its
+  of the twelve themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All eleven exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All twelve exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar: damage on any of them comes off the same pool, so the bar falls
   whichever one is shot - what changes is what happens when one DIES. One of
   the three is always SINGING, lit and loud, and the other two are silent. Kill
@@ -589,7 +610,19 @@ context. The start screen says so, and one click anywhere fixes it.
   quarter of the bar she EATS her own brood for a burst of speed - the only
   enrage in the game that costs the boss something the player can watch it
   pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. Regular enemies keep
+  but the speed. **THE SMOKING MIRROR**, OBSIDIAN's, is the theme's whole
+  argument at boss scale: a cracked slab of volcanic glass standing on end
+  that drags itself about on three heavy legs, and every attack it has draws
+  a LINE across the room. The CRESCENT plants a telegraphed lane and then
+  sweeps down it, committed to the heading - baitable into a pillar for the
+  same long window Siege offers. The RAIN drops three telegraphed circles
+  around you at once, the widest question it asks. The WALLS drive two solid
+  blades out of the floor, one either side of the lane you were using - the
+  knapper's trick doubled, and the strip between them is the answer that was
+  offered. And under a third of the bar the FACE SPLITS: the seam down its
+  middle blazes open, every attack comes twice as often, and the open face
+  takes FULL damage where the shut face ate a third of it - the last third
+  of the fight is the window the whole fight was building to. Regular enemies keep
   arriving throughout; killing the boss ends the wave and pays out. It does NOT
   refill your health or ammo - the payout is large and the stations are right
   there, so coming out of a boss in trouble is a real state to be in and what
@@ -2291,7 +2324,7 @@ js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera
 js/enemy.js         the Enemy class, the four projectile kinds, the damage sinks
-js/enemies/         the sixty-six types, one file per theme
+js/enemies/         the seventy-two types, one file per theme
   shared.js         what more than one theme (or the class) needs: the geometry
                     and material caches, the faceted primitives, the status
                     tables, aiMelee / orbit / landHit, and ENEMY_TYPES itself
@@ -2309,7 +2342,7 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: four fan projectors raking across the room
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the eleven themes, their six enemies each, and the run's deck
+js/themes.js        the twelve themes, their six enemies each, and the run's deck
 js/upgrades.js      upgrade pool, totem roll, ammo purchase
 js/items.js         the active items, and the mystery box that offers them
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
@@ -2377,13 +2410,25 @@ test/solar.mjs      SOLAR end to end - three of its four reach into the
                     inside the field AND came back outside it, the plate
                     turned the shot AND stopped once it was spent
 test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
-                    assertion is a trade measured both ways: the honey
-                    burning AND free again once expired, the borer's front
-                    half plated AND its back half not, killed slow AND killed
-                    fast, the carapace cheaper through AND still stacked
-                    after the nurse is dead, the weeper's arc costing on the
-                    line AND nothing off it, and the Broodmother eating her
-                    own brood to panic
+                     assertion is a trade measured both ways: the honey
+                     burning AND free again once expired, the borer's front
+                     half plated AND its back half not, killed slow AND killed
+                     fast, the carapace cheaper through AND still stacked
+                     after the nurse is dead, the weeper's arc costing on the
+                     line AND nothing off it, and the Broodmother eating her
+                     own brood to panic
+test/obsidian.mjs   OBSIDIAN end to end - every mechanic is a LINE, so every
+                     assertion is that line measured from both sides: the
+                     clast's lunge costing on the lane AND nothing a step off
+                     it, committed to its heading and free to be missed by,
+                     the lancet's wall of three turning after a player who
+                     stepped, the maser shelled in front AND full price behind,
+                     the knapper's blade real geometry in BOTH obstacle lists
+                     AND down again on its own, the mirror's rift cutting
+                     inside its final radius AND nothing outside it, the
+                     glasswing's arc costing on the line AND nothing off it,
+                     and the Smoking Mirror's face splitting under a third of
+                     the bar to take what the shut face did not
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is
