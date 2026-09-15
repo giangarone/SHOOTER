@@ -205,6 +205,85 @@ try {
       g.totemArea.active ? 'RAISED' : 'none');
     t('the caption is down on the win screen', !caption());
 
+    // ---- 5b. THE BLOCK'S NAME AND COLOUR, ON THE BANNER --------------------
+    //
+    // The wave banner's second line is the name of the five-wave block that
+    // just opened, drawn in the block's own colour. Two bugs this guards: the
+    // versus banner used to drop the line entirely - a match has no pick to
+    // cue from, so the startWave banner is the only announce a versus player
+    // ever sees - and the colour used to be the room's cyan for every block,
+    // which is VERDANT announced in TEMPEST's light.
+    //
+    // Asserted on the CALLS the game makes, because the DOM copy is transient
+    // by design: a cleared wave's banner rewrites both elements a frame or two
+    // later, and the field below is deliberately held empty. The element's own
+    // half of the contract - a colour is worn, then handed back - is pinned
+    // with two direct banner calls at the end, where nothing is racing it.
+    const bannerCalls = [];
+    const origBanner = g.ui.banner.bind(g.ui);
+    g.ui.banner = (text, sub = '', color = null) => {
+      bannerCalls.push([text, sub, color]);
+      origBanner(text, sub, color);
+    };
+    const subEl = document.getElementById('bannersub');
+    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    // style.color reads back normalised (rgb(...)) however it was written, so
+    // the comparison goes through the same normalisation rather than a
+    // hard-coded form.
+    const norm = (s) => { const d = document.createElement('div'); d.style.color = s; return d.style.color; };
+
+    // SOLO, wave 1 - always a block open, banner raised by startWave.
+    g.beginGame('solo');
+    bannerCalls.length = 0;
+    await until(() => g.waveState === 'active');
+    const soloOpen = bannerCalls.find(([txt]) => txt === 'WAVE 1');
+    t('solo: a block opens with the theme under the wave number',
+      !!soloOpen && soloOpen[1] === g._cfg.themeName,
+      soloOpen ? soloOpen.join(' / ') : 'no WAVE 1 banner');
+    t('solo: and in the block\'s own colour',
+      !!soloOpen && soloOpen[2] === hex(g._cfg.themeColor),
+      'want ' + hex(g._cfg.themeColor) + ' got ' + (soloOpen && soloOpen[2]));
+
+    // A MID-BLOCK wave carries no caption, and no colour left over from the
+    // block before it. Dismissing the pick is what opens wave 2 in solo - the
+    // same real flow a forfeited set takes - and the set has to be UP first:
+    // it rises on the frame the wave clears, so a dismiss fired straight off
+    // the wave opening would land on totems that have not risen yet.
+    await until(() => g.totemArea.active);
+    g.totemArea.dismiss();
+    await until(() => bannerCalls.some(([txt]) => txt === 'WAVE 2'));
+    const midBlock = bannerCalls.find(([txt]) => txt === 'WAVE 2');
+    t('solo: a mid-block wave carries no caption or colour',
+      !!midBlock && midBlock[1] === '' && !midBlock[2],
+      midBlock ? midBlock.join(' / ') : 'no WAVE 2 banner');
+
+    // VERSUS, wave 1 - the assertion that fails when the caption goes back to
+    // being solo-only.
+    g.beginGame('versus');
+    bannerCalls.length = 0;
+    await until(() => g.waveState === 'active');
+    const vsOpen = bannerCalls.find(([txt]) => /WAVE 1$/.test(txt));
+    t('versus: a block open names its theme too',
+      !!vsOpen && vsOpen[1] === g._cfg.themeName,
+      vsOpen ? vsOpen.join(' / ') : 'no WAVE 1 banner');
+    t('versus: and wears its colour',
+      !!vsOpen && vsOpen[2] === hex(g._cfg.themeColor),
+      'want ' + hex(g._cfg.themeColor) + ' got ' + (vsOpen && vsOpen[2]));
+
+    // THE ELEMENT'S HALF, called directly so nothing overwrites it between the
+    // write and the read. A colour goes on; the next banner with no colour
+    // hands both colour and glow back to the stylesheet's cyan.
+    const paint = hex(g._cfg.themeColor);
+    g.ui.banner('PROBE', 'SUB', paint);
+    t('the sub takes a colour inline',
+      subEl.style.color === norm(paint) && subEl.style.textShadow !== '',
+      subEl.style.color + ' / ' + subEl.style.textShadow);
+    g.ui.banner('PROBE', 'SUB');
+    t('and the next banner hands it back to cyan',
+      subEl.style.color === '' && subEl.style.textShadow === '',
+      subEl.style.color + ' / ' + subEl.style.textShadow);
+    g.ui.banner = origBanner;
+
     // ---- 6. the pass cannot be wedged --------------------------------------
     // `intermission` reached while a pass is running used to re-book the turn
     // through _endTurn on every frame, and _endTurn re-arms interT - so the

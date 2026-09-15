@@ -3509,16 +3509,20 @@ class Game {
   _cueWaveOpen() {
     if (this._waveCued || this.match) return;
     this._waveCued = true;
-    this.ui.banner('WAVE ' + (this.wave + 1), this._themeCaption(this.wave + 1));
+    const c = this._themeCaption(this.wave + 1);
+    this.ui.banner('WAVE ' + (this.wave + 1), c ? c.text : '', c && c.color);
   }
 
-  // The name of the five-wave block that opens on wave n, or '' if n is not
-  // the first wave of one. Only on the first: the point is to mark the CHANGE,
-  // and a name repeated over all four waves of a block stops being an
-  // announcement and becomes furniture.
+  // The five-wave block that opens on wave n, as the banner's second line:
+  // its name and its colour, or null if n is not the first wave of one. Only
+  // on the first: the point is to mark the CHANGE, and a name repeated over
+  // all four waves of a block stops being an announcement and becomes
+  // furniture. The colour is the same one the rig tints the room with, so the
+  // caption reads as the block's and not as the room's.
   _themeCaption(n) {
-    if (((n - 1) % 5) !== 0) return '';
-    return waveConfig(n, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName;
+    if (((n - 1) % 5) !== 0) return null;
+    const cfg = waveConfig(n, this._themeSeed, HAVE_TYPE, this._forcedTheme);
+    return { text: cfg.themeName, color: '#' + cfg.themeColor.toString(16).padStart(6, '0') };
   }
 
   _musicMuffled() {
@@ -4529,12 +4533,19 @@ class Game {
     // fight starts rather than only before it.
     // Already said at the pick in solo (see _cueWaveOpen); a second identical
     // caption on the same wave would just replay the animation for nothing.
+    //
+    // THE THEME LINE IS NOT SOLO-ONLY. Solo hears it at the pick; a match
+    // cannot cue there (the pick ends the turn, and the caption would
+    // announce a fight the next player has not started), so this banner is
+    // the only one a versus player ever sees a block open with.
     if (!this._waveCued) {
+      const c = this._themeCaption(this.wave);
       this.ui.banner(
         this.match
           ? this.match.label() + '  \u00b7  WAVE ' + this.wave
           : 'WAVE ' + this.wave,
-        this.match ? '' : this._themeCaption(this.wave));
+        c ? c.text : '',
+        c && c.color);
     }
     this._waveCued = false;
     // Blackout, then the whole rig hits at once. The dark beat before it is
@@ -8951,8 +8962,12 @@ class Game {
     this.waveState = 'idle';
     this._waveCued = false;
     this.interT = 0;
-    this.ui.banner('DEBUG  WAVE ' + wave,
-      waveConfig(wave, this._themeSeed, HAVE_TYPE, this._forcedTheme).themeName);
+    // Always names its block, mid-block or not: naming it is the point of the
+    // jump, the same reason the wave number is in the line. In its colour,
+    // like the real announce's.
+    const dbgCfg = waveConfig(wave, this._themeSeed, HAVE_TYPE, this._forcedTheme);
+    this.ui.banner('DEBUG  WAVE ' + wave, dbgCfg.themeName,
+      '#' + dbgCfg.themeColor.toString(16).padStart(6, '0'));
   }
 
   /**

@@ -650,12 +650,22 @@ export class UI {
   // `sub` is the optional second line - the name of the five-wave theme block
   // that is opening. Passing nothing clears it, so a caller never has to
   // remember to wipe last wave's subtitle.
-  banner(text, sub = '') {
+  //
+  // `subColor` is that block's own colour, as a CSS string. It goes on the
+  // element INLINE rather than through a class, because it is per-banner
+  // data - one element, eighteen blocks - and a banner given no colour hands
+  // the sub back to the stylesheet's cyan, so a plain banner never carries
+  // the last block's colour over.
+  banner(text, sub = '', subColor = null) {
     this.bannerEl.textContent = text;
     this.bannerEl.classList.remove('show');
     void this.bannerEl.offsetWidth;
     this.bannerEl.classList.add('show');
     this.bannerSubEl.textContent = sub;
+    this.bannerSubEl.style.color = subColor || '';
+    this.bannerSubEl.style.textShadow = subColor
+      ? '3px 3px 0 var(--ink), 0 0 22px ' + subColor
+      : '';
     this.bannerSubEl.classList.remove('show');
     void this.bannerSubEl.offsetWidth;
     if (sub) this.bannerSubEl.classList.add('show');
