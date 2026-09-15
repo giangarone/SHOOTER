@@ -47,7 +47,8 @@
     "test:hive": "node test/hive.mjs",
     "test:cathedral": "node test/cathedral.mjs",
     "test:bone": "node test/bone.mjs",
-    "test:obsidian": "node test/obsidian.mjs"
+    "test:obsidian": "node test/obsidian.mjs",
+    "test:sapphire": "node test/sapphire.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

@@ -281,6 +281,23 @@ export const THEMES = {
       flier: 'glasswing',
     },
   },
+
+  // Accruing resonance. The theme that punishes the back of the queue - every
+  // enemy in it is quiet when it arrives and worse for every second it is
+  // allowed to keep existing.
+  sapphire: {
+    name: 'SAPPHIRE',
+    color: 0x3fb3d6,
+    boss: 'carillon',
+    roles: {
+      rusher: 'dart',
+      gunner: 'facet',
+      brute: 'cairn',
+      artillery: 'lapidary',
+      support: 'attuner',
+      flier: 'comet',
+    },
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
