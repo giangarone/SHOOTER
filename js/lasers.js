@@ -950,8 +950,11 @@ export class Lasers {
   }
 
   // `punch` is the beat envelope the beams stab on, read only by the pairs
-  // that pulse. `master` is what the ROOM allows: the look's multiplier, the
-  // energy, the wave break and the blackout cue.
+  // that pulse. `master` is what the ROOM allows: the look's multiplier and
+  // the energy. The room's on/off - the wave break, the blackout cues -
+  // arrives through it too, but only as a shutter the rig re-casts on the
+  // beat edge (see rig.js): the instant gate below is the whole point of a
+  // laser, and an eased master would smuggle the dissolve back in past it.
   update(dt, camPos, colour, punch, master) {
     const ease = Math.min(1, dt * EASE);
     // Impact slots are handed out in whatever order this frame writes rays, so

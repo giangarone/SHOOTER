@@ -537,6 +537,12 @@ export class Rig {
     this._target = new THREE.Color(ACCENTS[0]);
     this._energy = 0;
     this._house = 0;
+    // Whether the room lets the show's STABBING instruments burn at all -
+    // the beams and the laser bank. A shutter, re-cast only on the beat
+    // edge (see update). Starts open: boot is neither a break nor a cue,
+    // and both instruments are dark on their own until the first cue
+    // lights them anyway.
+    this._showOpen = true;
     this._accent = 0;
     this._pickIdx = 0;
     // The wall chase: where the bright head currently is, as 0..1 around the
@@ -663,6 +669,17 @@ export class Rig {
     if (s.bar !== this._lastBar) {
       const first = this._lastBar < 0;
       this._lastBar = s.bar;
+      // The show's permission to be lit, re-cast HERE and only here - and
+      // shared by the two instruments that ANSWER beats: the laser bank and
+      // the beams. `_house` and the cue timers are EASED quantities - the
+      // break crossfades in over the best part of a second and the blackout
+      // cues ramp - and multiplying them straight into a punch-driven light
+      // does not dim it, it makes it fire WEAKER STABS at every beat that
+      // falls inside the ease: the flash still lands on the downbeat and
+      // still decays, so the room reads as flashing slightly PAST the beat
+      // it was meant to stop on. A shutter instead: sampled on this edge,
+      // these instruments are whole or they are dark, on the music.
+      this._showOpen = this._house < 0.5 && this._waveT <= 0 && this._staggerT <= 0;
       if (s.downbeat || first) {
         // Looks change on the ONE and only there. A show that changed state
         // mid-bar would read as a fault; on the downbeat it reads as a cue.
@@ -862,13 +879,15 @@ export class Rig {
       const solo = 0.55 + 0.45 * Math.sin(this.t * 2.1 + h.phase);
       // They hang 13m up and a SpotLight falls off over `distance`, so most of
       // the intensity is spent just getting down to the floor.
-      sp.intensity = (1 - dark) * (70 + level * 130 + beat * 240 * this._energy) * solo * (0.35 + this._energy);
+      sp.intensity = (70 + level * 130 + beat * 240 * this._energy) * solo * (0.35 + this._energy);
       // And the two real heads shutter off entirely. They are the only lights
       // in the room that throw a pool on the floor, which is exactly what the
       // columns are now doing - two white pools sweeping through three
       // coloured ones is the one thing that would read as the rig arguing with
-      // itself.
-      sp.intensity *= 1 - this._house;
+      // itself. The shutter is the beat-edged `_showOpen`, like the beams:
+      // the pool answers every kick, so an eased gate would leave it
+      // answering the beats INSIDE the break's crossfade.
+      if (!this._showOpen) sp.intensity = 0;
     }
 
     // ---- fixture lenses ----------------------------------------------------
@@ -920,8 +939,16 @@ export class Rig {
       // solve the same complaint.
       // Everything multiplies `punch`, nothing is added to it, so when the
       // envelope reaches zero so does the beam - which is the whole point.
+      //
+      // The room's on/off reaches the beams through `_showOpen`, never as an
+      // eased factor: a beam inside a fading ease keeps answering beats with
+      // weaker and weaker stabs, which reads as the stab arriving just AFTER
+      // the downbeat that should have left the room dark. Shuttered on the
+      // beat edge, a break's first dark beat is dark - and the meshes are
+      // culled below for the whole of it instead of rasterised at opacity a
+      // fraction above zero.
       const o = punch * (BEAM_PUNCH * this._energy + level * BEAM_GLOW)
-        * this._energy * (1 - dark) * (1 - this._house);
+        * this._energy * (this._showOpen ? 1 : 0);
       b.mat.opacity = Math.min(0.9, o);
       // An invisible mesh is culled before rasterisation; a fully transparent
       // one is still drawn. These are big double-sided additive cones, so that
@@ -943,9 +970,14 @@ export class Rig {
     // What the ROOM allows. Which pairs are lit is the bank's own business,
     // and nothing in it answers the beat: the beams own the hits, the lasers
     // own the movement, and a laser that blinked on every kick would only be
-    // the beams again in a thinner shape.
+    // the beams again in a thinner shape. The LOUDNESS terms - level, energy,
+    // the look - may breathe with the mix frame to frame; the room's
+    // permission itself may not. The break and the blackout cues reach the
+    // bank only through `_showOpen`, the shutter cast on the beat edge
+    // above, so a fan going away snaps off on the music instead of
+    // dissolving mid-sweep.
     const laserMaster = (0.6 + level * 0.4) * (0.4 + this._energy * 0.6)
-      * (1 - dark) * (1 - this._house) * laserLook;
+      * (this._showOpen ? 1 : 0) * laserLook;
     this.lasers.update(dt, s.camPos, this._laserColour, punch, laserMaster);
 
     // ---- emissive furniture -----------------------------------------------
