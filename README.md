@@ -923,7 +923,9 @@ context. The start screen says so, and one click anywhere fixes it.
   by a dark phrase: the bank catching its breath). Projectors cut fully off
   on their scheduled beat, including when the two sides trade bars; there is
   no crossfade into an off bar. Wave breaks close the laser and beam shutters
-  on the first beat, independently of the ambient lighting fade.
+  on the first beat, independently of the ambient lighting fade. Flashing
+  lasers and beams use only the hit and its decay, excluding the ambient
+  pre-beat lift so it cannot trigger a brief extra flash before an off bar.
 - **The lights run off the music.** An analyser reads the soundtrack's bass and
   the rig flashes on the actual kick - not on a timer. It is tapped upstream of
   both the mute and the muffle, so the room keeps dancing to the track even with

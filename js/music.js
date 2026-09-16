@@ -161,6 +161,7 @@ export class Music {
     this._fluxBeat = 0;
     this._lvl = 0;
     this._beat = 0;
+    this._beatHit = 0;
     this._beatCd = 0;
     this._fallbackT = 0;
 
@@ -422,6 +423,7 @@ export class Music {
     const pos = this._clock();
     const heard = pos === null ? 0 : this._heard(pos);
     const b = pos !== null && this.map ? this.map.at(heard) : null;
+    let hit = 0;
     if (b) {
       // Same 1/6s fall as the detector, plus a lift on the approach - the one
       // thing knowing the future buys. Both distances are measured against the
@@ -429,7 +431,8 @@ export class Music {
       // the envelope drift.
       const since = heard - b.last;
       const until = b.next - heard;
-      let e = Math.max(0, 1 - Math.max(0, since) * BEAT_DECAY);
+      hit = Math.max(0, 1 - Math.max(0, since) * BEAT_DECAY);
+      let e = hit;
       if (until < PRE_SEC) e = Math.max(e, (1 - until / PRE_SEC) * PRE_GAIN);
       this._realBeat = e;
       this._bar = b.bar;
@@ -496,6 +499,10 @@ export class Music {
       if (!this._synced) this._bar = Math.floor(this._fallbackT) & 3;
       this._lvl = 0.35 + Math.sin(this._fallbackT * 0.6) * 0.1;
     }
+    // Shuttered lights must not anticipate the next hit while the previous
+    // bar still permits them: that creates a ghost flash before an off bar.
+    // Detector and free-running envelopes already have no anticipation.
+    this._beatHit = this._synced ? hit : this._beat;
   }
 
   // Checks the beat map against what the browser is really playing, by timing
@@ -571,6 +578,11 @@ export class Music {
 
   get level() {
     return this._lvl;
+  }
+
+  // The hit and its decay only; ambient movement can still anticipate via beat.
+  get beatHit() {
+    return this._beatHit;
   }
 
   get beat() {

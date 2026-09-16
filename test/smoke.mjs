@@ -216,7 +216,7 @@ try {
   const shutter = await page.evaluate(() => {
     const g = window.__game;
     const rig = g.rig;
-    const state = { ...g._fillRigState(), mode: 'combat', beat: 1, level: 1, bar: 1, downbeat: false };
+    const state = { ...g._fillRigState(), mode: 'combat', beat: 1, beatHit: 1, level: 1, bar: 1, downbeat: false };
     rig._lastBar = 0;
     rig._house = 0;
     rig._waveT = rig._staggerT = 0;
@@ -231,6 +231,68 @@ try {
   });
   checks.push(['first break beat closes shutters before ambient fade finishes',
     shutter.lit && shutter.fading && shutter.dark]);
+
+  // Sample the real music envelope on BOTH sides of the off-beat boundary.
+  // Testing only the boundary misses an anticipation flash just before it.
+  const pulseTrace = await page.evaluate(async () => {
+    const { BeatMap } = await import('/js/beatmap.js');
+    const g = window.__game;
+    const originalMusic = g.music;
+    const music = Object.assign(Object.create(Object.getPrototypeOf(originalMusic)), originalMusic);
+    let time = 0;
+    music.analyser = null;
+    music._clock = () => time;
+    music._heard = (t) => t;
+    music.map = new BeatMap({ duration: 10, segments: [{
+      t0: 0, t1: 10, anchor: 0, period: 0.5, bpm: 120,
+      quantized: true, beatsPerBar: 4, barOffset: 0,
+    }] });
+    g.music = music;
+    try {
+      const rig = g.rig;
+      rig._lastBar = 3;
+      rig._barsHeld = -1;
+      rig._look = 0;
+      rig._energy = 1;
+      rig._house = rig._waveT = rig._staggerT = 0;
+      for (const b of rig.lasers.banks) {
+        b.playing = true;
+        b.mask = 5; // First bar on, second off, third on again.
+        b.barsOn = 0;
+        b.on = false;
+        b.pulsing = true;
+        b.move = 0;
+        b.emGain0 = b.emGain1 = 1;
+      }
+      const hits = [];
+      const stray = [];
+      let approach = 0;
+      for (let beat = 0; beat < 8; beat++) {
+        for (const offset of [0, 0.04, 0.18, 0.25, 0.42, 0.46, 0.49]) {
+          time = beat * 0.5 + offset;
+          music.sample(1 / 240);
+          rig.update(1 / 240, { ...g._fillRigState(), mode: 'combat', level: 1 });
+          const lit = rig.lasers.banks.some((b) => b.rayMesh.visible || b.fillMesh.visible);
+          if (offset === 0 && beat < 4) hits.push(lit);
+          if ((beat >= 4 || offset >= 0.18) && lit) stray.push(time);
+          if (offset >= 0.18 && rig.beams.some((b) => b.pivot.visible)) stray.push(`beam@${time}`);
+          if (offset === 0.49) approach = Math.max(approach, music.beat);
+        }
+      }
+      time = 4;
+      music.sample(1 / 240);
+      rig.update(1 / 240, { ...g._fillRigState(), mode: 'combat', level: 1 });
+      return { hits, stray, approach,
+        resumed: rig.lasers.banks.some((b) => b.rayMesh.visible) };
+    } finally {
+      g.music = originalMusic;
+    }
+  });
+  console.log('LASER PULSE TRACE', JSON.stringify(pulseTrace));
+  checks.push(['four flashes, no extra flash approaching or during the off beat',
+    pulseTrace.hits.length === 4 && pulseTrace.hits.every(Boolean) && pulseTrace.stray.length === 0]);
+  checks.push(['ambient anticipation preserved and scheduled laser flashes resume',
+    pulseTrace.approach > 0 && pulseTrace.resumed]);
 
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);
   const ok = checks.every(([, v]) => v);

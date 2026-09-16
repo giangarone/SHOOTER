@@ -107,13 +107,10 @@ const BEAM_SNAP = 26;
 // far the envelope falls, so a floor anywhere in the sum is a floor in the
 // result.
 //
-// BEAM_SHARP is what does the work. `beat` is an envelope that falls linearly
-// to zero over about a sixth of a second, and raising it to a power leaves the
-// peak at 1 while collapsing the tail: at 100ms after the hit it is down to a
-// tenth instead of four tenths. It also quiets the anticipation lift that
-// music.js puts in front of every beat, from 0.3 to well under a tenth, so the
-// beams stay dark right up until the hit while everything else in the room
-// still leans into it.
+// BEAM_SHARP tightens the hit's decay without changing its peak. This uses
+// music's hit-only envelope: the ambient envelope rises BEFORE the next beat,
+// when the old bar's shutter is still open. Even raised to this power, that
+// anticipation was bright enough to flash just before a scheduled off bar.
 //
 // The room does not lose its shape when they go: the wall strips, the fixture
 // lenses, the fog and every emissive edge in the venue are all still lit, and
@@ -917,7 +914,7 @@ export class Rig {
     const snap = Math.min(1, dt * BEAM_SNAP);
     // One stab shape for all four - they fire together, which is what makes
     // the figure they are holding legible as a single shape.
-    const punch = Math.pow(beat, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
+    const punch = Math.pow(s.beatHit, BEAM_SHARP) * (s.downbeat ? BEAM_DOWNBEAT : 1);
     const laserLook = LOOKS[this._look];
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
