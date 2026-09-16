@@ -1217,11 +1217,15 @@ try {
     const queasy = spawn('chaser', -5, 0);
     useItem('itemPanic');
     out.panicFeared = runner.status.fear > 7 && queasy.status.fear > 7;
+    // Generic weapon damage is deliberately huge here: the poison must still
+    // read its own ten-point base rather than the gun it was applied beside.
+    const heldDamage = P.mods.damage;
+    P.mods.damage = 9;
+    out.poisonWeaponDamage = P.getEffectiveDamage(P.weapon.damage);
     useItem('itemFoodPoisoning');
     out.poisonedAll = runner.status.poison > 7 && queasy.status.poison > 7;
-    // The dose is the player's own shot, so it is still worth a slot at wave
-    // thirty rather than being a flat number set on wave three.
-    out.poisonDoseScales = runner._dot.poison > 1;
+    out.poisonDose = runner._dot.poison;
+    P.mods.damage = heldDamage;
 
     // ---- PARTY BALLOONS: five off the floor, and never a boss ----
     clearField();
@@ -1829,8 +1833,9 @@ try {
   ok('phlebotomy: and nothing at all on a full bar', m.phlebotomyRefusesFull);
   ok('panic button: the whole floor runs', m.panicFeared);
   ok('food poisoning: the whole floor is poisoned', m.poisonedAll);
-  ok('food poisoning: the dose is the gun, not a flat number',
-    m.poisonDoseScales);
+  ok('food poisoning: poison stays at ten when weapon damage changes',
+    m.poisonDose === 10 && m.poisonWeaponDamage !== 10,
+    `poison=${m.poisonDose} weapon=${m.poisonWeaponDamage}`);
   ok('party balloons: five leave the floor', m.balloonsLifted === 5,
     String(m.balloonsLifted));
   ok('party balloons: a boss stays where it is', m.balloonsSpareBosses);

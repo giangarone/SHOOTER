@@ -4454,7 +4454,7 @@ class Game {
       if (e.dead || e.pos.y >= LAVA_FLOOR_CLEAR) continue;
       // Refreshed while they stand in it and left to run down when they climb
       // out, the rule every fire in this game follows.
-      e.applyStatus('burn', 2, this.player.dotHit);
+      e.applyStatus('burn', 2, this.player.fireTickDamage);
     }
     if (this.player.pos.y >= LAVA_FLOOR_CLEAR) return;
     // THE PLAYER BURNS ON EXACTLY A MAGMA PATCH'S TERMS - the same status for
@@ -5697,15 +5697,13 @@ class Game {
    * inventing an enemy-side curse to make the sentence come out even would be a
    * second mechanic nobody asked for.
    *
-   * The two damage-over-time effects are handed the player's OWN shot as their
-   * per-tick strength, exactly as VENOM and INCENDIARY are (see Player.dotHit),
-   * so a conduit build's burn is worth what the build's gun is worth.
+   * The two damage-over-time effects use their fixed status bases, exactly as
+   * VENOM and INCENDIARY do. Generic weapon damage never changes either one.
    */
   _conduit() {
     const m = this.player.mods;
     const r2 = m.conduit * m.conduit;
     const p = this.player.pos;
-    const hit = this.player.dotHit;
     let any = false;
     for (const [mine, theirs] of CONDUIT_MAP) {
       const t = this.player.status[mine];
@@ -5719,7 +5717,9 @@ class Game {
         // The remaining time on the PLAYER, so an effect that is nearly over
         // spreads as an effect that is nearly over. Capped at the tick rate's
         // own second so a refresh cannot stack into a permanent status.
-        e.applyStatus(theirs, Math.min(t, CONDUIT_TICK * 2), hit);
+        const power = theirs === 'burn' ? this.player.fireTickDamage
+          : theirs === 'poison' ? this.player.poisonTickDamage : 0;
+        e.applyStatus(theirs, Math.min(t, CONDUIT_TICK * 2), power);
       }
     }
     if (any) this.effects.shockwave(p, THEME_CONDUIT, m.conduit, 0.3);
@@ -6398,10 +6398,16 @@ class Game {
     // Malady scales the two statuses that HAVE a strength. Cryo, Terror
     // and Petrify are left alone: shortening them buys nothing back.
     if (m.poisonTime) {
-      en.applyStatus('poison', m.poisonTime * m.dotTime, this.player.dotHit * m.poisonPower * m.dotPower);
+      en.applyStatus(
+        'poison', m.poisonTime * m.dotTime,
+        this.player.poisonTickDamage * m.poisonPower * m.dotPower
+      );
     }
     if (m.burnTime) {
-      en.applyStatus('burn', m.burnTime * m.dotTime, this.player.dotHit * m.burnPower * m.dotPower);
+      en.applyStatus(
+        'burn', m.burnTime * m.dotTime,
+        this.player.fireTickDamage * m.burnPower * m.dotPower
+      );
     }
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
@@ -6752,8 +6758,8 @@ class Game {
         // either takes it or it is not this pull's near miss at all.
         //
         // Read off the SAME base the round that missed was worth: the weapon
-        // figured through every multiplier (exactly as dotHit reads it), so
-        // the chip stays ten percent of the shot the player actually fired.
+        // figured through every multiplier, so the chip stays ten percent of
+        // the shot the player actually fired.
         this.hurtEnemy(en, this.player.getEffectiveDamage(w.damage * m.volleyDamage) * 0.1);
       }
     }
@@ -10085,7 +10091,10 @@ class Game {
           }
         }
         if (best) {
-          best.applyStatus('burn', m.burnTime, this.player.dotHit * m.burnPower * m.dotPower);
+          best.applyStatus(
+            'burn', m.burnTime,
+            this.player.fireTickDamage * m.burnPower * m.dotPower
+          );
           this.effects.burst(at, 0xff7a18, 8, 4, 2, 0.4);
         }
       }
@@ -10104,7 +10113,8 @@ class Game {
     const m = this.player.mods;
     this._ash.push({
       x: pos.x, z: pos.z, life: m.ashTime, maxLife: m.ashTime,
-      power: this.player.dotHit * m.ashPower * m.dotPower, radius: m.ashRadius, drip: 0,
+      power: this.player.fireTickDamage * m.ashPower * m.dotPower,
+      radius: m.ashRadius, drip: 0,
       // Friendly: the smooth shape family, the one that never hurts the
       // player. Standing in your own ash has to be visibly safe.
       creep: this.effects.creepAcquire(false),
@@ -10117,12 +10127,12 @@ class Game {
   }
 
   // What one tick of HELLFIRE's trail is worth, snapshotted at the moment the
-  // patch is laid like every other fire in the game - see Player.dotHit. One
+  // patch is laid like every other fire in the game. One
   // expression rather than two, because the arming branch and the laying
   // branch both need it and a copy is a place for them to drift.
   _hellfirePower() {
     const m = this.player.mods;
-    return this.player.dotHit * m.hellfirePower * m.dotPower;
+    return this.player.fireTickDamage * m.hellfirePower * m.dotPower;
   }
 
   // HELLFIRE. One patch of the burning trail: the same four-numbers-and-a-drip
@@ -10188,7 +10198,8 @@ class Game {
         const hot = this.time < this._fireUntil;
         this._addFire(
           this.player.pos.x, this.player.pos.z,
-          hot ? this._hellfirePower() : this.player.dotHit * m.slideFire * m.dotPower,
+          hot ? this._hellfirePower()
+            : this.player.fireTickDamage * m.slideFire * m.dotPower,
           hot ? m.hellfireRadius : m.slideFireRadius
         );
       }
@@ -10266,7 +10277,7 @@ class Game {
 
     // SYNCOPATION. One body, chosen at random out of the living, for a flat
     // hit carried on the mods - the same shape HEARTBEAT pays in. It does not
-    // read Player.dotHit anymore: a pick that paid a shot's worth per beat was
+    // read the weapon anymore: a pick that paid a shot's worth per beat was
     // bought twice by a damage build, once per pull and once per beat survived.
     //
     // THE ROLL IS OVER THE LIVING ONLY. Taking a random index out of `enemies`
@@ -10436,10 +10447,9 @@ class Game {
    * a meaning for them here would be a second definition of a word the player
    * already knows from their own HUD.
    *
-   * THE POWER IS THE PLAYER'S OWN SHOT, through Player.dotHit, exactly as VENOM
-   * and INCENDIARY's are - so a poison the player is carrying comes off a body
-   * at the rate the player's gun does, not at the rate of whatever poisoned
-   * them. Scaled by MALADY like every other damage-over-time in the game.
+   * THE POWER IS THE STATUS'S FIXED BASE, exactly as VENOM and INCENDIARY use.
+   * It does not inherit the rate of whatever afflicted the player and generic
+   * weapon damage cannot move it. MALADY still scales both statuses.
    *
    * THE DURATION IS THE PLAYER'S REMAINING TIME, not the table's full one. What
    * the card promises is that the shots carry what the player has, and eight
@@ -10449,9 +10459,14 @@ class Game {
   _splashback(en) {
     const m = this.player.mods;
     const P = this.player.status;
-    const power = this.player.dotHit * m.dotPower;
-    if (P.fire > 0) en.applyStatus('burn', P.fire * m.dotTime, power);
-    if (P.poison > 0) en.applyStatus('poison', P.poison * m.dotTime, power);
+    if (P.fire > 0) {
+      en.applyStatus('burn', P.fire * m.dotTime, this.player.fireTickDamage * m.dotPower);
+    }
+    if (P.poison > 0) {
+      en.applyStatus(
+        'poison', P.poison * m.dotTime, this.player.poisonTickDamage * m.dotPower
+      );
+    }
     if (P.slowness > 0) en.applyStatus('slow', P.slowness);
     if (P.fear > 0) en.applyStatus('fear', P.fear);
   }
@@ -10884,7 +10899,10 @@ class Game {
         const dst = list[j];
         if (dst === src || dst.dead || dst.status.poison > 0) continue;
         if (dst.pos.distanceTo(src.pos) > m.poisonSpread) continue;
-        dst.applyStatus('poison', m.poisonTime * m.dotTime, this.player.dotHit * m.poisonPower * m.dotPower);
+        dst.applyStatus(
+          'poison', m.poisonTime * m.dotTime,
+          this.player.poisonTickDamage * m.poisonPower * m.dotPower
+        );
         this.effects.burst(
           this._ashAt.set(dst.pos.x, 1.0, dst.pos.z), 0x39d353, 6, 3, 1.5, 0.35
         );
@@ -10899,15 +10917,15 @@ class Game {
   // reload in the middle of a heavy wave throws what there is room for.
   //
   // WHAT A SHARD IS WORTH IS WHAT A SHOT IS WORTH, four times over - read off
-  // `dotHit`, which is the player's own round through getEffectiveDamage, so
-  // every damage passive item in the build feeds the ring exactly as it feeds
-  // a burn. Snapshotted here, at the throw, rather than carried on the shard:
+  // the player's current effective round, so every damage passive item in the
+  // build feeds the ring. Unlike poison and fire this is a real hit, not a
+  // status tick. Snapshotted here, at the throw, rather than carried on the shard:
   // a totem claimed while eight shards are in the air must not rescale them.
   _reloadBurst() {
     const m = this.player.mods;
     const n = m.reloadShards;
     if (n <= 0) return;
-    const dmg = this.player.dotHit * m.reloadShardMult;
+    const dmg = this.player.getEffectiveDamage(this.player.weapon.damage) * m.reloadShardMult;
     const spin = Math.random() * Math.PI * 2;
     for (let i = 0; i < n; i++) {
       if (this.projectiles.length >= MAX_PROJECTILES) break;

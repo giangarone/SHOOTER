@@ -13,14 +13,12 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // BRIMSTONE would have killed outright is instead a crowd that dies while
     // the player deals with something else.
     //
-    // ONE OF THE PLAYER'S OWN SHOTS PER TICK, half of what BRIMSTONE's fire is
-    // worth, because poison ticks once a beat where fire ticks twice - so the
-    // two items are the same total damage arriving at different speeds, and
-    // both are still worth a slot at wave thirty.
+    // THE FIXED POISON BASE PER TICK. Poison is a status with its own value,
+    // not another route through the weapon's damage stat.
     effects: [['POISON ALL ENEMIES', GOOD], ['FOR 8s', NOTE]],
     use: (game) => {
       let n = 0;
-      const dose = game.player.dotHit;
+      const dose = game.player.poisonTickDamage;
       for (const e of game.enemies) {
         if (e.dead) continue;
         e.applyStatus('poison', 8, dose);

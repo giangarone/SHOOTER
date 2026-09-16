@@ -31,8 +31,8 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.muzzleInto(_v);
       facing(game);
       // The burn is snapshotted at the throw, like every other fire in the
-      // game - see Player.dotHit and the note on Lob.
-      game.deploy(new Lob(game, _v, _dir, 'molotov', p.dotHit * 2));
+      // game; see the note on Lob.
+      game.deploy(new Lob(game, _v, _dir, 'molotov', p.fireTickDamage * 2));
       game.sfx.itemDeploy();
     },
 }));

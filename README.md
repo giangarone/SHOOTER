@@ -1034,6 +1034,11 @@ block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
 absolute values rather than accumulate. Every stat a passive item may touch is
 declared in `DEFAULT_MODS` in `js/player.js`.
 
+Player-owned damage over time is independent of the weapon: poison deals 10
+damage per tick and fire deals 15. A source that explicitly names a multiplier
+still applies it to that status base, and MALADY still modifies the result, but
+generic damage upgrades never raise either tick.
+
 Each passive item carries a `theme` colour describing what it DOES (gold ammo,
 orange fire rate, cyan armour, blue mobility...) and an `effects` list of short
 signed lines - `1` benefit drawn green, `-1` drawback drawn red, `0` a dim
@@ -1917,9 +1922,10 @@ It carries only what an enemy can actually hold - burning, poison, the chill and
 fear exist on both sides of the fight - and WEAKNESS and CURSE simply do not
 transfer, because there is nothing on an enemy for them to become and inventing
 one would be a second meaning for a word the player already knows from their own
-HUD. The power is the player's own shot through `dotHit`, and the duration is
-what is LEFT on the player: eight fresh seconds of poison off a burn with half a
-second left would be manufacturing an affliction rather than passing one on.
+HUD. Poison ticks for a fixed 10 and fire for a fixed 15, independent of the
+weapon's damage, and the duration is what is LEFT on the player: eight fresh
+seconds of poison off a burn with half a second left would be manufacturing an
+affliction rather than passing one on.
 
 **The turrets, which were one item and are now a family**
 

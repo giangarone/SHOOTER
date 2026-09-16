@@ -1,7 +1,6 @@
 import { definePassiveItem } from '../shared.js';
 
-// A MULTIPLE OF THE GUN, NOT A FLAT TWENTY-FIVE. The old number was the same
-// mistake fire and poison were built out of (see Player.dotHit): a real hit
+// A MULTIPLE OF THE GUN, NOT A FLAT TWENTY-FIVE. The old number was a real hit
 // on wave three and a rounding error on wave thirty, so the one passive item
 // in the pool that pays out on the reload got weaker every time the player
 // did anything else right. Charged at four times a shot it is worth what the

@@ -22,6 +22,13 @@ import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 import { CEIL_Y } from './arena.js';
 import { ACTIVE_ITEMS } from './items/active/index.js';
 
+// PLAYER-OWNED DAMAGE-OVER-TIME BASES. These are status numbers, not weapon
+// numbers: raising or lowering the gun's damage must never move either tick.
+// Sources can still apply their own explicit multiplier on top, and MALADY's
+// shared multiplier is applied by the caller where it always has been.
+export const POISON_TICK_DAMAGE = 10;
+export const FIRE_TICK_DAMAGE = 15;
+
 // Every stat a passive item is allowed to touch, at its un-upgraded value.
 //
 // rebuildMods() resets to a copy of this and replays the whole owned passive-item
@@ -81,10 +88,9 @@ const DEFAULT_MODS = {
   // exactly one passive item with max: 1, so they are flags and rates rather than
   // multipliers that stack. Zero means the passive item is not owned, which is
   // what every hook in main.js tests.
-  poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of one of
-                        // the player's own shots - see Player.dotHit
+  poisonPower: 0,       // Venom: multiplier on the base poison tick
   poisonTime: 0,
-  burnPower: 0,         // Incendiary: burn damage per tick, same multiple, for
+  burnPower: 0,         // Incendiary: multiplier on the base fire tick, for
   burnTime: 0,          // burnTime seconds
   burnSpread: 0,        // metres the burn jumps when a burning enemy dies
   slowTime: 0,          // Cryo: seconds of movement and projectile slow
@@ -362,8 +368,8 @@ const DEFAULT_MODS = {
   floatLift: 0,         // this acceleration - which must beat the 22 m/s^2 in
                         // update(), because gravity is applied before it
   jackpot: 0,           // Jackpot: chance a GROUND jump refills everything
-  slideFire: 0,         // Scorched Earth: burn power of the trail a slide lays,
-  slideFireRadius: 0,   // as a multiple of one of the player's own shots
+  slideFire: 0,         // Scorched Earth: multiplier on the fire tick its trail lays
+  slideFireRadius: 0,
   quorumEvery: 0,       // Quorum: kills that summon a turret, which lives
   quorumLife: 0,        // this long, up to
   quorumMax: 0,         // this many at once
@@ -382,7 +388,7 @@ const DEFAULT_MODS = {
   syncopation: 0,       // Syncopation: one random enemy per whole beat takes
   syncopationHit: 0,    // this much damage. Flat, the way heartbeatHit is:
                         // the beat pays the same whatever the build has
-                        // drafted - it used to read Player.dotHit and pay a
+                        // drafted - it used to read the weapon and pay a
                         // shot, and a damage build was getting the pick twice
   hitCharge: 0,         // Jumper Cables: item charge granted by a hit TAKEN
   dimeCrit: 0,          // Dime Novel: crit chance the active item buys, for
@@ -418,8 +424,8 @@ const DEFAULT_MODS = {
   sharedMagCost: 0,     // reserve can pay this many rounds for it
   heartbeat: 0,         // Heartbeat: chance per enemy per DOWNBEAT of taking
   heartbeatHit: 0,      // this much damage
-  turretPoison: 0,      // Venomgrid: poison a turret's shot applies, as a
-  turretPoisonTime: 0,  // multiple of one of the player's own shots
+  turretPoison: 0,      // Venomgrid: multiplier on a turret's poison tick
+  turretPoisonTime: 0,
   turretBurn: 0,        // Hellspitter: the same, in fire
   turretBurnTime: 0,
   bellowsGuard: 0,      // Bellows: damage taken reduced at FULL stamina
@@ -2647,22 +2653,14 @@ export class Player {
     return true;
   }
 
-  // ONE TICK OF DAMAGE OVER TIME: one of the player's own shots, before the
-  // per-status multiplier the caller applies on top.
-  //
-  // getEffectiveDamage, not the raw weapon number. Fire and poison used to be
-  // flat rates, which made them real numbers on wave 3 and rounding errors on
-  // wave 30 - the two statuses in the pool that got weaker the longer a run
-  // went on. Charged as one of the player's SHOTS, they are worth exactly what
-  // the gun is worth at the moment they are applied, and every damage passive
-  // item in the build feeds them. Malady still multiplies on top, which is
-  // what keeps that trade honest on both statuses.
-  //
-  // Snapshotted by the caller into the enemy's own _dot, so a burn already
-  // running is not retroactively rescaled by a totem claimed after it started.
-  get dotHit() {
-    return this.getEffectiveDamage(this.weapon.damage);
-  }
+  // THE STATUS BASES, intentionally independent of the weapon. Callers
+  // snapshot these into an enemy's _dot, then apply only modifiers that name
+  // the status itself; generic damage upgrades do not buy the same build
+  // twice. Separate getters keep the future extension point explicit without
+  // giving poison and fire another shared, weapon-derived value to drift back
+  // toward.
+  get poisonTickDamage() { return POISON_TICK_DAMAGE; }
+  get fireTickDamage() { return FIRE_TICK_DAMAGE; }
 
   // BRASS ECHO. Called once per shot that connected; a shot that hit nothing
   // is never offered the roll. Returns whether the round came back, so the

@@ -486,6 +486,9 @@ try {
       bare();
       for (const k of keys) P.passiveItems[k] = 1;
       P.rebuildMods();
+      // This compares the scythe's full blow with a bare swing, so neither
+      // half may roll the run's default 5% crit and become a different attack.
+      P.mods.critChance = 0;
       clearField();
       // Three in the arc in front, one squarely behind.
       const arc = [spawn('chaser', 0, -2.6), spawn('chaser', -1.4, -2.4),
@@ -697,9 +700,17 @@ try {
     clearField();
     // AND THE ROOM IS PUT BACK THE WAY THE FIXTURES BELOW EXPECT IT. A totem
     // set that DID rise would otherwise stand in front of the player for the
-    // rest of the suite.
+    // rest of the suite. The frames above may also have cleared the held wave
+    // and generated a fresh terrain set; clear its collision too, or one crate
+    // on the centre line makes every later gunshot miss together.
     g.totemArea.dismiss();
     g.mysteryBox.dismiss();
+    if (g.terrain.state !== 'hidden') {
+      g.terrain.reset();
+      g.terrain.clearCollision();
+      g.nav.rebake(g.arena.obstacles);
+      g.navBig.rebake(g.arena.obstacles);
+    }
     g.waveState = 'active';
     g.state = 'playing';
 
@@ -1142,7 +1153,7 @@ try {
   ok('and fires exactly once per whole beat', r.syncEvents === r.syncBeats,
     `events=${r.syncEvents} beats=${r.syncBeats}`);
   // A FLAT TEN, EXACTLY. The number not moving with the build IS the pick now,
-  // so it is asserted against the literal rather than against Player.dotHit -
+  // so it is asserted against the literal rather than against weapon damage -
   // a regression that paid a shot's worth would pass a relative check here.
   ok('and each one is a flat ten points', r.syncPerEvent === 10, `per=${r.syncPerEvent}`);
 
@@ -1325,7 +1336,7 @@ try {
   ok('splashback passes the burn on', r.splashBurn);
   ok('and the poison', r.splashPoison);
   ok('and the chill', r.splashSlow);
-  ok('at the strength of the player’s own shot', r.splashPower > 0,
+  ok('at poison’s fixed ten-point tick', r.splashPower === 10,
     String(r.splashPower));
   // WEAKNESS AND CURSE HAVE NO ENEMY FORM. Carrying only those must land
   // nothing rather than throwing or inventing a status.

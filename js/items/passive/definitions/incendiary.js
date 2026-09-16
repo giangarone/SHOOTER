@@ -8,7 +8,11 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     theme: THEME.fire,
     // Twice a beat where poison is once: fire is the fierce, short one and
     // poison the patient one, and on the beat that difference is audible.
-    effects: [['SHOTS SET ENEMIES', GOOD], ['ON FIRE FOR 3s', NOTE], ['FIRE SPREADS ON DEATH', NOTE]],
+    effects: [
+      ['SHOTS SET ENEMIES', GOOD],
+      ['15 DAMAGE PER TICK, 3s', NOTE],
+      ['FIRE SPREADS ON DEATH', NOTE],
+    ],
     apply: (mods, n) => {
       mods.burnPower = 1 * n;
       mods.burnTime = 3 * n;

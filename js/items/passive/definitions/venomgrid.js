@@ -6,9 +6,9 @@ import { definePassiveItem } from '../shared.js';
 // of poison twice a beat is a body that stays poisoned for as long as the
 // sentry can see it, which is worth more than the shot itself.
 //
-// THE PLAYER'S OWN POISON, through Player.dotHit, so it scales with the build
-// and stacks under SECONDARY INFECTION exactly as the gun's does. A turret
-// with a poison of its own would have been a fourth number nobody could find.
+// THE PLAYER'S OWN POISON, at poison's fixed base, and it stacks under
+// SECONDARY INFECTION exactly as the gun's does. A turret with a poison of its
+// own would have been a fourth number nobody could find.
 export const id = 'venomgrid';
 
 export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({

@@ -24,7 +24,9 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       // three the flames sat on the camera and the arena behind them was gone.
       const x = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.x + _dir.x * 4.5));
       const z = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.z + _dir.z * 4.5));
-      game.deploy(new FireWall(game, x, z, _dir.x, _dir.z, game.player.dotHit * 1.5));
+      game.deploy(new FireWall(
+        game, x, z, _dir.x, _dir.z, game.player.fireTickDamage * 1.5
+      ));
       game.effects.shockwave(_v.set(x, 0, z), THEME.hellfire, 5, 0.5);
       game.sfx.itemDeploy();
     },
