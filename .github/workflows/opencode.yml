@@ -26,36 +26,13 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      # Lets the job mint an OIDC token, which the action trades for an
-      # opencode GitHub App token. That token is what makes the PRs it opens
-      # trigger `tests` on their own - a PR opened with GITHUB_TOKEN instead
-      # lands the run in "awaiting approval" and sits there until a human
-      # clicks it.
-      id-token: write
 
     steps:
-      # persist-credentials is OFF because opencode brings its own credentials
-      # now. Both it and checkout write the SAME git config key,
-      # http.https://github.com/.extraheader, and git keeps a repeated key as
-      # multi-valued rather than overwriting - so the push went out carrying
-      # two Authorization headers and GitHub rejected it outright:
-      # `remote: Duplicate header: "Authorization"`, 400, after committing, so
-      # the work was already done and then lost.
-      #
-      # This was the opposite way round under `use_github_token: true`: back
-      # then opencode had no credentials of its own and pushed on the ones
-      # checkout left behind, so turning the flag off broke the push instead.
-      # Dropping that input (to stop PRs landing in "awaiting approval") is
-      # what flipped this.
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           persist-credentials: false
 
-      # Everything below exists so that the agent can actually RUN the test
-      # suite when it is asked to. Without node modules and a browser on the
-      # runner, every one of the ~30 puppeteer suites fails at launch and the
-      # agent has no way to check its own work.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -68,11 +45,6 @@ jobs:
         with:
           chrome-version: stable
 
-      # A runner is a fresh machine with no git identity, and a commit cannot
-      # be made without one - the agent got as far as staging its work and then
-      # died on "Author identity unknown", losing the change. Attributed to the
-      # agent rather than to a person on purpose: git log and git blame should
-      # say plainly which commits were written by an agent.
       - name: Set git identity for the agent
         run: |
           git config --global user.name "opencode-agent"
@@ -82,9 +54,10 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.OPENCODE_GITHUB_TOKEN }}
           OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "65536"
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
         with:
           model: nvidia/moonshotai/kimi-k3
           variant: max
+          use_github_token: true
