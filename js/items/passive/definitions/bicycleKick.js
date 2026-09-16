@@ -1,11 +1,9 @@
 import { definePassiveItem } from '../shared.js';
 
-// THE JUMP, RAISED, AND THE LANDING MADE A WEAPON. Two halves of one move:
-// the arc is the delivery and the landing is the payload, so the pick is
-// priced as an attack that happens to start with a jump. Stagger here is the
-// game's own crowd answer - the shove a staggered body takes - applied to
-// everything near the touchdown, which buys the player the second of space a
-// taller arc costs them in the air.
+// THE JUMP, RAISED. A pure movement pick: the arc is taller and that is the
+// whole offer. (The landing once staggered nearby enemies; that half was cut,
+// and the shove it paid went with it - STILT LEGS owns the weaponised landing
+// now.)
 //
 // THE BONUS FOLDS INTO THE IMPULSE, so it composes with DOUBLE JUMP (the
 // air jump is raised too - the card says jump height, and an air jump is a
@@ -16,7 +14,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'BICYCLE KICK',
     max: 1,
     theme: THEME.bicycleKick,
-    effects: [['JUMP HEIGHT +50%', GOOD], ['LANDING STAGGERS NEARBY', GOOD]],
+    effects: [['JUMP HEIGHT +50%', GOOD]],
     apply: (mods, n) => { mods.bicycleKick = n; },
 }));
 

@@ -156,7 +156,6 @@ const THEME_SHUFFLE = THEME.shuffle;
 const THEME_SOUL = THEME.soulHarvest;
 const THEME_CLAUSE = THEME.deathClause;
 const THEME_FLESH = THEME.fleshBank;
-const THEME_BICYCLE = THEME.bicycleKick;
 // COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
 // player's own CHILLED chip is drawn in - one colour for one effect, wherever
 // it is coming from, which is the rule STATUS_TINT exists to hold.
@@ -11345,39 +11344,33 @@ class Game {
         this.sfx.melee();
         this.pad.rumble(0.3, 0.2, 80, 1);
       }
-      // BICYCLE KICK and STILT LEGS, on the same frame and the same landing:
-      // the player's fall told the room either something knocked the door
-      // down (Stilt, paid in damage and a 3m stagger) or that someone is
-      // home (Bicycle, stagger only, 2.4m). A shove is read off `knock`,
-      // which is the same verb KNOCKOUT DROPS and SCORCHED EARTH already
-      // use for interruption - bosses and the immovable are exempt there,
-      // exactly as they are for every shove in the game.
-      if (this.player.slamFx || this.player.stiltLanding) {
-        const armedBicycle = this.player.slamFx;
-        const armedStilt = this.player.stiltLanding;
-        this.player.slamFx = false;
+      // STILT LEGS' LANDING. The player's fall told the room that something
+      // knocked the door down - a 3m stagger paid in three times the base
+      // damage. A shove is read off `knock`, which is the same verb KNOCKOUT
+      // DROPS and SCORCHED EARTH already use for interruption - bosses and
+      // the immovable are exempt there, exactly as they are for every shove
+      // in the game.
+      if (this.player.stiltLanding) {
         this.player.stiltLanding = false;
-        const radius = armedStilt ? 3 : 2.4;
-        const theme = armedStilt ? THEME.stiltLegs : THEME_BICYCLE;
-        const damage = armedStilt ? this.player.weapon.damage * 3 : 0;
-        // Enemies inside the ring are shoved off it and, under Stilt Legs,
-        // handed three times the base damage the card names. The shove is
-        // fresh-momentum for every body caught - a landing beside something
-        // that already got one knock is not a refund.
+        const damage = this.player.weapon.damage * 3;
+        // Enemies inside the ring are shoved off it and handed three times
+        // the base damage the card names. The shove is fresh-momentum for
+        // every body caught - a landing beside something that already got one
+        // knock is not a refund.
         for (const en of this.enemies) {
           if (en.dead) continue;
           const dx = en.pos.x - this.player.pos.x;
           const dz = en.pos.z - this.player.pos.z;
           const dist = Math.hypot(dx, dz);
-          if (dist > radius) continue;
+          if (dist > 3) continue;
           en.knock(dx, dz, 0.35, 0.4);
-          if (damage > 0) this.hurtEnemy(en, damage, this._knockback.set(dx, 0, dz));
+          this.hurtEnemy(en, damage, this._knockback.set(dx, 0, dz));
         }
-        this.effects.shockwave(this.player.pos, theme, radius + 0.6, 0.32);
-        this.effects.burst(this.player.pos, theme, 18, 5, 2.2, 0.4);
-        this.effects.addShake(armedStilt ? 0.22 : 0.12);
+        this.effects.shockwave(this.player.pos, THEME.stiltLegs, 3.6, 0.32);
+        this.effects.burst(this.player.pos, THEME.stiltLegs, 18, 5, 2.2, 0.4);
+        this.effects.addShake(0.22);
         this.sfx.impact();
-        this.pad.rumble(armedStilt ? 0.5 : 0.3, 0.3, 120, 1);
+        this.pad.rumble(0.5, 0.3, 120, 1);
       }
       // A slide opening. Dust at the player's feet and a short shove of the
       // pad - the one movement in the game that puts them on the floor should
