@@ -51,6 +51,16 @@ export const ROLE_KEYS = ['rusher', 'gunner', 'brute', 'artillery', 'support', '
 // `color` is the room's colour for that block: rig.js tints fixtures, beams
 // and fog toward it, the way it already does for a boss.
 export const THEMES = {
+  fungal: {
+    name: 'FUNGAL', color: 0xb17baa, boss: 'sporeregent',
+    roles: { rusher: 'buttonling', gunner: 'gillspitter', brute: 'bracketback',
+      artillery: 'puffmortar', support: 'mycelarch', flier: 'veilray' },
+  },
+  insects: {
+    name: 'INSECTS', color: 0xb4cb62, boss: 'vesperqueen',
+    roles: { rusher: 'sicklemantis', gunner: 'needletail', brute: 'stagguard',
+      artillery: 'antlion', support: 'lanternmoth', flier: 'lancewasp' },
+  },
   candy: {
     name: 'CANDY', color: 0xff70b9, boss: 'confectioner',
     roles: { rusher: 'taffy', gunner: 'bonbon', brute: 'jawbreaker',

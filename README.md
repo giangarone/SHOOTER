@@ -618,6 +618,48 @@ context. The start screen says so, and one click anywhere fixes it.
   and stalking pauses shorten; warnings and recovery stay full length.
   Rushes stop at cover and their speed is capped so later waves cannot outrun
   the warning. The bog's open side and the fan's gaps remain escape routes.
+- **FUNGAL: wine-coloured caps, luminous mint gills and woody mycelium.**
+  **Buttonlings** raise their caps before a short radial spore clap; leave
+  the marked circle before it closes. **Gillspitters** alternate a two-spore
+  fan with a three-spore fan that fills the gap, always on the bearing captured
+  before their wind-up. **Bracketbacks** brace beneath overlapping shelf fungi,
+  stomp, then fruit twice along the captured axis; dodge sideways, then punish
+  their unarmoured recovery. **Puffmortars** inflate before seeding your old
+  position and two later branches beyond it. **Mycelarchs** channel a visible
+  mycelium link for 1.2 seconds to restore 8% of an ally's health, capped at 12.
+  Range, cover or death breaks the link. Each recipient can regain at most 24%
+  of its maximum health across all mycelarchs, and bosses cannot be healed.
+  **Veilrays** float under broad caps with trailing gills, seed three staggered
+  eruptions along a captured line, then drift away through a recovery window.
+  **THE SPORE REGENT** is a walking fungal grove: a giant layered canopy,
+  shelf-covered arms, buttress roots and a heart behind split bark shutters.
+  Its three attacks grow two diverging root lanes, rotate successive spore
+  fans, and bloom a fairy ring around your old position. The forks leave a
+  central corridor; the ring leaves a wide opening towards the boss. Every
+  attack ends with a 1.8-second heart opening that removes its 35% resistance.
+  At half health, roots grow farther, volleys gain a wave and the ring gains
+  petals; warning and recovery durations remain unchanged.
+- **INSECTS: dark jade chitin, articulated legs and amber seams.**
+  **Sicklemantises** raise paired blades before a fast, straight lunge down a
+  marked lane. **Needletails** lift their segmented tails, then sweep three
+  needles across a captured bearing. **Stagguards** brace armoured wing cases
+  before ploughing forward with forked horns; their charge ends by throwing
+  two delayed clods to the flanks and opening their shells. **Antlions** mark
+  a pincer: the flanks erupt first, then the centre of your old position.
+  **Lanternmoths** channel amber pheromone links to advance a nearby needletail,
+  antlion or lancewasp's cooldown by 1.2 seconds, never below 0.8. They cannot
+  shorten an active warning, affect bosses or stack signals on the same ally
+  within five seconds. Cover, range or the moth's death interrupts the link.
+  **Lancewasps** lower their stingers from flight, fire along a captured bearing,
+  then climb and retreat. **THE VESPER QUEEN** towers on six legs beneath four
+  veined amber wings, a crown of antennae, and two great scythes. She alternates
+  lateral stalking with a marked lance charge, converging scissor eruptions,
+  and interleaved needle fans. Her thorax plates part for 1.8 seconds after
+  every attack, removing 35% damage resistance. At half health, her scissors
+  lengthen and volleys gain another wave, preserving every warning and opening.
+  All three charging insects stop at cover, hold their committed heading and
+  cap speed so late waves cannot carry them beyond their marked lanes.
+  Both themes skip floor attacks when the warning pool is exhausted.
 - **CORAL: rose limestone, ivory branches and turquoise polyps.**
   **Razorfins** scuttle toward you, then cut twice along two fixed floor circles;
   cross the blades rather than backing through the second cut. **Needlepolyps**
@@ -2701,7 +2743,7 @@ js/enemies/         the enemy roster, one file per theme
   index.js          imports the themes, which is what registers them
   candy.js          CANDY models, sweets, support pulses and the Confectioner
   rust.js  void.js  ember.js  rime.js  verdant.js
-  strata.js  swamp.js  coral.js  jungle.js  tempest.js  brine.js  plague.js  solar.js  hive.js
+  strata.js  swamp.js  fungal.js  insects.js  coral.js  jungle.js  tempest.js  brine.js  plague.js  solar.js  hive.js
   cathedral.js  bone.js  obsidian.js  sapphire.js
 js/nav.js           navigation grid + flow field enemies steer by
 js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
@@ -2761,6 +2803,8 @@ test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
                     the hoarfrost's field, and the Pale Crown's anchors
 test/candy.mjs      CANDY counterplay, musical support, shell loss and candy cleanup
+test/fungal.mjs     FUNGAL growth patterns, bounded healing, boss openings and warning exhaustion
+test/insects.mjs    INSECTS committed charges, pheromone links, boss patterns and warning cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/coral.mjs      CORAL captured patterns, healing, boss openings and warning ownership
 test/jungle.mjs     JUNGLE ambushes, pollen, boss attacks and warning ownership

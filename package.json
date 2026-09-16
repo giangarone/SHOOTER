@@ -50,6 +50,8 @@
     "test:bone": "node test/bone.mjs",
     "test:obsidian": "node test/obsidian.mjs",
     "test:candy": "node test/candy.mjs",
+    "test:fungal": "node test/fungal.mjs",
+    "test:insects": "node test/insects.mjs",
     "test:swamp": "node test/swamp.mjs",
     "test:sapphire": "node test/sapphire.mjs",
     "test:coral": "node test/coral.mjs",

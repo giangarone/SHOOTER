@@ -109,6 +109,15 @@ export const SPLITTER_BODY = 0xd6329a;
 export const SPLITTER_EYE = 0xffb0e8;
 
 export const SHARED_MATS = {
+  fungalRind: new THREE.MeshStandardMaterial({ color: 0x63465f, roughness: 0.9, metalness: 0 }),
+  fungalGills: new THREE.MeshStandardMaterial({ color: 0xbaffdc, emissive: 0x60dba2,
+    emissiveIntensity: 1.1, roughness: 0.65, metalness: 0 }),
+  insectWing: new THREE.MeshStandardMaterial({ color: 0xc5d6a0, emissive: 0x6b7c3c,
+    emissiveIntensity: 0.2, roughness: 0.55, metalness: 0.1,
+    transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }),
+  insectShell: new THREE.MeshStandardMaterial({ color: 0x304d40, roughness: 0.35, metalness: 0.35 }),
+  insectAmber: new THREE.MeshStandardMaterial({ color: 0xffd16b, emissive: 0xdc9634,
+    emissiveIntensity: 1.1, roughness: 0.3, metalness: 0.15 }),
   coralIvory: new THREE.MeshStandardMaterial({ color: 0xf6d3b9, roughness: 0.8, metalness: 0.05 }),
   coralPolyp: new THREE.MeshStandardMaterial({ color: 0x79eee0, emissive: 0x36b8b0,
     emissiveIntensity: 1.1, roughness: 0.3, metalness: 0.05 }),
@@ -835,4 +844,14 @@ export function contactReach(e, a, radius) {
   return a.dist < radius && Math.abs(a.ctx.player.pos.y - e.pos.y) < (e.boss ? 3.6 : 1.4) &&
     !segBlocked(e.pos.x, e.pos.y + 0.5, e.pos.z, a.ctx.player.pos.x,
       a.ctx.player.pos.y + 0.8, a.ctx.player.pos.z, a.ctx.obstacles);
+}
+
+// The mortar API owns its mark once spawned. Reserve-check synchronously so
+// an exhausted warning pool cannot turn a patterned eruption into a blind hit.
+export function addWarnedMortar(ctx, x, z, radius, delay, damage) {
+  const h = ctx.effects.markAcquire();
+  if (h < 0) return false;
+  ctx.effects.markRelease(h);
+  ctx.addMortar(x, z, radius, delay, damage);
+  return true;
 }
