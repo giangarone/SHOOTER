@@ -21,6 +21,13 @@ try {
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
+  // Wait on the game EXISTING, not on the document loading. `load` only
+  // means the html arrived; booting the game - and with it `__game` and
+  // `__report` - can take seconds on a loaded runner, and the poll loop's
+  // first sample used to be the first wakeup, about a second in. On a slow
+  // boot that call hit a window that did not have `__report` yet and the
+  // suite died with a runner error before a single sample was taken.
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
 
   const report = () => page.evaluate(() => window.__report());
   const peak = { powerups: 0, ammoPickups: 0, projectiles: 0, geometries: 0, programs: 0, textures: 0 };
