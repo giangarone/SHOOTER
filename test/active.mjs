@@ -1225,6 +1225,12 @@ try {
     useItem('itemFoodPoisoning');
     out.poisonedAll = runner.status.poison > 7 && queasy.status.poison > 7;
     out.poisonDose = runner._dot.poison;
+    clearField();
+    const scorched = spawn('chaser', 0, -5);
+    const scorchedToo = spawn('chaser', 4, -5);
+    useItem('itemInferno');
+    out.brimstoneBurnedAll = scorched.status.burn > 2 && scorchedToo.status.burn > 2;
+    out.brimstoneDose = scorched._dot.burn;
     P.mods.damage = heldDamage;
 
     // ---- PARTY BALLOONS: five off the floor, and never a boss ----
@@ -1836,6 +1842,9 @@ try {
   ok('food poisoning: poison stays at ten when weapon damage changes',
     m.poisonDose === 10 && m.poisonWeaponDamage !== 10,
     `poison=${m.poisonDose} weapon=${m.poisonWeaponDamage}`);
+  ok('brimstone: the whole floor burns at fire’s fixed ten-point tick',
+    m.brimstoneBurnedAll && m.brimstoneDose === 10,
+    `burn=${m.brimstoneDose} weapon=${m.poisonWeaponDamage}`);
   ok('party balloons: five leave the floor', m.balloonsLifted === 5,
     String(m.balloonsLifted));
   ok('party balloons: a boss stays where it is', m.balloonsSpareBosses);

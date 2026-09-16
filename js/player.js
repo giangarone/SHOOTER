@@ -27,7 +27,7 @@ import { ACTIVE_ITEMS } from './items/active/index.js';
 // Sources can still apply their own explicit multiplier on top, and MALADY's
 // shared multiplier is applied by the caller where it always has been.
 export const POISON_TICK_DAMAGE = 10;
-export const FIRE_TICK_DAMAGE = 15;
+export const FIRE_TICK_DAMAGE = 10;
 
 // Every stat a passive item is allowed to touch, at its un-upgraded value.
 //

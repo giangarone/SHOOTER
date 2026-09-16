@@ -1034,8 +1034,8 @@ block (`Player.rebuildMods`) after every pick, so `apply(mods, n)` must set
 absolute values rather than accumulate. Every stat a passive item may touch is
 declared in `DEFAULT_MODS` in `js/player.js`.
 
-Player-owned damage over time is independent of the weapon: poison deals 10
-damage per tick and fire deals 15. A source that explicitly names a multiplier
+Player-owned damage over time is independent of the weapon: poison and fire
+each deal 10 damage per tick. A source that explicitly names a multiplier
 still applies it to that status base, and MALADY still modifies the result, but
 generic damage upgrades never raise either tick.
 
@@ -1922,8 +1922,8 @@ It carries only what an enemy can actually hold - burning, poison, the chill and
 fear exist on both sides of the fight - and WEAKNESS and CURSE simply do not
 transfer, because there is nothing on an enemy for them to become and inventing
 one would be a second meaning for a word the player already knows from their own
-HUD. Poison ticks for a fixed 10 and fire for a fixed 15, independent of the
-weapon's damage, and the duration is what is LEFT on the player: eight fresh
+HUD. Poison and fire both tick for a fixed 10, independent of the weapon's
+damage, and the duration is what is LEFT on the player: eight fresh
 seconds of poison off a burn with half a second left would be manufacturing an
 affliction rather than passing one on.
 

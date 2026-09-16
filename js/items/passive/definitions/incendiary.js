@@ -10,7 +10,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // poison the patient one, and on the beat that difference is audible.
     effects: [
       ['SHOTS SET ENEMIES', GOOD],
-      ['15 DAMAGE PER TICK, 3s', NOTE],
+      ['10 DAMAGE PER TICK, 3s', NOTE],
       ['FIRE SPREADS ON DEATH', NOTE],
     ],
     apply: (mods, n) => {

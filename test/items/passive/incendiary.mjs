@@ -36,10 +36,10 @@ export async function run({ page, check, id }) {
     return { baseWeapon, boostedWeapon, base, boosted };
   }, id);
 
-  check('Incendiary applies a fifteen-point fire tick for three seconds',
-    result.base?.status === 'burn' && result.base.duration === 3 && result.base.power === 15,
+  check('Incendiary applies a ten-point fire tick for three seconds',
+    result.base?.status === 'burn' && result.base.duration === 3 && result.base.power === 10,
     JSON.stringify(result));
   check('Incendiary does not scale with weapon damage',
-    result.boostedWeapon > result.baseWeapon && result.boosted?.power === 15,
+    result.boostedWeapon > result.baseWeapon && result.boosted?.power === 10,
     JSON.stringify(result));
 }

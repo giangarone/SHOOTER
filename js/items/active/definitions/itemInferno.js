@@ -15,12 +15,13 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // everywhere else in this game (see status.js): it is a reason to press
     // the advantage now rather than a clock to wait out.
     //
-    // TWICE THE FIXED FIRE BASE PER TICK, at two ticks a beat, on every enemy
-    // at once. Weapon damage upgrades do not change it.
-    effects: [['BURN ALL ENEMIES', GOOD], ['FOR 3s', NOTE]],
+    // THE FIXED FIRE BASE PER TICK, at two ticks a beat, on every enemy at
+    // once. Weapon damage upgrades do not change it, and the active item does
+    // not carry a hidden multiplier of its own.
+    effects: [['BURN ALL ENEMIES', GOOD], ['10 DAMAGE PER TICK, 3s', NOTE]],
     use: (game) => {
       let n = 0;
-      const burn = game.player.fireTickDamage * 2;
+      const burn = game.player.fireTickDamage;
       for (const e of game.enemies) {
         if (e.dead) continue;
         e.applyStatus('burn', 3, burn);
