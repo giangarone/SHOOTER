@@ -838,15 +838,25 @@ def _(c):
 
 @icon('overload')           # empty the magazine and lightning takes everyone
 def _(c):
-    c.disc(12, 12, 3.6, S)
-    c.disc(12, 12, 1.7, E)
-    for i in range(4):
-        a = math.radians(45 + i * 90)
-        p0 = (12 + math.cos(a) * 3.4, 12 - math.sin(a) * 3.4)
-        p1 = (12 + math.cos(a + 0.42) * 7.4, 12 - math.sin(a + 0.42) * 7.4)
-        p2 = (12 + math.cos(a - 0.30) * 11.6, 12 - math.sin(a - 0.30) * 11.6)
-        c.line(p0[0], p0[1], p1[0], p1[1], E, 2.2)
-        c.line(p1[0], p1[1], p2[0], p2[1], E, 2.2)
+    # ONE STRIKE THAT FORKS. The old drawing was a core with four symmetric
+    # arms, which is a spark - REACTIVE PLATING's star could wear the same
+    # silhouette. This one is what the effect text says: a single discharge
+    # that reaches EVERYONE, drawn as one bolt coming down that splits into
+    # three. The twig off the trunk keeps it weather, not a pitchfork.
+    c.line(13.0, 0.5, 9.0, 6.5, E, 3.0)
+    c.line(9.0, 6.5, 12.5, 8.0, E, 3.0)
+    c.line(12.5, 8.0, 10.5, 11.5, E, 3.0)
+    c.line(10.0, 7.0, 5.5, 9.5, E, 1.6)
+    c.line(5.5, 9.5, 7.0, 11.0, E, 1.6)
+    c.line(10.5, 11.5, 6.0, 14.5, E, 2.2)
+    c.line(6.0, 14.5, 8.0, 16.0, E, 2.2)
+    c.line(8.0, 16.0, 4.0, 21.5, E, 2.2)
+    c.line(10.5, 11.5, 12.5, 15.5, E, 2.2)
+    c.line(12.5, 15.5, 11.0, 17.0, E, 2.2)
+    c.line(11.0, 17.0, 13.0, 22.5, E, 2.2)
+    c.line(10.5, 11.5, 15.5, 14.0, E, 2.2)
+    c.line(15.5, 14.0, 14.0, 15.5, E, 2.2)
+    c.line(14.0, 15.5, 19.5, 21.0, E, 2.2)
 
 
 @icon('lightningWizard')    # a share of hits calls lightning down
