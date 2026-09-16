@@ -307,9 +307,11 @@ const MAGPIE_SPRINT = 15;
 // TEN DAMAGE ON THE DOWNBEAT - once a beat, where everything else rhythmic in
 // the game fires on the half-beat pulse. That is a Bee's damage at half a Bee's
 // rate, and it is what it was written against - except a bee expires and this
-// never does. What pays for
-// that is reach: a bee will cross forty metres at anything it likes, and the
-// lamprey will not leave the player by more than LAMPREY_RANGE.
+// never does. What pays for that is reach: a bee will cross forty metres at
+// whatever it likes, and the leech will only START a fight that has come
+// within LAMPREY_RANGE of itself. A fight it has started it finishes - the
+// player walking away is not a whistle, and a kill sends it onto the next body
+// still standing near it. Only an empty field brings it home.
 //
 // THE HEAL IS ON THE KILL AND ONLY ON THE KILL. Two health for finishing
 // something is small, and it has to be: a leech that healed per BITE would be
@@ -434,14 +436,23 @@ export class Lamprey {
 
     // ---- who it is on ----------------------------------------------------
     //
-    // RE-TARGETED EVERY FRAME, not on a cooldown, and that is deliberate: the
-    // rule the player is meant to read is "it goes for whatever is closest to
-    // me", and a leech that took a third of a second to notice something had
-    // died would spend that third of a second chewing a corpse. The scan is one
-    // pass over the enemy list measured from the PLAYER - not from the leech -
-    // which is what makes it a bodyguard: the threat it picks is the one
-    // threatening the person it is guarding.
-    if (this.target && (this.target.dead || this._far(this.target))) this.target = null;
+    // RE-CHECKED EVERY FRAME, not on a cooldown, and that is deliberate: a
+    // leech that took a third of a second to notice something had died would
+    // spend that third of a second chewing a corpse.
+    //
+    // A FIGHT IT HAS STARTED IS ITS OWN. The pick is measured from the LEECH,
+    // and once it is on a body only two things part them: the body dropping,
+    // or the wave taking it - a boss purge and a buy-off clear the roster
+    // WITHOUT booking the deaths (see _finishBossWave), and a leech holding a
+    // reference through one would chew a ghost forever. The player walking
+    // away is deliberately NOT one of them: leashing the target to the player
+    // was the original rule, and it called the leech off a kill-in-progress
+    // every time the player simply backed out of trouble - which is the one
+    // situation the item is bought for. Coming home is what it does when
+    // nothing near IT is left standing, exactly what _pick returns then.
+    if (this.target && (this.target.dead || !ctx.enemies.includes(this.target))) {
+      this.target = null;
+    }
     if (!this.target) this.target = this._pick(ctx.enemies);
     // A leech that has been off biting comes back to a FRESH station rather
     // than to the one it left. The old one is wherever the player happened to
@@ -605,28 +616,24 @@ export class Lamprey {
     }
   }
 
-  // The nearest living enemy inside the leash, measured from the PLAYER.
+  // The nearest living enemy inside the range, measured from the LEECH. While
+  // it is parked the two positions are the same thing, so the rule the player
+  // reads is unchanged - "it goes for whatever comes close"; OFF the player,
+  // this is what chains a kill onto the next bystander instead of calling the
+  // leech home over a fight it has not finished.
   _pick(enemies) {
-    const p = this.player.pos;
     let best = null;
     let bestD = LAMPREY_RANGE * LAMPREY_RANGE;
     for (const e of enemies) {
       if (e.dead) continue;
-      const dx = e.pos.x - p.x;
-      const dz = e.pos.z - p.z;
+      const dx = e.pos.x - this.pos.x;
+      const dz = e.pos.z - this.pos.z;
       const d2 = dx * dx + dz * dz;
       if (d2 >= bestD) continue;
       bestD = d2;
       best = e;
     }
     return best;
-  }
-
-  // Dropped the moment the thing it is on walks out of the leash, which is what
-  // stops it being towed across the arena by a fleeing enemy.
-  _far(e) {
-    const p = this.player.pos;
-    return Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > LAMPREY_RANGE + 3;
   }
 
   // It landed the last hit. The heal, the tell, and the immediate re-target -
@@ -658,10 +665,12 @@ export class Lamprey {
 }
 
 const LAMPREY_SEGS = 7;
-// How far from the PLAYER it will go for a target, what one bite is worth, and
-// what a kill it finished heals. The bite is a Bee's, once a beat; the range
-// is deliberately short, because a bodyguard that ranged out to twenty metres
-// would be a turret that follows you.
+// How far FROM ITSELF it will go to start a fight, what one bite is worth,
+// and what a kill it finished heals. The bite is a Bee's, once a beat; the
+// range is deliberately short, because a bodyguard that went looking for work
+// twenty metres off would be a turret that follows you. It is a hunting
+// radius, not a leash: what the leech has caught, it keeps until the body
+// drops, wherever the player has gone by then.
 const LAMPREY_RANGE = 11;
 // Ten a DOWNBEAT - see the bite block above for why it is a whole beat and not
 // the half-beat pulse everything else rhythmic in the game fires on.

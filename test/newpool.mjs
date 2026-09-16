@@ -293,6 +293,55 @@ try {
       o.leech = { killed: e.dead, healed: P.health - hurt };
       g.enemies.length = 0;
     }
+    // THE LEECH HUNTS FROM WHERE IT IS, not from where the player is, and it
+    // is not on a leash: a fight it has started, it finishes.
+    {
+      const leech = g._companions[1];
+      // 1.3m from the leech but 11.5m from the player - in reach of the ONE
+      // and not of the other, which is the whole distinction being asserted.
+      const e = dummy(11.5, 0);
+      e.hp = 500;
+      g.enemies.push(e);
+      P.pos.set(0, 0, 0);
+      leech.pos.set(10.2, 1.2, 0);
+      leech.vel.set(0, 0, 0);
+      leech.target = null;
+      leech.station = null;
+      leech._lastPulse = -99;
+      leech.update(0.016, Object.assign({}, g._compCtx, { pulse: 2, time: g.time }));
+      o.leechHuntsFromItself = leech.target === e;
+      // Backing off is not a whistle: the body it is on stays its business
+      // until the body drops.
+      P.pos.set(34, 0, 34);
+      leech.update(0.016, Object.assign({}, g._compCtx, { pulse: 3, time: g.time }));
+      o.leechKeepsItsTarget = leech.target === e;
+      g.enemies.length = 0;
+    }
+    // A kill does not call it home either: the re-pick is measured from the
+    // LEECH, so what is left standing near the corpse is next - and only an
+    // empty field sends it back to the player. The purge books no deaths
+    // (see _finishBossWave), so the roster going silent has to count as empty.
+    {
+      const leech = g._companions[1];
+      P.pos.set(-30, 0, -30);
+      const prey = dummy(20, 0);
+      prey.hp = 5;
+      const next = dummy(22.5, 0);
+      next.hp = 500;
+      g.enemies.push(prey, next);
+      leech.pos.copy(prey.pos).setY(1.0);
+      leech.vel.set(0, 0, 0);
+      leech.target = prey;
+      leech.station = null;
+      leech._lastPulse = -99;
+      leech.update(0.016, Object.assign({}, g._compCtx, { pulse: 4, time: g.time }));
+      const killed = prey.dead;
+      leech.update(0.016, Object.assign({}, g._compCtx, { pulse: 4, time: g.time }));
+      o.leechChains = killed && leech.target === next;
+      g.enemies.length = 0;
+      leech.update(0.016, Object.assign({}, g._compCtx, { pulse: 4, time: g.time }));
+      o.leechHomeWhenQuiet = leech.target === null;
+    }
     // Dropping the passive items takes the pets down again.
     bare();
     g._syncCompanions();
@@ -493,6 +542,10 @@ try {
   ok('the magpie collects, through the player’s own payout', r.magpieTook);
   ok('the lamprey finishes and heals', r.leech.killed && r.leech.healed === 2,
     JSON.stringify(r.leech));
+  ok('it picks from where IT is, not from the player', r.leechHuntsFromItself);
+  ok('walking away does not call it off a body', r.leechKeepsItsTarget);
+  ok('a kill chains onto the next body near it', r.leechChains);
+  ok('and only an empty field sends it home', r.leechHomeWhenQuiet);
   ok('losing the build takes them down', r.petsDown);
 
   // ---- organ grinder ----

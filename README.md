@@ -1101,8 +1101,11 @@ a wider magnet: LODESTONE already grows the circle around the player, and being
 somewhere else is the only thing a bird can offer that a bigger circle cannot.
 
 LAMPREY holds station about 2.5m from the player and goes for whatever comes
-close, biting for 10 **on the downbeat** and healing 2 HP when it lands the last
-hit. `Music.pulse` is a half-beat edge - it is what the sentry guns and every
+within 11m of **itself**, biting for 10 **on the downbeat** and healing 2 HP
+when it lands the last hit. A fight it has started it finishes: the player
+walking away does not call it off, and a kill sends it straight onto the next
+body still standing near it - only an empty field brings it home.
+`Music.pulse` is a half-beat edge - it is what the sentry guns and every
 fire tick ride - so the leech gates on `pulseWhole` as well, the same way
 poison's one-tick-a-beat does: it chews on the kick drum, at a rate you can
 count without reading a damage number. It **parks** rather than orbiting: the station is a point in the world
