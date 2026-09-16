@@ -310,5 +310,58 @@ ok('the sit-out rule fires', spentSeen > 0,
 ok('every phrase plays a single pattern', mixedPhrases === 0,
   `${mixedPhrases} phrases had pairs on different casts`);
 
+// Rehearse four lit beats, then the first frame of the other side's bar.
+// Check the rendered buffers, so a shutter that only fixes its state fails.
+const shutters = new Lasers(new THREE.Object3D(), new THREE.BoxGeometry(1, 1, 1));
+for (const b of shutters.banks) {
+  b.playing = true;
+  b.mask = 0xF;
+  b.move = 6; // ALTERNATE, as in ALL_MOVES above.
+  b.pulsing = false;
+}
+shutters.bar(0);
+for (let beat = 0; beat < 4; beat++) {
+  shutters.beat();
+  shutters.update(1 / 60, camPos, colour, 1, 1);
+}
+for (const bar of [1, 2]) {
+  shutters.bar(bar);
+  shutters.beat();
+  shutters.update(1 / 240, camPos, colour, 1, 1);
+  const darkSide = bar & 1 ? 0 : 1;
+  ok(`alternating bar ${bar}: outgoing rays and fill cut on the first frame`,
+    shutters.banks.every((b) => {
+      const colours = b.rayGeo.attributes.color.array;
+      const half = colours.length / 2;
+      const dark = colours.slice(darkSide * half, (darkSide + 1) * half);
+      const live = colours.slice((1 - darkSide) * half, (2 - darkSide) * half);
+      const fill = b.fillGeo.attributes.position.array;
+      const split = fill.length / 2;
+      return !b.emitters[darkSide].lens.visible && b.emitters[1 - darkSide].lens.visible
+        && dark.every((v, i) => i % 4 !== 3 || v === 0)
+        && live.some((v, i) => i % 4 === 3 && v > 0)
+        && fill.slice(darkSide * split, (darkSide + 1) * split).every((v) => v === 0);
+    }));
+}
+for (const b of shutters.banks) b.mask = 1;
+shutters.bar(0);
+shutters.update(1 / 60, camPos, colour, 1, 1);
+const wasLit = shutters.banks.every((b) => b.rayMesh.visible) && shutters._impactCount > 0;
+shutters.bar(1);
+shutters.update(1 / 240, camPos, colour, 1, 1);
+ok('scheduled off bar is fully dark on its first frame', wasLit
+  && shutters.banks.every((b) => !b.rayMesh.visible && !b.fillMesh.visible
+    && b.emitters.every((em) => !em.lens.visible))
+  && shutters._impactCount === 0
+  && shutters._impactCol.every((v, i) => i % 4 !== 3 || v === 0));
+shutters.bar(0);
+shutters.update(1 / 60, camPos, colour, 1, 1);
+// A fully closed bank must also clear last frame's wall/ceiling spots.
+shutters.update(1 / 240, camPos, colour, 1, 0);
+ok('master closes rays, fill, lenses and impact spots in the same frame',
+  shutters.banks.every((b) => !b.rayMesh.visible && !b.fillMesh.visible && b.aperture.opacity === 0)
+    && shutters._impactCount === 0
+    && shutters._impactCol.every((v, i) => i % 4 !== 3 || v === 0));
+
 console.log(fails ? '\nLASERS TEST FAIL' : '\nLASERS TEST PASS');
 process.exit(fails ? 1 : 0);

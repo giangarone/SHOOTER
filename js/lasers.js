@@ -234,13 +234,6 @@ const BLOOM_REST = 0.08;
 // a rush that never pays off its speed inside its own phrase is what the next
 // bank's entry is for.
 const RUSH_MUL = [0.6, 1.7, 2.8, 3.9];
-// ALTERNATE's dimmed projector: a floor, not a zero. A dark half of a pair
-// reads as a broken projector; a low one reads as waiting for its bar. SWAP
-// is how fast the trade crosses - time constant a sixth of a second, fast
-// enough to belong to the bar that cued it and slow enough not to flicker.
-const ALT_LOW = 0.12;
-const ALT_SWAP = 6;
-
 // ---- the formations --------------------------------------------------------
 // How the three pairs divide the four bars of a phrase. ROAM is the everyday
 // cast and keeps the weight: the rest are moments, and a moment every phrase
@@ -375,6 +368,7 @@ class Bank {
       const lens = new THREE.Mesh(apertureGeo, this.aperture);
       lens.position.copy(pos);
       parent.add(lens);
+      this.emitters[this.emitters.length - 1].lens = lens;
     }
 
     this.roll = Math.random() * Math.PI * 2;
@@ -400,9 +394,8 @@ class Bank {
     this.t = 0;
     this.spent = false;
     // RUSH's wind-up, PENDULUM's swing, BREATHE's phase, and the two
-    // projectors' relative brightness - targets and eased values - for the
-    // moves that split a pair. All plain scalars cast by phrase() once per
-    // four bars.
+    // projectors' shutter gains for the moves that split a pair.
+    // All plain scalars cast by phrase() once per four bars.
     this.rushMul = 1;
     this.rollBase = this.roll;
     this.pendAmp = 0;
@@ -410,8 +403,6 @@ class Bank {
     this.breathePhase = 0;
     this.emGain0 = 1;
     this.emGain1 = 1;
-    this.emTgt0 = 1;
-    this.emTgt1 = 1;
     this.ripple = false;
 
     // ---- the rays: one camera-facing ribbon per ray -------------------------
@@ -743,12 +734,10 @@ export class Lasers {
     b.move = this._move;
     b.pulsing = this._pulsing;
     b.ripple = this._ripple;
-    // A pair leaving the phrase mid-trade could carry a dimmed projector
+    // A pair leaving the phrase mid-trade could carry a closed projector
     // into the next one; every cast of any move starts with both halves up.
     b.emGain0 = 1;
     b.emGain1 = 1;
-    b.emTgt0 = 1;
-    b.emTgt1 = 1;
     b.spreadTo = this._spreadTo;
     switch (b.move) {
       case MOVE_PENDULUM:
@@ -932,8 +921,8 @@ export class Lasers {
         // projector, odd bars to the other, and every pair in the room
         // trades together - the whole phrase is one call and answer.
         const even = (index & 1) === 0;
-        b.emTgt0 = even ? 1 : ALT_LOW;
-        b.emTgt1 = even ? ALT_LOW : 1;
+        b.emGain0 = even ? 1 : 0;
+        b.emGain1 = even ? 0 : 1;
       }
     }
   }
@@ -978,6 +967,8 @@ export class Lasers {
       // A fully transparent mesh still rasterises every one of its pixels, and
       // these are long. Not drawing them at all is most of the budget.
       const show = lit > 0.006;
+      b.emitters[0].lens.visible = b.gain > 0 && master > 0 && b.emGain0 > 0;
+      b.emitters[1].lens.visible = b.gain > 0 && master > 0 && b.emGain1 > 0;
       b.rayMesh.visible = show;
       b.fillMesh.visible = show;
       if (!show) continue;
@@ -995,11 +986,6 @@ export class Lasers {
         b.roll += SWEEP_RATE * b.rushMul * dt * b.spin;
       } else {
         b.roll += SWEEP_RATE * dt * b.spin;
-      }
-      if (b.move === MOVE_ALTERNATE) {
-        const swap = Math.min(1, dt * ALT_SWAP);
-        b.emGain0 += (b.emTgt0 - b.emGain0) * swap;
-        b.emGain1 += (b.emTgt1 - b.emGain1) * swap;
       }
       b.spread += (b.spreadTo - b.spread) * ease;
       // Not just tidiness: this ceiling is what the placement law proves
@@ -1072,6 +1058,9 @@ export class Lasers {
         fill[f + 6] = far[r * 3 + 3]; fill[f + 7] = far[r * 3 + 4]; fill[f + 8] = far[r * 3 + 5];
         f += 9;
       }
+      // The fill has its own vertex colours, independent of the rays' alpha.
+      // Collapse it too or the closed projector leaves a glowing fan behind.
+      if (emGain === 0) fill.fill(0, f - (RAYS - 1) * 9, f);
     }
     b.rayGeo.attributes.position.needsUpdate = true;
     b.rayGeo.attributes.color.needsUpdate = true;

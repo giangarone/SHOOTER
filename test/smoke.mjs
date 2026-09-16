@@ -213,6 +213,25 @@ try {
     ['texture count bounded', peak.textures <= 18],
   ];
 
+  const shutter = await page.evaluate(() => {
+    const g = window.__game;
+    const rig = g.rig;
+    const state = { ...g._fillRigState(), mode: 'combat', beat: 1, level: 1, bar: 1, downbeat: false };
+    rig._lastBar = 0;
+    rig._house = 0;
+    rig._waveT = rig._staggerT = 0;
+    rig.update(1 / 240, state);
+    const lit = rig._showOpen && rig.beams.some((b) => b.pivot.visible);
+    state.mode = 'house';
+    state.bar = 2;
+    rig.update(1 / 240, state);
+    return { lit, fading: rig._house < 0.5,
+      dark: !rig._showOpen && rig.beams.every((b) => !b.pivot.visible)
+        && rig.lasers.banks.every((b) => !b.rayMesh.visible && !b.fillMesh.visible) };
+  });
+  checks.push(['first break beat closes shutters before ambient fade finishes',
+    shutter.lit && shutter.fading && shutter.dark]);
+
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);
   const ok = checks.every(([, v]) => v);
 

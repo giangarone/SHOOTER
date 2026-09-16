@@ -679,7 +679,9 @@ export class Rig {
       // still decays, so the room reads as flashing slightly PAST the beat
       // it was meant to stop on. A shutter instead: sampled on this edge,
       // these instruments are whole or they are dark, on the music.
-      this._showOpen = this._house < 0.5 && this._waveT <= 0 && this._staggerT <= 0;
+      // Use the requested state: the ambient crossfade can still be below
+      // halfway on the first beat of a break.
+      this._showOpen = s.mode !== 'house' && this._waveT <= 0 && this._staggerT <= 0;
       if (s.downbeat || first) {
         // Looks change on the ONE and only there. A show that changed state
         // mid-bar would read as a fault; on the downbeat it reads as a cue.
