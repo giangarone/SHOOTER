@@ -145,6 +145,18 @@ const THEME_DIME = THEME.dimeNovel;
 // The fifth pool's, for the flashes each of them throws.
 const THEME_POSSUM = THEME.possum;
 const THEME_STARE = THEME.deathStare;
+// The sixth pool's, for the flashes each of them throws.
+const THEME_MAGNA = THEME.magnaCarta;
+const THEME_SLIDERULE = THEME.slideRule;
+const THEME_REARVIEW = THEME.rearview;
+const THEME_MONSOON = THEME.monsoon;
+const THEME_STIGMATA = THEME.stigmata;
+const THEME_PLATED = THEME.platedDessert;
+const THEME_SHUFFLE = THEME.shuffle;
+const THEME_SOUL = THEME.soulHarvest;
+const THEME_CLAUSE = THEME.deathClause;
+const THEME_FLESH = THEME.fleshBank;
+const THEME_BICYCLE = THEME.bicycleKick;
 // COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
 // player's own CHILLED chip is drawn in - one colour for one effect, wherever
 // it is coming from, which is the rule STATUS_TINT exists to hold.
@@ -1248,6 +1260,10 @@ class Game {
     // has been shown and the music has come out from behind the filter while
     // the arena is still rising. startWave() clears it.
     this._waveCued = false;
+    // ARMATURE'S bank, carried from the pick's own bookkeeping to the first
+    // pellet of the next trigger pull. Set and cleared inside shoot(); zero
+    // everywhere else, so no other path can spend what a kill banked.
+    this._shotArmature = 0;
     this.interT = 1.2;
     this.time = 0;
     this.stats = { shotsFired: 0, hits: 0, spawned: 0, damaged: 0 };
@@ -1384,6 +1400,14 @@ class Game {
     // _resolveHit and settled once at the end of shoot(), beside the two sets
     // above and cleared with them.
     this._shotWasCrit = false;
+    // STIGMATA's near-misses this trigger pull. The same peer rule as the
+    // three sets above: paid once per body per shot, so a shotgun fan that
+    // passes within the band of one mob in a close room still chips it once.
+    this._chipHits = new Set();
+    // SKIPSTONE's tracer origin. Reset per pellet to the muzzle; on a bounced
+    // pellet it is the bounce point, so the streak never draws through the
+    // floor it came off of. See _firePellet.
+    this._legStart = new THREE.Vector3();
     // DELAYED FUSE's stuck rounds, and the point one of them goes off at.
     this._fuses = [];
     this._fuseAt = new THREE.Vector3();
@@ -4192,6 +4216,13 @@ class Game {
     this._blastHit = false;
     this._shotWasCrit = false;
     this._reflected = false;
+    // ARMATURE belongs to the TRIGGER, and the dump is an item's - the bank
+    // waits for the player's own next pull. Held aside and put back: the
+    // pellets below all run through _firePellet, which is where the field is
+    // spent, and a dump that quietly consumed it would be an item eating a
+    // passive item's whole payload.
+    const heldArmature = this._shotArmature;
+    this._shotArmature = 0;
     let hitAny = false;
     // THE CONE IS THE ITEM. Six times the widest a moving player's own spread
     // ever opens to, which puts the far rounds well off the reticle - what the
@@ -4213,6 +4244,8 @@ class Game {
     this._critHeal(this._shotWasCrit);
     this._shotHits.clear();
     this._shotCrit.clear();
+    // ARMATURE, handed back - see the heldArmature note above.
+    this._shotArmature = heldArmature;
     targets.length = 0;
     // One press, one entry in the accuracy figures - the same grain LANCE is
     // booked at, and the reason the stat is still readable after one.
@@ -4521,6 +4554,10 @@ class Game {
     this._startWaveCharge();
     this.spawnTimer = 0.8;
     this.waveState = 'active';
+    // LATE FEE's clock. Absolute, and set beside the counter above so the two
+    // can never disagree about when the wave began - boss and ground waves
+    // alike, because both are "the current wave" to the card.
+    this._waveStartedAt = this.time;
     this.bossFight = null;
     this.ui.setWave(this.wave);
     // WHOSE WAVE THIS IS, said at the top of it. The pass caption is three
@@ -6239,6 +6276,26 @@ class Game {
       // melee reach in the game has already taught them.
       if (m.pointBlank > 0 && d <= POINT_BLANK_RANGE) k *= 1 + m.pointBlank;
     }
+    // SOFT POINTS. A question about the BODY, which is why it is here and not
+    // in the trigger: the body is either slowed or it is not when the round
+    // arrives, and every source of slow in the game - CRYO, the ice a sprint
+    // lays, whatever a theme freezes with - is covered by one test.
+    if (m.softPoints > 0 && en.status.slow > 0) k *= 1 + m.softPoints;
+    // TENDERIZER. Full health is read BEFORE the blow, on OVERKILL's terms:
+    // the body either arrived at this hit untouched or it did not, and a
+    // first pellet that peeled one point off would rob the eight behind it of
+    // the bonus - so it is measured per SHOT, not per pellet, off `hp` before
+    // anything lands. Per-pellet would make a scattergun the pick's worst
+    // friend, which is backwards.
+    if (m.tenderizer > 0 && en.hp >= en.maxHp) k *= 1 + m.tenderizer;
+    // LATE FEE. The wave's own clock, uncapped like LONG HAUL's - the ceiling
+    // is that the wave ENDS. `_waveStartedAt` is set beside the counter in
+    // startWave, so boss waves and ground waves read the same figure, and the
+    // reset is the boundary itself rather than a timer anything could miss.
+    if (m.lateFee > 0 && this._waveStartedAt !== undefined) {
+      const run = this.time - this._waveStartedAt;
+      if (run > 0) k *= 1 + m.lateFee * Math.floor(run / m.lateFeeEvery);
+    }
     return k;
   }
 
@@ -6279,6 +6336,20 @@ class Game {
       en.takeDamage(dealt, false, dir.x, dir.z, point, crit, head);
       if (m.overkill > 0 && en.dead && dealt > before) {
         this._carryOver(en, dealt - before);
+      }
+      // ARMATURE. The same spill OVERKILL walks to a neighbour, banked onto
+      // the NEXT SHOT instead - and capped at one kill's spill so a chain of
+      // small kills cannot compound into infinity. The two picks are
+      // deliberately compatible: a run holding both spills the same number
+      // twice over, to two different places.
+      //
+      // NOT ARMED ON A CORPSE THAT ATE NOTHING: `dealt > before` is the same
+      // test OVERKILL makes, and an armature that banked a round which was
+      // fully absorbed by armour would be making damage out of nothing.
+      if (m.armature > 0 && en.dead && dealt > before) {
+        this.player.armatureBank = Math.max(
+          this.player.armatureBank, dealt - before
+        );
       }
       // BEDBUGS. A quarter of what the round was worth, owed to the same body
       // two seconds from now.
@@ -6441,6 +6512,13 @@ class Game {
       if (en && !en.dead) headed.add(en);
     }
 
+    // SKIPSTONE's per-pellet bounce flag - see the floor branch below.
+    let bounced = false;
+    // And the muzzle-equivalent the final tracer is drawn FROM - usually the
+    // gun itself, but after a bounce it is the floor's bounce point, so the
+    // tracer never draws a straight line through solid ground to reach it.
+    const legStart = this._legStart;
+    legStart.copy(muzzle);
     // Multi-pellet weapons fire eight of these per shot, so their per-impact
     // particle bursts have to be much smaller or a single shell drains the
     // whole pool. Both numbers are half what they were: the flecks are grit
@@ -6459,7 +6537,11 @@ class Game {
     // purpose. Seeker must not treat that as a miss and steal it.
     let hitProp = false;
 
-    for (const h of hits) {
+    // An INDEX loop rather than a for-of: SKIPSTONE re-casts the ray at the
+    // floor and needs to walk the fresh hit list from its top, which a
+    // for-of over the same array cannot do without allocating a second one.
+    for (let hi = 0; hi < hits.length; hi++) {
+      const h = hits[hi];
       const totem = h.object.userData.totem;
       if (totem) {
         // Anywhere on the totem claims it. The pellet stops either way - a
@@ -6535,6 +6617,39 @@ class Game {
       }
       const en = h.object.userData.enemy;
       if (!en) {
+        // SKIPSTONE. A round that stops on the FLOOR has not stopped: it
+        // comes off the surface once and carries on, at full damage, along
+        // the reflected ray. The floor is the plane at y=0 and nothing else
+        // in the raycast list is - a wall, a crate and a totem all stop the
+        // round dead, which is what keeps the bounce a bank shot off the
+        // ground rather than a ricochet off the room.
+        //
+        // THE SECOND TOUCH IS THE LAST. `bounced` is per PELLET, so a skipped
+        // round that falls to the floor again simply stops, exactly as the
+        // card says - "once", and never twice.
+        if (m.skipstone > 0 && !bounced && h.point.y <= 0.06) {
+          bounced = true;
+          // Lift the origin off the surface by a hair so the reflected ray
+          // does not immediately re-intersect the floor it just left, invert
+          // the vertical, and RE-CAST into the same list - the walk restarts
+          // from the top of the fresh hits, so everything downstream (the
+          // pierce count, the head pass, the dedup sets) is shared with the
+          // forward flight exactly as though the bounce were one longer ray.
+          //
+          // The FIRST leg is drawn now - the tracer below only ever draws the
+          // second. A bent streak is the whole tell that the bounce happened.
+          legStart.copy(h.point);
+          legStart.y += 0.05;
+          this.effects.tracer(muzzle, h.point, this.player.muzzle);
+          this.effects.impact(h.point, THEME.skipstone, 3, 2.5, 1.2, 0.22);
+          ray.ray.origin.copy(legStart);
+          ray.ray.direction.y = -ray.ray.direction.y;
+          ray.ray.direction.normalize();
+          hits.length = 0;
+          ray.intersectObjects(targets, false, hits);
+          hi = -1;
+          continue;
+        }
         // Wall, floor or crate - the pellet stops here.
         end = h.point;
         this.effects.impact(end, 0x9fb4d8, w.pellets > 1 ? 2 : 4, 2.5, 1, 0.26);
@@ -6550,7 +6665,19 @@ class Game {
       // pellet just found. See _resolveHit.
       const hot = this._resolveHit(en, crit);
       const head = headed.has(en);
-      const dealt = this.player.getEffectiveDamage(w.damage * m.volleyDamage)
+      // ARMATURE'S BANK rides the FIRST body this trigger pull reaches and
+      // no other: the add is spent on the first pellet that lands (or the
+      // first body the ray touches, which is the same thing for a straight
+      // shot), and the field is zeroed in the same breath so the volley's
+      // other pellets and the echo cannot double-dip. A shotgun spreads one
+      // bank over one chest, which is the honest reading of "your next shot".
+      let arm = 0;
+      if (this._shotArmature > 0) {
+        arm = this._shotArmature;
+        this._shotArmature = 0;
+      }
+      const dealt = (this.player.getEffectiveDamage(w.damage * m.volleyDamage)
+        + arm)
         * Math.pow(falloff, pierced) * dmgMult * this._hitMult(en, hot, head);
       this._landShot(en, h.point, ray.ray.direction, dealt, burst, hot, head);
       damaged = true;
@@ -6573,11 +6700,60 @@ class Game {
     }
 
     if (!end) end = ray.ray.at(60, this._rayEnd);
+    // STIGMATA. A miss that passed within half a metre of a body at all still
+    // pays a tenth of the shot's damage. The distance is from the ray's own
+    // path to the body's EDGE, not its centre - a half-metre band drawn around
+    // a crawler reads as the shot nearly clipping it, which is the card's
+    // whole point. The geometry is a point-to-segment test between the gun's
+    // eye position and the pellet's stopping point.
+    //
+    // ONCE PER SHOT PER BODY. `_chipHits` is the set the next trigger pull
+    // clears, exactly as `_shotHits` is - which is also what says a body the
+    // pull ALREADY hit never chips: a hit and a near miss cannot both be
+    // owed for the same round.
+    if (m.stigmata > 0) {
+      for (const en of this.enemies) {
+        if (en.dead) continue;
+        if (seen.has(en) || this._chipHits.has(en)) continue;
+        // Point-to-segment distance from the body's capsule centre to the
+        // pellet's flight. The centre sits at half height above the feet,
+        // exactly where the hitbox lives. A boss's wide silhouette still
+        // counts (its own radius is subtracted), because the card never said
+        // its name.
+        const cx = en.pos.x, cy = en.pos.y + 0.8, cz = en.pos.z;
+        const ax = muzzle.x, ay = muzzle.y, az = muzzle.z;
+        const bx = end.x - ax, by = end.y - ay, bz = end.z - az;
+        const ab2 = bx * bx + by * by + bz * bz;
+        let t = 0;
+        if (ab2 > 1e-9) {
+          t = ((cx - ax) * bx + (cy - ay) * by + (cz - az) * bz) / ab2;
+          t = Math.max(0, Math.min(1, t));
+        }
+        const dx = cx - (ax + bx * t);
+        const dy = cy - (ay + by * t);
+        const dz = cz - (az + bz * t);
+        const gap = Math.hypot(dx, dy, dz) - en.radius;
+        if (gap > 0.5) continue;
+        this._chipHits.add(en);
+        // THROUGH hurtEnemy AND NOT THROUGH _landShot: no hit, so nothing that
+        // only makes sense after one - no status, no crit roll, no chain,
+        // no knockback - the chip is the whole of the event, and the body
+        // either takes it or it is not this pull's near miss at all.
+        //
+        // Read off the SAME base the round that missed was worth: the weapon
+        // figured through every multiplier (exactly as dotHit reads it), so
+        // the chip stays ten percent of the shot the player actually fired.
+        this.hurtEnemy(en, this.player.getEffectiveDamage(w.damage * m.volleyDamage) * 0.1);
+      }
+    }
     // Breach Round detonates wherever the shot stopped - an enemy, a wall or
     // the floor - so the last impact point is kept for the caller.
     this._lastImpact.copy(end);
-    // The streak's tail is glued to the live muzzle marker (Effects.tracer).
-    this.effects.tracer(muzzle, end, this.player.muzzle);
+    // The streak's tail is glued to the live muzzle marker (Effects.tracer) -
+    // or, after a SKIPSTONE bounce, to the bounce point: the tracer must
+    // never draw itself through the floor, which is what a straight line from
+    // the muzzle to a bounced end would do.
+    this.effects.tracer(legStart, end, this.player.muzzle);
     return damaged;
   }
 
@@ -6696,6 +6872,30 @@ class Game {
       );
     }
 
+    // ARMATURE. The bank rides the FIRST round of the trigger pull as a flat
+    // add, spent whether or not that round connects - it is part of the shot
+    // the way the round is, and a bank that survived a miss would be a bank
+    // the player never had to risk. Read and cleared HERE, in one breath, so
+    // no pellet downstream can spend it twice.
+    //
+    // THE ADD IS RAW, before every multiplier: it is a number that was ALREADY
+    // through the build's multipliers on the shot that earned it, and sending
+    // it through again would compound the build into itself.
+    let armatureAdd = 0;
+    if (this.player.armatureBank > 0) {
+      armatureAdd = this.player.armatureBank;
+      this.player.armatureBank = 0;
+      this.effects.burst(
+        this.player.muzzleInto(this._killPos), THEME_OVERKILL, 8, 3.5, 1.8, 0.3
+      );
+    }
+    // Carried to the pellet through a frame field rather than a seventh
+    // argument on _firePellet - the call sites (volleys, echoes, the off
+    // hand) all pass their own dmgMult, and a parameter that most of them
+    // would have to remember to forward is a parameter that will be
+    // forgotten by the next one. One shot, one field, read once.
+    this._shotArmature = armatureAdd;
+
     const w = this.player.weapon;
     this.stats.shotsFired++;
     this.sfx.shoot();
@@ -6733,6 +6933,7 @@ class Game {
     this._shotCrit.clear();
     this._blastHit = false;
     this._shotWasCrit = false;
+    this._chipHits.clear();
     // SOUTHPAW'S OFF HAND. A trigger pull answered mid-reload fires ONE pellet
     // and none of the duplicate patterns - the card says single rounds, and a
     // TWENTY/TWENTY volley or an ECHO of one off-hand round is a question about
@@ -6784,6 +6985,64 @@ class Game {
         }
         this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
       }
+    }
+    // REARVIEW. One pellet straight behind the player on every trigger pull,
+    // at full damage, off no magazine - the card says "as well", not
+    // "instead". It shares the trigger pull's crit roll, its dmgMult and the
+    // dedup sets (NOT cleared before it, for the reason the echo above does
+    // not clear them: a body caught by the forward volley and the back one
+    // takes one dose of status), and the tracer is drawn so the shot behind
+    // is as visible as the one ahead.
+    //
+    // FIRED FROM THE EYE, not from a backward-offset muzzle: the round leaves
+    // the player's own position along their bearing reversed, pitched level -
+    // a self-defense round, at chest height.
+    if (mods.rearview > 0) {
+      const eye = this.player.eyeInto(this._killPos);
+      // The camera's forward, mirrored around the vertical axis: x and z
+      // negated, y KEPT. A full negate would flip the pitch as well, and a
+      // player aiming down at a crawler in front would be shooting the ray
+      // UP behind them - which is not "backward". What the card promises is
+      // the same shot in the other lane, and the lane is changed by the draw
+      // of the feet, not the height of the eye.
+      const f = this._rayEnd;
+      this.camera.getWorldDirection(f);
+      f.x = -f.x;
+      f.z = -f.z;
+      // The cone. The same NDC readout the forward shots share - a backward
+      // round deserves the same cushion of luck rather than a laser line.
+      const spreadB = this._shotSpread();
+      const jx = (Math.random() - 0.5) * spreadB;
+      const jy = (Math.random() - 0.5) * spreadB;
+      // Rotate the mirrored vector by the two small angular offsets on the
+      // side that shares the player's yaw, so the cone opens the same way it
+      // would forward. Jittering in XZ keeps the pitch the player paid for.
+      const ca = Math.cos(jx), sa = Math.sin(jx);
+      const back = this._shotRay;
+      back.ray.origin.copy(eye);
+      back.ray.direction.set(f.x * ca - f.z * sa, f.y + jy, f.x * sa + f.z * ca);
+      back.ray.direction.normalize();
+      const bhits = this._hits;
+      bhits.length = 0;
+      back.intersectObjects(targets, false, bhits);
+      let bend = null;
+      for (const h of bhits) {
+        const en = h.object.userData.enemy;
+        if (en && !en.dead) {
+          const hot = this._resolveHit(en, crit);
+          const head = h.object.userData.head === true;
+          const dealt = this.player.getEffectiveDamage(w.damage * mods.volleyDamage)
+            * dmgMult * this._hitMult(en, hot, head);
+          this._landShot(en, h.point, back.ray.direction, dealt, 2, hot, head);
+          hitAny = true;
+        }
+        // Wall, floor, totem, or the body it just paid - the backward round
+        // stops here either way, exactly as a forward one does.
+        bend = h.point;
+        break;
+      }
+      bhits.length = 0;
+      this.effects.tracer(eye, bend || back.ray.at(40, this._rayEnd), this.player.muzzle);
     }
     if (this._blastHit) {
       this._blast(this._blastAt, mods.blastDamage, mods.blastRadius, null, false);
@@ -6867,6 +7126,25 @@ class Game {
         this.player.health = Math.max(1, this.player.health - mods.missCost);
         this.ui.damage();
       }
+    }
+    // DEATH CLAUSE. Only the FINAL ROUND of the magazine is covered - the
+    // clause's own terms - and only when that shot missed, which the
+    // hitmarker already told the player about. `magAtShot <= lastShotCost`
+    // is the pair that answers "the last round" for every build, on POCKET
+    // GRENADE's terms exactly, and the two reads cannot disagree: what the
+    // trigger saw is what runs dry.
+    //
+    // THE FLOOR OF ONE, on AIM OR BLEED's terms and for its reason: a guilt
+    // clause that could kill you out of the magazine it billed would be a
+    // card that reads as a broken gun, not as a contract.
+    if (mods.deathClause > 0 && !hitAny
+      && this.player.magAtShot > 0
+      && this.player.magAtShot <= this.player.lastShotCost
+      && this.player.health > 1) {
+      this.player.health = Math.max(1, this.player.health - mods.deathClause);
+      this.ui.damage();
+      this.effects.burst(this.player.eyeInto(this._killPos), THEME_CLAUSE, 8, 3.5, 1.8, 0.3);
+      this.sfx.hurt();
     }
 
     // Hot Streak rides the SHOT, not the pellet: one trigger pull is one step
@@ -7261,6 +7539,19 @@ class Game {
       this.ui.banner('DODGE');
       return;
     }
+    // GLANCING BLOW, above the ward and the throttle of bests either way: a
+    // graze never lands at all, so every counter that breaks on contact -
+    // Carnage, the flawless streak, KILL STREAK's clean count, the ward the
+    // player spent - must not fire, and the ward must not be spent on a hit
+    // the pick swallowed. "Ignored entirely" is the card, and ignored it is.
+    // The number is the blow after every multiplier but before curse (the one
+    // thing the ward checks too): small enough here, means small enough there.
+    if (this.player.mods.glancingBlow > 0
+      && d * this.player.incomingMult * this.player.itemTakenMult
+        <= this.player.mods.glancingBlow) {
+      this.effects.burst(pos, THEME.ceramic, 4, 3, 1.6, 0.2);
+      return;
+    }
     // Holy Mantle. A ward eats the hit whole, however big it was, and is spent
     // doing it - it is three free mistakes per wave, not damage reduction.
     //
@@ -7286,6 +7577,24 @@ class Game {
     this.player.clearCarnage();
     this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
+    // THIN BLOOD's bill, settled the same frame the hit landed - the player
+    // class set `hpDebt` from the build's own arithmetic and the wallet is
+    // here. Like CASH CANNON, `balance` is not written twice; the minus is
+    // taken straight off `credits`, and the HUD is told next frame.
+    if (this.player.hpDebt > 0) {
+      const pay = Math.min(this.credits, this.player.hpDebt);
+      if (pay > 0) {
+        this.credits -= pay;
+    this.player.balance = this.credits;
+    // WOLF PACK reads the LIVE COUNT on the same pattern: the roster is Game
+    // state, and effectiveFireRate must not walk it several times a trigger
+    // pull. `enemies` is compacted by _updateEnemies every frame, so its
+    // length IS the field's count - no dead entries, nothing held over.
+    this.player.aliveCount = this.enemies.length;
+        this._creditsDirty = true;
+        this.effects.burst(pos, 0xffd600, 6, 2.5, 1.6, 0.25);
+      }
+    }
     // KILL STREAK's counter, broken by the same hit that breaks the flawless
     // streak below - "without taking damage" means the same thing to both.
     this.player.cleanKills = 0;
@@ -7946,7 +8255,11 @@ class Game {
         // The passive item is the last decision the player makes, so the
         // handoff lands on a choice rather than halfway through the walk back.
         if (this.match) { this._endTurn(true); return; }
-        this.waveState = 'idle';
+    this.waveState = 'idle';
+    // LATE FEE's clock, undefined until the first wave books it - the same
+    // presence-not-sign test LONG HAUL's `startedAt` uses, for the same
+    // reason: a fixture setting the clock back must not silently arm the ramp.
+    this._waveStartedAt = undefined;
         this.interT = 0.4;
         // THE WAVE IS ANNOUNCED ON THE PICK, not on the build. Taking a
         // passive item is the last thing the player does in a break, so that
@@ -9053,8 +9366,13 @@ class Game {
       // PLASMA BAG lifts the full-bar gate on the health plate. The gate is not
       // a rule about health - it is the rule that a drop which cannot be SPENT
       // should not be rolled - and a crate carrying ten points of shield can be
-      // spent on a full bar.
-      this.player.mods.crateShield > 0
+      // spent on a full bar. PLATED DESSERT lifts the same gate for the same
+      // reason: the five-point bank is spendable there too.
+      this.player.mods.crateShield > 0 || this.player.mods.platedDessert > 0,
+      // SECOND HELPINGS. The odds side of the pick - the heal side lives with
+      // the pickup, in powerups.js, for the reason the chance's own note
+      // gives: one crate, two books, no two stepped on.
+      this.player.mods.crateLuck
     );
     if (kind) this._placeDrop(kind, pos);
   }
@@ -9077,7 +9395,8 @@ class Game {
       this._ammoActive() < MAX_ACTIVE_AMMO,
       this.player.mods.dropLuck,
       !!this.player.activeItem && this.player.activeItemCharge < this.player.activeItemChargeMax,
-      this.player.mods.crateShield > 0
+      this.player.mods.crateShield > 0,
+      this.player.mods.crateLuck
     );
   }
 
@@ -9563,6 +9882,9 @@ class Game {
       // would be paying twice for the same fight.
       if (!e.boss) this._bankKillCharge(e.value, paid);
       this.player.onKill(this.time);
+      // MONSOON. The kill's own clock, ticked on the frame the kill is booked
+      // so the window is the time between BODIES rather than between shots.
+      this.player.bumpMonsoon(this.time);
       // BODY COUNT's stack, and anything else that ever counts kills. Walked
       // rather than dispatched - see RunningActiveItems.onKill.
       this.runningActiveItems.onKill(this);
@@ -10933,6 +11255,27 @@ class Game {
         this.effects.shockwave(this.player.pos, THEME_GRISTLE, 4, 0.5);
         this.sfx.passiveItem();
       }
+      // SHUFFLE - LOUD, because the whole build just changed. This is the
+      // only banner that names a verb rather than a reward: the build the
+      // player is holding at the frame the pick settles is a different one
+      // from the one they had, and silence about that would be a bug.
+      if (this.player.shuffleFx) {
+        this.player.shuffleFx = false;
+        this.ui.banner('SHUFFLE');
+        this.effects.shockwave(this.player.pos, THEME_SHUFFLE, 6, 0.5);
+        this.effects.burst(this.player.pos, THEME_SHUFFLE, 26, 6, 2.5, 0.7);
+        this.sfx.passiveItem();
+        this.pad.rumble(0.5, 0.4, 180, 2);
+      }
+      // MAGNA CARTA's bank, raised the same way. No banner: a bank of four
+      // is a machine the player heard every dry reload for, not an event.
+      // The mag counter in the corner flashes instead, the way lastBreath's
+      // zero does - the number the player is already watching is the tell.
+      if (this.player.magnaFx) {
+        this.player.magnaFx = false;
+        this.ui.flashReserve();
+        this.sfx.reload();
+      }
       if (this.player.jackpotFx) {
         this.player.jackpotFx = false;
         this.sfx.jackpot();
@@ -10986,6 +11329,40 @@ class Game {
         this.sfx.melee();
         this.pad.rumble(0.3, 0.2, 80, 1);
       }
+      // BICYCLE KICK and STILT LEGS, on the same frame and the same landing:
+      // the player's fall told the room either something knocked the door
+      // down (Stilt, paid in damage and a 3m stagger) or that someone is
+      // home (Bicycle, stagger only, 2.4m). A shove is read off `knock`,
+      // which is the same verb KNOCKOUT DROPS and SCORCHED EARTH already
+      // use for interruption - bosses and the immovable are exempt there,
+      // exactly as they are for every shove in the game.
+      if (this.player.slamFx || this.player.stiltLanding) {
+        const armedBicycle = this.player.slamFx;
+        const armedStilt = this.player.stiltLanding;
+        this.player.slamFx = false;
+        this.player.stiltLanding = false;
+        const radius = armedStilt ? 3 : 2.4;
+        const theme = armedStilt ? THEME.stiltLegs : THEME_BICYCLE;
+        const damage = armedStilt ? this.player.weapon.damage * 3 : 0;
+        // Enemies inside the ring are shoved off it and, under Stilt Legs,
+        // handed three times the base damage the card names. The shove is
+        // fresh-momentum for every body caught - a landing beside something
+        // that already got one knock is not a refund.
+        for (const en of this.enemies) {
+          if (en.dead) continue;
+          const dx = en.pos.x - this.player.pos.x;
+          const dz = en.pos.z - this.player.pos.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > radius) continue;
+          en.knock(dx, dz, 0.35, 0.4);
+          if (damage > 0) this.hurtEnemy(en, damage, this._knockback.set(dx, 0, dz));
+        }
+        this.effects.shockwave(this.player.pos, theme, radius + 0.6, 0.32);
+        this.effects.burst(this.player.pos, theme, 18, 5, 2.2, 0.4);
+        this.effects.addShake(armedStilt ? 0.22 : 0.12);
+        this.sfx.impact();
+        this.pad.rumble(armedStilt ? 0.5 : 0.3, 0.3, 120, 1);
+      }
       // A slide opening. Dust at the player's feet and a short shove of the
       // pad - the one movement in the game that puts them on the floor should
       // be felt through it.
@@ -11002,6 +11379,14 @@ class Game {
         // A dash is the biggest thing the player does that nothing hits them
         // for, so it is the one movement that gets a shove rather than a tick.
         this.pad.rumble(0.55, 0.3, 150, 2);
+      }
+      // SOUL HARVEST. A single shield point is the quietest event in the pool:
+      // a small flash under the player and the HUD's shield count moving is
+      // the whole tell.
+      if (this.player.soulFx) {
+        this.player.soulFx = false;
+        this.effects.shockwave(this.player.pos, THEME_SOUL, 1.6, 0.22);
+        this.sfx.passiveItem();
       }
       // THE ACTIVE ITEM CAME BACK. One shot on the frame the bar fills, never
       // per frame while it is full - the flag is set once inside Player.update

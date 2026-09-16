@@ -61,22 +61,49 @@ export const POWERUP_TYPES = {
       // rather than a fraction of the bar, so the player can read which side of
       // it they are on straight off the HUD.
       const base = (m.crashCart > 0 && player.health <= m.crashCartAt) ? m.crashCart : 25;
-      // FIRE SALE. Twice the crate, and the despawn that pays for it is on the
-      // Powerup's own clock - see PICKUP_LIFETIME's use in update().
-      const amount = base * (m.lootMult || 1);
-      if (m.slowRelease > 1) {
-        // SLOW RELEASE. Twice as much again, owed rather than paid. It does
-        // NOT go through the +25 overheal ceiling below, and cannot: the pool
-        // is drained a fraction of a point at a time through Player.heal, so
-        // the cap it is measured against is whatever the bar is at on each of
-        // those frames. An overheal that only exists on the frame the crate is
-        // taken is not something a twenty-second drip can spend.
-        player.addSlowHeal(amount * m.slowRelease);
+      // SECOND HELPINGS. The card halves the heal, and it does it HERE - on
+      // the crate's own worth - so SLOW RELEASE's multiplication rides the
+      // smaller number and OVERDRAW's spill is exact. The drop-side of the
+      // pick is the chance, three times as often, which lives in rollDrop -
+      // its reason for being separate is in the notes above the roll.
+      //
+      // PLATED DESSERT above the hit, so "full HP" is answered against what
+      // the bar actually was, not against a full-health gate the drop never
+      // reached - and it pays the bank INSTEAD of the heal, not on top of it:
+      // at a full bar the ordinary heal was zero, so there is no double.
+      // GRISTLE's bank is the one it adds into - max HP is the same currency
+      // everywhere it is earned.
+      if (m.platedDessert > 0 && player.health >= player.maxHealth) {
+        player.fleshBanked += m.platedDessert;
+        // A banked point the player earned needs the same tell GRISTLE's coin
+        // has, because a max that silently grew is a max the player cannot
+        // have seen.
+        player.gristleFx = true;
       } else {
-        // TWENTY-FIVE OVER THE CAP, which is the crate's own rule and the
-        // reason it takes a `cap` at all - see Player.heal. Anything past even
-        // that ceiling is OVERDRAW's, if the run owns it.
-        player.heal(amount, player.maxHealth + 25);
+        const amount = base * (m.lootMult || 1) * (m.crateHealMult || 1);
+        if (m.slowRelease > 1) {
+          // SLOW RELEASE. Twice as much again, owed rather than paid. It does
+          // NOT go through the +25 overheal ceiling below, and cannot: the pool
+          // is drained a fraction of a point at a time through Player.heal, so
+          // the cap it is measured against is whatever the bar is at on each of
+          // those frames. An overheal that only exists on the frame the crate is
+          // taken is not something a twenty-second drip can spend.
+          player.addSlowHeal(amount * m.slowRelease);
+        } else {
+          // TWENTY-FIVE OVER THE CAP, which is the crate's own rule and the
+          // reason it takes a `cap` at all - see Player.heal. Anything past even
+          // that ceiling is OVERDRAW's, if the run owns it.
+          player.heal(amount, player.maxHealth + 25);
+        }
+      }
+      // SOUP KITCHEN. On every plate landed off an ammo crate. The heal is
+      // through heal() - it has to be, or HEALTHY CORE's refusal and
+      // OVERDRAW's bank would each have to be told about it twice.
+      if (m.fleshBank > 0) {
+        player.fleshBanked += m.fleshBankGain;
+        // A banked point the player earned needs the same tell GRISTLE's
+        // coin has; see the note above.
+        player.gristleFx = true;
       }
       // GRISTLE. One permanent point, three times in ten - see
       // Player.bankCrateHealth for why it has a bank of its own.
@@ -217,6 +244,12 @@ export const AMMO_PICKUP = {
     // build holding both has bought both.
     const got = Math.round(45 * (m ? m.ammoPickupMult * (m.lootMult || 1) : 1));
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + got);
+    // SOUP KITCHEN. Five HP on the side - through heal() so it obeys the same
+    // rules as every other heal in the game: HEALTHY CORE refuses, BONE
+    // MARROW scales, OVERDRAW banks the spill. The full-health freebie rule
+    // is NOT relaxed by it: a crate that heals something nobody can use is
+    // still a crate, and the reserve needed it anyway.
+    if (m && m.soupKitchen > 0) player.heal(m.soupKitchen);
   },
   sfx: 'pickupAmmo',
 };
@@ -339,7 +372,7 @@ function needScale(frac) {
  *   which is what most kills return.
  */
 export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
-  crateShield = false) {
+  crateShield = false, crateLuck = 1) {
   for (const key of ROLL_ORDER) {
     if (key === 'ammo' && !allowAmmo) continue;
     if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
@@ -349,6 +382,11 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBatte
     if (def.needy) {
       p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
     }
+    // SECOND HELPINGS. The crate's ODDS, not its heal - that one rides with
+    // the pickup itself above and is answered by POWERUP_TYPES.health. Luck
+    // multiplies every category; crateLuck multiplies ONLY this one's, so
+    // the two cannot be confused with each other by the next reader.
+    if (key === 'health') p *= crateLuck;
     // RABBIT'S FOOT. A multiplier, applied AFTER the need term, so it lifts the
     // odds a desperate player already has by the same proportion it lifts a
     // healthy one's. A flat addition would have been worth several times more

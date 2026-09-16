@@ -1962,6 +1962,131 @@ BELT FED DREAM reading), which gates the parity picks the same way their own
 trap comment spells out, and it does not spend CANNONADE's armed first round -
 that one belongs to the first round that actually leaves the fresh magazine.
 
+### The sixth pool
+
+Twenty-six more max-1 picks, and what holds them together as a group is that
+most of them answer a question about the **state of the run** rather than about
+the shot: how deep the wave is, how many bodies are still standing, whether the
+magazine was run dry, whether the kill landed inside five seconds of the last
+one, whether the bar is full when a crate is walked over. A handful of them
+change the geometry of the room instead - the floor becomes a second path for
+the shot, the air above it becomes a trap, the lane behind the player becomes a
+lane.
+
+**The magazine and its reload**
+
+| Passive Item | Effect |
+| --- | --- |
+| MAGNA CARTA | Reloading from empty banks +1 magazine size, forever |
+| FAT HANDGUN | Reloads are 20% faster but the magazine holds 2 fewer rounds |
+| SLIDE RULE | Sliding into a low magazine seats 10 rounds from the reserve |
+
+MAGNA CARTA banks its rounds into a base size the card owns, and the bank grows
+off **empty reloads only** - the question the game asks is the one BOTTOM
+FEEDER asks: was the gun run dry before it was fed. The answer is read off
+`magOnReload`, and a reload interrupted before it seats pays nothing, because
+the round it cost never became a new magazine. SLIDE RULE pays on the slide's
+own opening frame and is a transfer, not a reload, on CHAIN FEED's terms:
+nothing is armed and no clock starts.
+
+**The shot, and its geometry**
+
+| Passive Item | Effect |
+| --- | --- |
+| REARVIEW | Every trigger pull also fires one pellet straight back, at full damage |
+| SKIPSTONE | A pellet that hits the floor bounces once, at full damage |
+| STIGMATA | A shot passing within 0.5m of a body deals 10% chip damage to it |
+| ARMATURE | Overkill damage on a kill is banked onto your next shot |
+
+REARVIEW fires the negated forward ray from the eye - not from a swapped-out
+muzzle behind the player - and shares the pull's crit roll and the shot's dedup
+set with the forward volley, exactly as TWENTY/TWENTY's second barrel does.
+SKIPSTONE re-casts the same ray at the floor so the dedup sets and the pierce
+count carry the whole flight as one object; the second touch ends it. STIGMATA
+answers "the shot grazed them" with chip damage and a per-shot set of its own
+to hold it, because a shotgun fan covering one body eight ways is one near
+miss, exactly as it is one hit.
+
+**Counters and clocks**
+
+| Passive Item | Effect |
+| --- | --- |
+| WOLF PACK | +2% fire rate per enemy alive, capped at 40% |
+| MONSOON | Kills within 5s of each other stack +3% fire rate, to 10 |
+| LATE FEE | +3% damage per 10s the wave has run. Resets at wave end |
+| DEATH CLAUSE | +20% damage. A miss with the magazine's last round costs 5 HP |
+
+WOLF PACK reads the roster off the game's own enemy count, which _updateHud
+publishes into the player the same way the balance is published: the rate getter
+never walks a list it does not own. MONSOON keeps the chain entirely on the
+KILL's clock - `lastKillAt` - so the window is the time between bodies and the
+crowd never has to agree about when a stack qualified. LATE FEE only ever pays
+while a wave is actually running, because the wave's start time is stamped at
+`startWave` and read against the same clock LONG HAUL's boss clock uses.
+
+DEATH CLAUSE pairs its damage with the one miss the magazine actually charges
+for: the same pair of numbers CHAIN FEED asks about decides "that was the last
+round", and the penalty is floored at 1 HP so a held trigger cannot kill the
+player on its own - the terms CURSED AMMO already agrees to.
+
+**Landing and leaving**
+
+| Passive Item | Effect |
+| --- | --- |
+| BICYCLE KICK | Jump height is 50% higher; landing staggers nearby enemies |
+| STILT LEGS | Crouching in midair slams down, staggering everything within 3m for 3x base damage |
+| FAST LANE | Sprinting is 30% faster |
+
+BICYCLE KICK's stagger is paid on the LANDING, not on the jump - and the flag
+is raised on the airborne-to-grounded edge in `update()`, so a run holding it
+is never cheaper than the arc that earned it. STILT LEGS' slam is the slide
+buffer's other meaning - a crouch press in the AIR that did not come off the
+ground at a run - so it answers a press the movement code was already watching
+for, and lands at the same edge the bounce up off it would have.
+
+**Health, shields and money**
+
+| Passive Item | Effect |
+| --- | --- |
+| SECOND HELPINGS | Health crates appear 3x as often but heal 50% |
+| PLATED DESSERT | Health crates at a full bar grant +5 max HP instead of healing |
+| SOUP KITCHEN | Ammo pickups also heal 5 HP |
+| GLANCING BLOW | Incoming hits of 10 damage or less never land at all |
+| THIN BLOOD | 20% of damage taken drains credits at $10 per HP instead |
+| FLESH BANK | -10 max HP. Health crates bank +1 max HP on top of their heal |
+| SOUL HARVEST | 20% chance a kill banks a point of shield |
+
+SECOND HELPING's two halves live in different books - the chance belongs to
+`rollDrop`, the heal to the crate's own apply - so the two are the same pick
+read once per side rather than one written twice. PLATED DESSERT lifts the
+full-bar gate on health plates the way PLASMA BAG does (**a drop that cannot be
+spent should not be rolled**, and a crate that banks max HP at a full bar can
+always be spent), which is why a run carrying it finds them everywhere even at
+full health.
+
+THIN BLOOD pays out of the WALLET and runs the wallet's balance on the same
+mirror `balance` already carries - the check is exact (only what credits can
+actually cover is diverted), and the shortfall lands as damage, which is what
+the card says happens. GLANCING BLOW sits at the door to the hit path, in front
+of the ward and the counters a hit breaks, so a graze never spends anything:
+not the mantle, not Carnage, not the chain - "ignored entirely" is the card,
+and ignored it is.
+
+**The single wilder pick**
+
+| Passive Item | Effect |
+| --- | --- |
+| KILL SWITCH | +30% damage, plain |
+| AMPHETAMINES | +15% fire rate, plain |
+| SHUFFLE | Every passive item you own becomes a random one |
+
+KILL SWITCH and AMPHETAMINES are the plainest numbers in the pool, and their
+price is that they are: nothing else in either family is free of a gate, a
+shade or a cost. SHUFFLE changes the WHOLE LIST, at the totem and in
+`takePassiveItem` - the one place the list is written, on SACRIFICE's terms for
+exactly SACRIFICE's reason - and never re-deals itself, because the deck does
+not deal the dealer.
+
 ### Active items
 
 **One slot, one button, no menu.** Everything else a run collects is a number

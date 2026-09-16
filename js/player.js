@@ -444,9 +444,77 @@ const DEFAULT_MODS = {
                          // Player (`possumFx`, `possumEnd`) - see the state
                          // block in the constructor for why.
   deathStare: 0,        // Death Stare: seconds of petrify an attacker that
-                         // LANDED a melee blow is frozen for
+                          // LANDED a melee blow is frozen for
   southpawRate: 0,      // Southpaw: the fraction of the fire rate at which a
-                         // single round may leave the gun mid-reload
+                          // single round may leave the gun mid-reload
+
+  // ---- THE SIXTH POOL ------------------------------------------------------
+  //
+  // Twenty-seven more max-1 fields on the same contract every block above
+  // holds: zero is "not owned" and every reader tests for it. What this block
+  // has in common as a group is that most of them attach to a MOMENT the game
+  // already knows about - the reload landing from empty, a kill landing inside
+  // five seconds of the last one, a wave running long, a crate walked over at
+  // full health - and the counters those moments need live on the Player (see
+  // reset()), not here, for the reason every other block gives: mods are
+  // replayed from DEFAULT_MODS on every draft pick, so anything an EVENT
+  // writes here is handed back by the next totem.
+  magnaCarta: 0,        // Magna Carta: magazine size banked by reloading from
+                        // empty, one round at a time. The banked count lives
+                        // on the Player (`magnaRounds`) for the same reason
+                        // noHitStacks does.
+  fastLane: 0,          // Fast Lane: move faster while sprinting
+  softPoints: 0,        // Soft Points: damage gained against a SLOWED body
+  fatHandgun: 0,        // Fat Handgun: reloads are shorter and the magazine
+                        // holds fewer rounds
+  armature: 0,          // Armature: overkill damage banked onto the NEXT shot
+                        // rather than walked to a neighbour. The bank lives on
+                        // the Player (`armatureBank`).
+  slideRule: 0,          // Slide Rule: rounds a slide seats from the reserve
+  bicycleKick: 0,        // Bicycle Kick: the jump is higher, and a landing
+                        // near bodies staggers them. The landing hook lives in
+                        // main.js - see Game._bicycleLanding.
+  rearview: 0,          // Rearview: every trigger pull also fires one pellet
+                        // straight back, at full damage
+  wolfPack: 0,          // Wolf Pack: fire rate gained per enemy alive
+  wolfPackCap: 0,       // and the ceiling it stops at
+  crateLuck: 1,         // Second Helpings: multiplier on the health plate's
+                        // drop odds. DEFAULT 1, not 0 - it is a multiplier,
+                        // and zero here would be "health never drops".
+  crateHealMult: 1,     // ...and multiplier on what it heals
+  skipstone: 0,          // Skipstone: a pellet that hits the floor may bounce
+  stigmata: 0,          // Stigmata: chip damage for a shot that passed NEAR a
+                        // body without hitting it
+  glancingBlow: 0,      // Glancing Blow: incoming hits at or under this many
+                        // points never land at all
+  thinBlood: 0,          // Thin Blood: this much of every hit is paid in
+  thinBloodRate: 0,     // credits at this many per HP
+  platedDessert: 0,      // Plated Dessert: max HP a health crate banks at a
+                        // full bar instead of healing nothing
+  tenderizer: 0,        // Tenderizer: damage gained against a body at FULL
+                        // health
+  lateFee: 0,           // Late Fee: damage gained per ten seconds the current
+                        // wave has run
+  lateFeeEvery: 0,      // the ten seconds, as a mod so the card and the ramp
+                        // cannot drift
+  monsoon: 0,           // Monsoon: fire rate gained per kill inside five
+                        // seconds of the last one
+  monsoonWindow: 0,     // the five seconds, ditto
+  monsoonCap: 0,        // and the stack ceiling
+  soupKitchen: 0,        // Soup Kitchen: HP an ammo pickup also heals
+  stiltLegs: 0,          // Stilt Legs: crouching in the AIR slams down
+  shuffle: 0,           // Shuffle: flag only - the swap happens once, at the
+                        // pick, in takePassiveItem
+  soulHarvest: 0,       // Soul Harvest: chance a kill banks a shield point
+  deathClause: 0,       // Death Clause: damage gained, and the HP a miss with
+                        // the last round of a magazine costs
+  killSwitch: 0,        // Kill Switch: plain damage, on the card and off the
+                        // sleeves of everything the family already wears
+  amphetamines: 0,      // Amphetamines: plain fire rate
+  fleshBank: 0,          // Flesh Bank: max HP the pick costs, and max HP a
+  fleshBankGain: 0,     // health crate banks. The cost is a FLAT TAKE like
+                        // maxHpFlat, replayed by rebuildMods; the gains ride
+                        // the crate's own bank on the Player (`fleshBanked`).
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -463,6 +531,13 @@ const BASE_RESERVE = 300;
 // in the pool.
 const JUMP_V = 9;
 const AIR_JUMP_V = 11;
+// BICYCLE KICK's raised jump. A MULTIPLIER on the impulse rather than a
+// second constant, so the pick composes with DOUBLE JUMP (the air jump is
+// raised too - the card says jump height, and the air jump is a jump) and
+// with anything that ever touches the figure. JUMP_V's 9 at 1.5 gives
+// 1.84m x 2.25 = ~4.1m of clearance - over the 4.05 decks, short of the
+// 4.6 catwalk, where the old 2x (~7.4m) cleared everything in the room.
+const BICYCLE_JUMP_MULT = 1.5;
 // BLINK DRIVE: how long a dash lasts and its PEAK speed. What it costs to
 // fire again is the item's charge, not the dash's - see js/items/active/index.js.
 //
@@ -790,6 +865,11 @@ const SLIDE_STEER = 1.6;
 // Slides are paid for out of the sprint bar, and faster than running is - it
 // is a burst, not a pace.
 const SLIDE_DRAIN = 45;
+// STILT LEGS' downward speed, in m/s. Faster than a fall ever gets on its own
+// from a raised jump (the 1.5x arc returns at the 13.5 it left with) and
+// comfortably under the dash's 42, so the slam reads as its own committed move
+// rather than as either of the two the player already knows.
+const STILT_FALL = 26;
 // HOW LONG A SLIDE PRESSED IN THE AIR STAYS QUEUED.
 //
 // THE MOVE THIS EXISTS FOR: sprint, jump, and hit the crouch button on the way
@@ -1294,6 +1374,12 @@ export class Player {
     // path and has no business holding a reference to the game. Zero until the
     // first frame writes it, which is exactly what a run with no money means.
     this.balance = 0;
+    // WOLF PACK reads the LIVE ROSTER, mirrored across on the same terms and
+    // for the same reason `balance` is: the enemy list belongs to Game, and a
+    // fire-rate getter that walked it would be doing so several times a
+    // trigger pull. Zero until the first frame writes it, which is the honest
+    // reading of an empty arena.
+    this.aliveCount = 0;
     // ---- THE SECOND POOL'S COUNTERS ---------------------------------------
     //
     // On the PLAYER and never in `mods`, for the reason adrenalineStacks,
@@ -1387,6 +1473,51 @@ export class Player {
                                  // one-frame handshake with main.js, which
                                  // reads it and clears it in the same breath -
                                  // see shoot() there.
+
+    // ---- THE SIXTH POOL'S STATE -------------------------------------------
+    //
+    // The same contract every block above holds: anything an EVENT opens,
+    // banks or counts lives here rather than in `mods`, because
+    // rebuildMods() replays the owned list from DEFAULT_MODS on every draft
+    // pick and would hand the next totem a fresh copy of it.
+    this.magnaRounds = 0;       // Magna Carta: magazine rounds banked by
+                                 // reloading from empty. Banked one at a time,
+                                 // kept forever, and applied through the
+                                 // magSize getter so a draft pick can never
+                                 // leave the gun holding more than it carries.
+    this.armatureBank = 0;      // Armature: overkill damage waiting to ride the
+                                 // next shot. A BANK, not a window - it does
+                                 // not expire and does not stack past one
+                                 // kill's spill (see _carryArmature in
+                                 // main.js).
+    this.monsoonStacks = 0;     // Monsoon: kills inside the window, and
+    this.lastKillAt = -99;      // game time of the last kill, which is the
+                                 // whole of the window's clock. Stacks are
+                                 // LOST, not decayed, the moment five seconds
+                                 // pass without a body.
+    this.fleshBanked = 0;       // Flesh Bank: max HP banked off health crates.
+                                 // Its own bank, for GRISTLE's reason: that
+                                 // one rides `crateHp` and neither pick may
+                                 // eat the other's ceiling.
+    this.shuffleFx = false;     // Shuffle: one-shot, cleared by main.js. The
+                                 // build changing under the player is the one
+                                 // pick in the pool that has to SAY so.
+    this.magnaFx = false;       // Magna Carta: cleared the same way, for the
+                                 // same reason - a magazine that quietly got
+                                 // wider is a stat nobody saw change.
+    this.slamFx = false;        // Bicycle Kick: one-shot, raised on the frame
+                                 // a fall lands, cleared by main.js when it
+                                 // staggers the room - the jumpFx split, for
+                                 // the same reason (player.js has no enemies).
+    this.slamArmed = false;     // Stilt Legs: the fall currently in flight was
+                                 // ASKED for, so the landing pays the bigger
+                                 // version. Cleared with every landing edge.
+    this.stiltLanding = false; // and the one-frame read of it, for main.js
+    this.hpDebt = 0;          // Thin Blood: credits a hit just drained, read
+                               // and billed by main.js on the same frame -
+                               // the cashOwed split, for the same reason.
+    this.soulFx = false;      // Soul Harvest: one-shot, cleared by main.js
+    this._wasGrounded = true;   // last frame's onGround, for the landing edge
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1568,11 +1699,20 @@ export class Player {
     // walked over.
     return Math.max(
       MIN_MAX_HEALTH,
-      built + this.hpBanked + this.crateHp - this.mods.maxHpFlat - this.oathLoss
+      built + this.hpBanked + this.crateHp + this.fleshBanked
+        - this.mods.maxHpFlat - this.oathLoss
     );
   }
   get magSize() {
-    return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult));
+    // MAGNA CARTA'S BANK is added AFTER the round, not multiplied into it: the
+    // card promises one ROUND per reload from empty, and a bank of four on a
+    // HOLLOW POINT build that doubled the magazine is still four rounds the
+    // player earned - not eight. FAT HANDGUN'S CUT comes off the end, flat,
+    // because "two fewer rounds" is what that card says whatever else the
+    // build did to the number; max(1,...) keeps a small magazine a magazine.
+    const cut = this.mods.fatHandgun > 0 ? this.mods.fatHandgun : 0;
+    return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult)
+      + this.magnaRounds - cut);
   }
   /**
    * How long a reload takes, right now.
@@ -1661,9 +1801,23 @@ export class Player {
     // four. The honest answer for a build with no magazine is nothing.
     const hot = this.mods.hotMag > 0 && this.mods.beltFedDream <= 0
       ? 1 + this.mods.hotMag * this.mag : 1;
+    // WOLF PACK. `aliveCount` is written by main.js once per frame - the same
+    // split `balance` uses, because the player cannot see the roster and has
+    // no business walking it several times a trigger pull. Not a stack the
+    // player earns, a debt the room pays: the emptier the arena gets, the
+    // closer to base this falls, which is the whole shape of the pack hunting.
+    const wolf = this.mods.wolfPack > 0
+      ? 1 + Math.min(this.mods.wolfPackCap, this.mods.wolfPack * this.aliveCount)
+      : 1;
+    // MONSOON. A kill streak on a five-second clock, read live so the last
+    // frame of the window is exactly as fast as the first. The stacks are
+    // dropped rather than decayed - see bumpMonsoon - so this is always a
+    // step the player can see on the counter.
+    const monsoon = this.mods.monsoon > 0
+      ? 1 + this.mods.monsoon * this.monsoonStacks : 1;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
       * this.mods.fireRate * crouch * this.paceMult * spirit * hip
-      * wands * high * fumes * hot;
+      * wands * high * fumes * hot * wolf * monsoon;
   }
 
   /**
@@ -1855,6 +2009,44 @@ export class Player {
         delete this.passiveItems[gone];
         this.sacrificed = PASSIVE_ITEMS[gone] ? PASSIVE_ITEMS[gone].name : gone;
       }
+    }
+    // SHUFFLE. The pick's whole job is to change the LIST, not the stats
+    // built from it, which is the same reason SACRIFICE's removal lives here:
+    // rebuildMods() replays whatever is owned on the next totem's order, so
+    // anything done to `passiveItems` must be done where the list is
+    // written.
+    //
+    // EVERY STACK BECOMES A NEW PICK: the count carried is re-dealt one for
+    // one - a HOLLOW POINT x3 comes back as three random items, not as a
+    // rolled triple. The cap is respected (a random item at max stays out),
+    // and the draw respects `max` because this IS a pick made at the totem:
+    // a build that was three deep in one thing owes the pool three wilds,
+    // not one.
+    //
+    // SHUFFLE never re-deals itself: the deck does not deal the dealer.
+    if (id === 'shuffle') {
+      const open = Object.keys(PASSIVE_ITEMS).filter((k) => {
+        if (k === id) return false;
+        return (this.passiveItems[k] || 0) < PASSIVE_ITEMS[k].max;
+      });
+      const owned = Object.keys(this.passiveItems).filter((k) => k !== id);
+      const count = owned.reduce((s, k) => s + this.passiveItems[k], 0);
+      for (const k of owned) delete this.passiveItems[k];
+      // Keep the ONE shuffle: the dealer never deals itself in.
+      this.passiveItems.shuffle = 1;
+      let remaining = open.length ? open.slice() : [];
+      for (let i = 0; i < count && remaining.length; i++) {
+        const gi = (Math.random() * remaining.length) | 0;
+        const got = remaining[gi];
+        this.takePassiveItem(got);
+        // If that pick ran the pool out, feel free to keep offering: the set
+        // was bounded by what the player owned, so a shortfall simply means
+        // the pool could not cover the count.
+        if ((this.passiveItems[got] || 0) >= PASSIVE_ITEMS[got].max) {
+          remaining.splice(gi, 1);
+        }
+      }
+      this.shuffleFx = true;
     }
     this.rebuildMods();
     // A max-health change must not leave the player over the new cap or at a
@@ -2120,6 +2312,22 @@ export class Player {
     this.carnageStacks = 0;
   }
 
+  // MONSOON. A kill inside the window is one more stack, and the window is
+  // nothing but the time since the LAST kill - so the first kill of a chain
+  // arms it, every kill re-arms it, and the stacks are gone the moment five
+  // seconds pass without a body rather than decaying one at a time. LOST, not
+  // decayed, deliberately: a ramp that bled would read as a number the player
+  // could wait out, and the whole shape of the pick is a chain they keep
+  // breaking by stopping.
+  //
+  // Called by main.js beside onKill, on the frame the kill is booked.
+  bumpMonsoon(time) {
+    if (this.mods.monsoon <= 0) return;
+    if (time - this.lastKillAt > this.mods.monsoonWindow) this.monsoonStacks = 0;
+    this.monsoonStacks = Math.min(this.mods.monsoonCap, this.monsoonStacks + 1);
+    this.lastKillAt = time;
+  }
+
   // Evasion. Called by main.js when an incoming hit is dodged; the speed
   // burst is read back in update().
   startDodge(time) {
@@ -2137,6 +2345,17 @@ export class Player {
     // much as Vampiric's tick - it is paid for in max HP and in taking a
     // quarter more damage from everything, so it has to be felt.
     if (this.mods.killHeal > 0) this.heal(this.mods.killHeal);
+    // SOUL HARVEST. One time in five a kill banks a point of shield - and the
+    // clock is cancelled rather than shared, on PLASMA BAG's terms and for
+    // its reason: a point counting down on a timer the kill did not start is
+    // the one behaviour a player could not predict. The pick belongs beside
+    // Vampiric and Blood Pact precisely because it is one of the three ways a
+    // kill pays the bar instead of the wallet.
+    if (this.mods.soulHarvest > 0 && Math.random() < this.mods.soulHarvest) {
+      this.shield += 1;
+      this.shieldEnd = 0;
+      this.soulFx = true;
+    }
     this.bumpCarnage();
   }
 
@@ -2567,6 +2786,21 @@ export class Player {
     this.possumReady = false;
     this.possumFx = false;
     this.offHand = false;
+    // The sixth pool's, likewise - the banks with the other banks, the
+    // one-shots with the other one-shots.
+    this.magnaRounds = 0;
+    this.armatureBank = 0;
+    this.monsoonStacks = 0;
+    this.lastKillAt = -99;
+    this.fleshBanked = 0;
+    this.shuffleFx = false;
+    this.magnaFx = false;
+    this.slamFx = false;
+    this.slamArmed = false;
+    this.stiltLanding = false;
+    this.hpDebt = 0;
+    this.soulFx = false;
+    this._wasGrounded = true;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -2598,6 +2832,7 @@ export class Player {
     this.compoundMult = 1;
     this.adrenalineStacks = 0;
     this.balance = 0;
+    this.aliveCount = 0;
     this.extX = 0;
     this.extZ = 0;
     this.pos.set(0, 0, 8);
@@ -2879,6 +3114,22 @@ export class Player {
         if (this.mods.bottomFeed > 0 && this.magOnReload <= 0) {
           this.bottomEnd = time + this.mods.bottomTime;
         }
+        // MAGNA CARTA. The same question BOTTOM FEEDER asks, answered with a
+        // permanent round instead of a window: reloading a gun that was run
+        // dry banks one round of magazine, forever. Banked HERE, at the rounds
+        // actually arriving - a reload interrupted by a death cost the player
+        // the round they had left and must not pay them for it - and clamped
+        // in takePassiveItem's own breath, where every other change to the
+        // magazine is.
+        //
+        // NO CAP. The price is the reloads themselves: twenty rounds is twenty
+        // empty magazines this run stood through, and a card that paid less
+        // for more of that would be a card nobody believed.
+        if (this.mods.magnaCarta > 0 && this.magOnReload <= 0) {
+          this.magnaRounds++;
+          this.mag = Math.min(this.mag + 1, this.magSize);
+          this.magnaFx = true;
+        }
         // FLOW RELOAD. A second in which nothing lands, on the same edge
         // BOTTOM FEEDER's window opens on - the rounds ARRIVING, not the
         // button being pressed, so an interrupted reload buys nothing.
@@ -2962,7 +3213,12 @@ export class Player {
         // The second gear. A multiplier on the whole stack rather than an
         // addition to BASE_SPEED, so a slowed player who sprints is still
         // slowed and a Rage sprint is still faster than a Rage walk.
-        * (this.sprinting ? SPRINT_SPEED_MULT : 1)
+        // FAST LANE widens the gear itself, read live off the mods the way
+        // every posture bonus is: the card is about RUNNING, so it is the
+        // sprint - not the walk, not the slide - that it pays.
+        * (this.sprinting
+          ? SPRINT_SPEED_MULT * (1 + this.mods.fastLane)
+          : 1)
         // And the gear below the walk. Never both: _updateSprint refuses the
         // run while the player is crouched.
         * (this.crouching ? CROUCH_SPEED_MULT : 1);
@@ -3121,7 +3377,11 @@ export class Player {
     // nail the player to the floor.
     const canJump = !this.mods.noJump;
     if (canJump && input.jump && this.onGround) {
-      this.vel.y = JUMP_V;
+      // BICYCLE KICK, folded into the impulse itself so every consumer of
+      // the jump (the arc, the catwalk clearance, the slam's fall speed)
+      // reads one number. The multiplier is read live off the mods, the way
+      // every posture and window bonus is.
+      this.vel.y = JUMP_V * (this.mods.bicycleKick > 0 ? BICYCLE_JUMP_MULT : 1);
       this.onGround = false;
       // JACKPOT. THE GROUND JUMP AND NOT THE AIR ONE, deliberately: this
       // branch is held-key (bunny-hopping down a corridor is movement the game
@@ -3259,6 +3519,28 @@ export class Player {
         }
       }
     }
+    // ---- BICYCLE KICK'S LANDING --------------------------------------------
+    //
+    // The stagger is paid on the LANDING, not on the jump: a taller jump is
+    // only a movement passive item, and what makes the pick a weapon is coming
+    // down. The edge is "was airborne last frame, is grounded this frame", and
+    // the speed is the FALL's own - read off `prevFall`, kept from the frame
+    // before the resolution zeroed it, so the slam is proportional to the drop
+    // the player actually took.
+    //
+    // THE TELL IS A FLAG, like jumpFx and dashFx: player.js has no enemies, no
+    // effects and no banner, so main.js reads `slamFx` on the frame it lands
+    // and does the stagger there - see Game._bicycleLanding. `slamArmed` rides
+    // with it so the landing knows whether the fall was a Stilt press (the
+    // full 3m ring and the damage) or an ordinary Bicycle arc (the stagger
+    // alone), and is spent either way: a flag left standing would pay the big
+    // landing on the next hop.
+    if (this.onGround && !this._wasGrounded) {
+      if (this.mods.bicycleKick > 0) this.slamFx = true;
+      this.stiltLanding = this.slamArmed;
+      this.slamArmed = false;
+    }
+    this._wasGrounded = this.onGround;
     // ---- THE STEP -----------------------------------------------------------
     //
     // Walk into something low enough and you go up it instead of stopping.
@@ -3623,12 +3905,32 @@ export class Player {
       // player pressed crouch and they get a crouch, which is what the button
       // did before this branch existed.
       else this.crouching = true;
+    } else if (!this.onGround && edge && this.mods.stiltLegs > 0) {
+      // STILT LEGS. The crouch button in the AIR is a verb the slide buffer
+      // does not cover: a deliberate slam, taken on the edge rather than the
+      // hold so it is one press and not a way of riding the fall. It comes
+      // BEFORE the slide buffer deliberately - a player who sprint-jumped and
+      // presses crouch midair is asking to come DOWN, and a pick whose verb
+      // only worked from a standing jump would read as broken half the time.
+      //
+      // The direction is written straight onto the velocity - gravity is
+      // applied to vel.y every frame, and a "down" that only accelerated with
+      // gravity would take as long to arrive as the fall the player was trying
+      // to skip. `onGround` stays false until the resolution below catches
+      // the floor, and the landing edge is what fires the stagger - exactly
+      // the same landing BICYCLE KICK pays on, read by main.js off `slamFx`.
+      // `slamArmed` is what tells the landing WHICH pick it was: a Bicycle
+      // kick landing staggers whatever is nearby, a Stilt landing staggers
+      // the whole 3m ring and pays the damage. Both owned, both paid.
+      this.vel.y = -STILT_FALL;
+      this.slamArmed = true;
+      this.crouching = false;
     } else if (!this.onGround && want && this._groundRun) {
       // IN THE AIR, HAVING JUMPED OUT OF A RUN. Nothing to slide along yet,
       // so the press is kept rather than spent - see SLIDE_BUFFER.
       //
-      // Gated on `_groundRun` and not on anything measured right now, for a
-      // reason worth stating: neither live speed nor `sprinting` survives
+      // Gated on `_groundRun` and not on anything measured right now, for
+      // a reason worth stating: neither live speed nor `sprinting` survives
       // the jump. A player who lets go of the sprint key at the apex is at
       // walking pace by the time they press crouch, and they have obviously
       // still just jumped out of a sprint. What earns the slide is the
@@ -3690,6 +3992,22 @@ export class Player {
     this.slideT = SLIDE_TIME;
     this.slideFx = true;
     this._slideBuf = 0;
+    // SLIDE RULE. Ten rounds arrive on the OPENING frame, from the reserve
+    // into the magazine - a transfer rather than a reload, exactly as CHAIN
+    // FEED's is, so nothing is armed (no breach round, no fresh-magazine
+    // flag) and no clock starts. Capped by the room each side has: a full
+    // magazine takes nothing, an empty reserve has nothing to give, and both
+    // are silently fine.
+    if (this.mods.slideRule > 0) {
+      const take = Math.min(
+        this.mods.slideRule, this.magSize - this.mag, this.reserveAmmo
+      );
+      if (take > 0) {
+        this.mag += take;
+        this.reserveAmmo -= take;
+        this.ammoFx = true;
+      }
+    }
   }
 
   // ENDS STANDING. The envelope has already brought the speed down to the
@@ -4356,8 +4674,37 @@ export class Player {
     // applied any earlier could be multiplied back over by whatever came next,
     // which is the one way a ceiling can fail to be a ceiling. Above the
     // shield for the same reason curse is: a shield point is as much a thing
-    // the player has to spend as a health point.
+    // the player has to spend as a health point is.
     if (this.mods.hitCap > 0) d = Math.min(d, this.maxHealth * this.mods.hitCap);
+    // GLANCING BLOW, and above the shield deliberately: the card says the hit
+    // is IGNORED, not absorbed, and a graze that had to be paid for out of a
+    // shield point would be a shield the player lost to a fly. The line is
+    // measured against the blow AFTER every multiplier has had its say - the
+    // "10 damage" on the card is what the hit is worth when it arrives, which
+    // is the only number the player can see. _hurtPlayer has the SAME check
+    // in front of the counters, so a graze broken off here also never breaks
+    // Carnage or the flawless streak - the ticket this method reads can only
+    // be a hit that was going to land.
+    if (this.mods.glancingBlow > 0 && d <= this.mods.glancingBlow) {
+      this.lastDamageTaken = 0;
+      return this.health;
+    }
+    // rate rather than off the bar - and it is paid from the TOP of the hit,
+    // so the credits take the graze and the health takes the rest. The
+    // balance is the frame's own mirror (see the HUD block in main.js), so
+    // the check is exact: only what the wallet can actually cover is
+    // diverted, and the shortfall lands as damage, which is what the card
+    // says happens. `hpDebt` is what main.js bills after this returns,
+    // because the player class does not own the credits.
+    if (this.mods.thinBlood > 0) {
+      const cut = d * this.mods.thinBlood;
+      const want = cut * this.mods.thinBloodRate;
+      const pay = Math.min(want, this.balance);
+      this.hpDebt = pay;
+      d -= pay / this.mods.thinBloodRate;
+    } else {
+      this.hpDebt = 0;
+    }
     this.lastDamageTaken = d;
     if (this.shield > 0) {
       this.shield = Math.max(0, this.shield - d);

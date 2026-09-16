@@ -258,6 +258,48 @@ export const THEME = {
   pocketGrenade: 0xff5722,   // the round at the bottom of it, going off
   prodigalRounds: 0xc8b560,  // the shot that missed, come home
   fullLoad: 0xffc266,        // the reserve, filled at every clear
+  // ---- THE TWENTY-SEVEN THAT CAME IN WITH THE SIXTH POOL --------------------
+  //
+  // Same rule as every block above: the colour is what the pick DOES. A dozen
+  // of these are plain numbers a family already owns - damage reds, rate
+  // oranges, economy golds, vitality greens - and they sit beside whichever
+  // family already paid that number. The genuinely new hues are the ones for
+  // picks that do a thing no earlier pick did.
+  //
+  // the magazine and its reload
+  magnaCarta: 0xc9b037,      // Magna Carta: the economy golds, gone constitutional
+  fatHandgun: 0xffc773,      // Fat Handgun: brass, but fatter
+  slideRule: 0x9fc5e8,      // Slide Rule: the mobility blues, in calculator grey
+  // movement
+  fastLane: 0x29b6f6,      // Fast Lane: the mobility blues, at speed
+  bicycleKick: 0x81d4fa,    // Bicycle Kick: `leap`'s pale blue, airborne
+  stiltLegs: 0x6b4f3a,      // Stilt Legs: the entrench browns, on legs
+  // damage, and what it is measured against
+  softPoints: 0xffca8a,      // Soft Points: a pale salvo orange, for the slowed
+  tenderizer: 0xbb3f20,      // Tenderizer: the damage reds, at full health
+  lateFee: 0xa1442e,        // Late Fee: `longHaul`'s family, long-distance red
+  killSwitch: 0xbf2b2b,      // Kill Switch: damage red, plain
+  armature: 0xe86a17,        // Armature: `overkill`'s shade, banked
+  stigmata: 0xd33682,        // Stigmata: the crit magentas, for the near miss
+  skipstone: 0x4dd0e1,      // Skipstone: `gravity`'s blues, off the floor
+  rearview: 0xff9e80,      // Rearview: `salvo` thrown backwards
+  // rate of fire
+  wolfPack: 0xffa040,        // Wolf Pack: the rate oranges, per body alive
+  monsoon: 0x00796b,       // Monsoon: a storm teal the rate family does not own
+  amphetamines: 0xef6c00,    // Amphetamines: the rate oranges, straight
+  // staying alive, and what a crate is worth
+  secondHelpings: 0xffe0b2,  // Second Helpings: the economy oranges, refilled
+  platedDessert: 0xe6b03a,   // Plated Dessert: gold, plated
+  soupKitchen: 0x81c784,   // Soup Kitchen: vitality, served with ammo
+  glancingBlow: 0xb2ebf2,   // Glancing Blow: `ceramic`'s pale armour, brushed
+  thinBlood: 0xe57373,       // Thin Blood: `blood`'s red, watered down
+  soulHarvest: 0xab47bc,   // Soul Harvest: `holy`'s violet, for what a kill banks
+  fleshBank: 0x689f38,      // Flesh Bank: `boneMarrow`'s green, banked
+  // the one that rolls the build
+  shuffle: 0x9575cd,        // Shuffle: the mystery box's own violet, shuffled
+  // the contract
+  deathClause: 0x5e35b1,    // Death Clause: `hex`'s violet, signed
+
   // ---- THE FIVE THAT CAME IN WITH THE FIFTH POOL ----------------------------
   //
   // Same rule as every block above: the colour is what the pick DOES. Two of
