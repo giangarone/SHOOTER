@@ -1,0 +1,51 @@
+import { definePassiveItem } from '../shared.js';
+
+// THE CONTRACT, SIGNED. Twenty percent damage, and the price is the FINAL
+// ROUND OF THE MAGAZINE: miss with it and the signer bleeds five. The miss is
+// read off the trigger pull the same way AIM OR BLEED reads it - the whole
+// shot touched nothing - because "the final shot" is a question about the
+// magazine, and a magazine's last round that hit nothing is the only miss
+// the clause covers.
+//
+// THE BLEED HAS A FLOOR OF ONE, on CURSED AMMO'S terms and for its reason: a
+// held trigger on an empty magazine must not be able to kill the player on
+// its own. The floor is the difference between a price and a suicide button.
+export const id = 'deathClause';
+
+export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+    name: 'DEATH CLAUSE',
+    max: 1,
+    theme: THEME.deathClause,
+    effects: [['+20% DAMAGE', GOOD], ['MISS THE MAG LAST', BAD], ['SHOT: LOSE 5 HP', BAD]],
+    apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; mods.deathClause = 5 * n; },
+}));
+
+// THE CONTRACT WITH A SIGNATURE. A page, a line of type, the signature
+// crossing the bottom - and the one shape in the pool that means "you
+// agreed to this".
+export const icon = [
+  '........................',
+  '..2222222222222222......',
+  '..2333333333333332......',
+  '..2333333333333332......',
+  '..2334444333333332......',
+  '..2334444333333332......',
+  '..23344443333233332.....',
+  '..23333333333323332.....',
+  '..23344443333323332.....',
+  '..23344443333333332.....',
+  '..2334444333333332......',
+  '..2333333333333332......',
+  '..2333322222233332......',
+  '..2333322222233332......',
+  '..2333333333333332......',
+  '..2322222222222332......',
+  '..2323333333333332......',
+  '..2324444444442332......',
+  '..2324444444442332......',
+  '..2324444444442332......',
+  '..2322222222222332......',
+  '..2233333333333322......',
+  '...2222222222222222.....',
+  '........................',
+];
