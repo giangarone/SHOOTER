@@ -2098,16 +2098,17 @@ player on its own - the terms CURSED AMMO already agrees to.
 
 | Passive Item | Effect |
 | --- | --- |
-| BICYCLE KICK | Jump height is 50% higher; landing staggers nearby enemies |
+| BICYCLE KICK | Jump height is 50% higher |
 | STILT LEGS | Crouching in midair slams down, staggering everything within 3m for 3x base damage |
 | FAST LANE | Sprinting is 30% faster |
 
-BICYCLE KICK's stagger is paid on the LANDING, not on the jump - and the flag
-is raised on the airborne-to-grounded edge in `update()`, so a run holding it
-is never cheaper than the arc that earned it. STILT LEGS' slam is the slide
-buffer's other meaning - a crouch press in the AIR that did not come off the
-ground at a run - so it answers a press the movement code was already watching
-for, and lands at the same edge the bounce up off it would have.
+BICYCLE KICK's bonus folds into the jump impulse itself, so a run holding it
+raises the DOUBLE JUMP air hop too - the card says jump height, and an air
+jump is a jump. STILT LEGS' slam is the slide buffer's other meaning - a
+crouch press in the AIR that did not come off the ground at a run - so it
+answers a press the movement code was already watching for, and its stagger is
+paid on the LANDING: the flag is raised on the airborne-to-grounded edge in
+`update()`, so a run holding it is never cheaper than the fall that earned it.
 
 **Health, shields and money**
 

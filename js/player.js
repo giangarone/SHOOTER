@@ -473,9 +473,8 @@ const DEFAULT_MODS = {
                         // rather than walked to a neighbour. The bank lives on
                         // the Player (`armatureBank`).
   slideRule: 0,          // Slide Rule: rounds a slide seats from the reserve
-  bicycleKick: 0,        // Bicycle Kick: the jump is higher, and a landing
-                        // near bodies staggers them. The landing hook lives in
-                        // main.js - see Game._bicycleLanding.
+  bicycleKick: 0,        // Bicycle Kick: the jump is higher. Folded into the
+                        // impulse itself - see BICYCLE_JUMP_MULT.
   rearview: 0,          // Rearview: every trigger pull also fires one pellet
                         // straight back, at full damage
   wolfPack: 0,          // Wolf Pack: fire rate gained per enemy alive
@@ -1507,10 +1506,6 @@ export class Player {
     this.magnaFx = false;       // Magna Carta: cleared the same way, for the
                                  // same reason - a magazine that quietly got
                                  // wider is a stat nobody saw change.
-    this.slamFx = false;        // Bicycle Kick: one-shot, raised on the frame
-                                 // a fall lands, cleared by main.js when it
-                                 // staggers the room - the jumpFx split, for
-                                 // the same reason (player.js has no enemies).
     this.slamArmed = false;     // Stilt Legs: the fall currently in flight was
                                  // ASKED for, so the landing pays the bigger
                                  // version. Cleared with every landing edge.
@@ -2797,7 +2792,6 @@ export class Player {
     this.fleshBanked = 0;
     this.shuffleFx = false;
     this.magnaFx = false;
-    this.slamFx = false;
     this.slamArmed = false;
     this.stiltLanding = false;
     this.hpDebt = 0;
@@ -3521,24 +3515,18 @@ export class Player {
         }
       }
     }
-    // ---- BICYCLE KICK'S LANDING --------------------------------------------
+    // ---- STILT LEGS' LANDING -----------------------------------------------
     //
-    // The stagger is paid on the LANDING, not on the jump: a taller jump is
-    // only a movement passive item, and what makes the pick a weapon is coming
-    // down. The edge is "was airborne last frame, is grounded this frame", and
-    // the speed is the FALL's own - read off `prevFall`, kept from the frame
-    // before the resolution zeroed it, so the slam is proportional to the drop
-    // the player actually took.
+    // The slam is paid on the LANDING, not on the press: the edge is "was
+    // airborne last frame, is grounded this frame".
     //
     // THE TELL IS A FLAG, like jumpFx and dashFx: player.js has no enemies, no
-    // effects and no banner, so main.js reads `slamFx` on the frame it lands
-    // and does the stagger there - see Game._bicycleLanding. `slamArmed` rides
-    // with it so the landing knows whether the fall was a Stilt press (the
-    // full 3m ring and the damage) or an ordinary Bicycle arc (the stagger
-    // alone), and is spent either way: a flag left standing would pay the big
-    // landing on the next hop.
+    // effects and no banner, so main.js reads `stiltLanding` on the frame it
+    // lands and pays the ring and the damage there. `slamArmed` is what tells
+    // the landing the fall was a Stilt press rather than an ordinary hop, and
+    // is spent either way: a flag left standing would pay the big landing on
+    // the next hop.
     if (this.onGround && !this._wasGrounded) {
-      if (this.mods.bicycleKick > 0) this.slamFx = true;
       this.stiltLanding = this.slamArmed;
       this.slamArmed = false;
     }
@@ -3919,11 +3907,11 @@ export class Player {
       // applied to vel.y every frame, and a "down" that only accelerated with
       // gravity would take as long to arrive as the fall the player was trying
       // to skip. `onGround` stays false until the resolution below catches
-      // the floor, and the landing edge is what fires the stagger - exactly
-      // the same landing BICYCLE KICK pays on, read by main.js off `slamFx`.
-      // `slamArmed` is what tells the landing WHICH pick it was: a Bicycle
-      // kick landing staggers whatever is nearby, a Stilt landing staggers
-      // the whole 3m ring and pays the damage. Both owned, both paid.
+      // the floor, and the landing edge is what fires the stagger - read by
+      // main.js off `stiltLanding`. `slamArmed` is what tells the landing the
+      // fall was a Stilt press rather than an ordinary hop: a Stilt landing
+      // staggers the whole 3m ring and pays the damage, and any other landing
+      // pays nothing.
       this.vel.y = -STILT_FALL;
       this.slamArmed = true;
       this.crouching = false;
