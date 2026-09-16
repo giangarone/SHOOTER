@@ -31,7 +31,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          token: ${{ secrets.OPENCODE_GITHUB_TOKEN }}
+          persist-credentials: true
 
       - uses: actions/setup-node@v4
         with:
