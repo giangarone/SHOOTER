@@ -19,10 +19,11 @@ import { definePassiveItem } from '../shared.js';
 // ---- the music, which nothing in the pool had ever paid for --------------
 
 // A SECOND GUN THAT IS NOT A GUN. Once a whole beat, one body in the room
-// takes a round's worth of damage - the player's own round, through
-// Player.dotHit, so it grows with the build the way every other proc in the
-// game does rather than sitting at a flat number that is everything on wave
-// four and nothing on wave forty.
+// takes a flat ten points of damage - the same shape HEARTBEAT pays in, so
+// the beat buys the same thing whatever the run has drafted. It used to pay
+// one of the player's own shots through Player.dotHit, and that was the
+// wrong half to scale: a damage build got the pick twice over, once per
+// trigger pull and once per beat it happened to be alive for.
 //
 // ON THE WHOLE BEAT AND NOT THE HALF. The sentries fire twice a beat and the
 // burn ticks on the upbeat; a third thing landing on every pulse would have
@@ -40,6 +41,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'SYNCOPATION',
     max: 1,
     theme: THEME.syncopation,
-    effects: [['ONCE A BEAT: A SHOT\'S', GOOD], ['WORTH OF DAMAGE TO A', NOTE], ['RANDOM ENEMY', NOTE]],
-    apply: (mods, n) => { mods.syncopation = 1 * n; },
+    effects: [['ONCE A BEAT:', NOTE], ['10 DAMAGE TO A', GOOD], ['RANDOM ENEMY', NOTE]],
+    apply: (mods, n) => { mods.syncopation = 1 * n; mods.syncopationHit = 10; },
 }));

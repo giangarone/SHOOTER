@@ -379,9 +379,11 @@ const DEFAULT_MODS = {
   // anything extra. The two that DO ride the trigger (ODD COUPLE and EVEN
   // BETTER) read the magazine the trigger saw, exactly as FATAL RESERVE and
   // HARM WANDS do, and for the same reason.
-  syncopation: 0,       // Syncopation: damage dealt to one random enemy on
-                        // every whole beat, as a multiple of one of the
-                        // player's own shots - see Player.dotHit
+  syncopation: 0,       // Syncopation: one random enemy per whole beat takes
+  syncopationHit: 0,    // this much damage. Flat, the way heartbeatHit is:
+                        // the beat pays the same whatever the build has
+                        // drafted - it used to read Player.dotHit and pay a
+                        // shot, and a damage build was getting the pick twice
   hitCharge: 0,         // Jumper Cables: item charge granted by a hit TAKEN
   dimeCrit: 0,          // Dime Novel: crit chance the active item buys, for
   dimeTime: 0,          // this many seconds. The window is `dimeEnd` on the

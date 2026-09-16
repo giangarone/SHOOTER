@@ -3940,7 +3940,7 @@ def _(c):
 # ---- the music ------------------------------------------------------------
 
 
-@icon('syncopation')        # SYNCOPATION - one shot of damage a beat, at random
+@icon('syncopation')        # SYNCOPATION - ten points of damage a beat, at random
 def _(c):
     # A ROW OF BEATS WITH ONE OFF THE LINE, AND THAT ONE IS HITTING SOMETHING.
     # Against METRONOME (the tower) and ENCORE (two quavers): both of those say

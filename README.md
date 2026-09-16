@@ -1663,7 +1663,7 @@ carrying them is paid for the fight continuing rather than for firing faster.
 
 | Passive Item | Effect |
 | --- | --- |
-| SYNCOPATION | Once a beat, one of the player's own shots lands on a random enemy |
+| SYNCOPATION | Once a beat, a random enemy takes 10 damage |
 | HEARTBEAT | On every downbeat, every enemy has a 20% chance of taking 1 damage |
 
 These are the first picks in the game that put damage in the room off the
@@ -1673,14 +1673,14 @@ so a third thing landing on every pulse would have turned the beat into a wash
 of numbers instead of a rhythm. Once a beat is something the player can *hear*
 arriving, which is the only reason to hang either of them on the music at all.
 
-They are deliberately opposite shapes. SYNCOPATION scales with the build - it is
-worth one of the player's own shots through `Player.dotHit`, exactly as every
-other proc in the game is - and cannot be aimed, so it is worth most in a crowd
-and least in the one fight the player cares about. HEARTBEAT is the one number
-in the entire pool that does **not** scale with anything: a flat point, offered
-to every body in the room. That makes its value a fact about the SIZE of the
-wave rather than about the gun, which is why it is worth taking on a run that
-has drafted no damage at all and why a boss standing alone barely notices it.
+They are deliberately flat, the two of them - neither scales with anything the
+build drafts. SYNCOPATION is ten points dropped on one body chosen at random,
+so it cannot be aimed: worth most in a crowd and least in the one fight the
+player cares about. HEARTBEAT is the smaller but wider pay: a single point,
+offered to **every** body in the room. That makes its value a fact about the
+SIZE of the wave rather than about the gun, which is why it is worth taking on
+a run that has drafted no damage at all and why a boss standing alone barely
+notices it.
 
 **The magazine, read as a number**
 

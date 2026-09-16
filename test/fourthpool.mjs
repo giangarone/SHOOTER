@@ -206,7 +206,7 @@ try {
 
     // ---- 1. THE MUSIC -------------------------------------------------------
 
-    // SYNCOPATION. One body, once a whole beat, for one of the player's shots.
+    // SYNCOPATION. One body, once a whole beat, for a flat ten points.
     //
     // COUNTED AS EVENTS AGAINST BEATS. A damage total would pass just as well
     // for a pick that fired every frame and dealt a hundredth as much, which is
@@ -247,7 +247,6 @@ try {
     o.syncBeats = seenBeats;
     o.syncEvents = syncHits.length;
     o.syncPerEvent = syncHits.length ? (syncBefore - syncTarget.hp) / syncHits.length : 0;
-    o.syncShot = P.dotHit;
 
     // HEARTBEAT. A coin per body per downbeat, and a flat point when it wins.
     // The assertion is that EVERY body is offered the roll, which is the half
@@ -1142,9 +1141,10 @@ try {
   // check: a reader that fired per frame would be off by a factor of forty.
   ok('and fires exactly once per whole beat', r.syncEvents === r.syncBeats,
     `events=${r.syncEvents} beats=${r.syncBeats}`);
-  ok('and each one is worth a shot of the player’s own',
-    r.syncShot > 0 && near(r.syncPerEvent / r.syncShot, 1, 0.02),
-    `per=${r.syncPerEvent} shot=${r.syncShot}`);
+  // A FLAT TEN, EXACTLY. The number not moving with the build IS the pick now,
+  // so it is asserted against the literal rather than against Player.dotHit -
+  // a regression that paid a shot's worth would pass a relative check here.
+  ok('and each one is a flat ten points', r.syncPerEvent === 10, `per=${r.syncPerEvent}`);
 
   ok('heartbeat reaches every body in the room', r.hbTouched === 20, String(r.hbTouched));
   // Twenty bodies at a fifth each is four a beat. A wide band: it is a coin

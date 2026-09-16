@@ -10265,10 +10265,10 @@ class Game {
     if (first || !this.music.pulseWhole) return;
     if (!this.enemies.length) return;
 
-    // SYNCOPATION. One body, chosen at random out of the living, for one of the
-    // player's own shots - through Player.dotHit, so it grows with the build
-    // the way every other proc in the game does rather than sitting at a flat
-    // number that is everything on wave four and nothing on wave forty.
+    // SYNCOPATION. One body, chosen at random out of the living, for a flat
+    // hit carried on the mods - the same shape HEARTBEAT pays in. It does not
+    // read Player.dotHit anymore: a pick that paid a shot's worth per beat was
+    // bought twice by a damage build, once per pull and once per beat survived.
     //
     // THE ROLL IS OVER THE LIVING ONLY. Taking a random index out of `enemies`
     // and skipping it if it was dead would quietly make the pick fire less
@@ -10281,15 +10281,15 @@ class Game {
       if (live.length) {
         const pick = live[(Math.random() * live.length) | 0];
         this.effects.impact(pick.pos, THEME_SYNCOPATION, 8, 4, 2.2, 0.3);
-        this.hurtEnemy(pick, this.player.dotHit * m.syncopation);
+        this.hurtEnemy(pick, m.syncopationHit);
       }
       live.length = 0;
     }
     // HEARTBEAT. A coin per body per downbeat, and a flat point when it wins.
     //
-    // A FLAT POINT AND NOT A FRACTION, which is the one number in the pool that
-    // does not scale with the build - see the note on the entry. What that buys
-    // is a pick whose value is about the SIZE OF THE WAVE, so it is worth
+    // A FLAT POINT AND NOT A FRACTION, one of the two numbers on this clock
+    // that do not scale with the build - see the note on the entry. What that
+    // buys is a pick whose value is about the SIZE OF THE WAVE, so it is worth
     // taking on a run that has drafted no damage at all.
     //
     // NO PARTICLE PER BODY. Thirty enemies each tossing a coin is up to six
