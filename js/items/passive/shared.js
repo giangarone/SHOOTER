@@ -284,7 +284,7 @@ export const THEME = {
   skipstone: 0x4dd0e1,      // Skipstone: `gravity`'s blues, off the floor
   rearview: 0xff9e80,      // Rearview: `salvo` thrown backwards
   // rate of fire
-  wolfPack: 0xffa040,        // Wolf Pack: the rate oranges, per body alive
+  wolfPack: 0x8a9199,        // Wolf Pack: the grey of the face the icon now draws
   monsoon: 0x00796b,       // Monsoon: a storm teal the rate family does not own
   amphetamines: 0xef6c00,    // Amphetamines: the rate oranges, straight
   // staying alive, and what a crate is worth
