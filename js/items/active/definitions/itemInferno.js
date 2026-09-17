@@ -2,7 +2,7 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemInferno';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST, BURN_TICK, POISON_TICK }) => ({
     name: 'BRIMSTONE',
     charge: 40,
     theme: THEME.fire,
@@ -15,13 +15,11 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // everywhere else in this game (see status.js): it is a reason to press
     // the advantage now rather than a clock to wait out.
     //
-    // TWICE ONE OF THE PLAYER'S OWN SHOTS PER TICK, at two ticks a beat, on
-    // every enemy at once - so an item that used to be a flat 14 a second is
-    // worth the same slot on wave 30 as on wave 3. See Player.dotHit.
+    // TWICE THE FLAT BURN TICK, at two ticks a beat, on every enemy at once.
     effects: [['BURN ALL ENEMIES', GOOD], ['FOR 3s', NOTE]],
     use: (game) => {
       let n = 0;
-      const burn = game.player.dotHit * 2;
+      const burn = BURN_TICK * 2;
       for (const e of game.enemies) {
         if (e.dead) continue;
         e.applyStatus('burn', 3, burn);

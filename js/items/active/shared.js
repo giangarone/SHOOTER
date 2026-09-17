@@ -3,6 +3,7 @@ import { THEME } from '../passive/shared.js';
 import {
   Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE,
 } from '../../deploy.js';
+import { BURN_TICK, POISON_TICK } from '../../enemies/index.js';
 import { BOUND } from '../../arena.js';
 
 // Scratch vectors. Every one of these functions runs at most once per button
@@ -79,6 +80,10 @@ const ACTIVE_ITEM_CONTEXT = Object.freeze({
   THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey,
   MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE,
   PAY_TO_WIN_COST, PARACHUTE_COST,
+  // The flat per-tick rates every burn and poison in the game is charged at -
+  // passed through so an item that sets fire or poisons never has to import
+  // the enemy module for the game's own number.
+  BURN_TICK, POISON_TICK,
 });
 
 export function defineActiveItem(build) {

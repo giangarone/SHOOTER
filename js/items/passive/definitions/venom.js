@@ -16,11 +16,9 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'VENOM ROUNDS',
     max: 1,
     theme: THEME.poison,
-    // THE POISON IS AS STRONG AS THE GUN, and it ticks on the beat - once a
-    // beat, where fire ticks twice. See Player.dotHit and Enemy._tickStatus.
-    // No number in the text on purpose: the tick is one of the player's own
-    // shots, which is a moving figure, and printing whatever it happens to be
-    // on wave 1 would be a lie for the rest of the run.
+    // THE POISON IS A FLAT TEN A TICK, the rate every poison in the game
+    // carries (POISON_TICK in enemies/shared.js), and it ticks on the beat -
+    // once a beat, where fire ticks twice. See Enemy._tickStatus.
     effects: [['SHOTS POISON ENEMIES', GOOD], ['POISON LASTS 4s', NOTE]],
     apply: (mods, n) => {
       mods.poisonPower = 1 * n;

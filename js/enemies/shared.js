@@ -316,6 +316,21 @@ export const STATUS_FX = {
   fear: { interval: 0.2, count: 2, speed: 1.3, up: 2.4, life: 0.4, y: 1.45 },
 };
 
+// THE BASE TICK of the two damage-over-time statuses, in damage per tick,
+// FLAT. Burn ticks on every pulse and poison on whole beats only (see
+// Enemy._tickStatus), so at equal numbers burn would simply be the better
+// status: fifteen and ten are what keep burn the fierce one and poison the
+// patient one.
+//
+// NOT A SHARE OF THE GUN. The two used to be charged as a multiple of the
+// player's own shot, which paid a damage build twice - once per pull and
+// once per tick - and tied a status's worth to a number that has nothing to
+// do with it. The picks that carry a strength (VENOM, INCENDIARY, the
+// trails, the turrets) multiply THESE, and so does MALADY, so a stronger
+// poison is a pick you took and never just a bigger gun.
+export const BURN_TICK = 15;
+export const POISON_TICK = 10;
+
 export const SLOW_FACTOR = 0.5;
 
 // TEMPEST's capacitor plate. Bright and cold rather than dulled like the

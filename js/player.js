@@ -81,11 +81,11 @@ const DEFAULT_MODS = {
   // exactly one passive item with max: 1, so they are flags and rates rather than
   // multipliers that stack. Zero means the passive item is not owned, which is
   // what every hook in main.js tests.
-  poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of one of
-                        // the player's own shots - see Player.dotHit
+  poisonPower: 0,       // Venom: poison damage PER TICK as a multiple of the
+                        // flat POISON_TICK rate - see enemies/shared.js
   poisonTime: 0,
-  burnPower: 0,         // Incendiary: burn damage per tick, same multiple, for
-  burnTime: 0,          // burnTime seconds
+  burnPower: 0,         // Incendiary: burn damage per tick, the same multiple
+  burnTime: 0,          // of BURN_TICK, for burnTime seconds
   burnSpread: 0,        // metres the burn jumps when a burning enemy dies
   slowTime: 0,          // Cryo: seconds of movement and projectile slow
   fearTime: 0,          // Terror: seconds an enemy flees instead of attacking
@@ -363,7 +363,7 @@ const DEFAULT_MODS = {
                         // update(), because gravity is applied before it
   jackpot: 0,           // Jackpot: chance a GROUND jump refills everything
   slideFire: 0,         // Scorched Earth: burn power of the trail a slide lays,
-  slideFireRadius: 0,   // as a multiple of one of the player's own shots
+  slideFireRadius: 0,   // as a multiple of the flat BURN_TICK rate
   quorumEvery: 0,       // Quorum: kills that summon a turret, which lives
   quorumLife: 0,        // this long, up to
   quorumMax: 0,         // this many at once
@@ -382,8 +382,8 @@ const DEFAULT_MODS = {
   syncopation: 0,       // Syncopation: one random enemy per whole beat takes
   syncopationHit: 0,    // this much damage. Flat, the way heartbeatHit is:
                         // the beat pays the same whatever the build has
-                        // drafted - it used to read Player.dotHit and pay a
-                        // shot, and a damage build was getting the pick twice
+                        // drafted - it used to pay one of the player's own
+                        // shots, and a damage build was getting the pick twice
   hitCharge: 0,         // Jumper Cables: item charge granted by a hit TAKEN
   dimeCrit: 0,          // Dime Novel: crit chance the active item buys, for
   dimeTime: 0,          // this many seconds. The window is `dimeEnd` on the
@@ -419,7 +419,7 @@ const DEFAULT_MODS = {
   heartbeat: 0,         // Heartbeat: chance per enemy per DOWNBEAT of taking
   heartbeatHit: 0,      // this much damage
   turretPoison: 0,      // Venomgrid: poison a turret's shot applies, as a
-  turretPoisonTime: 0,  // multiple of one of the player's own shots
+  turretPoisonTime: 0,  // multiple of the flat POISON_TICK rate
   turretBurn: 0,        // Hellspitter: the same, in fire
   turretBurnTime: 0,
   bellowsGuard: 0,      // Bellows: damage taken reduced at FULL stamina
@@ -2647,22 +2647,11 @@ export class Player {
     return true;
   }
 
-  // ONE TICK OF DAMAGE OVER TIME: one of the player's own shots, before the
-  // per-status multiplier the caller applies on top.
-  //
-  // getEffectiveDamage, not the raw weapon number. Fire and poison used to be
-  // flat rates, which made them real numbers on wave 3 and rounding errors on
-  // wave 30 - the two statuses in the pool that got weaker the longer a run
-  // went on. Charged as one of the player's SHOTS, they are worth exactly what
-  // the gun is worth at the moment they are applied, and every damage passive
-  // item in the build feeds them. Malady still multiplies on top, which is
-  // what keeps that trade honest on both statuses.
-  //
-  // Snapshotted by the caller into the enemy's own _dot, so a burn already
-  // running is not retroactively rescaled by a totem claimed after it started.
-  get dotHit() {
-    return this.getEffectiveDamage(this.weapon.damage);
-  }
+  // NO `dotHit` LIVES HERE ON PURPOSE. Fire and poison were once charged as a
+  // multiple of the player's own shot through a getter of that name; they now
+  // carry their own flat per-tick rates - BURN_TICK and POISON_TICK in
+  // enemies/shared.js - because a status paid off the gun was paid twice on a
+  // damage build, once per pull and once per tick.
 
   // BRASS ECHO. Called once per shot that connected; a shot that hit nothing
   // is never offered the roll. Returns whether the round came back, so the

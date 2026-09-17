@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // inventing one would be a second meaning for a word the player already
 // knows.
 //
-// THE POWER IS YOUR OWN SHOT, through Player.dotHit, like every other
-// damage-over-time in the game - so a poison the player is carrying comes off
-// an enemy at the rate the player's gun does, not at the rate whatever
-// poisoned them does.
+// THE POWER IS THE FLAT TICK, like every other damage-over-time in the game
+// (BURN_TICK and POISON_TICK in enemies/shared.js) - so a poison the player
+// is carrying comes off an enemy at the rate every poison does, not at the
+// rate whatever poisoned them does.
 export const id = 'splashback';
 
 export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({

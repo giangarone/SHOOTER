@@ -1875,9 +1875,11 @@ It carries only what an enemy can actually hold - burning, poison, the chill and
 fear exist on both sides of the fight - and WEAKNESS and CURSE simply do not
 transfer, because there is nothing on an enemy for them to become and inventing
 one would be a second meaning for a word the player already knows from their own
-HUD. The power is the player's own shot through `dotHit`, and the duration is
-what is LEFT on the player: eight fresh seconds of poison off a burn with half a
-second left would be manufacturing an affliction rather than passing one on.
+HUD. The power is the statuses' own flat tick (`BURN_TICK` and `POISON_TICK` in
+`enemies/shared.js`) - a poison passed on is worth what every poison in the game
+is worth - and the duration is what is LEFT on the player: eight fresh seconds
+of poison off a burn with half a second left would be manufacturing an
+affliction rather than passing one on.
 
 **The turrets, which were one item and are now a family**
 

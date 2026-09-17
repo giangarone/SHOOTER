@@ -1219,9 +1219,9 @@ try {
     out.panicFeared = runner.status.fear > 7 && queasy.status.fear > 7;
     useItem('itemFoodPoisoning');
     out.poisonedAll = runner.status.poison > 7 && queasy.status.poison > 7;
-    // The dose is the player's own shot, so it is still worth a slot at wave
-    // thirty rather than being a flat number set on wave three.
-    out.poisonDoseScales = runner._dot.poison > 1;
+    // The dose is the flat base tick, not a share of the gun - a regression
+    // to scaling it off the player's damage would pass a bare "> 0" here.
+    out.poisonDoseFlat = runner._dot.poison === 10;
 
     // ---- PARTY BALLOONS: five off the floor, and never a boss ----
     clearField();
@@ -1829,8 +1829,8 @@ try {
   ok('phlebotomy: and nothing at all on a full bar', m.phlebotomyRefusesFull);
   ok('panic button: the whole floor runs', m.panicFeared);
   ok('food poisoning: the whole floor is poisoned', m.poisonedAll);
-  ok('food poisoning: the dose is the gun, not a flat number',
-    m.poisonDoseScales);
+  ok('food poisoning: the dose is the flat ten a tick',
+    m.poisonDoseFlat);
   ok('party balloons: five leave the floor', m.balloonsLifted === 5,
     String(m.balloonsLifted));
   ok('party balloons: a boss stays where it is', m.balloonsSpareBosses);

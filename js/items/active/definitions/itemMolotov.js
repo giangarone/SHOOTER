@@ -3,7 +3,7 @@ import { defineActiveItem } from '../shared.js';
 // ---- things left in the arena (the second helping) ----------------------
 export const id = 'itemMolotov';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST, BURN_TICK, POISON_TICK }) => ({
     name: 'MOLOTOV',
     charge: 20,
     theme: THEME.fire,
@@ -31,8 +31,8 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.muzzleInto(_v);
       facing(game);
       // The burn is snapshotted at the throw, like every other fire in the
-      // game - see Player.dotHit and the note on Lob.
-      game.deploy(new Lob(game, _v, _dir, 'molotov', p.dotHit * 2));
+      // game - see BURN_TICK and the note on Lob.
+      game.deploy(new Lob(game, _v, _dir, 'molotov', BURN_TICK * 2));
       game.sfx.itemDeploy();
     },
 }));

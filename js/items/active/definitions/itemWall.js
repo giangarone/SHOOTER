@@ -2,7 +2,7 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemWall';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST, BURN_TICK, POISON_TICK }) => ({
     name: 'FIREBREAK',
     charge: 12,
     theme: THEME.hellfire,
@@ -24,7 +24,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       // three the flames sat on the camera and the arena behind them was gone.
       const x = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.x + _dir.x * 4.5));
       const z = Math.max(-BOUND + 5, Math.min(BOUND - 5, p.pos.z + _dir.z * 4.5));
-      game.deploy(new FireWall(game, x, z, _dir.x, _dir.z, game.player.dotHit * 1.5));
+      game.deploy(new FireWall(game, x, z, _dir.x, _dir.z, BURN_TICK * 1.5));
       game.effects.shockwave(_v.set(x, 0, z), THEME.hellfire, 5, 0.5);
       game.sfx.itemDeploy();
     },

@@ -2,7 +2,7 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemFoodPoisoning';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST, BURN_TICK, POISON_TICK }) => ({
     name: 'FOOD POISONING',
     charge: 40,
     theme: THEME.poison,
@@ -13,14 +13,13 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // BRIMSTONE would have killed outright is instead a crowd that dies while
     // the player deals with something else.
     //
-    // ONE OF THE PLAYER'S OWN SHOTS PER TICK, half of what BRIMSTONE's fire is
-    // worth, because poison ticks once a beat where fire ticks twice - so the
-    // two items are the same total damage arriving at different speeds, and
-    // both are still worth a slot at wave thirty.
+    // THE FLAT TEN A TICK, poison's own rate (see POISON_TICK) - a third of
+    // what BRIMSTONE's fire is worth per tick, because poison ticks once a
+    // beat where fire ticks twice.
     effects: [['POISON ALL ENEMIES', GOOD], ['FOR 8s', NOTE]],
     use: (game) => {
       let n = 0;
-      const dose = game.player.dotHit;
+      const dose = POISON_TICK;
       for (const e of game.enemies) {
         if (e.dead) continue;
         e.applyStatus('poison', 8, dose);

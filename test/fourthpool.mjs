@@ -890,6 +890,8 @@ try {
         reserveLeft: P.reserveAmmo,
         poison: mark.status.poison,
         burn: mark.status.burn,
+        poisonTick: mark._dot.poison,
+        burnTick: mark._dot.burn,
         snapshot: t.damage,
       };
       for (const d of g._deployed) d.destroy();
@@ -1142,8 +1144,9 @@ try {
   ok('and fires exactly once per whole beat', r.syncEvents === r.syncBeats,
     `events=${r.syncEvents} beats=${r.syncBeats}`);
   // A FLAT TEN, EXACTLY. The number not moving with the build IS the pick now,
-  // so it is asserted against the literal rather than against Player.dotHit -
-  // a regression that paid a shot's worth would pass a relative check here.
+  // so it is asserted against the literal rather than against the damage the
+  // build happens to carry - a regression that paid a shot's worth would pass
+  // a relative check here.
   ok('and each one is a flat ten points', r.syncPerEvent === 10, `per=${r.syncPerEvent}`);
 
   ok('heartbeat reaches every body in the room', r.hbTouched === 20, String(r.hbTouched));
@@ -1325,7 +1328,9 @@ try {
   ok('splashback passes the burn on', r.splashBurn);
   ok('and the poison', r.splashPoison);
   ok('and the chill', r.splashSlow);
-  ok('at the strength of the player’s own shot', r.splashPower > 0,
+  // The statuses' own flat rates, not the gun: a splashback that scaled off
+  // the player's damage again would read as a different number here.
+  ok('at the flat poison tick of ten', r.splashPower === 10,
     String(r.splashPower));
   // WEAKNESS AND CURSE HAVE NO ENEMY FORM. Carrying only those must land
   // nothing rather than throwing or inventing a status.
@@ -1352,8 +1357,15 @@ try {
     `p=${r.turretBare.poison} b=${r.turretBare.burn}`);
   ok('venomgrid poisons what it hits', r.turretVenom.poison > 0,
     String(r.turretVenom.poison));
+  // THE FLAT TEN, not a share of the gun: the statuses carry their own rates
+  // now (BURN_TICK and POISON_TICK in enemies/shared.js), and a regression to
+  // reading the player's damage would pass a bare "> 0" here.
+  ok('at the flat poison tick', r.turretVenom.poisonTick === 10,
+    String(r.turretVenom.poisonTick));
   ok('and leaves nothing burning', r.turretVenom.burn === 0, String(r.turretVenom.burn));
   ok('hellspitter sets fire to it', r.turretHell.burn > 0, String(r.turretHell.burn));
+  ok('at the flat burn tick', r.turretHell.burnTick === 15,
+    String(r.turretHell.burnTick));
   ok('and leaves nothing poisoned', r.turretHell.poison === 0,
     String(r.turretHell.poison));
   // TWO RULES FOUR LINES APART: the damage is snapshotted at the throw and the

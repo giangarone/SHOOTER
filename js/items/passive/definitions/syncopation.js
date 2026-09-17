@@ -21,9 +21,9 @@ import { definePassiveItem } from '../shared.js';
 // A SECOND GUN THAT IS NOT A GUN. Once a whole beat, one body in the room
 // takes a flat ten points of damage - the same shape HEARTBEAT pays in, so
 // the beat buys the same thing whatever the run has drafted. It used to pay
-// one of the player's own shots through Player.dotHit, and that was the
-// wrong half to scale: a damage build got the pick twice over, once per
-// trigger pull and once per beat it happened to be alive for.
+// one of the player's own shots, and that was the wrong half to scale: a
+// damage build got the pick twice over, once per trigger pull and once per
+// beat it happened to be alive for.
 //
 // ON THE WHOLE BEAT AND NOT THE HALF. The sentries fire twice a beat and the
 // burn ticks on the upbeat; a third thing landing on every pulse would have

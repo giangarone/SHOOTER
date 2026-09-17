@@ -32,6 +32,7 @@
 
 import * as THREE from 'three';
 import { pointInObstacle, segmentClear, groundSurface } from './utils.js';
+import { BURN_TICK, POISON_TICK } from './enemies/index.js';
 import { BOUND } from './arena.js';
 
 const _v = new THREE.Vector3();
@@ -248,20 +249,20 @@ export class Turret {
       if (ctx.flashAmmo) ctx.flashAmmo();
     }
     ctx.hurtEnemy(target, dmg);
-    // VENOMGRID and HELLSPITTER. The player's own poison and fire, through
-    // Player.dotHit and scaled by MALADY exactly as the gun's are - a turret
-    // with a status of its own would be a fourth number with a fourth rate that
-    // nobody could find. Applied after the damage so a body the shot killed is
-    // not given eight seconds of poison it will never spend.
+    // VENOMGRID and HELLSPITTER. The statuses' own flat rates, scaled by
+    // MALADY exactly as the gun's are (see BURN_TICK in enemies/shared.js) -
+    // a turret with a status of its own would be a fourth number with a fourth
+    // rate that nobody could find. Applied after the damage so a body the shot
+    // killed is not given eight seconds of poison it will never spend.
     if (!target.dead) {
       if (m.turretPoison > 0) {
         target.applyStatus(
-          'poison', m.turretPoisonTime * m.dotTime, ctx.player.dotHit * m.turretPoison * m.dotPower
+          'poison', m.turretPoisonTime * m.dotTime, POISON_TICK * m.turretPoison * m.dotPower
         );
       }
       if (m.turretBurn > 0) {
         target.applyStatus(
-          'burn', m.turretBurnTime * m.dotTime, ctx.player.dotHit * m.turretBurn * m.dotPower
+          'burn', m.turretBurnTime * m.dotTime, BURN_TICK * m.turretBurn * m.dotPower
         );
       }
     }
@@ -872,7 +873,7 @@ export class FireWall {
   constructor(game, x, z, dirX, dirZ, burn) {
     this.life = 8;
     // What one burn tick off this wall is worth. Snapshotted at the cast, like
-    // every other fire in the game - see Player.dotHit.
+    // every other fire in the game - see BURN_TICK in enemies/shared.js.
     this.burn = burn;
     this.dead = false;
     // Perpendicular to the look direction, so the wall faces the player.
@@ -993,7 +994,7 @@ export class Firepit {
     this.y = standOn(game, x, z, standY);
     this.life = 20;
     // Snapshotted at the throw, like every other fire in the game - see
-    // Player.dotHit and the note on Turret's damage.
+    // BURN_TICK in enemies/shared.js and the note on Turret's damage.
     this.burn = burn;
     this.dead = false;
 
