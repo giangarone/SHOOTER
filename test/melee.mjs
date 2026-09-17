@@ -133,7 +133,19 @@ try {
       const ux = cx / len;
       const uz = cz / len;
 
+      // A FRESH ATTACKER, not just a fresh cooldown. The settle above is 20
+      // frames of simulation - a third of a second on a healthy host, a full
+      // one at the dt clamp - which is long enough for the subject to walk up
+      // to the parked player and commit to a windup. Left standing, that
+      // windup completes DURING the pass being measured, and the cooldown it
+      // charges then covers exactly the frames the contact should land in:
+      // contact needs attackCd at zero, and only a completed swing ever
+      // charges it, so clearing the cooldown alone does not see it coming.
+      // That is how a loaded shard watched a chaser let the player through
+      // untouched - the windup and the swing go back to zero with it.
       e.attackCd = 0;
+      e.windup = 0;
+      e.swing = 0;
       hits = 0;
       // GAME TIME, NOT FRAMES AND NOT WALL TIME.
       //

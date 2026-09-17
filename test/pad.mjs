@@ -157,7 +157,13 @@ try {
     t('no pointer lock in pad mode', document.pointerLockElement === null);
 
     // ---- 2. analogue movement ---------------------------------------------
-    // Same push, same frames, twice: once at full deflection and once at half.
+    // Same push, twice: once at full deflection and once at half, measured as
+    // a SPEED over a window of GAME TIME. Never a distance over a frame
+    // count: walking has no acceleration (the stick writes the velocity
+    // outright each frame), so a frame-counted trial measures the frame rate
+    // as much as the stick - on a loaded shard the dt clamp hands one frame
+    // three times the simulation of another, and this comparison once read a
+    // half-tilt walk as FARTHER than a full-tilt one for exactly that reason.
     const walk = async (tilt) => {
       clearField();
       g.player.pos.set(0, 0, 0);
@@ -165,15 +171,22 @@ try {
       g.player.moveVX = 0;
       g.player.moveVZ = 0;
       stick(0, -tilt, 0, 0);
-      for (let i = 0; i < 30; i++) { clearField(); await step(); }
-      const d = Math.hypot(g.player.pos.x, g.player.pos.z);
+      // Half a second is what the old 30-frame window amounted to on a
+      // healthy host; the frame ceiling is only a backstop against a dead
+      // clock. Dividing by the time the clock actually delivered cancels the
+      // window's ragged last frame against the distance it bought.
+      const t0 = g.time;
+      for (let i = 0; i < 600 && g.time - t0 < 0.5; i++) { clearField(); await step(); }
+      const d = Math.hypot(g.player.pos.x, g.player.pos.z) / (g.time - t0);
       stick(0, 0, 0, 0);
       await frames(4);
       return d;
     };
     const full = await walk(1);
     const half = await walk(0.5);
-    t('left stick moves the player', full > 3, full.toFixed(2));
+    // A SPEED now (m/s), so the gate is against BASE_SPEED's 10 rather than a
+    // distance.
+    t('left stick moves the player', full > 6, full.toFixed(2));
     // Half a stick is not half a keyboard - the deadzone eats the first fifth
     // of the travel - so this is a band, not a number.
     const ratio = half / full;
@@ -188,16 +201,23 @@ try {
       if (aim) await frames(20);
       g.player.yaw = 0;
       stick(0, 0, 1, 0);
-      await frames(20);
+      // The stick drives a RATE (see _padLook), so a rate is what is
+      // measured: a third of a second of game time - the 20 frames a healthy
+      // host gave this window - and the answer divided by whatever the clock
+      // actually delivered. Two frame-counted windows divided by each other
+      // compare the frame rates underneath them, not the sensitivities.
+      const t0 = g.time;
+      for (let i = 0; i < 400 && g.time - t0 < 1 / 3; i++) await step();
       stick(0, 0, 0, 0);
-      const turned = Math.abs(g.player.yaw);
+      const turned = Math.abs(g.player.yaw) / (g.time - t0);
       set(B.L2, false);
       await frames(20);
       return turned;
     };
     const open = await turn(false);
     const aimed = await turn(true);
-    t('right stick turns the view', open > 0.4, open.toFixed(2));
+    // A RATE now (rad/s); the old 0.4 over a third of a second is 1.2.
+    t('right stick turns the view', open > 1.2, open.toFixed(2));
     t('aiming turns slower', aimed < open * 0.85, aimed.toFixed(2) + ' vs ' + open.toFixed(2));
 
     // ---- 3b. the sights ----------------------------------------------------
