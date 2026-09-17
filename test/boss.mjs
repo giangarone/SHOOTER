@@ -46,7 +46,11 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await sleep(1200);
+  // Wait on the game EXISTING, not on a clock: a runner shared with other
+  // suites can take far longer than any fixed sleep to boot the page, and a
+  // sleep that ran out read `__game` as undefined and crashed the suite
+  // before a single assertion ran.
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
 
   // ---- weak point -----------------------------------------------------------
   // Checked before any fight, because it is the one boss bug that every
@@ -339,7 +343,17 @@ try {
           if (p.type === 'overgrowth') {
             g.player.pos.set(p.pos.x + 3, g.player.pos.y, p.pos.z + 3);
           }
-          p.takeDamage(2500, true, 0, 1);
+          // A FRACTION OF THE PART'S OWN POOL, not a flat number. A flat chip
+          // calibrated for a wave-50 boss is a one-hit kill on the same boss
+          // pinned at wave 5, and an overkill hit is fatal BEFORE the ai can
+          // act on it - update() returns early on the dead - so a threshold
+          // boss dies with its mechanic unfired. That was the plague walk:
+          // one 2500 chip against a 2356hp Schism, no split ever fired, the
+          // bar read full on every living sample, and hpFell failed with the
+          // fight legitimately cleared. A fraction keeps every boss inside
+          // the budget while leaving room for thresholds to fire and for the
+          // poll above to catch the bar below full.
+          p.takeDamage(Math.ceil(p.maxHp * 0.4), true, 0, 1);
         }
       });
       await sleep(820);

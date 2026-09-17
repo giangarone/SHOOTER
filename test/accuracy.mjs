@@ -326,9 +326,13 @@ try {
         g.effects.blast(o, d, 1);
         const i = g.effects.blasts.findIndex((x, k) => x.life > before[k]);
         const b = i >= 0 ? g.effects.blasts[i] : null;
+        // Petal threshold is 0.35 of size and not 0.4: the birth petal is
+        // 0.4*reach*size, and one of the three styles a shot rolls between
+        // (BLAST_PETALS) has reach 0.95 - born at exactly 0.38 of size. A
+        // 0.4 line fails a third of all runs on a blast that was hot.
         t('the blast is hot on its own frame',
           b != null && b.ballMat.opacity > 0.9
-            && b.ball.scale.x > b.size * 0.5 && b.petals[0].scale.x > b.size * 0.4
+            && b.ball.scale.x > b.size * 0.5 && b.petals[0].scale.x > b.size * 0.35
             && b.petals[0].material.opacity > 0.5,
           b
             ? 'ball ' + b.ballMat.opacity.toFixed(2) + ', scale ' + b.ball.scale.x.toFixed(2)
