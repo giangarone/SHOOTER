@@ -178,22 +178,10 @@ def _(c):
     bullet(c, 8.5, 14, 7, 10, E, E)                      # and rounds fall out of it
 
 
-@icon('scavenger')          # ammo per kill, kills refill the reserve
-def _(c):
-    # A magnet: the ammunition comes to you off the bodies. Carried in solid
-    # strokes, never as a masked ring - see the note in js/icons.js.
-    c.arc(12, 16, 8.6, 3.8, 180, 360, S)
-    c.rect(3.4, 9, 7.2, 16, S)
-    c.rect(16.8, 9, 20.6, 16, S)
-    c.rect(3.4, 9, 7.2, 12, E)
-    c.rect(16.8, 9, 20.6, 12, E)
-    bullet(c, 9.5, 1, 5, 7, E, E)
-
-
 @icon('lodestone')          # money and pickups come to you, three tiers
 def _(c):
-    # NOT a magnet - SCAVENGER above is already the magnet, and two horseshoes
-    # in one set would make the pair unreadable at totem distance. This is the
+    # NOT a magnet. The horseshoe used to be SCAVENGER's drawing; it is a crow
+    # now, but the answer below was already the better one. This is the
     # money itself: one coin, with three smaller ones falling into its orbit.
     # As a flat black shape it is a big disc with three dots around it, which
     # nothing else in the set is.

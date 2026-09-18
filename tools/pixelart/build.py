@@ -17,7 +17,6 @@ NOTE = {
     'beltFeed': 'BELT FEED - some shots come straight off the reserve.',
     'ammoHoarder': 'AMMO HOARDER - twice the reserve. The biggest drum there is.',
     'ammoFab': 'AMMO FABRICATOR - rounds made out of nothing, per second.',
-    'scavenger': 'SCAVENGER - kills pull ammo to you.',
     'lodestone': 'LODESTONE - money and pickups come to you. The coin pulls.',
     'ammoBox': 'AMMO STATION.',
     'pickAmmo': 'AMMO PICKUP - one magazine off a body.',
