@@ -596,6 +596,13 @@ export function aiVigil(e, a) {
 
 // ---- the models -------------------------------------------------------------
 
+// The dressing rule for the whole theme: every bare slab the first pass used
+// was a PIECE OF FURNITURE drawn one face short, so the models here are built
+// as the furniture they always were - jambs get feet and capitals, lanterns
+// get caps and cages, robes get layers. Nothing below moves a tell the AI
+// reads: every handle the poses drive (penUpper, cuLamp, palCoffin...) keeps
+// exactly the transform contract it had, and the dressing is all inert.
+
 // A kneeling figure under a hooded lantern. Narrow, deeply cowled, the lantern
 // held at the chest where the hood's shadow falls across it. The upper body is
 // one articulated assembly and the legs are separate joints, so the kneel is
@@ -605,48 +612,103 @@ export function buildPenitent(e, g, s) {
   e.penUpper = new THREE.Group();
   g.add(e.penUpper);
   const U = partsFor(e, e.penUpper, s);
-  // THE HOOD. Deep, forward-tilted, and the whole head - the face never
-  // shows, which is the point of a penitent.
+  // THE COWL. Deep, forward-tilted, and the whole head - the face never
+  // shows, which is the point of a penitent. The wide collar under it makes
+  // the hood read WRAPPED rather than worn.
   e.penHood = U('penHood', spike(0.3, 0.62, 6), { y: 1.18, z: 0.04, rx: -0.34 });
-  // A narrow upright body under it, hands drawn in at the chest.
+  U('penCowl', prism(0.26, 0.34, 0.16, 6), { y: 0.92 });
+  U('penShoulder', slab(0.17, 0.09, 0.2), { x: -0.22, y: 0.94, rz: 0.14 });
+  U('penShoulder', slab(0.17, 0.09, 0.2), { x: 0.22, y: 0.94, rz: -0.14 });
+  // A narrow upright body under it, cinched with the rope belt of the habit -
+  // the dress of a thing whose whole life is the kneel.
   U('penTorso', prism(0.17, 0.24, 0.66, 5), { y: 0.82, rx: -0.08 });
-  // THE LANTERN, held low at the chest where the hood shades it. Pale brass,
-  // and the one lit thing on the body.
+  U('penBelt', prism(0.245, 0.25, 0.06, 6), { y: 0.62 });
+  // Both hands drawn in to the chest, clasped around the lamp.
+  U('penArmL', slab(0.08, 0.3, 0.08), { x: -0.15, y: 0.82, z: -0.15, rx: 0.55, rz: -0.35 });
+  U('penArmR', slab(0.08, 0.3, 0.08), { x: 0.15, y: 0.82, z: -0.15, rx: 0.55, rz: 0.35 });
+  // THE LANTERN, held low at the chest where the hood shades it - a CASED
+  // light now, capped and chained up into the hands. Pale brass, and the
+  // one lit thing on the body.
   U('penLamp', lump(0.11), {
     y: 0.86, z: -0.3, mat: SHARED_MATS.cathGilt, shadow: false,
   });
-  // THE ARCH of the silhouette: two thin uprights and a spanner over the
-  // head, so even the smallest CATHEDRAL body reads as a doorway walking.
-  // In cathStone rather than the body material, so a status tint cannot
-  // make the doorway stop reading as stone.
+  U('penLampCap', prism(0.045, 0.09, 0.07, 5), {
+    y: 0.965, z: -0.3, mat: SHARED_MATS.cathGilt, shadow: false,
+  });
+  U('penLampChain', slab(0.02, 0.14, 0.02), {
+    y: 1.06, z: -0.3, mat: SHARED_MATS.cathGilt, shadow: false,
+  });
+  // THE ARCH, dressed as a doorway instead of a frame: jambs with feet and
+  // capitals, a spanner with a gable peaked over it, and a candle flame on
+  // each shoulder of the span. In cathStone rather than the body material,
+  // so a status tint cannot make the doorway stop reading as stone; the
+  // flames are the theme's pale brass.
   U('penArchL', slab(0.05, 0.92, 0.05), { x: -0.24, y: 0.74, rz: 0.08, mat: SHARED_MATS.cathStone });
   U('penArchR', slab(0.05, 0.92, 0.05), { x: 0.24, y: 0.74, rz: -0.08, mat: SHARED_MATS.cathStone });
+  U('penJambL', slab(0.1, 0.08, 0.1), { x: -0.28, y: 0.3, mat: SHARED_MATS.cathStone });
+  U('penJambR', slab(0.1, 0.08, 0.1), { x: 0.28, y: 0.3, mat: SHARED_MATS.cathStone });
+  U('penCapL', slab(0.09, 0.07, 0.09), { x: -0.215, y: 1.17, mat: SHARED_MATS.cathStone });
+  U('penCapR', slab(0.09, 0.07, 0.09), { x: 0.215, y: 1.17, mat: SHARED_MATS.cathStone });
   U('penArchTop', slab(0.56, 0.06, 0.07), { y: 1.24, mat: SHARED_MATS.cathStone });
-  // Legs that fold: short, and angled as though halfway down already.
+  U('penGable', spike(0.09, 0.18, 4), { y: 1.36, mat: SHARED_MATS.cathStone });
+  U('penFlame', spike(0.028, 0.09, 4), { x: -0.24, y: 1.31, mat: SHARED_MATS.cathGilt, shadow: false });
+  U('penFlame', spike(0.028, 0.09, 4), { x: 0.24, y: 1.31, mat: SHARED_MATS.cathGilt, shadow: false });
+  // The skirt of the habit hangs off the UPPER body, so the kneel pools the
+  // cloth down over the folding legs instead of baring them under a floating
+  // torso.
+  U('penRobe', prism(0.22, 0.32, 0.36, 6), { y: 0.44 });
+  // Legs that fold: short, and angled as though halfway down already, each
+  // with a bare foot grafted on as a CHILD of the shin so the fold carries
+  // the foot with it rather than leaving a shoe planted in mid-air.
   e.penLegs = [
     P('penLeg', slab(0.1, 0.5, 0.11), { x: -0.14, y: 0.24, rx: 0.28 }),
     P('penLeg', slab(0.1, 0.5, 0.11), { x: 0.14, y: 0.24, rx: 0.28 }),
   ];
+  for (const leg of e.penLegs) {
+    const foot = new THREE.Mesh(geo('penFoot', slab(0.11, 0.07, 0.22)), e.bodyMat);
+    foot.position.set(0, -0.22, -0.05);
+    foot.castShadow = true;
+    leg.add(foot);
+  }
   eyes(U, { y: 1.02, x: 0.09, z: -0.3, r: 0.7, mat: e.eyeMat });
 }
 
 // The tallest thin thing in the theme: a curate is a lantern on a pole that
-// walks. The lantern rides high and forward of the body, so the aim and the
-// light are one line, and the body under the pole is an afterthought.
+// walks, in vestments. The lantern rides high and forward of the body, so the
+// aim and the light are one line - and the lamp is a CASED one, so the charge
+// reads as the core shrinking inside its own housing rather than the whole
+// lamp blinking smaller.
 export function buildCurate(e, g, s) {
   const P = partsFor(e, g, s);
-  // THE POLE, and it is most of the height: a thin column with the lamp
-  // bracket at the top.
+  // THE POLE, and it is most of the height: a processional staff, finialed
+  // at the top, with the lamp bracket off its head.
   P('cuPole', prism(0.06, 0.09, 1.3, 5), { y: 0.85 });
+  P('cuFinial', spike(0.06, 0.16, 4), { y: 1.58, mat: SHARED_MATS.cathGilt, shadow: false });
   P('cuArm', slab(0.06, 0.06, 0.42), { y: 1.5, z: -0.18 });
-  // THE LANTERN, hung off the arm's end. Its dim is the charge's tell - see
-  // aiCurate.
+  // THE LANTERN as an actual lantern: a hanging link off the arm, a cap over
+  // it, a foot under it and cage bars at its flanks. The dim that announces
+  // the round is the CORE's alone (see aiCurate) - the housing staying lit
+  // sized is exactly what makes the core's shrink read as a wick going down.
+  P('cuHanger', slab(0.02, 0.1, 0.02), { y: 1.46, z: -0.38, mat: SHARED_MATS.cathGilt, shadow: false });
   e.cuLamp = P('cuLamp', lump(0.16), {
     y: 1.38, z: -0.38, mat: SHARED_MATS.cathGilt, shadow: false,
   });
-  // A small bowed body under the pole, mostly hidden by it.
+  P('cuLampCap', spike(0.12, 0.12, 4), { y: 1.47, z: -0.38, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('cuLampBase', prism(0.06, 0.1, 0.08, 5), { y: 1.25, z: -0.38, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('cuCage', slab(0.02, 0.26, 0.02), { x: -0.15, y: 1.36, z: -0.38, mat: SHARED_MATS.cathStone, shadow: false });
+  P('cuCage', slab(0.02, 0.26, 0.02), { x: 0.15, y: 1.36, z: -0.38, mat: SHARED_MATS.cathStone, shadow: false });
+  // A small bowed body under the pole, mostly hidden by it, in vestments:
+  // chest over skirt, and the two strips of a stole hanging down the front.
   P('cuBody', prism(0.13, 0.19, 0.56, 5), { y: 0.56, z: 0.12, rx: -0.3 });
   P('cuSkirt', prism(0.2, 0.13, 0.3, 5), { y: 0.24, z: 0.1 });
+  P('cuStole', slab(0.05, 0.34, 0.02), { x: -0.09, y: 0.6, z: -0.11, rx: -0.24 });
+  P('cuStole', slab(0.05, 0.34, 0.02), { x: 0.09, y: 0.6, z: -0.11, rx: -0.24 });
+  // THE MITRE: two panels meeting at a peak over the bowed face, banded in
+  // brass at the brow - the one rank badge in the theme, worn by the one
+  // body that has rank.
+  P('cuMitreL', slab(0.035, 0.22, 0.15), { x: -0.055, y: 1.0, rx: -0.06, rz: 0.3 });
+  P('cuMitreR', slab(0.035, 0.22, 0.15), { x: 0.055, y: 1.0, rx: -0.06, rz: -0.3 });
+  P('cuMitreBand', slab(0.17, 0.05, 0.16), { y: 0.9, mat: SHARED_MATS.cathGilt, shadow: false });
   // Two long thin legs, splayed for the height - the read of a stilt walker
   // is wrong by exactly nothing.
   P('cuLeg', slab(0.05, 0.52, 0.05), { x: -0.13, y: 0.24, rz: 0.14 });
@@ -654,24 +716,39 @@ export function buildCurate(e, g, s) {
   eyes(P, { y: 0.72, x: 0.08, z: -0.1, r: 0.65, mat: e.eyeMat });
 }
 
-// A doorway walking: the widest arch in the theme, carried flat across the
-// shoulders like a yoke, with the coffin slung under the middle of it. The
-// lantern rides the yoke's crown. Read: it is carrying a threshold, and there
-// is a grave under it.
+// A doorway walking, and a doorway with JOINERY on it now: the widest arch
+// in the theme, footed at the jambs and crested at the spanner, carried flat
+// across the shoulders like a yoke, with the coffin slung under the middle
+// of it. The lantern rides the yoke's crown. Read: it is carrying a
+// threshold, and there is a grave under it.
 export function buildPallbearer(e, g, s) {
   e.palRig = new THREE.Group();
   g.add(e.palRig);
   const P = partsFor(e, e.palRig, s);
-  // THE YOKE. Two uprights at the shoulders and a spanner over the head -
-  // the arch at its plainest, and the outline's whole width, in the stone
-  // that keeps its colour under a tint.
+  // THE YOKE. Two uprights on block feet with capitals at their tops and a
+  // spanner over the head, crested by a gable - the arch at its plainest and
+  // its widest, in the stone that keeps its colour under a tint. A candle
+  // flame at each end of the spanner marks it as the theme's.
   P('palUpL', slab(0.09, 1.0, 0.1), { x: -0.42, y: 0.9, rz: 0.1, mat: SHARED_MATS.cathStone });
   P('palUpR', slab(0.09, 1.0, 0.1), { x: 0.42, y: 0.9, rz: -0.1, mat: SHARED_MATS.cathStone });
+  P('palFootL', slab(0.16, 0.1, 0.18), { x: -0.47, y: 0.42, mat: SHARED_MATS.cathStone });
+  P('palFootR', slab(0.16, 0.1, 0.18), { x: 0.47, y: 0.42, mat: SHARED_MATS.cathStone });
+  P('palCapL', slab(0.13, 0.08, 0.14), { x: -0.37, y: 1.36, mat: SHARED_MATS.cathStone });
+  P('palCapR', slab(0.13, 0.08, 0.14), { x: 0.37, y: 1.36, mat: SHARED_MATS.cathStone });
   P('palSpan', slab(1.0, 0.09, 0.12), { y: 1.44, mat: SHARED_MATS.cathStone });
-  // THE LANTERN at the crown of the yoke.
+  P('palGable', spike(0.14, 0.24, 4), { y: 1.58, z: 0.14, mat: SHARED_MATS.cathStone });
+  P('palFlame', spike(0.03, 0.1, 4), { x: -0.45, y: 1.54, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('palFlame', spike(0.03, 0.1, 4), { x: 0.45, y: 1.54, mat: SHARED_MATS.cathGilt, shadow: false });
+  // THE LANTERN at the crown of the yoke, hung just forward of the gable.
   e.palLamp = P('palLamp', lump(0.14), {
-    y: 1.6, z: 0.0, mat: SHARED_MATS.cathGilt, shadow: false,
+    y: 1.6, z: -0.06, mat: SHARED_MATS.cathGilt, shadow: false,
   });
+  // The bearer between the uprights: a stooped trunk under a low cowl, both
+  // arms thrown forward under the bier - the load is the point and the body
+  // under it only labours.
+  P('palTorso', prism(0.3, 0.38, 0.44, 5), { y: 0.68, rx: -0.08 });
+  P('palArmL', slab(0.09, 0.46, 0.1), { x: -0.34, y: 0.9, z: -0.14, rx: 0.62, rz: 0.12 });
+  P('palArmR', slab(0.09, 0.46, 0.1), { x: 0.34, y: 0.9, z: -0.14, rx: 0.62, rz: -0.12 });
   // THE COFFIN IS HINGED AS ONE OBJECT. It rises upright through the tell,
   // stays between the carrier and the player through the charge, and slams
   // flat at ground level on impact. Separate static lids could never make
@@ -683,6 +760,14 @@ export function buildPallbearer(e, g, s) {
   C('palLidL', slab(0.3, 0.1, 0.9), { x: -0.17, rz: 0.5 });
   C('palLidR', slab(0.3, 0.1, 0.9), { x: 0.17, rz: -0.5 });
   C('palBody', slab(0.34, 0.5, 0.8), { rx: 0.06 });
+  // A DRESSED CASKET: end plates at the head and foot, a brass boss over the
+  // face and one candle at the head - it is not a box, it is somebody's
+  // grave goods. No more than this: the corpse pool throws 28 pieces and
+  // the bearer is at it, so every slab has to earn its flight.
+  C('palEndH', slab(0.3, 0.42, 0.06), { z: -0.44 });
+  C('palEndF', slab(0.24, 0.34, 0.06), { z: 0.44 });
+  C('palBoss', lump(0.07), { y: 0.3, z: -0.3, mat: SHARED_MATS.cathGilt, shadow: false });
+  C('palCandle', spike(0.035, 0.14, 4), { y: 0.34, z: -0.44, mat: SHARED_MATS.cathGilt, shadow: false });
   // A low hooded head under the yoke's front edge.
   P('palHead', spike(0.14, 0.34, 5), { y: 1.2, z: -0.3, rx: -0.4 });
   // Four thick legs, planted - the brute posture, carrying weight.
@@ -694,46 +779,72 @@ export function buildPallbearer(e, g, s) {
 }
 
 // A swinging censer on chains, carried before the body by a long arm. The
-// body itself is a hooded column - barely a body at all, because the censer
-// is the silhouette and the smoke is the enemy.
+// body itself is a hooded habit in two layers - barely a body at all,
+// because the censer is the silhouette and the smoke is the enemy. The
+// chains hang off the CENSER rather than off the air beside it, so the sway
+// the ai puts on the censer carries its own tackle with it.
 export function buildThurible(e, g, s) {
   const P = partsFor(e, g, s);
-  // THE CENSER. Hung well forward and low, on two chains from the arm - the
-  // one part of the outline that moves every frame, and the author of
-  // everything on the floor.
+  // THE CENSER. Hung well forward and low at the arm's reach - the one part
+  // of the outline that moves every frame, and the author of everything on
+  // the floor.
   e.thurArm = P('thurArm', slab(0.07, 0.07, 0.62), { y: 1.0, z: -0.28, rx: 0.2 });
-  P('thurChain', slab(0.02, 0.3, 0.02), { y: 0.98, z: -0.56 });
-  P('thurChain', slab(0.02, 0.3, 0.02), { y: 0.98, z: -0.56, rz: 0.1 });
   e.thurCenser = P('thurCenser', prism(0.14, 0.2, 0.24, 6), {
     y: 0.72, z: -0.58, mat: SHARED_MATS.cathGilt,
   });
-  // A plume of lit smoke above the censer's mouth - small, and the only
-  // other lit thing on the model.
+  // The tackle, in the censer's own frame so the sway carries it: a banded
+  // rim, a peaked lid, and three chains fanning up to where the arm reaches.
+  const C = partsFor(e, e.thurCenser, s);
+  C('thurRim', prism(0.205, 0.205, 0.045, 6), { y: 0.06, mat: SHARED_MATS.cathGilt });
+  C('thurLid', spike(0.13, 0.12, 6), { y: 0.17, mat: SHARED_MATS.cathGilt });
+  C('thurChain', slab(0.02, 0.3, 0.02), { y: 0.28, mat: SHARED_MATS.cathGilt });
+  C('thurChain', slab(0.02, 0.3, 0.02), { x: -0.07, y: 0.26, rz: 0.26, mat: SHARED_MATS.cathGilt });
+  C('thurChain', slab(0.02, 0.3, 0.02), { x: 0.07, y: 0.26, rz: -0.26, mat: SHARED_MATS.cathGilt });
+  // A plume of lit smoke above the censer's mouth - the one sign of what it
+  // pours, in the same frame of reference.
   P('thurPlume', spike(0.09, 0.3, 5), {
     y: 0.94, z: -0.58, rx: Math.PI, mat: SHARED_MATS.cathGilt, shadow: false,
   });
-  // THE HOODED COLUMN: a narrow body under a deep cowl, arms hidden.
-  P('thurRobe', prism(0.2, 0.32, 0.72, 5), { y: 0.5, rx: -0.1 });
+  // THE HABIT: a skirt under a robe under a shoulder mantle, belted - the
+  // layering is what makes it read as cloth rather than as a column.
+  P('thurRobeLo', prism(0.3, 0.4, 0.4, 6), { y: 0.26 });
+  P('thurRobe', prism(0.2, 0.32, 0.72, 5), { y: 0.56, rx: -0.1 });
+  P('thurBelt', prism(0.24, 0.26, 0.05, 6), { y: 0.52 });
+  P('thurMantle', prism(0.24, 0.3, 0.18, 5), { y: 0.88, rx: -0.1 });
   P('thurHood', spike(0.2, 0.44, 6), { y: 1.1, z: 0.02, rx: -0.3 });
   // A long thin arm behind, for balance - the read of a thing that carries
   // weight in front of it.
   P('thurArmB', slab(0.05, 0.05, 0.4), { y: 0.9, z: 0.3, rx: -0.3 });
-  // The arch, small and worn high: the chains and the hood's point.
-  P('thurArch', slab(0.4, 0.05, 0.06), { y: 1.38 });
+  // The arch, small and worn high, with its own gable: the chains and the
+  // hood's point.
+  P('thurArch', slab(0.4, 0.05, 0.06), { y: 1.38, mat: SHARED_MATS.cathStone });
+  P('thurGable', spike(0.06, 0.12, 4), { y: 1.46, mat: SHARED_MATS.cathStone });
   eyes(P, { y: 0.98, x: 0.08, z: -0.2, r: 0.65, mat: e.eyeMat });
 }
 
-// THE BELL RINGER. A bell hung in a small frame above the head, and a wide
-// shallow ring drawn on the floor at exactly the radius the toll is heard at
-// - the hoarfrost's contract: a mechanic the player cannot see the edge of
+// THE BELL RINGER, in a belfry it carries: two posts on block feet under a
+// lintel and its gable, the bell hung from a yoke beam between them - and
+// the ROPE fallen down from the beam into the ringer's raised hands. The
+// ring on the floor is drawn at exactly the radius the toll is heard at -
+// the hoarfrost's contract: a mechanic the player cannot see the edge of
 // is a tax they cannot answer.
 export function buildSacristan(e, g, s) {
   const P = partsFor(e, g, s);
-  // THE BELL, hung from a two-post frame. It is the whole upper silhouette,
-  // and it turns - slowly, the way a heavy thing does.
-  P('sacPost', slab(0.05, 0.7, 0.05), { x: -0.2, y: 1.3, rz: 0.06 });
-  P('sacPost', slab(0.05, 0.7, 0.05), { x: 0.2, y: 1.3, rz: -0.06 });
-  P('sacLintel', slab(0.5, 0.06, 0.07), { y: 1.66 });
+  // THE BELFRY. Posts with feet and capitals, the lintel over them and a
+  // gable cresting it - a doorway carrying its own roof, in the stone that
+  // keeps its colour under a tint.
+  P('sacPost', slab(0.05, 0.7, 0.05), { x: -0.2, y: 1.3, rz: 0.06, mat: SHARED_MATS.cathStone });
+  P('sacPost', slab(0.05, 0.7, 0.05), { x: 0.2, y: 1.3, rz: -0.06, mat: SHARED_MATS.cathStone });
+  P('sacFootL', slab(0.1, 0.08, 0.1), { x: -0.21, y: 0.96, mat: SHARED_MATS.cathStone });
+  P('sacFootR', slab(0.1, 0.08, 0.1), { x: 0.21, y: 0.96, mat: SHARED_MATS.cathStone });
+  P('sacCapL', slab(0.09, 0.06, 0.09), { x: -0.19, y: 1.62, mat: SHARED_MATS.cathStone });
+  P('sacCapR', slab(0.09, 0.06, 0.09), { x: 0.19, y: 1.62, mat: SHARED_MATS.cathStone });
+  P('sacLintel', slab(0.5, 0.06, 0.07), { y: 1.66, mat: SHARED_MATS.cathStone });
+  P('sacGable', spike(0.09, 0.16, 4), { y: 1.77, mat: SHARED_MATS.cathStone });
+  // The yoke beam the bell swings from, and the bell itself - it turns,
+  // slowly, the way a heavy thing does, with a crown going round with it
+  // (the crown is the bell's own child so the turn never canters it).
+  P('sacBeam', slab(0.34, 0.05, 0.06), { y: 1.6 });
   e.sacBell = new THREE.Mesh(
     geo('sacBell', () => {
       // A bell is a flared cone: wide at the mouth, narrow at the crown.
@@ -745,9 +856,20 @@ export function buildSacristan(e, g, s) {
   e.sacBell.position.set(0, 1.5 * s, 0);
   e.sacBell.scale.setScalar(s);
   g.add(e.sacBell);
+  const crown = new THREE.Mesh(
+    geo('sacBellCrown', prism(0.05, 0.1, 0.09, 6)),
+    SHARED_MATS.cathGilt
+  );
+  crown.position.y = 0.18;
+  e.sacBell.add(crown);
   P('sacClap', spike(0.05, 0.16, 4), { y: 1.36, mat: e.eyeMat, shadow: false });
-  // A narrow hooded body under the frame, hands raised to the rope.
+  // THE ROPE, fallen from the beam between the raised hands - the reason the
+  // hands are up at all.
+  P('sacRope', slab(0.03, 0.56, 0.03), { y: 1.28, z: -0.08 });
+  // The habit under the frame: robe, shoulder mantle, deep hood, and the
+  // arms still lifted to the rope.
   P('sacRobe', prism(0.18, 0.26, 0.6, 5), { y: 0.64, rx: -0.06 });
+  P('sacMantle', prism(0.22, 0.26, 0.14, 6), { y: 0.94 });
   P('sacHood', spike(0.16, 0.4, 5), { y: 1.08, z: 0.0, rx: -0.3 });
   P('sacArm', slab(0.05, 0.05, 0.34), { x: -0.16, y: 1.0, z: -0.16, rx: 0.5 });
   P('sacArm', slab(0.05, 0.05, 0.34), { x: 0.16, y: 1.0, z: -0.16, rx: 0.5 });
@@ -776,42 +898,63 @@ export function buildSacristan(e, g, s) {
   g.add(e.sacRing);
 }
 
-// THE LIGHT IN THE TOWER. A tall louvered lamp hanging under a small body
-// with two ragged vanes: read from below, it is a lantern with wings, and
-// the beam it draws on the floor is the whole enemy.
+// THE LIGHT IN THE TOWER, caged like a real one: a tall lamp banded with
+// stone louvres between two posts, roofed and finialed above and tasselled
+// below, hung under a small hooded body between two feathered vanes. Read
+// from below - the only place it is seen from - it is a lantern with wings,
+// and the beam it draws on the floor is the whole enemy.
 export function buildVigil(e, g, s) {
   const P = partsFor(e, g, s);
-  // THE TOWER LAMP. Tall, louvered, and lit from within - the widest part of
-  // the silhouette from anywhere, because it is the thing the player has to
-  // find to answer the beam.
+  // THE TOWER LAMP. Tall, held between stone ribs and cage posts, and lit
+  // from within - the widest part of the silhouette from anywhere, because
+  // it is the thing the player has to find to answer the beam.
   P('vgLampBody', prism(0.14, 0.2, 0.5, 5), {
     y: 0.5, mat: SHARED_MATS.cathGilt,
   });
-  P('vgLampCap', spike(0.14, 0.22, 4), { y: 0.86, mat: SHARED_MATS.cathGilt });
-  P('vgLampFoot', prism(0.06, 0.12, 0.12, 5), { y: 0.22, mat: SHARED_MATS.cathGilt });
+  P('vgLouver', prism(0.205, 0.215, 0.04, 5), { y: 0.34, mat: SHARED_MATS.cathStone });
+  P('vgLouver', prism(0.205, 0.215, 0.04, 5), { y: 0.5, mat: SHARED_MATS.cathStone });
+  P('vgLouver', prism(0.205, 0.215, 0.04, 5), { y: 0.66, mat: SHARED_MATS.cathStone });
+  P('vgPostL', slab(0.03, 0.6, 0.03), { x: -0.2, y: 0.5, mat: SHARED_MATS.cathStone });
+  P('vgPostR', slab(0.03, 0.6, 0.03), { x: 0.2, y: 0.5, mat: SHARED_MATS.cathStone });
+  P('vgLampCap', spike(0.16, 0.22, 4), { y: 0.86, mat: SHARED_MATS.cathGilt });
+  P('vgFinial', spike(0.035, 0.12, 4), { y: 1.02, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('vgLampFoot', prism(0.06, 0.12, 0.12, 5), { y: 0.2, mat: SHARED_MATS.cathGilt });
+  // The tassel: three small flames off the lamp's foot, the light pointing
+  // DOWN - this is the only body in the theme whose lamp hangs under it,
+  // because the beam is what it is for.
+  P('vgTassel', spike(0.03, 0.12, 4), { y: 0.1, rx: Math.PI, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('vgTassel', spike(0.03, 0.12, 4), { x: -0.07, y: 0.13, rx: Math.PI - 0.24, mat: SHARED_MATS.cathGilt, shadow: false });
+  P('vgTassel', spike(0.03, 0.12, 4), { x: 0.07, y: 0.13, rx: Math.PI + 0.24, mat: SHARED_MATS.cathGilt, shadow: false });
   // The small body above it: a hooded seed, no bigger than the lamp itself.
   P('vgBody', lump(0.16), { y: 1.12 });
   P('vgHood', spike(0.12, 0.3, 5), { y: 1.3, z: 0.02, rx: -0.4 });
-  // Two ragged vanes, high and swept - the theme's one airborne body keeps
-  // the arch in the vanes: two uprights and nothing between them.
+  // Two ragged vanes, doubled - a blade and a feather at its tip, swept
+  // high and back: the theme's one airborne body keeps the arch in the
+  // span between them.
   P('vgVane', slab(0.5, 0.04, 0.2), { x: -0.34, y: 1.3, z: 0.1, ry: 0.5, rz: 0.2 });
   P('vgVane', slab(0.5, 0.04, 0.2), { x: 0.34, y: 1.3, z: 0.1, ry: -0.5, rz: -0.2 });
+  P('vgFeatherL', slab(0.26, 0.03, 0.12), { x: -0.56, y: 1.36, z: -0.02, ry: 0.62, rz: 0.34 });
+  P('vgFeatherR', slab(0.26, 0.03, 0.12), { x: 0.56, y: 1.36, z: -0.02, ry: -0.62, rz: -0.34 });
   eyes(P, { y: 1.16, x: 0.07, z: -0.16, r: 0.6, mat: e.eyeMat });
 }
 
 // THE RELIQUARY. A shrine that walks: a reliquary box carried under a great
-// arch on four claw-legs, with a crown of candles along the spanner, a bell
-// hung at the yoke's crown, and the theme's lantern flaring at the centre.
-// The box is the health bar's argument - shut and armoured until the last
-// third, then the lids go wide and the glow pours out.
+// buttressed arch on four claw-legs, with a crown of candles along the
+// spanner and a gable cresting it, a bell hung at the yoke's crown, and the
+// theme's lantern flaring at the centre. The box is the health bar's
+// argument - shut and armoured until the last third, then the lids go wide
+// and the glow pours out.
 export function buildReliquary(e, g, s) {
   const P = partsFor(e, g, s);
-  // THE ARCH, at boss scale: two great uprights and a spanner, carrying the
-  // whole silhouette. The boss is a doorway, and it is walking through
-  // itself.
+  // THE ARCH, at boss scale: two great uprights on capitals, a spanner and
+  // its gable, carrying the whole silhouette. The boss is a doorway, and it
+  // is walking through itself.
   P('relUpL', slab(0.16, 1.9, 0.18), { x: -0.66, y: 1.7, rz: 0.06, mat: SHARED_MATS.cathStone });
   P('relUpR', slab(0.16, 1.9, 0.18), { x: 0.66, y: 1.7, rz: -0.06, mat: SHARED_MATS.cathStone });
+  P('relCapL', slab(0.26, 0.12, 0.28), { x: -0.69, y: 2.56, mat: SHARED_MATS.cathStone });
+  P('relCapR', slab(0.26, 0.12, 0.28), { x: 0.69, y: 2.56, mat: SHARED_MATS.cathStone });
   P('relSpan', slab(1.6, 0.14, 0.2), { y: 2.7, mat: SHARED_MATS.cathStone });
+  P('relGable', spike(0.22, 0.4, 4), { y: 2.95, z: 0.22, mat: SHARED_MATS.cathStone });
   // A CROWN OF CANDLES along the spanner, the sacristan's lit brass at boss
   // scale - the skyline that says CATHEDRAL from anywhere in the room.
   for (let i = 0; i < 5; i++) {
@@ -833,6 +976,15 @@ export function buildReliquary(e, g, s) {
   // Shut, it is the armoured read - a reliquary is a box you cannot open.
   e.relLidL = P('relLidL', slab(0.5, 0.14, 1.1), { x: -0.3, y: 1.44, rz: 0.5 });
   e.relLidR = P('relLidR', slab(0.5, 0.14, 1.1), { x: 0.3, y: 1.44, rz: -0.5 });
+  // A gilt finial on each lid's outer edge, as a CHILD of its lid - the
+  // opening rotates the lids, and a finial anywhere else would be left
+  // hanging where the lid was.
+  for (const [lid, sx] of [[e.relLidL, -1], [e.relLidR, 1]]) {
+    const fin = new THREE.Mesh(geo('relFinial', spike(0.05, 0.16, 4)), SHARED_MATS.cathGilt);
+    fin.position.set(sx * 0.2, 0.14, 0);
+    fin.castShadow = false;
+    lid.add(fin);
+  }
   // THE LANTERN at the box's centre, inside the arch - the theme's own
   // lamp, at the scale of the thing carrying it. It flares for the volley.
   e.relLamp = P('relLamp', lump(0.24), {
