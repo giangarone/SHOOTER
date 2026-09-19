@@ -12,89 +12,169 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, aiMelee, eyes, landHit, orbit, partsFor, prism, segBlocked,
-  shard, slab, spike,
+  ENEMY_TYPES, SHARED_MATS, aiMelee, eyes, landHit, orbit, partsFor, prism,
+  segBlocked, shard, slab, spike,
 } from './shared.js';
+
+// The build shorthand. The bodies stay on e.bodyMat so a status tint still
+// reads; the STRUCTURE - rods, rails, frames - is tempestIron and the
+// WINDINGS are tempestCopper, so a frozen or poisoned member of the family
+// still reads as TEMPEST hardware. Porcelain (tempestCeramic) mounts every
+// charged part, the insulator between the bright core and the frame. The
+// rule of thumb used below: if it conducts, it is copper; if it holds two
+// charged things apart, it is ceramic; if it only has to stand there, it is
+// iron.
 
 // A tuning fork that runs. Small, light, and almost all of its outline is the
 // two prongs - so a pair of arclings across a room read as two forks aimed at
 // each other before the wire between them is even drawn.
 export function buildArcling(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // THE PRONGS ARE THE ENEMY. Tall, thin, and splayed - they clear the head
   // by half a body height, which is what makes the silhouette top-heavy and
-  // unmistakable at a distance.
-  P('arcProng', slab(0.07, 0.7, 0.07), { x: -0.19, y: 1.42, rz: 0.16 });
-  P('arcProng', slab(0.07, 0.7, 0.07), { x: 0.19, y: 1.42, rz: -0.16 });
-  // The core, suspended between their tips. The one bright thing on it.
+  // unmistakable at a distance. Each one is a grounded machine now, not a
+  // stick: porcelain seat where it roots into the yoke, copper collar on the
+  // shaft, and a dark sharpened tip - a fork you can see the construction of.
+  P('arcProng', slab(0.07, 0.7, 0.07), { x: -0.19, y: 1.42, rz: 0.16, mat: IRON });
+  P('arcProng', slab(0.07, 0.7, 0.07), { x: 0.19, y: 1.42, rz: -0.16, mat: IRON });
+  P('arcSeat', prism(0.09, 0.11, 0.1, 4), { x: -0.155, y: 1.2, rz: 0.16, mat: CER });
+  P('arcSeat', prism(0.09, 0.11, 0.1, 4), { x: 0.155, y: 1.2, rz: -0.16, mat: CER });
+  P('arcCollar', prism(0.1, 0.1, 0.07, 4), { x: -0.214, y: 1.57, rz: 0.16, mat: COP });
+  P('arcCollar', prism(0.1, 0.1, 0.07, 4), { x: 0.214, y: 1.57, rz: -0.16, mat: COP });
+  P('arcTip', spike(0.045, 0.22, 4), { x: -0.247, y: 1.775, rz: 0.16, mat: IRON });
+  P('arcTip', spike(0.045, 0.22, 4), { x: 0.247, y: 1.775, rz: -0.16, mat: IRON });
+  // The core, suspended between their tips, now in a copper gimbal ring - the
+  // one bright thing on it, visibly HELD rather than floating.
   P('arcCore', shard(0.11), { y: 1.66, mat: e.eyeMat, shadow: false });
+  P('arcRing', () => new THREE.TorusGeometry(0.19, 0.024, 5, 10), { y: 1.66, mat: COP, shadow: false });
   // A narrow hunched body under them, deliberately small - a rusher this fast
-  // should read as almost nothing but the fork it is carrying.
+  // should read as almost nothing but the fork it is carrying. The spine
+  // spike is its tell in silhouette from behind: hunched and pointed at you.
   P('arcTorso', prism(0.19, 0.11, 0.5, 4), { y: 0.92, rx: -0.24, ry: Math.PI / 4 });
-  P('arcYoke', slab(0.42, 0.08, 0.09), { y: 1.14 });
-  // Thin rods for legs. Nothing about this enemy is heavy.
-  P('arcLeg', slab(0.06, 0.5, 0.06), { x: -0.13, y: 0.26, rz: 0.1 });
-  P('arcLeg', slab(0.06, 0.5, 0.06), { x: 0.13, y: 0.26, rz: -0.1 });
+  P('arcYoke', slab(0.46, 0.1, 0.11), { y: 1.14, mat: IRON });
+  P('arcSpine', spike(0.05, 0.24, 4), { y: 1.0, z: 0.16, rx: 0.7, mat: IRON });
+  // Two-piece legs - thigh, shin, and a forward foot - so it reads as a thing
+  // that RUNS, not a thing on stilts.
+  P('arcThigh', slab(0.07, 0.3, 0.08), { x: -0.11, y: 0.44, rz: -0.06, mat: IRON });
+  P('arcThigh', slab(0.07, 0.3, 0.08), { x: 0.11, y: 0.44, rz: 0.06, mat: IRON });
+  P('arcShin', slab(0.05, 0.28, 0.06), { x: -0.14, y: 0.17, rz: 0.08, mat: IRON });
+  P('arcShin', slab(0.05, 0.28, 0.06), { x: 0.14, y: 0.17, rz: -0.08, mat: IRON });
+  P('arcFoot', slab(0.08, 0.05, 0.16), { x: -0.15, y: 0.03, z: -0.03, mat: IRON });
+  P('arcFoot', slab(0.08, 0.05, 0.16), { x: 0.15, y: 0.03, z: -0.03, mat: IRON });
   eyes(P, { y: 1.06, x: 0.09, z: -0.2, r: 0.7, mat: e.eyeMat });
 }
 
-// A wide V on a pole. The horns are held out in FRONT rather than up, so the
-// gap between them faces the player - which is where the bolt charges, and so
-// the tell is aimed at the person it is aimed at.
+// A wide V on a wound column. The horns are held out in FRONT rather than up,
+// so the gap between them faces the player - which is where the bolt charges,
+// and so the tell is aimed at the person it is aimed at.
 export function buildCoil(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // The two horns, swept forward and apart. Long enough that the V is legible
-  // side-on as well as head-on.
+  // side-on as well as head-on. Each is dressed the way the arcing prongs are
+  // dressed - porcelain at the root, copper along the shaft, a sharpened tip -
+  // so the whole family reads as one workshop.
   P('coilHorn', spike(0.09, 0.66, 4), { x: -0.26, y: 1.3, z: -0.22, rx: -1.25, rz: 0.4 });
   P('coilHorn', spike(0.09, 0.66, 4), { x: 0.26, y: 1.3, z: -0.22, rx: -1.25, rz: -0.4 });
+  P('coilHornSeat', prism(0.115, 0.115, 0.08, 6), {
+    x: -0.299, y: 1.271, z: -0.133, rx: -1.25, rz: 0.4, mat: CER,
+  });
+  P('coilHornSeat', prism(0.115, 0.115, 0.08, 6), {
+    x: 0.299, y: 1.271, z: -0.133, rx: -1.25, rz: -0.4, mat: CER,
+  });
+  P('coilHornCollar', prism(0.12, 0.12, 0.09, 6), {
+    x: -0.213, y: 1.335, z: -0.325, rx: -1.25, rz: 0.4, mat: COP,
+  });
+  P('coilHornCollar', prism(0.12, 0.12, 0.09, 6), {
+    x: 0.213, y: 1.335, z: -0.325, rx: -1.25, rz: -0.4, mat: COP,
+  });
+  P('coilHornTip', spike(0.05, 0.16, 4), {
+    x: -0.12, y: 1.404, z: -0.535, rx: -1.25, rz: 0.4, mat: IRON,
+  });
+  P('coilHornTip', spike(0.05, 0.16, 4), {
+    x: 0.12, y: 1.404, z: -0.535, rx: -1.25, rz: -0.4, mat: IRON,
+  });
   // THE BOLT, in the mouth of the V. Driven by aiCoil - it swells while the
   // shot is charging, which is the entire warning the player gets.
   e.coilCore = P('coilCore', shard(0.13), {
     y: 1.32, z: -0.5, mat: e.eyeMat, shadow: false,
   });
-  // A thin column, and a collar where the horns are rooted. No shoulders and
-  // no arms: everything this enemy does happens in front of its face.
-  P('coilCollar', prism(0.19, 0.15, 0.16, 6), { y: 1.16 });
-  P('coilSpine', slab(0.13, 0.72, 0.13), { y: 0.76 });
+  // THE SPINE IS THE NAMESAKE: a rod of dark iron wearing three copper coils,
+  // so the whole body reads as the thing it is - a coil. The porcelain collar
+  // up top is where the horns are rooted, the insulator between them.
+  P('coilSpine', slab(0.13, 0.84, 0.13), { y: 0.8, mat: IRON });
+  P('coilRing', prism(0.18, 0.18, 0.05, 6), { y: 0.56, mat: COP });
+  P('coilRing', prism(0.18, 0.18, 0.05, 6), { y: 0.76, mat: COP });
+  P('coilRing', prism(0.18, 0.18, 0.05, 6), { y: 0.96, mat: COP });
+  P('coilCollar', prism(0.19, 0.15, 0.16, 6), { y: 1.2, mat: CER });
   P('coilFoot', prism(0.26, 0.3, 0.18, 6), { y: 0.16 });
-  // A low outrigger each side, so it stands rather than balances.
-  P('coilStrut', slab(0.05, 0.44, 0.05), { x: -0.19, y: 0.3, rz: 0.5 });
-  P('coilStrut', slab(0.05, 0.44, 0.05), { x: 0.19, y: 0.3, rz: -0.5 });
+  // An iron base ring through the outriggers, so the struts read as bolted to
+  // something rather than as two loose sticks.
+  P('coilBase', prism(0.2, 0.25, 0.06, 6), { y: 0.28, mat: IRON });
+  P('coilStrut', slab(0.05, 0.44, 0.05), { x: -0.19, y: 0.3, rz: 0.5, mat: IRON });
+  P('coilStrut', slab(0.05, 0.44, 0.05), { x: 0.19, y: 0.3, rz: -0.5, mat: IRON });
   eyes(P, { y: 1.16, x: 0.1, z: -0.18, r: 0.75, mat: e.eyeMat });
 }
 
-// A standing barbell. Two heavy drum plates held apart at chest height on a
-// squat frame, with the charge building in the gap - so the meter the player
-// is filling is a thing on the model rather than a number nobody can see.
+// A standing barbell. Two wound drums held apart at chest height on a squat
+// frame, with the charge building in the gap - so the meter the player is
+// filling is a thing on the model rather than a number nobody can see.
 export function buildDynamo(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // THE DRUMS ARE HELD CLEAR OF EVERYTHING, and that is not a style choice.
   // The first draft had them at 0.36 either side of a torso 0.36 wide, so the
   // body filled the gap exactly and the silhouette came out as one solid
   // blob - the same failure the bellows had, where the central mass bridged
   // the space the whole design is built on. Pushed out past the body, and the
-  // only thing crossing between them is the axle.
+  // only things crossing the gap are the axle, the core, and the two porcelain
+  // bushings the drums are wound onto it through.
   const drum = prism(0.34, 0.34, 0.14, 6);
   P('dynDrum', drum, { x: -0.54, y: 0.98, rz: Math.PI / 2 });
   P('dynDrum', drum, { x: 0.54, y: 0.98, rz: Math.PI / 2 });
+  // The copper rim on each drum's OUTER face, proud of the plate: the wound
+  // coil that says these are stators, not weights.
+  P('dynRim', prism(0.29, 0.29, 0.05, 6), { x: -0.64, y: 0.98, rz: Math.PI / 2, mat: COP });
+  P('dynRim', prism(0.29, 0.29, 0.05, 6), { x: 0.64, y: 0.98, rz: Math.PI / 2, mat: COP });
   // THE STORED CHARGE. Held on the enemy and grown by aiDynamo as the meter
-  // fills, so a dynamo about to go off is visibly about to go off.
+  // fills, so a dynamo about to go off is visibly about to go off. The
+  // bushings sit just inside the drums' faces; even at full scale the core
+  // does not reach them, so the meter is never clipped by its own frame.
   e.dynCore = P('dynCore', shard(0.19), { y: 0.98, mat: e.eyeMat, shadow: false });
-  P('dynAxle', slab(1.12, 0.07, 0.07), { y: 0.98 });
+  P('dynAxle', slab(1.12, 0.07, 0.07), { y: 0.98, mat: IRON });
+  P('dynBush', prism(0.11, 0.11, 0.06, 6), { x: -0.42, y: 0.98, rz: Math.PI / 2, mat: CER });
+  P('dynBush', prism(0.11, 0.11, 0.06, 6), { x: 0.42, y: 0.98, rz: Math.PI / 2, mat: CER });
   // AND NO HEAD. The gap has to stay empty from the axle to the top of the
   // drums, and a head on a neck is exactly the wrong height to put anything
   // there - so this one is a device rather than an animal, which is what the
   // capacitor already is and what the theme reads as anyway.
   P('dynTorso', prism(0.24, 0.32, 0.56, 6), { y: 0.48 });
+  P('dynBelt', prism(0.32, 0.34, 0.1, 6), { y: 0.3, mat: COP });
   P('dynCowl', slab(0.28, 0.2, 0.22), { y: 0.66, z: -0.16, rx: -0.3 });
-  // Short thick legs, set wide. A brute that looked like it could run would
-  // be lying, and this one has to look like it is BRACED.
+  // A pair of vent stacks off the back of the shoulders - the discharge has
+  // to look like it has somewhere to come from.
+  P('dynStack', prism(0.05, 0.065, 0.3, 4), { x: -0.1, y: 0.68, z: 0.3, rx: 0.35, mat: IRON });
+  P('dynStack', prism(0.05, 0.065, 0.3, 4), { x: 0.1, y: 0.68, z: 0.3, rx: 0.35, mat: IRON });
+  // Short thick legs, set wide, on iron feet. A brute that looked like it
+  // could run would be lying, and this one has to look like it is BRACED.
   P('dynLeg', slab(0.2, 0.34, 0.22), { x: -0.26, y: 0.17 });
   P('dynLeg', slab(0.2, 0.34, 0.22), { x: 0.26, y: 0.17 });
+  P('dynFoot', slab(0.24, 0.09, 0.34), { x: -0.26, y: 0.05, z: -0.02, mat: IRON });
+  P('dynFoot', slab(0.24, 0.09, 0.34), { x: 0.26, y: 0.05, z: -0.02, mat: IRON });
   // Two stub arms, LOW and forward, for the swing it still has - below the
   // drums rather than beside them, or they would fill the gap from the side.
+  // Copper cuffs at the wrist, where the swing is wound.
   P('dynArm', slab(0.11, 0.11, 0.36), { x: -0.36, y: 0.5, z: -0.2 });
   P('dynArm', slab(0.11, 0.11, 0.36), { x: 0.36, y: 0.5, z: -0.2 });
+  P('dynCuff', slab(0.14, 0.14, 0.14), { x: -0.36, y: 0.5, z: -0.31, mat: COP });
+  P('dynCuff', slab(0.14, 0.14, 0.14), { x: 0.36, y: 0.5, z: -0.31, mat: COP });
   eyes(P, { y: 0.68, x: 0.1, z: -0.28, r: 0.8, mat: e.eyeMat });
 }
 
@@ -103,52 +183,93 @@ export function buildDynamo(e, g, s) {
 // says "this is pointed at the sky" from anywhere in the room.
 export function buildStormcaller(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // THE MAST. It has to break the top of the silhouette by a long way or the
-  // enemy is a blight with different colours.
-  P('stormMast', slab(0.07, 1.35, 0.07), { x: 0.22, y: 1.5, rz: -0.2 });
+  // enemy is a blight with different colours. Copper binding collars down the
+  // shaft mark it as wound, and the tip is caught in a three-prong crown so
+  // the top of it is a fork like everything else in the theme.
+  P('stormMast', slab(0.07, 1.35, 0.07), { x: 0.22, y: 1.5, rz: -0.2, mat: IRON });
+  P('stormCollar', prism(0.1, 0.1, 0.07, 4), { x: 0.18, y: 1.3, rz: -0.2, mat: COP });
+  P('stormCollar', prism(0.1, 0.1, 0.07, 4), { x: 0.27, y: 1.75, rz: -0.2, mat: COP });
   e.stormTip = P('stormTip', shard(0.14), {
     x: 0.44, y: 2.12, mat: e.eyeMat, shadow: false,
   });
-  // Two short catch-prongs at the mast's foot, so the top of it is a fork like
-  // everything else in the theme rather than a plain stick.
-  P('stormFork', slab(0.05, 0.3, 0.05), { x: 0.31, y: 1.9, rz: -0.5 });
-  P('stormFork', slab(0.05, 0.3, 0.05), { x: 0.5, y: 1.9, rz: 0.3 });
-  // Leaning back, and asymmetric - one shoulder is carrying everything.
+  P('stormFork', slab(0.05, 0.3, 0.05), { x: 0.31, y: 1.9, rz: -0.5, mat: IRON });
+  P('stormFork', slab(0.05, 0.3, 0.05), { x: 0.5, y: 1.9, rz: 0.3, mat: IRON });
+  P('stormForkC', spike(0.04, 0.24, 4), { x: 0.37, y: 2.02, rz: -0.2, mat: IRON });
+  // Leaning back, and asymmetric - one shoulder is carrying everything. The
+  // power has to come from somewhere: a copper drum slung on the small of the
+  // back, and a porcelain bus through the pauldron the mast grows out of.
   P('stormTorso', prism(0.24, 0.3, 0.6, 5), { y: 0.86, rx: 0.22 });
+  P('stormDrum', prism(0.13, 0.13, 0.16, 6), { x: -0.1, y: 1.02, z: 0.2, rx: 0.22, mat: COP });
   P('stormPauldron', prism(0.16, 0.2, 0.16, 5), { x: 0.28, y: 1.16, rz: -0.4 });
+  P('stormBus', prism(0.08, 0.08, 0.14, 6), { x: 0.16, y: 1.24, rz: -0.2, mat: CER });
   P('stormHead', slab(0.22, 0.2, 0.2), { y: 1.28, z: -0.1, rx: 0.2 });
+  P('stormBrow', slab(0.26, 0.06, 0.28), { y: 1.42, z: -0.08, mat: IRON });
+  // One arm on the mast, the other thrown back off it - the pose of a thing
+  // braced against what it is about to bring down.
   P('stormArm', slab(0.09, 0.09, 0.4), { x: 0.26, y: 1.02, z: -0.1, rx: 0.5 });
+  P('stormArmB', slab(0.08, 0.08, 0.32), { x: -0.24, y: 0.98, z: 0.1, ry: 0.5, rx: 0.2, mat: IRON });
   P('stormLeg', slab(0.11, 0.5, 0.13), { x: -0.16, y: 0.26 });
   P('stormLeg', slab(0.11, 0.5, 0.13), { x: 0.16, y: 0.26 });
+  P('stormFoot', slab(0.15, 0.06, 0.24), { x: -0.16, y: 0.03, z: -0.03, mat: IRON });
+  P('stormFoot', slab(0.15, 0.06, 0.24), { x: 0.16, y: 0.03, z: -0.03, mat: IRON });
   eyes(P, { y: 1.3, x: 0.09, z: -0.22, r: 0.75, mat: e.eyeMat });
 }
 
-// A stack of plates on a stalk, with a core in every gap. No head and no
-// limbs at all - it is obviously a device rather than an animal, which is what
-// a support has to read as before the player can be asked to shoot it first.
+// A stack of plates on a stalk, with a core caged in every gap. No head and
+// no limbs at all - it is obviously a device rather than an animal, which is
+// what a support has to read as before the player can be asked to shoot it
+// first.
 export function buildCapacitor(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   const plate = prism(0.36, 0.36, 0.07, 6);
   // THREE PLATES, TWO GAPS. Three is the count that reads as a stack; two
-  // would read as a drum and four as a column.
+  // would read as a drum and four as a column. Each plate carries the copper
+  // rim of the foil it is wound from - the read of a real capacitor, cells
+  // and all.
   P('capPlate', plate, { y: 0.66 });
   P('capPlate', plate, { y: 1.04 });
   P('capPlate', plate, { y: 1.42 });
-  // The cores in the gaps, which is where the theme's language lives.
+  P('capRim', () => new THREE.TorusGeometry(0.34, 0.035, 6, 12), { y: 0.66, rx: Math.PI / 2, mat: COP });
+  P('capRim', () => new THREE.TorusGeometry(0.34, 0.035, 6, 12), { y: 1.04, rx: Math.PI / 2, mat: COP });
+  P('capRim', () => new THREE.TorusGeometry(0.34, 0.035, 6, 12), { y: 1.42, rx: Math.PI / 2, mat: COP });
+  // The cores in the gaps, which is where the theme's language lives - and
+  // each gap is CAGED by a pair of thin rods, so the bright thing is visibly
+  // HELD APART from the plates. The cages never rotate; aiCapacitor spins
+  // what they are holding.
   e.capCoreA = P('capCore', shard(0.14), { y: 0.85, mat: e.eyeMat, shadow: false });
   e.capCoreB = P('capCore', shard(0.14), { y: 1.23, mat: e.eyeMat, shadow: false });
-  // The stalk through them, and three thin legs. Nothing else.
-  P('capStalk', slab(0.1, 1.3, 0.1), { y: 1.0 });
+  P('capCage', slab(0.03, 0.34, 0.03), { x: -0.2, y: 0.85, mat: IRON });
+  P('capCage', slab(0.03, 0.34, 0.03), { x: 0.2, y: 0.85, mat: IRON });
+  P('capCage', slab(0.03, 0.34, 0.03), { z: -0.2, y: 1.23, mat: IRON });
+  P('capCage', slab(0.03, 0.34, 0.03), { z: 0.2, y: 1.23, mat: IRON });
+  // The stalk through them, wound at the neck, with a porcelain seat at the
+  // base - and three legs on porcelain feet.
+  P('capStalk', slab(0.1, 1.3, 0.1), { y: 1.0, mat: IRON });
+  P('capWind', prism(0.15, 0.15, 0.05, 6), { y: 0.52, mat: COP });
+  P('capWind', prism(0.15, 0.15, 0.05, 6), { y: 1.52, mat: COP });
+  P('capSeat', prism(0.14, 0.18, 0.1, 6), { y: 0.35, mat: CER });
   for (let i = 0; i < 3; i++) {
     const ang = (i / 3) * Math.PI * 2 + 0.5;
     P('capLeg', slab(0.05, 0.6, 0.05), {
       x: Math.cos(ang) * 0.2, y: 0.3, z: Math.sin(ang) * 0.2,
-      rz: Math.cos(ang) * -0.45, rx: Math.sin(ang) * 0.45,
+      rz: Math.cos(ang) * -0.45, rx: Math.sin(ang) * 0.45, mat: IRON,
+    });
+    P('capPip', slab(0.1, 0.07, 0.1), {
+      x: Math.cos(ang) * 0.33, y: 0.05, z: Math.sin(ang) * 0.33, mat: CER,
     });
   }
-  // A single eye on the top plate, and only one: a device that watches rather
-  // than a face that looks.
-  P('capEye', shard(0.08), { y: 1.52, mat: e.eyeMat, shadow: false });
+  // A single eye on a fork at the top of the stalk, and only one: a device
+  // that watches rather than a face that looks.
+  P('capEye', shard(0.08), { y: 1.56, mat: e.eyeMat, shadow: false });
+  P('capFork', slab(0.04, 0.2, 0.04), { x: -0.08, y: 1.58, rz: 0.32, mat: IRON });
+  P('capFork', slab(0.04, 0.2, 0.04), { x: 0.08, y: 1.58, rz: -0.32, mat: IRON });
 }
 
 // A pair of swept vanes with the middle taken out. Read from below - which is
@@ -156,20 +277,42 @@ export function buildCapacitor(e, g, s) {
 // bright bar across the gap, and nothing that looks like a body.
 export function buildSquall(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // THE VANES. Long, thin and swept back hard, and they carry the whole
   // outline: a squall has no attack, so it has to be recognisable in the two
-  // seconds before it arrives or it is simply an unexplained shove.
+  // seconds before it arrives or it is simply an unexplained shove. A copper
+  // leading edge and an iron tip pod each, so the pair reads as WINGS, not
+  // as two planks.
   P('sqVane', slab(0.9, 0.06, 0.24), { x: -0.62, y: 0.6, z: 0.16, ry: 0.5, rz: 0.28 });
   P('sqVane', slab(0.9, 0.06, 0.24), { x: 0.62, y: 0.6, z: 0.16, ry: -0.5, rz: -0.28 });
+  // The edge strip sits at the vane's own local front corner - computed from
+  // the vane's ry/rz, not eyeballed - or it hovers off the lip and reads as a
+  // loose rod rather than as the wing's leading edge.
+  P('sqEdge', slab(0.92, 0.05, 0.05), { x: -0.677, y: 0.6, z: 0.055, ry: 0.5, rz: 0.28, mat: COP });
+  P('sqEdge', slab(0.92, 0.05, 0.05), { x: 0.677, y: 0.6, z: 0.055, ry: -0.5, rz: -0.28, mat: COP });
+  P('sqPod', slab(0.12, 0.09, 0.2), { x: -1.0, y: 0.5, z: 0.36, ry: 0.5, mat: IRON });
+  P('sqPod', slab(0.12, 0.09, 0.2), { x: 1.0, y: 0.5, z: 0.36, ry: -0.5, mat: IRON });
   // Two short inner spars holding the vanes off a centre that is not there.
-  P('sqSpar', slab(0.3, 0.07, 0.07), { x: -0.24, y: 0.6, rz: 0.2 });
-  P('sqSpar', slab(0.3, 0.07, 0.07), { x: 0.24, y: 0.6, rz: -0.2 });
-  // THE BAR ACROSS THE GAP, bright, and the only thing in the middle.
+  P('sqSpar', slab(0.3, 0.07, 0.07), { x: -0.24, y: 0.6, rz: 0.2, mat: IRON });
+  P('sqSpar', slab(0.3, 0.07, 0.07), { x: 0.24, y: 0.6, rz: -0.2, mat: IRON });
+  // THE BAR ACROSS THE GAP, bright, and the only thing in the middle - hung
+  // between porcelain collars, and riding a small gondola so the centre has
+  // a body worth aiming at.
   P('sqCore', slab(0.26, 0.09, 0.09), { y: 0.6, mat: e.eyeMat, shadow: false });
-  // A small forward prow so it has a direction, and a stub tail so it has a
-  // back. Both deliberately tiny - the mass is all out on the vanes.
+  P('sqCollar', prism(0.065, 0.065, 0.06, 6), { x: -0.17, y: 0.6, rz: Math.PI / 2, mat: CER });
+  P('sqCollar', prism(0.065, 0.065, 0.06, 6), { x: 0.17, y: 0.6, rz: Math.PI / 2, mat: CER });
+  P('sqGond', prism(0.1, 0.14, 0.16, 5), { y: 0.44, z: 0.04 });
+  // A small forward prow so it has a direction - with a canard barb each side
+  // of it - and a stub tail with its own planes so it has a back. Both
+  // deliberately tiny: the mass is all out on the vanes.
   P('sqProw', spike(0.11, 0.42, 4), { y: 0.6, z: -0.34, rx: -Math.PI / 2 });
+  P('sqCanard', slab(0.18, 0.04, 0.1), { x: -0.13, y: 0.6, z: -0.26, rz: 0.3, mat: IRON });
+  P('sqCanard', slab(0.18, 0.04, 0.1), { x: 0.13, y: 0.6, z: -0.26, rz: -0.3, mat: IRON });
   P('sqTail', spike(0.09, 0.3, 4), { y: 0.6, z: 0.3, rx: Math.PI / 2 });
+  P('sqTailplane', slab(0.22, 0.04, 0.12), { x: -0.16, y: 0.58, z: 0.34, mat: IRON });
+  P('sqTailplane', slab(0.22, 0.04, 0.12), { x: 0.16, y: 0.58, z: 0.34, mat: IRON });
   // A KEEL AND A FIN, and they are what make it an enemy rather than a smear.
   // Two swept vanes and nothing else is a horizontal line, and a horizontal
   // line seen from the floor at player eye height is a scratch on the screen -
@@ -177,42 +320,46 @@ export function buildSquall(e, g, s) {
   // gives it height to be recognised by, and it is a different cross from the
   // mothcap's ragged disc and the sleet's hanging column.
   P('sqFin', slab(0.08, 0.44, 0.34), { y: 0.84, z: 0.1 });
+  P('sqFinStrip', slab(0.05, 0.05, 0.3), { y: 1.04, z: 0.1, mat: COP });
   P('sqKeel', spike(0.15, 0.6, 4), { y: 0.32, z: -0.04, rx: Math.PI });
+  P('sqKeelRing', prism(0.13, 0.13, 0.05, 6), { y: 0.36, z: -0.04, mat: CER });
   eyes(P, { y: 0.62, x: 0.11, z: -0.22, r: 0.7, mat: e.eyeMat });
 }
 
-// A mast in the floor: two rails with bright rungs between them. Deliberately
-// NOT an anchor - the Crown's anchor is a spike driven in, a lock on a door,
-// and this is a thing with two ends and a line running out of the top of it.
+// A mast in the floor: two rails with bright rungs between them, latticed
+// like a real transmission tower. Deliberately NOT an anchor - the Crown's
+// anchor is a spike driven in, a lock on a door, and this is a thing with two
+// ends and a line running out of the top of it.
 export function buildPylon(e, g, s) {
   const P = partsFor(e, g, s);
-  P('pylRail', slab(0.09, 1.7, 0.09), { x: -0.2, y: 0.9, rz: 0.05 });
-  P('pylRail', slab(0.09, 1.7, 0.09), { x: 0.2, y: 0.9, rz: -0.05 });
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
+  P('pylRail', slab(0.09, 1.7, 0.09), { x: -0.2, y: 0.9, rz: 0.05, mat: IRON });
+  P('pylRail', slab(0.09, 1.7, 0.09), { x: 0.2, y: 0.9, rz: -0.05, mat: IRON });
+  // The lattice: two cross braces low on the mast. Iron against iron, but
+  // they are what separates a tower from two sticks standing near each other.
+  P('pylBrace', slab(0.46, 0.05, 0.05), { y: 0.52, rz: 0.4, mat: COP });
+  P('pylBrace', slab(0.46, 0.05, 0.05), { y: 0.52, rz: -0.4, mat: COP });
   // The rungs. Bright, so the pylon is findable across a room at a glance -
-  // which is the only thing it has to be.
+  // which is the only thing it has to be. Each is mounted into the rails
+  // through a porcelain puck at either end.
   for (let i = 0; i < 3; i++) {
-    P('pylRung', slab(0.34, 0.06, 0.06), {
-      y: 0.5 + i * 0.42, mat: e.eyeMat, shadow: false,
-    });
+    const y = 0.5 + i * 0.42;
+    P('pylRung', slab(0.34, 0.06, 0.06), { y, mat: e.eyeMat, shadow: false });
+    P('pylPuck', prism(0.05, 0.05, 0.08, 6), { x: -0.17, y, rz: Math.PI / 2, mat: CER });
+    P('pylPuck', prism(0.05, 0.05, 0.08, 6), { x: 0.17, y, rz: Math.PI / 2, mat: CER });
   }
-  // A splayed foot, and a fork at the top where the boss's line lands.
+  // A splayed foot on a copper grounding plate, and a fork at the top where
+  // the boss's line lands.
   P('pylFoot', prism(0.24, 0.44, 0.2, 6), { y: 0.1 });
-  P('pylFork', slab(0.06, 0.36, 0.06), { x: -0.17, y: 1.92, rz: 0.4 });
-  P('pylFork', slab(0.06, 0.36, 0.06), { x: 0.17, y: 1.92, rz: -0.4 });
+  P('pylBase', prism(0.3, 0.4, 0.08, 6), { y: 0.04, mat: COP });
+  P('pylFork', slab(0.06, 0.36, 0.06), { x: -0.17, y: 1.92, rz: 0.4, mat: IRON });
+  P('pylFork', slab(0.06, 0.36, 0.06), { x: 0.17, y: 1.92, rz: -0.4, mat: IRON });
+  P('pylCollar', prism(0.08, 0.08, 0.08, 6), { x: -0.12, y: 1.76, rz: 0.4, mat: CER });
+  P('pylCollar', prism(0.08, 0.08, 0.08, 6), { x: 0.12, y: 1.76, rz: -0.4, mat: CER });
   e.pylTip = P('pylTip', shard(0.13), { y: 2.14, mat: e.eyeMat, shadow: false });
 }
-
-// ---- BRINE -----------------------------------------------------------------
-// The theme's language: A SHELL THAT DOES NOT FIT, and something hanging off
-// it. Every body is a smooth swollen mass with hard crusted plate laid over it
-// a size out - bulging past the plate or hanging below it - and every one of
-// them trails an appendage the plate does not cover: a lure, a siphon, a
-// frond, a curtain.
-//
-// Where TEMPEST is held apart and STRATA is cut, BRINE is ENCRUSTED. The rule
-// that keeps it from reading as VERDANT's raggedness is that the plates are
-// SMOOTH and the thing under them is smooth too - nothing here is torn, it is
-// all grown over.
 
 // THE CONDUCTOR. The theme's fork, grown to the size of a boss and held over
 // its own head - two enormous prongs sweeping up and out with the core slung
@@ -220,39 +367,74 @@ export function buildPylon(e, g, s) {
 //
 // The crown is the tell for the whole fight: it BRIGHTENS on every bar, so
 // the count the player has to keep is written on the boss rather than only in
-// the music.
+// the music. When the core flares past the collars that hold it, that is the
+// fourth bar arriving.
 export function buildConductor(e, g, s) {
   const P = partsFor(e, g, s);
+  const IRON = SHARED_MATS.tempestIron;
+  const COP = SHARED_MATS.tempestCopper;
+  const CER = SHARED_MATS.tempestCeramic;
   // The prongs. They carry most of the height, and they are the reason this
-  // reads as a conductor rather than as another armoured torso.
+  // reads as a conductor rather than as another armoured torso. Each is wound
+  // with copper twice along its own length, at the spacing that keeps it
+  // clear of the resting core.
   P('condProng', spike(0.16, 1.5, 4), { x: -0.5, y: 2.5, rz: 0.34 });
   P('condProng', spike(0.16, 1.5, 4), { x: 0.5, y: 2.5, rz: -0.34 });
+  P('condCollarP', prism(0.18, 0.18, 0.1, 6), { x: -0.517, y: 2.547, rz: 0.34, mat: COP });
+  P('condCollarP', prism(0.18, 0.18, 0.1, 6), { x: 0.517, y: 2.547, rz: -0.34, mat: COP });
+  P('condCollarP', prism(0.16, 0.16, 0.09, 6), { x: -0.616, y: 2.83, rz: 0.34, mat: COP });
+  P('condCollarP', prism(0.16, 0.16, 0.09, 6), { x: 0.616, y: 2.83, rz: -0.34, mat: COP });
   // THE CROWN CORE, between their roots. Held on the enemy: aiConductor grows
   // and brightens it once per bar, so a player watching the boss and a player
   // listening to the track are counting the same four.
   e.condCore = P('condCore', shard(0.32), { y: 2.32, mat: e.eyeMat, shadow: false });
-  // A yoke joining the prongs, so the crown is one object.
-  P('condYoke', slab(0.96, 0.16, 0.2), { y: 1.98 });
+  // A yoke joining the prongs over a copper underbar, so the crown is one
+  // object, and porcelain seats where the prongs come through it.
+  P('condYoke', slab(0.96, 0.16, 0.2), { y: 1.98, mat: IRON });
+  P('condUnder', slab(0.84, 0.07, 0.15), { y: 1.83, mat: COP });
+  P('condSeat', prism(0.15, 0.15, 0.1, 6), { x: -0.38, y: 2.06, rz: 0.34, mat: CER });
+  P('condSeat', prism(0.15, 0.15, 0.1, 6), { x: 0.38, y: 2.06, rz: -0.34, mat: CER });
   // A tall narrow torso - it is a conductor, not a siege engine, and it should
-  // look like it could be knocked over even though it cannot.
+  // look like it could be knocked over even though it cannot. The iron chest
+  // plate and its copper ribs give the front something to BE, at the distance
+  // the fight is fought from.
   P('condTorso', prism(0.36, 0.5, 1.1, 6), { y: 1.28 });
+  P('condChest', slab(0.5, 0.66, 0.1), { y: 1.44, z: -0.36, mat: IRON });
+  P('condRib', slab(0.54, 0.06, 0.06), { y: 1.66, z: -0.42, mat: COP });
+  P('condRib', slab(0.54, 0.06, 0.06), { y: 1.26, z: -0.42, mat: COP });
   P('condCollar', prism(0.4, 0.32, 0.2, 6), { y: 1.88 });
   P('condHead', slab(0.3, 0.28, 0.28), { y: 1.72, z: -0.2 });
+  P('condBrow', slab(0.34, 0.08, 0.3), { y: 1.85, z: -0.22, mat: IRON });
   // ARMS OUT, and held there. The pose is the whole character: it is not
-  // reaching for the player, it is holding the arena.
+  // reaching for the player, it is holding the arena. Forked claw hands, so
+  // even the hands are the theme.
+  P('condPauldron', prism(0.2, 0.26, 0.2, 5), { x: -0.66, y: 1.84, mat: IRON });
+  P('condPauldron', prism(0.2, 0.26, 0.2, 5), { x: 0.66, y: 1.84, mat: IRON });
   P('condArm', slab(0.12, 0.12, 0.9), { x: -0.66, y: 1.62, rz: 0.3, ry: 1.2 });
   P('condArm', slab(0.12, 0.12, 0.9), { x: 0.66, y: 1.62, rz: -0.3, ry: -1.2 });
+  P('condCuff', slab(0.16, 0.16, 0.18), { x: -0.98, y: 1.48, mat: COP });
+  P('condCuff', slab(0.16, 0.16, 0.18), { x: 0.98, y: 1.48, mat: COP });
   P('condHand', shard(0.2), { x: -1.06, y: 1.44 });
   P('condHand', shard(0.2), { x: 1.06, y: 1.44 });
+  P('condClaw', spike(0.055, 0.3, 4), { x: -1.06, y: 1.5, z: -0.22, rx: -Math.PI / 2, mat: IRON });
+  P('condClaw', spike(0.055, 0.3, 4), { x: -1.06, y: 1.38, z: -0.22, rx: -Math.PI / 2, mat: IRON });
+  P('condClaw', spike(0.055, 0.3, 4), { x: 1.06, y: 1.5, z: -0.22, rx: -Math.PI / 2, mat: IRON });
+  P('condClaw', spike(0.055, 0.3, 4), { x: 1.06, y: 1.38, z: -0.22, rx: -Math.PI / 2, mat: IRON });
   // Three rings around the waist, spaced - the same stacked-plate motif the
-  // capacitor is built from, at boss scale.
+  // capacitor is built from, at boss scale, with a copper counter-ring riding
+  // between the top two.
   const ring = prism(0.56, 0.56, 0.08, 6);
   P('condRing', ring, { y: 0.94 });
   P('condRing', ring, { y: 0.7 });
   P('condRing', ring, { y: 0.46 });
+  P('condRingC', prism(0.6, 0.6, 0.05, 8), { y: 0.82, mat: COP });
   // Heavy feet, set wide. It walks, and it must not look like it floats.
   P('condLeg', slab(0.26, 0.44, 0.3), { x: -0.34, y: 0.22 });
   P('condLeg', slab(0.26, 0.44, 0.3), { x: 0.34, y: 0.22 });
+  P('condKnee', slab(0.3, 0.24, 0.08), { x: -0.34, y: 0.42, z: -0.2, mat: IRON });
+  P('condKnee', slab(0.3, 0.24, 0.08), { x: 0.34, y: 0.42, z: -0.2, mat: IRON });
+  P('condFoot', slab(0.34, 0.1, 0.46), { x: -0.34, y: 0.05, z: -0.03, mat: IRON });
+  P('condFoot', slab(0.34, 0.1, 0.46), { x: 0.34, y: 0.05, z: -0.03, mat: IRON });
   eyes(P, { y: 1.76, x: 0.14, z: -0.34, r: 1.1, mat: e.eyeMat });
 }
 

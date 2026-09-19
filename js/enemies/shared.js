@@ -266,6 +266,24 @@ export const SHARED_MATS = {
     color: 0x9ee8ff, emissive: 0x5bd0ff, emissiveIntensity: 1.3,
     roughness: 0.25, metalness: 0.6, transparent: true, opacity: 0.9,
   }),
+  // ---- TEMPEST --------------------------------------------------------------
+  // One structural metal and one winding metal, the tank's contract: the
+  // family reads as TEMPEST through dark iron frames and copper windings, and
+  // both keep their colour while the body under them is tinted by a status -
+  // so a frozen coil is still recognisably a charged machine. The lit accent
+  // is deliberately absent here: the theme's glow is the charge core, and
+  // those live on e.eyeMat because their flash IS the mechanic (a coil's core
+  // swelling is its alert). The porcelain insulator is plain white and stays
+  // unlit so it never competes with the core it is mounting.
+  tempestIron: new THREE.MeshStandardMaterial({
+    color: 0x24304a, roughness: 0.35, metalness: 0.72,
+  }),
+  tempestCopper: new THREE.MeshStandardMaterial({
+    color: 0xb07a3e, roughness: 0.3, metalness: 0.85,
+  }),
+  tempestCeramic: new THREE.MeshStandardMaterial({
+    color: 0xe8eef4, roughness: 0.5, metalness: 0.05,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 
