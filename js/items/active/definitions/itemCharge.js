@@ -24,7 +24,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // Player.dash), so the envelope, the window and the hand-back are still
     // BLINK DRIVE's to the frame, and the two items are still the same
     // movement with different things happening on the way.
-    effects: [['DASH THROUGH ENEMIES,', GOOD], ['DEALING 3x DAMAGE, SAFE', GOOD]],
+    effects: [['DASH THROUGH ENEMIES,', GOOD], ['DEALING 3x DAMAGE,', GOOD], ['SAFE THE WHOLE WAY', NOTE]],
     duration: 0.7,
     hud: false,
     use: (game, s) => {

@@ -24,7 +24,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // to a ceiling of +100% the hundred-kill chain is the target rather than
     // the accident, and what it costs you is that any hit at all takes it all
     // back - which is the whole drawback now that no health is charged for it.
-    effects: [['EACH KILL: +1% DMG', GOOD], ['UP TO +100%', NOTE], ['A HIT RESETS IT', BAD]],
+    effects: [['EACH KILL: +1% DMG', GOOD], ['UP TO +100%', NOTE], ['GETTING HIT RESETS IT', BAD]],
     apply: (mods, n) => {
       mods.carnageStep = 0.01 * n;
       mods.carnageMax = 1.0 * n;

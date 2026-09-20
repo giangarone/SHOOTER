@@ -16,6 +16,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // the same kills, so what the player is really buying is the right to bank
     // charge they would otherwise have thrown away - see the clamp in
     // Player.addItemCharge, which used to drop the overflow on the floor.
-    effects: [['STORE 2 ITEM CHARGES', GOOD], ['THE 2nd FILLS AFTER', NOTE]],
+    effects: [['STORE 2 ITEM CHARGES', GOOD], ['THE 2nd FILLS ONCE', NOTE], ['THE 1st IS FULL', NOTE]],
     apply: (mods, n) => { mods.activeItemChargeCap = 1 + n; },
 }));

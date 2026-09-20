@@ -22,6 +22,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'BEDBUGS',
     max: 1,
     theme: THEME.bedbugs,
-    effects: [['EVERY HIT LANDS TWICE:', GOOD], ['25% AGAIN, 2s LATER', NOTE]],
+    effects: [['EVERY HIT BITES AGAIN', GOOD], ['2s LATER, AT 25% DMG', NOTE]],
     apply: (mods, n) => { mods.bedbugs = 0.25 * n; mods.bedbugsDelay = 2; },
 }));

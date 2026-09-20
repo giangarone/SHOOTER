@@ -17,7 +17,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'STIGMATA',
     max: 1,
     theme: THEME.stigmata,
-    effects: [['MISSES THAT PASS WITHIN', NOTE], ['0.5m DEAL 10% CHIP', GOOD]],
+    effects: [['MISSES PASSING WITHIN', NOTE], ['0.5m DEAL 10% OF', GOOD], ['THE SHOT AS CHIP', NOTE]],
     apply: (mods, n) => { mods.stigmata = n; },
 }));
 

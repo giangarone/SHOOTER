@@ -23,7 +23,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // cannot climb, and the ones that fly are above it anyway - so what the
     // player is buying is ten seconds in which the room's own geometry is the
     // only safe thing in it, and they are the only one who knows that.
-    effects: [['THE WHOLE FLOOR BURNS', GOOD], ['FOR 10s - YOU TOO, GET UP', NOTE]],
+    effects: [['THE WHOLE FLOOR BURNS', GOOD], ['YOU TOO, FOR 10s', NOTE], ['GET UP ON SOMETHING', NOTE]],
     duration: 10,
     use: (game) => {
       game._lavaFloorStart();

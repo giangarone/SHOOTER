@@ -18,7 +18,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // on a 2.5s timer. A single charge that comes back fast reads as mobility;
     // two charges that come back slowly read as an escape saved for the worst
     // moment, and the four items above already cover the worst moment.
-    effects: [['DASH WHERE YOU ARE LOOKING', GOOD]],
+    effects: [['DASH WHERE YOU LOOK', GOOD]],
     use: (game) => {
       // THE DASH GOES WHERE THE VIEW GOES, up as well as along. It used to be
       // flattened onto the floor, which made the one item in the pool that is

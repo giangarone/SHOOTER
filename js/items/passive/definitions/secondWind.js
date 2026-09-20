@@ -11,7 +11,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'SECOND WIND',
     max: 1,
     theme: THEME.wind,
-    effects: [['SPRINT TWICE AS LONG', GOOD], ['STAMINA BACK 2x FAST', GOOD]],
+    effects: [['SPRINT TWICE AS LONG', GOOD], ['STAMINA BACK 2x FASTER', GOOD]],
     apply: (mods, n) => {
       mods.staminaDrain *= Math.pow(0.5, n);
       mods.staminaRegen *= 1 + n;

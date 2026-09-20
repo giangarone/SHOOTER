@@ -23,7 +23,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // AND THE MELEE KILL DOUBLE RIDES ON TOP, untouched: everything this kills
     // with the swing is tagged the way any melee kill is, so a crowd taken
     // down by one hit pays a crowd's worth of doubled bounties.
-    effects: [['MELEE: 5x DMG FOR 8s,', GOOD], ['HITS EVERY ENEMY', NOTE]],
+    effects: [['MELEE: 5x DMG FOR 8s,', GOOD], ['STRIKING EVERY ENEMY', NOTE]],
     duration: 8,
     use: (game) => {
       const p = game.player;

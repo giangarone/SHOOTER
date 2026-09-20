@@ -35,7 +35,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
       ['RELOADS THROW THE MAG', GOOD],
       ['AS A BLAST: 20 DMG PER', NOTE],
       ['ROUND LEFT IN IT', NOTE],
-      ['THAT MAG IS SPENT', BAD],
+      ['THOSE ROUNDS ARE LOST', BAD],
     ],
     apply: (mods, n) => { mods.primedMag = 20 * n; },
 }));

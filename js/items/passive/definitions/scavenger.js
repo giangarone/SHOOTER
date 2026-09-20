@@ -7,8 +7,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     max: 3,
     theme: THEME.salvage,
     effects: (n) => [
-      ['+2 AMMO PER KILL', GOOD],
-      ['FROM ' + step(n, (k) => '+' + 2 * k), NOTE],
+      [step(n, (k) => '+' + 2 * k) + ' AMMO PER KILL', GOOD],
     ],
     apply: (mods, n) => {
       mods.ammoOnKill += 2 * n;

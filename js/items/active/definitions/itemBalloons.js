@@ -20,7 +20,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // NOT BOSSES, and this one is a hard exemption rather than a resistance:
     // a boss is a fight with a floor pattern, and lifting it off the floor for
     // five seconds does not weaken it, it deletes the fight.
-    effects: [['BALLOON THE 5 NEAREST', GOOD], ['ENEMIES UP, 5s, NOT BOSSES', NOTE]],
+    effects: [['BALLOON THE 5 NEAREST', GOOD], ['ENEMIES FOR 5s', NOTE], ['NOT BOSSES', NOTE]],
     use: (game) => {
       let n = 0;
       for (const e of nearestEnemies(game, 5)) {

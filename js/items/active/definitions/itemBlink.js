@@ -16,7 +16,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // same as being safe: the room has to be given time to notice, and one
     // second is roughly a frame more than a chaser needs to close the gap it
     // was already closing.
-    effects: [['TELEPORT TO OPEN GROUND', GOOD], ['1.5s INVINCIBLE', GOOD]],
+    effects: [['TELEPORT TO OPEN GROUND', GOOD], ['IT PICKS WHERE, NOT YOU', NOTE], ['1.5s INVINCIBLE', GOOD]],
     use: (game) => {
       const p = game.player;
       let best = null;

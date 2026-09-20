@@ -9,7 +9,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'FEAR AURA',
     max: 1,
     theme: THEME.fearAura,
-    effects: [['ENEMIES WITHIN 5m FLEE', GOOD], ['EACH, EVERY 30s', NOTE]],
+    effects: [['ENEMIES WITHIN 5m FLEE', GOOD], ['EACH AT MOST EVERY 30s', NOTE]],
     apply: (mods, n) => {
       mods.fearAura = 5 * n;
       mods.fearAuraTime = 5;

@@ -16,7 +16,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // and it is wrong: a stacking buff that refreshes itself off its own
     // output does not end, it just gets bigger until the wave does, and then
     // the item has no shape at all. Eight seconds, from the press.
-    effects: [['+10% DAMAGE PER KILL', GOOD], ['FOR 8s', NOTE]],
+    effects: [['+10% DAMAGE PER KILL', GOOD], ['FOR 8s, MAX 20 KILLS', NOTE]],
     duration: 8,
     use: (game, s) => {
       s.stacks = 0;

@@ -16,7 +16,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'DEATH CLAUSE',
     max: 1,
     theme: THEME.deathClause,
-    effects: [['+20% DAMAGE', GOOD], ['MISS THE MAG LAST', BAD], ['SHOT: LOSE 5 HP', BAD]],
+    effects: [['+20% DAMAGE', GOOD], ['MISS THE LAST ROUND', BAD], ['OF A MAG: LOSE 5 HP', BAD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; mods.deathClause = 5 * n; },
 }));
 

@@ -17,7 +17,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'THIN BLOOD',
     max: 1,
     theme: THEME.thinBlood,
-    effects: [['20% OF DAMAGE TAKEN', GOOD], ['DRAINS $10 PER HP', NOTE], ['ONLY WHILE IN CREDIT', BAD]],
+    effects: [['20% OF DAMAGE TAKEN', GOOD], ['IS PAID IN CREDITS:', NOTE], ['$10/HP, ONLY IN CREDIT', BAD]],
     apply: (mods, n) => { mods.thinBlood = 0.2 * n; mods.thinBloodRate = 10; },
 }));
 

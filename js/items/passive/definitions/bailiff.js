@@ -15,6 +15,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // back after the spend rather than as a cheaper cost: the meter empties
     // when the button is pressed, exactly as it always has, and then a fifth
     // of it comes back. The player sees the item fire and the bar jump.
-    effects: [['USING YOUR ITEM', NOTE], ['REFUNDS 20% OF ITS', GOOD], ['CHARGE BACK', NOTE]],
+    effects: [['USING YOUR ITEM', NOTE], ['REFUNDS 20% OF', GOOD], ['ITS CHARGE', NOTE]],
     apply: (mods, n) => { mods.bailiff = Math.min(0.9, 0.2 * n); },
 }));

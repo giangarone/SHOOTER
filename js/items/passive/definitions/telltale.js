@@ -14,6 +14,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // Counted per TRIGGER PULL and not per pellet - see the _shotHits guard in
     // _resolveHit - or a scattergun would tick the counter eight times a shell
     // and this would read as a permanent crit rather than as a rhythm.
-    effects: [['EVERY 3rd HIT ON THE SAME', NOTE], ['ENEMY IS ALWAYS A CRIT', GOOD]],
+    effects: [['EVERY 3rd HIT ON THE', NOTE], ['SAME ENEMY CRITS', GOOD]],
     apply: (mods, n) => { mods.telltale = 3; },
 }));

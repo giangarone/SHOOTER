@@ -13,6 +13,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'HIGH STAKES',
     max: 1,
     theme: THEME.highStakes,
-    effects: [['REROLLS & BOX ROLLS', GOOD], ['ARE FREE', GOOD], ['10%: DROPPED TO 1 HP', BAD], ['AND 1 AMMO', BAD]],
+    effects: [['REROLLS & BOX ROLLS', GOOD], ['ARE FREE', GOOD], ['10% PER ROLL: YOU', BAD], ['DROP TO 1 HP & 1 AMMO', BAD]],
     apply: (mods, n) => { mods.highStakes = n; mods.stakesOdds = 0.1; },
 }));

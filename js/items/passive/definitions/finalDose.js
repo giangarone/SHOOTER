@@ -9,6 +9,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'FINAL DOSE',
     max: 1,
     theme: THEME.finalDose,
-    effects: [['RELOAD ON YOUR LAST', NOTE], ['ROUND: HEAL 5 HP', GOOD]],
+    effects: [['RELOAD WITH 1 ROUND', NOTE], ['LEFT: HEAL 5 HP', GOOD]],
     apply: (mods, n) => { mods.finalDose = 5 * n; },
 }));

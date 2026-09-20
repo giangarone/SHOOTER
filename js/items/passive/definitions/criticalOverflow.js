@@ -10,7 +10,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'CRITICAL OVERFLOW',
     max: 1,
     theme: THEME.criticalOverflow,
-    effects: [['CRITS: +50% DMG', GOOD], ['AND REFUND 1 AMMO', GOOD], ['OTHER SHOTS: +1 AMMO COST', BAD]],
+    effects: [['CRITS: +50% DMG', GOOD], ['AND REFUND 1 AMMO', GOOD], ['NON-CRITS COST +1 AMMO', BAD]],
     apply: (mods, n) => {
       mods.critMult *= 1 + 0.5 * n;
       mods.critOverflow = n;

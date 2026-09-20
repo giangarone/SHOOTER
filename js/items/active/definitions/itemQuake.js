@@ -17,7 +17,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // is visibly thrown out over half a second instead of being found already
     // scattered on the next frame. That half second IS the item: what the
     // player bought is the walk back, and they have to be able to watch it.
-    effects: [['KNOCK EVERY NEARBY', GOOD], ['ENEMY FLYING, WITH DAMAGE', GOOD]],
+    effects: [['HURLS NEARBY ENEMIES', GOOD], ['FLYING, DEALING DAMAGE', NOTE]],
     use: (game) => {
       const p = game.player;
       const dmg = p.getEffectiveDamage(p.weapon.damage);

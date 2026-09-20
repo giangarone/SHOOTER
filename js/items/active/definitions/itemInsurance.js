@@ -54,7 +54,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // game ends up - a bullet, a burn, a lava patch, a corpse blast - because
     // a policy that only covered bullets would be a policy the player finds
     // the edge of by dying to a pool.
-    effects: [['SURVIVE ONE KILLING BLOW', GOOD], ['AT 1 HP + HEAL 20, 10s', GOOD]],
+    effects: [['FOR 10s: SURVIVE ONE', NOTE], ['KILLING BLOW AT 1 HP', GOOD], ['AND HEAL 20', GOOD]],
     duration: 10,
     use: (game) => {
       const p = game.player;

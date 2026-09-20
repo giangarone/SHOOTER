@@ -21,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // rather than a mod, for the same reason GRAFT's three health is: a
     // rebuildMods() on the next totem claimed would wipe anything written into
     // the block, and this is meant to outlive the build.
-    effects: [['HEAL TO FULL', GOOD], ['10% SLOWER, FOREVER', NOTE]],
+    effects: [['HEAL TO FULL', GOOD], ['EACH PRESS: -10%', NOTE], ['MOVE SPEED, FOREVER', NOTE]],
     use: (game) => {
       const p = game.player;
       p.health = p.maxHealth;

@@ -9,7 +9,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'ECHO CHAMBER',
     max: 1,
     theme: THEME.echoChamber,
-    effects: [['EVERY 4th SHOT FIRES', GOOD], ['TWICE, ECHO IS HALF DMG', NOTE], ['AND COSTS NO AMMO', GOOD]],
+    effects: [['EVERY 4th SHOT FIRES', GOOD], ['A HALF-DMG ECHO', NOTE], ['THAT COSTS NO AMMO', GOOD]],
     apply: (mods, n) => {
       mods.echoEvery = 4;
       mods.echoDamage = 0.5 * n;

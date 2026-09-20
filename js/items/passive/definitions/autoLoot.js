@@ -9,7 +9,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'AUTO-LOOT',
     max: 1,
     theme: THEME.autoLoot,
-    effects: [['ALL CREDITS FLY TO YOU', GOOD], ['ALWAYS', NOTE], ['EACH WORTH HALF', BAD]],
+    effects: [['ALL CREDITS FLY TO YOU', GOOD], ['EACH WORTH HALF', BAD]],
     apply: (mods, n) => {
       mods.autoLoot = n;
       mods.creditMult *= Math.pow(0.5, n);

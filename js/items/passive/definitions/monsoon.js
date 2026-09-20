@@ -16,7 +16,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'MONSOON',
     max: 1,
     theme: THEME.monsoon,
-    effects: [['KILLS WITHIN 5s STACK', GOOD], ['+3% FIRE RATE, MAX 10', NOTE]],
+    effects: [['KILLS 5s APART STACK', GOOD], ['+3% FIRE RATE, MAX 10', NOTE]],
     apply: (mods, n) => {
       mods.monsoon = 0.03 * n;
       mods.monsoonWindow = 5;

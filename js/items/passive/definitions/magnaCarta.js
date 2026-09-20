@@ -16,7 +16,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'MAGNA CARTA',
     max: 1,
     theme: THEME.magnaCarta,
-    effects: [['RELOAD FROM EMPTY:', NOTE], ['MAG +1, FOREVER', GOOD]],
+    effects: [['EACH RELOAD FROM EMPTY:', NOTE], ['MAG +1, FOREVER', GOOD]],
     apply: (mods, n) => { mods.magnaCarta = n; },
 }));
 

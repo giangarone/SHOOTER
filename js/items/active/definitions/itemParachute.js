@@ -24,7 +24,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // the ordinary clear - the flawless streak, the resupply, the shop, all of it.
     // A player who takes no damage buying their way out has still cleared the
     // wave without being touched, which is the honest reading.
-    effects: [['$5,000 PER PRESS', NOTE], ['END THE WAVE NOW, NO BOSSES', GOOD]],
+    effects: [['END THE WAVE NOW', GOOD], ['$5,000 PER PRESS', NOTE], ['NOT ON BOSS WAVES', NOTE]],
     // TWO REFUSALS, in one line and in the same voice an uncharged press gets.
     //
     // THE MONEY is PAY TO WIN's rule exactly: the second item in the pool

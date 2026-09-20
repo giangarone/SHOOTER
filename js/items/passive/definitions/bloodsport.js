@@ -15,6 +15,9 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // button a health regen with a windup; the body has to actually go down.
     // It reads `meleeKill`, the same flag the credit double is decided on, in
     // the same sweep - so the two can never disagree about what a melee kill is.
-    effects: (n) => [['MELEE KILLS HEAL ' + step(n, (k) => 3 * k + ' HP'), GOOD]],
+    effects: (n) => [
+      ['MELEE KILLS HEAL', GOOD],
+      [step(n, (k) => 3 * k + ' HP'), GOOD],
+    ],
     apply: (mods, n) => { mods.meleeHeal += 3 * n; },
 }));

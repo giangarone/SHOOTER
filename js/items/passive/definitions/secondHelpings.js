@@ -17,7 +17,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     name: 'SECOND HELPINGS',
     max: 1,
     theme: THEME.secondHelpings,
-    effects: [['HEALTH CRATES 3x', GOOD], ['AS OFTEN, BUT 50% HEAL', BAD]],
+    effects: [['3x THE HEALTH CRATES,', GOOD], ['EACH HEALS HALF', BAD]],
     apply: (mods, n) => {
       mods.crateLuck = 1 + 3 * n;
       mods.crateHealMult = 1 - 0.5 * n;

@@ -21,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // THE BILL IS COLLECTED IN main.js, at the wave clear, and NOT by an
     // end() here: a running item's window is torn down when the wave ends,
     // which is the exact moment this is supposed to fire.
-    effects: [['HEAL 40 HP NOW', GOOD], ['PAY 30 AT WAVE END', NOTE]],
+    effects: [['HEAL 40 HP NOW', GOOD], ['OWE 30 HP PER PRESS,', NOTE], ['PAID AT WAVE END', NOTE]],
     use: (game) => {
       const p = game.player;
       p.heal(40);

@@ -18,6 +18,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // more than the rest of the build put together. Five clean waves for a
     // flat +40% is still the best rare in the pool and is now a target the
     // player can actually finish.
-    effects: [['CLEAR A WAVE WITHOUT', NOTE], ['BEING HIT: +8% DMG', GOOD], ['AND RATE. STACKS TO +40%', NOTE]],
+    effects: [['CLEAR A WAVE WITHOUT', NOTE], ['BEING HIT: +8% DMG', GOOD], ['AND RATE, MAX +40%', GOOD]],
     apply: (mods, n) => { mods.noHitBonus = 0.08 * n; },
 }));

@@ -10,6 +10,6 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     // the magazine dry on wave 40 as much as on wave 4. It is the one thing in
     // the pool that scales with the enemy instead of with the build - and the
     // health it charges per use is why it needs no drawback beyond itself.
-    effects: [['EMPTY MAGAZINE:', NOTE], ['LIGHTNING HITS ALL ENEMIES', GOOD], ['FOR 20% OF MAX HP', NOTE]],
+    effects: [['EMPTY MAGAZINE:', NOTE], ['ALL ENEMIES TAKE 20%', GOOD], ['OF THEIR MAX HP', NOTE]],
     apply: (mods, n) => { mods.overloadFrac = 0.2 * n; },
 }));

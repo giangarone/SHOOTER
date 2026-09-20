@@ -19,7 +19,8 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown
     max: 3,
     theme: THEME.lodestone,
     effects: (n) => [
-      ['PICKUP RANGE ' + step(n, pctUp(50)), GOOD],
+      ['PICKUP RANGE', NOTE],
+      [step(n, pctUp(50)), GOOD],
       ['MONEY COMES TO YOU', NOTE],
     ],
     // +50% a tier and not more, because the radius it multiplies is already

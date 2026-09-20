@@ -31,8 +31,8 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // been surrounded when they threw it would undo the item outright.
     effects: [
       ['THROW A CYMBAL MONKEY', GOOD],
-      ['ENEMIES IGNORE YOU FOR IT', GOOD],
-      ['IT GOES OFF AFTER ' + MONKEY_FUSE + 's', NOTE],
+      ['ENEMIES CHASE IT,', GOOD],
+      ['NOT YOU. EXPLODES IN ' + MONKEY_FUSE + 's', NOTE],
     ],
     use: (game) => {
       const p = game.player;
