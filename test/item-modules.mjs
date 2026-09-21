@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchBrowser, ROOT, startServer } from './harness.mjs';
 import { buildPages } from '../tools/build-pages.mjs';
+import { DONATION_ITEMS } from '../js/items/donation/index.js';
 
 const PORT = 8249;
 const PAGES_PORT = 8250;
@@ -48,15 +49,22 @@ const check = (name, condition, extra = '') => {
   if (!condition) fails++;
 };
 
-async function fragments(kind) {
-  const dir = path.join(ROOT, 'test', 'items', kind);
-  return (await readdir(dir))
+async function fragments(parts, kind) {
+  const dir = path.join(ROOT, 'test', 'items', ...parts);
+  const files = await readdir(dir).catch((error) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  return files
     .filter((file) => /^[A-Za-z_$][\w$]*\.mjs$/.test(file))
     .sort()
     .map((file) => ({ kind, id: file.slice(0, -4), file: path.join(dir, file) }));
 }
 
 try {
+  check('Node discovers three independent donation catalogues',
+    Object.values(DONATION_ITEMS).every((pool) => Object.keys(pool).length === 3),
+    Object.entries(DONATION_ITEMS).map(([kind, pool]) => `${kind}=${Object.keys(pool).length}`).join(' '));
   browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
@@ -66,8 +74,8 @@ try {
   page.on('pageerror', (error) => errors.push('PAGEERROR: ' + error.message));
   page.on('request', (request) => {
     const url = request.url();
-    if (/\/js\/items\/(passive|active)\/definitions\//.test(url)) directDefinitionRequests.push(url);
-    if (/\/js\/items\/(passive|active)\/modules\/[a-f0-9]{64}\.js$/.test(url)) opaqueModuleRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/definitions\//.test(url)) directDefinitionRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/modules\/[a-f0-9]{64}\.js$/.test(url)) opaqueModuleRequests.push(url);
   });
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
   await sleep(1500);
@@ -75,19 +83,32 @@ try {
   const catalogue = await page.evaluate(() => ({
     passive: Object.keys(window.__game.__passiveItemsForTest),
     active: Object.keys(window.__game.__activeItemsForTest),
+    'donation-ammo': Object.keys(window.__game.__donationItemsForTest.ammo),
+    'donation-health': Object.keys(window.__game.__donationItemsForTest.health),
+    'donation-credits': Object.keys(window.__game.__donationItemsForTest.credits),
   }));
+  const catalogueTotal = Object.values(catalogue).reduce((n, ids) => n + ids.length, 0);
   check('the directory-driven item catalogues boot',
-    catalogue.passive.length > 0 && catalogue.active.length > 0,
-    `${catalogue.passive.length} passive / ${catalogue.active.length} active`);
+    catalogue.passive.length > 0 && catalogue.active.length > 0
+      && catalogue['donation-ammo'].length === 3
+      && catalogue['donation-health'].length === 3
+      && catalogue['donation-credits'].length === 3,
+    `${catalogue.passive.length} passive / ${catalogue.active.length} active / 9 donation`);
   check('browser item URLs are opaque to content blockers',
     directDefinitionRequests.length === 0
-      && opaqueModuleRequests.length === catalogue.passive.length + catalogue.active.length,
+      && opaqueModuleRequests.length === catalogueTotal,
     `${directDefinitionRequests.length} named / ${opaqueModuleRequests.length} opaque`);
   check('Magpie loads without exposing magpie.js in a request URL',
     catalogue.passive.includes('magpie')
       && !opaqueModuleRequests.some((url) => url.toLowerCase().includes('magpie')));
 
-  const all = [...await fragments('passive'), ...await fragments('active')];
+  const all = [
+    ...await fragments(['passive'], 'passive'),
+    ...await fragments(['active'], 'active'),
+    ...await fragments(['donation', 'ammo'], 'donation-ammo'),
+    ...await fragments(['donation', 'health'], 'donation-health'),
+    ...await fragments(['donation', 'credits'], 'donation-credits'),
+  ];
   for (const fragment of all) {
     check(`${fragment.kind} fragment names a real item`,
       catalogue[fragment.kind].includes(fragment.id), fragment.id);
@@ -114,8 +135,8 @@ try {
   pagesPage.on('pageerror', (error) => pagesErrors.push('PAGEERROR: ' + error.message));
   pagesPage.on('request', (request) => {
     const url = request.url();
-    if (/\/js\/items\/(passive|active)\/definitions\//.test(url)) pagesNamedRequests.push(url);
-    if (/\/js\/items\/(passive|active)\/modules\/[a-f0-9]{64}\.js$/.test(url)) {
+    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/definitions\//.test(url)) pagesNamedRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/modules\/[a-f0-9]{64}\.js$/.test(url)) {
       pagesOpaqueRequests.push(url);
     }
   });
@@ -126,14 +147,19 @@ try {
   const pagesCatalogue = await pagesPage.evaluate(() => ({
     passive: Object.keys(window.__game.__passiveItemsForTest),
     active: Object.keys(window.__game.__activeItemsForTest),
+    'donation-ammo': Object.keys(window.__game.__donationItemsForTest.ammo),
+    'donation-health': Object.keys(window.__game.__donationItemsForTest.health),
+    'donation-credits': Object.keys(window.__game.__donationItemsForTest.credits),
   }));
+  const pagesTotal = Object.values(pagesCatalogue).reduce((n, ids) => n + ids.length, 0);
   check('the generated GitHub Pages site boots below a project path',
-    pagesCatalogue.passive.length === catalogue.passive.length
-      && pagesCatalogue.active.length === catalogue.active.length,
-    `${pagesCatalogue.passive.length} passive / ${pagesCatalogue.active.length} active`);
+    Object.keys(catalogue).every((kind) =>
+      pagesCatalogue[kind].length === catalogue[kind].length
+    ),
+    `${pagesCatalogue.passive.length} passive / ${pagesCatalogue.active.length} active / 9 donation`);
   check('the Pages artifact uses only opaque item module URLs',
     pagesNamedRequests.length === 0
-      && pagesOpaqueRequests.length === pagesCatalogue.passive.length + pagesCatalogue.active.length,
+      && pagesOpaqueRequests.length === pagesTotal,
     `${pagesNamedRequests.length} named / ${pagesOpaqueRequests.length} opaque`);
   check('the generated Pages site has no console errors',
     pagesErrors.length === 0, pagesErrors.join(' | '));

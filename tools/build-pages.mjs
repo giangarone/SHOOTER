@@ -10,6 +10,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUTPUT = path.join(ROOT, '.pages');
 const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
+const ITEM_CATALOGUES = {
+  passive: 'passive',
+  active: 'active',
+  'donation-ammo': 'donation/ammo',
+  'donation-health': 'donation/health',
+  'donation-credits': 'donation/credits',
+};
 const SITE_ENTRIES = [
   'assets',
   'css',
@@ -32,9 +39,9 @@ export async function buildPages() {
   await mkdir(manifestDir, { recursive: true });
   const counts = {};
 
-  for (const kind of ['passive', 'active']) {
-    const sourceDir = path.join(ROOT, 'js', 'items', kind, 'definitions');
-    const moduleDir = path.join(destination, 'js', 'items', kind, 'modules');
+  for (const [kind, relative] of Object.entries(ITEM_CATALOGUES)) {
+    const sourceDir = path.join(ROOT, 'js', 'items', relative, 'definitions');
+    const moduleDir = path.join(destination, 'js', 'items', relative, 'modules');
     const files = (await readdir(sourceDir)).filter((file) => ITEM_DEFINITION.test(file)).sort();
     const manifest = [];
     await mkdir(moduleDir, { recursive: true });
@@ -49,7 +56,7 @@ export async function buildPages() {
     // Named definitions are source inputs, not deployed URLs. Leaving them in
     // the artifact would make it too easy to accidentally reintroduce a URL
     // that an extension blocks based on an innocent item name.
-    await rm(path.join(destination, 'js', 'items', kind, 'definitions'), { recursive: true });
+    await rm(path.join(destination, 'js', 'items', relative, 'definitions'), { recursive: true });
     await writeFile(path.join(manifestDir, `${kind}.json`), JSON.stringify(manifest));
     counts[kind] = manifest.length;
   }
@@ -60,5 +67,6 @@ export async function buildPages() {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { output, counts } = await buildPages();
   console.log(`Pages artifact: ${output}`);
-  console.log(`${counts.passive} passive items / ${counts.active} active items`);
+  console.log(`${counts.passive} passive items / ${counts.active} active items / `
+    + `${counts['donation-ammo'] + counts['donation-health'] + counts['donation-credits']} donation items`);
 }

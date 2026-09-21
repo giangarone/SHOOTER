@@ -912,13 +912,19 @@ context. The start screen says so, and one click anywhere fixes it.
   centre, each showing one passive item as short colour-coded lines - benefits
   green, drawbacks red - with its own theme colour and a pixel-art icon
   that orbits round to whatever side you are standing on: a flame for
-  Incendiary, an icicle for Cryo, a coin for Midas Touch. Walk into one or
+  Incendiary, an icicle for Cryo, a coin for Midas Touch. Use one nearby or
   shoot it anywhere to take it. Passive items are permanent for the run and stack,
   so no two runs build the same way.
 - **The next wave waits for your pick.** No menu opens and the camera never
   leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
+- **Donation Machines**: every shop also raises a separate bank of three
+  Use-only cabinets behind the Mystery Box, centred on it against the nearest
+  wall. The yellow cabinet takes 30 reserve rounds, the red cabinet takes 10 HP
+  (only above 10), and the green cabinet takes $1,000. Each has its own
+  bottom-up segmented meter, tier ladder and permanent reward pool; firing into
+  the cabinet stops the shot but never pays.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
   MONEY ORBS where the enemy died - chunky pixel-art spheres drawn on an
   eleven-pixel grid in the shader, wearing the ceiling's own colour with a few
@@ -1068,6 +1074,53 @@ everything the current shop has offered across all of its sets, and `rollTotems`
 draws around it; it is emptied when a fresh shop opens, not when a set is
 rerolled. Paying an escalating price for the answer the console already gave is
 the moment a reroll stops feeling like a purchase.
+
+## Donation Machines
+
+The Donation Machine bank rises behind the Mystery Box in every shop, centred
+on the box directly in front of its nearest wall, and sinks when the totem pick
+closes it. These are Use interactions, not shot interactions: the prompt names
+E or the rebindable controller Use button (Triangle by default), the fixed cost,
+and the resource the cabinet accepts. Ammo is taken from reserve only. Health
+is a price rather than damage, so it cannot be paid with shield and does not
+trigger hit reactions. Credits go through the shared spending ledger, so PAPER
+TRAIL counts them, while HIGH STAKES cannot waive them.
+
+Each cabinet begins at `0 / 5`. A donation fills one whole segment from the
+bottom; completing a cabinet grants one random unowned item from that cabinet's
+pool and makes its next requirement one longer: 5, then 6, then 7, without a
+cap. Completion immediately disables and sinks that cabinet for the rest of
+the current shop, so each machine can finish at most once per shop. Its item,
+name and effect lines remain floating where the cabinet stood until the player
+presses Use a second time to take it; it never auto-grants or expires while the
+shop remains open. Closing the shop forfeits an unclaimed item. Only the
+completed cabinet locks; the other two machines, the Mystery Box and the totems
+remain usable. The next shop raises it empty at its longer requirement. A
+cabinet becomes `SOLD OUT` once its independent pool has actually been claimed.
+
+Donation rewards are passive-style permanent build items, but they are not in
+the normal passive pool or the active-item slot. Their definitions are
+directory-driven under:
+
+```
+js/items/donation/ammo/definitions/
+js/items/donation/health/definitions/
+js/items/donation/credits/definitions/
+```
+
+Each file exports a filename-matching `id`, a definition with `name`, `theme`,
+`effects` and `apply`, and its own 24x24 `icon`. The local server, Node loader
+and static Pages build discover the three directories independently. Adding a
+machine-exclusive reward therefore adds only its definition file (and an
+optional matching test fragment); neither the machine system nor a registry is
+edited. Ownership and icon keys are namespaced as `donation/<machine>/<id>`, so
+the same id may exist in multiple machine pools, and owning its normal-passive
+placeholder does not remove the machine version.
+
+Progress, completed tiers and claimed rewards last across shops for the current
+run and reset with a new run or match. In local versus they are Player snapshot
+state: every participant restores their own three tracks, tiers and reward set
+when the controller passes, just like health, ammo and the rest of their build.
 
 ### The critical hit, as a build
 
@@ -2770,8 +2823,11 @@ js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
 js/items/active/index.js       active catalogue and timed-item runtime
 js/items/active/definitions/   one file per active item
+js/items/donation/index.js     three independent Donation Machine catalogues
+js/items/donation/*/definitions/  one file per machine-exclusive reward
 tools/build-pages.mjs          generates the static Pages artifact and item manifests
 js/mysterybox.js               the box that offers active items
+js/donation-machines.js        the three shop cabinets, meters and floating pickups
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
@@ -2793,6 +2849,7 @@ test/pad.mjs        controller support, driven by a synthetic DualSense - the
                     buttons, the menus, and the pad's own rebind rows
 test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
+test/donation.mjs   Donation Machine costs, tiers, rewards and reset
 test/themes.mjs     the theme table and the balance law: every role filled, no
                     type in two themes, and every stat block inside the
                     envelope its role has to share across every theme

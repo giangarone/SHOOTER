@@ -24,6 +24,7 @@
     "test:seeker": "node test/seeker.mjs",
     "test:active": "node test/active.mjs",
     "test:item-modules": "node test/item-modules.mjs",
+    "test:donation": "node test/donation.mjs",
     "test:newpool": "node test/newpool.mjs",
     "test:thirdpool": "node test/thirdpool.mjs",
     "test:fourthpool": "node test/fourthpool.mjs",

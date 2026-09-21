@@ -15,6 +15,9 @@
 import * as THREE from 'three';
 import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
 import { PASSIVE_ITEMS } from './items/passive/index.js';
+import {
+  DONATION_ITEMS, DONATION_KINDS, donationItemKey,
+} from './items/donation/index.js';
 import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 // UPDRAFT climbs, and the room is a closed box - see the ceiling clamp in
@@ -1439,6 +1442,15 @@ export class Player {
       const def = PASSIVE_ITEMS[id];
       if (def && n > 0) def.apply(this.mods, n);
     }
+    // Donation rewards are permanent build items too, but their ownership is
+    // namespaced away from the passive pool. Replay them here, beside normal
+    // passives, so every later rebuild keeps their effects without teaching
+    // the core stat machinery which machine produced which item.
+    for (const kind of DONATION_KINDS) {
+      for (const [id, def] of Object.entries(DONATION_ITEMS[kind])) {
+        if (this.donationItems[donationItemKey(kind, id)]) def.apply(this.mods);
+      }
+    }
     // No-Hit Bonus is applied AFTER the passive item replay, because it multiplies
     // whatever the build ended up with rather than being part of it. Additive
     // and clamped at NO_HIT_CAP: it is a bonus the player can finish earning,
@@ -1586,6 +1598,23 @@ export class Player {
     this.health = Math.min(this.health, this.maxHealth);
     // A magazine-shrinking passive item must not leave the gun holding more rounds
     // than it can now carry.
+    this.mag = Math.min(this.mag, this.magSize);
+    return true;
+  }
+
+  // The single grant path for every Donation Machine reward. The compound
+  // key is intentional: future pools may use the same filename without
+  // sharing ownership, and owning the normal passive with that id is also a
+  // completely separate fact.
+  takeDonationItem(machineKind, itemId) {
+    const pool = DONATION_ITEMS[machineKind];
+    const def = pool && pool[itemId];
+    if (!def) return false;
+    const key = donationItemKey(machineKind, itemId);
+    if (this.donationItems[key]) return false;
+    this.donationItems[key] = true;
+    this.rebuildMods();
+    this.health = Math.min(this.health, this.maxHealth);
     this.mag = Math.min(this.mag, this.magSize);
     return true;
   }
@@ -2235,6 +2264,12 @@ export class Player {
     // mods, so reading them before the wipe would seed the new run with the
     // last one's stats.
     this.passiveItems = {};
+    // Three flat, snapshot-safe ledgers. Versus swaps the Player's run fields
+    // wholesale, so each participant carries an independent progress track,
+    // tier ladder and namespaced reward set for every machine.
+    this.donationProgress = { ammo: 0, health: 0, credits: 0 };
+    this.donationTiers = { ammo: 0, health: 0, credits: 0 };
+    this.donationItems = {};
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.
     this.noHitStacks = 0;

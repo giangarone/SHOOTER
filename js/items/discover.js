@@ -4,7 +4,10 @@
 // both environments a new branch only adds its item module, so independently-
 // created items merge as independent Git paths instead of registry edits.
 
-export async function discoverItems(kind, catalogueUrl) {
+export async function discoverItems(kind, catalogueUrl, options = {}) {
+  const directoryPath = options.directory || './definitions/';
+  const modulePath = options.modulePath || `js/items/${kind}/modules/`;
+  const schema = options.schema || kind;
   let files;
   let moduleUrls;
   if (typeof window === 'undefined') {
@@ -12,13 +15,13 @@ export async function discoverItems(kind, catalogueUrl) {
       import('node:fs/promises'),
       import('node:url'),
     ]);
-    const directory = new URL('./definitions/', catalogueUrl);
+    const directory = new URL(directoryPath, catalogueUrl);
     files = (await readdir(fileURLToPath(directory)))
       .filter((name) => /^[A-Za-z_$][\w$]*\.js$/.test(name))
       .sort();
-    moduleUrls = files.map((file) => new URL(`./definitions/${file}`, catalogueUrl).href);
+    moduleUrls = files.map((file) => new URL(file, directory).href);
   } else {
-    // Three levels above either catalogue is the application root. Building
+    // Three levels above every catalogue index is the application root. Building
     // from import.meta.url keeps this valid both at localhost / and at a
     // project Pages URL such as /SHOOTER/.
     const appRoot = new URL('../../../', catalogueUrl);
@@ -33,7 +36,7 @@ export async function discoverItems(kind, catalogueUrl) {
     }
     files = manifest.map(({ file }) => file);
     moduleUrls = manifest.map(({ token }) =>
-      new URL(`js/items/${kind}/modules/${token}.js`, appRoot).href);
+      new URL(`${modulePath}${token}.js`, appRoot).href);
   }
 
   const modules = await Promise.all(moduleUrls.map((url) => import(url)));
@@ -50,15 +53,21 @@ export async function discoverItems(kind, catalogueUrl) {
     }
     if (catalogue[module.id]) throw new Error(`duplicate ${kind} item id: ${module.id}`);
     const definition = module.default;
-    const valid = kind === 'passive'
+    const valid = schema === 'passive'
       ? typeof definition.name === 'string'
         && Number.isInteger(definition.max) && definition.max > 0
         && Number.isFinite(definition.theme)
         && typeof definition.apply === 'function'
-      : typeof definition.name === 'string'
+      : schema === 'active'
+        ? typeof definition.name === 'string'
         && Number.isFinite(definition.charge) && definition.charge >= 0
         && Number.isFinite(definition.theme)
-        && typeof definition.use === 'function';
+        && typeof definition.use === 'function'
+        : schema === 'donation'
+          && typeof definition.name === 'string'
+          && Number.isFinite(definition.theme)
+          && (Array.isArray(definition.effects) || typeof definition.effects === 'function')
+          && typeof definition.apply === 'function';
     if (!valid) throw new Error(`invalid ${kind} item definition: ${module.id}`);
     catalogue[module.id] = Object.freeze(definition);
     // A new item may carry its own 24x24 drawing. Existing drawings remain in
@@ -71,6 +80,9 @@ export async function discoverItems(kind, catalogueUrl) {
         throw new Error(`${kind} item ${module.id} has a malformed icon`);
       }
       icons[module.id] = Object.freeze(module.icon.slice());
+    }
+    if (schema === 'donation' && module.icon === undefined) {
+      throw new Error(`${kind} item ${module.id} has no icon`);
     }
   }
   return Object.freeze({

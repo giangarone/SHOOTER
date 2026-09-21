@@ -37,6 +37,7 @@
 import * as THREE from 'three';
 import { PASSIVE_ITEMS, PASSIVE_ITEM_ICONS } from './items/passive/index.js';
 import { ACTIVE_ITEMS, ACTIVE_ITEM_ICONS } from './items/active/index.js';
+import { DONATION_ITEM_ICONS } from './items/donation/index.js';
 
 export const GRID = 24;
 // One art-pixel in metres. 24 of them come to ~0.62m, matching the size the
@@ -7457,7 +7458,7 @@ const PIXEL_ICONS = {
 for (const id of Object.keys(ACTIVE_ITEMS)) {
   if (PASSIVE_ITEMS[id]) throw new Error(`item id exists in both catalogues: ${id}`);
 }
-Object.assign(PIXEL_ICONS, PASSIVE_ITEM_ICONS, ACTIVE_ITEM_ICONS);
+Object.assign(PIXEL_ICONS, PASSIVE_ITEM_ICONS, ACTIVE_ITEM_ICONS, DONATION_ITEM_ICONS);
 
 export const PIXEL_ICON_KEYS = Object.keys(PIXEL_ICONS);
 

@@ -27,13 +27,22 @@ const TYPES = {
 // <audio> element can play, and seeking within it does not work at all.
 const RANGED = new Set(['.m4a']);
 const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
+const ITEM_CATALOGUES = {
+  passive: 'passive',
+  active: 'active',
+  'donation-ammo': 'donation/ammo',
+  'donation-health': 'donation/health',
+  'donation-credits': 'donation/credits',
+};
 
 const itemModuleToken = (kind, file) => createHash('sha256')
   .update(`${kind}/${file}`)
   .digest('hex');
 
 async function itemDefinitions(kind) {
-  const dir = path.join(root, 'js', 'items', kind, 'definitions');
+  const relative = ITEM_CATALOGUES[kind];
+  if (!relative) throw new Error('unknown item catalogue');
+  const dir = path.join(root, 'js', 'items', relative, 'definitions');
   const files = (await readdir(dir)).filter((name) => ITEM_DEFINITION.test(name)).sort();
   return files.map((file) => ({ file, token: itemModuleToken(kind, file), dir }));
 }
@@ -47,19 +56,22 @@ http
       // cannot enumerate a directory themselves. The manifest pairs each
       // filename with an opaque module token: item names such as `magpie`
       // otherwise trip URL-based content blockers before our code can load.
-      const itemManifest = /^\/__item_manifest__\/(passive|active)\.json$/.exec(p);
+      const itemManifest = /^\/__item_manifest__\/(passive|active|donation-(?:ammo|health|credits))\.json$/.exec(p);
       if (itemManifest) {
         const definitions = await itemDefinitions(itemManifest[1]);
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify(definitions.map(({ file, token }) => ({ file, token }))));
         return;
       }
-      // Keep this virtual path one directory below the item kind so imports
-      // of ../shared.js inside a definition still resolve without rewriting
-      // its source. Only the server ever maps the token back to a filename.
-      const itemModule = /^\/js\/items\/(passive|active)\/modules\/([a-f0-9]{64})\.js$/.exec(p);
+      // Keep each virtual path exactly where its definition directory sat, so
+      // relative imports of the catalogue's shared.js resolve without source
+      // rewriting. Only the server maps the token back to a filename.
+      const itemModule = /^\/js\/items\/(passive|active|donation\/(?:ammo|health|credits))\/modules\/([a-f0-9]{64})\.js$/.exec(p);
       if (itemModule) {
-        const definitions = await itemDefinitions(itemModule[1]);
+        const kind = itemModule[1].startsWith('donation/')
+          ? 'donation-' + itemModule[1].slice('donation/'.length)
+          : itemModule[1];
+        const definitions = await itemDefinitions(kind);
         const definition = definitions.find(({ token }) => token === itemModule[2]);
         if (!definition) {
           res.writeHead(404);

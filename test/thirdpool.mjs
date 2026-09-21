@@ -503,6 +503,24 @@ try {
     // ...and it survives a draft pick, for the reason the crate bank does.
     give('overclock');
     o.trailSurvives = P.spentTotal === 2000;
+    // Donation credits use that same door, but never High Stakes' waiver.
+    const creditMachine = g.donationMachines.byKind.credits;
+    creditMachine.state = 'up';
+    creditMachine.rise = 1;
+    creditMachine.group.visible = true;
+    creditMachine.clearPending();
+    creditMachine.completedThisShop = false;
+    P.donationProgress.credits = 0;
+    P.donationTiers.credits = 0;
+    for (const key of Object.keys(P.donationItems)) delete P.donationItems[key];
+    P.spentTotal = 0;
+    g.credits = 2000;
+    P.mods.highStakes = 1;
+    o.donationPaid = g._useDonationMachine(creditMachine);
+    o.donationBalance = g.credits;
+    o.donationSpent = P.spentTotal;
+    o.donationProgress = P.donationProgress.credits;
+    P.mods.highStakes = 0;
     g.credits = creditsHeld;
     P.spentTotal = 0;
 
@@ -905,6 +923,10 @@ try {
   ok('and every till in the shop counts',
     r.trailCounted === 2000 && r.trailBilled === 2000,
     `counted=${r.trailCounted} billed=${r.trailBilled}`);
+  ok('credit donations count and High Stakes cannot waive them',
+    r.donationPaid && r.donationBalance === 1000
+      && r.donationSpent === 1000 && r.donationProgress === 1,
+    `balance=${r.donationBalance} spent=${r.donationSpent} progress=${r.donationProgress}`);
   ok('and a draft pick does not hand it back', r.trailSurvives);
 
   ok('a charge point is a charge point without the ticket', r.raffleBare === 10,

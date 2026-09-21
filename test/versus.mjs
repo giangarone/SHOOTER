@@ -103,6 +103,10 @@ try {
       'active=' + g.match.active + ' wave=' + g.match.wave);
     t('both snapshot slots are seeded', !!g.match.slots[0] && !!g.match.slots[1]);
     t('the match has no winner yet', g.match.winner === -1, String(g.match.winner));
+    Object.assign(g.player.donationProgress, { ammo: 2, health: 1, credits: 3 });
+    Object.assign(g.player.donationTiers, { ammo: 1, health: 0, credits: 2 });
+    g.player.donationItems['donation/ammo/magnaCarta'] = true;
+    g.player.rebuildMods();
 
     // ---- 2. a CLEAR hands over ---------------------------------------------
     t('wave 1 starts', (await until(() => g.waveState === 'active')) >= 0, g.waveState);
@@ -120,6 +124,15 @@ try {
     t('Player 2 is on wave 2', g.wave === 2 && g.match.wave === 2,
       'wave=' + g.wave + '/' + g.match.wave);
     t('Player 2 has a run of their own', g.player.health > 0, 'hp=' + Math.round(g.player.health));
+    t('Player 2 starts with independent Donation Machine ledgers',
+      Object.values(g.player.donationProgress).every((n) => n === 0)
+        && Object.values(g.player.donationTiers).every((n) => n === 0)
+        && Object.keys(g.player.donationItems).length === 0,
+      JSON.stringify(g.player.donationProgress));
+    Object.assign(g.player.donationProgress, { ammo: 4, health: 3, credits: 2 });
+    Object.assign(g.player.donationTiers, { ammo: 0, health: 2, credits: 1 });
+    g.player.donationItems['donation/health/soulHarvest'] = true;
+    g.player.rebuildMods();
 
     // ---- 2b. THE BOX KNOWS WHOSE SLOT IT IS LOOKING AT ---------------------
     //
@@ -192,6 +205,20 @@ try {
     t('the caption came down', !caption());
     t('Player 1 got their run back alive', g.player.health > 0,
       'hp=' + Math.round(g.player.health));
+    t('Player 1 restores all three machine tracks, tiers and rewards',
+      g.player.donationProgress.ammo === 2
+        && g.player.donationProgress.health === 1
+        && g.player.donationProgress.credits === 3
+        && g.player.donationTiers.ammo === 1
+        && g.player.donationTiers.health === 0
+        && g.player.donationTiers.credits === 2
+        && !!g.player.donationItems['donation/ammo/magnaCarta']
+        && !g.player.donationItems['donation/health/soulHarvest'],
+      JSON.stringify({
+        progress: g.player.donationProgress,
+        tiers: g.player.donationTiers,
+        items: g.player.donationItems,
+      }));
 
     // ---- 5. clearing the challenge WINS, on the wave -----------------------
     g.player.maxHealth = 9999;
