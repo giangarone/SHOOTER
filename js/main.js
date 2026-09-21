@@ -7602,12 +7602,6 @@ class Game {
       const pay = Math.min(this.credits, this.player.hpDebt);
       if (pay > 0) {
         this.credits -= pay;
-    this.player.balance = this.credits;
-    // WOLF PACK reads the LIVE COUNT on the same pattern: the roster is Game
-    // state, and effectiveFireRate must not walk it several times a trigger
-    // pull. `enemies` is compacted by _updateEnemies every frame, so its
-    // length IS the field's count - no dead entries, nothing held over.
-    this.player.aliveCount = this.enemies.length;
         this._creditsDirty = true;
         this.effects.burst(pos, 0xffd600, 6, 2.5, 1.6, 0.25);
       }
@@ -9367,14 +9361,12 @@ class Game {
     this._reliefT = RELIEF_INTERVAL;
   }
 
-  // One kill's roll. Independent of every other kill's - there is no budget
-  // and no memory; see the note above rollDrop in powerups.js.
-  _rollDrop(pos) {
-    if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
-    // RABBIT'S FOOT rides in as a multiplier on every category's chance, so it
-    // lifts the need-adjusted odds in proportion rather than adding a flat
-    // fifteen points - see the note on its entry in items/passive/index.js.
-    const kind = rollDrop(
+  // The gate fractions every drop roll reads, assembled ONCE so the two
+  // rollers - rollDrop for an ordinary kill, forcedDrop for PINATA's
+  // guaranteed one - cannot drift apart. They already did (PLATED DESSERT
+  // lifted the full-bar gate here and not there), which is why this exists.
+  _dropArgs() {
+    return [
       this.player.health / this.player.maxHealth,
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
       this._ammoActive() < MAX_ACTIVE_AMMO,
@@ -9393,8 +9385,15 @@ class Game {
       // SECOND HELPINGS. The odds side of the pick - the heal side lives with
       // the pickup, in powerups.js, for the reason the chance's own note
       // gives: one crate, two books, no two stepped on.
-      this.player.mods.crateLuck
-    );
+      this.player.mods.crateLuck,
+    ];
+  }
+
+  // One kill's roll. Independent of every other kill's - there is no budget
+  // and no memory; see the note above rollDrop in powerups.js.
+  _rollDrop(pos) {
+    if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return;
+    const kind = rollDrop(...this._dropArgs());
     if (kind) this._placeDrop(kind, pos);
   }
 
@@ -9410,15 +9409,7 @@ class Game {
    */
   _pinataKind() {
     if (this.powerups.length >= MAX_ACTIVE_PICKUPS) return null;
-    return forcedDrop(
-      this.player.health / this.player.maxHealth,
-      (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
-      this._ammoActive() < MAX_ACTIVE_AMMO,
-      this.player.mods.dropLuck,
-      !!this.player.activeItem && this.player.activeItemCharge < this.player.activeItemChargeMax,
-      this.player.mods.crateShield > 0,
-      this.player.mods.crateLuck
-    );
+    return forcedDrop(...this._dropArgs());
   }
 
   _ammoActive() {
@@ -11048,6 +11039,12 @@ class Game {
     // business holding a reference to the game. One assignment, and the passive
     // item is worth what the corner of the screen says it is.
     this.player.balance = this.credits;
+    // WOLF PACK reads the LIVE COUNT on the same mirror as the balance: the
+    // roster is Game state, and effectiveFireRate must not walk it several
+    // times a trigger pull. `enemies` is compacted by _updateEnemies every
+    // frame, so its length IS the field's count - no dead entries, nothing
+    // held over.
+    this.player.aliveCount = this.enemies.length;
     // FIRE SALE's fuse, pushed with the balance and for the same reason: both
     // are things the BUILD decides and the systems that read them have no way
     // to ask. Idempotent - setLifetime returns immediately when nothing moved.

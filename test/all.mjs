@@ -9,7 +9,7 @@
 //
 // Usage: node test/all.mjs [nameFilter]      TIMEOUT=600 to lengthen the cap
 import { spawn } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './harness.mjs';
 
@@ -72,6 +72,40 @@ const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const OFF = '\x1b[0m';
 
+// ONE SUITE, ONE PORT. Two suites that share one collide in the silent
+// direction: the second server fails to bind and the suite measures the first
+// one's game. Cathedral and obsidian both owned 8247 for months, and nothing
+// noticed. Checked against the WHOLE directory regardless of filter or shard -
+// shard membership shifts with the weights, so a collision two shards apart
+// today is a collision inside one tomorrow.
+{
+  const owners = new Map();
+  let clash = false;
+  for (const f of readdirSync(path.join(ROOT, 'test')).filter((f) => f.endsWith('.mjs'))) {
+    const src = readFileSync(path.join(ROOT, 'test', f), 'utf8');
+    for (const m of src.matchAll(/\bconst\s+\w*PORT\w*\s*=\s*(\d+)/g)) {
+      if (owners.has(m[1])) {
+        console.error(`${RED}port ${m[1]} is owned by both ${owners.get(m[1])} and ${f}${OFF}`);
+        clash = true;
+      } else owners.set(m[1], f);
+    }
+  }
+  if (clash) process.exit(1);
+}
+
+// `detached` (below) puts each suite in its own process group, which is what
+// lets a timeout take the whole tree down - and what keeps the tree OUT of
+// reach of a Ctrl+C or a CI cancellation sent to THIS process, since a signal
+// to the group never reaches it. Forward it by hand or an orphaned suite
+// leaves its 200%-CPU software-GL Chrome running on the runner.
+let killCurrent = null;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (killCurrent) killCurrent('SIGKILL');
+    process.exit(128 + (sig === 'SIGINT' ? 2 : 15));
+  });
+}
+
 const run = (file) =>
   new Promise((resolve) => {
     const started = Date.now();
@@ -114,9 +148,22 @@ const run = (file) =>
       hardTimer = setTimeout(() => killGroup('SIGKILL'), 5000);
     }, TIMEOUT);
 
+    killCurrent = killGroup;
+
+    // A child that never starts emits 'error' and possibly never 'exit' -
+    // without a listener here the promise hangs and the runner dies of the
+    // job's own cap instead of naming the suite that failed to spawn.
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      clearTimeout(hardTimer);
+      killCurrent = null;
+      resolve({ file, ms: Date.now() - started, timedOut, ok: false, spawnError: String(err) });
+    });
+
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       clearTimeout(hardTimer);
+      killCurrent = null;
       // The suite is down but its Chrome may not be - a crashed or wedged
       // suite leaks the same orphans a timeout does. Sweep the group either
       // way; on a clean exit there is nothing left in it and this is a no-op.
@@ -144,7 +191,8 @@ for (const file of suites) {
 console.log(`\n${BOLD}-- summary --${OFF}`);
 for (const r of results) {
   const tag = r.ok ? `${GREEN}PASS${OFF}` : r.timedOut ? `${RED}TIMEOUT${OFF}` : `${RED}FAIL${OFF}`;
-  console.log(`${tag}  ${r.file.padEnd(16)} ${(r.ms / 1000).toFixed(1)}s`);
+  console.log(`${tag}  ${r.file.padEnd(16)} ${(r.ms / 1000).toFixed(1)}s`
+    + (r.spawnError ? `  spawn error: ${r.spawnError}` : ''));
 }
 
 const failed = results.filter((r) => !r.ok);

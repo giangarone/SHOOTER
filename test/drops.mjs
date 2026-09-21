@@ -157,6 +157,26 @@ try {
     (rates.dry.damageBoost || 0) > 0.003,
     `damage=${(rates.dry.damageBoost || 0).toFixed(4)}`);
 
+  // ---- the guaranteed drop honours the same multipliers ----
+  // forcedDrop is the same table with "nothing" removed, and for a stretch it
+  // quietly ignored crateLuck - PINATA simply did not feel SECOND HELPINGS.
+  // Sampled rather than read, because the weight lives in two loops.
+  const pinataRates = await page.evaluate(async () => {
+    const { forcedDrop } = await import('./js/powerups.js');
+    const skew = (crateLuck) => {
+      const t = {};
+      for (let i = 0; i < 50000; i++) {
+        const k = forcedDrop(0.5, 0.5, true, 1, true, false, crateLuck);
+        t[k] = (t[k] || 0) + 1;
+      }
+      return (t.health || 0) / 50000;
+    };
+    return { plain: skew(1), helped: skew(4) };
+  });
+  check('second helpings sweetens the guaranteed drop',
+    pinataRates.plain > 0 && pinataRates.helped > pinataRates.plain * 1.5,
+    `plain=${pinataRates.plain.toFixed(3)} helped=${pinataRates.helped.toFixed(3)}`);
+
   // ---- boss bleeds at its thresholds ----
   const boss = await page.evaluate(async () => {
     const g = window.__game;

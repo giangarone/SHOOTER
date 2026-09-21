@@ -864,15 +864,11 @@ export function aiSquall(e, a) {
   if (e.sqT > 0) {
     a.vx = -a.nx * a.sp;
     a.vz = -a.nz * a.sp;
-    e.group.rotation.z = 0;
     return;
   }
 
   a.vx = a.px * a.sp;
   a.vz = a.pz * a.sp;
-  // Banks as it comes in. The only animation it has, and it is what makes a
-  // squall about to gust distinguishable from one crossing the room.
-  e.group.rotation.z = Math.min(0.6, Math.max(0, (SQUALL_REACH * 2 - a.dist) * 0.12));
   if (a.dist > SQUALL_REACH) return;
 
   e.sqT = SQUALL_CD + SQUALL_OFF;

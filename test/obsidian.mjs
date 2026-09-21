@@ -31,7 +31,7 @@
 //   of the bar - full damage from there, where the shut face ate a third.
 import { launchBrowser, startServer } from './harness.mjs';
 
-const PORT = 8247;
+const PORT = 8252;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);

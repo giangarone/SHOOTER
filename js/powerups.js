@@ -340,6 +340,36 @@ function needScale(frac) {
   return lack * lack;
 }
 
+// THE ONE GATE every drop roll asks, whatever the roll is for. Whether a
+// category can land at all has to be answered identically by rollDrop,
+// forcedDrop and dropChance - the guaranteed drop that ignored it (or the
+// lucky crate it skipped) is the drift this exists to prevent, and it has
+// happened once. Ammo needs floor room, health needs a bar that can spend it
+// (or a build carrying crates that are worth something anyway - see the gate
+// note on rollDrop), and a battery needs a meter to pour into.
+function _gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield) {
+  return (key === 'ammo' && !allowAmmo)
+    || (key === 'health' && hpFrac >= 1 && !crateShield)
+    || (key === 'battery' && !wantBattery);
+}
+
+// One category's share of the table: its flat chance plus the need term.
+//
+// SECOND HELPINGS' crateLuck multiplies the crate's ODDS, not its heal - the
+// heal rides with the pickup itself (see POWERUP_TYPES.health). `luck` is
+// applied by the callers and NOT here: RABBIT'S FOOT multiplies the
+// need-adjusted chance at the roll, after this, so it lifts a desperate
+// player's odds and a healthy one's by the same proportion - a flat addition
+// would be worth several times more to the player who needed it least, which
+// is backwards for a luck charm.
+function _weightOf(key, hpFrac, ammoFrac, crateLuck) {
+  const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
+  const p = def.needy
+    ? def.chance + def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac)
+    : def.chance;
+  return key === 'health' ? p * crateLuck : p;
+}
+
 /**
  * Rolls one kill's drop.
  *
@@ -374,24 +404,10 @@ function needScale(frac) {
 export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
   crateShield = false, crateLuck = 1) {
   for (const key of ROLL_ORDER) {
-    if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
-    if (key === 'battery' && !wantBattery) continue;
-    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
-    let p = def.chance;
-    if (def.needy) {
-      p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
-    }
-    // SECOND HELPINGS. The crate's ODDS, not its heal - that one rides with
-    // the pickup itself above and is answered by POWERUP_TYPES.health. Luck
-    // multiplies every category; crateLuck multiplies ONLY this one's, so
-    // the two cannot be confused with each other by the next reader.
-    if (key === 'health') p *= crateLuck;
-    // RABBIT'S FOOT. A multiplier, applied AFTER the need term, so it lifts the
-    // odds a desperate player already has by the same proportion it lifts a
-    // healthy one's. A flat addition would have been worth several times more
-    // to the player who needed it least, which is backwards for a luck charm.
-    if (Math.random() < p * luck) return key;
+    if (_gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield)) continue;
+    // RABBIT'S FOOT rides here - see _weightOf for why it is a multiplier on
+    // the need-adjusted chance rather than a flat addition.
+    if (Math.random() < _weightOf(key, hpFrac, ammoFrac, crateLuck) * luck) return key;
   }
   return null;
 }
@@ -419,14 +435,11 @@ export function rollDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBatte
  * @returns {string|null}
  */
 export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
-  crateShield = false) {
+  crateShield = false, crateLuck = 1) {
   let total = 0;
   for (const key of ROLL_ORDER) {
-    if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
-    if (key === 'battery' && !wantBattery) continue;
-    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
-    total += def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
+    if (_gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield)) continue;
+    total += _weightOf(key, hpFrac, ammoFrac, crateLuck);
   }
   if (total <= 0) return null;
   // LUCK IS DELIBERATELY NOT READ. RABBIT'S FOOT lifts the odds that anything
@@ -435,20 +448,15 @@ export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBat
   // parameter that provably does nothing.
   let r = Math.random() * total;
   for (const key of ROLL_ORDER) {
-    if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
-    if (key === 'battery' && !wantBattery) continue;
-    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
-    r -= def.chance + (def.needy ? def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac) : 0);
+    if (_gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield)) continue;
+    r -= _weightOf(key, hpFrac, ammoFrac, crateLuck);
     if (r <= 0) return key;
   }
   // Floating-point crumbs at the very end of the walk. The last eligible
   // category is the honest answer, and it is never null.
   for (let i = ROLL_ORDER.length - 1; i >= 0; i--) {
     const key = ROLL_ORDER[i];
-    if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
-    if (key === 'battery' && !wantBattery) continue;
+    if (_gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield)) continue;
     return key;
   }
   return null;
@@ -460,18 +468,11 @@ export function forcedDrop(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBat
  * one minus the chance every one of them misses.
  */
 export function dropChance(hpFrac, ammoFrac, allowAmmo = true, luck = 1, wantBattery = true,
-  crateShield = false) {
+  crateShield = false, crateLuck = 1) {
   let miss = 1;
   for (const key of ROLL_ORDER) {
-    if (key === 'ammo' && !allowAmmo) continue;
-    if (key === 'health' && hpFrac >= 1 && !crateShield) continue;
-    if (key === 'battery' && !wantBattery) continue;
-    const def = key === 'ammo' ? AMMO_PICKUP : POWERUP_TYPES[key];
-    let p = def.chance;
-    if (def.needy) {
-      p += def.needy * needScale(key === 'ammo' ? ammoFrac : hpFrac);
-    }
-    miss *= 1 - p * luck;
+    if (_gatedOut(key, hpFrac, allowAmmo, wantBattery, crateShield)) continue;
+    miss *= 1 - _weightOf(key, hpFrac, ammoFrac, crateLuck) * luck;
   }
   return 1 - miss;
 }

@@ -358,9 +358,6 @@ export function aiBloatfly(e, a) {
   }
   a.vx = a.px * a.sp;
   a.vz = a.pz * a.sp;
-  // The sack swells as it comes over. It is the only animation it has, and it
-  // is what makes the dive readable a moment before it starts.
-  e.group.rotation.z = Math.sin(ctx.time * 2 + e.id) * 0.1;
   if (a.dist > BLOAT_DROP_R || e.pos.y < 1.5) return;
   e.diving = true;
   e.flash = 0.2;

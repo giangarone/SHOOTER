@@ -599,7 +599,7 @@ export class MoneyOrbs {
         // metre per step, and a position-only test lets that tunnel straight
         // through the collection radius.
         if (dist <= COLLECT_RADIUS || sp * dt >= dist) {
-          onCollect(this.value[i]);
+          onCollect(this._worth(i));
           collected++;
           this._remove(i--);
           continue;
@@ -641,7 +641,7 @@ export class MoneyOrbs {
       const dz = this.pos[i3 + 2] - pz;
       const fd2 = dx * dx + dz * dz;
       if (fd2 < collect2) {
-        onCollect(this.value[i]);
+        onCollect(this._worth(i));
         collected++;
         this._remove(i--);
       } else if (fd2 < magnet2) {

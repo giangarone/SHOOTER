@@ -1188,6 +1188,10 @@ export class Enemy {
     // lean honest against a sphere the player is trying to hit.
     // Barely perceptible on a boss, for the same reason its hop is small.
     const leanAmp = this.boss ? 0.07 : 0.26;
+    // THE ROLL CHANNEL IS OWNED HERE. A write to group.rotation.z anywhere in
+    // an ai is dead on arrival - this line overwrites it the same frame. (The
+    // bloatfly's swell, the drifter's sway and the squall's bank all lived
+    // that way for months, animating nothing.) rotation.x is the free axis.
     this.group.rotation.z = this.status.freeze > 0
       ? 0
       : this._lean * leanAmp * (0.45 + this._dance * 0.55);

@@ -972,6 +972,28 @@ try {
     M.setLifetime(20);
     M.clear();
 
+    // AND PAID THROUGH THE FIELD'S OWN COLLECTION, not just the arithmetic.
+    // _worth is one method so every path pays the same, but the magnet's
+    // arrival and the walk-over each handed over the face value - which is
+    // every orb a player actually picks up. Both paths are collected here.
+    M.setVintage(0.01);
+    M._add(3, 0.4, 3, 0, 0, 0, 100, 0);
+    M.time = M.born[0] + 10;
+    let magnetPaid = -1;
+    const floorPos = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < 600 && magnetPaid < 0; i++) {
+      M.update(1 / 60, floorPos, 100, (v) => { magnetPaid = v; });
+    }
+    o.vintageMagnetPaid = magnetPaid;
+    M.clear();
+    M._add(0.1, 0.4, 0.1, 0, 0, 0, 100, 0);
+    M.time = M.born[0] + 10;
+    let walkPaid = -1;
+    M.update(1 / 60, floorPos, 0, (v) => { walkPaid = v; });
+    o.vintageWalkPaid = walkPaid;
+    M.setVintage(0);
+    M.clear();
+
     // FIRST FRUITS. Armed by the wave, spent by kills, and never banked.
     bare();
     give('firstFruits');
@@ -1387,6 +1409,15 @@ try {
     String(r.vintageCapped));
   ok('and a shorter fuse is a lower ceiling', near(r.vintageShortFuse, 110, 0.01),
     String(r.vintageShortFuse));
+  // Exact down to the frame: the orb keeps ripening while it is collected, so
+  // anything ABOVE the hand-aged 110 is right and the face value of 100 is the
+  // bug this check exists for. The fuse's ceiling bounds the top.
+  ok('and the magnet pays the ripened value',
+    r.vintageMagnetPaid > 110 && r.vintageMagnetPaid <= 120,
+    String(r.vintageMagnetPaid));
+  ok('and the walk-over pays the ripened value',
+    r.vintageWalkPaid > 110 && r.vintageWalkPaid <= 120,
+    String(r.vintageWalkPaid));
 
   ok('first fruits arms three at a wave', r.fruitsArmed === 3, String(r.fruitsArmed));
   ok('and a wave that spent none banks none', r.fruitsNotBanked === 3,

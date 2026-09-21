@@ -684,9 +684,6 @@ export function aiDrifter(e, a) {
   a.vx = a.px * a.sp;
   a.vz = a.pz * a.sp;
   e.driftCd = (e.driftCd || 0) - a.dt;
-  // The fronds sway. It is the only motion on it, and without it a drifter
-  // parked overhead reads as a piece of the ceiling.
-  e.group.rotation.z = Math.sin(a.ctx.time * 1.6 + e.id) * 0.14;
   if (e.driftCd > 0) return;
   e.driftCd = DRIFT_CD;
   // Dropped WHERE IT HAS BEEN, the same contract every trail in the game
