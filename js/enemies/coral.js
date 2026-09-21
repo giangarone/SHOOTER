@@ -1,6 +1,6 @@
 // CORAL: rose limestone, turquoise polyps and ivory reef fans.
 import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes,
-  orbit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot } from './shared.js';
+  orbit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot, snapAim } from './shared.js';
 
 const COLOR = 0x79eee0;
 const ORBIT = { dist: 11, band: 2, out: 0.8, in: -0.7, strafe: 0.5, flip: 2, flipVar: 1 };
@@ -140,10 +140,7 @@ function buildReefEmpress(e, g, s) {
 }
 
 function coralCleanup(e) { releasePattern(e); }
-function capture(e, a) {
-  e.aim = Math.atan2(a.nz, a.nx); e.tx = a.ctx.player.pos.x; e.tz = a.ctx.player.pos.z;
-  e._setEyeAlert(true);
-}
+
 function rest(e, seconds) { e.state = 'rest'; e.timer = seconds; e._setEyeAlert(false); }
 function point(x, z, radius, delay, damage) { return { x, z, radius, delay, damage }; }
 function aiRazorfin(e, a) {
@@ -154,7 +151,7 @@ function aiRazorfin(e, a) {
   // Two cuts advance along a fixed bearing. Backpedalling through the second
   // circle is worse than stepping across the blades.
   if (a.dist < 4) {
-    capture(e, a); e.state = 'cut';
+    snapAim(e, a, true); e.state = 'cut';
     beginPattern(e, a, [1.6, 3.4].map((d, i) => point(e.pos.x + a.nx * d,
       e.pos.z + a.nz * d, 1.35, 0.6 + i * 0.45, e.damage * 0.7)), COLOR);
     return;
@@ -185,7 +182,7 @@ function aiNeedlepolyp(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
   if (a.dist < 22 && e.attackCd <= 0) {
-    capture(e, a); e.state = 'tell'; e.timer = 0.75; e.volley = 0; e.attackCd = 3.6;
+    snapAim(e, a, true); e.state = 'tell'; e.timer = 0.75; e.volley = 0; e.attackCd = 3.6;
   }
 }
 function aiClamguard(e, a) {
@@ -194,7 +191,7 @@ function aiClamguard(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
   if (a.dist < 4.2) {
-    capture(e, a); e.state = 'tell';
+    snapAim(e, a, true); e.state = 'tell';
     const points = [point(e.pos.x, e.pos.z, 2.7, 0.85, e.damage)];
     // The snap throws a second, OUTER crown. After the first impact the
     // empty centre is safe, making this more than one large circular hit.
@@ -210,7 +207,7 @@ function aiBloomcoral(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
   if (a.dist < 24 && e.attackCd <= 0) {
-    capture(e, a); e.state = 'bloom'; e.attackCd = 4.8;
+    snapAim(e, a, true); e.state = 'bloom'; e.attackCd = 4.8;
     const points = [point(e.tx, e.tz, 1.7, 1.15, e.damage)];
     for (let i = 0; i < 3; i++) {
       const angle = e.aim + i * Math.PI * 2 / 3;
@@ -251,7 +248,7 @@ function aiReefray(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
   if (a.dist < 18 && e.attackCd <= 0) {
-    capture(e, a); e.state = 'trail'; e.attackCd = 4.8;
+    snapAim(e, a, true); e.state = 'trail'; e.attackCd = 4.8;
     beginPattern(e, a, [-1, 0, 1].map((i) => point(e.tx - a.nz * i * 2.8,
       e.tz + a.nx * i * 2.8, 1.4, 1 + (i + 1) * 0.4, e.damage)), COLOR);
   }
@@ -284,7 +281,7 @@ function aiReefEmpress(e, a) {
   }
   a.vx = a.px * a.sp * 0.7; a.vz = a.pz * a.sp * 0.7;
   if (e.timer > 0 || a.dist > 28) return;
-  capture(e, a); a.vx = a.vz = 0;
+  snapAim(e, a, true); a.vx = a.vz = 0;
   bs.attack = ['scissors', 'reef', 'pearls', 'crown'][bs.turn++ % 4];
   const damage = Math.min(22, e.damage * 0.75), points = [];
   if (bs.attack === 'pearls') { e.state = 'salvo'; e.timer = 1.1; e.volley = 0; return; }

@@ -1058,6 +1058,147 @@ const POISON_SPREAD_INTERVAL = 0.5;
 // once brushed it.
 const FIRE_ZONE_BURN = 0.8;
 
+// The two player-laid trails' differences, as data, so `_applyTrail` can run
+// both - see it for what is shared. `duration` and `power` are functions
+// because one trail's numbers are fixed while the other's are read off the
+// player's mods at the moment of standing in it.
+const FIRE_TRAIL = {
+  creep: CREEP_FIRE,
+  // IT SETS FIRE. The trail used to deal its own damage-per-second, which
+  // made it a third fire system with its own rate, unrelated to the burn the
+  // passive item's bullets apply and unrelated to the music. Now standing in
+  // it burns you, on the beat, like every other fire in the game - one
+  // system, one number, one rhythm.
+  status: 'burn',
+  duration: () => FIRE_ZONE_BURN,
+  power: (f) => f.power,
+  dripEvery: 0.4,
+  burstY: 0.25,
+  burst: [2, 1.2, 1.5, 0.7],
+};
+const ICE_TRAIL = {
+  creep: CREEP_ICE,
+  // IT SLOWS AND IT DOES NOT HURT. There is already one thing the player lays
+  // behind them that deals damage, and a second would only be a worse version
+  // of it.
+  status: 'slow',
+  duration: (g) => g.player.mods.coldFoot,
+  power: () => undefined,
+  dripEvery: 0.5,
+  burstY: 0.2,
+  burst: [2, 1.0, 1.4, 0.8],
+};
+
+// THE ONE-SHOT PLAYER FLAGS. player.js has no effects, no HUD and no sound,
+// so a thing worth feeling raises its flag there and the loop pays it out
+// here, once, and clears it - one convention, written once, instead of a
+// dozen hand-spelled blocks the loop used to interleave. ROW ORDER IS THE
+// FRAME'S ORDER of sound and banner, and two deliberate exceptions stay out
+// of the table: UPDRAFT's wisp is true on every frame the float holds (it is
+// throttled, not one-shot), and STILT LEGS' landing deals damage rather than
+// announcing it. LIFE INSURANCE's claim is paid in _updateItemDeliveries, out
+// of this list, because it must be drawn after the running list ends its
+// window on the same frame.
+//
+// A flag raised mid-frame - LAST BREATH's, by a shot - is still paid on the
+// frame it happened: the loop drains this table twice, see _payPlayerFx.
+const PLAYER_FX = [
+  ['gristleFx', (g) => {
+    // A crate that also made the bar bigger - a reward with NO tell is the
+    // one kind a player reports as broken: the bar grew and nothing said so.
+    g.ui.banner('+1 MAX HP');
+    g.effects.shockwave(g.player.pos, THEME_GRISTLE, 4, 0.5);
+    g.sfx.passiveItem();
+  }],
+  ['shuffleFx', (g) => {
+    // LOUD, because the whole build just changed: the only banner that names
+    // a verb rather than a reward. Silence about it would be a bug.
+    g.ui.banner('SHUFFLE');
+    g.effects.shockwave(g.player.pos, THEME_SHUFFLE, 6, 0.5);
+    g.effects.burst(g.player.pos, THEME_SHUFFLE, 26, 6, 2.5, 0.7);
+    g.sfx.passiveItem();
+    g.pad.rumble(0.5, 0.4, 180, 2);
+  }],
+  ['magnaFx', (g) => {
+    // No banner: a bank of four is a machine the player heard every dry
+    // reload for, not an event. The mag counter in the corner flashes
+    // instead - the number the player is already watching is the tell.
+    g.ui.flashReserve();
+    g.sfx.reload();
+  }],
+  ['jackpotFx', (g) => {
+    // BEFORE the jump flash so the two land on one frame as one event rather
+    // than as a jump and then a surprise. The SOUND is the whole tell - it
+    // is a 1-in-100 the player will mostly be looking away from when it fires.
+    g.sfx.jackpot();
+    g.ui.banner('JACKPOT');
+    g.ui.flashReserve();
+    g.effects.shockwave(g.player.pos, THEME_JACKPOT, 9, 0.8);
+    g.effects.burst(g.player.eyeInto(g._killPos), THEME_JACKPOT, 40, 7, 3, 0.9);
+    g.pad.rumble(0.8, 0.6, 200, 3);
+  }],
+  ['flowFx', (g) => {
+    // NO BANNER, deliberately: the window is a second long and opens several
+    // times a wave, and a caption each time would wipe the wave line, the
+    // flawless line and the no-hit line all day. A ring at the feet and the
+    // invulnerability frame the HUD already draws are the tell.
+    g.effects.shockwave(g.player.pos, THEME_FLOW, 5, 0.5);
+    g.sfx.pickupShield();
+  }],
+  ['possumFx', (g) => {
+    // A banner, unlike FLOW RELOAD's quiet ring, because this one opens once
+    // per health bar rather than once per magazine - and the window opens at
+    // the worst moment a run has, so ten seconds of enemies walking past has
+    // to read as a reprieve rather than the crowd losing interest.
+    g.ui.banner('PLAYING DEAD');
+    g.effects.shockwave(g.player.pos, THEME_POSSUM, 7, 0.6);
+    g.sfx.death(0.35);
+    g.pad.rumble(0.5, 0.5, 190, 3);
+  }],
+  ['jumpFx', (g) => {
+    g.effects.shockwave(g.player.pos, 0x82b1ff, 1.6, 0.22);
+    g.sfx.melee();
+    g.pad.rumble(0.3, 0.2, 80, 1);
+  }],
+  ['slideFx', (g) => {
+    // Dust at the player's feet and a short shove of the pad - the one
+    // movement in the game that puts them on the floor should be felt through
+    // it.
+    g.effects.burst(g.player.pos, 0xbfd4e6, 12, 3, 1.2, 0.45);
+    g.sfx.melee();
+    g.pad.rumble(0.45, 0.25, 200, 1);
+  }],
+  ['dashFx', (g) => {
+    g.effects.shockwave(g.player.pos, 0x1de9b6, 2.2, 0.22);
+    g.sfx.melee();
+    // A dash is the biggest thing the player does that nothing hits them
+    // for, so it is the one movement that gets a shove rather than a tick.
+    g.pad.rumble(0.55, 0.3, 150, 2);
+  }],
+  ['soulFx', (g) => {
+    // A single shield point is the quietest event in the pool: a small flash
+    // under the player and the HUD's shield count moving is the whole tell.
+    g.effects.shockwave(g.player.pos, THEME_SOUL, 1.6, 0.22);
+    g.sfx.passiveItem();
+  }],
+  ['activeItemReadyFx', (g) => {
+    // A SOUND and not a banner because it lands mid-fight: the player is
+    // looking at the crosshair, the bar is in the corner, and the only
+    // channel that reaches them without taking their eyes off the room is
+    // their ears. The HUD plate flashes with it for anyone who does look.
+    g.sfx.activeItemReady();
+    g.pad.rumble(0.2, 0.45, 90, 1);
+    g.ui.flashItemReady();
+  }],
+  ['ammoFx', (g) => {
+    // LAST BREATH's one-shot, paid on the same split jumpFx and dashFx use:
+    // player.js has no audio and no HUD to reach for.
+    g.sfx.pickupAmmo();
+    g.ui.flashReserve();
+    g.effects.shockwave(g.player.pos, THEME.lastBreath, 4, 0.4);
+  }],
+];
+
 class Game {
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -3642,6 +3783,30 @@ class Game {
   }
 
   /**
+   * The housekeeping EVERY way out of a run shares: hands off the controls,
+   * panels closed, pointer handed back, the pick row and the box put away,
+   * no pass still half-swung. The three exits used to spell this out a page
+   * apart with subtly different subsets; the subsets were not the point.
+   *
+   * `dismissRow` is the one knob: gameOver leaves the totems standing because
+   * the death screen is drawn over the room as it fell, and sweeping the row
+   * from under it would rearrange the scene between the hit and the screen.
+   */
+  _leaveRun({ dismissRow = true } = {}) {
+    this._clearInput();
+    this._closeStats();
+    if (dismissRow) {
+      this.totemArea.dismiss();
+      this.mysteryBox.dismiss();
+    }
+    this.ui.setPrompt(null, false);
+    this._pass = false;
+    this._swapped = false;
+    this.player.setHolster(0);
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /**
    * ABANDON THE RUN AND GO BACK TO THE MENU. Reached only from the pause
    * screen, and only through the confirmation - see #overlay-confirm.
    *
@@ -3657,29 +3822,21 @@ class Game {
     if (this.state !== 'paused') return;
     this._closeSubScreen();
     this.state = 'menu';
-    this._clearInput();
-    this._closeStats();
     this.pad.stopRumble();
-    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     // A MATCH ENDS WITH THE RUN THAT WAS ABANDONED. There is no half a versus
     // match to come back to: the slots are one run seen N times, and the
     // players who did not press EXIT are in the room to argue about it.
     this.mode = 'solo';
     this.match = null;
-    this._pass = false;
-    this._swapped = false;
     this.ui.setVersus(null);
     this.player.setPlayerTag(null);
-    this.player.setHolster(0);
+    this._leaveRun();
     this._clearEntities();
     this._resetTerrain();
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
     this.waveState = 'idle';
     this._waveCued = false;
-    this.totemArea.dismiss();
-    this.mysteryBox.dismiss();
-    this.ui.setPrompt(null, false);
     this.ui.showStart();
   }
 
@@ -3830,19 +3987,12 @@ class Game {
     const m = this.match;
     this.state = 'gameover';
     // A match can only end from _endTurn, which is before the pass starts -
-    // but the flags are cleared anyway so the screen can never be reached with
-    // a half-swung weapon or a slid-out HUD still owed an animation.
-    this._pass = false;
-    this._swapped = false;
-    this.player.setHolster(0);
-    this._clearInput();
-    this._closeStats();
+    // but _leaveRun clears the flags anyway so the screen can never be
+    // reached with a half-swung weapon or a slid-out HUD still owed an
+    // animation.
+    this._leaveRun();
     this._clearEntities();
-    this.totemArea.dismiss();
-    this.mysteryBox.dismiss();
     this.rig.setEnraged(false);
-    this.ui.setPrompt(null, false);
-    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
     this.sfx.passiveItem();
     this.ui.showMatchOver(m.label(m.winner), m.wave);
   }
@@ -4069,6 +4219,52 @@ class Game {
   }
 
   /**
+   * Everything a shot can land on, built once per press into the scratch
+   * list. What VARIES between the three callers is which extras ride along:
+   *
+   * - THE ROW (totems, stations, the box) is the trigger's alone. LANCE and
+   *   MAG DUMP are item volleys, and neither has ever bought anything - if a
+   *   dump pellet is ever meant to shop for the player, that is one flag at
+   *   the call site, here.
+   * - BRINE's angler bubble joins the trigger's and the dump's lists rather
+   *   than being raycast separately, so a bubble drifting in front of an
+   *   enemy is cover for it exactly the way a crate would be. The lance is
+   *   the one shot geometry does not apply to, bubbles included - "through
+   *   everything in the room" is the whole card.
+   */
+  _buildShotTargets({ props = false, bubbles = true } = {}) {
+    const targets = this._targets;
+    targets.length = 0;
+    for (const m of this.arena.meshList) targets.push(m);
+    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
+    if (bubbles) {
+      for (const pr of this.projectiles) {
+        if (pr.shootable) targets.push(pr.mesh);
+      }
+    }
+    if (props) {
+      this.totemArea.addTargets(targets);
+      this.mysteryBox.addTargets(targets);
+    }
+    return targets;
+  }
+
+  /**
+   * The per-press scratch, zeroed as one block. `_shotHits`/`_shotCrit` are
+   * the press's dedup and crit ledgers, `_blastHit` the DETONATOR flag,
+   * `_shotWasCrit` what settlePity and RED HARVEST read, `_reflected` the
+   * mirror's one-round-back latch, `_chipHits` the chip ledger.
+   */
+  _beginShot() {
+    this._shotHits.clear();
+    this._shotCrit.clear();
+    this._blastHit = false;
+    this._shotWasCrit = false;
+    this._reflected = false;
+    this._chipHits.clear();
+  }
+
+  /**
    * LANCE. One enormous round straight down the crosshair that stops for
    * nothing: it walks the whole sorted hit list and damages every enemy on it,
    * where an ordinary shot stops at the first thing that is not one.
@@ -4081,10 +4277,7 @@ class Game {
    */
   megaShot(mult) {
     const w = this.player.weapon;
-    const targets = this._targets;
-    targets.length = 0;
-    for (const m of this.arena.meshList) targets.push(m);
-    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
+    const targets = this._buildShotTargets();
 
     const ray = this._shotRay;
     this._screen.set(0, 0);
@@ -4098,13 +4291,10 @@ class Game {
     // through everything in the room, so it crits like one.
     const crit = this.player.rollCrit();
     const base = this.player.getEffectiveDamage(w.damage) * mult;
-    this._shotHits.clear();
-    this._shotCrit.clear();
-    this._blastHit = false;
-    // Cleared like the two sets beside it. Without this the beam settles PITY
-    // PARTY and RED HARVEST against whatever the last TRIGGER pull said, which
-    // is a crit the beam did not land and a drought it did not break.
-    this._shotWasCrit = false;
+    // Zeroed like every press. Without this the beam settles PITY PARTY and
+    // RED HARVEST against whatever the last TRIGGER pull said, which is a
+    // crit the beam did not land and a drought it did not break.
+    this._beginShot();
     // The lance is ONE round through everything, so a body it passes through
     // pays once however many of its spheres the beam clipped - and it earns the
     // head on the same terms a pellet does. See _hitOnce.
@@ -4206,20 +4396,10 @@ class Game {
     if (n <= 0) return;
     p.mag = 0;
     const w = p.weapon;
-    const targets = this._targets;
-    targets.length = 0;
-    for (const m of this.arena.meshList) targets.push(m);
-    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
-    for (const pr of this.projectiles) {
-      if (pr.shootable) targets.push(pr.mesh);
-    }
+    const targets = this._buildShotTargets();
     const muzzle = p.muzzleInto(this._muzzle);
     const crit = p.rollCrit();
-    this._shotHits.clear();
-    this._shotCrit.clear();
-    this._blastHit = false;
-    this._shotWasCrit = false;
-    this._reflected = false;
+    this._beginShot();
     // ARMATURE belongs to the TRIGGER, and the dump is an item's - the bank
     // waits for the player's own next pull. Held aside and put back: the
     // pellets below all run through _firePellet, which is where the field is
@@ -5155,16 +5335,13 @@ class Game {
     // between "the player is dead" and "the run is over".
     if (this.match) { this._playerFell(); return; }
     this.state = 'gameover';
-    this._clearInput();
-    // A panel held open across the death would sit over the game-over screen
-    // with no key left to release it.
-    this._closeStats();
-    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    // The room stays standing - the screen is drawn OVER the arena as it fell,
+    // row and all, so the row is not dismissed here (see _leaveRun).
+    this._leaveRun({ dismissRow: false });
     const eye = this.player.eyeInto(this._killPos);
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
     this.comboKills = 0;
     this.comboTimer = 0;
-    this.ui.setPrompt(null, false);
     this.ui.setBoss(null, 0, '', '');
     // The boss keeps its telegraphs until it is disposed, and on the game-over
     // screen it never is - release them with the fight.
@@ -5737,12 +5914,38 @@ class Game {
    * ITS OWN CAP, counted over the deployed list rather than kept as a number:
    * a turret can be retired by MAX_DEPLOYED's eviction or by its own clock, and
    * a counter would have to be decremented in both places. Five at once.
+   *
+   * QUORUM runs the same placement off ten kills instead of a blow taken -
+   * THE SAME CLASS, THE SAME ROUND, THE SAME BEAT, and deliberately so: this
+   * is the pick that answers a run that is WINNING where PANIC TURRET answers
+   * one that is losing, and two guns that behaved differently would be two
+   * things to learn rather than one thing bought two ways. Its own FLAG
+   * (`quorum`, not `panic`), so a run holding both picks gets both caps rather
+   * than one of them eating the other's.
    */
   _panicTurret() {
     const m = this.player.mods;
+    if (this._placeTurret('panic', m.panicMax, m.panicLife)) this.sfx.itemDeploy();
+  }
+
+  _quorumTurret() {
+    const m = this.player.mods;
+    if (this._placeTurret('quorum', m.quorumMax, m.quorumLife)) {
+      this.effects.shockwave(this.player.pos, THEME_QUORUM, 4, 0.4);
+      this.sfx.turret();
+    }
+  }
+
+  /**
+   * The placement the two picks above share: count the caller's flag against
+   * its cap, and if there is room, drop the item's own turret beside the
+   * player.
+   * @returns {boolean} whether one was placed, so the caller plays its sound.
+   */
+  _placeTurret(flag, max, life) {
     let live = 0;
-    for (const d of this._deployed) if (d.panic && !d.dead) live++;
-    if (live >= m.panicMax) return;
+    for (const d of this._deployed) if (d[flag] && !d.dead) live++;
+    if (live >= max) return false;
     const p = this.player.pos;
     // Beside the player rather than under them, so the thing they can see
     // arriving is not inside their own feet. A metre and a half, in a random
@@ -5751,50 +5954,14 @@ class Game {
     const t = new Turret(
       this, p.x + Math.cos(a) * 1.5, p.z + Math.sin(a) * 1.5,
       this.player.getEffectiveDamage(this.player.weapon.damage),
-      // The player's own feet, so a panic turret dropped on a platform stands
-      // on the platform beside them rather than on the floor below it.
+      // The player's own feet, so a turret dropped on a platform stands on
+      // the platform beside them rather than on the floor below it.
       p.y
     );
-    t.panic = true;
-    t.life = m.panicLife;
+    t[flag] = true;
+    t.life = life;
     this.deploy(t);
-    this.sfx.itemDeploy();
-  }
-
-  /**
-   * QUORUM. PANIC TURRET's gun, bought with kills instead of with blows.
-   *
-   * THE SAME CLASS, THE SAME ROUND, THE SAME BEAT - and deliberately so: this
-   * is the pick that answers a run that is WINNING where PANIC TURRET answers
-   * one that is losing, and two guns that behaved differently would be two
-   * things to learn rather than one thing bought two ways.
-   *
-   * ITS OWN CAP, counted over the deployed list rather than kept as a number,
-   * for the reason PANIC TURRET's is: a turret can be retired by MAX_DEPLOYED's
-   * eviction or by its own clock, and a counter would have to be decremented in
-   * both places. Its own FLAG as well (`quorum`, not `panic`), so a run holding
-   * both picks gets both caps rather than one of them eating the other's.
-   */
-  _quorumTurret() {
-    const m = this.player.mods;
-    let live = 0;
-    for (const d of this._deployed) if (d.quorum && !d.dead) live++;
-    if (live >= m.quorumMax) return;
-    const p = this.player.pos;
-    // Beside the player, exactly as the panic turret is placed and for the same
-    // reason: a gun that arrived across the room is a gun the player did not
-    // choose the position of, and this one is a reward rather than a rescue.
-    const a = Math.random() * Math.PI * 2;
-    const t = new Turret(
-      this, p.x + Math.cos(a) * 1.5, p.z + Math.sin(a) * 1.5,
-      this.player.getEffectiveDamage(this.player.weapon.damage),
-      p.y
-    );
-    t.quorum = true;
-    t.life = m.quorumLife;
-    this.deploy(t);
-    this.effects.shockwave(p, THEME_QUORUM, 4, 0.4);
-    this.sfx.turret();
+    return true;
   }
 
   /**
@@ -6774,6 +6941,26 @@ class Game {
     return damaged;
   }
 
+  /**
+   * One full pattern of the weapon - all its pellets, TWENTY/TWENTY's volleys
+   * included - returning whether anything landed.
+   *
+   * THE DEDUP SETS ARE NOT CLEARED BETWEEN PATTERNS: two volleys of one
+   * trigger pull, ECHO CHAMBER's fourth pull and ENCORE's second pattern are
+   * all THE SAME PRESS, so a body caught by two of them takes one dose of
+   * status and sets off one DETONATOR blast. The press's bookkeeping lives at
+   * shoot() - see _beginShot.
+   */
+  _volley(muzzle, targets, spread, w, dmgMult, crit) {
+    let hit = false;
+    for (let v = 0; v < this.player.mods.volley; v++) {
+      for (let i = 0; i < w.pellets; i++) {
+        if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hit = true;
+      }
+    }
+    return hit;
+  }
+
   // A shot. Raycast targets are built once for the whole blast and shared by
   // every pellet: arena geometry, enemy hitboxes and the totems together, so
   // the nearest hit wins whatever it is and walls correctly block shots.
@@ -6928,29 +7115,13 @@ class Game {
     this.effects.blast(muzzle, this._killPos, 1);
     this.effects.addShake(w.shake);
 
-    const targets = this._targets;
-    targets.length = 0;
-    for (const m of this.arena.meshList) targets.push(m);
-    for (const e of this.enemies) { targets.push(e.hitbox); targets.push(e.head); }
-    // BRINE's angler bubble, and nothing else in the game. Added to the same
-    // list the enemies are on rather than raycast separately, so a bubble
-    // drifting in front of an enemy is cover for it exactly the way a crate
-    // would be - which is the honest reading of a slow object in the way.
-    for (const pr of this.projectiles) {
-      if (pr.shootable) targets.push(pr.mesh);
-    }
-    this.totemArea.addTargets(targets);
-    this.mysteryBox.addTargets(targets);
+    // The trigger's list is the one WITH the row on it - a shot aimed at a
+    // totem is a claim, not a stray. See _buildShotTargets for the split.
+    const targets = this._buildShotTargets({ props: true });
 
     const spread = this._shotSpread();
     let hitAny = false;
-    this._shotHits.clear();
-    // One reflection per trigger pull - see the mirror branch in _firePellet.
-    this._reflected = false;
-    this._shotCrit.clear();
-    this._blastHit = false;
-    this._shotWasCrit = false;
-    this._chipHits.clear();
+    this._beginShot();
     // SOUTHPAW'S OFF HAND. A trigger pull answered mid-reload fires ONE pellet
     // and none of the duplicate patterns - the card says single rounds, and a
     // TWENTY/TWENTY volley or an ECHO of one off-hand round is a question about
@@ -6961,45 +7132,22 @@ class Game {
     if (offHand) {
       if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
     } else {
-      // Twenty/Twenty fires the whole pellet pattern twice off one round. The
-      // dedup set is NOT cleared between volleys - both barrels are one trigger
-      // pull, so an enemy caught by both still takes one dose of status.
-      for (let v = 0; v < mods.volley; v++) {
-        for (let i = 0; i < w.pellets; i++) {
-          if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
-        }
-      }
+      // Twenty/Twenty fires the whole pellet pattern twice off one round -
+      // mods.volley rides inside _volley.
+      if (this._volley(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
       // ECHO CHAMBER. Every fourth trigger pull fires the pattern a second time
       // at half strength, off no magazine at all.
-      //
-      // The dedup sets are NOT cleared between the shot and its echo, exactly as
-      // they are not cleared between TWENTY/TWENTY's two volleys and for the same
-      // reason: this is one trigger pull, so a body caught by both still takes
-      // one dose of status and sets off one DETONATOR blast.
       if (mods.echoEvery > 0 && this.player.shotTally % mods.echoEvery === 0) {
-        for (let v = 0; v < mods.volley; v++) {
-          for (let i = 0; i < w.pellets; i++) {
-            if (this._firePellet(muzzle, targets, spread, w, dmgMult * mods.echoDamage, crit)) {
-              hitAny = true;
-            }
-          }
+        if (this._volley(muzzle, targets, spread, w, dmgMult * mods.echoDamage, crit)) {
+          hitAny = true;
         }
         this.effects.burst(muzzle, THEME_ECHO, 8, 3.5, 1.8, 0.26);
       }
       // ENCORE. The whole pattern again, at full strength, off no magazine -
       // ECHO CHAMBER's ghost with the every-fourth and the half-damage taken off
       // it, which is exactly what the item is and why it rides the same lines.
-      //
-      // The dedup sets are NOT cleared between the shot and its encore, for the
-      // reason the echo above does not clear them and TWENTY/TWENTY's two
-      // volleys do not either: this is ONE trigger pull, so a body caught by
-      // both takes one dose of status and sets off one DETONATOR blast.
       if (this.player.encore > 0) {
-        for (let v = 0; v < mods.volley; v++) {
-          for (let i = 0; i < w.pellets; i++) {
-            if (this._firePellet(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
-          }
-        }
+        if (this._volley(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
         this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
       }
     }
@@ -9370,17 +9518,20 @@ class Game {
       this.player.health / this.player.maxHealth,
       (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve,
       this._ammoActive() < MAX_ACTIVE_AMMO,
+      // RABBIT'S FOOT rides in as a multiplier on every category's chance, so
+      // it lifts the need-adjusted odds in proportion rather than adding a
+      // flat fifteen points - see the note on its entry in items/passive/index.js.
       this.player.mods.dropLuck,
       // A BATTERY IS ONLY ROLLED WHEN THERE IS A METER TO POUR IT INTO. No
       // item, or a meter already at its ceiling, and the category is skipped
       // outright rather than left to land as a plate the player walks over for
       // nothing - the same rule health holds at a full bar.
       !!this.player.activeItem && this.player.activeItemCharge < this.player.activeItemChargeMax,
-      // PLASMA BAG lifts the full-bar gate on the health plate. The gate is not
-      // a rule about health - it is the rule that a drop which cannot be SPENT
-      // should not be rolled - and a crate carrying ten points of shield can be
-      // spent on a full bar. PLATED DESSERT lifts the same gate for the same
-      // reason: the five-point bank is spendable there too.
+      // PLASMA BAG lifts the full-bar gate on the health plate. The gate is
+      // not a rule about health - it is the rule that a drop which cannot be
+      // SPENT should not be rolled - and a crate carrying ten points of shield
+      // can be spent on a full bar. PLATED DESSERT lifts the same gate for the
+      // same reason: the five-point bank is spendable there too.
       this.player.mods.crateShield > 0 || this.player.mods.platedDessert > 0,
       // SECOND HELPINGS. The odds side of the pick - the heal side lives with
       // the pickup, in powerups.js, for the reason the chance's own note
@@ -10195,45 +10346,7 @@ class Game {
         );
       }
     }
-    for (let i = this._fire.length - 1; i >= 0; i--) {
-      const f = this._fire[i];
-      f.life -= dt;
-      if (f.life <= 0) {
-        this.effects.creepRelease(f.creep);
-        this._fire.splice(i, 1);
-        continue;
-      }
-      this.effects.creepSet(f.creep, f.x, f.z, f.radius, CREEP_FIRE, Math.min(1, f.life));
-      for (const e of this.enemies) {
-        if (e.dead) continue;
-        const dx = e.pos.x - f.x;
-        const dz = e.pos.z - f.z;
-        if (dx * dx + dz * dz > f.radius * f.radius) continue;
-        // IT SETS FIRE. It used to deal its own damage-per-second, which made
-        // the trail a third fire system with its own rate, unrelated to the
-        // burn the same passive item's bullets apply and unrelated to the
-        // music. Now standing in it burns you, on the beat, like every other
-        // fire in the game - one system, one number, one rhythm.
-        //
-        // Re-applied every frame an enemy is inside: applyStatus refreshes
-        // rather than stacking, so this tops the timer up for as long as they
-        // stand in it and lets it run down the moment they leave.
-        e.applyStatus('burn', FIRE_ZONE_BURN, f.power);
-      }
-      // A third the rate a pool drips at: there can be twenty of these on the
-      // floor at once, and at the pool's rate one reload would stand a couple
-      // of hundred particles up in the shared buffer.
-      f.drip -= dt;
-      if (f.drip <= 0) {
-        f.drip = 0.4;
-        const ang = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * f.radius;
-        this.effects.burst(
-          this._ashAt.set(f.x + Math.cos(ang) * r, 0.25, f.z + Math.sin(ang) * r),
-          CREEP_FIRE, 2, 1.2, 1.5, 0.7
-        );
-      }
-    }
+    this._applyTrail(this._fire, dt, FIRE_TRAIL);
   }
 
   // ---- the two picks that hang off the music -------------------------------
@@ -10351,41 +10464,66 @@ class Game {
         this._addIce(this.player.pos.x, this.player.pos.z);
       }
     }
-    for (let i = this._ice.length - 1; i >= 0; i--) {
-      const p = this._ice[i];
-      p.life -= dt;
-      if (p.life <= 0) {
-        this.effects.creepRelease(p.creep);
-        this._ice.splice(i, 1);
+    this._applyTrail(this._ice, dt, ICE_TRAIL);
+  }
+
+  /**
+   * The decay all three player-laid trails share: run each patch's clock
+   * down, hold its creep slot at the patch's own radius, stand whatever is in
+   * it into the status the trail exists to apply, and shed a drip now and
+   * then. Written once so the fire and the ice cannot drift - they used to be
+   * two copies of the same forty lines, kept in step by hand.
+   *
+   * The per-patch values that differ (the status, its duration, the drip's
+   * timing and look) are the config's; see FIRE_TRAIL/ICE_TRAIL above.
+   */
+  _applyTrail(list, dt, cfg) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const f = list[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        this.effects.creepRelease(f.creep);
+        list.splice(i, 1);
         continue;
       }
-      this.effects.creepSet(p.creep, p.x, p.z, p.radius, CREEP_ICE, Math.min(1, p.life));
+      this.effects.creepSet(f.creep, f.x, f.z, f.radius, cfg.creep, Math.min(1, f.life));
       for (const e of this.enemies) {
         if (e.dead) continue;
-        const dx = e.pos.x - p.x;
-        const dz = e.pos.z - p.z;
-        if (dx * dx + dz * dz > p.radius * p.radius) continue;
-        // IT SLOWS AND IT DOES NOT HURT. There is already one thing the player
-        // lays behind them that deals damage, and a second would only be a
-        // worse version of it. Re-applied every frame an enemy is inside:
-        // applyStatus refreshes rather than stacking, so this holds the timer
-        // up while they stand in it and lets it run down the moment they leave
-        // - the same contract the fire trail holds, and the reason the ice is
-        // felt as a place rather than as a hit.
-        e.applyStatus('slow', m.coldFoot);
+        const dx = e.pos.x - f.x;
+        const dz = e.pos.z - f.z;
+        if (dx * dx + dz * dz > f.radius * f.radius) continue;
+        // Re-applied every frame an enemy is inside: applyStatus refreshes
+        // rather than stacking, so the timer is topped up for as long as they
+        // stand in the patch and runs down the moment they leave. The trail
+        // is felt as a PLACE, not as a hit.
+        e.applyStatus(cfg.status, cfg.duration(this, f), cfg.power(f));
       }
-      // A third the rate a hazard pool drips at, for the fire trail's reason:
-      // twenty of these can be on the floor at once.
-      p.drip -= dt;
-      if (p.drip <= 0) {
-        p.drip = 0.5;
+      // A third the rate a pool or a hazard drips at: there can be twenty of
+      // these on the floor at once, and at the pool's rate one reload would
+      // stand a couple of hundred particles up in the shared buffer.
+      f.drip -= dt;
+      if (f.drip <= 0) {
+        f.drip = cfg.dripEvery;
         const ang = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * p.radius;
+        const r = Math.sqrt(Math.random()) * f.radius;
         this.effects.burst(
-          this._ashAt.set(p.x + Math.cos(ang) * r, 0.2, p.z + Math.sin(ang) * r),
-          CREEP_ICE, 2, 1.0, 1.4, 0.8
+          this._ashAt.set(f.x + Math.cos(ang) * r, cfg.burstY, f.z + Math.sin(ang) * r),
+          cfg.creep, ...cfg.burst
         );
       }
+    }
+  }
+
+  // Pays every outstanding one-shot player fx flag, in PLAYER_FX's order.
+  // Called TWICE a frame: once beside the HUD reads, and once after the
+  // trigger and the melee, so a flag RAISED by the shot that just happened -
+  // LAST BREATH's is - is still paid on the frame that raised it rather than
+  // one frame after the player stopped wondering why nothing chimed.
+  _payPlayerFx() {
+    for (const [flag, pay] of PLAYER_FX) {
+      if (!this.player[flag]) continue;
+      this.player[flag] = false;
+      pay(this);
     }
   }
 
@@ -11272,99 +11410,22 @@ class Game {
       // Double Jump and Double Dash raise one-shot flags rather than calling
       // effects themselves: player.js has no effects reference, and the same
       // split is already what reloadFinished uses.
-      // JACKPOT, read before the jump flash below so the two land on one frame
-      // as one event rather than as a jump and then a surprise. The SOUND is
-      // the whole tell - it is a 1-in-100 that a player will mostly be looking
-      // somewhere else when it fires.
-      // GRISTLE. A crate that also made the bar bigger. Read beside JACKPOT
-      // because it is the same shape - a one-shot the player has to be TOLD
-      // about, raised in player.js which has no banner and no sound.
-      if (this.player.gristleFx) {
-        this.player.gristleFx = false;
-        this.ui.banner('+1 MAX HP');
-        this.effects.shockwave(this.player.pos, THEME_GRISTLE, 4, 0.5);
-        this.sfx.passiveItem();
-      }
-      // SHUFFLE - LOUD, because the whole build just changed. This is the
-      // only banner that names a verb rather than a reward: the build the
-      // player is holding at the frame the pick settles is a different one
-      // from the one they had, and silence about that would be a bug.
-      if (this.player.shuffleFx) {
-        this.player.shuffleFx = false;
-        this.ui.banner('SHUFFLE');
-        this.effects.shockwave(this.player.pos, THEME_SHUFFLE, 6, 0.5);
-        this.effects.burst(this.player.pos, THEME_SHUFFLE, 26, 6, 2.5, 0.7);
-        this.sfx.passiveItem();
-        this.pad.rumble(0.5, 0.4, 180, 2);
-      }
-      // MAGNA CARTA's bank, raised the same way. No banner: a bank of four
-      // is a machine the player heard every dry reload for, not an event.
-      // The mag counter in the corner flashes instead, the way lastBreath's
-      // zero does - the number the player is already watching is the tell.
-      if (this.player.magnaFx) {
-        this.player.magnaFx = false;
-        this.ui.flashReserve();
-        this.sfx.reload();
-      }
-      if (this.player.jackpotFx) {
-        this.player.jackpotFx = false;
-        this.sfx.jackpot();
-        this.ui.banner('JACKPOT');
-        this.ui.flashReserve();
-        this.effects.shockwave(this.player.pos, THEME_JACKPOT, 9, 0.8);
-        this.effects.burst(
-          this.player.eyeInto(this._killPos), THEME_JACKPOT, 40, 7, 3, 0.9
-        );
-        this.pad.rumble(0.8, 0.6, 200, 3);
-      }
-      // FLOW RELOAD. The same shape again: a one-shot raised in player.js,
-      // which has no effects reference and no sound of its own.
-      //
-      // NO BANNER, and that is a deliberate difference from the two above. The
-      // window is one second long and opens several times a wave; a caption
-      // that replaced whatever was on screen every time a magazine was changed
-      // would wipe the wave line, the flawless line and the no-hit line all
-      // day. A ring at the feet and the invulnerability frame the HUD already
-      // draws for AEGIS are the tell - the player is told the same way they are
-      // told about every other second of immunity in the game.
-      if (this.player.flowFx) {
-        this.player.flowFx = false;
-        this.effects.shockwave(this.player.pos, THEME_FLOW, 5, 0.5);
-        this.sfx.pickupShield();
-      }
-      // POSE. The window opens at the worst moment a run has, and ten seconds
-      // of enemies walking past has to read as a reprieve rather than as the
-      // crowd having lost interest for no reason. A BANNER, unlike FLOW
-      // RELOAD's quiet ring, because this one opens once per health bar rather
-      // than once per magazine.
-      if (this.player.possumFx) {
-        this.player.possumFx = false;
-        this.ui.banner('PLAYING DEAD');
-        this.effects.shockwave(this.player.pos, THEME_POSSUM, 7, 0.6);
-        this.sfx.death(0.35);
-        this.pad.rumble(0.5, 0.5, 190, 3);
-      }
-      // UPDRAFT. A wisp under the feet on every frame the float is holding, so
-      // the stamina the player is spending is visible where they are looking.
-      // Throttled off the frame clock rather than fired every frame: at 60fps
-      // an unthrottled burst here is 60 particle allocations a second for one
-      // held button.
+      // THE ONE-SHOT PLAYER FLAGS, paid in table order - see PLAYER_FX.
+      this._payPlayerFx();
+      // UPDRAFT's wisp is NOT one-shot: true on every frame the float is
+      // holding, so it is throttled off the frame clock rather than paid - at
+      // 60fps an unthrottled burst here is 60 particle allocations a second
+      // for one held button.
       if (this.player.floatFx && this.time - this._floatFxAt > 0.09) {
         this._floatFxAt = this.time;
         this.effects.burst(this.player.pos, THEME_UPDRAFT, 3, 1.6, 1.4, 0.35);
       }
-      if (this.player.jumpFx) {
-        this.player.jumpFx = false;
-        this.effects.shockwave(this.player.pos, 0x82b1ff, 1.6, 0.22);
-        this.sfx.melee();
-        this.pad.rumble(0.3, 0.2, 80, 1);
-      }
-      // STILT LEGS' LANDING. The player's fall told the room that something
-      // knocked the door down - a 3m stagger paid in three times the base
-      // damage. A shove is read off `knock`, which is the same verb KNOCKOUT
-      // DROPS and SCORCHED EARTH already use for interruption - bosses and
-      // the immovable are exempt there, exactly as they are for every shove
-      // in the game.
+      // STILT LEGS' LANDING. Not an announcement either - a fall asked for is
+      // a hit dealt, and paying it through hurtEnemy is what keeps the kill
+      // booked, streaked and bountied like every other hit. The shove is read
+      // off `knock`, the same verb KNOCKOUT DROPS and SCORCHED EARTH use for
+      // interruption - bosses and the immovable are exempt there, exactly as
+      // they are for every shove in the game.
       if (this.player.stiltLanding) {
         this.player.stiltLanding = false;
         const damage = this.player.weapon.damage * 3;
@@ -11386,45 +11447,6 @@ class Game {
         this.effects.addShake(0.22);
         this.sfx.impact();
         this.pad.rumble(0.5, 0.3, 120, 1);
-      }
-      // A slide opening. Dust at the player's feet and a short shove of the
-      // pad - the one movement in the game that puts them on the floor should
-      // be felt through it.
-      if (this.player.slideFx) {
-        this.player.slideFx = false;
-        this.effects.burst(this.player.pos, 0xbfd4e6, 12, 3, 1.2, 0.45);
-        this.sfx.melee();
-        this.pad.rumble(0.45, 0.25, 200, 1);
-      }
-      if (this.player.dashFx) {
-        this.player.dashFx = false;
-        this.effects.shockwave(this.player.pos, 0x1de9b6, 2.2, 0.22);
-        this.sfx.melee();
-        // A dash is the biggest thing the player does that nothing hits them
-        // for, so it is the one movement that gets a shove rather than a tick.
-        this.pad.rumble(0.55, 0.3, 150, 2);
-      }
-      // SOUL HARVEST. A single shield point is the quietest event in the pool:
-      // a small flash under the player and the HUD's shield count moving is
-      // the whole tell.
-      if (this.player.soulFx) {
-        this.player.soulFx = false;
-        this.effects.shockwave(this.player.pos, THEME_SOUL, 1.6, 0.22);
-        this.sfx.passiveItem();
-      }
-      // THE ACTIVE ITEM CAME BACK. One shot on the frame the bar fills, never
-      // per frame while it is full - the flag is set once inside Player.update
-      // and cleared here, the same split dashFx and jumpFx use.
-      //
-      // It is a SOUND and not a banner because it lands mid-fight: the player
-      // is looking at the crosshair, the bar is in the corner, and the only
-      // channel that reaches them without taking their eyes off the room is
-      // their ears. The HUD plate flashes with it for anyone who does look.
-      if (this.player.activeItemReadyFx) {
-        this.player.activeItemReadyFx = false;
-        this.sfx.activeItemReady();
-        this.pad.rumble(0.2, 0.45, 90, 1);
-        this.ui.flashItemReady();
       }
 
       // THE ZOOM HAS TO REACH THE ORBS. Money is drawn as points whose pixel
@@ -11528,14 +11550,11 @@ class Game {
         this._monoOn = mono;
         this.crt.setMono(mono);
       }
-      // LAST BREATH's one-shot, the same split jumpFx and dashFx use: the
-      // player class has no audio and no HUD to reach for.
-      if (this.player.ammoFx) {
-        this.player.ammoFx = false;
-        this.sfx.pickupAmmo();
-        this.ui.flashReserve();
-        this.effects.shockwave(this.player.pos, THEME.lastBreath, 4, 0.4);
-      }
+      // THE ONE-SHOT FLAGS AGAIN, now that the trigger and the melee have had
+      // their say this frame - LAST BREATH's is raised by the shot itself (see
+      // reloadFinished), and a chime a frame late is a chime the player does
+      // not connect to the thing they did. Idempotent; usually a no-op walk.
+      this._payPlayerFx();
       // The running items tick BEFORE the enemy sweep, so anything SUTURE
       // ENGINE heals or BODY COUNT is multiplying is already true for the
       // frame the enemies are updated in - and so an item that expires this

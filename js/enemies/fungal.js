@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes, orbit, landHit, segBlocked, addWarnedMortar } from './shared.js';
+import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes, orbit, landHit, segBlocked, addWarnedMortar, capturedShot, contactReach, snapAim, faceSnap, markGet, markDrop } from './shared.js';
 
 const COLOR = 0xbaffdc;
 const body = { color: 0x985d91, eye: COLOR, scale: 1, radius: 0.5, mass: 1 };
@@ -7,28 +7,28 @@ const shot = { core: COLOR, glow: 0x985d91, scale: 0.5, speed: [16, 0.2, 22], dm
 const TYPES = {
   buttonling: { ...body, hp: 36, speed: 3.3, damage: 8, value: 130,
     head: { r: 0.3, y: 0.9 },
-    build: buildRusher, ai: aiRusher, cleanup },
+    build: buildRusher, ai: aiRusher, cleanup: markDrop },
   gillspitter: { ...body, hp: 26, speed: 2.4, damage: 9, value: 260,
     head: { r: 0.3, y: 1.3 },
     proj: shot,
-    build: buildGunner, ai: aiGunner, cleanup },
+    build: buildGunner, ai: aiGunner, cleanup: markDrop },
   bracketback: { ...body, hp: 145, speed: 1.6, damage: 18, value: 320,
     head: { r: 0.3, y: 0.85 },
     scale: 1.4, radius: 0.7, mass: 2,
     armor: (e) => e.state === 'tell' ? 0.6 : 1,
     armorDefault: (e) => e.state === 'tell' ? 0.6 : 1,
-    build: buildBrute, ai: aiBrute, cleanup },
+    build: buildBrute, ai: aiBrute, cleanup: markDrop },
   puffmortar: { ...body, hp: 44, speed: 1.9, damage: 10, value: 270,
     head: { r: 0.3, y: 0.8 },
-    build: buildArtillery, ai: aiArtillery, cleanup },
+    build: buildArtillery, ai: aiArtillery, cleanup: markDrop },
   mycelarch: { ...body, hp: 62, speed: 2.1, damage: 0, value: 350,
     head: { r: 0.3, y: 1.5 },
-    build: buildSupport, ai: aiSupport, cleanup },
+    build: buildSupport, ai: aiSupport, cleanup: markDrop },
   veilray: { ...body, hp: 52, speed: 3.8, damage: 9, value: 300,
     head: { r: 0.3, y: 0.5 },
     proj: shot,
     fly: { height: 3.5 }, hitbox: { r: 0.6, y: 0.4 },
-    build: buildFlier, ai: aiFlier, cleanup },
+    build: buildFlier, ai: aiFlier, cleanup: markDrop },
   sporeregent: { ...body, hp: 3200, speed: 1.8, damage: 24, value: 6500,
     head: { r: 0.3, y: 1.55 },
     proj: shot,
@@ -37,7 +37,7 @@ const TYPES = {
     slowFactor: 0.75, freezeVuln: 1, entropyExempt: true, fearMode: 'stagger',
     armor: (e) => e.bs.weakOpen ? 1 : 0.65,
     armorDefault: (e) => e.bs.weakOpen ? 1 : 0.65,
-    build: buildBoss, ai: aiBoss, cleanup },
+    build: buildBoss, ai: aiBoss, cleanup: markDrop },
 };
 Object.assign(ENEMY_TYPES, TYPES);
 
@@ -139,33 +139,17 @@ function buildBoss(e, g, s) {
   roots(P, 0.85, 8);
   eyes(P, { y: 1.55, z: -0.5, x: 0.25, r: 1.6, mat: e.eyeMat });
 }
-function cleanup(e) {
-  if (e.mark >= 0) e.fx.markRelease(e.mark);
-  e.mark = undefined;
-}
+// The aim/warn/touch/fire machinery is shared.js's: snapAim, faceSnap, markGet,
+// markDrop, capturedShot, contactReach. Brought there so the SIXTEEN themes
+// that ask for a wind-up cannot each grow their own half-copy of it - the
+// release-on-every-path line in particular.
 function warning(e, a, radius, progress) {
-  if (e.mark === undefined) { e.fx = a.ctx.effects; e.mark = e.fx.markAcquire(); }
-  e.fx.markSet(e.mark, e.pos.x, e.pos.z, radius, COLOR, progress);
+  const mark = markGet(e, a.ctx.effects);
+  e.fx.markSet(mark, e.pos.x, e.pos.z, radius, COLOR, progress);
 }
 function pulse(e, a, radius) {
   at.set(e.pos.x, e.pos.y + 0.3, e.pos.z);
   a.ctx.effects.shockwave(at, COLOR, radius, 0.4);
-}
-function touch(e, a, radius) {
-  return a.dist < radius && Math.abs(a.ctx.player.pos.y - e.pos.y) < 1.5 &&
-    !segBlocked(e.pos.x, e.pos.y + 0.5, e.pos.z, a.ctx.player.pos.x,
-      a.ctx.player.pos.y + 0.8, a.ctx.player.pos.z, a.ctx.obstacles);
-}
-function capture(e, a) {
-  e.aim = Math.atan2(a.nz, a.nx); e.tx = a.ctx.player.pos.x; e.tz = a.ctx.player.pos.z;
-}
-function face(e) {
-  e.faceLocked = true; e.group.rotation.y = Math.atan2(-Math.cos(e.aim), -Math.sin(e.aim));
-}
-function fire(e, a, offset) {
-  const live = Math.atan2(a.ctx.player.pos.z - e.pos.z, a.ctx.player.pos.x - e.pos.x);
-  a.ctx.addProjectile(e.pos.x, e.pos.y + (e.boss ? 2.5 : 1.2), e.pos.z,
-    e.type, e._projScale(), e.aim - live + offset);
 }
 function aiRusher(e, a) {
   e.timer = (e.timer || 0) - a.dt;
@@ -173,8 +157,8 @@ function aiRusher(e, a) {
   if (e.state === 'tell') {
     warning(e, a, 2.3, 1 - e.timer / 0.65);
     if (e.timer <= 0) {
-      const visible = e.mark >= 0; cleanup(e); pulse(e, a, 2.3);
-      if (visible && touch(e, a, 2.3)) landHit(e, a.ctx);
+      const visible = e.mark >= 0; markDrop(e); pulse(e, a, 2.3);
+      if (visible && contactReach(e, a, 2.3, 1.5, 1.5)) landHit(e, a.ctx);
       e.state = 'rest'; e.timer = 1.2; e._setEyeAlert(false);
     }
     return;
@@ -185,18 +169,18 @@ function aiRusher(e, a) {
 }
 function aiGunner(e, a) {
   if (e.timer > 0) {
-    face(e);
+    faceSnap(e);
     e.timer -= a.dt;
     if (e.timer <= 0) {
       const n = e.alternate ? 3 : 2;
-      for (let i = 0; i < n; i++) fire(e, a, (i - (n - 1) / 2) * 0.22);
+      for (let i = 0; i < n; i++) capturedShot(e, a, e.aim, (i - (n - 1) / 2) * 0.22, e.boss ? 2.5 : 1.2);
       e.alternate = !e.alternate; e._setEyeAlert(false);
     }
     return;
   }
   orbit(e, a, ORBIT);
   if (e.attackCd <= 0 && a.dist < 22) {
-    capture(e, a); e.timer = 0.65; e.attackCd = 2.8; e._setEyeAlert(true);
+    snapAim(e, a); e.timer = 0.65; e.attackCd = 2.8; e._setEyeAlert(true);
   }
 }
 function aiBrute(e, a) {
@@ -204,9 +188,9 @@ function aiBrute(e, a) {
   if (e.state === 'tell') {
     warning(e, a, 3.5, 1 - e.timer / 0.9);
     if (e.timer <= 0) {
-      const visible = e.mark >= 0; cleanup(e); pulse(e, a, 3.5);
+      const visible = e.mark >= 0; markDrop(e); pulse(e, a, 3.5);
       if (visible) {
-        if (touch(e, a, 3.5)) landHit(e, a.ctx);
+        if (contactReach(e, a, 3.5, 1.5, 1.5)) landHit(e, a.ctx);
         // Two fruiting bodies follow the stomp, leaving both flanks open.
         for (const side of [-1, 1]) addWarnedMortar(a.ctx, e.pos.x + Math.cos(e.aim) * side * 4,
           e.pos.z + Math.sin(e.aim) * side * 4, 1.5, 1.0, e.damage * 0.6);
@@ -217,12 +201,12 @@ function aiBrute(e, a) {
   }
   if (e.timer > 0) return;
   a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
-  if (a.dist < 4.2) { capture(e, a); e.state = 'tell'; e.timer = 0.9; e._setEyeAlert(true); }
+  if (a.dist < 4.2) { snapAim(e, a); e.state = 'tell'; e.timer = 0.9; e._setEyeAlert(true); }
 }
 function aiArtillery(e, a) {
   orbit(e, a, ORBIT);
   if (e.timer > 0) {
-    face(e);
+    faceSnap(e);
     a.vx = a.vz = 0; e.timer -= a.dt;
     e.sack.scale.set(e.scale * (1 + 0.3 * (1 - e.timer / 0.8)), e.scale * 1.25, e.scale);
     if (e.timer <= 0) {
@@ -233,7 +217,7 @@ function aiArtillery(e, a) {
     }
     return;
   }
-  if (e.attackCd <= 0 && a.dist < 24) { capture(e, a); e.timer = 0.8; e.attackCd = 4.8; e._setEyeAlert(true); }
+  if (e.attackCd <= 0 && a.dist < 24) { snapAim(e, a); e.timer = 0.8; e.attackCd = 4.8; e._setEyeAlert(true); }
 }
 function aiSupport(e, a) {
   orbit(e, a, ORBIT);
@@ -259,7 +243,7 @@ function aiSupport(e, a) {
 function aiFlier(e, a) {
   e.tendrils.forEach((m, i) => { m.rotation.z = Math.sin(a.ctx.time * 4 + i) * 0.22; });
   if (e.timer > 0) {
-    face(e);
+    faceSnap(e);
     e.timer -= a.dt;
     if (e.timer <= 0) {
       for (let i = 0; i < 3; i++) addWarnedMortar(a.ctx, e.tx + Math.cos(e.aim) * i * 2.4,
@@ -270,10 +254,10 @@ function aiFlier(e, a) {
   }
   if (e.escape > 0) { e.escape -= a.dt; a.vx = -a.nx * a.sp; a.vz = -a.nz * a.sp; return; }
   orbit(e, a, { ...ORBIT, dist: 6 });
-  if (e.attackCd <= 0 && a.dist < 12) { capture(e, a); e.timer = 0.9; e.attackCd = 4.8; e._setEyeAlert(true); }
+  if (e.attackCd <= 0 && a.dist < 12) { snapAim(e, a); e.timer = 0.9; e.attackCd = 4.8; e._setEyeAlert(true); }
 }
 function rest(e, a) {
-  cleanup(e); e.state = 'rest'; e.timer = 1.8; e.bs.weakOpen = true;
+  markDrop(e); e.state = 'rest'; e.timer = 1.8; e.bs.weakOpen = true;
   e.bs.ventNote = 'MYCELIUM HEART EXPOSED'; e._setEyeAlert(false); a.ctx.bossEvent('vent', e);
 }
 function aiBoss(e, a) {
@@ -285,16 +269,16 @@ function aiBoss(e, a) {
   if (e.status.fear > 0) return;
   e.timer -= a.dt;
   if (e.state === 'spiral') {
-    face(e);
+    faceSnap(e);
     if (e.timer <= 0) {
-      for (let i = 0; i < 5; i++) fire(e, a, (i - 2) * 0.34 + (e.round - 1) * 0.13);
+      for (let i = 0; i < 5; i++) capturedShot(e, a, e.aim, (i - 2) * 0.34 + (e.round - 1) * 0.13, e.boss ? 2.5 : 1.2);
       e.round++; e.timer = 0.38;
       if (e.round >= (bs.enraged ? 4 : 3)) rest(e, a);
     }
     return;
   }
   if (e.state === 'tell') {
-    face(e);
+    faceSnap(e);
     if (e.timer > 0) return;
     const damage = Math.min(22, e.damage * 0.7);
     if (bs.attack === 'spiral') { e.state = 'spiral'; e.timer = 0; e.round = 0; return; }
@@ -325,6 +309,6 @@ function aiBoss(e, a) {
   }
   a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
   if (e.timer > 0 || a.dist > 28) return;
-  capture(e, a); bs.attack = ['roots', 'spiral', 'bloom'][bs.turn++ % 3];
+  snapAim(e, a); bs.attack = ['roots', 'spiral', 'bloom'][bs.turn++ % 3];
   e.state = 'tell'; e.timer = 1.1; e._setEyeAlert(true); pulse(e, a, 3);
 }

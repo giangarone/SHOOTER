@@ -858,10 +858,44 @@ export function capturedShot(e, a, heading, spread = 0, height = 1) {
   a.ctx.addProjectile(e.pos.x, e.pos.y + height, e.pos.z, e.type,
     e._projScale(), heading + spread - live);
 }
-export function contactReach(e, a, radius) {
-  return a.dist < radius && Math.abs(a.ctx.player.pos.y - e.pos.y) < (e.boss ? 3.6 : 1.4) &&
+// Touch-or-hit range test. The y-bands are parameters because the themes that
+// grew their own copy of this (fungal at a flat 1.5, insects at 1.4/3.5)
+// measured the player slightly differently, and folding them onto the shared
+// one is only honest if it keeps each of those numbers.
+export function contactReach(e, a, radius, band = 1.4, bossBand = 3.6) {
+  return a.dist < radius && Math.abs(a.ctx.player.pos.y - e.pos.y) < (e.boss ? bossBand : band) &&
     !segBlocked(e.pos.x, e.pos.y + 0.5, e.pos.z, a.ctx.player.pos.x,
       a.ctx.player.pos.y + 0.8, a.ctx.player.pos.z, a.ctx.obstacles);
+}
+
+// Snaps the player's bearings at the wind-up: the unit direction, the aim
+// angle, and the point they were at - the three spellings of "where they were
+// when it committed", which four themes wrote out by hand. `alert` raises the
+// eye flash for a body whose tell is its face; leave it off for one whose
+// tell is elsewhere.
+export function snapAim(e, a, alert = false) {
+  e.nx = a.nx; e.nz = a.nz; e.aim = Math.atan2(a.nz, a.nx);
+  e.tx = a.ctx.player.pos.x; e.tz = a.ctx.player.pos.z;
+  if (alert) e._setEyeAlert(true);
+}
+// And faces the snap. faceLocked so the walk's own facing pass leaves it alone.
+export function faceSnap(e) {
+  e.faceLocked = true;
+  e.group.rotation.y = Math.atan2(-e.nx, -e.nz);
+}
+
+// A warning mark as one acquire/release PAIR. Every theme that lay telegraphs
+// used to spell these two out over its own field pair (e.mark/e.fx,
+// e.laneMark/e.laneFx, e.boneLane...), and "released on every path out" is
+// exactly the line those copies kept getting wrong. markGet hands back the
+// handle; markDrop releases it and forgets the pair.
+export function markGet(e, fx) {
+  if (e.mark === undefined) { e.fx = fx; e.mark = fx.markAcquire(); }
+  return e.mark;
+}
+export function markDrop(e) {
+  if (e.mark >= 0) e.fx.markRelease(e.mark);
+  e.mark = undefined;
 }
 
 // The mortar API owns its mark once spawned. Reserve-check synchronously so

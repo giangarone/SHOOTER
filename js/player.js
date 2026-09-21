@@ -647,7 +647,9 @@ export function flawlessStreakMult(n) {
 // whole guarantee that a build can never reduce itself to nothing. Twenty is a
 // fifth of the starting pool: low enough that Executioner's fifty is a real
 // price out of a full bar, high enough that a run carrying it is still standing.
-export // THE HANDOFF SWING. Far enough down that the muzzle clears the bottom of the
+const MIN_MAX_HEALTH = 20;
+
+// THE HANDOFF SWING. Far enough down that the muzzle clears the bottom of the
 // frame at every field of view the game offers, with the roll and the push
 // outboard doing the rest - a weapon that only translated straight down read
 // as a lift going out of shot.
@@ -657,9 +659,6 @@ const HOLSTER_OUT = 0.1;
 const HOLSTER_PITCH = -0.55;
 const HOLSTER_ROLL = 0.7;
 
-const MIN_MAX_HEALTH = 20;
-// Collision height, a little over the 1.7 eye height. Only overhead geometry
-// cares - see the resolveCircle call in update().
 // How fast the recoil offset bleeds back to zero, as the fraction left after
 // one second. RECOIL IS AN OFFSET, NOT A WRITE TO AIM - see applyCamera - and
 // this is what makes it one: without a decay the kick simply accumulated into
@@ -714,6 +713,8 @@ function ease(x) {
   return x * x * (3 - 2 * x);
 }
 
+// Collision height, a little over the 1.7 eye height. Only overhead geometry
+// cares - see the resolveCircle call in update().
 const PLAYER_HEIGHT = 1.8;
 // Evasion's window after a successful dodge, and what it multiplies speed by.
 // Short on purpose: it is an escape from the hit you just avoided, not a
@@ -1100,170 +1101,20 @@ export class Player {
     camera.rotation.order = 'YXZ';
     this.pos = new THREE.Vector3(0, 0, 8);
     this.vel = new THREE.Vector3();
-    this.yaw = 0;
-    this.pitch = 0;
     this.baseMaxHealth = 100;
     // One gun for the whole run. The key is still held in a field rather than
     // read from the constant everywhere, so the day a second weapon returns
     // only this and _equipModel() have to change.
     this.weaponKey = STARTING_WEAPON;
-    this.mag = WEAPONS[STARTING_WEAPON].magSize;
-    // Owned passive items as id -> stack count, and the stat block derived from
-    // them. Both are cleared by reset(), so a run never inherits a build.
-    this.passiveItems = {};
-    this.mods = { ...DEFAULT_MODS };
-    this.health = 100;
-    this.reserveAmmo = 90;
-    this.fireCd = 0;
-    // Breach Round: set by a finished reload, spent by the next shot.
-    this.breachReady = false;
-    // WHAT THE LAST TRIGGER PULL ACTUALLY COST, in rounds. Brass Echo pays
-    // this back rather than shotCost, so a shot that spent nothing - one
-    // inside Opening Salvo's window - can never refund something it never
-    // used. Written by every path through tryShoot().
-    this.lastShotCost = 0;
-    // Evasion's speed boost, set by main.js when a hit is dodged.
-    this.dodgeEnd = 0;
-    // Carnage's kill chain, and the invulnerability window AEGIS opens. Both
-    // on the player rather than in mods, for the reason above.
-    this.carnageStacks = 0;
-    this.invulnEnd = 0;
-
-    // THE ACTIVE ITEM SLOT. One at a time, by id into ACTIVE_ITEMS
-    // (js/items/active/index.js), or null - a run starts carrying nothing. `activeItemCharge` is
-    // points banked toward the item's cost; it is filled to the top the moment
-    // an item is taken, so a pedestal never hands over something the player has
-    // to wait to use. It is NOT cleared between waves - a cost above WAVE_CHARGE
-    // is meant to carry, which is the only way an item can cost more than one
-    // wave is worth.
-    this.activeItem = null;
-    this.activeItemCharge = 0;
-    // OVERDRAW's remainder, in HP, between whole points of item charge. See
-    // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
-    this._overdrawAcc = 0;
-    // One-shot, read and cleared by main.js on the frame the bar fills - the
-    // same split jumpFx and dashFx use, and for the same reason: player.js has
-    // no audio to reach for.
-    this.activeItemReadyFx = false;
-    // Absolute Zero's drawback: the player cannot move until this time.
-    this.frozenUntil = 0;
     // Game time, written once per frame by update(). getEffectiveDamage() has
     // no time argument and several callers of it have no clock to pass, so the
     // timed damage windows read it from here.
     this.now = 0;
-    // EXTERNAL DRAG, metres per second, written by whatever is pulling the
-    // player around - Maw's gravity well. It cannot be an addition to `vel`:
-    // update() ASSIGNS vel.x/z outright whenever a movement key is held, so a
-    // velocity written from outside would be thrown away on the same frame the
-    // player pressed W. It is applied straight to `pos` instead, and consumed
-    // every frame, so a puller has to keep asking for it.
-    this.extX = 0;
-    this.extZ = 0;
-    // What the movement keys asked for this frame, before the dash is mixed
-    // over it. See the note in update().
-    this.moveVX = 0;
-    this.moveVZ = 0;
-    this.reloading = 0;
-    // The magazine count the LAST trigger pull saw, before that pull was
-    // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
-    this.magAtShot = 0;
-    // Rounds left in the magazine the reload now running is discarding. See
-    // startReload, and PRIMED MAG in js/items/passive/index.js.
-    this.magOnReload = 0;
-    // AIMING. `_aimRaw` is the linear 0..1 timer and `aimT` the eased curve
-    // everything else reads - see the ADS block above. `aiming` is what the
-    // player is ASKING for, which is not the same thing: the gun is still on
-    // its way up on the frame the button goes down.
-    this.aiming = false;
-    this._aimRaw = 0;
-    this.aimT = 0;
-    // SPRINTING. `sprinting` is what the player is actually doing, which is
-    // not what they asked for: the button is refused while the bar is locked,
-    // while the trigger is down, and while they are standing still.
-    this.sprinting = false;
-    this.stamina = STAMINA_MAX;
-    // True from the moment the bar hits zero until it is a third full again.
-    this.staminaLocked = false;
-    // Counts down before the bar starts refilling, and is reset on every frame
-    // of a sprint.
-    this._staminaHold = 0;
-    // Game time up to which a shot keeps the player walking.
-    this.noSprintUntil = -99;
-    this._sprintFov = 0;
-    // 1 while running and bleeding to 0 over SPRINT_SPREAD_FADE afterwards.
-    // main.js multiplies the sprint's cone penalty by it.
-    this.sprintFade = 0;
-    // THE SUSTAINED-FIRE CHARGE, 0..1. See BLOOM_PER_SHOT. `_bloomHold` is the
-    // game time recovery is allowed to start at, pushed forward by every round.
-    this.bloom = 0;
-    this._bloomHold = -99;
-    // The walk/sprint bob. `_bobPhase` is in radians and advances with metres
-    // travelled; `_bobAmp` is the eased 0..1 weight the whole animation is
-    // scaled by; `_sprintPose` is the eased 0..1 blend into the run carry.
-    this._bobPhase = 0;
-    this._bobAmp = 0;
-    this._sprintPose = 0;
-    // CROUCHING AND SLIDING. `crouching` is a latched posture and `sliding` is
-    // a timed move; they are never both true. `eyeH` is the height the camera
-    // and every hit test read - see eyeInto - eased between the three poses so
-    // going down is a movement rather than a cut.
-    this.crouching = false;
-    this.sliding = false;
-    this.slideT = 0;
-    this.slideDX = 0;
-    this.slideDZ = 0;
-    this.eyeH = STAND_EYE;
-    // How far the eye is currently BEHIND the feet, because the body just took
-    // a step up. Eased back to zero every frame - see the step block in
-    // update() - and subtracted by both eyeInto and applyCamera so the view and
-    // every hit test read the same height.
-    this._stepLag = 0;
-    // The two pose blends the gun rides on, and the crouch button's edge
-    // detector - the button is HELD by the time this sees it, and a toggle
-    // driven by a held button would flip once a frame.
-    this._crouchPose = 0;
-    this._slidePose = 0;
-    this._prevCrouch = false;
-    // Seconds left on a slide asked for in mid-air. See SLIDE_BUFFER. A
-    // COUNTDOWN rather than a deadline, so nothing has to rebase it.
-    this._slideBuf = 0;
-    // Whether the player was RUNNING the last time they had ground under
-    // them. Read only by the air branch of _updateCrouch, and remembered
-    // rather than measured because horizontal speed in the air is not the
-    // question: letting go of the sprint key at the apex drops it to the walk
-    // instantly, and the player who did that has still just jumped out of a
-    // sprint. It is a fact about the takeoff, so it is recorded at the takeoff.
-    this._groundRun = false;
-    // The sprint button's own edge. Sprint is otherwise a HELD input and
-    // nothing needed its rising edge until the crouch had to be cancelled by
-    // it - see _updateCrouch.
-    this._prevSprint = false;
-    // Momentum carried out of a slide by a jump. See MOM_GROUND_DECAY.
-    this._momX = 0;
-    this._momZ = 0;
-    this._momW = 0;
-    // What _updateGunMotion() hands the pose block: three positions and three
-    // rotations, all offsets from the rest pose.
-    this._gunOffX = 0;
-    this._gunOffY = 0;
-    this._gunOffZ = 0;
-    this._gunOffRX = 0;
-    this._gunOffRY = 0;
-    this._gunOffRZ = 0;
     // The two ends of the zoom. Taken from the camera rather than written as a
     // constant here, so the game keeps ownership of its own field of view and
     // this owns only the fraction it is cut by.
     this.fovHip = camera.fov;
     this.fovAds = camera.fov * ADS_FOV_SCALE;
-    this.onGround = false;
-    this.lastHurt = -99;
-    this.kick = 0;
-    // Recoil, as a CAMERA OFFSET in radians, decaying to zero. It is added to
-    // the aim in applyCamera rather than written into `pitch`, which is what
-    // keeps a burst from permanently re-pointing the player: the shot ray
-    // comes off the camera, so a climbing offset still walks sustained fire
-    // off target - it just hands the gun back where it was found.
-    this.recoilPitch = 0;
     // The player's copy of the screenshake setting, written by main.js. The
     // weapon's recoil kick is the other half of "the camera jolts when I
     // shoot" - the first half is the shake main.js adds through effects - and
@@ -1277,250 +1128,6 @@ export class Player {
     // altogether. That is what the player asked for when they turned the dial
     // down, and it is the same trade every game offering this setting makes.
     this.shakeScale = 1.5;
-    this.meleeCd = 0;
-    this.meleeActive = 0;
-    // The swing's own clock, separate from meleeActive: the animation outlives
-    // the hit by a wide margin, and folding the two into one number would tie
-    // how long the arm takes to come back to how long the strike lands for.
-    this.meleeAnim = 0;
-    this.damageMult = 1;
-    // RAGE. The red pickup's other half: it moves the player as well as their
-    // damage, and it rides the SAME clock so the two can never disagree about
-    // how long the buff has left. Set by POWERUP_TYPES.damageBoost, cleared
-    // beside damageMult below.
-    this.rageSpeedMult = 1;
-    this.damageBoostEnd = 0;
-    this.fireRateMult = 1;
-    this.fireRateBoostEnd = 0;
-    // HOW LONG THE WINDOW CURRENTLY RUNNING WAS GRANTED FOR, in seconds. The
-    // HUD chip's fraction is (remaining / this), and it exists because the two
-    // boosts now have more than one source: the RAGE pickup opens ten seconds
-    // and OVERDRIVE five, the FIRE RATE pickup eight and RED LINE six. Measured
-    // against a constant, every chip but the pickup's own opened part-drained -
-    // the bar disagreeing with the effect it was drawn for.
-    //
-    // Written by whatever wrote the DEADLINE, and only when that write actually
-    // won: a five-second item landing under a ten-second pickup leaves both the
-    // deadline and the length alone.
-    this.damageBoostFull = 1;
-    this.fireRateBoostFull = 1;
-    this.shield = 0;
-    this.shieldEnd = 0;
-    // ---- ACTIVE-ITEM RUNTIME ------------------------------------------
-    //
-    // Written by the running-item list in items.js and read by the shot
-    // pipeline, the damage sinks and the pickup hooks. DELIBERATELY NOT IN
-    // `mods`: rebuildMods() replays the owned passive item list from fresh defaults
-    // after every totem pick, so anything an item wrote there would be handed
-    // back by the next passive item the player walked into.
-    //
-    // They are also separate from damageMult / fireRateMult rather than folded
-    // into them. Those two are the RAGE pickup's fields and carry its expiry;
-    // an item that borrowed them would either be cancelled by a pickup landing
-    // on top of it or would cancel one, and neither is the honest reading of
-    // two effects granted independently. Multiplying instead means an item and
-    // a pickup stack, which is what a player holding both expects.
-    this.itemDamageMult = 1;   // RED MIST, BLOOD TAX, BODY COUNT
-    this.itemTakenMult = 1;    // RED MIST's other half
-    this.itemRateMult = 1;     // RED LINE
-    this.itemHoming = 0;       // BIRD DOG: Seeker's cone, on a clock
-    this.leechShots = 0;       // HAEMOPHAGE: landed shots still owed a heal
-    this.elementCycle = -1;    // FOUR HUMOURS: -1 off, else the next element
-    this.orbHealEnd = 0;       // BLOOD FROM STONE: orbs heal until this time
-    this.statusLockEnd = 0;    // WHITE CELL: applyStatus refuses until this
-    this.itemCritEnd = 0;      // SWEET SPOT: every shot crits until this time
-    this.insuredEnd = 0;       // LIFE INSURANCE: the policy is live until this
-    // Raised by the claim above and lowered by main.js on the frame it draws
-    // it, the way jumpFx and dashFx are: takeDamage has no effects, no HUD
-    // and no sound, and a payout the player cannot see is a payout they
-    // will call a bug.
-    this.insuranceFx = false;
-    this.encore = 0;           // ENCORE: 1 while every trigger pull fires twice
-    this.meleeMult = 1;        // EVERYONE FELT THAT: the swing's multiplier
-    this.meleeShare = 0;       // ...and 1 while every body takes what it dealt
-    this.pinataLeft = 0;       // PINATA: kills still owed a guaranteed drop
-    // BACKORDER'S PARCEL. A deadline rather than a running window, because the
-    // running list is torn down at every wave clear (see RunningActiveItems.clear)
-    // and a delivery cancelled by the wave ending under it would read as the
-    // item having failed.
-    //
-    // TWO FIELDS, AND THE FLAG IS THE ONE THAT DECIDES. `backorderAt` is a
-    // deadline and so is rebased across a versus handover (see PLAYER_CLOCKS
-    // in versus.js), which means an "empty" 0 comes back as a small POSITIVE
-    // number sitting in the past - a parcel that instantly delivers itself to
-    // whoever took the controller next. Every other clock here survives that
-    // because a stale deadline in the past is indistinguishable from an
-    // expired one; this is the one whose past is its payload. So whether a
-    // parcel exists at all is a boolean, and the clock only says when.
-    this.backordered = false;
-    this.backorderAt = 0;
-    // MEDICAL DEBT, in health, payable when the wave ends. It stacks across
-    // presses and it is allowed to kill - see the bill in Game._updateWave.
-    this.medicalDebt = 0;
-    // ---- THE TWO PERMANENT MARKS AN ITEM CAN LEAVE ---------------------
-    //
-    // Beside hpBanked rather than in `mods`, and for hpBanked's exact reason:
-    // rebuildMods() replays the owned passive item list from fresh defaults after
-    // every totem claimed, so anything an item wrote into the block would be
-    // handed back by the next pick. These outlive the build.
-    //
-    // LIFE SENTENCE's legs, as a multiplier on movement rather than a count of
-    // presses, so the ten percent compounds the way the card says it does.
-    this.moveLoss = 1;
-    // COMPOUND INTEREST's gun, on the same terms.
-    this.compoundMult = 1;
-    // ADRENALINE's stacks. On the PLAYER and not in `mods`, for the reason
-    // noHitStacks and carnageStacks are: rebuildMods() replays the owned list
-    // from fresh defaults after every draft pick, so a counter an EVENT wrote
-    // into mods would be handed back by the next totem walked into. Read live
-    // by getEffectiveDamage; zeroed by main.js at every wave start.
-    this.adrenalineStacks = 0;
-    // WAR CHEST reads the run's BALANCE, which lives on Game and not here.
-    // Mirrored across once a frame rather than reached for, because
-    // getEffectiveDamage runs several times per trigger pull inside the shot
-    // path and has no business holding a reference to the game. Zero until the
-    // first frame writes it, which is exactly what a run with no money means.
-    this.balance = 0;
-    // WOLF PACK reads the LIVE ROSTER, mirrored across on the same terms and
-    // for the same reason `balance` is: the enemy list belongs to Game, and a
-    // fire-rate getter that walked it would be doing so several times a
-    // trigger pull. Zero until the first frame writes it, which is the honest
-    // reading of an empty arena.
-    this.aliveCount = 0;
-    // ---- THE SECOND POOL'S COUNTERS ---------------------------------------
-    //
-    // On the PLAYER and never in `mods`, for the reason adrenalineStacks,
-    // carnageStacks and noHitStacks are: rebuildMods() replays the owned list
-    // from fresh defaults after every draft pick, so anything an EVENT wrote
-    // into mods would be handed straight back by the next totem walked into.
-    // Every one of these is written by something that HAPPENED.
-    this.firingFor = 0;        // Machine Spirit: seconds of unbroken trigger
-    this.beatShot = false;     // Metronome: a beat is standing and unspent
-    this.shotTally = 0;        // Echo Chamber: trigger pulls, for every fourth
-    this.magFresh = true;      // Cannonade: this magazine has not fired yet
-    this.shotWasFresh = false; // and whether the shot just fired was that one
-    this.oathLoss = 0;         // Blood Oath: max HP given up so far, kept
-    this.bottomEnd = 0;        // Bottom Feeder: the damage window's deadline
-    this.cashOwed = 0;         // Cash Cannon: credits main.js still has to bill
-    this.lastBreathUsed = false; // Last Breath: spent for this wave
-    this.trueStrikeLeft = 0;   // True Strike: guaranteed crits in hand
-    this.dominoNext = false;   // Domino: the last shot crit
-    this.luckyTarget = null;   // Lucky Streak: the body being worked on
-    this.luckyHits = 0;        // and how many landed on it in a row
-    this.cleanKills = 0;       // Kill Streak: kills since the last hit taken
-    this.lastShotAt = -99;     // True Strike: when the trigger last fired
-    this.magOnReload = 0;      // Primed Mag / Bottom Feeder: what was thrown
-    this.sacrificed = null;     // Sacrifice: the name of what it just ate, for
-                                // the banner main.js draws at the pick
-    this.ammoFx = false;        // Last Breath: one-shot, cleared by main.js
-    // ---- THE THIRD POOL'S COUNTERS ----------------------------------------
-    //
-    // Same rule as the block above and for the same reason: every one of these
-    // is written by something that HAPPENED, so none of them can live in mods.
-    // Four are RUN TOTALS that must survive to the end of a run - the money
-    // spent, the boxes bought, the max health crates banked - and those are the
-    // ones a rebuildMods() would be most quietly wrong about.
-    this.pityMiss = 0;          // Pity Party: landed shots since the last crit
-    this.pityNext = false;      // and whether the next one is owed
-    this.pityShot = false;      // ...and whether the shot in flight IS it, which
-                                // is what _hitMult reads for the flat multiplier
-    this.spentTotal = 0;        // Paper Trail: every credit this run has spent
-    this.boxesBought = 0;       // Raffle Ticket: mystery box rolls paid for
-    this.crateHp = 0;           // Gristle: permanent max health off health
-                                // crates. Kept apart from hpBanked because that
-                                // one is capped by hpBankCap, which is SCAR
-                                // TISSUE's ceiling and has nothing to do with
-                                // this - see the maxHealth getter.
-    this.healOwed = 0;          // Slow Release: HP still to be paid out, and
-    this.healRate = 0;          // the rate it is being paid at. A POOL and a
-                                // RATE rather than a deadline, which is what
-                                // lets two crates stack honestly - see heal
-                                // pickup and _tickSlowRelease.
-    this.quorumKills = 0;       // Quorum: kills since the last free turret
-    this.jackpotFx = false;     // Jackpot: one-shot, cleared by main.js
-    this.gristleFx = false;     // Gristle: one-shot, likewise. A permanent
-                                // point of max health with NO tell is the one
-                                // kind of reward a player reports as broken -
-                                // the bar grew and nothing said so.
-    this.floatFx = false;       // Updraft: true on any frame the float is
-                                // holding the player up, for the HUD and the
-                                // wisp main.js draws under their feet
-
-    // ---- THE FOURTH POOL'S STATE ------------------------------------------
-    //
-    // Three fields, and each is here rather than in `mods` for the reason every
-    // counter above is: rebuildMods() replays the owned list from
-    // DEFAULT_MODS on every draft pick, so a window an EVENT opened or a count
-    // an event spent would be handed back by the next totem the player claimed.
-    this.dimeEnd = 0;           // Dime Novel: game time the crit window closes
-    this.fruitsLeft = 0;        // First Fruits: kills left at the top of this
-                                 // wave that still owe a plate. SET by
-                                 // startWave, never added to - see armFruits.
-    this.flowFx = false;        // Flow Reload: one-shot, cleared by main.js.
-                                 // A second of invulnerability with no tell is
-                                 // a second the player cannot spend on purpose.
-    // ---- THE FIFTH POOL'S STATE -------------------------------------------
-    //
-    // POSE's window and its recharge, here rather than in `mods` for the
-    // reason every counter above is: a window an EVENT opened would be handed
-    // back by the next totem the player claimed.
-    //
-    // `possumEnd` is a deadline and is rebased across a versus handoff (see
-    // PLAYER_CLOCKS in versus.js) like every other one; `possumReady` is a
-    // boolean because an empty 0 deadline sits in the past, which for this one
-    // field would read as "playing dead" - the same trap BACKORDER's parcel
-    // flag exists for.
-    this.possumEnd = 0;         // Possum: game time the window closes at
-    this.possumReady = false;   // and whether it may open at all. SET by the
-                                 // recharge below, never by the window.
-    this.possumFx = false;      // one-shot, cleared by main.js on the frame
-                                 // the window opens - player.js has no banner
-    this.offHand = false;       // SOUTHPAW: the last trigger pull was fired
-                                 // mid-reload, one round from the reserve. A
-                                 // one-frame handshake with main.js, which
-                                 // reads it and clears it in the same breath -
-                                 // see shoot() there.
-
-    // ---- THE SIXTH POOL'S STATE -------------------------------------------
-    //
-    // The same contract every block above holds: anything an EVENT opens,
-    // banks or counts lives here rather than in `mods`, because
-    // rebuildMods() replays the owned list from DEFAULT_MODS on every draft
-    // pick and would hand the next totem a fresh copy of it.
-    this.magnaRounds = 0;       // Magna Carta: magazine rounds banked by
-                                 // reloading from empty. Banked one at a time,
-                                 // kept forever, and applied through the
-                                 // magSize getter so a draft pick can never
-                                 // leave the gun holding more than it carries.
-    this.armatureBank = 0;      // Armature: overkill damage waiting to ride the
-                                 // next shot. A BANK, not a window - it does
-                                 // not expire and does not stack past one
-                                 // kill's spill (see _carryArmature in
-                                 // main.js).
-    this.monsoonStacks = 0;     // Monsoon: kills inside the window, and
-    this.lastKillAt = -99;      // game time of the last kill, which is the
-                                 // whole of the window's clock. Stacks are
-                                 // LOST, not decayed, the moment five seconds
-                                 // pass without a body.
-    this.fleshBanked = 0;       // Flesh Bank: max HP banked off health crates.
-                                 // Its own bank, for GRISTLE's reason: that
-                                 // one rides `crateHp` and neither pick may
-                                 // eat the other's ceiling.
-    this.shuffleFx = false;     // Shuffle: one-shot, cleared by main.js. The
-                                 // build changing under the player is the one
-                                 // pick in the pool that has to SAY so.
-    this.magnaFx = false;       // Magna Carta: cleared the same way, for the
-                                 // same reason - a magazine that quietly got
-                                 // wider is a stat nobody saw change.
-    this.slamArmed = false;     // Stilt Legs: the fall currently in flight was
-                                 // ASKED for, so the landing pays the bigger
-                                 // version. Cleared with every landing edge.
-    this.stiltLanding = false; // and the one-frame read of it, for main.js
-    this.hpDebt = 0;          // Thin Blood: credits a hit just drained, read
-                               // and billed by main.js on the same frame -
-                               // the cashOwed split, for the same reason.
-    this.soulFx = false;      // Soul Harvest: one-shot, cleared by main.js
-    this._wasGrounded = true;   // last frame's onGround, for the landing edge
     // STATUS EFFECTS PUT ON THE PLAYER - see status.js for what each one does.
     // Seconds remaining per key, and the duration each was applied WITH, which
     // is the only thing the HUD's timer bar can measure its fraction against.
@@ -1531,88 +1138,6 @@ export class Player {
       this.status[k] = 0;
       this.statusFull[k] = 1;
     }
-    // Damage over time is billed in WHOLE POINTS. Fire at 7/s over a 90Hz
-    // frame is 0.078 of a point, and a hit that small rounds to nothing at
-    // every sink it could go through - the health bar, the run summary, the
-    // damage vignette. It accumulates here instead and main.js drains it (see
-    // drainStatusDamage), which is also what puts it through the game-over
-    // path: the player class cannot end a run on its own.
-    this._statusDot = 0;
-    // What the last takeDamage() call actually cost, after curse - see there.
-    this.lastDamageTaken = 0;
-    // The flawless streak: consecutive waves cleared without being hit.
-    //
-    // ON THE PLAYER, NOT ON THE GAME, and that is the whole of what makes it
-    // work in versus: captureRun copies every Player field that is not on the
-    // skip list, so a streak follows its owner onto the bench and comes back
-    // with them. The same counter on Game would have to be named in
-    // GAME_FIELDS, and the failure mode of forgetting is one player inheriting
-    // the other's streak - silent, and worth real money.
-    this.flawlessStreak = 0;
-    this._ammoRegenAcc = 0;
-    // Holy Mantle's charges, re-armed at every wave start, and Dead Cat's
-    // revive counter, which is spent once per run and not refilled.
-    //
-    // A COUNT, NOT A FLAG - see armWard. `wardReady` is still a readable and
-    // writable boolean on top of it (the accessors below), because every place
-    // that ever asked was asking "can a hit be eaten right now" and that
-    // question has not changed shape.
-    this.wardCharges = 0;
-    this.livesUsed = 0;
-    // No-Hit Bonus: waves cleared without taking a point of damage since the
-    // passive item was picked up. It lives on the PLAYER rather than in mods
-    // because mods are rebuilt from the passive item list on every draft pick, and
-    // anything written into them by an event would be wiped by the next one.
-    this.noHitStacks = 0;
-    // UNTOUCHED and SCAR TISSUE. Max HP earned at wave ends and kept for the
-    // rest of the run, on the player for the reason noHitStacks is - see the
-    // note in DEFAULT_MODS. Read by the maxHealth getter.
-    this.hpBanked = 0;
-    // OPENING SALVO. Game time the free-ammo window at the top of the wave
-    // closes at. A deadline, so it is rebased across a versus handoff - see
-    // PLAYER_CLOCKS in versus.js.
-    //
-    // A NEGATIVE SENTINEL, not 0, and the window is tested against the passive
-    // item as well as the clock. Game time is a float that starts at 0 and a
-    // frame served a backwards timestamp can push it below that, at which
-    // point a closed window written as 0 compares as OPEN and every shot in
-    // the run is free. "Not armed" must not be a number the clock can walk
-    // past.
-    this.salvoEnd = -99;
-    // DIG IN. Seconds spent planted and untouched, counted in update().
-    this._planted = 0;
-    // Hot Streak's live bonus, a signed damage FRACTION clamped between
-    // -streakFloor and +streakCap. On the player for the same reason
-    // noHitStacks is: a rebuildMods() would wipe it mid-magazine.
-    this.streak = 0;
-    // Double Jump state; `jumpsLeft` refills on landing. The DASH kept its
-    // motion but lost its bookkeeping: it is an active item now (BLINK DRIVE,
-    // js/items/active/index.js) and the item's charge bar IS the gate on firing it again,
-    // so nothing here counts charges any more. That bar is filled by kills.
-    this.jumpsLeft = 0;
-    this.dashStart = 0;
-    this.dashEnd = 0;
-    this.dashDX = 0;
-    this.dashDZ = 0;
-    // The VERTICAL component of the dash, sin(pitch) at the moment it fired.
-    // Zero for anything that dashes flat; BLINK DRIVE fills it from the view.
-    this.dashDY = 0;
-    // Multiplier on DASH_SPEED for this dash. BONESAW's is slightly longer
-    // than BLINK DRIVE's - bought with speed rather than with time, so the
-    // envelope and the window are still the one shape every dash in the game
-    // shares.
-    this.dashBoost = 1;
-    this._prevJump = false;
-    this.jumpFx = false;
-    this.dashFx = false;
-    // One-shot, read and cleared by main.js on the frame a slide opens - the
-    // same split jumpFx and dashFx use, and for the same reason: player.js has
-    // no effects or audio to reach for.
-    this.slideFx = false;
-    // VERSUS HANDOFF. 0 is the gun in hand, 1 is the gun swung fully out of
-    // frame. Driven by main.js across a turn change and zero at every other
-    // moment in the game's life - see setHolster.
-    this.holster = 0;
 
     // The viewmodel is built once here and parented to the camera. Building
     // one per equip would allocate geometry for the rest of the session.
@@ -1624,7 +1149,14 @@ export class Player {
     model.userData.baseX = model.position.x;
     camera.add(model);
     this.gunModels[this.weaponKey] = model;
-    this._equipModel();
+    // EVERY FIELD A RUN MOVES IS INITIALISED BY reset(), here at construction
+    // as on every new game. The constructor carried its own copy of that list
+    // for a long time - ninety fields, two of them twice - and the copies had
+    // already drifted ("magOnReload" was documented two different ways, the
+    // dash's direction was only half-here). What stays above is what reset()
+    // either reads (the models, the status tables, the fov ends, the weapon
+    // key) or is forbidden to touch (the clock, the shake preference).
+    this.reset();
     scene.add(camera);
     this.applyCamera();
   }
@@ -1734,9 +1266,6 @@ export class Player {
     const crouch = this.mods.crouchReload > 0 && this.crouching && !this.sliding
       ? 1 - this.mods.crouchReload : 1;
     return this.weapon.reloadTime * this.mods.reloadMult * crouch;
-  }
-  get fireRate() {
-    return this.weapon.fireRate;
   }
   /**
    * Shots per second the trigger will actually run at, right now.
@@ -2245,6 +1774,12 @@ export class Player {
       this.status[k] = 0;
       this.statusFull[k] = 1;
     }
+    // Damage over time is billed in WHOLE POINTS. Fire at 7/s over a 90Hz
+    // frame is 0.078 of a point, and a hit that small rounds to nothing at
+    // every sink it could go through - the health bar, the run summary, the
+    // damage vignette. It accumulates here instead and main.js drains it (see
+    // drainStatusDamage), which is also what puts it through the game-over
+    // path: the player class cannot end a run on its own.
     this._statusDot = 0;
   }
 
@@ -2282,29 +1817,22 @@ export class Player {
   // Movement, outgoing damage and incoming damage, in that order. Each walks
   // the whole table rather than naming its effect, so an effect that gains a
   // second multiplier later needs no change here.
-  statusSpeedMult() {
+  _statusMult(field) {
     let m = 1;
     for (const k of PLAYER_STATUS_KEYS) {
-      const f = PLAYER_STATUS[k].speedMult;
+      const f = PLAYER_STATUS[k][field];
       if (f && this.status[k] > 0) m *= f;
     }
     return m;
+  }
+  statusSpeedMult() {
+    return this._statusMult('speedMult');
   }
   statusDamageMult() {
-    let m = 1;
-    for (const k of PLAYER_STATUS_KEYS) {
-      const f = PLAYER_STATUS[k].damageMult;
-      if (f && this.status[k] > 0) m *= f;
-    }
-    return m;
+    return this._statusMult('damageMult');
   }
   statusTakenMult() {
-    let m = 1;
-    for (const k of PLAYER_STATUS_KEYS) {
-      const f = PLAYER_STATUS[k].takenMult;
-      if (f && this.status[k] > 0) m *= f;
-    }
-    return m;
+    return this._statusMult('takenMult');
   }
 
   // Carnage. Every kill is +5% damage and any hit taken is all of it.
@@ -2698,8 +2226,10 @@ export class Player {
     return gain;
   }
 
-  // Back to a fresh-run state. Called on every new game, so anything added to
-  // the constructor that changes during play must be reset here too.
+  // Back to a fresh-run state, and the ONE LIST of every field a run moves:
+  // the constructor calls this rather than keeping its own copy. Anything new
+  // a run can change is declared here, once - there is nowhere else for it to
+  // be forgotten from.
   reset() {
     // Passive items are cleared first: maxHealth and magSize are derived from
     // mods, so reading them before the wipe would seed the new run with the
@@ -2711,12 +2241,28 @@ export class Player {
     // Before rebuildMods for the same reason: maxHealth reads the bank, and a
     // new run must be born at the base cap and not the last one's.
     this.hpBanked = 0;
+    // OPENING SALVO. Game time the free-ammo window at the top of the wave
+    // closes at. A deadline, so it is rebased across a versus handoff - see
+    // PLAYER_CLOCKS in versus.js.
+    //
+    // A NEGATIVE SENTINEL, not 0, and the window is tested against the passive
+    // item as well as the clock. Game time is a float that starts at 0 and a
+    // frame served a backwards timestamp can push it below that, at which
+    // point a closed window written as 0 compares as OPEN and every shot in
+    // the run is free. "Not armed" must not be a number the clock can walk
+    // past.
     this.salvoEnd = -99;
     this._planted = 0;
     this.streak = 0;
     this.jumpsLeft = 0;
+    // The dash's direction and stretch are set the moment it fires and dead
+    // the moment it ends (see dash): the window fields alone are the gate.
     this.dashStart = 0;
     this.dashEnd = 0;
+    this.dashDX = 0;
+    this.dashDZ = 0;
+    this.dashDY = 0;
+    this.dashBoost = 1;
     this._prevJump = false;
     this.jumpFx = false;
     this.dashFx = false;
@@ -2730,11 +2276,22 @@ export class Player {
     this.wardCharges = 0;
     this.livesUsed = 0;
     this.breachReady = false;
+    // WHAT THE LAST TRIGGER PULL ACTUALLY COST, in rounds. Brass Echo pays
+    // this back rather than shotCost, so a shot that spent nothing - one
+    // inside Opening Salvo's window - can never refund something it never
+    // used. Written by every path through tryShoot().
     this.lastShotCost = 0;
     this.dodgeEnd = 0;
     this.carnageStacks = 0;
     this.invulnEnd = 0;
     this.frozenUntil = 0;
+    // THE ACTIVE ITEM SLOT. One at a time, by id into ACTIVE_ITEMS (see
+    // js/items/active/index.js), or null - a run starts carrying nothing.
+    // `activeItemCharge` is points banked toward the item's cost; it is filled
+    // to the top the moment an item is taken, so a pedestal never hands over
+    // something the player has to wait to use. It is NOT cleared between
+    // waves - a cost above WAVE_CHARGE is meant to carry, which is the only
+    // way an item can cost more than one wave is worth.
     this.activeItem = null;
     this.activeItemCharge = 0;
     // The second pool's counters, all of them - see the block in the
@@ -2754,7 +2311,6 @@ export class Player {
     this.luckyHits = 0;
     this.cleanKills = 0;
     this.lastShotAt = -99;
-    this.magOnReload = 0;
     this.sacrificed = null;
     this.ammoFx = false;
     // The third pool's counters - see the constructor. The four run totals
@@ -2817,15 +2373,40 @@ export class Player {
     this.meleeMult = 1;
     this.meleeShare = 0;
     this.pinataLeft = 0;
+    // BACKORDER'S PARCEL. A deadline rather than a running window, because the
+    // running list is torn down at every wave clear (see the running list's
+    // clear in js/items/active/index.js) and a delivery cancelled by the wave
+    // ending under it would read as the item having failed.
+    //
+    // TWO FIELDS, AND THE FLAG IS THE ONE THAT DECIDES. `backorderAt` is a
+    // deadline and so is rebased across a versus handover (see PLAYER_CLOCKS
+    // in versus.js), which means an "empty" 0 comes back as a small POSITIVE
+    // number sitting in the past - a parcel that instantly delivers itself to
+    // whoever took the controller next. Every other clock here survives that
+    // because a stale deadline in the past is indistinguishable from an
+    // expired one; this is the one whose past is its payload. So whether a
+    // parcel exists at all is a boolean, and the clock only says when.
     this.backordered = false;
     this.backorderAt = 0;
+    // MEDICAL DEBT, in health, payable when the wave ends. It stacks across
+    // presses and it is allowed to kill - see the bill in Game._updateWave.
     this.medicalDebt = 0;
     // The two permanent marks. A new run starts at full speed and base damage
     // however deep the last one got - the same rule hpBanked is wiped under.
     this.moveLoss = 1;
     this.compoundMult = 1;
     this.adrenalineStacks = 0;
+    // WAR CHEST reads the run's BALANCE, which lives on Game and not here.
+    // Mirrored across once a frame rather than reached for, because
+    // getEffectiveDamage runs several times per trigger pull inside the shot
+    // path and has no business holding a reference to the game. Zero until the
+    // first frame writes it, which is exactly what a run with no money means.
     this.balance = 0;
+    // WOLF PACK reads the LIVE ROSTER, mirrored across on the same terms and
+    // for the same reason `balance` is: the enemy list belongs to Game, and a
+    // fire-rate getter that walked it would be doing so several times a
+    // trigger pull. Zero until the first frame writes it, which is the honest
+    // reading of an empty arena.
     this.aliveCount = 0;
     this.extX = 0;
     this.extZ = 0;
@@ -2835,6 +2416,11 @@ export class Player {
     this.moveVZ = 0;
     this.yaw = 0;
     this.pitch = 0;
+    // Recoil, as a CAMERA OFFSET in radians, decaying to zero. It is added to
+    // the aim in applyCamera rather than written into `pitch`, which is what
+    // keeps a burst from permanently re-pointing the player: the shot ray
+    // comes off the camera, so a climbing offset still walks sustained fire
+    // off target - it just hands the gun back where it was found.
     this.recoilPitch = 0;
     // The gun comes down with the run. A new game inheriting a raised weapon
     // would inherit the zoom with it, and nothing would be holding the button.
@@ -2853,6 +2439,14 @@ export class Player {
     this._bobPhase = 0;
     this._bobAmp = 0;
     this._sprintPose = 0;
+    // What _updateGunMotion() hands the pose block: three positions and three
+    // rotations, all offsets from the rest pose.
+    this._gunOffX = 0;
+    this._gunOffY = 0;
+    this._gunOffZ = 0;
+    this._gunOffRX = 0;
+    this._gunOffRY = 0;
+    this._gunOffRZ = 0;
     this.crouching = false;
     this.sliding = false;
     this.slideT = 0;
@@ -2900,6 +2494,12 @@ export class Player {
     this.fireRateBoostFull = 1;
     this.shield = 0;
     this.shieldEnd = 0;
+    // What the last takeDamage() call actually cost, after curse - see there.
+    this.lastDamageTaken = 0;
+    // VERSUS HANDOFF. 0 is the gun in hand, 1 the gun swung fully out of
+    // frame. Driven by main.js across a turn change (see setHolster), and a
+    // run restarted mid-swing still comes back with the gun drawn.
+    this.holster = 0;
     this.clearStatuses();
   }
 
@@ -3327,12 +2927,7 @@ export class Player {
     // clamp so the last frame of a bar cannot buy a frame of hang.
     if (this.mods.float > 0 && input.jump && !this.onGround
       && !this.staminaLocked && this.stamina > 0) {
-      this.stamina -= this.mods.floatDrain * this.mods.staminaDrain * dt;
-      this._staminaHold = STAMINA_DELAY;
-      if (this.stamina <= 0) {
-        this.stamina = 0;
-        this.staminaLocked = true;
-      }
+      this._drainStamina(this.mods.floatDrain, dt);
       // IT CLIMBS. Holding the button takes the player UP, not merely slows
       // the fall - the whole verb is leaving the floor, and a glide is a thing
       // that happens on the way down from a jump you already took.
@@ -3855,13 +3450,7 @@ export class Player {
       // sprint run dry gets. The hold is refreshed every frame for the same
       // reason the sprint refreshes it: the bar must not start climbing back
       // during the move it is paying for.
-      this.stamina -= SLIDE_DRAIN * this.mods.staminaDrain * dt;
-      this._staminaHold = STAMINA_DELAY;
-      if (this.stamina <= 0) {
-        this.stamina = 0;
-        this.staminaLocked = true;
-        this.slideT = 0;
-      }
+      if (this._drainStamina(SLIDE_DRAIN, dt)) this.slideT = 0;
       // A LITTLE steering, applied to the heading rather than to the velocity,
       // so the slide keeps its speed through the turn.
       if (moving) {
@@ -4006,6 +3595,31 @@ export class Player {
     this.slideT = 0;
   }
 
+  /**
+   * The one way the sprint bar is spent. Sprint, slide and FLOAT all pay the
+   * same bar at their own rate, and each used to carry its own copy of the
+   * drain-and-lock.
+   *
+   * The lockout is shared on purpose: a bar run dry by ANY of them refuses
+   * the run until a third of it is back (see STAMINA_UNLOCK), and the hold is
+   * refreshed every frame so the bar does not start climbing during the very
+   * move it is paying for. The drain runs before the clamp so the last frame
+   * of a bar cannot buy a frame of the move.
+   *
+   * @returns {boolean} true on the frame the bar ran dry - the caller's cue
+   *   to end its own move.
+   */
+  _drainStamina(rate, dt) {
+    this.stamina -= rate * this.mods.staminaDrain * dt;
+    this._staminaHold = STAMINA_DELAY;
+    if (this.stamina > 0) return false;
+    this.stamina = 0;
+    // Set here rather than tested by the callers, so the lock survives the
+    // player letting go of the key that is spending it.
+    this.staminaLocked = true;
+    return true;
+  }
+
   _updateSprint(dt, input, f, s) {
     const moving = (f !== 0 || s !== 0);
     const wants = !!input.sprint && moving;
@@ -4036,16 +3650,9 @@ export class Player {
       : Math.max(0, this.sprintFade - dt / SPRINT_SPREAD_FADE);
 
     if (this.sprinting) {
-      this.stamina -= STAMINA_DRAIN * this.mods.staminaDrain * dt;
-      this._staminaHold = STAMINA_DELAY;
-      if (this.stamina <= 0) {
-        this.stamina = 0;
-        // Run it dry and it is gone until a third of it is back - see the note
-        // on STAMINA_UNLOCK. Set here rather than tested at the top, so the
-        // lock survives the player letting go of the key.
-        this.staminaLocked = true;
-        this.sprinting = false;
-      }
+      // Run it dry and it is gone until a third of it is back - see the note
+      // on STAMINA_UNLOCK.
+      if (this._drainStamina(STAMINA_DRAIN, dt)) this.sprinting = false;
       return;
     }
     if (this._staminaHold > 0) {
@@ -4426,18 +4033,11 @@ export class Player {
     // must not spend its window standing through a reload, and a free shot
     // must not quietly take its round off the reserve instead.
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
-      this.beatShot = false;
       this.lastShotCost = 0;
       // The magazine is never touched by a free shot, so what the trigger saw
       // is simply what is in it - see magAtShot.
       this.magAtShot = this.mag;
-      this.fireCd = 1 / this.effectiveFireRate;
-      this.kick = w.kick;
-      this.noSprintUntil = this.now + SPRINT_FIRE_LOCK;
-      this.recoilPitch +=
-        (w.recoil + Math.random() * w.recoil * 0.6) * this.mods.recoilMult * this.shakeScale;
-      this._bloomShot();
-      this._noteShot();
+      this._fireShot(w);
       return 'shot';
     }
     // BELT FED DREAM. No magazine at all: the shot is billed straight off the
@@ -4494,11 +4094,11 @@ export class Player {
    * EVERYTHING A ROUND LEAVING THE BARREL DOES TO THE GUN, once the paying is
    * settled: the cooldown, the kick, the cone, the sprint lock.
    *
-   * Three branches of tryShoot bill their round three different ways - the
-   * magazine, the reserve under BELT FED DREAM, and the wallet under CASH
-   * CANNON - and every one of them fires the same weapon afterwards. This is
-   * the half they share, and it exists so a fourth way of paying cannot ship
-   * with a gun that forgot to recoil.
+   * Four branches of tryShoot bill their round four different ways - the
+   * magazine, the reserve under BELT FED DREAM, the wallet under CASH CANNON,
+   * and nothing at all under OPENING SALVO - and every one of them fires the
+   * same weapon afterwards. This is the half they share, and it exists so a
+   * fifth way of paying cannot ship with a gun that forgot to recoil.
    */
   _fireShot(w) {
     this.beatShot = false;

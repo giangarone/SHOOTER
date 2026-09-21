@@ -1,7 +1,7 @@
 // CANDY: stretched taffy, cracked sugar shells and sweets that pop twice.
 import * as THREE from 'three';
 import { ENEMY_TYPES, SHARED_MATS, partsFor, geo, lump, slab, prism, spike,
-  eyes, orbit, segBlocked } from './shared.js';
+  eyes, orbit, segBlocked, capturedShot } from './shared.js';
 
 const CREAM = 0xffedcf;
 const PINK = 0xff70b9;
@@ -221,9 +221,7 @@ function shedSugar(e, a) {
   a.ctx.effects.burst(at, CREAM, 20, 5, 2.5, 0.5);
 }
 function fireCandy(e, a, heading, spread = 0) {
-  const live = Math.atan2(a.ctx.player.pos.z - e.pos.z, a.ctx.player.pos.x - e.pos.x);
-  a.ctx.addProjectile(e.pos.x, e.pos.y + (e.boss ? e.scale * 1.1 : 1.25), e.pos.z,
-    e.type, e._projScale(), heading - live + spread);
+  capturedShot(e, a, heading, spread, e.boss ? e.scale * 1.1 : 1.25);
 }
 function aiTaffy(e, a) {
   tickSweets(e, a);

@@ -1,7 +1,7 @@
 // JUNGLE: buttress roots, jade leaves and golden pollen.
 import * as THREE from 'three';
 import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes,
-  orbit, landHit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot, contactReach } from './shared.js';
+  orbit, landHit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot, contactReach, snapAim, faceSnap } from './shared.js';
 
 const COLOR = 0xffc45c;
 const ORBIT = { dist: 11, band: 2, out: 0.8, in: -0.7, strafe: 0.5, flip: 2, flipVar: 1 };
@@ -165,10 +165,6 @@ function jungleCleanup(e) {
   if (e.laneMark >= 0) e.laneFx.markRelease(e.laneMark);
   e.laneMark = undefined;
 }
-function capture(e, a) {
-  e.nx = a.nx; e.nz = a.nz; e.aim = Math.atan2(a.nz, a.nx);
-  e.tx = a.ctx.player.pos.x; e.tz = a.ctx.player.pos.z; e._setEyeAlert(true);
-}
 function rest(e, seconds) { e.state = 'rest'; e.timer = seconds; e.stepMul = 1.4; e._setEyeAlert(false); }
 function point(x, z, radius, delay, damage) { return { x, z, radius, delay, damage }; }
 function lane(e, a, length, width, progress) {
@@ -176,11 +172,11 @@ function lane(e, a, length, width, progress) {
   e.laneFx.markSet(e.laneMark, e.pos.x + e.nx * length / 2, e.pos.z + e.nz * length / 2,
     width, COLOR, progress, length / (2 * width), Math.atan2(-e.nx, -e.nz));
 }
-function face(e) { e.faceLocked = true; e.group.rotation.y = Math.atan2(-e.nx, -e.nz); }
+
 function aiVinecat(e, a) {
   e.timer = (e.timer || 0) - a.dt;
   if (e.state === 'tell') {
-    face(e); lane(e, a, 7, 1.5, 1 - e.timer / 0.7);
+    faceSnap(e); lane(e, a, 7, 1.5, 1 - e.timer / 0.7);
     if (e.timer <= 0) {
       const warned = e.laneMark >= 0; jungleCleanup(e);
       e.state = warned ? 'pounce' : 'rest'; e.timer = warned ? 0.65 : 1.4; e.hit = false;
@@ -188,7 +184,7 @@ function aiVinecat(e, a) {
     return;
   }
   if (e.state === 'pounce') {
-    face(e); e.stepMul = 3;
+    faceSnap(e); e.stepMul = 3;
     const speed = Math.min(8, e.speed * 3) * Math.min(1, a.sp / Math.max(0.001, e.speed)) *
       Math.min(1, Math.max(0, e.timer + a.dt) / a.dt);
     a.vx = e.nx * speed; a.vz = e.nz * speed;
@@ -199,13 +195,13 @@ function aiVinecat(e, a) {
   if (e.state === 'rest' && e.timer > 0) return;
   // The lateral prowl happens BEFORE commitment. The warning and the pounce
   // never turn, even when the player changes direction or speed scales up.
-  if (a.dist < 7) { capture(e, a); e.state = 'tell'; e.timer = 0.7; return; }
+  if (a.dist < 7) { snapAim(e, a, true); e.state = 'tell'; e.timer = 0.7; return; }
   a.vx = a.px * a.sp - a.pz * a.sp * e.strafe * 0.45;
   a.vz = a.pz * a.sp + a.px * a.sp * e.strafe * 0.45;
 }
 function aiQuillmonkey(e, a) {
   if (e.state === 'tell') {
-    face(e);
+    faceSnap(e);
     e.timer -= a.dt;
     if (e.timer <= 0) {
       for (const spread of [-0.12, 0, 0.12]) capturedShot(e, a, e.aim, spread, 1.25);
@@ -222,7 +218,7 @@ function aiQuillmonkey(e, a) {
   }
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
-  if (a.dist < 22 && e.attackCd <= 0) { capture(e, a); e.state = 'tell'; e.timer = 0.7; e.attackCd = 3.4; }
+  if (a.dist < 22 && e.attackCd <= 0) { snapAim(e, a, true); e.state = 'tell'; e.timer = 0.7; e.attackCd = 3.4; }
 }
 function aiRootgorilla(e, a) {
   for (const arm of e.arms) arm.position.y = (e.state === 'tell' ? 1.0 : 0.6) * e.scale;
@@ -230,7 +226,7 @@ function aiRootgorilla(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
   if (a.dist < 6) {
-    capture(e, a); e.state = 'tell';
+    snapAim(e, a, true); e.state = 'tell';
     beginPattern(e, a, [1.8, 4, 6.2].map((d, i) => point(e.pos.x + a.nx * d,
       e.pos.z + a.nz * d, 1.5, 0.9 + i * 0.35, e.damage * 0.8)), COLOR);
   }
@@ -241,7 +237,7 @@ function aiSeedpod(e, a) {
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
   if (a.dist < 24 && e.attackCd <= 0) {
-    capture(e, a); e.state = 'seeds'; e.attackCd = 4.7;
+    snapAim(e, a, true); e.state = 'seeds'; e.attackCd = 4.7;
     // A central seed splits into two diagonals. The old centre is safe once
     // it has popped, so changing direction beats simply running farther back.
     beginPattern(e, a, [point(e.tx, e.tz, 1.8, 1.1, e.damage),
@@ -292,7 +288,7 @@ function aiSunfeather(e, a) {
   }
   if (e.state === 'rest' && (e.timer -= a.dt) > 0) return;
   orbit(e, a, ORBIT);
-  if (a.dist < 20 && e.attackCd <= 0) { capture(e, a); e.state = 'tell'; e.timer = 1; e.attackCd = 4.5; }
+  if (a.dist < 20 && e.attackCd <= 0) { snapAim(e, a, true); e.state = 'tell'; e.timer = 1; e.attackCd = 4.5; }
 }
 function titanRest(e, a) {
   jungleCleanup(e); rest(e, 1.9); e.bs.weakOpen = true;
@@ -308,7 +304,7 @@ function aiCanopyTitan(e, a) {
   if (e.state === 'pattern') { if (tickPattern(e, a)) titanRest(e, a); return; }
   e.timer -= a.dt;
   if (e.state === 'charge') {
-    face(e); e.stepMul = 4;
+    faceSnap(e); e.stepMul = 4;
     const speed = Math.min(7.2, e.speed * 4) * Math.min(1, a.sp / Math.max(0.001, e.speed)) *
       Math.min(1, Math.max(0, e.timer + a.dt) / a.dt);
     a.vx = e.nx * speed; a.vz = e.nz * speed;
@@ -317,7 +313,7 @@ function aiCanopyTitan(e, a) {
     return;
   }
   if (e.state === 'tell') {
-    face(e); lane(e, a, 12, 2.8, 1 - e.timer / 1.15);
+    faceSnap(e); lane(e, a, 12, 2.8, 1 - e.timer / 1.15);
     if (e.timer <= 0) {
       const warned = e.laneMark >= 0; jungleCleanup(e);
       if (!warned) { titanRest(e, a); return; }
@@ -326,7 +322,7 @@ function aiCanopyTitan(e, a) {
     return;
   }
   if (e.state === 'salvo') {
-    face(e);
+    faceSnap(e);
     if (e.timer > 0) return;
     const n = bs.enraged ? 7 : 5;
     for (let i = 0; i < n; i++) capturedShot(e, a, e.aim, (i - (n - 1) / 2) * 0.2 + (1 - e.volley) * 0.2, 1.4 * e.scale);
@@ -340,7 +336,7 @@ function aiCanopyTitan(e, a) {
   }
   a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
   if (e.timer > 0 || a.dist > 28) return;
-  capture(e, a); a.vx = a.vz = 0;
+  snapAim(e, a, true); a.vx = a.vz = 0;
   bs.attack = ['roots', 'stampede', 'seeds', 'canopy'][bs.turn++ % 4];
   if (bs.attack === 'stampede') { e.state = 'tell'; e.timer = 1.15; return; }
   if (bs.attack === 'seeds') { e.state = 'salvo'; e.timer = 1.15; e.volley = 0; return; }
