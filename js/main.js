@@ -185,13 +185,11 @@ const MAG_DUMP_SPREAD = 0.5;
 
 // FLOOR IS LAVA, in one place.
 //
-// The DPS is a magma trail's own (MAGMA_PATCH_DPS in js/enemies/ember.js), and
-// deliberately so: this is the same ground an ember wave lays under the
-// player, and a second number would mean the player learns "lava hurts this
-// much" twice. It is carved by the burn's own rate the way every lava patch is
-// - see the tick.
+// The floor's whole payload is the shared fire status - ONE ledger, billed
+// exactly as a cinder's touch is, because a second ground-rate account would
+// be nothing but a carve of that same status: a copy to keep in step at best,
+// and a bill a status immunity cannot refuse at worst.
 const LAVA_FLOOR_TIME = 10;
-const LAVA_FLOOR_DPS = 12;
 // The nine stamps: a 3x3 grid at this spacing, each this wide. Sized so the
 // ragged edges overlap well inside the arena bound rather than meeting exactly
 // at it, because two creep blobs that just touch leave a seam, and a seam in
@@ -1659,18 +1657,13 @@ class Game {
     // them together would put a branch in a hot loop that is wrong half the
     // time it runs.
     this._hazard = [];
-    // FLOOR IS LAVA's decal handles, and its two accumulators. The ITEM is in
-    // the running list like every other window; what is here is the state that
-    // window writes on the world, held on Game for the same reason every other
-    // zone's is - the creep pool is Game's to hand back, and an item's scratch
-    // object dies with the activation.
+    // FLOOR IS LAVA's decal handles. The ITEM is in the running list like
+    // every other window; what is here is the state that window writes on the
+    // world, held on Game for the same reason every other zone's is - the
+    // creep pool is Game's to hand back, and an item's scratch object dies
+    // with the activation.
     this._lavaCreep = [];
     this._lavaT = 0;
-    // Fractional damage between whole points, and the throttle on them. Both
-    // are a hazard patch's own `acc` and `tick` under different names, because
-    // this bleeds the player exactly the way standing in a patch does.
-    this._lavaAcc = 0;
-    this._lavaTick = 0;
     // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the sixty-six do not
     // finish on the frame they are pressed; this is the list that ticks them
     // and, more importantly, the list that ENDS them. See RunningActiveItems.
@@ -4634,8 +4627,6 @@ class Game {
   _lavaFloorStart() {
     this._lavaFloorEnd();
     this._lavaT = LAVA_FLOOR_TIME;
-    this._lavaAcc = 0;
-    this._lavaTick = 0;
     for (let i = 0; i < 9; i++) {
       this._lavaCreep.push(this.effects.creepAcquire(true));
     }
@@ -4666,21 +4657,20 @@ class Game {
       e.applyStatus('burn', 2, this.player.fireTickDamage);
     }
     if (this.player.pos.y >= LAVA_FLOOR_CLEAR) return;
-    // THE PLAYER BURNS ON EXACTLY A MAGMA PATCH'S TERMS - the same status for
-    // the same 2.5 seconds, and the same carve: the burn's own dps is taken
-    // OUT of the ground's rate, so standing here costs what standing in lava
-    // has always cost and the tail is what makes leaving early worth
-    // something. Through _afflictPlayer rather than straight onto the player,
-    // because that is where `invulnEnd` is checked: an item that set the
-    // player alight mid-AEGIS would break the one item AEGIS exists to be.
+    // THE PLAYER BURNS ON THE SHARED FIRE'S TERMS, and nothing else: one
+    // status, refreshed while they stand here, billed through the same drain
+    // every fire in the game uses. The floor used to keep a second ledger on
+    // top - a ground rate carved out of the burn's own - and the carve was
+    // the entire bug: a status refused is a floor that cannot bill, which is
+    // exactly what a status immunity pays for. Holding the total at a magma
+    // patch's 12 was never worth two accounts to keep in step; the floor
+    // burns a touch kinder than the magma's trail and the burn's own tail
+    // still makes leaving early worth something.
+    //
+    // Through _afflictPlayer rather than straight onto the player, because
+    // that is where `invulnEnd` is checked: an item that set the player
+    // alight mid-AEGIS would break the one item AEGIS exists to be.
     this._afflictPlayer('fire', LAVA_BURN_SECONDS);
-    this._lavaAcc += Math.max(0, LAVA_FLOOR_DPS - PLAYER_STATUS.fire.dps) * dt;
-    this._lavaTick -= dt;
-    if (this._lavaAcc < 1 || this._lavaTick > 0) return;
-    const whole = Math.floor(this._lavaAcc);
-    this._lavaAcc -= whole;
-    this._lavaTick = 0.34;
-    this._hurtPlayerDot(whole);
   }
 
   // Hands the stamps back. Called by the item's end(), by _clearHazards - so a
@@ -4690,7 +4680,6 @@ class Game {
     for (const h of this._lavaCreep) this.effects.creepRelease(h);
     this._lavaCreep.length = 0;
     this._lavaT = 0;
-    this._lavaAcc = 0;
   }
 
   // ---- BACKORDER, and LIFE INSURANCE's receipt ---------------------------
@@ -10961,10 +10950,14 @@ class Game {
   // rather than by a roll of Evasion. Making the ward eat a fear as well would
   // spend a once-per-wave charge on something the player could simply walk out
   // of, and they would never know it had.
+  //
+  // The return is whether anything landed, so a caller billing on the
+  // status's behalf - a hazard's carve - can ask before charging for one that
+  // was refused.
   _afflictPlayer(kind, secs) {
-    if (this.state !== 'playing') return;
-    if (this.time < this.player.invulnEnd) return;
-    this.player.applyStatus(kind, secs);
+    if (this.state !== 'playing') return false;
+    if (this.time < this.player.invulnEnd) return false;
+    return this.player.applyStatus(kind, secs);
   }
 
   // Frees whatever decoration a hazard was holding. Both pools hand out
@@ -11068,8 +11061,19 @@ class Game {
           // is where `invulnEnd` is checked, and applying the status directly
           // here meant a player could be set alight mid-AEGIS by standing in
           // lava - the one thing the item exists to prevent.
-          this._afflictPlayer(k.status, k.secs);
-          if (k.carve) dps = Math.max(0, dps - PLAYER_STATUS[k.status].dps);
+          //
+          // THE CARVE IS THE STATUS'S TO PAY. A carved patch splits its rate
+          // between the status and the ground, and the ground's half exists
+          // only because the status does: a status that was refused - IRON
+          // LUNG, WHITE CELL's lock - leaves the ground with nothing to bill.
+          // Billing anyway had a fully status-immune player bleeding from a
+          // patch whose whole payload had just failed to stick. ANTIDOTE is
+          // untouched either way: lava is not poison.
+          if (this._afflictPlayer(k.status, k.secs)) {
+            if (k.carve) dps = Math.max(0, dps - PLAYER_STATUS[k.status].dps);
+          } else if (k.carve) {
+            dps = 0;
+          }
         }
         h.acc += dps * dt;
         h.tick -= dt;

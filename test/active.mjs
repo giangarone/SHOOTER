@@ -1071,6 +1071,31 @@ try {
     tick(60);
     out.poisonLeech = P.health > 50;
 
+    // IRON LUNG versus a magma's trail. The patch's ground rate is the burn's
+    // carve, and a burn that cannot land leaves nothing to bill - the trail is
+    // its status, so the pick that refuses every status is owed the whole
+    // patch. The control underneath it is the same patch on a clean build, and
+    // has to keep billing: the law is "immune means free", not "lava got shy".
+    take('ironLung');
+    clearField();
+    g._hazard.length = 0;
+    P.pos.set(0, 0, 0);
+    P.health = P.maxHealth;
+    g._addHazard(0, 0, 3, 5, 12, 'lava');
+    for (let i = 0; i < 40; i++) { g.time += 0.05; g._updateHazard(0.05); }
+    out.ironLungLavaPatch = P.health === P.maxHealth && P.status.fire === 0;
+    P.passiveItems = {};
+    P.rebuildMods();
+    P.clearStatuses();
+    P.health = P.maxHealth;
+    g._hazard.length = 0;
+    g._addHazard(0, 0, 3, 5, 12, 'lava');
+    for (let i = 0; i < 40; i++) { g.time += 0.05; g._updateHazard(0.05); }
+    out.lavaPatchControl = P.health < P.maxHealth && P.status.fire > 0;
+    P.clearStatuses();
+    P.health = P.maxHealth;
+    g._hazard.length = 0;
+
     take('eternalAffliction');
     clearField();
     const cursed = spawn('chaser', 4, 0);
@@ -1399,6 +1424,13 @@ try {
     for (let i = 0; i < 40; i++) {
       g.time += 0.05;
       g.runningActiveItems.update(g, 0.05);
+      // The floor's whole payload is the burn now, and a burn bills through
+      // the loop's own two lines - the player's status tick, then the drain.
+      // This block drives the item's tick by hand, so it owes those two, or
+      // the fire is applied and never paid.
+      P._tickStatus(0.05);
+      const dot = P.drainStatusDamage();
+      if (dot > 0) g._hurtPlayerDot(dot);
     }
     out.lavaBurnsTheFloor = grounded.status.burn > 0;
     out.lavaSparesTheHigh = upstairs.status.burn === 0;
@@ -1412,6 +1444,24 @@ try {
       g.runningActiveItems.update(g, 0.05);
     }
     out.lavaSparesYouUpThere = P.health === P.maxHealth && P.status.fire === 0;
+    // IRON LUNG ON THE BURNING FLOOR. The floor is the one status now, so the
+    // refusal is the entire answer: nothing lands, and with nothing on the
+    // player there is nothing for the drain to collect. An earlier floor
+    // billed a carve of the burn alongside it, and a status immunity still
+    // bled two points a second.
+    const passivesBeforeLava = P.passiveItems;
+    take('ironLung');
+    P.pos.set(0, 0, 0);
+    P.health = P.maxHealth;
+    for (let i = 0; i < 40; i++) {
+      g.time += 0.05;
+      g.runningActiveItems.update(g, 0.05);
+    }
+    out.lavaIronLungClean = P.status.fire === 0 && P.health === P.maxHealth;
+    P.passiveItems = passivesBeforeLava;
+    P.rebuildMods();
+    P.clearStatuses();
+    P.health = P.maxHealth;
     out.lavaHeldCreep = creepHeld > 0;
     for (let i = 0; i < 400; i++) {
       g.time += 0.05;
@@ -1812,6 +1862,9 @@ try {
   ok('overload: 20% of max HP off everything', m.overload);
   ok('hellfire: the trail burns', m.hellfire);
   ok('antidote: pools do nothing', m.poolImmune);
+  ok('iron lung: a lava patch cannot bill the burn it could not land',
+    m.ironLungLavaPatch, String(m.ironLungLavaPatch));
+  ok('and the same patch still burns without the pick', m.lavaPatchControl);
   ok('antidote: poisoned enemies heal you', m.poisonLeech);
   ok('eternal affliction: statuses never end', m.eternal);
   ok('eternal affliction: pools hurt double', m.hazardDouble === 20, String(m.hazardDouble));
@@ -1873,6 +1926,7 @@ try {
   ok('floor is lava: and everything above it does not', m.lavaSparesTheHigh);
   ok('floor is lava: it burns you too', m.lavaBurnsYou);
   ok('floor is lava: unless you are up on something', m.lavaSparesYouUpThere);
+  ok('floor is lava: iron lung stands on it untouched', m.lavaIronLungClean);
   ok('floor is lava: it takes creep stamps', m.lavaHeldCreep);
   ok('floor is lava: ...and gives every one of them back',
     m.lavaGaveCreepBack);
