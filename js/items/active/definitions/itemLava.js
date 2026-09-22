@@ -6,7 +6,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     name: 'FLOOR IS LAVA',
     charge: 40,
     theme: THEME.hellfire,
-    // THE ONE ITEM THAT CHANGES WHERE THE GAME IS PLAYED. For ten seconds the
+    // THE ONE ITEM THAT CHANGES WHERE THE GAME IS PLAYED. For four seconds the
     // arena floor is not a place anybody can stand - the player included - and
     // the only ground left is what the terrain generator put ABOVE it: the
     // decks, the tiers, the stairs and the crates the player has spent the
@@ -17,14 +17,14 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // SURVIVED, which is why it is the only one whose value depends on where
     // the player was standing when they pressed it. Press it from a catwalk
     // and it is BRIMSTONE for forty points; press it in the open and it is
-    // ten seconds of being chased onto furniture.
+    // four seconds of being chased onto furniture.
     //
     // THE ENEMIES CANNOT ANSWER IT. They path on the floor, most of them
     // cannot climb, and the ones that fly are above it anyway - so what the
-    // player is buying is ten seconds in which the room's own geometry is the
+    // player is buying is four seconds in which the room's own geometry is the
     // only safe thing in it, and they are the only one who knows that.
-    effects: [['THE WHOLE FLOOR BURNS', GOOD], ['YOU TOO, FOR 10s', NOTE], ['GET UP ON SOMETHING', NOTE]],
-    duration: 10,
+    effects: [['THE WHOLE FLOOR BURNS', GOOD], ['YOU TOO, FOR 4s', NOTE], ['GET UP ON SOMETHING', NOTE]],
+    duration: 4,
     use: (game) => {
       game._lavaFloorStart();
       game.effects.shockwave(game.player.pos, THEME.hellfire, 30, 1.0);

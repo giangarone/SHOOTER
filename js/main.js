@@ -189,7 +189,7 @@ const MAG_DUMP_SPREAD = 0.5;
 // exactly as a cinder's touch is, because a second ground-rate account would
 // be nothing but a carve of that same status: a copy to keep in step at best,
 // and a bill a status immunity cannot refuse at worst.
-const LAVA_FLOOR_TIME = 10;
+const LAVA_FLOOR_TIME = 4;
 // The nine stamps: a 3x3 grid at this spacing, each this wide. Sized so the
 // ragged edges overlap well inside the arena bound rather than meeting exactly
 // at it, because two creep blobs that just touch leave a seam, and a seam in
