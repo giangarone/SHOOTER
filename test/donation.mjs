@@ -91,6 +91,10 @@ try {
       machine('health').pos.x === g.mysteryBox.pos.x
         && Math.abs((Math.min(...xs) + Math.max(...xs)) / 2 - g.mysteryBox.pos.x) < 1e-9,
       `boxX=${g.mysteryBox.pos.x} xs=${xs.join(',')}`);
+    const sortedXs = [...xs].sort((a, b) => a - b);
+    t('the cabinets leave a little air between each other',
+      sortedXs[1] - sortedXs[0] === 2.5 && sortedXs[2] - sortedXs[1] === 2.5,
+      `xs=${sortedXs.join(',')}`);
     const cornerAlpha = area.machines.map((m) =>
       m.panel.canvas.getContext('2d').getImageData(10, 10, 1, 1).data[3]);
     t('machine labels have no background fill or frame',

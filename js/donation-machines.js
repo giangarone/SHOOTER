@@ -346,10 +346,11 @@ export class DonationMachineArea {
     // directly before its nearest wall. The centre cabinet and the midpoint
     // of the outer pair share the box's x=0 centreline exactly.
     const z = DONATION_BANK_Z;
+    const spacing = 2.5;
     this.machines = [
-      new DonationMachine('ammo', -2.25, z, scene),
+      new DonationMachine('ammo', -spacing, z, scene),
       new DonationMachine('health', 0, z, scene),
-      new DonationMachine('credits', 2.25, z, scene),
+      new DonationMachine('credits', spacing, z, scene),
     ];
     this.byKind = Object.fromEntries(this.machines.map((m) => [m.kind, m]));
   }

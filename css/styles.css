@@ -2063,7 +2063,7 @@ body.pad-mode #game canvas { cursor: none; }
    or MALADY do, and this screen exists to be able to try them. A card is the
    icon, the name and the pool's own effect lines, at the width those lines
    need; three or four to a row is the honest density. */
-#debug-actives, #debug-passives {
+.debug-grid {
   display: grid; gap: calc(var(--u) * 2);
   grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
 }

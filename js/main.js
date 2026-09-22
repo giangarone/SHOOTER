@@ -9482,11 +9482,13 @@ class Game {
     // its own list would be one more thing to edit per theme - the exact chore
     // this row exists to remove. setTheme is the same hook the tests drive, so
     // a pin made here and a pin made by a suite cannot drift apart.
-    this.ui.buildDebug(this._debugPassiveDefs(), this._debugActiveDefs(),
+    this.ui.buildDebug(this._debugPassiveDefs(), this._debugActiveDefs(), this._debugDonationDefs(),
       Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, color: t.color })), {
       passive: (id) => this._debugGivePassive(id),
       dropPassive: (id) => this._debugDropPassive(id),
       active: (id) => this._debugGiveActive(id),
+      donation: (key) => this._debugGiveDonation(key),
+      dropDonation: (key) => this._debugDropDonation(key),
       wave: (n) => this._debugJumpToWave(n),
       theme: (key) => this._debugSetTheme(key),
     });
@@ -9511,9 +9513,9 @@ class Game {
     if (!this.autoTest) this._lock();
   }
 
-  // The two catalogues, as the flat shape the panel draws. The id is also the
-  // icon key in both pools - see the note at the head of ACTIVE_ITEMS - so
-  // there is nothing to map.
+  // The ordinary catalogues, as the flat shape the panel draws. The id is also
+  // the icon key in both pools - see the note at the head of ACTIVE_ITEMS -
+  // so there is nothing to map.
   //
   // THE EFFECT LINES COME FROM THE POOL, not from a second table written for
   // this screen. A tiered passive's `effects` is a FUNCTION of the stack count
@@ -9533,8 +9535,24 @@ class Game {
     }));
   }
 
+  // Donation catalogues stay split by cabinet so the panel grows directly
+  // from the same three discovered pools as the machines. Their compound id
+  // is also their icon and ownership key, so duplicate filenames in different
+  // cabinets remain independent here just as they are in a run.
+  _debugDonationDefs() {
+    return Object.fromEntries(DONATION_KINDS.map((kind) => [kind,
+      Object.entries(DONATION_ITEMS[kind]).map(([id, def]) => ({
+        id: donationItemKey(kind, id),
+        name: def.name,
+        theme: def.theme,
+        effects: def.effects,
+      })),
+    ]));
+  }
+
   _debugRefresh() {
-    this.ui.refreshDebug(this.player.passiveItems, this.player.activeItem, this.wave, this._forcedTheme);
+    this.ui.refreshDebug(this.player.passiveItems, this.player.activeItem,
+      this.player.donationItems, this.wave, this._forcedTheme);
   }
 
   // A TIER AT A TIME, through the player's own takePassiveItem - so a stacking
@@ -9574,6 +9592,23 @@ class Game {
     this.player.giveActiveItem(id);
     this._debugRefresh();
     this.sfx.activeItemReady();
+  }
+
+  _debugGiveDonation(key) {
+    const [, kind, id] = key.split('/');
+    if (!this.player.takeDonationItem(kind, id, this)) return;
+    this._debugRefresh();
+    this.sfx.menuMove();
+  }
+
+  _debugDropDonation(key) {
+    if (!this.player.donationItems[key]) return;
+    delete this.player.donationItems[key];
+    this.player.rebuildMods();
+    this.player.health = Math.min(this.player.health, this.player.maxHealth);
+    this.player.mag = Math.min(this.player.mag, this.player.magSize);
+    this._debugRefresh();
+    this.sfx.menuBack();
   }
 
   /**

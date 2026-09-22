@@ -98,6 +98,11 @@ export class UI {
     this.debugPanel = $('debug-panel');
     this.debugPassives = $('debug-passives');
     this.debugActives = $('debug-actives');
+    this.debugDonations = {
+      ammo: $('debug-donation-ammo'),
+      health: $('debug-donation-health'),
+      credits: $('debug-donation-credits'),
+    };
     this.debugWaves = $('debug-waves');
     this.debugThemes = $('debug-themes');
     this.debugWaveNow = $('debug-wave-now');
@@ -1029,13 +1034,13 @@ export class UI {
   // things around it: the card lights up in the item's theme, its border and
   // name come up with it, and an owned tile is the only one that is not flat.
   //
-  // BUILT ONCE. A hundred and three tiles is a hundred and three
+  // BUILT ONCE. Hundreds of tiles means hundreds of
   // pixelIconCanvas calls at 576 cells each, and the panel is opened and shut
   // over and over inside one session - so the DOM is made on the first open
   // and every open after it only rewrites the `on` class and the tier count.
   //
-  // `passives` and `actives` are [{ id, name, theme, effects }]; `on` carries
-  // the five things a click can mean. Nothing here knows what a wave or an
+  // Every item catalogue is [{ id, name, theme, effects }]; `on` carries the
+  // things a click can mean. Nothing here knows what a wave or an
   // passive item IS - main.js owns all of that, and this owns which pixel was
   // clicked.
   //
@@ -1043,7 +1048,7 @@ export class UI {
   // in here once so a theme landing in the table is a theme this row grows
   // without either file being edited, which is the whole reason the panel
   // does not carry its own list of them.
-  buildDebug(passives, actives, themes, on) {
+  buildDebug(passives, actives, donations, themes, on) {
     if (this._debugTiles) return;
     this._debugTiles = {};
     this._debugWaveEls = [];
@@ -1053,6 +1058,13 @@ export class UI {
     }
     for (const def of actives) {
       this.debugActives.appendChild(this._debugTile(def, on.active, null));
+    }
+    for (const [kind, defs] of Object.entries(donations)) {
+      for (const def of defs) {
+        this.debugDonations[kind].appendChild(
+          this._debugTile(def, on.donation, on.dropDonation)
+        );
+      }
     }
     // Forty buttons, which covers the whole boss rotation twice and every
     // enemy unlock in the game. Anything past it goes in the box beside them.
@@ -1106,7 +1118,8 @@ export class UI {
    * One card: the icon, the name and the effect lines, in the item's own
    * theme colour.
    *
-   * `give` runs on a click and `drop` - passives only - on a right-click,
+   * `give` runs on a click and `drop` - permanent build items only - on a
+   * right-click,
    * which is the whole reason the tile is a <button> and the panel needs no
    * other controls. Being a button is also what makes the pad work: the menu
    * driver walks buttons geometrically and has no idea what this screen is.
@@ -1176,7 +1189,9 @@ export class UI {
       t.el.classList.toggle('filtered',
         words.length > 0 && !words.every((w) => t.hay.includes(w)));
     }
-    for (const grid of [this.debugActives, this.debugPassives]) {
+    for (const grid of [
+      this.debugActives, this.debugPassives, ...Object.values(this.debugDonations),
+    ]) {
       const any = [...grid.children].some((el) => !el.classList.contains('filtered'));
       grid.closest('.debug-sec').classList.toggle('hidden', !any);
     }
@@ -1187,14 +1202,15 @@ export class UI {
    *
    * @param {object} owned  { [passive id]: stacks } - the player's own map
    * @param {string|null} item  the carried active item's id
+   * @param {object} donations  namespaced Donation Machine rewards owned
    * @param {number} wave   the wave the run is currently in
    * @param {string|null} theme  the theme every block is pinned to, or null
    *   when the run's dealt order owns the schedule
    */
-  refreshDebug(owned, item, wave, theme) {
+  refreshDebug(owned, item, donations, wave, theme) {
     if (!this._debugTiles) return;
     for (const [id, t] of Object.entries(this._debugTiles)) {
-      const n = id === item ? 1 : (owned[id] || 0);
+      const n = id === item ? 1 : (owned[id] || donations[id] || 0);
       t.el.classList.toggle('on', n > 0);
       // A tier is printed only where there is one to read. "x1" on every
       // single-tier passive would make the stacking ones invisible, which is

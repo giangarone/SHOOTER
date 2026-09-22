@@ -764,6 +764,29 @@ try {
     t('the beam is down while the panel is up',
       document.body.classList.contains('reading'));
     {
+      // The three exclusive catalogues are dealt from the same discovered
+      // pools as their cabinets. Counts, sections and click paths all stay
+      // current when a reward definition is added without this suite learning
+      // its name.
+      const { DONATION_ITEMS } = await import('./js/items/donation/index.js');
+      const donationDefs = g._debugDonationDefs();
+      t('each Donation Machine pool has its own debug section',
+        Object.entries(DONATION_ITEMS).every(([kind, pool]) =>
+          g.ui.debugDonations[kind].children.length === Object.keys(pool).length),
+        Object.entries(g.ui.debugDonations)
+          .map(([kind, grid]) => `${kind}=${grid.children.length}`).join(' '));
+      const reward = donationDefs.ammo[0];
+      const tile = g.ui._debugTiles[reward.id].el;
+      delete g.player.donationItems[reward.id];
+      g.player.rebuildMods();
+      tile.click();
+      t('a donation reward tile grants through the real ownership path',
+        !!g.player.donationItems[reward.id] && tile.classList.contains('on'), reward.id);
+      tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      t('right-click removes a donation reward and refreshes its tile',
+        !g.player.donationItems[reward.id] && !tile.classList.contains('on'), reward.id);
+    }
+    {
       // One theme button per theme, plus OFF. Counted from the table the
       // buttons were dealt from, not a literal - a theme landing is the row
       // growing, and the suite should not have to be told.
@@ -804,11 +827,15 @@ try {
         search.value = q;
         search.dispatchEvent(new Event('input', { bubbles: true }));
       };
-      const defs = [...g._debugPassiveDefs(), ...g._debugActiveDefs()];
+      const donationDefs = Object.values(g._debugDonationDefs()).flat();
+      const defs = [...g._debugPassiveDefs(), ...g._debugActiveDefs(), ...donationDefs];
       const hayOf = (d) => (d.name + ' ' +
         (Array.isArray(d.effects) ? d.effects.map((e) => e[0]).join(' ') : '')).toLowerCase();
+      const itemGrids = [
+        g.ui.debugActives, g.ui.debugPassives, ...Object.values(g.ui.debugDonations),
+      ];
       const standing = () =>
-        [...g.ui.debugActives.children, ...g.ui.debugPassives.children]
+        itemGrids.flatMap((grid) => [...grid.children])
           .filter((el) => !el.classList.contains('filtered'));
       const actSec = g.ui.debugActives.closest('.debug-sec');
       const pasSec = g.ui.debugPassives.closest('.debug-sec');
@@ -818,7 +845,7 @@ try {
         defs.filter((x) => d.name.toLowerCase().split(/\s+/).every((w) => hayOf(x).includes(w)))
           .length < defs.length) || g._debugPassiveDefs()[0];
       type(pick.name);
-      t('a query narrows both grids to the cards holding it',
+      t('a query narrows every grid to the cards holding it',
         standing().length > 0 && standing().length < defs.length,
         `q="${pick.name}" ${standing().length}/${defs.length}`);
       t('every card still standing says every word of it',
@@ -841,12 +868,12 @@ try {
         && !pasSec.classList.contains('hidden'),
         'word=' + (passOnly || pick.name));
       type('qqqq wwww');
-      t('a query nothing holds empties both sections',
-        actSec.classList.contains('hidden') && pasSec.classList.contains('hidden'));
+      t('a query nothing holds empties every item section',
+        itemGrids.every((grid) => grid.closest('.debug-sec').classList.contains('hidden')));
       type('');
       t('and clearing the box puts every card back',
         standing().length === defs.length
-        && !actSec.classList.contains('hidden') && !pasSec.classList.contains('hidden'),
+        && itemGrids.every((grid) => !grid.closest('.debug-sec').classList.contains('hidden')),
         `${standing().length}/${defs.length}`);
     }
     await tap(B.CREATE);

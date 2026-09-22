@@ -203,13 +203,13 @@
        reason: it is here on purpose, it is one screen, and it says so in two
        places (see _openDebug in js/main.js).
 
-       Three sections, in the order a test actually uses them: the wave you
-       want to be in, the one active item you can carry, and the sixty-six
-       passives. Every tile is a button carrying its own icon - the same
+       The controls come first, followed by every item catalogue: the one
+       active item you can carry, the passives, and each Donation Machine's
+       exclusive pool. Every tile is a button carrying its own icon - the same
        pixelicons.js drawing the totem and the build sheet use - and OWNED is
        the only state it has: colour for carried, grey for not. That is the
        whole readout, so there is nothing to read. The search box in the head
-       filters the two item grids by name and effect line - a hundred tiles
+       filters every item grid by name and effect line - hundreds of tiles
        is past what the eye scans, and "give me the dash one" should not be
        a hunt. -->
   <div id="debug-panel" class="hidden">
@@ -246,6 +246,18 @@
         <section class="debug-sec">
           <h3>PASSIVE ITEMS <em>CLICK ADDS A TIER - RIGHT-CLICK REMOVES</em></h3>
           <div id="debug-passives" class="debug-grid"></div>
+        </section>
+        <section class="debug-sec">
+          <h3>AMMO DONATION MACHINE <em>CLICK ADDS - RIGHT-CLICK REMOVES</em></h3>
+          <div id="debug-donation-ammo" class="debug-grid"></div>
+        </section>
+        <section class="debug-sec">
+          <h3>HEALTH DONATION MACHINE <em>CLICK ADDS - RIGHT-CLICK REMOVES</em></h3>
+          <div id="debug-donation-health" class="debug-grid"></div>
+        </section>
+        <section class="debug-sec">
+          <h3>CREDITS DONATION MACHINE <em>CLICK ADDS - RIGHT-CLICK REMOVES</em></h3>
+          <div id="debug-donation-credits" class="debug-grid"></div>
         </section>
       </div>
     </div>

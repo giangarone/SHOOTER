@@ -919,10 +919,10 @@ context. The start screen says so, and one click anywhere fixes it.
   leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
-- **Donation Machines**: every shop also raises a separate bank of three
-  Use-only cabinets behind the Mystery Box, centred on it against the nearest
-  wall. The yellow cabinet takes 30 reserve rounds, the red cabinet takes 10 HP
-  (only above 10), and the green cabinet takes $1,000. Each has its own
+- **Donation Machines**: every shop also raises a separate, evenly spaced bank
+  of three Use-only cabinets behind the Mystery Box, centred on it against the
+  nearest wall. The yellow cabinet takes 30 reserve rounds, the red cabinet
+  takes 10 HP (only above 10), and the green cabinet takes $1,000. Each has its own
   bottom-up segmented meter, tier ladder and permanent reward pool; firing into
   the cabinet stops the shot but never pays.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
@@ -1116,6 +1116,8 @@ independently. Adding a machine-exclusive reward therefore adds only its
 definition file (and an optional matching test fragment); neither the machine
 system nor a registry is edited. Ownership and icon keys are namespaced as
 `donation/<machine>/<id>`, so the same id may exist in multiple machine pools.
+The debug panel discovers the same catalogues and gives ammo, health and credit
+rewards their own sections automatically.
 
 The machine-exclusive pools are:
 
