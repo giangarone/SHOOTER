@@ -67,7 +67,8 @@ export async function discoverItems(kind, catalogueUrl, options = {}) {
           && typeof definition.name === 'string'
           && Number.isFinite(definition.theme)
           && (Array.isArray(definition.effects) || typeof definition.effects === 'function')
-          && typeof definition.apply === 'function';
+          && typeof definition.apply === 'function'
+          && (definition.onTake === undefined || typeof definition.onTake === 'function');
     if (!valid) throw new Error(`invalid ${kind} item definition: ${module.id}`);
     catalogue[module.id] = Object.freeze(definition);
     // A new item may carry its own 24x24 drawing. Existing drawings remain in

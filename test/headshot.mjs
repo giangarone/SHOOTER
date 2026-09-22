@@ -122,15 +122,14 @@ try {
       let hits = 0;
       const sink = g.effects.damageNumber.bind(g.effects);
       g.effects.damageNumber = (...a) => { hits++; return sink(...a); };
-      g._shotHits.clear();
-      g._shotCrit.clear();
+      g._beginShot();
       g._firePellet(new THREE.Vector3(0, at.y, 0), targets, 0, g.player.weapon, 1, false);
       g.effects.damageNumber = sink;
       const dealt = before - e.hp;
       e.dispose();
       g.scene.remove(e.group);
       g.enemies.length = 0;
-      return { dealt, hits };
+      return { dealt, hits, registeredHead: g._shotWasHead };
     };
     const body = shoot(false);
     const head = shoot(true);
@@ -144,6 +143,9 @@ try {
     `${dmg.head.hits} damage numbers`);
   check('one round through a body is ONE hit', dmg.body.hits === 1,
     `${dmg.body.hits} damage numbers`);
+  check('the shot ledger distinguishes headshots for ammo settlement',
+    dmg.head.registeredHead && !dmg.body.registeredHead,
+    `head=${dmg.head.registeredHead} body=${dmg.body.registeredHead}`);
 
   // ---- 4. aim assist lets go of a head ----
   const assist = await page.evaluate(async () => {

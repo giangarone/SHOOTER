@@ -525,6 +525,18 @@ const DEFAULT_MODS = {
   fleshBankGain: 0,     // health crate banks. The cost is a FLAT TAKE like
                         // maxHpFlat, replayed by rebuildMods; the gains ride
                         // the crate's own bank on the Player (`fleshBanked`).
+
+  // ---- DONATION MACHINE REWARDS -----------------------------------------
+  // These fields are replayed from the three machine-exclusive catalogues in
+  // rebuildMods(), while one-time pickup behavior stays on each definition.
+  donationShieldRate: 0,   // shield per combat second
+  donationShieldCap: 0,    // and the most that trickle may build
+  donationLowHpGuard: 0,   // incoming-damage cut below an absolute HP line
+  donationLowHpAt: 0,
+  donationFreeShot: 0,     // chance a trigger pull spends no ammunition
+  donationMagFlat: 0,      // flat rounds added after magazine multipliers
+  donationHeadshotFree: 0, // refund the ammunition spent by a headshot
+  donationCreditSiphon: 0, // share of each payout banked before it hits floor
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -1250,7 +1262,7 @@ export class Player {
     // build did to the number; max(1,...) keeps a small magazine a magazine.
     const cut = this.mods.fatHandgun > 0 ? this.mods.fatHandgun : 0;
     return Math.max(1, Math.round(this.weapon.magSize * this.mods.magMult)
-      + this.magnaRounds - cut);
+      + this.magnaRounds + this.mods.donationMagFlat - cut);
   }
   /**
    * How long a reload takes, right now.
@@ -1400,6 +1412,12 @@ export class Player {
     // make the best moment of the pick the one moment it is invisible.
     if (this.mods.coldBloodCut > 0 && this.health <= this.maxHealth * this.mods.coldBloodAt) {
       k *= 1 - this.mods.coldBloodCut;
+    }
+    // PANIC PLATE uses an ABSOLUTE line. A larger health bar should give the
+    // player more room above the emergency state, not turn "below 50 HP" into
+    // a percentage whose meaning changes every time max health does.
+    if (this.mods.donationLowHpGuard > 0 && this.health < this.mods.donationLowHpAt) {
+      k *= 1 - this.mods.donationLowHpGuard;
     }
     // MONEY BELT. The balance is published onto the player every frame by
     // main.js, which owns it - the same number WAR CHEST reads, so the two
@@ -1606,7 +1624,7 @@ export class Player {
   // key is intentional: future pools may use the same filename without
   // sharing ownership, and owning the normal passive with that id is also a
   // completely separate fact.
-  takeDonationItem(machineKind, itemId) {
+  takeDonationItem(machineKind, itemId, context) {
     const pool = DONATION_ITEMS[machineKind];
     const def = pool && pool[itemId];
     if (!def) return false;
@@ -1614,6 +1632,10 @@ export class Player {
     if (this.donationItems[key]) return false;
     this.donationItems[key] = true;
     this.rebuildMods();
+    // One-time pickup behavior lives with the reward that owns it. Stat-only
+    // rewards omit the hook; credits receive a narrow callback from Game,
+    // while player-owned effects such as a full heal act directly here.
+    if (typeof def.onTake === 'function') def.onTake(this, context);
     this.health = Math.min(this.health, this.maxHealth);
     this.mag = Math.min(this.mag, this.magSize);
     return true;
@@ -2308,6 +2330,7 @@ export class Player {
     this._equipModel();
     this.flawlessStreak = 0;
     this._ammoRegenAcc = 0;
+    this._donationShieldAcc = 0;
     this.wardCharges = 0;
     this.livesUsed = 0;
     this.breachReady = false;
@@ -2316,6 +2339,12 @@ export class Player {
     // inside Opening Salvo's window - can never refund something it never
     // used. Written by every path through tryShoot().
     this.lastShotCost = 0;
+    // The exact payment behind lastShotCost. Most magazine mechanics care
+    // about the advertised trigger cost; SKULL RECEIPT has to put back the
+    // ammunition that actually left, and into the pool it left from.
+    this.lastAmmoSpent = 0;
+    this.lastShotPool = 'none';
+    this.lastShotAutoReload = false;
     this.dodgeEnd = 0;
     this.carnageStacks = 0;
     this.invulnEnd = 0;
@@ -2628,6 +2657,24 @@ export class Player {
         const whole = Math.floor(this._ammoRegenAcc);
         this._ammoRegenAcc -= whole;
         this.reserveAmmo = Math.min(this.maxReserve, this.reserveAmmo + whole);
+      }
+    }
+    // IVORY DRIP. Like Ammo Fabricator, time exists only while the fight is
+    // live: a shop has no clock, so allowing the shield there would make
+    // waiting at the machines until twenty the correct move. Whole points are
+    // paid from an accumulator so the HUD climbs once per second and a short
+    // frame never rounds the reward away.
+    if (combat && this.mods.donationShieldRate > 0
+      && this.shield < this.mods.donationShieldCap) {
+      this._donationShieldAcc += this.mods.donationShieldRate * dt;
+      if (this._donationShieldAcc >= 1) {
+        const whole = Math.floor(this._donationShieldAcc);
+        this._donationShieldAcc -= whole;
+        this.shield = Math.min(this.mods.donationShieldCap, this.shield + whole);
+        // Machine shields are permanent until spent, just like Soul Harvest's
+        // point. They must never inherit another shield source's expiry.
+        this.shieldEnd = 0;
+        if (this.shield >= this.mods.donationShieldCap) this._donationShieldAcc = 0;
       }
     }
 
@@ -3955,6 +4002,34 @@ export class Player {
   // cannot know, because a crit is resolved against the BODY (see
   // Game._resolveHit).
   //
+  // SKULL RECEIPT is deliberately a separate settlement. Critical Overflow
+  // promises one round; a headshot promises that its whole trigger cost no
+  // ammunition, which can be several rounds and may have left the reserve.
+  refundLastShotAmmo() {
+    const spent = this.lastAmmoSpent;
+    if (!(spent > 0)) return false;
+    if (this.lastShotPool === 'mag') {
+      this.mag = Math.min(this.magSize, this.mag + spent);
+      // The reload was armed only because this same trigger emptied the
+      // magazine. Once the rounds are back, leaving it running would make a
+      // free headshot interrupt the weapon anyway.
+      if (this.lastShotAutoReload && this.mag > 0) {
+        this.reloading = 0;
+        this.magOnReload = 0;
+      }
+    } else if (this.lastShotPool === 'reserve') {
+      this.reserveAmmo = Math.min(this.maxReserve, this.reserveAmmo + spent);
+    } else {
+      return false;
+    }
+    this.lastShotCost = 0;
+    this.lastAmmoSpent = 0;
+    this.lastShotPool = 'none';
+    this.lastShotAutoReload = false;
+    return true;
+  }
+
+  //
   // A refund goes to the MAGAZINE where there is room and to the reserve
   // otherwise, because the magazine is the number the player is watching. The
   // extra round a non-crit costs comes out of the same two, in the same order.
@@ -4023,8 +4098,13 @@ export class Player {
       if (this.status.fear > 0) return 'feared';
       if (!w.auto && !triggerFresh) return null;
       if (this.reserveAmmo <= 0) return 'empty';
-      this.reserveAmmo--;
-      this.lastShotCost = 1;
+      const free = this.mods.donationFreeShot > 0
+        && Math.random() < this.mods.donationFreeShot;
+      if (!free) this.reserveAmmo--;
+      this.lastShotCost = free ? 0 : 1;
+      this.lastAmmoSpent = free ? 0 : 1;
+      this.lastShotPool = free ? 'none' : 'reserve';
+      this.lastShotAutoReload = false;
       this.magAtShot = 0;
       // Marks this trigger pull as the OFF HAND'S, so main.js fires one pellet
       // through it rather than the weapon's whole pattern - the card says
@@ -4069,6 +4149,9 @@ export class Player {
     // must not quietly take its round off the reserve instead.
     if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
       this.lastShotCost = 0;
+      this.lastAmmoSpent = 0;
+      this.lastShotPool = 'none';
+      this.lastShotAutoReload = false;
       // The magazine is never touched by a free shot, so what the trigger saw
       // is simply what is in it - see magAtShot.
       this.magAtShot = this.mag;
@@ -4085,8 +4168,13 @@ export class Player {
         if (this._tryCashShot()) return 'shot';
         return 'empty';
       }
-      this.reserveAmmo -= belt;
-      this.lastShotCost = belt;
+      const free = this.mods.donationFreeShot > 0
+        && Math.random() < this.mods.donationFreeShot;
+      if (!free) this.reserveAmmo -= belt;
+      this.lastShotCost = free ? 0 : belt;
+      this.lastAmmoSpent = free ? 0 : belt;
+      this.lastShotPool = free ? 'none' : 'reserve';
+      this.lastShotAutoReload = false;
       this.magAtShot = 0;
       this._fireShot(w);
       return 'shot';
@@ -4104,7 +4192,12 @@ export class Player {
     // is worth more than the round itself: it is a reload you never have to
     // stand through. The trigger's full cost comes out of whichever pool pays.
     const cost = this.shotCost;
-    this.lastShotCost = cost;
+    const free = this.mods.donationFreeShot > 0
+      && Math.random() < this.mods.donationFreeShot;
+    this.lastShotCost = free ? 0 : cost;
+    this.lastAmmoSpent = 0;
+    this.lastShotPool = 'none';
+    this.lastShotAutoReload = false;
     // WHAT THE TRIGGER SAW, snapshotted before anything is billed. FATAL
     // RESERVE asks whether the round leaving the barrel was one of the last
     // five in the magazine, and by the time the pellet lands the count has
@@ -4112,16 +4205,26 @@ export class Player {
     // all when BELT FEED took it off the reserve instead. This is the only
     // number that answers the question the same way for every build.
     this.magAtShot = this.mag;
-    if (this.mods.beltFeed > 0 && this.reserveAmmo >= cost
+    if (free) {
+      // The round leaves the gun normally; only the ammunition ledger is
+      // skipped. In particular it still recoils, blooms and observes the fire
+      // rate through the shared _fireShot path below.
+    } else if (this.mods.beltFeed > 0 && this.reserveAmmo >= cost
       && Math.random() < this.mods.beltFeed) {
       this.reserveAmmo -= cost;
+      this.lastAmmoSpent = cost;
+      this.lastShotPool = 'reserve';
     } else {
       // A shot that cannot afford its full cost still fires and empties the
       // magazine; refusing it would jam the gun on one leftover round.
+      this.lastAmmoSpent = Math.min(this.mag, cost);
+      this.lastShotPool = 'mag';
       this.mag = Math.max(0, this.mag - cost);
     }
     this._fireShot(w);
-    if (this.mag === 0) this.startReload();
+    if (!free && this.lastShotPool === 'mag' && this.mag === 0) {
+      this.lastShotAutoReload = this.startReload();
+    }
     return 'shot';
   }
 
@@ -4173,6 +4276,9 @@ export class Player {
     // The shot cost no AMMUNITION, which is what BRASS ECHO and CRITICAL
     // OVERFLOW both read to decide whether there is anything to refund.
     this.lastShotCost = 0;
+    this.lastAmmoSpent = 0;
+    this.lastShotPool = 'none';
+    this.lastShotAutoReload = false;
     this.magAtShot = 0;
     this._fireShot(this.weapon);
     return true;

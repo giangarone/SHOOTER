@@ -1549,6 +1549,10 @@ class Game {
     // _resolveHit and settled once at the end of shoot(), beside the two sets
     // above and cleared with them.
     this._shotWasCrit = false;
+    // SKULL RECEIPT's answer for the whole trigger pull. One pellet through a
+    // head makes the ammunition behind that pull free; reset beside the crit
+    // ledger because both answers are known only after the raycasts land.
+    this._shotWasHead = false;
     // STIGMATA's near-misses this trigger pull. The same peer rule as the
     // three sets above: paid once per body per shot, so a shotgun fan that
     // passes within the band of one mob in a close room still chips it once.
@@ -4284,6 +4288,7 @@ class Game {
     this._shotCrit.clear();
     this._blastHit = false;
     this._shotWasCrit = false;
+    this._shotWasHead = false;
     this._reflected = false;
     this._chipHits.clear();
   }
@@ -5526,12 +5531,24 @@ class Game {
     // Multiplying it would not be compensating a many-handed player for the
     // waves they never played - it would hand them N times the active-item
     // uptime in the wave they are actually in, which is just being stronger.
-    this.money.spawn(pos, split ? paid * this._playerMult() : paid,
-      maxOrbs, spread, hold);
+    const payout = split ? paid * this._playerMult() : paid;
+    // REMOTE DEPOSIT. The split happens BEFORE anything reaches MoneyOrbs:
+    // half of the payout goes directly into the balance and the untouched
+    // half is still represented by ordinary floor orbs with ordinary magnet,
+    // lifetime and pickup behavior. Splitting each existing orb after spawn
+    // would either need a second visual pool or make a full-looking orb worth
+    // half of what its size says.
+    const siphon = Math.max(0, Math.min(1, this.player.mods.donationCreditSiphon));
+    const banked = payout * siphon;
+    if (banked > 0) this.addCredits(banked);
+    this.money.spawn(pos, payout - banked, maxOrbs, spread, hold);
     // The figure paid comes back out for the item charge, which is handed over
     // as those orbs are collected and in proportion to what each one is worth -
     // see _collectOrb. Nothing about the MONEY itself needs it.
-    return paid;
+    // Item charge is distributed over what remains collectable on the floor.
+    // Its total still comes from the enemy's value in _bankKillCharge; this is
+    // only the denominator that decides how quickly that total arrives.
+    return paid * (1 - siphon);
   }
 
   // WHAT A KILL IS WORTH, banked as the enemy dies and paid out as its orbs are
@@ -5603,6 +5620,17 @@ class Game {
     // same one OVERDRAW made wrong: a point that does not fit is now a point
     // of item charge rather than a point thrown away. heal() decides.
     if (this.time < this.player.orbHealEnd) this.player.heal(1);
+  }
+
+  // A narrow pickup hook for machine rewards that grant credits immediately.
+  // Player owns the item catalogue but Game owns the wallet, so passing Game
+  // as this context keeps the reward definition in its own directory without
+  // putting an item id into either core class.
+  addCredits(value) {
+    if (!(value > 0)) return 0;
+    this.credits += value;
+    this._creditsDirty = true;
+    return value;
   }
 
   // Extends the kill chain. Called once per enemy death. Nothing is paid for
@@ -6512,6 +6540,7 @@ class Game {
   // already inside `dealt` (see _hitMult).
   _landShot(en, point, dir, dealt, burst, crit = false, head = false) {
     const m = this.player.mods;
+    if (head) this._shotWasHead = true;
     // A warded enemy eats the shot whole (see Enemy.takeDamage). It gets the
     // stone-grey spark rather than the ordinary yellow one, so a player
     // emptying a magazine into a group under a warden's dome is told why
@@ -7255,6 +7284,13 @@ class Game {
     if (charged) {
       this._blast(this._lastImpact, mods.chargeDamage, mods.chargeRadius, null, false);
       this.effects.addShake(0.2);
+    }
+    // SKULL RECEIPT settles after every pellet has answered where it landed
+    // and before any last-round mechanic asks whether the magazine emptied.
+    // A refunded headshot did not empty it, so Pocket Grenade, Chain Feed and
+    // Death Clause must all see the zero cost written by refundLastShotAmmo.
+    if (mods.donationHeadshotFree > 0 && this._shotWasHead) {
+      if (this.player.refundLastShotAmmo()) this.ui.flashReserve();
     }
     // POCKET GRENADE. The round that emptied the magazine, as a blast.
     //
@@ -9326,7 +9362,7 @@ class Game {
 
   _takeDonationReward(machine) {
     const itemId = machine.pendingId;
-    if (!itemId || !this.player.takeDonationItem(machine.kind, itemId)) return false;
+    if (!itemId || !this.player.takeDonationItem(machine.kind, itemId, this)) return false;
     const def = DONATION_ITEMS[machine.kind][itemId];
     machine.takeReward();
     this._killPos.set(machine.pos.x, 2.05, machine.pos.z);

@@ -63,7 +63,9 @@ async function fragments(parts, kind) {
 
 try {
   check('Node discovers three independent donation catalogues',
-    Object.values(DONATION_ITEMS).every((pool) => Object.keys(pool).length === 3),
+    Object.keys(DONATION_ITEMS.ammo).length === 5
+      && Object.keys(DONATION_ITEMS.health).length === 3
+      && Object.keys(DONATION_ITEMS.credits).length === 2,
     Object.entries(DONATION_ITEMS).map(([kind, pool]) => `${kind}=${Object.keys(pool).length}`).join(' '));
   browser = await launchBrowser();
   const page = await browser.newPage();
@@ -90,10 +92,10 @@ try {
   const catalogueTotal = Object.values(catalogue).reduce((n, ids) => n + ids.length, 0);
   check('the directory-driven item catalogues boot',
     catalogue.passive.length > 0 && catalogue.active.length > 0
-      && catalogue['donation-ammo'].length === 3
+      && catalogue['donation-ammo'].length === 5
       && catalogue['donation-health'].length === 3
-      && catalogue['donation-credits'].length === 3,
-    `${catalogue.passive.length} passive / ${catalogue.active.length} active / 9 donation`);
+      && catalogue['donation-credits'].length === 2,
+    `${catalogue.passive.length} passive / ${catalogue.active.length} active / 10 donation`);
   check('browser item URLs are opaque to content blockers',
     directDefinitionRequests.length === 0
       && opaqueModuleRequests.length === catalogueTotal,
@@ -156,7 +158,7 @@ try {
     Object.keys(catalogue).every((kind) =>
       pagesCatalogue[kind].length === catalogue[kind].length
     ),
-    `${pagesCatalogue.passive.length} passive / ${pagesCatalogue.active.length} active / 9 donation`);
+    `${pagesCatalogue.passive.length} passive / ${pagesCatalogue.active.length} active / 10 donation`);
   check('the Pages artifact uses only opaque item module URLs',
     pagesNamedRequests.length === 0
       && pagesOpaqueRequests.length === pagesTotal,

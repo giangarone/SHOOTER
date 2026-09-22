@@ -105,7 +105,7 @@ try {
     t('the match has no winner yet', g.match.winner === -1, String(g.match.winner));
     Object.assign(g.player.donationProgress, { ammo: 2, health: 1, credits: 3 });
     Object.assign(g.player.donationTiers, { ammo: 1, health: 0, credits: 2 });
-    g.player.donationItems['donation/ammo/magnaCarta'] = true;
+    g.player.donationItems['donation/ammo/drumMajor'] = true;
     g.player.rebuildMods();
 
     // ---- 2. a CLEAR hands over ---------------------------------------------
@@ -131,7 +131,7 @@ try {
       JSON.stringify(g.player.donationProgress));
     Object.assign(g.player.donationProgress, { ammo: 4, health: 3, credits: 2 });
     Object.assign(g.player.donationTiers, { ammo: 0, health: 2, credits: 1 });
-    g.player.donationItems['donation/health/soulHarvest'] = true;
+    g.player.donationItems['donation/health/ivoryDrip'] = true;
     g.player.rebuildMods();
 
     // ---- 2b. THE BOX KNOWS WHOSE SLOT IT IS LOOKING AT ---------------------
@@ -212,8 +212,8 @@ try {
         && g.player.donationTiers.ammo === 1
         && g.player.donationTiers.health === 0
         && g.player.donationTiers.credits === 2
-        && !!g.player.donationItems['donation/ammo/magnaCarta']
-        && !g.player.donationItems['donation/health/soulHarvest'],
+        && !!g.player.donationItems['donation/ammo/drumMajor']
+        && !g.player.donationItems['donation/health/ivoryDrip'],
       JSON.stringify({
         progress: g.player.donationProgress,
         tiers: g.player.donationTiers,

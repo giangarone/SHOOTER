@@ -168,9 +168,7 @@ try {
 
     // ---- completion, pickup, tiers and non-duplicates -------------------
     reset();
-    p.passiveItems.fatHandgun = 1;
-    p.rebuildMods();
-    const reloadWithNormal = p.mods.reloadMult;
+    const rateBeforeReward = p.mods.fireRate;
     p.reserveAmmo = 10000;
     const random = Math.random;
     Math.random = () => 0;
@@ -178,7 +176,7 @@ try {
     Math.random = random;
     t('five donations complete the first tier',
       p.donationTiers.ammo === 1 && p.donationProgress.ammo === 0
-        && ammo.completedThisShop && ammo.pendingId === 'fatHandgun'
+        && ammo.completedThisShop && ammo.pendingId === 'clockworkSear'
         && own('ammo').length === 0,
       `tiers=${p.donationTiers.ammo} pending=${ammo.pendingId}`);
     t('the completed meter is full as the cabinet starts sinking',
@@ -197,27 +195,24 @@ try {
     area.update(30, g.time + 30, p.pos, p);
     t('the cabinet sinks but an unclaimed reward remains indefinitely',
       ammo.state === 'hidden' && !ammo.group.visible
-        && ammo.pendingId === 'fatHandgun' && ammo.displayGroup.visible
-        && ammo.icons.fatHandgun.visible && own('ammo').length === 0);
+        && ammo.pendingId === 'clockworkSear' && ammo.displayGroup.visible
+        && ammo.icons.clockworkSear.visible && own('ammo').length === 0);
     const pickupPrompt = g._usePrompt({ kind: 'donation', target: ammo })[0];
     t('the floating reward asks for a second Use press',
       pickupPrompt.includes(g.keys.label('use'))
-        && pickupPrompt.includes('TAKE') && pickupPrompt.includes('FAT HANDGUN'),
+        && pickupPrompt.includes('TAKE') && pickupPrompt.includes('CLOCKWORK SEAR'),
       pickupPrompt);
 
     p.pos.copy(ammo.pos);
     g.tryUse();
     t('the second Use press grants and removes the floating reward',
-      !!p.donationItems['donation/ammo/fatHandgun']
+      !!p.donationItems['donation/ammo/clockworkSear']
         && !ammo.pendingId && !ammo.displayGroup.visible);
-    t('normal-pool ownership does not exclude a namespaced reward',
-      !!p.passiveItems.fatHandgun
-        && !!p.donationItems['donation/ammo/fatHandgun']);
     t('the picked-up reward is replayed into modifiers',
-      p.mods.reloadMult < reloadWithNormal,
-      `normal=${reloadWithNormal} donation=${p.mods.reloadMult}`);
+      p.mods.fireRate === rateBeforeReward * 1.2,
+      `before=${rateBeforeReward} donation=${p.mods.fireRate}`);
     t('the build sheet includes picked-up donation rewards',
-      g._statPassives().some((row) => row.id === 'donation/ammo/fatHandgun'));
+      g._statPassives().some((row) => row.id === 'donation/ammo/clockworkSear'));
     t('pickup does not re-enable the completed cabinet',
       ammo.state === 'hidden' && ammo.completedThisShop);
 
@@ -234,7 +229,7 @@ try {
     };
 
     // Always choosing index zero now takes the next unowned id: it cannot
-    // hand Fat Handgun out again even though the RNG repeats exactly.
+    // hand Clockwork Sear out again even though the RNG repeats exactly.
     Math.random = () => 0;
     startShop();
     p.reserveAmmo = 10000;
@@ -250,6 +245,15 @@ try {
     t('draws are non-duplicate within the machine pool',
       own('ammo').length === 3 && new Set(own('ammo')).size === 3,
       own('ammo').join(', '));
+    // Ammo has five genuinely distinct rewards. Finish its last two tiers so
+    // sold-out is still proved against the actual directory, not a stale
+    // placeholder count.
+    for (let tier = 3; tier < Object.keys(g.__donationItemsForTest.ammo).length; tier++) {
+      startShop();
+      p.reserveAmmo = 10000;
+      for (let i = 0; i < 5 + tier; i++) g._useDonationMachine(ammo);
+      g._takeDonationReward(ammo);
+    }
     startShop();
     const beforeSoldOut = p.reserveAmmo;
     const refusedSoldOut = g._useDonationMachine(ammo);
@@ -281,7 +285,8 @@ try {
       for (const key of own(kind)) delete p.donationItems[key];
       p.donationProgress[kind] = 0;
       p.donationTiers[kind] = 0;
-      for (let tier = 0; tier < 3; tier++) {
+      const count = Object.keys(g.__donationItemsForTest[kind]).length;
+      for (let tier = 0; tier < count; tier++) {
         startShop();
         if (kind === 'health') p.health = Math.max(p.maxHealth, 100);
         else g.credits = 100000;
@@ -294,9 +299,9 @@ try {
     exhaust('health');
     exhaust('credits');
     Math.random = random;
-    t('health and credit pools also draw all three rewards without duplicates',
+    t('health and credit pools draw every reward without duplicates',
       own('health').length === 3 && new Set(own('health')).size === 3
-        && own('credits').length === 3 && new Set(own('credits')).size === 3,
+        && own('credits').length === 2 && new Set(own('credits')).size === 2,
       `health=${own('health').join(',')} credits=${own('credits').join(',')}`);
 
     // Same filename in another pool would still be a different compound key;
@@ -305,6 +310,98 @@ try {
       g.__donationItemsForTest.ammo !== g.__donationItemsForTest.health
         && g.__donationItemsForTest.health !== g.__donationItemsForTest.credits
         && !Object.keys(g.__passiveItemsForTest).some((id) => id.startsWith('donation/')));
+
+    const poolIds = Object.fromEntries(Object.entries(g.__donationItemsForTest)
+      .map(([kind, pool]) => [kind, Object.keys(pool)]));
+    t('placeholder rewards are completely gone from every machine pool',
+      !poolIds.ammo.some((id) => ['fatHandgun', 'magnaCarta', 'slideRule'].includes(id))
+        && !poolIds.health.some((id) => ['fleshBank', 'platedDessert', 'soulHarvest'].includes(id))
+        && !poolIds.credits.some((id) => ['lateFee', 'thinBlood', 'deathClause'].includes(id)),
+      JSON.stringify(poolIds));
+
+    // ---- the ten exclusive reward mechanics ----------------------------
+    reset();
+    const baseDamage = p.getEffectiveDamage(10);
+    const baseRate = p.effectiveFireRate;
+    const baseMag = p.magSize;
+    for (const id of poolIds.ammo) p.takeDonationItem('ammo', id, g);
+    t('OVERPRESSURE grants exactly 40% damage',
+      Math.abs(p.getEffectiveDamage(10) / baseDamage - 1.4) < 1e-9);
+    t('CLOCKWORK SEAR grants exactly 20% fire rate',
+      Math.abs(p.effectiveFireRate / baseRate - 1.2) < 1e-9);
+    t('DRUM MAJOR adds exactly 30 rounds of magazine capacity',
+      p.magSize === baseMag + 30, `${baseMag} -> ${p.magSize}`);
+
+    p.mag = 10;
+    p.reserveAmmo = 100;
+    p.reloading = 0;
+    p.fireCd = 0;
+    Math.random = () => 0;
+    const freeShot = p.tryShoot(true);
+    const afterFree = p.mag;
+    p.fireCd = 0;
+    Math.random = () => 0.99;
+    const paidShot = p.tryShoot(true);
+    Math.random = random;
+    t('GHOST CASINGS makes a successful 40% roll cost no ammo',
+      freeShot === 'shot' && afterFree === 10 && p.lastAmmoSpent === 1,
+      `afterFree=${afterFree}`);
+    t('GHOST CASINGS leaves a failed roll paying normally',
+      paidShot === 'shot' && p.mag === 9, `mag=${p.mag}`);
+    const refund = p.refundLastShotAmmo();
+    t('SKULL RECEIPT restores the exact ammunition a shot spent',
+      refund && p.mag === 10 && p.lastShotCost === 0, `mag=${p.mag}`);
+
+    reset();
+    const oldMax = p.maxHealth;
+    p.health = 7;
+    p.takeDonationItem('health', 'secondHeart', g);
+    t('SECOND HEART adds 20 max health and fills the new bar on pickup',
+      p.maxHealth === oldMax + 20 && p.health === p.maxHealth,
+      `${p.health}/${p.maxHealth}`);
+    p.takeDonationItem('health', 'panicPlate', g);
+    p.health = 50;
+    const atFifty = p.incomingMult;
+    p.health = 49;
+    const underFifty = p.incomingMult;
+    t('PANIC PLATE halves damage only below 50 HP',
+      atFifty === 1 && underFifty === 0.5,
+      `at50=${atFifty} under50=${underFifty}`);
+    p.takeDonationItem('health', 'ivoryDrip', g);
+    p.shield = 0;
+    p._donationShieldAcc = 0;
+    const neutral = { move: { x: 0, z: 0 }, look: { x: 0, y: 0 } };
+    let tickTime = g.time;
+    for (let i = 0; i < 120; i++) {
+      tickTime += 1 / 60;
+      p.update(1 / 60, neutral, g.arena.obstacles, tickTime, false);
+    }
+    const shopShield = p.shield;
+    for (let i = 0; i < 1500; i++) {
+      tickTime += 1 / 60;
+      p.update(1 / 60, neutral, g.arena.obstacles, tickTime, true);
+    }
+    t('IVORY DRIP creates no shield outside combat', shopShield === 0,
+      `shield=${shopShield}`);
+    t('IVORY DRIP generates one shield per combat second and caps at 20',
+      p.shield === 20, `shield=${p.shield}`);
+
+    reset();
+    g.credits = 125;
+    p.takeDonationItem('credits', 'signingBonus', g);
+    t('SIGNING BONUS grants exactly $10,000 on pickup', g.credits === 10125,
+      `credits=${g.credits}`);
+    p.takeDonationItem('credits', 'remoteDeposit', g);
+    g.money.clear();
+    g.credits = 0;
+    p.flawlessStreak = 0;
+    const floorShare = g._dropMoney(p.pos, 100);
+    let floorValue = 0;
+    for (let i = 0; i < g.money.count; i++) floorValue += g.money.value[i];
+    t('REMOTE DEPOSIT banks half of every floor payout immediately',
+      g.credits === 50 && floorShare === 50, `bank=${g.credits} return=${floorShare}`);
+    t('REMOTE DEPOSIT leaves the other half as ordinary floor credits',
+      Math.abs(floorValue - 50) < 1e-4, `floor=${floorValue}`);
 
     // A new run owns none of the ledgers that survived the previous shops.
     g.autoTest = true;

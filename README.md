@@ -1109,13 +1109,28 @@ js/items/donation/credits/definitions/
 ```
 
 Each file exports a filename-matching `id`, a definition with `name`, `theme`,
-`effects` and `apply`, and its own 24x24 `icon`. The local server, Node loader
-and static Pages build discover the three directories independently. Adding a
-machine-exclusive reward therefore adds only its definition file (and an
-optional matching test fragment); neither the machine system nor a registry is
-edited. Ownership and icon keys are namespaced as `donation/<machine>/<id>`, so
-the same id may exist in multiple machine pools, and owning its normal-passive
-placeholder does not remove the machine version.
+`effects` and `apply`, and its own 24x24 `icon`. A definition may also provide
+`onTake` for a one-time pickup event such as a full heal or a credit grant. The
+local server, Node loader and static Pages build discover the three directories
+independently. Adding a machine-exclusive reward therefore adds only its
+definition file (and an optional matching test fragment); neither the machine
+system nor a registry is edited. Ownership and icon keys are namespaced as
+`donation/<machine>/<id>`, so the same id may exist in multiple machine pools.
+
+The machine-exclusive pools are:
+
+| Machine | Reward | Effect |
+| --- | --- | --- |
+| Ammo | GHOST CASINGS | 40% of trigger pulls spend no ammunition |
+| Ammo | OVERPRESSURE | +40% damage |
+| Ammo | CLOCKWORK SEAR | +20% fire rate |
+| Ammo | DRUM MAJOR | +30 magazine capacity |
+| Ammo | SKULL RECEIPT | Headshots refund all ammunition spent by that trigger pull |
+| Health | IVORY DRIP | Generates 1 permanent shield per combat second, up to 20 |
+| Health | PANIC PLATE | 50% damage resistance while below 50 HP |
+| Health | SECOND HEART | +20 max health and fills the health bar on pickup |
+| Credits | SIGNING BONUS | Grants $10,000 on pickup |
+| Credits | REMOTE DEPOSIT | Banks 50% of each credit payout immediately; the other half remains on the floor |
 
 Progress, completed tiers and claimed rewards last across shops for the current
 run and reset with a new run or match. In local versus they are Player snapshot

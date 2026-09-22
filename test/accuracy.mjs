@@ -73,8 +73,10 @@ try {
       g.spawnTimer = 1e9;
     };
     // The bot that comes with ?autotest has to be taken off the sticks, or it
-    // rewrites `input` under every measurement below.
-    g.autoTest = false;
+    // rewrites `input` under every measurement below. It stays enabled until
+    // after beginGame(), though: beginGame uses this same flag to avoid asking
+    // headless Chrome for pointer lock, whose rejection pauses the run before
+    // the first measurement and leaves every later firing assertion vacuous.
     const p = g.player;
     const out = [];
     const t = (name, cond, extra = '') => out.push([name, !!cond, String(extra)]);
@@ -153,6 +155,7 @@ try {
     };
 
     g.beginGame();
+    g.autoTest = false;
     await frames(4);
     await rest();
 

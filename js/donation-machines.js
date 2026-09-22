@@ -228,9 +228,9 @@ export class DonationMachine {
     this.displayGroup.visible = false;
     this.displayGroup.add(this.panel.sprite);
 
-    // This pool's three placeholder plates are built once with the cabinet
-    // (nine across the bank). A reveal only toggles visibility; completing a
-    // tier never allocates scene data.
+    // This pool's exclusive reward plates are built once with the cabinet. A
+    // reveal only toggles visibility; completing a tier never allocates scene
+    // data, regardless of how many definition files the pool contains.
     this.icons = {};
     this.iconAnchor = new THREE.Group();
     this.iconAnchor.position.set(0, 2.16, 0.66);
