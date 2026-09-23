@@ -93,6 +93,7 @@ import {
 import { MoneyOrbs, BASE_MAGNET_RADIUS, ORB_LIFETIME } from './money.js';
 import {
   PASSIVE_ITEMS, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
+  WAVETABLE,
 } from './items/passive/index.js';
 import { DONATION_ITEMS, DONATION_KINDS, donationItemKey } from './items/donation/index.js';
 
@@ -163,6 +164,16 @@ const THEME_SHUFFLE = THEME.shuffle;
 const THEME_SOUL = THEME.soulHarvest;
 const THEME_CLAUSE = THEME.deathClause;
 const THEME_FLESH = THEME.fleshBank;
+// The eighth pool's, for the flashes each of them throws. SIDECHAIN keeps
+// THUNDERCLAP's blue because the two are the same verb - a flat hit on every
+// body in the room - and ECHO keeps SKIPSTONE's because it IS that bounce,
+// twice. LFO throws none (the sweep IS the tell) and WAVETABLE draws its
+// flashes in the current element's own colour, so neither needs an entry.
+const THEME_SQUARE = THEME.squareWave;
+const THEME_MIDI = THEME.midiCable;
+const THEME_SIDECHAIN = THEME.sidechain;
+const THEME_ECHO_BOUNCE = THEME.echo;
+const THEME_CHORUS = THEME.chorus;
 // COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
 // player's own CHILLED chip is drawn in - one colour for one effect, wherever
 // it is coming from, which is the rule STATUS_TINT exists to hold.
@@ -238,7 +249,7 @@ import {
   donationRequirement, donationSoldOut, randomUnownedDonationItem,
 } from './donation-machines.js';
 import {
-  ACTIVE_ITEMS, shuffledPool, RunningActiveItems, HUMOURS,
+  ACTIVE_ITEMS, shuffledPool, rollItem, RunningActiveItems, HUMOURS,
   CHARGE_PER_VALUE, BOSS_ADD_CHARGE_CAP,
 } from './items/active/index.js';
 // PRIMED MAG throws the Bomb; PANIC TURRET stands the Turret up. Both are
@@ -1605,6 +1616,15 @@ class Game {
     // the vector moved Detonator's blast onto whatever the last bolt hit.
     this._boltAt = new THREE.Vector3();
     this._blastHit = false;
+    // SIDECHAIN COMPRESSION's once-per-press latch, on DETONATOR's terms:
+    // cleared with the rest of the press's scratch in _beginShot so a
+    // scattergun's eight pellets are one pulse, exactly as they are one
+    // blast.
+    this._sidechainHit = false;
+    // ECHO's bounce normal, in WORLD space. The floor bounce SKIPSTONE takes
+    // can simply invert y; a wall or a platform can only be answered by the
+    // surface's own normal, transformed out of the hit's local frame.
+    this._bounceN = new THREE.Vector3();
     // Where the last pellet stopped, for Breach Round's blast.
     this._lastImpact = new THREE.Vector3();
     this._pullTo = new THREE.Vector3();
@@ -4303,6 +4323,7 @@ class Game {
     this._shotHits.clear();
     this._shotCrit.clear();
     this._blastHit = false;
+    this._sidechainHit = false;
     this._shotWasCrit = false;
     this._shotWasHead = false;
     this._reflected = false;
@@ -4711,6 +4732,44 @@ class Game {
     for (const h of this._lavaCreep) this.effects.creepRelease(h);
     this._lavaCreep.length = 0;
     this._lavaT = 0;
+  }
+
+  /**
+   * SYNTHESIZER and MIDI CABLE, the two picks that reroll a slot at the wave
+   * clear. One method for both because they answer the same question - what
+   * is the build carrying into the shop? - and are paid on the same edge,
+   * after the wave's payouts and before the totems rise, so the player shops
+   * against what the rerolls left them.
+   *
+   * RETURNS the names of what changed, for the clear banner: the banner is
+   * the pick's only readout, because a rental or a rerolled item that went
+   * unannounced would read as the stats moving on their own.
+   *
+   * @returns {{synth: ?string, midi: ?string}}
+   */
+  _rerollWaveItems() {
+    const p = this.player;
+    const out = { synth: null, midi: null };
+    // SYNTHESIZER. The tenancy is the player's own method so the pick's
+    // onTake and this clear can never disagree about the pool - see
+    // Player.rollSynthPick.
+    const synth = p.rollSynthPick();
+    if (synth) {
+      out.synth = PASSIVE_ITEMS[synth].name;
+      this.effects.shockwave(p.pos, THEME.synthesizer, 7, 0.55);
+    }
+    // MIDI CABLE. Only ever something the player is already carrying - the
+    // card reroutes the slot, and an empty slot has nothing to reroute. The
+    // swap goes through giveActiveItem so the newcomer arrives FULLY
+    // CHARGED, which is half of what the pick sells.
+    if (p.mods.midiCable > 0 && p.activeItem) {
+      const next = rollItem(p.activeItem);
+      p.giveActiveItem(next);
+      out.midi = ACTIVE_ITEMS[next].name;
+      this.effects.burst(p.eyeInto(this._killPos), THEME_MIDI, 16, 4.5, 2.2, 0.5);
+      this.sfx.itemTake();
+    }
+    return out;
   }
 
   // ---- BACKORDER, and LIFE INSURANCE's receipt ---------------------------
@@ -6686,6 +6745,24 @@ class Game {
     }
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
+    // WAVETABLE. One more status, paid for by the magazine the round left
+    // rather than by a pick: whatever element the current magazine carries
+    // lands with the hit, on the same per-SHOT terms the four above follow -
+    // a scattergun puts one element on a chest however many pellets it did
+    // it with. The impact flash carries the element's own colour, which is
+    // the only readout of which slot the bank is on: there is nowhere on the
+    // HUD to print it, exactly as FOUR HUMOURS has none.
+    if (m.wavetable > 0) {
+      const el = WAVETABLE[this.player.wavetable % WAVETABLE.length];
+      if (el.status === 'burn') {
+        en.applyStatus('burn', el.dur, this.player.fireTickDamage * el.power);
+      } else if (el.status === 'poison') {
+        en.applyStatus('poison', el.dur, this.player.poisonTickDamage * el.power);
+      } else {
+        en.applyStatus(el.status, el.dur);
+      }
+      this.effects.impact(point, el.color, 8, 4, 2, 0.3);
+    }
     // SPLASHBACK. Whatever is on the PLAYER right now, on the body they just
     // hit. Below the passive item statuses because it is one more of them, and
     // in the per-SHOT half of this method (under the _shotHits guard) because
@@ -6716,6 +6793,24 @@ class Game {
     if (m.chainDamage) this._chain(en, dealt * m.chainDamage, m.chainRange);
     if (m.knockback) this._shove(en, dir, m.knockback);
     if (m.gravityPull) this._pull(point, m.gravityRadius, m.gravityPull, en, 0.18);
+    // SIDECHAIN COMPRESSION. The press has found its first body, so the
+    // whole room takes the pulse: one flat point at everything else alive,
+    // through hurtEnemy so the kill, the bounty and the combo are booked
+    // exactly as THUNDERCLAP's are. Latched once per press on DETONATOR's
+    // pattern - a scattergun or a piercing round is one kick, not one per
+    // body it found - and the ring is only thrown when there was something
+    // to pump, so a clean 1v1 pays nothing but its own damage.
+    if (m.sidechain > 0 && !this._sidechainHit) {
+      this._sidechainHit = true;
+      let pulsed = 0;
+      for (const other of this.enemies) {
+        if (other === en || other.dead) continue;
+        if (this.hurtEnemy(other, m.sidechain)) pulsed++;
+      }
+      if (pulsed > 0) {
+        this.effects.shockwave(this.player.pos, THEME_SIDECHAIN, 22, 0.5);
+      }
+    }
     // Detonator goes off once per trigger pull, at the first enemy the
     // shot touched. Per-pellet it would fire eight blasts from one shell
     // and exhaust the four-ring pool on its own.
@@ -6804,8 +6899,14 @@ class Game {
       if (en && !en.dead) headed.add(en);
     }
 
-    // SKIPSTONE's per-pellet bounce flag - see the floor branch below.
-    let bounced = false;
+    // THE BOUNCES THIS PELLET HAS LEFT. SKIPSTONE starts with one, off the
+    // floor only; ECHO starts with two, off any surface the room owns. When
+    // a build holds both the better card answers - ECHO's two supersets
+    // SKIPSTONE's one, and a bounce budget that added them would be a pick
+    // nobody printed. Per PELLET, like everything in this walk: the count is
+    // this round's own flight.
+    let bouncesLeft = m.echo > 0 ? m.echo : (m.skipstone > 0 ? 1 : 0);
+    const bouncesOffWalls = m.echo > 0;
     // And the muzzle-equivalent the final tracer is drawn FROM - usually the
     // gun itself, but after a bounce it is the floor's bounce point, so the
     // tracer never draws a straight line through solid ground to reach it.
@@ -6922,34 +7023,61 @@ class Game {
       }
       const en = h.object.userData.enemy;
       if (!en) {
-        // SKIPSTONE. A round that stops on the FLOOR has not stopped: it
-        // comes off the surface once and carries on, at full damage, along
-        // the reflected ray. The floor is the plane at y=0 and nothing else
-        // in the raycast list is - a wall, a crate and a totem all stop the
-        // round dead, which is what keeps the bounce a bank shot off the
-        // ground rather than a ricochet off the room.
+        // SKIPSTONE and ECHO. A round that stops on the ROOM has not
+        // necessarily stopped: it comes off the surface and carries on, at
+        // full damage, along the reflected ray. Only the room's own meshes
+        // reach this branch - every branch above is shop furniture or a
+        // body, and all of them stop the round dead - so the question left
+        // is WHICH surfaces pay, and that is the two cards' whole
+        // difference: SKIPSTONE bounces off the FLOOR alone (the plane at
+        // y=0, identified by height exactly as it always was), ECHO off
+        // anything with a face to reflect off.
         //
-        // THE SECOND TOUCH IS THE LAST. `bounced` is per PELLET, so a skipped
-        // round that falls to the floor again simply stops, exactly as the
-        // card says - "once", and never twice.
-        if (m.skipstone > 0 && !bounced && h.point.y <= 0.06) {
-          bounced = true;
+        // THE LAST TOUCH IS THE LAST. `bouncesLeft` is per PELLET, so a
+        // round that falls to the floor again - or meets a third wall -
+        // simply stops, one bounce fewer than the card promised never being
+        // a thing the walk allows. A hit with no FACE to reflect off is a
+        // degenerate the normal branch has no answer for, and stops too.
+        const floor = h.point.y <= 0.06;
+        if (bouncesLeft > 0 && (bouncesOffWalls ? !!h.face : floor)) {
+          bouncesLeft--;
           // Lift the origin off the surface by a hair so the reflected ray
-          // does not immediately re-intersect the floor it just left, invert
-          // the vertical, and RE-CAST into the same list - the walk restarts
-          // from the top of the fresh hits, so everything downstream (the
-          // pierce count, the head pass, the dedup sets) is shared with the
-          // forward flight exactly as though the bounce were one longer ray.
+          // does not immediately re-intersect the surface it just left, and
+          // RE-CAST into the same list - the walk restarts from the top of
+          // the fresh hits, so everything downstream (the pierce count, the
+          // head pass, the dedup sets) is shared with the forward flight
+          // exactly as though the bounce were one longer ray.
           //
-          // The FIRST leg is drawn now - the tracer below only ever draws the
-          // second. A bent streak is the whole tell that the bounce happened.
-          legStart.copy(h.point);
-          legStart.y += 0.05;
-          this.effects.tracer(muzzle, h.point, this.player.muzzle);
-          this.effects.impact(h.point, THEME.skipstone, 3, 2.5, 1.2, 0.22);
+          // THE BOUNCE'S OWN LEG is drawn now, from where the pellet was
+          // FLYING at the touch - `legStart`, which is the muzzle on the
+          // first bounce and the last touch point on the second. SKIPSTONE's
+          // original made this call with `muzzle`, which was safe only
+          // because it bounces once: on ECHO's second bounce that drew a
+          // straight streak out of the barrel to a point the shot never
+          // flew from - a phantom second shot. The bent streak is the whole
+          // tell that the bounce happened; the final leg is closed by the
+          // tracer at the bottom of this function.
+          this.effects.tracer(legStart, h.point, this.player.muzzle);
+          if (bouncesOffWalls) {
+            // THE SURFACE'S OWN NORMAL, in world space, reflected properly.
+            // The floor is a rotated plane and the walls scaled boxes, so
+            // the local face normal has to be walked through the object's
+            // transform before it can answer a world-space ray - and for
+            // the floor the reflection this produces is exactly the
+            // y-inversion SKIPSTONE's branch performs by hand.
+            this._bounceN.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+            const d = ray.ray.direction;
+            d.addScaledVector(this._bounceN, -2 * d.dot(this._bounceN)).normalize();
+            legStart.copy(h.point).addScaledVector(this._bounceN, 0.05);
+            this.effects.impact(h.point, THEME_ECHO_BOUNCE, 3, 2.5, 1.2, 0.22);
+          } else {
+            legStart.copy(h.point);
+            legStart.y += 0.05;
+            ray.ray.direction.y = -ray.ray.direction.y;
+            ray.ray.direction.normalize();
+            this.effects.impact(h.point, THEME.skipstone, 3, 2.5, 1.2, 0.22);
+          }
           ray.ray.origin.copy(legStart);
-          ray.ray.direction.y = -ray.ray.direction.y;
-          ray.ray.direction.normalize();
           hits.length = 0;
           ray.intersectObjects(targets, false, hits);
           hi = -1;
@@ -7198,6 +7326,15 @@ class Game {
       );
     }
 
+    // SQUARE WAVE. Odd trigger pulls are the doubled ones, one shot each,
+    // forever - the tally is the phase, exactly as it is for ECHO CHAMBER's
+    // every-fourth, so the alternation costs no state of its own and can
+    // never fall out of step with the shots that earned it. Per SHOT and not
+    // per pellet, like every multiplier in this half of the trigger: a
+    // scattergun is one step of the wave.
+    const squareHot = mods.squareWave > 0 && (this.player.shotTally & 1) === 1;
+    if (squareHot) dmgMult *= 2;
+
     // ARMATURE. The bank rides the FIRST round of the trigger pull as a flat
     // add, spent whether or not that round connects - it is part of the shot
     // the way the round is, and a bank that survived a miss would be a bank
@@ -7237,6 +7374,12 @@ class Game {
     this.camera.getWorldDirection(this._killPos);
     this.effects.blast(muzzle, this._killPos, 1);
     this.effects.addShake(w.shake);
+    // SQUARE WAVE'S TELL. The doubled pulls answer with a second, harder
+    // flash - the alternation has to be readable from the trigger hand alone,
+    // because nothing on the HUD prints it.
+    if (squareHot) {
+      this.effects.burst(muzzle, THEME_SQUARE, 8, 4, 2, 0.24);
+    }
 
     // The trigger's list is the one WITH the row on it - a shot aimed at a
     // totem is a claim, not a stray. See _buildShotTargets for the split.
@@ -7272,6 +7415,22 @@ class Game {
       if (this.player.encore > 0) {
         if (this._volley(muzzle, targets, spread, w, dmgMult, crit)) hitAny = true;
         this.effects.burst(muzzle, THEME_ECHO, 10, 4, 2, 0.3);
+      }
+      // CHORUS. Two more pellets on every trigger pull, each at sixty percent,
+      // off no magazine of their own. They share the press's crit roll,
+      // dmgMult and dedup sets with the forward volley - same rules
+      // TWENTY/TWENTY's second pattern follows - and they are drawn from the
+      // same cone, which the pick has already widened a shade (spreadAdd in
+      // its apply). NOT off the off-hand round above: that is a single
+      // round squeezed out of a gun with no magazine in it, and there is no
+      // shot there for two more pellets to be extra TO.
+      if (mods.chorus > 0) {
+        for (let c = 0; c < mods.chorus; c++) {
+          if (this._firePellet(muzzle, targets, spread, w, dmgMult * mods.chorusDamage, crit)) {
+            hitAny = true;
+          }
+        }
+        this.effects.burst(muzzle, THEME_CHORUS, 8, 3.5, 1.8, 0.26);
       }
     }
     // REARVIEW. One pellet straight behind the player on every trigger pull,
@@ -8613,6 +8772,14 @@ class Game {
         // and by the time this runs there is nothing left for it to report.
         const loaded = this._fullLoad();
         if (loaded > 0) msg += '  FULL LOAD +' + loaded + ' ROUNDS';
+        // SYNTHESIZER and MIDI CABLE, last of the clear's rerolls and before
+        // the banner, so the shop opens on what they left the build holding
+        // and the player is told the names at the only moment they matter.
+        // Folded into the clear banner like everything above it: a second
+        // banner would wipe the first before it could be read.
+        const rerolled = this._rerollWaveItems();
+        if (rerolled.synth) msg += '  SYNTH: ' + rerolled.synth;
+        if (rerolled.midi) msg += '  MIDI: ' + rerolled.midi;
         this.ui.banner(msg);
         // After the flawless test above, so it still reads the damage actually
         // taken during the fight.
@@ -11917,6 +12084,17 @@ class Game {
       if (reloaded) {
         this._reloadBurst();
         if (this.player.mods.thunderclap > 0) this._thunderclap();
+        // WAVETABLE. The index has already stepped inside Player.update -
+        // this edge is the same one that seated the magazine - so all that
+        // is left is to tell the player which element they are holding: a
+        // flash at the muzzle in the new element's own colour, on the same
+        // one-frame signal THUNDERCLAP rides.
+        if (this.player.mods.wavetable > 0) {
+          const el = WAVETABLE[this.player.wavetable % WAVETABLE.length];
+          this.effects.burst(
+            this.player.muzzleInto(this._killPos), el.color, 12, 4, 2, 0.4
+          );
+        }
         // The magazine seating. Two motors, briefly, low on the strong one -
         // it is a mechanism, not an impact.
         this.pad.rumble(0.25, 0.35, 90, 1);

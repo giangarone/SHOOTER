@@ -8,6 +8,24 @@ export const PASSIVE_ITEMS = discovered.items;
 export const PASSIVE_ITEM_ICONS = discovered.icons;
 export const PASSIVE_ITEM_KEYS = Object.keys(PASSIVE_ITEMS);
 
+// WAVETABLE's bank, in the order the card names. Read by _landShot in
+// main.js, which owns every other per-hit status, and by the reload edge in
+// Player.update, which owns the magazine - so putting the list here rather
+// than in either file is what keeps the item's whole definition in one place.
+//
+// The four are deliberately a shade SHORTER than the dedicated picks that own
+// them (Venom's poison is 4s, Cryo's slow 3s, Incendiary burns 3s, Terror
+// flees 2s), exactly as FOUR HUMOURS' are: what the pick sells is having all
+// four across four magazines, not any one of them at full strength.
+// `power` is a multiplier on the shared status tick; slow and fear have no
+// strength to scale and leave it at zero.
+export const WAVETABLE = [
+  { status: 'burn', dur: 2.5, power: 1, color: 0xff5a00 },  // FIRE
+  { status: 'slow', dur: 2, power: 0, color: 0x7fe3ff },    // ICE
+  { status: 'poison', dur: 3, power: 1, color: 0x39d353 },  // POISON
+  { status: 'fear', dur: 1.5, power: 0, color: 0x9d4edd },  // FEAR
+];
+
 
 /**
  * Rolls the three passive items offered on a totem set.

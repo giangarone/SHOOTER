@@ -370,6 +370,26 @@ export const THEME = {
   spendthrift: 0xf0a900,
   brassTax: 0xd6a72c,
   sprayEconomy: 0x229b91,
+
+  // ---- THE EIGHTH POOL: THE MUSIC -------------------------------------------
+  //
+  // Eight picks named for the machinery of the electronic music the arena
+  // plays, and the rule above holds for them as it does for everything else:
+  // the colour is what the pick DOES. Three of them pay a number a family
+  // already owns (LFO the rate oranges, SQUARE WAVE the damage reds, CHORUS
+  // the volley magentas); SYNTHESIZER takes the mystery violet every
+  // reroll-the-build pick has worn; WAVETABLE, which owns no single element,
+  // takes the one green no status uses; MIDI CABLE sits beside JUMPER CABLES'
+  // charge yellow; SIDECHAIN joins THUNDERCLAP's room-strike blues; and ECHO
+  // shades SKIPSTONE's bounce cyan, which is the mechanic it borrows.
+  lfo: 0xff9838,           // the rate oranges, on a clock
+  synthesizer: 0x8f6fd8,   // the mystery violet, patched
+  squareWave: 0xff5a3c,    // the damage reds, alternating
+  wavetable: 0x45e0b0,     // four elements, and none of them
+  midiCable: 0xb4f06e,     // beside JUMPER CABLES' charge yellow
+  sidechain: 0x66c7ff,     // THUNDERCLAP's blues, pumped
+  echo: 0x6fd8c8,          // SKIPSTONE's bounce cyan, twice
+  chorus: 0xff8ad0,        // the volley magentas, three voices
 };
 
 
