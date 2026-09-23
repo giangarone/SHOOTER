@@ -14,7 +14,9 @@
 
 import * as THREE from 'three';
 import { resolveCircle, stepSurface, STEP_HEIGHT } from './utils.js';
-import { PASSIVE_ITEMS } from './items/passive/index.js';
+import {
+  PASSIVE_ITEMS, PASSIVE_ITEM_KEYS, WAVETABLE,
+} from './items/passive/index.js';
 import {
   DONATION_ITEMS, DONATION_KINDS, donationItemKey,
 } from './items/donation/index.js';
@@ -31,6 +33,16 @@ import { ACTIVE_ITEMS } from './items/active/index.js';
 // shared multiplier is applied by the caller where it always has been.
 export const POISON_TICK_DAMAGE = 10;
 export const FIRE_TICK_DAMAGE = 10;
+
+// LFO's TWO FRAMES, the whole card in one place: what each of the three
+// stats reads on the high second and on the low one. Frozen and shared, so
+// the three read sites (damage, rate, speed) hand the same object back
+// without allocating and can never disagree about which side of the wave
+// the run is on. LFO_OFF is the pick not being owned - the getter answers
+// "nothing" once rather than making three callers test for it.
+const LFO_UP = Object.freeze({ damage: 1.3, rate: 1.25, speed: 1.15 });
+const LFO_DOWN = Object.freeze({ damage: 0.9, rate: 0.85, speed: 0.95 });
+const LFO_OFF = Object.freeze({ damage: 1, rate: 1, speed: 1 });
 
 // Every stat a passive item is allowed to touch, at its un-upgraded value.
 //
@@ -560,6 +572,24 @@ const DEFAULT_MODS = {
   brassTax: 0,          // credits per shot, for a paid damage bonus
   brassTaxDamage: 0,
   sprayEconomy: 0,      // damage per consecutive miss
+
+  // ---- THE EIGHTH POOL: THE MUSIC ------------------------------------------
+  //
+  // Settings on the same contract as the block above: zero is "not owned",
+  // every reader tests for it, and anything a WAVE or a MAGAZINE moves during
+  // play lives on the Player instead (see `synthItem` and `wavetable`).
+  lfo: 0,               // LFO: damage, rate and speed ride a two-second
+                        // square wave - see lfoMults for the phases
+  synthesizer: 0,       // SYNTHESIZER: flag; the current rental is `synthItem`
+  squareWave: 0,        // SQUARE WAVE: odd trigger pulls deal double damage
+  wavetable: 0,         // WAVETABLE: every round in the current magazine
+                        // carries the element at `wavetable`
+  midiCable: 0,         // MIDI CABLE: the item slot rerolls at every wave clear
+  sidechain: 0,         // SIDECHAIN COMPRESSION: the first enemy a press
+                        // touches pulses the whole room for this flat damage
+  echo: 0,              // ECHO: bounces off any arena surface, this many times
+  chorus: 0,            // CHORUS: extra pellets per trigger pull,
+  chorusDamage: 1,      // ...each at this fraction of the shot
 
   // ---- DONATION MACHINE REWARDS -----------------------------------------
   // These fields are replayed from the three machine-exclusive catalogues in
@@ -1397,9 +1427,13 @@ export class Player {
     // step the player can see on the counter.
     const monsoon = this.mods.monsoon > 0
       ? 1 + this.mods.monsoon * this.monsoonStacks : 1;
+    // LFO's rate half. Read live off the phase like every posture bonus is,
+    // so the gun speeds up and slows down on the second the clock says and
+    // not on the next trigger pull after it.
+    const lfo = this.lfoMults.rate;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
       * this.mods.fireRate * crouch * this.paceMult * spirit * hip
-      * wands * high * fumes * hot * wolf * monsoon;
+      * wands * high * fumes * hot * wolf * monsoon * lfo;
   }
 
   /**
@@ -1418,6 +1452,26 @@ export class Player {
   get paceMult() {
     if (!(this.mods.pace > 0)) return 1;
     return this.health >= this.maxHealth ? 1 + this.mods.pace : 1;
+  }
+
+  /**
+   * LFO, the one clock the pick owns: which of its two frames damage, fire
+   * rate and speed are all reading this second.
+   *
+   * THE PHASE IS DERIVED, NEVER STORED. Which side of the square the run is
+   * on is the parity of the whole second, so no pause, reload or handoff can
+   * leave a flip-flop out of step with the clock, and there is no state to
+   * forget to reset - the same reason Hipshot reads the aim flag rather
+   * than a latched copy of it. The first second of a run is the high side,
+   * so the pick opens on its best foot.
+   *
+   * All three stats read the SAME frame on purpose: a pick that peaked
+   * damage while troughing speed would be two picks wearing one card, and
+   * what the name sells is one slow movement felt everywhere at once.
+   */
+  get lfoMults() {
+    if (this.mods.lfo <= 0) return LFO_OFF;
+    return (Math.floor(this.now) & 1) === 0 ? LFO_UP : LFO_DOWN;
   }
 
   /**
@@ -1517,6 +1571,21 @@ export class Player {
         if (this.donationItems[donationItemKey(kind, id)]) def.apply(this.mods);
       }
     }
+    // SYNTHESIZER'S RENTAL, replayed on top of the owned list rather than
+    // into it: the grant is an effect the wave is wearing, not a pick, so it
+    // must stack with the build and die with the wave that rented it.
+    //
+    // ONE STACK, ALWAYS: a rental is a single pick's worth of the item, which
+    // is also what keeps a tiered pick's `max` honest - the pool rolled a
+    // card, not a ladder.
+    //
+    // GATED ON THE PICK ITSELF BEING OWNED. SACRIFICE can eat the
+    // synthesizer, and a rental whose landlord is gone must stop playing;
+    // `synthItem` alone could not say that.
+    if (this.mods.synthesizer > 0 && this.synthItem) {
+      const def = PASSIVE_ITEMS[this.synthItem];
+      if (def) def.apply(this.mods, 1);
+    }
     // No-Hit Bonus is applied AFTER the passive item replay, because it multiplies
     // whatever the build ended up with rather than being part of it. Additive
     // and clamped at NO_HIT_CAP: it is a bonus the player can finish earning,
@@ -1532,6 +1601,43 @@ export class Player {
     if (Object.prototype.hasOwnProperty.call(this, 'ghostShield')) {
       this.ghostShield = Math.min(this.ghostShield, this.mods.ghostPlate);
     }
+  }
+
+  // SYNTHESIZER'S DRAW, shared by the pick's onTake and the wave-clear
+  // reroll so the two can never disagree about what the pool is. `exclude`
+  // is the rental being replaced, because a reroll that dealt the preset the
+  // player already has is one that reads as the card having done nothing -
+  // the same reason a rerolled totem set never repeats a pick.
+  //
+  // The excluded few are the ids with no EFFECT a rental could deliver: the
+  // two list-manipulators only manipulate the owned list at the moment of a
+  // pick, deathwish is a trade paid at the totem, and the synthesizer does
+  // not re-roll itself.
+  //
+  // Clamps to the new caps at the end, in takePassiveItem's own shape: a
+  // rental that leaves the run holding more health, magazine or reserve than
+  // the new stat block allows must not leave the HUD showing a number the
+  // build can no longer defend.
+  //
+  // @returns {?string} the rental's id, or null when nothing legal remains
+  //   (or the pick itself is not owned - SACRIFICE can eat the landlord, and
+  //   the tenancy ends with it)
+  rollSynthPick(exclude = this.synthItem) {
+    if (this.mods.synthesizer <= 0) return null;
+    const pool = [];
+    for (const k of PASSIVE_ITEM_KEYS) {
+      if (k === exclude) continue;
+      if (k === 'synthesizer' || k === 'sacrifice' || k === 'shuffle'
+        || k === 'deathwish') continue;
+      pool.push(k);
+    }
+    if (!pool.length) return null;
+    this.synthItem = pool[(Math.random() * pool.length) | 0];
+    this.rebuildMods();
+    this.health = Math.min(this.health, this.maxHealth);
+    this.mag = Math.min(this.mag, this.magSize);
+    this.reserveAmmo = Math.min(this.reserveAmmo, this.maxReserve);
+    return this.synthItem;
   }
 
   // Hot Streak. Called once per SHOT with whether that shot connected - the
@@ -2504,6 +2610,14 @@ export class Player {
     this.deadSwitchEnd = -99;
     this.deadSwitchFx = false;
     this._wasGrounded = true;
+    // Eighth-pool state, on the same rule as the blocks above: the mods
+    // object is replayed after every pick, so anything a WAVE or a MAGAZINE
+    // moves during play lives here. SYNTHESIZER starts with no rental
+    // standing - its onTake or its next wave clear hands the first one over -
+    // and WAVETABLE starts the run's first magazine on FIRE, the first slot
+    // in its bank.
+    this.synthItem = null;
+    this.wavetable = 0;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -2921,6 +3035,15 @@ export class Player {
           this.mag = Math.min(this.mag + 1, this.magSize);
           this.magnaFx = true;
         }
+        // WAVETABLE. The element belongs to the MAGAZINE, so this is the one
+        // instant it can change: the seating edge, exactly where magFresh
+        // and BOTTOM FEED's own armed flag are decided. main.js throws the
+        // flash off the same edge via the return value, so the player is
+        // told the colour of the magazine they just seated at the moment it
+        // arrives.
+        if (this.mods.wavetable > 0) {
+          this.wavetable = (this.wavetable + 1) % WAVETABLE.length;
+        }
         // FLOW RELOAD. A second in which nothing lands, on the same edge
         // BOTTOM FEEDER's window opens on - the rounds ARRIVING, not the
         // button being pressed, so an interrupted reload buys nothing.
@@ -3000,6 +3123,9 @@ export class Player {
         // full. See paceMult.
         * this.paceMult
         * this.statusSpeedMult()
+        // LFO's speed half, read live off the same phase the trigger and the
+        // damage do, so the whole sweep arrives and leaves on one second.
+        * this.lfoMults.speed
         * (time < this.wadingEnd ? this.mods.wadingSlow : 1)
         * (time < this.dodgeEnd ? DODGE_SPEED : 1)
         // The second gear. A multiplier on the whole stack rather than an
@@ -3036,6 +3162,10 @@ export class Player {
       const mult = SLIDE_SPEED_MULT + (1 - SLIDE_SPEED_MULT) * smooth(u);
       const sp = BASE_SPEED * mult * this.moveLoss * this.mods.moveMult
         * this.rageSpeedMult * this.statusSpeedMult()
+        // LFO again, on the slide too: the card says speed, and a slide is
+        // the fastest thing the legs do - a sweep that skipped it would be
+        // a second of standing still in the middle of the room.
+        * this.lfoMults.speed
         * (time < this.wadingEnd ? this.mods.wadingSlow : 1);
       this.moveVX = this.slideDX * sp;
       this.moveVZ = this.slideDZ * sp;
@@ -4656,6 +4786,12 @@ export class Player {
     // Point three times - which is exactly the run that pressed it most.
     let d = base * this.damageMult * this.mods.damage * this.statusDamageMult()
       * this.itemDamageMult * this.compoundMult;
+    // LFO's damage half, read live off the same phase the rate and the legs
+    // do. It sits with the multipliers rather than on the base for the same
+    // reason COMPOUND INTEREST does: the card promises a percent of the shot,
+    // and the status ticks that must not follow the gun never come through
+    // here at all.
+    d *= this.lfoMults.damage;
     if (this.mods.pressureCooker > 0 && this.nearbyEnemies > 0) {
       d *= 1 + this.mods.pressureCooker * this.nearbyEnemies;
     }

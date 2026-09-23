@@ -1059,7 +1059,7 @@ pick has no "from" and shows the result alone. `effectLines(def, owned)`
 resolves either form; the numbers live next to the `apply()` they mirror so the
 two cannot drift.
 
-The pool is 191 passive items and **the draw is flat** - every one of them has exactly
+The pool is 252 passive items and **the draw is flat** - every one of them has exactly
 the same chance of appearing. It used to be weighted three ways, with rares
 locked out before wave 2 and cursed before wave 3, and two things were wrong
 with that: the player could not see it (the totem stopped printing a rarity line
@@ -2325,6 +2325,67 @@ MITOSIS claims fresh targets as its fragments are born, so siblings do not
 collapse onto the same enemy. The killing shot makes two half-damage fragments;
 a fragment that kills may divide once into two quarter-original-damage
 children, and that second generation ends the chain.
+
+### The eighth pool: the music
+
+Eight max-1 picks named for the machinery of the electronic music the arena
+plays. They are the first pool to reach for the music as a THEME rather than
+as a clock (SYNCHRONATION and HEARTBEAT pay the beat; these borrow its
+vocabulary), and between them they touch every hook the earlier pools built:
+the trigger pull, the pellet walk, the reload edge, the wave clear and the
+item slot.
+
+| Passive Item | Effect |
+| --- | --- |
+| LFO | Damage, fire rate and speed oscillate between +30%/-10%, +25%/-15% and +15%/-5%, one second per side |
+| SYNTHESIZER | A new random passive item's effect is loaded each wave |
+| SQUARE WAVE | Shots alternate: 2x damage, then 1x, one shot each |
+| WAVETABLE | Each magazine carries one element - fire, ice, poison, fear - stepping on every reload |
+| MIDI CABLE | The active item becomes a random one at each wave clear, fully charged |
+| SIDECHAIN COMPRESSION | Any enemy a trigger pull hits deals 1 damage to every other enemy |
+| ECHO | Shots bounce off the walls and floor, twice, at full damage |
+| CHORUS | +2 projectiles per shot, each at -40% damage, slightly wider spread |
+
+LFO's three stats read one derived PHASE rather than a stored flip-flop -
+the parity of the whole second of game time - so no pause, reload or versus
+handoff can leave the sweep out of step with itself, and there is no counter
+to reset. The card lists the two settings and not the clock on purpose: the
+alternation is felt through the legs long before it needs naming.
+
+SYNTHESIZER grants an EFFECT, never a pick: the current rental is replayed by
+`rebuildMods` on top of the owned list and dies with the wave that rented it,
+which is also why SACRIFICE eating the synthesizer ends the tenancy. The
+reroll excludes SACRIFICE, SHUFFLE, DEATHWISH and itself - the two
+list-manipulators have no effect a rental could deliver, DEATHWISH's price is
+paid at the totem, and the synthesizer does not re-roll itself. The clear
+banner names whatever loaded, which is the pick's only readout.
+
+WAVETABLE advances at the one instant a new magazine exists - the reload's
+seating edge, inside `Player.update`, where CANNONADE and BOTTOM FEED are
+armed - and its four elements are each a shade shorter than the dedicated
+pick that owns them, on FOUR HUMOURS' precedent: the card sells having all
+four across four magazines, not any one at full strength.
+
+MIDI CABLE waits while the slot is empty and reroutes it at every clear
+through `giveActiveItem`, so the newcomer arrives fully charged - half of
+what the pick sells, and the half that keeps the slot worth using the wave it
+changes hands.
+
+SIDECHAIN takes the DETONATOR latch: one pulse per trigger pull however many
+pellets or bodies the press found, one flat point per body, through
+`hurtEnemy` so the kill and the bounty are booked exactly as THUNDERCLAP's
+are.
+
+ECHO is SKIPSTONE's mechanic, generalised: one branch in `_firePellet` answers
+both cards, with the surface's own world-space normal doing the reflecting
+where SKIPSTONE's floor test used to invert y by hand. SKIPSTONE keeps the
+floor alone, once; ECHO takes any surface the room owns, twice; a run holding
+both has the better card's two.
+
+CHORUS fires its two extras as PELLETS - sharing the press's crit roll and
+dedup sets exactly as TWENTY/TWENTY's second pattern does - and its spread
+cost lands in `spreadAdd`, the one accuracy mod that raising the weapon
+cannot talk its way out of.
 
 ### Active items
 
