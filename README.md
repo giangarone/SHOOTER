@@ -2271,6 +2271,61 @@ shade or a cost. SHUFFLE changes the WHOLE LIST, at the totem and in
 exactly SACRIFICE's reason - and never re-deals itself, because the deck does
 not deal the dealer.
 
+### The seventh pool
+
+Twenty-seven max-1 picks. This pool leans into short, readable triggers: the
+reload finishing, a hit landing, a body dying, a pickup being collected, or a
+shot resolving as a hit or miss. Its live damage bonuses are evaluated when a
+round is fired, so the card always agrees with the current crowd, magazine,
+position and wave counter.
+
+| Passive Item | Effect |
+| --- | --- |
+| THUNDERCLAP | Finishing a reload deals 5 damage to every enemy |
+| PACK LIGHT | -100 reserve, +25% damage, +20% max HP |
+| LUCKY CORPSE | One random enemy each wave drops 3 health and 3 ammo pickups |
+| DEATHWISH | +40% damage; taking it leaves you at 5 HP |
+| GRACE PERIOD | Taking a hit grants 1s of invincibility |
+| KILLCHAIN | A kill adds 1s of invincibility, up to 5s banked |
+| ZERO WASTE | Health and ammo pickups pay their normal amount, then another 50% |
+| BLOOD TAX | +20% damage, -5 max HP |
+| PRESSURE COOKER | +20% damage per enemy within 5m |
+| CORNERED ANIMAL | +40% damage within 2m of the map border |
+| PRESERVATIVE | Money orbs and pickups last 4x longer |
+| WADING BOOTS | Pools and lava slow instead of damaging or afflicting you |
+| GHOST PLATE | A separate 10-point shield reforms 8s after it breaks |
+| LUCKY CASINGS | Each fired round has a 2% chance to heal 5 HP or grant 15 ammo |
+| DIALYSIS | Poison on enemies ticks 50% faster |
+| EXTENDED WARRANTY | Every enemy status you apply lasts 3s longer |
+| COIN LAUNDRY | Money orbs collected at full health are worth double |
+| VENDING MACHINE | Every 15 kills drops a random powerup at your feet |
+| SPONSORSHIP | +2% fire rate per passive item owned, capped at +30% |
+| COMPLETIONIST | +1% fire rate and damage per passive item owned, each capped at +30% |
+| DEAD MAN'S SWITCH | Crossing below 10% HP deals 100 damage to all enemies; 10s cooldown |
+| MITOSIS | A killing shot splits into two half-damage homing fragments; those fragments can split once |
+| FULL HOUSE | +0.4% damage per round currently in the magazine |
+| BOTTOM FEED | Reloading from empty gives the next magazine +30% damage |
+| SPENDTHRIFT | +0.1% damage per shot fired this wave |
+| BRASS TAX | Each shot costs $1 and deals +30% damage while the shot can be paid for |
+| SPRAY ECONOMY | +5% damage per consecutive miss; a hit clears the stack |
+
+LUCKY CORPSE marks the wave's body when it is created. Boss waves mark the
+boss, and a Schism that divides carries the mark into one random child rather
+than paying for a split that was not a kill. KILLCHAIN extends the time still
+left instead of reopening a fresh one-second window, so five fast kills really
+do bank five seconds and never more.
+
+GHOST PLATE has its own shield ledger. That lets it reform without erasing a
+shield pickup, while the HUD draws both as one readable total. ZERO WASTE is
+also a second ledger entry rather than a larger crate: the ordinary pickup
+lands first, then half its amounts land again, respecting the same health,
+overheal, shield and reserve limits.
+
+MITOSIS claims fresh targets as its fragments are born, so siblings do not
+collapse onto the same enemy. The killing shot makes two half-damage fragments;
+a fragment that kills may divide once into two quarter-original-damage
+children, and that second generation ends the chain.
+
 ### Active items
 
 **One slot, one button, no menu.** Everything else a run collects is a number
@@ -2318,7 +2373,7 @@ Sixty-six of them, in six groups by what they actually reach for.
 | RED LINE | Double fire rate for 6s | 30 |
 | RED MIST | 3x damage, but you take 2x, for 10s | 40 |
 | BODY COUNT | +10% damage per kill for 8s, capped at 20 | 32 |
-| BLOOD TAX | 25 HP for 3x damage for 10s | 30 |
+| BLOOD PRICE | 25 HP for 3x damage for 10s | 30 |
 | FOUR HUMOURS | Shots cycle fire, ice, venom, arc for 8s | 40 |
 | BIRD DOG | Seeker's homing for 10s | 40 |
 | HAEMOPHAGE | The next 20 hits heal 1 HP each, no time limit | 60 |
@@ -2483,7 +2538,7 @@ item may declare a `duration`, a `tick` and an `end` alongside its `use`, and
 `RunningActiveItems` in `js/items/active/index.js` is the whole of it: a list of activations, each
 holding the item that made it, a scratch object and a clock. Re-firing refreshes
 rather than stacks - the same rule `Player.applyStatus` follows, and for the
-same reason, since two BLOOD TAXes at once would be nine times damage through a
+same reason, since two BLOOD PRICE windows at once would be nine times damage through a
 multiplier neither of them could correctly hand back.
 
 What a running item writes on the player lives in its OWN fields -

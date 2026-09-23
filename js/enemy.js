@@ -122,6 +122,16 @@ export function setPoisonStackCap(n) {
   poisonStackCap = Math.max(1, n || 1);
 }
 
+// EXTENDED WARRANTY's flat duration. Every status applied to an enemy is a
+// player-owned effect in this game (rounds, items, turrets, trails), and they
+// all converge through applyStatus. Publishing one number here covers those
+// doors without teaching each source which passive extended it.
+let statusDurationBonus = 0;
+
+export function setStatusDurationBonus(secs) {
+  statusDurationBonus = Math.max(0, secs || 0);
+}
+
 // WEAK POINT's multiplier. A module constant rather than a mod read, for the
 // same reason the hook above is a hook: the enemy cannot see the player. The
 // FLAG is what the build sets (main.js only ever marks a body while the pick is
@@ -201,6 +211,9 @@ export class Enemy {
     // read once by the death sweep in main.js - see MELEE_KILL_MULT. It lives
     // here rather than in a set on the game so that it dies with the enemy.
     this.meleeKill = false;
+    // LUCKY CORPSE's one marked body. The wave chooses it; the death sweep
+    // pays it, and the flag dies with this enemy.
+    this.luckyCorpse = false;
     // THE CRIT FAMILY'S PER-BODY HISTORY. ASSASSIN pays on the first hit this
     // body has ever taken and TELLTALE on every third; both are questions about
     // THIS enemy, so both are answered here rather than on the player - and
@@ -350,6 +363,10 @@ export class Enemy {
     // everything else in it moves to. Now a tick is a discrete event on the
     // beat: burn twice a bar-beat, poison once. See _tickStatus.
     this._dot = { poison: 0, burn: 0 };
+    // DIALYSIS spends fractional poison ticks on whole beats. At 1.5x the
+    // sequence is one tick, two ticks, one, two: still locked to Music.pulse,
+    // but exactly fifty percent faster over any pair of beats.
+    this._poisonTickAcc = 0;
     // SECONDARY INFECTION's depth on THIS body. Always at least 1, which is
     // the refresh rule every other status keeps - see applyStatus. It
     // multiplies the poison tick and nothing else, so a run without the pick
@@ -564,6 +581,10 @@ export class Enemy {
       if (this._statusCd[kind] > 0) return;
       this._statusCd[kind] = dur * 2;
     }
+    // EXTENDED WARRANTY is a flat promise on the final status. Boss
+    // resistance still shortens the status it was given, then the warranty
+    // adds its full three seconds rather than having the bonus halved too.
+    dur += statusDurationBonus;
     // SECONDARY INFECTION. THE ONE STATUS IN THIS GAME THAT STACKS, and the
     // exception is held to poison alone and to three deep.
     //
@@ -701,7 +722,10 @@ export class Enemy {
         // clean body, and the next dose starts at one - which is what makes
         // three stacks something the player has to keep ON a target rather
         // than something a target accumulates for the rest of its life.
-        if (k === 'poison') this.poisonStacks = 1;
+        if (k === 'poison') {
+          this.poisonStacks = 1;
+          this._poisonTickAcc = 0;
+        }
       } else {
         any = true;
       }
@@ -726,9 +750,14 @@ export class Enemy {
       const first = this._dotPulse < 0;
       this._dotPulse = ctx.pulse;
       if (!first) {
+        let poisonTicks = 0;
+        if (this.status.poison > 0 && ctx.pulseWhole) {
+          this._poisonTickAcc += (ctx.mods && ctx.mods.poisonTickRate) || 1;
+          poisonTicks = Math.floor(this._poisonTickAcc);
+          this._poisonTickAcc -= poisonTicks;
+        }
         const dmg = (this.status.burn > 0 ? this._dot.burn : 0)
-          + (this.status.poison > 0 && ctx.pulseWhole
-            ? this._dot.poison * this.poisonStacks : 0);
+          + this._dot.poison * this.poisonStacks * poisonTicks;
         if (dmg > 0) {
           this.takeDamage(dmg, true);
           if (this.dead) return;
@@ -1750,6 +1779,88 @@ export class Shard {
     _tmpTarget.set(this.pos.x, 0, this.pos.z);
     ctx.onBlast(_tmpTarget, this.damage, this.radius);
     this.mesh.visible = false;
+  }
+}
+
+// MITOSIS' player-owned fragment. It carries a concrete target so the two
+// children of one split can never converge on the same body, and asks Game for
+// a fresh one if that target dies while it is in flight. Geometry is ignored:
+// this is a homing fragment, not a second hitscan round, and steering one into
+// a pillar after the killing shot visibly created it would make the passive's
+// promised split disappear for reasons the player could not read.
+let mitosisMats = null;
+
+function getMitosisMats(glowTex) {
+  if (!mitosisMats) {
+    mitosisMats = {
+      core: new THREE.MeshStandardMaterial({
+        color: 0xd9a7ff, emissive: 0x8f35ff, emissiveIntensity: 2,
+        roughness: 0.22, metalness: 0.35,
+      }),
+      glow: new THREE.SpriteMaterial({
+        map: glowTex, color: 0xb56cff, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
+    };
+  }
+  return mitosisMats;
+}
+
+export class MitosisFragment {
+  constructor(scene, glowTex, from, target, damage, generation, used) {
+    this.pos = new THREE.Vector3(from.x, from.y + 0.9, from.z);
+    this.target = target;
+    this.damage = damage;
+    this.generation = generation;
+    this.used = used;
+    this.speed = 18;
+    this.life = 2.5;
+    this.trail = 0;
+    this.type = 'mitosis';
+    const mats = getMitosisMats(glowTex);
+    this.mesh = new THREE.Mesh(
+      geo('mitosis-fragment', () => new THREE.OctahedronGeometry(0.14, 0)), mats.core
+    );
+    const glow = new THREE.Sprite(mats.glow);
+    glow.scale.setScalar(0.85);
+    this.mesh.add(glow);
+    this.mesh.position.copy(this.pos);
+    scene.add(this.mesh);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    if (this.life <= 0) return 'mitosis';
+    if (!this.target || this.target.dead) {
+      this.target = ctx.mitosisTarget(this.pos, this.used);
+      if (!this.target) return 'mitosis';
+    }
+    const tx = this.target.pos.x;
+    const ty = this.target.pos.y + Math.max(0.55, this.target.radius);
+    const tz = this.target.pos.z;
+    const dx = tx - this.pos.x;
+    const dy = ty - this.pos.y;
+    const dz = tz - this.pos.z;
+    const dist = Math.hypot(dx, dy, dz) || 1;
+    const step = this.speed * dt;
+    if (dist <= this.target.radius + 0.28 || step >= dist) {
+      this.pos.set(tx, ty, tz);
+      this.mesh.position.copy(this.pos);
+      ctx.onMitosisHit(this);
+      return 'mitosis';
+    }
+    this.pos.x += dx / dist * step;
+    this.pos.y += dy / dist * step;
+    this.pos.z += dz / dist * step;
+    this.mesh.position.copy(this.pos);
+    this.mesh.rotation.x += dt * 15;
+    this.mesh.rotation.y += dt * 19;
+    this.trail -= dt;
+    if (ctx.effects && this.trail <= 0) {
+      this.trail = 0.06;
+      ctx.effects.impact(this.pos, 0xb56cff, 1, 0.8, 0.4, 0.12);
+    }
+    return 'alive';
   }
 }
 

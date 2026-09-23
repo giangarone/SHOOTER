@@ -58,7 +58,7 @@ export const HUMOURS = [
 // on a class that would then have to reset thirty-two of them.
 //
 // RE-FIRING REFRESHES, IT DOES NOT STACK. The same rule Player.applyStatus
-// follows, for the same reason: two BLOOD TAXes running at once would be nine
+// follows, for the same reason: two BLOOD PRICE windows at once would be nine
 // times damage through a multiplier neither of them could correctly hand back,
 // because whichever expired first would write 1 over the other's window.
 export class RunningActiveItems {

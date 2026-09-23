@@ -45,7 +45,7 @@ export const POWERUP_TYPES = {
      * - it is a question about the crate having been PICKED UP, not about how
      * much of it landed.
      */
-    apply: (player) => {
+    apply: (player, _time, scale = 1, repeat = false) => {
       const m = player.mods || {};
       // CRASH CART. A hundred instead of the crate's own twenty-five, and only
       // while the bar is at or under twenty points.
@@ -60,7 +60,8 @@ export const POWERUP_TYPES = {
       // strategy - and the line it is measured against is a number of POINTS
       // rather than a fraction of the bar, so the player can read which side of
       // it they are on straight off the HUD.
-      const base = (m.crashCart > 0 && player.health <= m.crashCartAt) ? m.crashCart : 25;
+      const base = ((m.crashCart > 0 && player.health <= m.crashCartAt) ? m.crashCart : 25)
+        * scale;
       // SECOND HELPINGS. The card halves the heal, and it does it HERE - on
       // the crate's own worth - so SLOW RELEASE's multiplication rides the
       // smaller number and OVERDRAW's spill is exact. The drop-side of the
@@ -74,7 +75,7 @@ export const POWERUP_TYPES = {
       // GRISTLE's bank is the one it adds into - max HP is the same currency
       // everywhere it is earned.
       if (m.platedDessert > 0 && player.health >= player.maxHealth) {
-        player.fleshBanked += m.platedDessert;
+        player.fleshBanked += m.platedDessert * scale;
         // A banked point the player earned needs the same tell GRISTLE's coin
         // has, because a max that silently grew is a max the player cannot
         // have seen.
@@ -100,14 +101,14 @@ export const POWERUP_TYPES = {
       // through heal() - it has to be, or HEALTHY CORE's refusal and
       // OVERDRAW's bank would each have to be told about it twice.
       if (m.fleshBank > 0) {
-        player.fleshBanked += m.fleshBankGain;
+        player.fleshBanked += m.fleshBankGain * scale;
         // A banked point the player earned needs the same tell GRISTLE's
         // coin has; see the note above.
         player.gristleFx = true;
       }
       // GRISTLE. One permanent point, three times in ten - see
       // Player.bankCrateHealth for why it has a bank of its own.
-      player.bankCrateHealth();
+      if (!repeat) player.bankCrateHealth();
       // PLASMA BAG. Ten points of shield on top of whatever the crate healed,
       // and the reason it is last is the reason GRISTLE's coin is: it is a
       // question about the crate having been PICKED UP, not about how much of
@@ -122,7 +123,7 @@ export const POWERUP_TYPES = {
       // player could not predict, and taking the clock off is always the
       // reading in their favour.
       if (m.crateShield > 0) {
-        player.shield += m.crateShield;
+        player.shield += m.crateShield * scale;
         player.shieldEnd = 0;
       }
     },
@@ -237,19 +238,19 @@ export const AMMO_PICKUP = {
   // drop's need-scaling and by the HUD's "+45 ROUNDS" - and a pickup that
   // changed its own advertised size when a totem was claimed would be a
   // different pickup. What the pick changes is what walking over one is worth.
-  apply: (player) => {
+  apply: (player, _time, scale = 1) => {
     const m = player.mods;
     // AMMO SURPLUS and FIRE SALE, multiplying: one pick makes the crate fuller
     // and the other makes it worth double at the price of the clock, and a
     // build holding both has bought both.
-    const got = Math.round(45 * (m ? m.ammoPickupMult * (m.lootMult || 1) : 1));
+    const got = Math.round(45 * (m ? m.ammoPickupMult * (m.lootMult || 1) : 1) * scale);
     player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + got);
     // SOUP KITCHEN. Five HP on the side - through heal() so it obeys the same
     // rules as every other heal in the game: HEALTHY CORE refuses, BONE
     // MARROW scales, OVERDRAW banks the spill. The full-health freebie rule
     // is NOT relaxed by it: a crate that heals something nobody can use is
     // still a crate, and the reserve needed it anyway.
-    if (m && m.soupKitchen > 0) player.heal(m.soupKitchen);
+    if (m && m.soupKitchen > 0) player.heal(m.soupKitchen * scale);
   },
   sfx: 'pickupAmmo',
 };

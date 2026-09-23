@@ -342,6 +342,9 @@ const PLAYER_CLOCKS = [
   // an empty deadline lands it in the past, which for this one field would
   // read as "it arrived".
   'insuredEnd', 'backorderAt',
+  // Seventh-pool deadlines. Recharge, cooldown and the short wading slow all
+  // freeze on the bench just like the shield and invulnerability windows do.
+  'ghostPlateBrokenAt', 'deadSwitchEnd', 'wadingEnd',
 ];
 
 // The same trap, on Game's side of the line.

@@ -526,6 +526,41 @@ const DEFAULT_MODS = {
                         // maxHpFlat, replayed by rebuildMods; the gains ride
                         // the crate's own bank on the Player (`fleshBanked`).
 
+  // ---- THE SEVENTH POOL ---------------------------------------------------
+  //
+  // These are settings only. Their running counters and deadlines live on the
+  // Player below, so replaying the build after a new pick cannot refund a
+  // spent magazine, a broken plate, or a wave's worth of shots.
+  thunderclap: 0,       // flat room damage when a reload finishes
+  reserveFlat: 0,       // Pack Light's flat change to reserve capacity
+  luckyCorpse: 0,       // one marked body per wave drops six supplies
+  gracePeriod: 0,       // invulnerability granted by a landed hit
+  killchain: 0,         // invulnerability added by a kill
+  zeroWaste: 0,         // fraction of health/ammo pickups paid a second time
+  pressureCooker: 0,    // damage per enemy within pressureRadius
+  pressureRadius: 0,
+  corneredAnimal: 0,    // damage while within two metres of the arena border
+  wadingSlow: 0,        // pools and lava slow instead of dealing damage
+  ghostPlate: 0,        // shield points that return after ghostPlateDelay
+  ghostPlateDelay: 0,
+  luckyCasings: 0,      // chance per fired round to pay health or ammunition
+  poisonTickRate: 1,    // Dialysis; ticks per normal poison beat
+  statusDurationBonus: 0, // Extended Warranty, flat seconds on enemy statuses
+  coinLaundry: 0,       // full-health orb value bonus
+  vendingEvery: 0,      // kills between random powerup drops
+  sponsorship: 0,       // fire rate per passive pick, capped below
+  completionist: 0,     // fire rate and damage per passive pick, capped below
+  deadSwitch: 0,        // room damage on crossing the low-health line
+  deadSwitchAt: 0,
+  deadSwitchCd: 0,
+  mitosis: 0,           // killing-shot fragment damage fraction
+  fullHouse: 0,         // damage per round currently in the magazine
+  bottomFeedMag: 0,     // next magazine's damage after an empty reload
+  spendthrift: 0,       // damage per shot fired in the current wave
+  brassTax: 0,          // credits per shot, for a paid damage bonus
+  brassTaxDamage: 0,
+  sprayEconomy: 0,      // damage per consecutive miss
+
   // ---- DONATION MACHINE REWARDS -----------------------------------------
   // These fields are replayed from the three machine-exclusive catalogues in
   // rebuildMods(), while one-time pickup behavior stays on each definition.
@@ -1448,7 +1483,7 @@ export class Player {
   // Ammo Hoarder. A getter rather than a field so the cap can never go stale
   // against the build: everything else in the game only ever READS maxReserve.
   get maxReserve() {
-    return Math.round(BASE_RESERVE * this.mods.reserveMult);
+    return Math.max(0, Math.round(BASE_RESERVE * this.mods.reserveMult + this.mods.reserveFlat));
   }
 
   // Rebuilds the whole stat block from the owned passive item list. Always a full
@@ -1459,6 +1494,19 @@ export class Player {
     for (const [id, n] of Object.entries(this.passiveItems)) {
       const def = PASSIVE_ITEMS[id];
       if (def && n > 0) def.apply(this.mods, n);
+    }
+    // SPONSORSHIP and COMPLETIONIST count PICKS, including their own. A tiered
+    // passive represents several picks and therefore several items owned; the
+    // count is the sum of stacks rather than the number of catalogue keys.
+    const passiveCount = Object.values(this.passiveItems)
+      .reduce((sum, n) => sum + Math.max(0, n || 0), 0);
+    if (this.mods.sponsorship > 0) {
+      this.mods.fireRate *= 1 + Math.min(0.3, this.mods.sponsorship * passiveCount);
+    }
+    if (this.mods.completionist > 0) {
+      const bonus = Math.min(0.3, this.mods.completionist * passiveCount);
+      this.mods.fireRate *= 1 + bonus;
+      this.mods.damage *= 1 + bonus;
     }
     // Donation rewards are permanent build items too, but their ownership is
     // namespaced away from the passive pool. Replay them here, beside normal
@@ -1478,6 +1526,12 @@ export class Player {
       this.mods.damage *= k;
       this.mods.fireRate *= k;
     }
+    // A build-list mutation (Sacrifice or Shuffle) must take a removed Ghost
+    // Plate with it. The run reset calls rebuildMods before this field exists,
+    // hence the own-property guard.
+    if (Object.prototype.hasOwnProperty.call(this, 'ghostShield')) {
+      this.ghostShield = Math.min(this.ghostShield, this.mods.ghostPlate);
+    }
   }
 
   // Hot Streak. Called once per SHOT with whether that shot connected - the
@@ -1489,6 +1543,14 @@ export class Player {
     if (m.streakStep <= 0) return;
     const next = this.streak + (hit ? m.streakStep : -m.streakStep);
     this.streak = Math.max(-m.streakFloor, Math.min(m.streakCap, next));
+  }
+
+  // SPRAY ECONOMY. The miss that earned a stack cannot spend it itself: this
+  // is called after the shot has settled, and getEffectiveDamage reads the
+  // count on the next trigger pull. A hit clears the whole run immediately.
+  noteAccuracy(hit) {
+    if (this.mods.sprayEconomy <= 0) return;
+    this.sprayMisses = hit ? 0 : this.sprayMisses + 1;
   }
 
   // BLINK DRIVE's motion. Fired by the item (js/items/active/index.js) rather than by a
@@ -1611,12 +1673,17 @@ export class Player {
       this.shuffleFx = true;
     }
     this.rebuildMods();
+    // One-time pickup behavior belongs to the definition but must run outside
+    // apply(): apply() is replayed after every later pick. DEATHWISH uses this
+    // to set the bar to five once, rather than setting it back to five forever.
+    if (typeof def.onTake === 'function') def.onTake(this, n);
     // A max-health change must not leave the player over the new cap or at a
     // stale value; clamp immediately so the HUD never shows 120/100.
     this.health = Math.min(this.health, this.maxHealth);
     // A magazine-shrinking passive item must not leave the gun holding more rounds
     // than it can now carry.
     this.mag = Math.min(this.mag, this.magSize);
+    this.reserveAmmo = Math.min(this.reserveAmmo, this.maxReserve);
     return true;
   }
 
@@ -1937,6 +2004,14 @@ export class Player {
       this.shield += 1;
       this.shieldEnd = 0;
       this.soulFx = true;
+    }
+    // KILLCHAIN extends what remains rather than opening a fresh one-second
+    // window. Five quick kills therefore bank five seconds; a sixth can only
+    // replace time that has already elapsed, never push the ceiling outward.
+    if (this.mods.killchain > 0) {
+      this.invulnEnd = Math.min(
+        time + 5, Math.max(time, this.invulnEnd) + this.mods.killchain
+      );
     }
     this.bumpCarnage();
   }
@@ -2414,6 +2489,20 @@ export class Player {
     this.stiltLanding = false;
     this.hpDebt = 0;
     this.soulFx = false;
+    // Seventh-pool state. Counters live here, never in mods, because the mods
+    // object is replayed after every passive pick.
+    this.waveShots = 0;
+    this.sprayMisses = 0;
+    this.bottomFeedMagActive = false;
+    this.brassTaxPaid = false;
+    this.vendingKills = 0;
+    this.nearbyEnemies = 0;
+    this.wadingEnd = -99;
+    this.ghostShield = 0;
+    this.ghostPlateBrokenAt = -1;
+    this.ghostFx = false;
+    this.deadSwitchEnd = -99;
+    this.deadSwitchFx = false;
     this._wasGrounded = true;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
@@ -2605,6 +2694,15 @@ export class Player {
     // Published for getEffectiveDamage(), which has no clock of its own and is
     // called from several places that have none to give it.
     this.now = time;
+    // GHOST PLATE. A break starts one clock; taking another hit while it is
+    // gone cannot move that clock, and a reformed plate is a fresh ten points.
+    if (this.mods.ghostPlate > 0 && this.ghostShield <= 0
+      && this.ghostPlateBrokenAt >= 0
+      && time - this.ghostPlateBrokenAt >= this.mods.ghostPlateDelay) {
+      this.ghostShield = this.mods.ghostPlate;
+      this.ghostPlateBrokenAt = -1;
+      this.ghostFx = true;
+    }
     this._tickStatus(dt);
     // SLOW RELEASE's pool. NOT gated on `combat`, unlike NANOWEAVE and the
     // fabricator beside it - and it does not need to be. Those two pay per
@@ -2790,6 +2888,10 @@ export class Player {
         if (this.mods.bottomFeed > 0 && this.magOnReload <= 0) {
           this.bottomEnd = time + this.mods.bottomTime;
         }
+        // BOTTOM FEED. Unlike BOTTOM FEEDER's timed window, this belongs to
+        // the magazine that just arrived and stays with it until the next
+        // reload begins. Only a reload started from empty arms it.
+        this.bottomFeedMagActive = this.mods.bottomFeedMag > 0 && this.magOnReload <= 0;
         // MAGNA CARTA. The same question BOTTOM FEEDER asks, answered with a
         // permanent round instead of a window: reloading a gun that was run
         // dry banks one round of magazine, forever. Banked HERE, at the rounds
@@ -2885,6 +2987,7 @@ export class Player {
         // full. See paceMult.
         * this.paceMult
         * this.statusSpeedMult()
+        * (time < this.wadingEnd ? this.mods.wadingSlow : 1)
         * (time < this.dodgeEnd ? DODGE_SPEED : 1)
         // The second gear. A multiplier on the whole stack rather than an
         // addition to BASE_SPEED, so a slowed player who sprints is still
@@ -2919,7 +3022,8 @@ export class Player {
       const u = 1 - Math.max(0, this.slideT) / SLIDE_TIME;
       const mult = SLIDE_SPEED_MULT + (1 - SLIDE_SPEED_MULT) * smooth(u);
       const sp = BASE_SPEED * mult * this.moveLoss * this.mods.moveMult
-        * this.rageSpeedMult * this.statusSpeedMult();
+        * this.rageSpeedMult * this.statusSpeedMult()
+        * (time < this.wadingEnd ? this.mods.wadingSlow : 1);
       this.moveVX = this.slideDX * sp;
       this.moveVZ = this.slideDZ * sp;
     }
@@ -3963,6 +4067,9 @@ export class Player {
     // gone. Refused first, because every other guard below is about a magazine.
     if (this.mods.beltFedDream > 0) return false;
     if (this.reloading > 0 || this.mag === this.magSize || this.reserveAmmo <= 0) return false;
+    // Whatever was in the previous magazine ends when that magazine comes
+    // out. The reload that is starting below may arm the next one on arrival.
+    this.bottomFeedMagActive = false;
     // FINAL DOSE. EXACTLY one round left, which is a thing the player has to
     // choose to stop at rather than a band they drift through - and it is
     // taken here, at the DECISION, not when the magazine seats: a reload
@@ -4260,6 +4367,16 @@ export class Player {
   _noteShot() {
     this.lastShotAt = this.now;
     this.shotTally++;
+    this.waveShots++;
+    // BRASS TAX. The trigger still fires when the wallet is empty; it simply
+    // loses the paid damage. `cashOwed` is settled by Game after tryShoot, so
+    // several shots in one frame cannot all spend the same final dollar.
+    this.brassTaxPaid = false;
+    if (this.mods.brassTax > 0
+      && this.balance - this.cashOwed >= this.mods.brassTax) {
+      this.cashOwed += this.mods.brassTax;
+      this.brassTaxPaid = true;
+    }
     // CANNONADE. `magFresh` is consumed HERE, at the trigger, and what it was
     // is published for main.js - which reads it after tryShoot has already
     // returned and so can no longer ask the question itself.
@@ -4389,6 +4506,7 @@ export class Player {
   // Shield soaks damage first and fully - a hit that breaks the shield does
   // not carry the remainder through to health. Returns remaining health.
   takeDamage(d, time) {
+    const beforeHealth = this.health;
     // CURSE, applied before the shield rather than after it: the effect says
     // every source hurts 25% more, and a shield point is as much a thing the
     // player has to spend as a health point is.
@@ -4435,6 +4553,16 @@ export class Player {
       this.hpDebt = 0;
     }
     this.lastDamageTaken = d;
+    // GHOST PLATE is its own layer. Keeping it separate from temporary shield
+    // pickups is what lets ten points reform without overwriting fifty points
+    // the player found elsewhere. Like the ordinary shield, a hit that breaks
+    // it does not carry a remainder into the next layer.
+    if (this.ghostShield > 0) {
+      this.ghostShield = Math.max(0, this.ghostShield - d);
+      if (this.ghostShield <= 0) this.ghostPlateBrokenAt = time;
+      this.lastHurt = time;
+      return this.health;
+    }
     if (this.shield > 0) {
       this.shield = Math.max(0, this.shield - d);
       if (this.shield <= 0) {
@@ -4445,6 +4573,16 @@ export class Player {
     }
     this.health = Math.max(0, this.health - d);
     this.lastHurt = time;
+    // DEAD MAN'S SWITCH is an edge, not a low-health aura. Healing back over
+    // the line permits a later crossing once the cooldown has elapsed; merely
+    // remaining under it never fires again.
+    if (this.mods.deadSwitch > 0
+      && beforeHealth >= this.maxHealth * this.mods.deadSwitchAt
+      && this.health < this.maxHealth * this.mods.deadSwitchAt
+      && time >= this.deadSwitchEnd) {
+      this.deadSwitchEnd = time + this.mods.deadSwitchCd;
+      this.deadSwitchFx = true;
+    }
     // LIFE INSURANCE, and this is the last thing that happens to the number
     // because it is a claim on the OUTCOME rather than on the blow: the hit
     // lands in full, everything above has already had its say, and only then
@@ -4468,6 +4606,13 @@ export class Player {
     return this.health;
   }
 
+  // What the health bar draws. The temporary shield and Ghost Plate remain
+  // separate ledgers for recharge purposes, but they are one layer to the
+  // player looking at the HUD.
+  get totalShield() {
+    return this.shield + this.ghostShield;
+  }
+
   // All outgoing damage goes through here. Steady Aim reads live horizontal
   // speed, so the bonus fades in as the player settles and drops the moment
   // they move - it is not a key check, and there is no key to check.
@@ -4488,6 +4633,27 @@ export class Player {
     // Point three times - which is exactly the run that pressed it most.
     let d = base * this.damageMult * this.mods.damage * this.statusDamageMult()
       * this.itemDamageMult * this.compoundMult;
+    if (this.mods.pressureCooker > 0 && this.nearbyEnemies > 0) {
+      d *= 1 + this.mods.pressureCooker * this.nearbyEnemies;
+    }
+    // The collision clamp holds the feet at 21.6; two metres inside that is
+    // the visible border band the card names.
+    if (this.mods.corneredAnimal > 0
+      && Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) >= 19.6) {
+      d *= 1 + this.mods.corneredAnimal;
+    }
+    if (this.mods.fullHouse > 0 && this.mods.beltFedDream <= 0) {
+      d *= 1 + this.mods.fullHouse * this.mag;
+    }
+    if (this.mods.bottomFeedMag > 0 && this.bottomFeedMagActive) {
+      d *= 1 + this.mods.bottomFeedMag;
+    }
+    if (this.mods.spendthrift > 0 && this.waveShots > 0) {
+      d *= 1 + this.mods.spendthrift * this.waveShots;
+    }
+    if (this.mods.sprayEconomy > 0 && this.sprayMisses > 0) {
+      d *= 1 + this.mods.sprayEconomy * this.sprayMisses;
+    }
     if (this.mods.steady > 0) {
       d *= 1 + this.mods.steady * this.stillness;
     }

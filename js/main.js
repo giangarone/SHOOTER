@@ -64,8 +64,9 @@ import {
 } from './player.js';
 import { PLAYER_STATUS } from './status.js';
 import {
-  Enemy, Projectile, Grenade, Shard, Spit, ENEMY_TYPES, setDamageSink, setPlateSink,
-  setShareHook, setPoisonStackCap, projStats, projLook,
+  Enemy, Projectile, Grenade, Shard, MitosisFragment, Spit, ENEMY_TYPES,
+  setDamageSink, setPlateSink, setShareHook, setPoisonStackCap,
+  setStatusDurationBonus, projStats, projLook,
 } from './enemy.js';
 import { Effects } from './effects.js';
 import { CrtPass } from './crt.js';
@@ -113,6 +114,11 @@ const THEME_VITAL = THEME.vitalTrigger;
 const THEME_BRUISE = THEME.bruiseRounds;
 const THEME_KILLSTREAK = THEME.killStreak;
 const THEME_OATH = THEME.bloodOath;
+const THEME_THUNDERCLAP = THEME.thunderclap;
+const THEME_LUCKY_CORPSE = THEME.luckyCorpse;
+const THEME_GHOST_PLATE = THEME.ghostPlate;
+const THEME_DEAD_SWITCH = THEME.deadMansSwitch;
+const THEME_MITOSIS = THEME.mitosis;
 // LIFE INSURANCE's payout. The item is drawn in THEME.holy like AEGIS, and the
 // claim wears it too: what the player has to read off the flash is which of
 // the two things that can save them from a killing blow just did.
@@ -1184,6 +1190,13 @@ const PLAYER_FX = [
     g.effects.shockwave(g.player.pos, THEME_SOUL, 1.6, 0.22);
     g.sfx.passiveItem();
   }],
+  ['ghostFx', (g) => {
+    g.effects.shockwave(g.player.pos, THEME_GHOST_PLATE, 3.6, 0.45);
+    g.effects.burst(
+      g.player.eyeInto(g._killPos), THEME_GHOST_PLATE, 12, 4, 2, 0.4
+    );
+    g.sfx.pickupShield();
+  }],
   ['activeItemReadyFx', (g) => {
     // A SOUND and not a banner because it lands mid-fight: the player is
     // looking at the crosshair, the bar is in the corner, and the only
@@ -1489,6 +1502,11 @@ class Game {
     this._pendingValue = 0;
     this._addCharge = 0;
     this._bossChargeFrac = 1;
+    // LUCKY CORPSE chooses one of the wave's scheduled bodies before the first
+    // spawn. Boss waves mark the boss itself instead; adds are an unbounded
+    // stream and cannot be sampled uniformly.
+    this._luckyCorpseSpawn = -1;
+    this._waveSpawned = 0;
     // The field of view the orbs were last sized for. Aiming moves it every
     // frame of a raise - see the sync in _loop.
     this._fov = this.camera.fov;
@@ -1779,6 +1797,11 @@ class Game {
       // the enemy list and a blast that cannot reach back.
       enemies: this.enemies,
       onBlast: (pos, dmg, radius) => this._blast(pos, dmg, radius, null, false),
+      // MITOSIS fragments own their flight; Game owns target selection, damage
+      // and child creation because those touch the live roster and projectile
+      // cap. Both callbacks are stable for the whole session.
+      mitosisTarget: (pos, used) => this._mitosisTarget(pos, used),
+      onMitosisHit: (fragment) => this._mitosisHit(fragment),
       // A blight's spit grows its pool where it lands, so the projectile ctx
       // needs the same hazard hook the enemy ctx has. Kind is left to default:
       // a spit is a pool, and it is capped against the other pools.
@@ -4657,6 +4680,14 @@ class Game {
       e.applyStatus('burn', 2, this.player.fireTickDamage);
     }
     if (this.player.pos.y >= LAVA_FLOOR_CLEAR) return;
+    // WADING BOOTS names lava, not just the circular hazard implementation.
+    // The active item's arena-wide floor takes this separate height-test path,
+    // so it has to pay the same slowdown here or the same surface would obey
+    // two different rules depending on who poured it.
+    if (this.player.mods.wadingSlow > 0) {
+      this.player.wadingEnd = Math.max(this.player.wadingEnd, this.time + 0.12);
+      return;
+    }
     // THE PLAYER BURNS ON THE SHARED FIRE'S TERMS, and nothing else: one
     // status, refreshed while they stand here, billed through the same drain
     // every fire in the game uses. The floor used to keep a second ledger on
@@ -4748,6 +4779,11 @@ class Game {
     this.player.adrenalineStacks = 0;
     this._cfg = waveConfig(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme);
     this.queue = this._cfg.queue;
+    this.player.waveShots = 0;
+    this._waveSpawned = 0;
+    this._luckyCorpseSpawn = this.player.mods.luckyCorpse > 0
+      && !this._cfg.boss && this.queue.length
+      ? (Math.random() * this.queue.length) | 0 : -1;
     // CURTAIN CALL's address is a WAVE's, not a run's. Cleared here so the
     // crates can never land where the LAST wave's last body fell - a pick
     // claimed at a shop would otherwise pay out across the room on the first
@@ -4837,7 +4873,12 @@ class Game {
       this.sfx.pickupShield();
     }
     this._reliefT = RELIEF_INTERVAL;
-    if (this._cfg.boss) this._spawnBoss(this._cfg.bossKey);
+    if (this._cfg.boss) {
+      this._spawnBoss(this._cfg.bossKey);
+      if (this.player.mods.luckyCorpse > 0 && this.bossFight && this.bossFight.parts[0]) {
+        this.bossFight.parts[0].luckyCorpse = true;
+      }
+    }
   }
 
   // ---- boss waves --------------------------------------------------------
@@ -5065,6 +5106,10 @@ class Game {
     if (!bf) return;
     const sc = bossScale(this.wave);
     const tier = e.bs.tier;
+    const luckyChild = e.luckyCorpse ? ((Math.random() * 2) | 0) : -1;
+    // Splitting is survival, not a kill. Carry LUCKY CORPSE's mark into one
+    // random child so the six drops belong to a body the player actually kills.
+    e.luckyCorpse = false;
     // Each half carries half the parent's remaining pool, so the total health
     // left in the fight is unchanged by the split itself.
     const half = e.maxHp * 0.5;
@@ -5079,6 +5124,7 @@ class Game {
       child.maxHp = half;
       child.hp = half;
       child.bs.tier = tier;
+      child.luckyCorpse = i === luckyChild;
       // The geometry cache bakes `scale` per TYPE, so a child cannot have its
       // own - visual size comes from the group, exactly as a splitter's minis
       // do. Collision and melee reach follow through `radius`.
@@ -5296,6 +5342,8 @@ class Game {
       type, j, this._cfg.hpScale * this.player.mods.enemyHpMult,
       this._cfg.speedScale, this._cfg.dmgScale
     );
+    if (this._waveSpawned === this._luckyCorpseSpawn) e.luckyCorpse = true;
+    this._waveSpawned++;
     this.scene.add(e.group);
     this.enemies.push(e);
     this.effects.burst(j, e.colorHex, 12, 3, 2, 0.4);
@@ -5579,7 +5627,10 @@ class Game {
   // An orb reached the player. The single entry point for the balance going
   // up; the value is already final by the time it gets here.
   _collectOrb(value) {
-    this.credits += value;
+    const full = this.player.health >= this.player.maxHealth;
+    const paid = full && this.player.mods.coinLaundry > 0
+      ? value * (1 + this.player.mods.coinLaundry) : value;
+    this.credits += paid;
     this._creditsDirty = true;
     // THE ITEM METER MOVES HERE AND NOWHERE ELSE, in proportion to what this
     // orb is WORTH rather than to it being one orb. The split rule can put a
@@ -6555,6 +6606,9 @@ class Game {
       // and what did not fit is what walks to the next body.
       const before = en.hp;
       en.takeDamage(dealt, false, dir.x, dir.z, point, crit, head);
+      if (m.mitosis > 0 && en.dead && before > 0) {
+        this._spawnMitosis(en.pos, dealt * m.mitosis, 0, new Set([en.id]));
+      }
       if (m.overkill > 0 && en.dead && dealt > before) {
         this._carryOver(en, dealt - before);
       }
@@ -7068,6 +7122,7 @@ class Game {
     // Cursed Ammo, rolled once per trigger pull. The floor is what keeps it
     // playable: a held trigger must never be able to kill you on its own.
     let dmgMult = 1;
+    if (this.player.brassTaxPaid) dmgMult *= 1 + mods.brassTaxDamage;
     // CANNONADE. The first round out of a fresh magazine, and only the first:
     // `magFresh` is raised where the rounds actually arrive (the reload's last
     // frame, and CHAIN FEED's instant one) and dropped by the trigger.
@@ -7158,6 +7213,7 @@ class Game {
 
     const w = this.player.weapon;
     this.stats.shotsFired++;
+    this._luckyCasing(this.player.offHand ? 1 : this.player.shotCost);
     this.sfx.shoot();
     // Recoil, in the hands. Scaled by the same number the camera kick is, so a
     // scattergun is felt as a scattergun without the two ever disagreeing, and
@@ -7379,6 +7435,7 @@ class Game {
     // up or one step down however many pellets were in it, and it reads the
     // same boolean the hitmarker below does so the two can never disagree.
     this.player.bumpStreak(hitAny);
+    this.player.noteAccuracy(hitAny);
 
     // OVERLOAD. The magazine running dry calls lightning down on the whole
     // room. Fired here rather than in tryShoot() because it has to be the
@@ -7437,6 +7494,71 @@ class Game {
       }
     }
     targets.length = 0;
+  }
+
+  // LUCKY CASINGS. One coin per fired round, never per pellet: a scattergun
+  // shell leaves one casing just as an accurate rifle round does.
+  _luckyCasing(rounds = 1) {
+    const chance = this.player.mods.luckyCasings;
+    if (chance <= 0) return;
+    const at = this.player.muzzleInto(this._killPos);
+    for (let i = 0; i < Math.max(1, rounds); i++) {
+      if (Math.random() >= chance) continue;
+      if (Math.random() < 0.5) {
+        this.player.heal(5);
+        this.effects.burst(at, 0x42f59b, 10, 4, 2, 0.35);
+        this.sfx.pickupHealth();
+      } else {
+        this.player.reserveAmmo = Math.min(
+          this.player.maxReserve, this.player.reserveAmmo + 15
+        );
+        this.effects.burst(at, 0xffd54f, 10, 4, 2, 0.35);
+        this.sfx.pickupAmmo();
+        this.ui.flashReserve();
+      }
+    }
+  }
+
+  // MITOSIS. Targets are claimed as soon as a fragment is created, so two
+  // siblings always seek fresh bodies. A child that loses its target in flight
+  // asks again from the same claimed set rather than collapsing onto its twin.
+  _mitosisTarget(pos, used) {
+    let best = null;
+    let bestD = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || used.has(e.id)) continue;
+      const d = pos.distanceToSquared(e.pos);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    if (best) used.add(best.id);
+    return best;
+  }
+
+  _spawnMitosis(from, damage, generation, used) {
+    for (let i = 0; i < 2; i++) {
+      if (this.projectiles.length >= MAX_PROJECTILES) break;
+      const target = this._mitosisTarget(from, used);
+      if (!target) break;
+      this.projectiles.push(new MitosisFragment(
+        this.scene, this.effects.glowTex, from, target, damage, generation, used
+      ));
+    }
+    this.effects.burst(
+      this._killPos.set(from.x, (from.y || 0) + 0.9, from.z),
+      THEME_MITOSIS, 16, 5, 2.2, 0.45
+    );
+  }
+
+  _mitosisHit(fragment) {
+    const en = fragment.target;
+    if (!en || en.dead) return;
+    const killed = this.hurtEnemy(en, fragment.damage);
+    this.effects.impact(fragment.pos, THEME_MITOSIS, 10, 4, 2, 0.35);
+    if (killed && en.dead && fragment.generation < 1) {
+      this._spawnMitosis(
+        en.pos, fragment.damage * 0.5, fragment.generation + 1, fragment.used
+      );
+    }
   }
 
   /**
@@ -7805,6 +7927,13 @@ class Game {
     this.player.clearCarnage();
     this.player.freeze(this.time);
     const h = this.player.takeDamage(d, this.time);
+    if (this.player.lastDamageTaken > 0 && this.player.mods.gracePeriod > 0) {
+      this.player.invulnEnd = Math.max(
+        this.player.invulnEnd, this.time + this.player.mods.gracePeriod
+      );
+      this.effects.shockwave(this.player.pos, 0xe8f5ff, 3.2, 0.35);
+    }
+    if (this.player.deadSwitchFx) this._deadMansSwitch();
     // THIN BLOOD's bill, settled the same frame the hit landed - the player
     // class set `hpDebt` from the build's own arithmetic and the wallet is
     // here. Like CASH CANNON, `balance` is not written twice; the minus is
@@ -8649,7 +8778,7 @@ class Game {
    * item with a delayed cost the one item nothing in the build can talk to.
    *
    * NOT Player.pay(). That helper is for an item's OWN price, floored at 1 so
-   * a button can never end a run - the correct rule for BLOOD TAX, which is
+   * a button can never end a run - the correct rule for BLOOD PRICE, which is
    * paid the instant it is pressed and read. This is a bill the player took on
    * knowing the terms, and the card says so.
    *
@@ -9815,7 +9944,7 @@ class Game {
     if (!p) return p;
     if (this.player.mods.noPickups > 0) return p;
     const k = this.player.mods.lootDespawn;
-    if (k < 1) p.despawnTime *= k;
+    if (k !== 1) p.despawnTime *= k;
     this.powerups.push(p);
     return p;
   }
@@ -9828,6 +9957,37 @@ class Game {
     );
     // The drop has to be findable in a fight it landed in the middle of.
     this.effects.burst(this._killPos.set(pos.x, (pos.y || 0) + 0.9, pos.z), 0xffe95e, 10, 3, 2, 0.5);
+  }
+
+  // LUCKY CORPSE's six guaranteed supplies. Spread in a small ring so their
+  // plates remain individually readable instead of occupying one flickering
+  // point. Guaranteed means no need gate and no ordinary active-pickup cap.
+  _luckyCorpseDrop(pos) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const at = new THREE.Vector3(
+        pos.x + Math.cos(a) * 1.15, pos.y || 0, pos.z + Math.sin(a) * 1.15
+      );
+      this._placeDrop(i < 3 ? 'health' : 'ammo', at);
+    }
+    this.effects.shockwave(pos, THEME_LUCKY_CORPSE, 5, 0.55);
+    this.effects.burst(
+      this._killPos.set(pos.x, (pos.y || 0) + 1, pos.z),
+      THEME_LUCKY_CORPSE, 28, 7, 3, 0.75
+    );
+    this.sfx.jackpot();
+  }
+
+  _vendingDrop() {
+    const kinds = Object.keys(POWERUP_TYPES);
+    // POWERUP_TYPES intentionally excludes ammo, but the player's language is
+    // "powerup" rather than "buff": include the ammo plate alongside every
+    // table entry so the machine can dispense any pickup the floor supports.
+    kinds.push('ammo');
+    const kind = kinds[(Math.random() * kinds.length) | 0];
+    this._placeDrop(kind, this.player.pos);
+    this.ui.banner('VENDING MACHINE');
+    this.sfx.pickupBuff();
   }
 
   // A boss sheds a pickup as it crosses each health threshold. Without this a
@@ -9957,6 +10117,10 @@ class Game {
         this._pendingBuffs.push(p.type);
       } else {
         p.type.apply(this.player, this.time);
+        if (this.player.mods.zeroWaste > 0
+          && (p.typeKey === 'health' || p.typeKey === 'ammo')) {
+          p.type.apply(this.player, this.time, this.player.mods.zeroWaste, true);
+        }
       }
       // Held for the flight instead of destroyed - see the note above.
       p.absorb(Math.random() * 0.55);
@@ -10000,6 +10164,14 @@ class Game {
       }
       if (p.tryPickup(this.player.pos)) {
         p.type.apply(this.player, this.time);
+        if (this.player.mods.zeroWaste > 0
+          && (p.typeKey === 'health' || p.typeKey === 'ammo')) {
+          // The plate is consumed once, then pays half of its payload again.
+          // Passing `repeat` keeps one-per-crate random riders from rolling a
+          // second time while every amount on the plate scales honestly.
+          p.type.apply(this.player, this.time, this.player.mods.zeroWaste, true);
+          this.effects.shockwave(this.player.pos, p.type.color, 2.5, 0.25);
+        }
         // THE MAGNET. The only pickup whose effect is not on the player, so it
         // is the only one main.js has to know by name: everything on the floor
         // comes in at once, the same sweep a wave clear does.
@@ -10266,6 +10438,16 @@ class Game {
       // would be paying twice for the same fight.
       if (!e.boss) this._bankKillCharge(e.value, paid);
       this.player.onKill(this.time);
+      // VENDING MACHINE counts every booked body, whatever killed it. The
+      // fifteenth pays at the player's feet, where it can be collected on the
+      // next pickup pass rather than stranded at a distant corpse.
+      if (this.player.mods.vendingEvery > 0) {
+        this.player.vendingKills++;
+        if (this.player.vendingKills >= this.player.mods.vendingEvery) {
+          this.player.vendingKills = 0;
+          this._vendingDrop();
+        }
+      }
       // MONSOON. The kill's own clock, ticked on the frame the kill is booked
       // so the window is the time between BODIES rather than between shots.
       this.player.bumpMonsoon(this.time);
@@ -10330,6 +10512,9 @@ class Game {
       if (forced) {
         this._placeDrop(forced, e.pos);
       } else if (!e.boss) this._rollDrop(e.pos);
+      if (e.luckyCorpse && this.player.mods.luckyCorpse > 0) {
+        this._luckyCorpseDrop(e.pos);
+      }
       if (e.boss) this._bossDeathPos.copy(e.pos);
       // Blast Corpse and Incendiary's spread both need the enemy list intact,
       // so they are only noted here and played after the sweep.
@@ -11045,6 +11230,14 @@ class Game {
       // `radius`, not h.radius: for the one kind that grows, the danger is
       // where the drawing has reached - see the spread block above.
       if (!immune && dx * dx + dz * dz < radius * radius && this.player.pos.y < 0.8) {
+        // WADING BOOTS answer the two literal liquid hazards. The patch keeps
+        // its drawing and expiry, but refreshes a short movement penalty in
+        // place of both its direct damage and its lingering status.
+        if (this.player.mods.wadingSlow > 0
+          && (h.kind === 'pool' || h.kind === 'lava')) {
+          this.player.wadingEnd = Math.max(this.player.wadingEnd, this.time + 0.12);
+          continue;
+        }
         // WHAT THE GROUND PUTS ON YOU. Lava sets you alight, gas poisons you,
         // frost chills you - and all three keep working after you leave, which
         // is the entire reason they are statuses and not just a damage tick.
@@ -11134,6 +11327,13 @@ class Game {
     // in fire is being hit, and the card says "without taking damage".
     this.player.cleanKills = 0;
     const h = this.player.takeDamage(d, this.time);
+    if (this.player.lastDamageTaken > 0 && this.player.mods.gracePeriod > 0) {
+      this.player.invulnEnd = Math.max(
+        this.player.invulnEnd, this.time + this.player.mods.gracePeriod
+      );
+      this.effects.shockwave(this.player.pos, 0xe8f5ff, 3.2, 0.35);
+    }
+    if (this.player.deadSwitchFx) this._deadMansSwitch();
     // Standing in fire is being hit, for the streak as much as for Carnage.
     this._noteDamage();
     // Throttled, and NO LONGER THE DAMAGE FLASH. The fire and poison layers are
@@ -11230,7 +11430,7 @@ class Game {
   _clearHazards() {
     // The running items and the deployables go with the hazards, and for the
     // same reason: all three are things the last fight left lying around. A
-    // BLOOD TAX still multiplying damage across a wave boundary would be a
+    // BLOOD PRICE still multiplying damage across a wave boundary would be a
     // buff nobody was granted, and a turret firing into the shop would be
     // furniture the player has to wait out.
     this.runningActiveItems.clear(this);
@@ -11303,6 +11503,36 @@ class Game {
     }
     this.effects.shockwave(this.player.pos, 0xff7043, 2.5, 0.35);
     this.effects.addShake(0.08);
+  }
+
+  // THUNDERCLAP. Flat damage, deliberately: five remains five whether the
+  // rifle is fresh or carrying a full damage build, exactly as the card says.
+  // Every living body is struck once on the frame the magazine seats.
+  _thunderclap() {
+    const damage = this.player.mods.thunderclap;
+    if (damage <= 0) return;
+    for (const e of this.enemies) if (!e.dead) this.hurtEnemy(e, damage);
+    this.effects.shockwave(this.player.pos, THEME_THUNDERCLAP, 24, 0.65);
+    this.effects.burst(
+      this.player.eyeInto(this._killPos), THEME_THUNDERCLAP, 24, 7, 3, 0.65
+    );
+    this.sfx.impact();
+  }
+
+  // DEAD MAN'S SWITCH. The player raises the edge-trigger flag at the exact
+  // health crossing; the game owns the roster, so it pays the room hit here.
+  _deadMansSwitch() {
+    this.player.deadSwitchFx = false;
+    for (const e of this.enemies) {
+      if (!e.dead) this.hurtEnemy(e, this.player.mods.deadSwitch);
+    }
+    this.effects.shockwave(this.player.pos, THEME_DEAD_SWITCH, 24, 0.8);
+    this.effects.burst(
+      this.player.eyeInto(this._killPos), THEME_DEAD_SWITCH, 48, 10, 4, 0.9
+    );
+    this.effects.addShake(0.5);
+    this.sfx.itemBlast();
+    this.ui.banner("DEAD MAN'S SWITCH");
   }
 
   /**
@@ -11436,7 +11666,7 @@ class Game {
     // rate everything on the floor is being paid at. Hidden at 1x - a "x1"
     // sitting there permanently is not information.
     this.ui.setFlawless(this.flawlessMult());
-    this.ui.setHealth(this.player.health, this.player.maxHealth, this.player.shield);
+    this.ui.setHealth(this.player.health, this.player.maxHealth, this.player.totalShield);
     this.ui.setStamina(
       this.player.staminaFrac, this.player.staminaLow, this.player.staminaLocked
     );
@@ -11626,6 +11856,7 @@ class Game {
       );
       if (reloaded) {
         this._reloadBurst();
+        if (this.player.mods.thunderclap > 0) this._thunderclap();
         // The magazine seating. Two motors, briefly, low on the strong one -
         // it is a mechanism, not an impact.
         this.pad.rumble(0.25, 0.35, 90, 1);
@@ -11709,6 +11940,21 @@ class Game {
       }
 
       this._updateWave(dt);
+      // PRESSURE COOKER. Published immediately before the trigger is read, so
+      // the shot uses this frame's player position and live roster rather than
+      // a count left over from the previous HUD pass.
+      let close = 0;
+      const pressureR = this.player.mods.pressureRadius;
+      if (pressureR > 0) {
+        const r2 = pressureR * pressureR;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const dx = e.pos.x - this.player.pos.x;
+          const dz = e.pos.z - this.player.pos.z;
+          if (dx * dx + dz * dz <= r2) close++;
+        }
+      }
+      this.player.nearbyEnemies = close;
       // METRONOME's gate. A whole beat - not the upbeat between two - raises
       // the flag, and letting go of the trigger drops it, which is what makes
       // the first shot of a burst wait for the NEXT beat rather than leaving on
@@ -11793,6 +12039,7 @@ class Game {
       // every frame rather than on an edge, because setPoisonStackCap is a
       // single clamped assignment - there is nothing here worth an edge test.
       setPoisonStackCap(this.player.mods.poisonStacks);
+      setStatusDurationBonus(this.player.mods.statusDurationBonus);
       // GRAY MATTER. Written on the frame it changes and never again.
       const mono = this.player.mods.mono > 0;
       if (mono !== this._monoOn) {

@@ -2698,7 +2698,7 @@ const PIXEL_ICONS = {
     '.2......................',
     '........................',
   ],
-  // BLOOD TAX - health for damage. An opened palm.
+  // BLOOD PRICE - health for damage. An opened palm.
   itemPact: [
     '........................',
     '........................',

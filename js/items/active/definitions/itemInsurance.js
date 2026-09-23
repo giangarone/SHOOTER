@@ -14,7 +14,7 @@ import { defineActiveItem } from '../shared.js';
 //     still standing when it lands. Every other heal in the pool is a number
 //     arriving on the frame of the press.
 //   - A DEBT. MEDICAL DEBT and LIFE SENTENCE take their price LATER - at the
-//     end of the wave, or for the rest of the run - where BLOOD TAX and OPEN
+//     end of the wave, or for the rest of the run - where BLOOD PRICE and OPEN
 //     VEIN take theirs now. A cost the player has already forgotten about by
 //     the time it arrives is a different decision to one they watch happen.
 //   - THE ROOM'S OWN COUNT AS THE PAYLOAD. FAITH HEALING, PICKPOCKET, HEAD

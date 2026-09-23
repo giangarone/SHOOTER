@@ -582,7 +582,7 @@ export class SFX {
     this.noise({ t: 0.2, v: 0.14, f: 900, mode: 'bandpass', q: 3 });
   }
 
-  // BLOOD TAX and OPEN VEIN: health leaving. A wet thud with a low bend under
+  // BLOOD PRICE and OPEN VEIN: health leaving. A wet thud with a low bend under
   // it - the same shape as being hurt, because it is.
   itemPact() {
     this.tone({ f: 210, f2: 70, t: 0.3, type: 'triangle', v: 0.3 });

@@ -819,7 +819,7 @@ try {
     // ---- ...AND THE LIST ITSELF ----
     //
     // Three rules, and each of them is a bug that would otherwise only show up
-    // in a run: re-firing must refresh rather than stack (two BLOOD TAXes
+    // in a run: re-firing must refresh rather than stack (two BLOOD PRICE windows
     // would be nine times damage through a multiplier neither could hand
     // back), clear() must run every end(), and a duration must actually end.
     P.passiveItems = {};

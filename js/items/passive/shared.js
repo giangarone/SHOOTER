@@ -337,6 +337,35 @@ export const THEME = {
   // the item slot
   jumperCables: 0xd6e000,    // charge off a hit taken
   dimeNovel: 0xe8a0c8,       // crit off a button pressed
+
+  // ---- THE SEVENTH POOL ---------------------------------------------------
+  thunderclap: 0x86d7ff,
+  packLight: 0xf0c36a,
+  luckyCorpse: 0x76d275,
+  deathwish: 0xf51b51,
+  gracePeriod: 0xe8f5ff,
+  killchain: 0xf03f7b,
+  zeroWaste: 0x80cbc4,
+  bloodTax: 0xc42d4f,
+  pressureCooker: 0xf26945,
+  corneredAnimal: 0x85624f,
+  preservative: 0x88c957,
+  wadingBoots: 0x27a8df,
+  ghostPlate: 0xb388ff,
+  luckyCasings: 0xf6c423,
+  dialysis: 0x43a047,
+  extendedWarranty: 0x7653b5,
+  coinLaundry: 0xf2cd45,
+  vendingMachine: 0xec407a,
+  sponsorship: 0xf28700,
+  completionist: 0x009fb7,
+  deadMansSwitch: 0xa71930,
+  mitosis: 0xa140b6,
+  fullHouse: 0xee4d64,
+  bottomFeed: 0x607d8b,
+  spendthrift: 0xf0a900,
+  brassTax: 0xd6a72c,
+  sprayEconomy: 0x229b91,
 };
 
 

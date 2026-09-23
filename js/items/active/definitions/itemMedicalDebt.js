@@ -6,7 +6,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     name: 'MEDICAL DEBT',
     charge: 20,
     theme: THEME.pact,
-    // FORTY NOW, THIRTY AT THE END OF THE WAVE, AND IT STACKS. BLOOD TAX pays
+    // FORTY NOW, THIRTY AT THE END OF THE WAVE, AND IT STACKS. BLOOD PRICE pays
     // its twenty-five up front and can never kill you; this one is the same
     // bargain with the terms reversed and the safety off - the bill arrives
     // when the wave does, it is thirty per press, and it goes through the

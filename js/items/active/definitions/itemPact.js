@@ -3,7 +3,7 @@ import { defineActiveItem } from '../shared.js';
 export const id = 'itemPact';
 
 export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
-    name: 'BLOOD TAX',
+    name: 'BLOOD PRICE',
     charge: 30,
     theme: THEME.pact,
     // PAID UP FRONT, IN THE ONE CURRENCY THE PLAYER CANNOT FARM. It is the
