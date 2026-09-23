@@ -2436,7 +2436,7 @@ nothing above it did:
 | PICKPOCKET | Heal 1 HP and gain 5 rounds per enemy alive | 20 |
 | PINATA | The next 5 enemies you kill are guaranteed to drop | 40 |
 | MONEY SHOT | Spend every credit; deal that much to every enemy | 40 |
-| FLOOR IS LAVA | The whole floor burns for 10s - you included | 40 |
+| FLOOR IS LAVA | The whole floor burns for 4s - you included | 40 |
 | PARTY BALLOONS | The 5 nearest enemies float helpless for 5s. Not bosses | 30 |
 | HEAD COUNT | $100 per enemy alive | 20 |
 | EXECUTIVE DECISION | Instantly kill a boss | 120 |
@@ -2475,7 +2475,7 @@ way a run boundary disposes a roster; the queue empties with them, and
 outright - a boss wave ends when the boss dies, not when the floor is clear,
 and buying one out would retire EXECUTIVE DECISION at a third of the charge.
 
-FLOOR IS LAVA is the only item that changes where the game is played. For ten
+FLOOR IS LAVA is the only item that changes where the game is played. For four
 seconds the arena floor burns everything standing on it, the player included,
 and the only safe ground is what the terrain generator put above it. It is a
 HEIGHT test rather than a hazard patch - nine creep stamps cover the floor for
