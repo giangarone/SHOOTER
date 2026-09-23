@@ -2348,7 +2348,7 @@ Item mechanic tests follow the same rule. A branch adds
 `test/item-modules.mjs` runner discovers the fragments and uses one real browser
 for all of them. Adding a test does not change a registry or package script.
 
-Sixty-six of them, in six groups by what they actually reach for.
+Eighty of them, in six groups by what they actually reach for.
 
 **Instant, on the room:**
 
@@ -2447,6 +2447,51 @@ nothing above it did:
 | GOLDEN PARACHUTE | $5,000 clears the current wave. Not a boss wave | 40 |
 | HEALTH & SEEK | Three health pickups, somewhere in the arena | 40 |
 
+**The fourth block** - fourteen more, three of which are not paid for in dead
+enemies at all but in health, or in money outright:
+
+| Item | Effect | Charge |
+| --- | --- | --- |
+| ORBITAL DEBRIS | 3 blades orbit you for 8s; each cut is 4x your damage | 30 |
+| WALK IT OFF | For 8s, walking heals 1 HP per metre | 20 |
+| MOON | 15s of low gravity: jump higher, fall slower | 30 |
+| OPEN TAP | 6s of free fire: no ammo spent, no reloads | 30 |
+| GUN RACK | Deploy 3 auto-turrets in an arc facing your aim, for 8s | 50 |
+| SNOWMAN | A decoy for 8s; enemies attack it, and hits on it freeze the attackers | 40 |
+| SLOT MACHINE | $100 a spin: 1/3 +5 HP, 1/3 +15 ammo, 1/3 nothing | 0 |
+| BULLET FEVER | Convert 60 reserve ammo into 30 HP | 10 |
+| TOP OFF | Lose 30 HP, fully replenish your ammo | 40 |
+| ONCE-PUNCH POLICY | Your next melee hit kills any enemy, bosses included; keeps until it lands | 40 |
+| MACHINE FEAST | Take 10 HP damage to deploy a turret for 10 seconds | 0 |
+| PAINFUL PEACE | Take 5 HP damage to become invulnerable for 2 seconds | 0 |
+| CHARITY CASE | For 10s your gun deals no damage, but every landed shot heals 1 HP | 40 |
+| EMPTY PROMISE | Destroy all reserve ammo to gain max HP, 1 HP per 3 rounds | 60 |
+
+The two that spend health rather than charge - MACHINE FEAST and PAINFUL
+PEACE - pay through `pay()`, the same bypass BLOOD PRICE uses: the cost is a
+price, not a hit, so it cannot be dodged, shielded or reflected, and it can
+never be the thing that kills you. Both REFUSE below their price, because a
+press floored at 1 HP would charge the player "whatever was left" - a
+different price from the one on the card, paid silently. SLOT MACHINE is the
+second item in the pool priced in money outright: a flat hundred a spin, with
+the outcome rolled at the press and revealed a beat later on SIX CHAMBERS'
+rule - a player killed mid-spin must not die to an outcome that had not
+happened yet.
+
+CHARITY CASE silences the gun IN the pellet rather than at the trigger: the
+damage is zeroed in `_landShot` (so a ward eating the round eats its
+collection too, and a capacitor's plate is never spent on a hit worth
+nothing), and the heal is paid in `shoot()` off `hitAny`, on HAEMOPHAGE's
+terms - a magazine emptied into a wall pays nothing. A turret thrown by GUN
+RACK or MACHINE FEAST is the ordinary `Turret` with a shorter clock, on the
+pool's rule that "deployable" is a contract and not a menu of near-identical
+parts. SNOWMAN is the one lure that answers a hit: it stands where aimed on
+ORGAN GRINDER's decoy machinery, and main.js hands a lure's own `onHit` the
+blow it just took, which is the entire freeze-burst. ONCE-PUNCH POLICY kills
+through the `_throatCut` route - hp zeroed, `dead` raised, the sweep books it
+- because `takeDamage`'s pile of correct refusals is tuned for bullets, and a
+card that says "kills" cannot have an armour value. A miss never spends it.
+
 Four of them are the first items in the pool that do not resolve when they are
 pressed. LIFE INSURANCE is a ten-second window that pays only if something goes
 wrong inside it, and the claim is paid in `Player.takeDamage` rather than in
@@ -2532,7 +2577,7 @@ that proves the shape: it cannot touch the player, because every telegraph in
 this game is a question answered by moving, and a dozen rocks landing at random
 where the player did not aim them would be a question with no answer.
 
-**Fifteen of them run for a window** rather than finishing on the frame they are
+**Twenty-one of them run for a window** rather than finishing on the frame they are
 pressed, which needed the one piece of machinery this system did not have. An
 item may declare a `duration`, a `tick` and an `end` alongside its `use`, and
 `RunningActiveItems` in `js/items/active/index.js` is the whole of it: a list of activations, each
@@ -2550,9 +2595,9 @@ which belong to the RAGE and FIRE RATE pickups and carry their expiry: an item
 borrowing those would either cancel a pickup or be cancelled by one, where
 multiplying means a player holding both gets both.
 
-**Seven of them leave something in the arena.** `js/deploy.js` holds a turret, a
-mine, a bomb, a wall, a singularity, a bee and a meteor, all under the contract
-`Projectile` and `Grenade` in `js/enemy.js` already established - a constructor
+**Twelve of them leave something in the arena.** `js/deploy.js` holds a turret,
+a mine, a bomb, a wall, a singularity, a bee, a meteor, a monkey, a firepit and
+a snowman, all under the contract
 that adds meshes, an `update(dt, ctx)` returning `'alive'` or `'dead'`, and a
 `destroy()`. `main.js` drives that list with the same eight lines it drives the
 projectiles with, and `_clearHazards()` sweeps it alongside the pools, so

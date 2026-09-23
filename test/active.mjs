@@ -751,6 +751,12 @@ try {
       P.invulnEnd = 0;
       P.hpBanked = 0;
       P.freeRerolls = 0;
+      // The wallet, on the same terms as the bar two lines up: the pool now
+      // holds items whose ready() gate is MONEY (PAY TO WIN's thousand,
+      // SLOT MACHINE's hundred), and a duration spent refused for being broke
+      // reads here as an item that never ran. Earlier iterations buy things,
+      // so the balance is reset rather than trusted to still be there.
+      g.credits = 100000;
       try {
         useItem(key);
       } catch (e) {
@@ -790,6 +796,11 @@ try {
       P.hpBanked = 0;
       P.leechShots = 0;
       P.pinataLeft = 0;
+      // ONCE-PUNCH POLICY, another of the count-shaped marks above: one armed
+      // swing, kept until it lands. Left standing it spends itself in the
+      // EVERYONE FELT THAT block below, a thousand lines and one full health
+      // bar away from anything that could point back here.
+      P.meleeExecute = 0;
       P.moveLoss = 1;
       P.compoundMult = 1;
       P.medicalDebt = 0;

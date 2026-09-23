@@ -2525,6 +2525,19 @@ export class Player {
     this.encore = 0;
     this.meleeMult = 1;
     this.meleeShare = 0;
+    // ONCE-PUNCH POLICY. A count and not a window, on HAEMOPHAGE's terms - see
+    // the note on itemOncePunch: the swing it buys keeps until it lands, so it
+    // never joins the running list and there is no end() to zero it.
+    this.meleeExecute = 0;
+    // OPEN TAP's free-fire window and CHARITY CASE's collection plate,
+    // deadlines on the player like itemCritEnd: each is owned by one running
+    // activation whose end() writes it back to zero, so a wave boundary cannot
+    // hand the next wave a window nobody is holding.
+    this.freeFireEnd = 0;
+    this.charityEnd = 0;
+    // MOON. Multiplied into the gravity term in update(); the item's end()
+    // writes the 1 back, like every other mark it leaves here.
+    this.gravityMult = 1;
     this.pinataLeft = 0;
     // BACKORDER'S PARCEL. A deadline rather than a running window, because the
     // running list is torn down at every wave clear (see the running list's
@@ -3089,7 +3102,13 @@ export class Player {
       this.vel.z = this.vel.z * (1 - w) + this._momZ * w;
     }
 
-    this.vel.y -= 22 * dt;
+    // MOON lives in the gravity term and nowhere else: the same impulse under
+    // a third of the pull is a higher, longer, floatier jump for free, and a
+    // fall under it is the slow one the card promises - which is the whole
+    // item and every verb at once. A multiplier and not a second constant, so
+    // the ceiling test and the updraft's BEAT-gravity arithmetic below read
+    // the figure they already had.
+    this.vel.y -= 22 * this.gravityMult * dt;
     // ---- UPDRAFT ------------------------------------------------------------
     //
     // The jump button, HELD, and the fall stops.
@@ -4248,13 +4267,17 @@ export class Player {
     // reads as a broken gun.
     if (this.status.fear > 0) return 'feared';
     if (!w.auto && !triggerFresh) return null;
-    // OPENING SALVO. Inside the window at the top of a wave the trigger simply
-    // does not bill: the magazine is never touched, so nothing empties and no
-    // reload interrupts the ten seconds. Tested before the empty-magazine
+    // OPENING SALVO, and beside it OPEN TAP - the same window opened by the
+    // item rather than by the wave. Inside either, the trigger simply does
+    // not bill: the magazine is never touched, so nothing empties and no
+    // reload interrupts the window. Tested before the empty-magazine
     // branch as well as before Belt Feed: a wave that starts on an empty gun
     // must not spend its window standing through a reload, and a free shot
-    // must not quietly take its round off the reserve instead.
-    if (this.mods.salvoTime > 0 && this.salvoEnd > this.now) {
+    // must not quietly take its round off the reserve instead. Same shape,
+    // same reasons - trigger pulls that deal full damage and cost no
+    // ammunition are one mechanic, whichever of the two opened it.
+    if ((this.mods.salvoTime > 0 && this.salvoEnd > this.now)
+      || this.freeFireEnd > this.now) {
       this.lastShotCost = 0;
       this.lastAmmoSpent = 0;
       this.lastShotPool = 'none';
