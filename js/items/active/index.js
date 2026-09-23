@@ -44,7 +44,7 @@ export const HUMOURS = [
 // THE RUNNING LIST
 // ---------------------------------------------------------------------------
 //
-// Fifteen of the sixty-six items do not finish on the frame they start.
+// Twenty-one of the eighty items do not finish on the frame they start.
 // This is the four lines that make that possible, and it is deliberately the
 // smallest thing that could: a list of activations, each holding the item that
 // made it, its own scratch object and a clock. No registry, no ids to keep in

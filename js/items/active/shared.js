@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { THEME } from '../passive/shared.js';
 import {
   Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE,
+  Snowman, SNOWMAN_FUSE,
 } from '../../deploy.js';
 import { BOUND } from '../../arena.js';
 
@@ -77,7 +78,8 @@ export const PARACHUTE_COST = 5000;
 
 const ACTIVE_ITEM_CONTEXT = Object.freeze({
   THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey,
-  MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE,
+  MONKEY_FUSE, Snowman, SNOWMAN_FUSE,
+  BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE,
   PAY_TO_WIN_COST, PARACHUTE_COST,
 });
 

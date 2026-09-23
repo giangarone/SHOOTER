@@ -6589,6 +6589,17 @@ class Game {
       this.effects.impact(point, 0xc9d2dd, burst, 2.5, 1.2, 0.26);
       return;
     }
+    // CHARITY CASE, before everything inline below: for its window the round
+    // LANDS but does no damage, so it must not eat a capacitor's plate, stick
+    // a DELAYED FUSE, or tick a status - the card says the gun deals NO
+    // damage, and all of those are the gun's. The pellet just collects: one
+    // health per trigger pull that connects, banked in shoot() off `hitAny`,
+    // beside HAEMOPHAGE's spend. The spark is the heal's own green, so a
+    // magazine emptied into the crowd reads as alms rather than as misses.
+    if (this.player.charityEnd > this.time) {
+      this.effects.impact(point, THEME_VITAL, 4, 2.5, 1.4, 0.25);
+      return;
+    }
     // DELAYED FUSE. The round STICKS: no damage now, and in two seconds
     // whatever it was worth goes off over a small area at wherever the body has
     // got to. Everything below this line still happens on contact - the status,
@@ -7453,6 +7464,14 @@ class Game {
       this.player.heal(1);
       this.effects.impact(this.player.eyeInto(this._killPos), 0xff2d6f, 6, 3, 2, 0.3);
     }
+    // CHARITY CASE. One health for the trigger pull that LANDED, on the same
+    // boolean the hitmarker and HAEMOPHAGE read, so the three can never
+    // disagree about what counts as a hit: the pellet's damage is zeroed in
+    // _landShot rather than here, which is what makes a ward eating the round
+    // also eat its collection.
+    if (hitAny && this.player.charityEnd > this.time) {
+      this.player.heal(1);
+    }
     // PRODIGAL ROUNDS. BRASS ECHO's mirror image, written beside the hitmarker
     // branch below and off the same boolean, so the two can never disagree
     // about what a miss is - between them there is no shot in the game that is
@@ -7697,7 +7716,29 @@ class Game {
     // to 45% - a version of the pick that finishes anything it can bring under
     // the line in one hit, which is a different and much larger promise.
     if (!this._throatCut(target)) {
-      target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, hot);
+      // ONCE-PUNCH POLICY, on _throatCut's route and for its reason: a card
+      // that says "instantly kills" cannot go through takeDamage, where a
+      // Colossus's plating or a warden's ward is the CORRECT answer to a
+      // blow. hp to zero, `dead` raised, and the sweep below books it like
+      // every other melee kill. A MISS never spends it - the swing that lands
+      // is the next melee HIT, exactly as the card says. Bosses go through
+      // _executeBoss, whose note is this one's: all of the parts, or the
+      // promise is a lie on exactly the body it was bought for.
+      if (this.player.meleeExecute > 0) {
+        this.player.meleeExecute = 0;
+        if (target.boss && this.bossFight) this._executeBoss();
+        else {
+          this.effects.damageNumber(target.pos, target.hp, true, false);
+          target.hp = 0;
+          target.dead = true;
+        }
+        target.meleeKill = true;
+        this.effects.impact(target.pos, 0xffffff, 22, 8, 4, 0.5);
+        this.effects.burst(target.pos, THEME_THROATCUT, 26, 7, 4, 0.6);
+        this.effects.shockwave(target.pos, THEME_THROATCUT, 6, 0.5);
+      } else {
+        target.takeDamage(dealt, false, bestDX / d, bestDZ / d, null, hot);
+      }
     }
     // TAGGED, NOT PAID. The reward is worked out in one place - the death
     // sweep in _updateEnemies - and this only records how the body died, so
@@ -10312,7 +10353,15 @@ class Game {
       this._possumDecoy = null;
     }
     ctx.player = lure ? lure.decoy : (possum ? this._possumDecoy : this.player);
-    ctx.onHitPlayer = (lure || possum) ? NO_HIT : this._onHitPlayer;
+    // THE SNOWMAN IS THE ONE LURE THAT ANSWERS A HIT. Everything else that can
+    // hold the crowd - the monkey, the possum corpse - treats a landed blow as
+    // nothing happening; the snowman's burst IS the item, so a lure may carry
+    // its own handler and the rest keep the no-op. The handler is handed the
+    // same arguments the player would have been, which is what lets a bramble
+    // tick and a boss's crescent both register as hits on the decoy.
+    ctx.onHitPlayer = (lure || possum)
+      ? ((lure && lure.onHit) || NO_HIT)
+      : this._onHitPlayer;
     ctx.applyPlayerStatus = (lure || possum) ? NO_STATUS : this._onPlayerStatus;
     ctx.pullPlayer = (lure || possum) ? NO_PULL : this._onPullPlayer;
     ctx.nav = (lure || possum) ? null : this.nav;

@@ -1,9 +1,11 @@
 // THINGS THE PLAYER PUTS IN THE ARENA AND THEN STOPS OWNING.
 //
-// Seven of the active items do not do something to the world, they LEAVE
-// something in it: a turret that picks its own targets, a mine that waits, a
-// wall that burns, a singularity that pulls, five bees, a bomb on a fuse, and
-// a sky full of rocks. What they have in common is that the player has already
+// Twelve of the active items do not do something to the world, they LEAVE
+// something in it: a turret that picks its own targets (thrown by the player,
+// planted by the rack or bought with health), a mine that waits, a wall that
+// burns, a singularity that pulls, five bees, a bomb on a fuse, a sky full of
+// rocks, a toy the crowd would rather look at, and a snowman the crowd would
+// rather swing at. What they have in common is that the player has already
 // walked away by the time they matter.
 //
 // THE CONTRACT IS THE PROJECTILE'S, because the game already had one and a
@@ -855,6 +857,259 @@ const MONKEY_EYE = 0.55;
 // The arms at rest and how far the clash opens them, in radians.
 const MONKEY_ARM_SHUT = 0.16;
 const MONKEY_ARM_OPEN = 0.85;
+
+// ---------------------------------------------------------------------------
+// SNOWMAN - the decoy that bites back
+// ---------------------------------------------------------------------------
+//
+// ORGAN GRINDER's trick with the punchline moved to the front. The monkey
+// buys TIME and pays one blast at the end of it; the snowman buys the same
+// time but pays a burst for every blow the crowd lands on it, freezing
+// whatever is standing close enough to be the one swinging. It is melee's
+// answer at range's price: a rusher pack that walks to it once does not walk
+// back.
+//
+// PLACED, NOT THROWN. The monkey's whole design is that it lands where it was
+// aimed and the crowd turns toward a point behind them; the snowman is the
+// wall you put between the room and yourself, so it lands a step in front of
+// the player and is armed the same frame - a lure still in flight is a lure
+// nobody has turned toward yet, and the panic this is pressed under is
+// exactly the moment "it is on its way" is not good enough.
+export class Snowman {
+  constructor(game, x, z, fromY = 0) {
+    this.pos = new THREE.Vector3(x, standOn(game, x, z, fromY), z);
+    this.life = SNOWMAN_FUSE;
+    this.dead = false;
+    // Armed from birth - it is PLACED rather than thrown, so there is no
+    // flight to wait out (contrast the monkey's `_fly`), and both flags are
+    // what _findLure scans for.
+    this.armed = true;
+    this.lure = true;
+    this._yaw = 0;
+
+    // The same duck the monkey is, member for member - see its note above for
+    // why the list is the player's whole movement-facing surface rather than
+    // the members something happens to read today.
+    const self = this;
+    this.decoy = {
+      pos: this.pos,
+      vel: new THREE.Vector3(),
+      get yaw() { return self._yaw; },
+      eyeH: SNOWMAN_EYE,
+      eyeInto: (v) => v.copy(self.pos).setY(SNOWMAN_EYE),
+      forwardInto: (v) => v.set(-Math.sin(self._yaw), 0, -Math.cos(self._yaw)),
+    };
+    // THE ONE LURE THAT ANSWERS. main.js hands a lure's own onHit the four
+    // hooks it took from the player, and this is that handler: a blow that
+    // landed on the snowman is a burst out of it. The cooldown is the card's
+    // honesty - "when enemies hit it" could otherwise be a hundred ticks of
+    // lava standing in a puddle refreezing the room on one frame's budget,
+    // which is the same lie as the hits being read as happening at all: one
+    // blow, one answer.
+    this._burstCd = 0;
+    this.onHit = () => this._struck();
+
+    this._wobble = 0;
+    this._game = game;
+    this.effects = game.effects;
+
+    const g = new THREE.Group();
+    this.geos = [];
+    this.mats = [];
+    const own = (m) => { this.mats.push(m); return m; };
+    // SNOW, AND ONLY SNOW, IS WHITE. The monkey is a toy because its key says
+    // so; the snowman is a decoy because everything about it is the thing the
+    // room is trying to kill at human height - three balls, and the line of
+    // coal down the front. The ACCENT is the coal: near-black against the
+    // body, the same trick the turret's eye plays, so the blotches read as a
+    // face from far away rather than as dirt.
+    const snow = own(new THREE.MeshStandardMaterial({
+      color: 0xe8f0ff, roughness: 0.72, metalness: 0.02,
+    }));
+    const coal = own(new THREE.MeshStandardMaterial({
+      color: 0x11151c, roughness: 0.55, metalness: 0.3,
+    }));
+    const carrot = own(new THREE.MeshStandardMaterial({
+      color: 0xff7a1a, roughness: 0.5, metalness: 0.05,
+    }));
+    // The eyes and the halo are the COLD, so they are the only emissive part
+    // and the part that flares when the burst goes off.
+    this.eyeMat = own(new THREE.MeshStandardMaterial({
+      color: 0x9adfff, emissive: 0x7fe3ff, emissiveIntensity: 1.2,
+      roughness: 0.3, metalness: 0.1,
+    }));
+    // THE SCARF IS THE ITEM'S COLOUR. It is the one saturated thing on a white
+    // body in a white-lit burst, so the snowman reads as an ITEM the player
+    // owns and not as arena dressing - the same job the turret's halo does,
+    // worn as clothing.
+    const scarf = own(new THREE.MeshStandardMaterial({
+      color: 0x2b6f9e, emissive: 0x7fe3ff, emissiveIntensity: 0.55,
+      roughness: 0.6, metalness: 0.05,
+    }));
+    const mesh = (geo, mat) => {
+      this.geos.push(geo);
+      return new THREE.Mesh(geo, mat);
+    };
+
+    // THREE BALLS, bottom to top, each seated a ball-and-a-bit deep so the
+    // stack reads as one body and not as spheres resting on each other.
+    const bottom = mesh(new THREE.SphereGeometry(0.34, 14, 12), snow);
+    bottom.position.y = 0.28;
+    bottom.scale.y = 0.88;
+    const mid = mesh(new THREE.SphereGeometry(0.25, 12, 10), snow);
+    mid.position.y = 0.68;
+    mid.scale.y = 0.9;
+    const head = mesh(new THREE.SphereGeometry(0.18, 12, 10), snow);
+    head.position.y = 1.02;
+    g.add(bottom, mid, head);
+
+    // The face, the buttons and the carrot - all on +z, so _yaw is the
+    // direction the snowman is LOOKING, which is also where its decoy's
+    // forwardInto() points for a wraith reading it.
+    const btnGeo = new THREE.SphereGeometry(0.028, 6, 5);
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(btnGeo, coal);
+      b.position.set(0, 0.6 + i * 0.09, 0.235);
+      g.add(b);
+    }
+    this.geos.push(btnGeo);
+    const noseGeo = new THREE.ConeGeometry(0.035, 0.22, 8);
+    this.geos.push(noseGeo);
+    const nose = new THREE.Mesh(noseGeo, carrot);
+    nose.position.set(0, 1.0, 0.26);
+    nose.rotation.x = Math.PI / 2;
+    g.add(nose);
+    const eyeGeo = new THREE.SphereGeometry(0.026, 6, 5);
+    this.geos.push(eyeGeo);
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, this.eyeMat);
+      eye.position.set(sx * 0.065, 1.075, 0.155);
+      g.add(eye);
+    }
+
+    // THE TWIG ARMS, one pivot each so a burst can throw them up like a
+    // shiver. Stuck out sideways and slightly up - a snowman with arms down
+    // is three balls, and the shape has to carry the joke at twenty metres.
+    this.arms = [];
+    const twigGeo = new THREE.CylinderGeometry(0.014, 0.024, 0.42, 5);
+    this.geos.push(twigGeo);
+    for (const sx of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(sx * 0.25, 0.72, 0);
+      const twig = new THREE.Mesh(twigGeo, coal);
+      twig.position.y = 0.2;
+      pivot.add(twig);
+      pivot.rotation.z = sx * -1.9;
+      g.add(pivot);
+      this.arms.push({ pivot, sx });
+    }
+
+    // THE SCARF. A ring at the neck, slightly tilted, with a tail down the
+    // front - the colour story from the note above.
+    const ringGeo = new THREE.TorusGeometry(0.165, 0.035, 8, 14);
+    const tailGeo = new THREE.BoxGeometry(0.09, 0.22, 0.03);
+    this.geos.push(ringGeo, tailGeo);
+    const ring = new THREE.Mesh(ringGeo, scarf);
+    ring.position.y = 0.845;
+    ring.rotation.x = Math.PI / 2 + 0.12;
+    const tail = new THREE.Mesh(tailGeo, scarf);
+    tail.position.set(0.08, 0.74, 0.2);
+    tail.rotation.z = -0.18;
+    g.add(ring, tail);
+
+    // The halo, in the cold's own colour like the eyes: what finds it across
+    // the arena, on the turret's rule that a deployed thing the player owns
+    // must be visible at range.
+    this.halo = glow(game.effects.glowTex, 0x7fe3ff, 1.2, 0.55);
+    this.halo.position.y = 1.05;
+    g.add(this.halo);
+    this.mats.push(this.halo.material);
+
+    this.group = g;
+    g.position.copy(this.pos);
+    game.scene.add(g);
+  }
+
+  update(dt, ctx) {
+    this.life -= dt;
+    this._burstCd = Math.max(0, this._burstCd - dt);
+    if (this.life <= 0) {
+      // MELTS where a monkey explodes: the frost fogging outward instead of
+      // fire, so the end of the decoy is not a threat the player has to
+      // stand clear of - which is the whole reason to take it over the toy.
+      this.effects.shockwave(this.pos, 0x7fe3ff, 2.4, 0.5);
+      this.effects.burst(_v.set(this.pos.x, this.pos.y + 0.6, this.pos.z),
+        0xaee9ff, 22, 4, 2.5, 0.7);
+      return 'dead';
+    }
+
+    // The wobble decays; a burst re-excites it below. Rocked on z like a thing
+    // that was just shoved, because that is the only thing that ever excites
+    // it - the crowd hits the DECOY and the decoy visibly takes the blow.
+    this._wobble = Math.max(0, this._wobble - dt * 5);
+    this.group.rotation.z = Math.sin(this._wobble * 10) * 0.09 * Math.min(1, this._wobble);
+    for (const a of this.arms) a.pivot.rotation.z = a.sx * -(1.9 + this._wobble * 0.7);
+
+    // THE MELT IS THE COUNTDOWN. The last fifth of the fuse shrinks the whole
+    // snowman into the floor, so how long is left is printed on the body
+    // rather than on a ring nobody is reading while they kite - the same
+    // level-not-rhythm tell the monkey's halo is.
+    const t = Math.max(0, this.life / SNOWMAN_FUSE);
+    const melt = t < 0.2 ? t / 0.2 : 1;
+    this.group.scale.set(1, Math.max(0.35, melt), 1);
+    this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
+    this.eyeMat.emissiveIntensity = 1.2 + (1 - melt) * 2.4;
+    this.halo.material.opacity = 0.35 + melt * 0.25;
+    return 'alive';
+  }
+
+  _struck() {
+    // A hit is always FELT - the wobble and a puff of frost off the body -
+    // even when the burst itself is still in its cooldown. A volley into the
+    // decoy that drew nothing for most of its length would read as the lure
+    // having stopped working, and it has not: it is paying once.
+    this._wobble = 1;
+    this.effects.impact(_v.set(this.pos.x, this.pos.y + 0.9, this.pos.z),
+      0xaee9ff, 6, 3.5, 2, 0.3);
+    if (this._burstCd > 0) return;
+    this._burstCd = SNOWMAN_BURST_CD;
+    let froze = 0;
+    // LATE-BOUND to the live roster, because the wave that threw this decoy
+    // is not necessarily the wave standing around it by the time it is hit.
+    for (const e of this._game.enemies) {
+      if (e.dead) continue;
+      const dx = e.pos.x - this.pos.x;
+      const dz = e.pos.z - this.pos.z;
+      if (dx * dx + dz * dz > SNOWMAN_RADIUS * SNOWMAN_RADIUS) continue;
+      // The ordinary freeze, not a special one: bosses take it as the slow
+      // their resistance block already grants (see Enemy.applyStatus), which
+      // is the answer CRYO PULSE settled on and is correct here for the same
+      // reason - a decoy that could chain-stop a boss by being hit would be
+      // the only boss strategy there is.
+      e.applyStatus('freeze', SNOWMAN_FREEZE);
+      froze++;
+    }
+    if (froze > 0) this._game.sfx.itemBlink();
+    this.effects.shockwave(this.pos, 0x7fe3ff, SNOWMAN_RADIUS, 0.55);
+    this.effects.burst(_v.set(this.pos.x, this.pos.y + 0.7, this.pos.z),
+      0x7fe3ff, 26, 6, 3, 0.6);
+  }
+
+  destroy() {
+    this.group.parent?.remove(this.group);
+    for (const g of this.geos) g.dispose();
+    for (const m of this.mats) m.dispose();
+  }
+}
+
+// How long it stands, how far its burst reaches and how slowly that burst may
+// answer. The freeze length itself is a status, not a number on this class:
+// it has to outlast a rusher's approach, not a firefight.
+export const SNOWMAN_FUSE = 8;
+const SNOWMAN_RADIUS = 4.5;
+const SNOWMAN_EYE = 1.05;
+const SNOWMAN_FREEZE = 2.2;
+const SNOWMAN_BURST_CD = 0.6;
 
 // ---------------------------------------------------------------------------
 // FIREBREAK - the wall
