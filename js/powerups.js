@@ -534,6 +534,11 @@ export class Powerup {
     this.spawnTime = time;
     this.despawnTime = PICKUP_LIFETIME;
     this.dead = false;
+    // HOW it died, because main.js pays ZERO WASTE on a plate that timed out
+    // and on nothing else - a crate swept up or walked over has already paid
+    // in full. Set on the expiry branch of update() only; every other death
+    // leaves it false.
+    this.expired = false;
     this.bobOffset = Math.random() * Math.PI * 2;
     // Absorption state. `absorbing` takes the pickup out of main.js's live
     // list entirely, so nothing here has to guard the bob, the blink or the
@@ -569,7 +574,8 @@ export class Powerup {
     scene.add(this.glow);
   }
 
-  // Bob, face, and pulse. Sets `dead` when its lifetime runs out; main.js
+  // Bob, face, and pulse. Sets `dead` when its lifetime runs out - flagging
+  // `expired` first, which is the death ZERO WASTE pays half on - and main.js
   // removes dead pickups from its list on the same pass.
   //
   // `facing` is where the player is standing, so the plate can turn to them.
@@ -578,6 +584,7 @@ export class Powerup {
 
     const age = time - this.spawnTime;
     if (age >= this.despawnTime) {
+      this.expired = true;
       this.destroy();
       return;
     }

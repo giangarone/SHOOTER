@@ -6,7 +6,7 @@ export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
     name: "ZERO WASTE",
     max: 1,
     theme: THEME.zeroWaste,
-    effects: [['HEALTH + AMMO PICKUPS', NOTE], ['PAY AGAIN AT 50%', GOOD]],
+    effects: [['EXPIRING HEALTH + AMMO', NOTE], ['PAY YOU HALF', GOOD]],
     apply: (mods, n) => { mods.zeroWaste = 0.5 * n; },
 }));
 

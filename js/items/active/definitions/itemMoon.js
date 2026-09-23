@@ -11,7 +11,7 @@ const MOON_PULL = 0.35;
 export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MOON',
     charge: 30,
-    theme: THEME.gravity,
+    theme: THEME.moon,
     // FIFTEEN SECONDS IN WHICH THE FLOOR IS A SUGGESTION. The whole mechanic
     // is one multiplier in Player.update's gravity line (see
     // player.gravityMult): the jump impulse is untouched, so everything the
@@ -28,8 +28,10 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       const p = game.player;
       p.gravityMult = MOON_PULL;
-      game.effects.shockwave(p.pos, THEME.gravity, 7, 0.7);
-      game.effects.burst(p.eyeInto(_v), 0x536dfe, 22, 4, 3, 0.9);
+      // Moonlight-coloured, not gravity-blue: the whole item is the moon, and
+      // the white is what makes the totem read as one from across the arena.
+      game.effects.shockwave(p.pos, THEME.moon, 7, 0.7);
+      game.effects.burst(p.eyeInto(_v), THEME.moon, 22, 4, 3, 0.9);
       game.sfx.itemBlink();
     },
     // And the floor is a floor again. Written back rather than trusted to
@@ -38,32 +40,32 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // gravity nobody was granted.
     end: (game) => {
       game.player.gravityMult = 1;
-      game.effects.shockwave(game.player.pos, THEME.gravity, 3.5, 0.35);
+      game.effects.shockwave(game.player.pos, THEME.moon, 3.5, 0.35);
     },
 }));
 
 export const icon = [
   '........................',
-  '...........444..........',
-  '.........00000000.......',
-  '.......002222222200.....',
-  '......02222222222220....',
-  '.....0222222222222220...',
-  '....022222222222222220..',
-  '....022222222222222220..',
-  '...02222200222222222220.',
-  '...02222000022222222220.',
-  '...02222000022222222220.',
-  '...02222200222222222220.',
-  '...02222220022222222220.',
-  '....02222222222222222...',
-  '....022222222222222220..',
-  '.....0222220022222220...',
-  '......02200002222220....',
-  '.......002222222200.....',
-  '.........00000000.......',
-  '....44..............44..',
-  '.....44............44...',
+  '........................',
+  '........................',
+  '........00000000........',
+  '......004444444400......',
+  '.....04444444444440.....',
+  '....0444444444444430....',
+  '....0444224444444310....',
+  '...044422214444433310...',
+  '...044422114444443310...',
+  '...044441144444443330...',
+  '...044444444444221330...',
+  '...044444444442221330...',
+  '...044214444442211330...',
+  '...044114444444113310...',
+  '...044444444444433310...',
+  '....0444344444433310....',
+  '....0443333443333310....',
+  '.....03133333333110.....',
+  '......001133331100......',
+  '........00000000........',
   '........................',
   '........................',
   '........................',

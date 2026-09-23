@@ -2287,7 +2287,7 @@ position and wave counter.
 | DEATHWISH | +40% damage; taking it leaves you at 5 HP |
 | GRACE PERIOD | Taking a hit grants 1s of invincibility |
 | KILLCHAIN | A kill adds 1s of invincibility, up to 5s banked |
-| ZERO WASTE | Health and ammo pickups pay their normal amount, then another 50% |
+| ZERO WASTE | A health or ammo pickup about to despawn grants half of itself to you instead of vanishing |
 | BLOOD TAX | +20% damage, -5 max HP |
 | PRESSURE COOKER | +20% damage per enemy within 5m |
 | CORNERED ANIMAL | +40% damage within 2m of the map border |
@@ -2316,10 +2316,13 @@ left instead of reopening a fresh one-second window, so five fast kills really
 do bank five seconds and never more.
 
 GHOST PLATE has its own shield ledger. That lets it reform without erasing a
-shield pickup, while the HUD draws both as one readable total. ZERO WASTE is
-also a second ledger entry rather than a larger crate: the ordinary pickup
-lands first, then half its amounts land again, respecting the same health,
-overheal, shield and reserve limits.
+shield pickup, while the HUD draws both as one readable total. ZERO WASTE pays
+through the same apply path rather than as a smaller crate: at the instant a
+health or ammo plate's clock runs out, half of what it was carrying lands on
+you wherever you are standing, respecting the same health, overheal, shield
+and reserve limits. The crate was never picked up, so per-crate riders like
+GRISTLE's coin do not roll; everything else on the plate scales by the half
+honestly.
 
 MITOSIS claims fresh targets as its fragments are born, so siblings do not
 collapse onto the same enemy. The killing shot makes two half-damage fragments;

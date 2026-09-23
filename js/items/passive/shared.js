@@ -53,6 +53,10 @@ export const THEME = {
   wind: 0x26c6da,
   impact: 0x00e5c0,
   surge: 0x1de9b6,
+  // The one entry that is what the item IS rather than what it does: the
+  // MOON icon is the moon itself, and a moon reads white or it reads as
+  // gravity rounds. The near-black ramp tones keep the craters legible.
+  moon: 0xf4f6f8,
   // the shot itself: how it travels and what it costs to fire
   pierce: 0x76ff03,
   gravity: 0x536dfe,

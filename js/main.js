@@ -10158,10 +10158,6 @@ class Game {
         this._pendingBuffs.push(p.type);
       } else {
         p.type.apply(this.player, this.time);
-        if (this.player.mods.zeroWaste > 0
-          && (p.typeKey === 'health' || p.typeKey === 'ammo')) {
-          p.type.apply(this.player, this.time, this.player.mods.zeroWaste, true);
-        }
       }
       // Held for the flight instead of destroyed - see the note above.
       p.absorb(Math.random() * 0.55);
@@ -10196,23 +10192,34 @@ class Game {
   // Ticks pickups and collects any the player is standing on. Iterates
   // backwards so removals don't skip entries.
   _updatePickups(dt) {
+    // ZERO WASTE's rescues this frame, counted so the chime at the bottom can
+    // be one per frame rather than one per crate.
+    let rescued = 0;
     for (let i = this.powerups.length - 1; i >= 0; i--) {
       const p = this.powerups[i];
       p.update(dt, this.time, this.player.pos);
       if (p.dead) {
+        // ZERO WASTE. The last frame of a plate is the one payout in the game
+        // the player never chose to take, so it comes to them wherever they
+        // are - at half, the price of never having to reach it. `repeat` keeps
+        // one-per-crate riders (GRISTLE's coin) from rolling on a crate that
+        // was never picked up; every amount on the plate scales by the
+        // fraction like any other payout.
+        if (p.expired && this.player.mods.zeroWaste > 0
+          && (p.typeKey === 'health' || p.typeKey === 'ammo')) {
+          p.type.apply(this.player, this.time, this.player.mods.zeroWaste, true);
+          // The tell has to close the loop from across the arena: a pop where
+          // the plate was, so the vanish reads as a delivery, and a ring on
+          // the player, so the grant is felt with no HUD readout to name it.
+          this.effects.burst(p.pos, p.type.color, 10, 3, 1.5, 0.35);
+          this.effects.shockwave(this.player.pos, p.type.color, 2.5, 0.25);
+          rescued++;
+        }
         this.powerups.splice(i, 1);
         continue;
       }
       if (p.tryPickup(this.player.pos)) {
         p.type.apply(this.player, this.time);
-        if (this.player.mods.zeroWaste > 0
-          && (p.typeKey === 'health' || p.typeKey === 'ammo')) {
-          // The plate is consumed once, then pays half of its payload again.
-          // Passing `repeat` keeps one-per-crate random riders from rolling a
-          // second time while every amount on the plate scales honestly.
-          p.type.apply(this.player, this.time, this.player.mods.zeroWaste, true);
-          this.effects.shockwave(this.player.pos, p.type.color, 2.5, 0.25);
-        }
         // THE MAGNET. The only pickup whose effect is not on the player, so it
         // is the only one main.js has to know by name: everything on the floor
         // comes in at once, the same sweep a wave clear does.
@@ -10226,6 +10233,10 @@ class Game {
         this.powerups.splice(i, 1);
       }
     }
+    // One chime for the frame's rescues together - the same call the wave-clear
+    // sweep makes, for its reason: five pickup chimes on one frame are not
+    // five times the feedback, they are a click.
+    if (rescued) this.sfx.pickupHealth();
   }
 
   // ANTIDOTE's upside. Every poisoned enemy on the floor heals the player one

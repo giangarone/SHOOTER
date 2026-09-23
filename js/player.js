@@ -536,7 +536,7 @@ const DEFAULT_MODS = {
   luckyCorpse: 0,       // one marked body per wave drops six supplies
   gracePeriod: 0,       // invulnerability granted by a landed hit
   killchain: 0,         // invulnerability added by a kill
-  zeroWaste: 0,         // fraction of health/ammo pickups paid a second time
+  zeroWaste: 0,         // fraction of an expiring health/ammo plate granted at despawn
   pressureCooker: 0,    // damage per enemy within pressureRadius
   pressureRadius: 0,
   corneredAnimal: 0,    // damage while within two metres of the arena border

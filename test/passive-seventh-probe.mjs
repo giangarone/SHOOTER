@@ -98,14 +98,37 @@ export async function probeSeventh(page, id) {
           detail.window = p.invulnEnd - g.time;
           result.ok = Math.abs(detail.window - 5) < 1e-9;
           break;
-        case 'zeroWaste':
+        case 'zeroWaste': {
+          // Both directions of the redesign. A crate walked over pays only
+          // its ordinary amount - the old collect bonus is gone - and a crate
+          // left to expire pays half of itself with the player nowhere near it.
           p.reserveAmmo = 0;
           g._placeDrop('ammo', p.pos);
           g.powerups[g.powerups.length - 1].moveTo(p.pos.x, p.pos.z, p.pos.y);
           g._updatePickups(0);
-          detail.ammo = p.reserveAmmo;
-          result.ok = p.reserveAmmo === 68;
+          detail.collected = p.reserveAmmo;
+
+          p.reserveAmmo = 0;
+          g._placeDrop('ammo', p.pos);
+          const expiring = g.powerups[g.powerups.length - 1];
+          expiring.moveTo(p.pos.x + 30, p.pos.z, p.pos.y);
+          expiring.spawnTime = g.time - expiring.despawnTime;
+          g._updatePickups(0);
+          detail.expiredAmmo = p.reserveAmmo;
+          detail.gone = g.powerups.indexOf(expiring) === -1;
+
+          p.health = 50;
+          g._placeDrop('health', p.pos);
+          const healing = g.powerups[g.powerups.length - 1];
+          healing.moveTo(p.pos.x + 30, p.pos.z, p.pos.y);
+          healing.spawnTime = g.time - healing.despawnTime;
+          g._updatePickups(0);
+          detail.expiredHealth = p.health;
+
+          result.ok = detail.collected === 45 && detail.expiredAmmo === 23
+            && detail.gone && Math.abs(detail.expiredHealth - 62.5) < 1e-9;
           break;
+        }
         case 'bloodTax':
           Object.assign(detail, { maxHealth: p.maxHealth, damage: p.mods.damage });
           result.ok = p.maxHealth === baseMax - 5 && Math.abs(p.mods.damage - 1.2) < 1e-9;
