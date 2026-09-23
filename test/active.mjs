@@ -753,7 +753,7 @@ try {
       P.freeRerolls = 0;
       // The wallet, on the same terms as the bar two lines up: the pool now
       // holds items whose ready() gate is MONEY (PAY TO WIN's thousand,
-      // SLOT MACHINE's hundred), and a duration spent refused for being broke
+      // SLOT MACHINE's price of a spin), and a duration spent refused for being broke
       // reads here as an item that never ran. Earlier iterations buy things,
       // so the balance is reset rather than trusted to still be there.
       g.credits = 100000;

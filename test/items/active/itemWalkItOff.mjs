@@ -1,4 +1,4 @@
-// WALK IT OFF: eight seconds in which metres walked come back as health.
+// WALK IT OFF: four seconds in which metres walked come back as health.
 // Walking heals, STANDING does not, and a jump in position - a teleport - is
 // not walking. The chip counts what actually landed, so the exchange rate is
 // visible while it runs.

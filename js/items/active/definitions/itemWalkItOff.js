@@ -4,22 +4,29 @@ export const id = 'itemWalkItOff';
 
 export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'WALK IT OFF',
-    charge: 20,
+    charge: 50,
     theme: THEME.wind,
     // THE ONLY HEAL PRICED IN FOOTSTEPS. Every other heal in the pool is a
     // number on a button; this one pays for exactly the thing a surrounded
     // player should be doing anyway - KEEP MOVING - which makes it the one
     // recovery in the game that dodging a crowd and running from a boss both
     // feed. A player who stands still to shoot gets nothing, and that is the
-    // item: it is worth a press only when the next eight seconds were going
+    // item: it is worth a press only when the next four seconds were going
     // to be spent on feet.
+    //
+    // FOUR, NOT EIGHT. The arena's stride is ten metres a second before
+    // sprint is asked, and the first version priced eight seconds of it
+    // without doing that sum: eighty health a press was not a window, it was
+    // a second bar. Four seconds of constant walking is forty - still the
+    // best recovery a runner can buy at the price, and now it is actually a
+    // price.
     //
     // MEASURED ON THE FLOOR, like every distance in this game: metres of XZ
     // travel, so walking and sprinting pay, jumping pays nothing on the way
     // up, and the distance is accrued in fractions so the fraction carried
     // onto the next frame is never silently lost to rounding.
-    effects: [['8s: WALKING HEALS YOU', GOOD], ['1 HP PER METRE', NOTE]],
-    duration: 8,
+    effects: [['4s: WALKING HEALS YOU', GOOD], ['1 HP PER METRE', NOTE]],
+    duration: 4,
     use: (game, s) => {
       const p = game.player;
       s.x = p.pos.x;

@@ -2453,7 +2453,7 @@ enemies at all but in health, or in money outright:
 | Item | Effect | Charge |
 | --- | --- | --- |
 | ORBITAL DEBRIS | 3 blades orbit you for 8s; each cut is 4x your damage | 30 |
-| WALK IT OFF | For 8s, walking heals 1 HP per metre | 20 |
+| WALK IT OFF | For 4s, walking heals 1 HP per metre | 50 |
 | MOON | 15s of low gravity: jump higher, fall slower | 30 |
 | OPEN TAP | 6s of free fire: no ammo spent, no reloads | 30 |
 | GUN RACK | Deploy 3 auto-turrets in an arc facing your aim, for 8s | 50 |

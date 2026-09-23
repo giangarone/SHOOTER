@@ -4,7 +4,10 @@ export const id = 'itemSlots';
 
 // What one press costs. Flat, on PAY TO WIN's rule: it is pressed in a row
 // or not at all, and a price that climbed would turn the joke into a sum.
-const SPIN_COST = 100;
+// Two hundred and fifty - enough that a string of busts is a felt decision
+// against an ammo refill, small enough that a wave's takings still buys a
+// handful of them.
+const SPIN_COST = 250;
 // The three pockets of the wheel, in the order the banner names them.
 const SPIN_TIME = 0.9;
 
@@ -13,12 +16,11 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     charge: 0,
     theme: THEME.gamble,
     // THE CHEAPEST GAMBLE IN THE POOL, AND THE ONLY ONE PRICED IN MONEY. SIX
-    // CHAMBERS plays with the health bar; this plays with the wallet, and at
-    // a hundred a spin it is the thing you press with the change left over
-    // from a reroll. The outcomes are worth what a shop shelf sells them
-    // for, which is the point: a spin is never a mistake, just rarely the
-    // thing you would have bought. And one pocket in three is empty, which
-    // is what makes it a slot machine and not a discount.
+    // CHAMBERS plays with the health bar; this plays with the wallet, priced
+    // squarely between an ammo refill and a box roll. Two pockets pay about
+    // what the shelf would charge for them; the third is the house, and at
+    // $250 a bust is one you feel - which is what makes it a slot machine
+    // and not a discount.
     //
     // THE SPIN IS NINETY ROUNDS SHORT OF A SECOND, on SIX CHAMBERS' rule:
     // the click track IS the item, the outcome is rolled at the press, and
@@ -29,7 +31,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // happened yet, and a winner rolled late would be exactly that bug with
     // the sign flipped: the burst at the press would promise a coin the gun
     // was never going to spin.
-    effects: [['$100 PER SPIN', NOTE], ['1/3 EACH: 5 HP,', GOOD], ['15 AMMO, NOTHING', GOOD]],
+    effects: [['$250 PER SPIN', NOTE], ['1/3 EACH: 5 HP,', GOOD], ['15 AMMO, NOTHING', GOOD]],
     ready: (game) => game.credits >= SPIN_COST,
     duration: SPIN_TIME,
     hud: false,

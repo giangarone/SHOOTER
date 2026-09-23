@@ -1,4 +1,4 @@
-// SLOT MACHINE: $100 a spin, one third a heal, one third ammunition, one
+// SLOT MACHINE: $250 a spin, one third a heal, one third ammunition, one
 // third nothing. All three pockets are walked by pinning Math.random while
 // the press is made; the pricing gate is the one assertion that can be made
 // without the odds: broke players do not get to gamble.
@@ -28,25 +28,26 @@ export async function run({ page, check, id }) {
       }
     };
 
-    g.credits = 400;
+    g.credits = 1000;
     P.health = 40;
     P.reserveAmmo = 10;
     out.readyWithMoney = g.__activeItemsForTest[id].ready(g);
 
     spin(0.05);           // first pocket: health
-    out.winHeal = P.health === 45 && g.credits === 300;
+    out.winHeal = P.health === 45 && g.credits === 750;
     spin(0.5);            // second pocket: ammunition
-    out.winAmmo = P.reserveAmmo === 25 && g.credits === 200;
+    out.winAmmo = P.reserveAmmo === 25 && g.credits === 500;
     const hpAt = P.health;
     const ammoAt = P.reserveAmmo;
     spin(0.95);           // the house pocket: nothing
-    out.bust = P.health === hpAt && P.reserveAmmo === ammoAt && g.credits === 100;
+    out.bust = P.health === hpAt && P.reserveAmmo === ammoAt && g.credits === 250;
 
-    // Broke: the press is refused and the wallet does not feel it.
-    g.credits = 50;
+    // Broke: a hundred short of a spin, the press is refused and the wallet
+    // does not feel it.
+    g.credits = 100;
     P.giveActiveItem(id);
     g.tryActiveItem();
-    out.refusedBroke = g.credits === 50 && g.runningActiveItems.list.length === 0;
+    out.refusedBroke = g.credits === 100 && g.runningActiveItems.list.length === 0;
 
     g.credits = 1000;
     P.health = P.maxHealth;
@@ -54,7 +55,7 @@ export async function run({ page, check, id }) {
     g.runningActiveItems.clear(g);
     return out;
   }, id);
-  check('SLOT MACHINE sells all three pockets at $100 and refuses the broke',
+  check('SLOT MACHINE sells all three pockets at $250 and refuses the broke',
     r.readyWithMoney && r.winHeal && r.winAmmo && r.bust && r.refusedBroke,
     JSON.stringify(r));
 }
