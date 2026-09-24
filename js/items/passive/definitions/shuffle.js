@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // Player.takePassiveItem, exactly where SACRIFICE's removal is.
 export const id = 'shuffle';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SHUFFLE',
     max: 1,
-    theme: THEME.shuffle,
+    theme: 0x9575cd,
     effects: [['REPLACE YOUR PASSIVES', NOTE], ['WITH RANDOM ONES', NOTE]],
     apply: (mods, n) => { mods.shuffle = n; },
 }));

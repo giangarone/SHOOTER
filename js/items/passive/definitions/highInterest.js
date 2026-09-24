@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // next wave's interest is measured against.
 export const id = 'highInterest';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HIGH INTEREST',
     max: 1,
-    theme: THEME.highInterest,
+    theme: 0xe0b040,
     effects: [['UNSPENT CREDITS EARN', NOTE], ['20% INTEREST', GOOD], ['AT EVERY WAVE END', NOTE]],
     apply: (mods, n) => { mods.interest = 0.2 * n; },
 }));

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemBlink';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x7c4dff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'COLD SPOT',
     charge: 40,
-    theme: THEME.poise,
+    theme: ITEM_THEME,
     // NOT A TELEPORT THE PLAYER AIMS. They press it because they are in
     // trouble, and being asked to pick a destination at that moment is being
     // asked to solve the problem the item is for. It picks the emptiest of the
@@ -40,7 +42,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       }
       if (best) {
         game.effects.burst(p.eyeInto(_v), 0x7c4dff, 30, 7, 3, 0.6);
-        game.effects.shockwave(p.pos, THEME.poise, 6, 0.5);
+        game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.5);
         const fromX = p.pos.x;
         const fromZ = p.pos.z;
         p.pos.set(best.x, p.pos.y, best.z);
@@ -61,7 +63,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         if (dx * dx + dz * dz > 1e-6) p.yaw = Math.atan2(-dx, -dz);
       }
       p.invulnEnd = Math.max(p.invulnEnd, game.time + 1.5);
-      game.effects.shockwave(p.pos, THEME.poise, 8, 0.7);
+      game.effects.shockwave(p.pos, ITEM_THEME, 8, 0.7);
       game.effects.burst(p.eyeInto(_v), 0x7c4dff, 30, 7, 3, 0.6);
       game.sfx.itemBlink();
     },

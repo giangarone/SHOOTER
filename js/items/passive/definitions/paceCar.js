@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'paceCar';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PACE CAR',
     max: 1,
-    theme: THEME.pace,
+    theme: 0x448aff,
     // BERSERKER'S EXACT OPPOSITE, and it belongs in the same pool for that
     // reason. Berserker pays on health missing and is worth nothing until the
     // run is going badly; this is worth something for as long as the run is

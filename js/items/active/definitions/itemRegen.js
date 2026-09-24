@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemRegen';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x00e676;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SUTURE ENGINE',
     charge: 30,
-    theme: THEME.vitality,
+    theme: ITEM_THEME,
     // TWENTY HEALTH THAT ARRIVES SLOWLY, against TRAUMA KIT's twenty-five that
     // arrives now - and TRAUMA KIT costs fifty where this costs thirty. That
     // is the whole comparison and it is a real one: this is cheaper, slower
@@ -15,7 +17,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     effects: [['REGENERATE 2 HP/s', GOOD], ['FOR 10s', NOTE]],
     duration: 10,
     use: (game) => {
-      game.effects.shockwave(game.player.pos, THEME.vitality, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.sfx.itemHeal2();
     },
     tick: (game, s, dt) => {

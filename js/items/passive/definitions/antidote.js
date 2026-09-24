@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'antidote';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ANTIDOTE',
     max: 1,
-    theme: THEME.antidote,
+    theme: 0x66bb6a,
     effects: [['IMMUNE TO POISON', GOOD], ['HEAL 1 HP/s PER', GOOD], ['POISONED ENEMY NEARBY', NOTE]],
     apply: (mods, n) => {
       mods.poisonImmune = n;

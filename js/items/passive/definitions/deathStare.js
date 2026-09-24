@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // away with it is the one case where the pick would read as broken.
 export const id = 'deathStare';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DEATH STARE',
     max: 1,
-    theme: THEME.deathStare,
+    theme: 0xb06bff,
     effects: [
       ['MELEE HITS THAT LAND', NOTE],
       ['PETRIFY THE ATTACKER', GOOD],

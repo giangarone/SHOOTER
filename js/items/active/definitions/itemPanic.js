@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the room, all at once (the second helping) -------------------------
 export const id = 'itemPanic';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x9d4edd;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PANIC BUTTON',
     charge: 30,
-    theme: THEME.fear,
+    theme: ITEM_THEME,
     // EIGHT SECONDS IN WHICH NOTHING IS COMING TOWARD YOU. It is CRYO PULSE's
     // opposite number and priced ten points under it: freeze holds the crowd
     // where it is and hands the player a stationary target, this sends the
@@ -26,7 +28,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         e.applyStatus('fear', 8);
         game.effects.impact(e.pos, 0x9d4edd, 6, 3, 2.5, 0.5);
       }
-      game.effects.shockwave(game.player.pos, THEME.fear, 30, 0.9);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 0.9);
       game.effects.addShake(0.25);
       game.sfx.itemRites();
     },

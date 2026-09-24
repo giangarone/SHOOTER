@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemBomb';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SHORT FUSE',
     charge: 30,
-    theme: THEME.blast,
+    theme: 0xff6f00,
     // THREE SECONDS IS THE ITEM. Every other blast in the pool happens at the
     // moment it is asked for; this one happens where the fight is GOING to be,
     // which is a different skill and the only place in the game the player is

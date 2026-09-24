@@ -19,10 +19,10 @@ import { definePassiveItem } from '../shared.js';
 // a version that simply refused to fire would have been.
 export const id = 'sharedMag';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SHARED MAG',
     max: 1,
-    theme: THEME.sharedMag,
+    theme: 0xffcf40,
     effects: [
       ['TURRETS DRAW FROM YOUR', NOTE],
       ['RESERVE FOR 3x DAMAGE', GOOD],

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemBackorder';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x00e676;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BACKORDER',
     charge: 60,
-    theme: THEME.vitality,
+    theme: ITEM_THEME,
     // TWENTY-FIVE HEALTH, IN TEN SECONDS' TIME. TRAUMA KIT is twenty-five now
     // for fifty, so this is dearer AND slower - and what the extra ten points
     // of charge buy is that the parcel is already paid for when the fight
@@ -27,7 +29,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.backordered = true;
       p.backorderAt = game.time + 10;
-      game.effects.shockwave(p.pos, THEME.vitality, 5, 0.45);
+      game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.45);
       game.ui.banner('DISPATCHED');
       game.sfx.itemDeploy();
     },

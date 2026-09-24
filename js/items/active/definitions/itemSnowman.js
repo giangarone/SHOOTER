@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemSnowman';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x7fe3ff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SNOWMAN',
     charge: 40,
-    theme: THEME.ice,
+    theme: ITEM_THEME,
     // ORGAN GRINDER'S LURE, POINTED AT THE CROWD INSTEAD OF THE CLOCK. The
     // monkey buys five untouchable seconds and ends them with a blast; the
     // snowman is the patient version - it never goes off on its own, it just
@@ -27,7 +29,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const x = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.x + _dir.x * 2.2));
       const z = Math.max(-BOUND + 1, Math.min(BOUND - 1, p.pos.z + _dir.z * 2.2));
       game.deploy(new Snowman(game, x, z, p.pos.y));
-      game.effects.shockwave(p.pos, THEME.ice, 5, 0.55);
+      game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.55);
       game.effects.burst(p.eyeInto(_v), 0xaee9ff, 18, 5, 3, 0.5);
       game.sfx.itemDeploy();
     },

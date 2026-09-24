@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // wide stays meleeable from outside its own surface.
 export const id = 'longArm';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LONG ARM',
     max: 1,
-    theme: THEME.longArm,
+    theme: 0xa9744f,
     effects: [['2x MELEE REACH', GOOD]],
     apply: (mods, n) => { mods.meleeReach = 1 * n; },
 }));

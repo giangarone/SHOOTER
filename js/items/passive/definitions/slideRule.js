@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // shortfall - never more, never a jam.
 export const id = 'slideRule';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SLIDE RULE',
     max: 1,
-    theme: THEME.slideRule,
+    theme: 0x9fc5e8,
     effects: [['SLIDING LOADS', GOOD], ['10 ROUNDS INTO THE MAG', NOTE]],
     apply: (mods, n) => { mods.slideRule = 10 * n; },
 }));

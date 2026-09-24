@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemBalloons';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x26c6da;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PARTY BALLOONS',
     charge: 30,
-    theme: THEME.wind,
+    theme: ITEM_THEME,
     // FIVE BODIES TAKEN OUT OF THE FIGHT AND LEFT WHERE THEY CAN BE SHOT. It
     // is not a stun - CRYO PULSE is the stun, and a frozen enemy is still
     // standing in the crowd - it is REMOVAL: five things drift up out of the
@@ -28,7 +30,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.burst(e.pos, 0x26c6da, 18, 4, 5, 0.8);
         n++;
       }
-      game.effects.shockwave(game.player.pos, THEME.wind, 12, 0.6);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 12, 0.6);
       if (!n) game.sfx.denied();
       else game.sfx.itemSurge();
     },

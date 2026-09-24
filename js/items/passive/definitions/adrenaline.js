@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'adrenaline';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ADRENALINE',
     max: 1,
-    theme: THEME.adrenaline,
+    theme: 0xe64a19,
     // CARNAGE, RUN BACKWARDS. Carnage climbs on kills and is lost the instant
     // anything touches you; this climbs on being touched and is lost at the
     // end of the wave. A run holding both has a damage number that never sits

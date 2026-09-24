@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMoneyShot';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xf9a825;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MONEY SHOT',
     charge: 40,
-    theme: THEME.gold,
+    theme: ITEM_THEME,
     // THE WHOLE BALANCE, AS DAMAGE, TO EVERYTHING. PAY TO WIN spends a
     // thousand at a time for two shots' worth of damage and is deliberately a
     // bad buy; this spends every dollar the player has for exactly that many
@@ -29,7 +31,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const spent = Math.floor(game.credits);
       if (spent <= 0) {
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.gold, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
       game.credits -= spent;
@@ -39,7 +41,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.impact(e.pos, 0xf9a825, 10, 5, 3, 0.4);
         game.hurtEnemy(e, spent);
       }
-      game.effects.shockwave(p.pos, THEME.gold, 30, 0.9);
+      game.effects.shockwave(p.pos, ITEM_THEME, 30, 0.9);
       game.effects.addShake(0.45);
       game.ui.banner('SPENT $' + spent.toLocaleString());
       game.sfx.credits();

@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemHole';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'EVENT HORIZON',
     charge: 60,
-    theme: THEME.gravity,
+    theme: 0x536dfe,
     // THROWN, NOT PLACED. The orb flies flat and fast along the line of sight,
     // so where the hole opens is a shot the player took rather than a circle
     // they stood in - and it can be put on the far side of a crowd, which is

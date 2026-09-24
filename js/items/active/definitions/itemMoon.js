@@ -2,16 +2,18 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMoon';
 
+const ITEM_THEME = 0xf4f6f8;
+
 // A third of the arena's pull. JUMP_V against it tops out near three times
 // the standing jump's height, and a long fall takes long enough to steer -
 // the card's "higher" and "slower" are the same number read from opposite
 // ends of the arc.
 const MOON_PULL = 0.35;
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MOON',
     charge: 30,
-    theme: THEME.moon,
+    theme: ITEM_THEME,
     // FIFTEEN SECONDS IN WHICH THE FLOOR IS A SUGGESTION. The whole mechanic
     // is one multiplier in Player.update's gravity line (see
     // player.gravityMult): the jump impulse is untouched, so everything the
@@ -30,8 +32,8 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.gravityMult = MOON_PULL;
       // Moonlight-coloured, not gravity-blue: the whole item is the moon, and
       // the white is what makes the totem read as one from across the arena.
-      game.effects.shockwave(p.pos, THEME.moon, 7, 0.7);
-      game.effects.burst(p.eyeInto(_v), THEME.moon, 22, 4, 3, 0.9);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.7);
+      game.effects.burst(p.eyeInto(_v), ITEM_THEME, 22, 4, 3, 0.9);
       game.sfx.itemBlink();
     },
     // And the floor is a floor again. Written back rather than trusted to
@@ -40,7 +42,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // gravity nobody was granted.
     end: (game) => {
       game.player.gravityMult = 1;
-      game.effects.shockwave(game.player.pos, THEME.moon, 3.5, 0.35);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 3.5, 0.35);
     },
 }));
 

@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // and charges for itself twice.
 export const id = 'overwound';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'OVERWOUND',
     max: 1,
-    theme: THEME.overwound,
+    theme: 0xe65100,
     effects: [['+40% FIRE RATE', GOOD], ['RELOADS 30% SLOWER', BAD]],
     apply: (mods, n) => {
       mods.fireRate *= 1 + 0.4 * n;

@@ -50,7 +50,7 @@ const DEPTH = 3 * PX;
 //   .  empty      1  shadow       3  energy - the active, lit thing
 //   0  outline    2  structure    4  pale accent
 //
-// Every tone but the pale accent is derived from the offer's THEME colour, so
+// Every tone but the pale accent is derived from the offer's `theme` colour, so
 // one drawing works for any passive item and the game's "colour tells you what
 // it does" language stays load-bearing. The steps are further apart than they
 // look: the game tone-maps with ACES (main.js), which pulls flat unlit colour

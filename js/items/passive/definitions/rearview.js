@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // what was coming to it.
 export const id = 'rearview';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'REARVIEW',
     max: 1,
-    theme: THEME.rearview,
+    theme: 0xff9e80,
     effects: [['EVERY SHOT FIRES ONE', GOOD], ['BACKWARD, FULL DAMAGE', NOTE]],
     apply: (mods, n) => { mods.rearview = n; },
 }));

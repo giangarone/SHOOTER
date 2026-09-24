@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemCrit';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff80ab;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SWEET SPOT',
     charge: 60,
-    theme: THEME.deadeye,
+    theme: ITEM_THEME,
     // EIGHT SECONDS OF THE THING THE PLAYER HAS BEEN ROLLING FOR. Every run has
     // seen the yellow number since its first magazine - critChance is 5% in
     // DEFAULT_MODS precisely so that it has - so this item does not have to
@@ -30,7 +32,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       const p = game.player;
       p.itemCritEnd = Math.max(p.itemCritEnd, game.time + 8);
-      game.effects.shockwave(p.pos, THEME.deadeye, 6, 0.55);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.55);
       game.effects.burst(p.eyeInto(_v), 0xffe95e, 22, 5, 3, 0.6);
       game.sfx.itemSurge();
     },

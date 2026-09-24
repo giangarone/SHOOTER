@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // this is the one a player takes when the gun simply needs to be faster.
 export const id = 'amphetamines';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'AMPHETAMINES',
     max: 1,
-    theme: THEME.amphetamines,
+    theme: 0xef6c00,
     effects: [['+15% FIRE RATE', GOOD]],
     apply: (mods, n) => { mods.fireRate *= 1 + 0.15 * n; },
 }));

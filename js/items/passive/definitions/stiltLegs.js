@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // reading of a card about the floor, not about giants.
 export const id = 'stiltLegs';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STILT LEGS',
     max: 1,
-    theme: THEME.stiltLegs,
+    theme: 0x6b4f3a,
     effects: [['CROUCH IN MIDAIR:', NOTE], ['SLAM DOWN. 3x DAMAGE', GOOD], ['+ STAGGER WITHIN 3m', GOOD]],
     apply: (mods, n) => { mods.stiltLegs = n; },
 }));

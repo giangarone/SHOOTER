@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // fire. Three hits is one burst.
 export const id = 'weakPoint';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'WEAK POINT',
     max: 1,
-    theme: THEME.weakPoint,
+    theme: 0xff4fa3,
     effects: [
       ['3 HITS ON AN ENEMY', GOOD],
       ['MARK IT: +50% DMG TAKEN', NOTE],

@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMachineFeast';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MACHINE FEAST',
     charge: 0,
-    theme: THEME.pact,
+    theme: 0xb71c1c,
     // A TURRET BOUGHT WITH BLOOD, AND THE BLOOD IS THE CHARGE. Ten health,
     // gone the moment the button is pressed, whatever happens next - through
     // pay(), the same non-damage bypass BLOOD PRICE pays with, so it cannot

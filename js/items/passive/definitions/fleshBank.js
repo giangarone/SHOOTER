@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // so the build is behind from the first wave and level after ten crates.
 export const id = 'fleshBank';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FLESH BANK',
     max: 1,
-    theme: THEME.fleshBank,
+    theme: 0x689f38,
     effects: [['-10 MAX HP', BAD], ['HEALTH CRATES GIVE', GOOD], ['+1 MAX HP BACK', GOOD]],
     apply: (mods, n) => {
       mods.maxHpFlat += 10 * n;

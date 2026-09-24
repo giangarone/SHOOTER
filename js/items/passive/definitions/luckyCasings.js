@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'luckyCasings';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "LUCKY CASINGS",
     max: 1,
-    theme: THEME.luckyCasings,
+    theme: 0xf6c423,
     effects: [['2% CHANCE PER SHOT:', NOTE], ['HEAL 5 OR GAIN 15 AMMO', GOOD]],
     apply: (mods, n) => { mods.luckyCasings = 0.02 * n; },
 }));

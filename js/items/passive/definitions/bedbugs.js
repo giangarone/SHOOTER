@@ -18,10 +18,10 @@ import { definePassiveItem } from '../shared.js';
 // an empty floor, and a crowded wave would end in a minute of them.
 export const id = 'bedbugs';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BEDBUGS',
     max: 1,
-    theme: THEME.bedbugs,
+    theme: 0x6b3f2a,
     effects: [['EVERY HIT BITES AGAIN', GOOD], ['2s LATER, AT 25% DMG', NOTE]],
     apply: (mods, n) => { mods.bedbugs = 0.25 * n; mods.bedbugsDelay = 2; },
 }));

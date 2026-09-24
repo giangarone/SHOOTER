@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // should not evict it.
 export const id = 'scorchedEarth';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SCORCHED EARTH',
     max: 1,
-    theme: THEME.scorchedEarth,
+    theme: 0xe25822,
     effects: [['SLIDING LEAVES A', GOOD], ['TRAIL OF FIRE', NOTE]],
     apply: (mods, n) => { mods.slideFire = 0.5 * n; mods.slideFireRadius = 2.2; },
 }));

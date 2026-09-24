@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // has drafted no damage at all.
 export const id = 'heartbeat';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HEARTBEAT',
     max: 1,
-    theme: THEME.heartbeat,
+    theme: 0xff0066,
     effects: [['EVERY DOWNBEAT: EACH', NOTE], ['ENEMY HAS A 20% CHANCE', GOOD], ['TO TAKE 1 DAMAGE', NOTE]],
     apply: (mods, n) => { mods.heartbeat = 0.2 * n; mods.heartbeatHit = 1; },
 }));

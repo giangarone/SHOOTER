@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'pointBlank';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'POINT BLANK',
     max: 1,
-    theme: THEME.muzzle,
+    theme: 0xf4511e,
     // FIVE METRES IS INSIDE THE ARM'S REACH OF HALF THE ROSTER. That is the
     // whole deal: the bonus is only ever collected somewhere that is about to
     // cost health, which is what stops a flat +30% from being strictly better

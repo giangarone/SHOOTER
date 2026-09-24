@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // fifty out of two hundred is a wave you have to earn back.
 export const id = 'emergencyRations';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'EMERGENCY RATIONS',
     max: 1,
-    theme: THEME.emergencyRations,
+    theme: 0x74d17a,
     effects: [['EACH WAVE STARTS YOU', NOTE], ['AT EXACTLY 50 HP', BAD], ['HEALING +50%', GOOD]],
     apply: (mods, n) => { mods.rations = 50; mods.healMult *= 1 + 0.5 * n; },
 }));

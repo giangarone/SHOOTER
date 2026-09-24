@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // of the pick invisible.
 export const id = 'coldBlood';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'COLD BLOOD',
     max: 1,
-    theme: THEME.coldBlood,
+    theme: 0x5c8dc7,
     effects: [['TAKE 30% LESS DAMAGE', GOOD], ['BELOW 25% HEALTH', NOTE]],
     apply: (mods, n) => { mods.coldBloodAt = 0.25; mods.coldBloodCut = 0.3 * n; },
 }));

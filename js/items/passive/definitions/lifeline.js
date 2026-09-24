@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // being nearly dead a place you can stay.
 export const id = 'lifeline';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LIFELINE',
     max: 1,
-    theme: THEME.lifeline,
+    theme: 0x00c853,
     effects: [['AT 25 HP OR BELOW:', NOTE], ['REGEN 5 HP/s', GOOD]],
 
     apply: (mods, n) => { mods.lifelineAt = 25; mods.lifelineRate = 5 * n; },

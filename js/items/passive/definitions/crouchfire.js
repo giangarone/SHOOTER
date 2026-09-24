@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'crouchfire';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CROUCHFIRE',
     max: 2,
-    theme: THEME.hunker,
+    theme: 0xa1887f,
     // THE CROUCH ALREADY COSTS HALF THE PLAYER'S SPEED and until now bought
     // nothing but a lower head. This is the pick that makes it a stance: the
     // rate is read live off `crouching`, so it arrives the frame the button

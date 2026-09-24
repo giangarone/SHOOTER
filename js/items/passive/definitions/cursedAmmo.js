@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'cursedAmmo';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CURSED AMMO',
     max: 1,
-    theme: THEME.hex,
+    theme: 0x6a1b9a,
     // The floor is the whole reason this is playable: without it a held
     // trigger kills you from full health with no enemy in the room.
     effects: [['20% OF SHOTS: 2x DMG', GOOD], ['THOSE SHOTS COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],

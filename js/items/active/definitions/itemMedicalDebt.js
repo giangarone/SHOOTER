@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMedicalDebt';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xb71c1c;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MEDICAL DEBT',
     charge: 20,
-    theme: THEME.pact,
+    theme: ITEM_THEME,
     // FORTY NOW, THIRTY AT THE END OF THE WAVE, AND IT STACKS. BLOOD PRICE pays
     // its twenty-five up front and can never kill you; this one is the same
     // bargain with the terms reversed and the safety off - the bill arrives
@@ -26,7 +28,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.heal(40);
       p.medicalDebt += 30;
-      game.effects.shockwave(p.pos, THEME.pact, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x8affc1, 26, 5, 3, 0.7);
       game.ui.banner('ON ACCOUNT');
       game.sfx.itemHeal2();

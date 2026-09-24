@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'leadBalloon';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LEAD BALLOON',
     max: 1,
-    theme: THEME.ballast,
+    theme: 0x6d4c41,
     // TWENTY-FIVE PERCENT IS A LOT, and the jump is a lot to give up. The
     // arena has catwalks, the boxes are cover you get ON as often as behind,
     // and half the enemies in the pool are answered by not being where they

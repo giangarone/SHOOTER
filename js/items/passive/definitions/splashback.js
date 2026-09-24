@@ -18,10 +18,10 @@ import { definePassiveItem } from '../shared.js';
 // whatever afflicted them.
 export const id = 'splashback';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SPLASHBACK',
     max: 1,
-    theme: THEME.splashback,
+    theme: 0x8e6fd8,
     effects: [['YOUR SHOTS ALSO APPLY', GOOD], ['STATUS EFFECTS YOU CARRY', NOTE]],
     apply: (mods, n) => { mods.splashback = n; },
 }));

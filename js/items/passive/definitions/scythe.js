@@ -17,10 +17,10 @@ import { definePassiveItem } from '../shared.js';
 // the gun is a melee kill wherever in the arc it was standing.
 export const id = 'scythe';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SCYTHE',
     max: 1,
-    theme: THEME.scythe,
+    theme: 0x7f8fa6,
     effects: [['MELEE HITS EVERY', GOOD], ['ENEMY IN FRONT OF YOU', NOTE]],
     apply: (mods, n) => { mods.scythe = n; },
 }));

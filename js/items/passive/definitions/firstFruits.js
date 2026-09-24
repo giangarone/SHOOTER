@@ -16,10 +16,10 @@ import { definePassiveItem } from '../shared.js';
 // and the next one tries again.
 export const id = 'firstFruits';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FIRST FRUITS',
     max: 1,
-    theme: THEME.firstFruits,
+    theme: 0x9ccc65,
     effects: [['FIRST 3 KILLS OF EACH', NOTE], ['WAVE DROP A POWERUP', GOOD]],
     apply: (mods, n) => { mods.firstFruits = 3 * n; },
 }));

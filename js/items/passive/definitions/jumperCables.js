@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // the room is what this counts, at most once per blow.
 export const id = 'jumperCables';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'JUMPER CABLES',
     max: 1,
-    theme: THEME.jumperCables,
+    theme: 0xd6e000,
     effects: [['EACH HIT TAKEN:', NOTE], ['+3 ITEM CHARGE', GOOD]],
     apply: (mods, n) => { mods.hitCharge = 3 * n; },
 }));

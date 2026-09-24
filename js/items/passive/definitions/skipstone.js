@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // cannot be relied on as one - which is the price of a free second chance.
 export const id = 'skipstone';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SKIPSTONE',
     max: 1,
-    theme: THEME.skipstone,
+    theme: 0x4dd0e1,
     effects: [['SHOTS BOUNCE OFF', GOOD], ['THE FLOOR ONCE', NOTE]],
     apply: (mods, n) => { mods.skipstone = n; },
 }));

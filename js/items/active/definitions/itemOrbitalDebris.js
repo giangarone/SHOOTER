@@ -2,6 +2,8 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemOrbitalDebris';
 
+const ITEM_THEME = 0x9fd8ff;
+
 // The ring's geometry. Module-level because tick() and use() both have to
 // agree on every one of them and there is nothing else for them to drift
 // against - the card's "8 seconds" lives below, in the definition itself.
@@ -10,10 +12,10 @@ const ORBIT_SPEED = 3.6;       // rad/s - a blade passes any fixed point three t
 const ORBIT_HIT = 0.85;        // a blade's reach, before the enemy's own radius
 const CUT_AGAIN = 0.45;        // seconds before the same body may be cut again
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'ORBITAL DEBRIS',
     charge: 30,
-    theme: THEME.storm,
+    theme: ITEM_THEME,
     // NOT A SHIELD AND NOT A BURST. A burst answers the crowd once; this
     // answers it for as long as it stands in arm's reach. The blades are for
     // the fight that is already ON TOP of the player - the rushers at the
@@ -75,7 +77,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.scene.add(grp);
         s.blades.push(grp);
       }
-      game.effects.shockwave(p.pos, THEME.storm, 7, 0.7);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.7);
       game.effects.burst(p.eyeInto(_v), 0x9fd8ff, 24, 5, 3, 0.6);
       game.sfx.itemArc();
     },
@@ -123,7 +125,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       for (const b of s.blades) game.scene.remove(b);
       for (const g of s.geos) g.dispose();
       for (const m of s.mats) m.dispose();
-      game.effects.shockwave(game.player.pos, THEME.storm, 3.5, 0.35);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 3.5, 0.35);
     },
 }));
 

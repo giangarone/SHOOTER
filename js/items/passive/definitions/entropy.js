@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'entropy';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ENTROPY',
     max: 1,
-    theme: THEME.stone,
+    theme: 0x9aa5b1,
     effects: [['STATUS NEVER ENDS', GOOD], ['ON ENEMIES UNDER 30% HP', NOTE]],
     apply: (mods, n) => { mods.entropyBelow = 0.3 * n; },
 }));

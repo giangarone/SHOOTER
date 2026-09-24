@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'bailiff';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BAILIFF',
     max: 1,
-    theme: THEME.bailiff,
+    theme: 0x90a4ae,
     // A FIFTH OF EVERY PRESS BACK. It is the only passive item in the pool
     // that reaches the active-item slot at all besides TWIN CELL, and the two
     // are opposites worth owning together: Twin Cell lets the player BANK a

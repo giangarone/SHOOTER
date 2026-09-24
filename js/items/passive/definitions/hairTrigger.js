@@ -17,10 +17,10 @@ import { definePassiveItem } from '../shared.js';
 // answer, and now sprays wider than the room.
 export const id = 'hairTrigger';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HAIR TRIGGER',
     max: 2,
-    theme: THEME.hair,
+    theme: 0xff6d00,
     effects: (n) => [
       ['FIRE RATE ' + step(n, pctUp(25)), GOOD],
       ['RECOIL ' + step(n, pctUp(160)), BAD],

@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // (see the note in js/music.js); this is the player joining them.
 export const id = 'metronome';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'METRONOME',
     max: 1,
-    theme: THEME.metronome,
+    theme: 0xff6e40,
     effects: [['SHOTS FIRE ON THE', NOTE], ['BEAT ONLY: 4x DAMAGE', GOOD], ['FIRE RATE MEANS NOTHING', BAD]],
     apply: (mods, n) => {
       mods.metronome = n;

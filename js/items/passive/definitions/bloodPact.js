@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'bloodPact';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BLOOD PACT',
     max: 1,
-    theme: THEME.pact,
+    theme: 0xb71c1c,
     effects: [['KILLS HEAL 3 HP', GOOD], ['TAKE 25% MORE DAMAGE', BAD]],
     apply: (mods, n) => {
       mods.killHeal = 3 * n;

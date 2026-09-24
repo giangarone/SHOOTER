@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'ghostPlate';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "GHOST PLATE",
     max: 1,
-    theme: THEME.ghostPlate,
+    theme: 0xb388ff,
     effects: [['10-POINT SHIELD', GOOD], ['REFORMS AFTER 8s', GOOD]],
     apply: (mods, n) => { mods.ghostPlate = 10 * n; mods.ghostPlateDelay = 8; },
     onTake: (player) => { player.ghostShield = player.mods.ghostPlate; player.ghostPlateBrokenAt = -1; },

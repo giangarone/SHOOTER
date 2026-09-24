@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // from filling the arena: five at once, ten seconds each.
 export const id = 'panicTurret';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PANIC TURRET',
     max: 1,
-    theme: THEME.panicTurret,
+    theme: 0xffa733,
     effects: [['TAKING A HIT DROPS', GOOD], ['A TURRET, 10s, MAX 5', NOTE]],
     apply: (mods, n) => { mods.panicTurret = n; mods.panicLife = 10; mods.panicMax = 5; },
 }));

@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // own would have been a fourth number nobody could find.
 export const id = 'venomgrid';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'VENOMGRID',
     max: 1,
-    theme: THEME.venomgrid,
+    theme: 0x4caf50,
     effects: [['YOUR TURRETS POISON', GOOD], ['WHAT THEY HIT', NOTE]],
 
     apply: (mods, n) => { mods.turretPoison = 1 * n; mods.turretPoisonTime = 4; },

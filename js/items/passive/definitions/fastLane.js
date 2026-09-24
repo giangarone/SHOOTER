@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // gear, nowhere near enough to leave the room behind.
 export const id = 'fastLane';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FAST LANE',
     max: 1,
-    theme: THEME.fastLane,
+    theme: 0x29b6f6,
     effects: [['SPRINT +30% SPEED', GOOD]],
     apply: (mods, n) => { mods.fastLane = 0.3 * n; },
 }));

@@ -8,10 +8,10 @@ import { definePassiveItem } from '../shared.js';
 // number in the pool has to be bigger than thirty to be worth its clause.
 export const id = 'killSwitch';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'KILL SWITCH',
     max: 1,
-    theme: THEME.killSwitch,
+    theme: 0xbf2b2b,
     effects: [['+30% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.3 * n; },
 }));

@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // fair way the trick can still cost you.
 export const id = 'possum';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'POSSUM',
     max: 1,
-    theme: THEME.possum,
+    theme: 0x616a70,
     effects: [
       ['BELOW 15% HEALTH:', NOTE],
       ['ENEMIES IGNORE YOU, 10s', GOOD],

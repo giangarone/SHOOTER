@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // reading of the deal: the oath is on the max, not on a wave count.
 export const id = 'bloodOath';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BLOOD OATH',
     max: 1,
-    theme: THEME.bloodOath,
+    theme: 0x9b1b30,
     effects: [['+100% DAMAGE', GOOD], ['-5 MAX HP PER WAVE', BAD], ['FLOORS AT 50 MAX HP', NOTE]],
     apply: (mods, n) => { mods.oathPerWave = 5 * n; mods.oathFloor = 50; },
 }));

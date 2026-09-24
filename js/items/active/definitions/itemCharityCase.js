@@ -2,12 +2,14 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemCharityCase';
 
+const ITEM_THEME = 0x00e676;
+
 const CHARITY_TIME = 10;
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'CHARITY CASE',
     charge: 40,
-    theme: THEME.vitality,
+    theme: ITEM_THEME,
     // THE GUN TEMPORARILY WORKS FOR YOU INSTEAD OF ON THEM. Ten seconds in
     // which the trigger still does everything a trigger does - it recoils,
     // it bills, it eats the rate picks - but the pellets land as alms: one
@@ -31,13 +33,13 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       const p = game.player;
       p.charityEnd = Math.max(p.charityEnd, game.time + CHARITY_TIME);
-      game.effects.shockwave(p.pos, THEME.vitality, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x00e676, 22, 5, 3, 0.6);
       game.sfx.itemHeal2();
     },
     end: (game) => {
       game.player.charityEnd = 0;
-      game.effects.shockwave(game.player.pos, THEME.vitality, 3.5, 0.35);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 3.5, 0.35);
     },
 }));
 

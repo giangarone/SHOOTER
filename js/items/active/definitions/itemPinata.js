@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemPinata';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xc6ff00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PINATA',
     charge: 40,
-    theme: THEME.salvage,
+    theme: ITEM_THEME,
     // FIVE GUARANTEED DROPS, PAID OUT BY KILLING. Every other item in the pool
     // resolves the moment it is pressed or inside a window with a clock on it;
     // this one sits on the run until the player has earned it out, which makes
@@ -25,7 +27,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     effects: [['NEXT 5 KILLS', NOTE], ['ALWAYS DROP LOOT', GOOD]],
     use: (game) => {
       game.player.pinataLeft = 5;
-      game.effects.shockwave(game.player.pos, THEME.salvage, 7, 0.6);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(game.player.eyeInto(_v), 0xc6ff00, 26, 6, 3, 0.7);
       game.ui.banner('PINATA x5');
       game.sfx.itemSurge();

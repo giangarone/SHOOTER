@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // trying to stop the player doing.
 export const id = 'bottomFeeder';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BOTTOM FEEDER',
     max: 1,
-    theme: THEME.bottomFeeder,
+    theme: 0xc0ca33,
     effects: [['RELOAD ON AN EMPTY', NOTE], ['MAG: +20% DMG FOR 5s', GOOD]],
     apply: (mods, n) => { mods.bottomFeed = 0.2 * n; mods.bottomTime = 5; },
 }));

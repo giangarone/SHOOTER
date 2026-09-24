@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'nanoweave';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'NANOWEAVE',
     max: 2,
-    theme: THEME.vitality,
+    theme: 0x00e676,
     // THE ONLY SOURCE OF REGENERATION IN THE GAME besides Antidote's leech -
     // there is no natural trickle underneath it any more (see Player's mods
     // block), so this is a real pick rather than a bigger version of something

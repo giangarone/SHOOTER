@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'spendthrift';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "SPENDTHRIFT",
     max: 1,
-    theme: THEME.spendthrift,
+    theme: 0xf0a900,
     effects: [['+0.1% DAMAGE PER SHOT', GOOD], ['FIRED THIS WAVE', NOTE]],
     apply: (mods, n) => { mods.spendthrift = 0.001 * n; },
 }));

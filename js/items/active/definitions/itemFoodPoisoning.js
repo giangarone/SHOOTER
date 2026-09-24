@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemFoodPoisoning';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x39d353;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FOOD POISONING',
     charge: 40,
-    theme: THEME.poison,
+    theme: ITEM_THEME,
     // BRIMSTONE IN THE OTHER ELEMENT, AT THE OTHER SHAPE. Fire is three
     // seconds and a high rate; poison everywhere in this game is long and
     // patient (see status.js), so this is eight seconds of the whole room
@@ -25,7 +27,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.impact(e.pos, 0x39d353, 6, 3, 2.5, 0.5);
         n++;
       }
-      game.effects.shockwave(game.player.pos, THEME.poison, 30, 0.9);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 0.9);
       if (n) game.effects.addShake(0.2);
       game.sfx.itemBlast();
     },

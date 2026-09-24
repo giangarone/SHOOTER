@@ -18,10 +18,10 @@ import { definePassiveItem } from '../shared.js';
 // taken perfectly and this is the whole of what the pick does.
 export const id = 'fullLoad';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FULL LOAD',
     max: 1,
-    theme: THEME.fullLoad,
+    theme: 0xffc266,
     effects: [['AMMO REFILLED AT', GOOD], ['EVERY WAVE END', NOTE]],
     apply: (mods, n) => { mods.fullLoad = n; },
 }));

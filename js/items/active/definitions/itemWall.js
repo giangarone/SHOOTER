@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemWall';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xdd2c00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FIREBREAK',
     charge: 12,
-    theme: THEME.hellfire,
+    theme: ITEM_THEME,
     // A LINE, WHERE EVERYTHING ELSE IS A CIRCLE. The answer to every radial
     // effect in this game is the same - back off - and the one item that asks
     // a different question is the one that says "not through here". Laid
@@ -27,7 +29,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       game.deploy(new FireWall(
         game, x, z, _dir.x, _dir.z, game.player.fireTickDamage * 1.5
       ));
-      game.effects.shockwave(_v.set(x, 0, z), THEME.hellfire, 5, 0.5);
+      game.effects.shockwave(_v.set(x, 0, z), ITEM_THEME, 5, 0.5);
       game.sfx.itemDeploy();
     },
 }));

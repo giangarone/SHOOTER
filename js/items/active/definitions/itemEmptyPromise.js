@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemEmptyPromise';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x689f38;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'EMPTY PROMISE',
     charge: 60,
-    theme: THEME.fleshBank,
+    theme: ITEM_THEME,
     // THE WHOLE RESERVE, SET ON FIRE, AT THREE ROUNDS TO THE POINT. GRAFT's
     // promise carried on the ammo bill: what comes back is permanent max
     // health, banked into hpBanked where GRAFT banks its three, so it
@@ -39,7 +41,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.heal(gain);
       game.ui.flashReserve();
       game.ui.banner('+' + gain + ' MAX HP');
-      game.effects.shockwave(p.pos, THEME.fleshBank, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x689f38, 24, 5, 3, 0.7);
       game.sfx.itemGraft();
     },

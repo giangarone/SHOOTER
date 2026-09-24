@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // jump) and with every consumer of the figure.
 export const id = 'bicycleKick';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BICYCLE KICK',
     max: 1,
-    theme: THEME.bicycleKick,
+    theme: 0x81d4fa,
     effects: [['JUMP HEIGHT +50%', GOOD]],
     apply: (mods, n) => { mods.bicycleKick = n; },
 }));

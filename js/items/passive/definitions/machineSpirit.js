@@ -24,10 +24,10 @@ import { definePassiveItem } from '../shared.js';
 // build reaches by never letting go, not a number it sits at.
 export const id = 'machineSpirit';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MACHINE SPIRIT',
     max: 1,
-    theme: THEME.machineSpirit,
+    theme: 0xffa000,
     effects: [['HOLD THE TRIGGER:', NOTE], ['+5% FIRE RATE/s', GOOD], ['UP TO +50%', NOTE]],
     apply: (mods, n) => {
       mods.spiritStep = 0.05 * n;

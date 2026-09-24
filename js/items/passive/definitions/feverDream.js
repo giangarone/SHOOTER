@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // a theme that arms you.
 export const id = 'feverDream';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FEVER DREAM',
     max: 1,
-    theme: THEME.feverDream,
+    theme: 0x64dd17,
     effects: [['+100% DAMAGE', GOOD], ['WHILE POISONED', NOTE]],
     apply: (mods, n) => { mods.feverDream = 1.0 * n; },
 }));

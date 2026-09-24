@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // POINT did to the number underneath.
 export const id = 'fatHandgun';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FAT HANDGUN',
     max: 1,
-    theme: THEME.fatHandgun,
+    theme: 0xffc773,
     effects: [['RELOADS 20% FASTER', GOOD], ['MAG HOLDS 2 FEWER', BAD]],
     apply: (mods, n) => {
       mods.reloadMult *= Math.pow(0.8, n);

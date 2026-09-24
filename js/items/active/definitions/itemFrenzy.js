@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemFrenzy';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x8b0000;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'RED MIST',
     charge: 40,
-    theme: THEME.rage,
+    theme: ITEM_THEME,
     // THE DRAWBACK IS THE FEATURE. Three times damage for five seconds is the
     // hardest hit in the pool, and taking double while it runs is what stops
     // it being a strictly-better OVERDRIVE - it is pressed when the room is
@@ -20,14 +22,14 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.itemDamageMult = 3;
       p.itemTakenMult = 2;
-      game.effects.shockwave(p.pos, THEME.rage, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x8b0000, 26, 6, 3, 0.7);
       game.sfx.itemFrenzy();
     },
     end: (game) => {
       game.player.itemDamageMult = 1;
       game.player.itemTakenMult = 1;
-      game.effects.shockwave(game.player.pos, THEME.rage, 4, 0.35);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 4, 0.35);
     },
 }));
 

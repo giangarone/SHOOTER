@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemWalkItOff';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x26c6da;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'WALK IT OFF',
     charge: 50,
-    theme: THEME.wind,
+    theme: ITEM_THEME,
     // THE ONLY HEAL PRICED IN FOOTSTEPS. Every other heal in the pool is a
     // number on a button; this one pays for exactly the thing a surrounded
     // player should be doing anyway - KEEP MOVING - which makes it the one
@@ -33,7 +35,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       s.z = p.pos.z;
       s.acc = 0;
       s.healed = 0;
-      game.effects.shockwave(p.pos, THEME.wind, 6, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.6);
       game.sfx.itemHeal2();
     },
     tick: (game, s) => {
@@ -67,7 +69,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       game.effects.burst(p.pos, 0x26c6da, 3, 2.5, 1.5, 0.25);
     },
     end: (game) => {
-      game.effects.shockwave(game.player.pos, THEME.wind, 3.5, 0.35);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 3.5, 0.35);
     },
 }));
 

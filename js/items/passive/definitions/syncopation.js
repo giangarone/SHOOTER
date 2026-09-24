@@ -37,10 +37,10 @@ import { definePassiveItem } from '../shared.js';
 // above it and is why it can be this large.
 export const id = 'syncopation';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SYNCOPATION',
     max: 1,
-    theme: THEME.syncopation,
+    theme: 0xff33ee,
     effects: [['ONCE A BEAT:', NOTE], ['10 DAMAGE TO A', GOOD], ['RANDOM ENEMY', NOTE]],
     apply: (mods, n) => { mods.syncopation = 1 * n; mods.syncopationHit = 10; },
 }));

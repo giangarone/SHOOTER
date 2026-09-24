@@ -25,10 +25,10 @@ import { definePassiveItem } from '../shared.js';
 // That is the drawback the card has always claimed and never charged.
 export const id = 'blackout';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BLACKOUT',
     max: 1,
-    theme: THEME.murk,
+    theme: 0x546e7a,
     effects: [['+25 MAX HEALTH', GOOD], ['HEAVY FOG', BAD], ['HARD TO SEE FAR', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 25 * n;

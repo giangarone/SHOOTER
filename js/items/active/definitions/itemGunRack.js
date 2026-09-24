@@ -2,6 +2,8 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemGunRack';
 
+const ITEM_THEME = 0xffab40;
+
 // HOW FAR IN FRONT THE RACK STANDS, AND HOW WIDE THE WINGS FAN. Both in the
 // player's own gait units: close enough that the arc is BETWEEN the player
 // and the room, far enough that walking backwards does not step on a barrel.
@@ -9,10 +11,10 @@ const RACK_AHEAD = 2.6;
 const RACK_FAN = 0.66;      // radians between the centre post and a wing
 const RACK_LIFE = 8;
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'GUN RACK',
     charge: 50,
-    theme: THEME.feed,
+    theme: ITEM_THEME,
     // LITTLE BROTHER THREE WAYS. One turret is fire from somewhere the player
     // is not; three in an arc is a firing LINE in front of the player, thrown
     // up at once where they are aiming - which is a different emergency from
@@ -54,7 +56,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         t.head.rotation.y = t.yaw + Math.PI;
         game.deploy(t);
       }
-      game.effects.shockwave(p.pos, THEME.feed, 6, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xffab40, 20, 5, 3, 0.5);
       game.sfx.itemDeploy();
     },

@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // window the card describes is exactly the red the HUD draws.
 export const id = 'runningOnFumes';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'RUNNING ON FUMES',
     max: 1,
-    theme: THEME.runningOnFumes,
+    theme: 0xd84b20,
     effects: [['+100% DAMAGE,', GOOD], ['+50% FIRE RATE', GOOD], ['WHILE STAMINA IS RED', NOTE]],
     apply: (mods, n) => { mods.fumesDamage = 1.0 * n; mods.fumesRate = 0.5 * n; },
 }));

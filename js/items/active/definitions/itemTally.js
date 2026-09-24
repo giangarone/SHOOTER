@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemTally';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff1744;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BODY COUNT',
     charge: 32,
-    theme: THEME.carnage,
+    theme: ITEM_THEME,
     // AN EMPTY BUTTON THAT THE PLAYER FILLS. Pressed into an empty room it
     // does literally nothing, and pressed into a crowd it is the biggest
     // damage number in the game - which makes it the only item in the pool
@@ -21,7 +23,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game, s) => {
       s.stacks = 0;
       game.player.itemDamageMult = 1;
-      game.effects.shockwave(game.player.pos, THEME.carnage, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.sfx.itemSurge();
     },
     onKill: (game, s) => {

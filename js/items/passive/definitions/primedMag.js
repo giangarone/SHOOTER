@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'primedMag';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PRIMED MAG',
     max: 1,
-    theme: THEME.primed,
+    theme: 0xff8f00,
     // THE TACTICAL RELOAD, PAID FOR. Every shooter teaches the habit of
     // topping up between fights and no shooter has ever paid for it; here the
     // rounds you did not fire are the bomb, so a magazine dropped at twenty is

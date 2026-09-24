@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemDash';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BLINK DRIVE',
     charge: 3,
-    theme: THEME.surge,
+    theme: 0x1de9b6,
     // THE DASH USED TO BE A PASSIVE ITEM. Double Dash held two charges on a
     // 2.5s timer and was fired by double-tapping W, which is a binding that
     // exists because the game had no spare finger - and an active item slot IS

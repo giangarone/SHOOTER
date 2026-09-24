@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // and every orb is worth half, so the pick is about ATTENTION and not income.
 export const id = 'autoLoot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'AUTO-LOOT',
     max: 1,
-    theme: THEME.autoLoot,
+    theme: 0xb59a3f,
     effects: [['ALL CREDITS FLY TO YOU', GOOD], ['EACH WORTH HALF', BAD]],
     apply: (mods, n) => {
       mods.autoLoot = n;

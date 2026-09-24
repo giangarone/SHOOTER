@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // pool does.
 export const id = 'lodestone';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LODESTONE',
     max: 3,
-    theme: THEME.lodestone,
+    theme: 0xffc400,
     effects: (n) => [
       ['PICKUP RANGE', NOTE],
       [step(n, pctUp(50)), GOOD],

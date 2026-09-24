@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'steadyAim';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STEADY AIM',
     max: 2,
-    theme: THEME.poise,
+    theme: 0x7c4dff,
     effects: (n) => [
       ['DAMAGE ' + step(n, pctUp(40)), GOOD],
       ['WHILE STANDING STILL', NOTE],

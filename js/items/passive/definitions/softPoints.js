@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // slowed AND hit harder would be two picks in one slot.
 export const id = 'softPoints';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SOFT POINTS',
     max: 1,
-    theme: THEME.softPoints,
+    theme: 0xffca8a,
     effects: [['+30% DAMAGE TO', GOOD], ['SLOWED ENEMIES', NOTE]],
     apply: (mods, n) => { mods.softPoints = 0.3 * n; },
 }));

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'vampiric';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'VAMPIRIC ROUNDS',
     max: 3,
-    theme: THEME.blood,
+    theme: 0xff2d6f,
     effects: (n) => [
       ['HEAL 1 HP ON KILL,', GOOD],
       ['CHANCE ' + step(n, (k) => 25 * (k + 1) + '%'), NOTE],

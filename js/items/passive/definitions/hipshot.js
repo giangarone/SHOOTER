@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // the rate of a spray is only worth something at a range the spray can hold.
 export const id = 'hipshot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HIPSHOT',
     max: 1,
-    theme: THEME.hipshot,
+    theme: 0xffb74d,
     effects: [['2x FIRE RATE', GOOD], ['WHILE HIP FIRING', NOTE], ['HALF RATE WHILE AIMING', BAD]],
     apply: (mods, n) => { mods.hipshot = n; },
 }));

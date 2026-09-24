@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // are up, which is the largest single step the crit family has.
 export const id = 'ironLiturgy';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'IRON LITURGY',
     max: 1,
-    theme: THEME.ironLiturgy,
+    theme: 0xd16ba5,
     effects: [['+25% CRIT CHANCE', GOOD], ['WHILE AIMING', NOTE]],
     apply: (mods, n) => { mods.aimCrit = 0.25 * n; },
 }));

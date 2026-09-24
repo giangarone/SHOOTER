@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemLifeSentence';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x8d6e63;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'LIFE SENTENCE',
     charge: 20,
-    theme: THEME.entrench,
+    theme: ITEM_THEME,
     // A FULL HEAL FOR TWENTY POINTS, AND YOU ARE SLOWER FOREVER. It is the
     // cheapest full heal in the game by a distance - SIX CHAMBERS costs
     // thirty-six for a coin toss at one - and the price is not paid in health
@@ -26,7 +28,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.health = p.maxHealth;
       p.moveLoss *= 0.9;
-      game.effects.shockwave(p.pos, THEME.entrench, 8, 0.7);
+      game.effects.shockwave(p.pos, ITEM_THEME, 8, 0.7);
       game.effects.burst(p.eyeInto(_v), 0x8d6e63, 30, 5, 3, 0.8);
       game.ui.banner('SENTENCED');
       game.sfx.itemGraft();

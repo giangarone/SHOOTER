@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemStone';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff2d6f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BLOOD FROM STONE',
     charge: 30,
-    theme: THEME.blood,
+    theme: ITEM_THEME,
     // MONEY BECOMES MEDICINE, and only while it is running - which turns a
     // wave's payout into a heal exactly once, and makes the press a question
     // about timing rather than about health. Best used on the corpse of
@@ -19,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       game.player.orbHealEnd = game.time + 8;
       game.money.vacuum();
-      game.effects.shockwave(game.player.pos, THEME.blood, 8, 0.55);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 8, 0.55);
       game.sfx.itemSurge();
     },
     end: (game) => { game.player.orbHealEnd = 0; },

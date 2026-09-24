@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // reading for a multiplier to drift into.
 export const id = 'tenderizer';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TENDERIZER',
     max: 1,
-    theme: THEME.tenderizer,
+    theme: 0xbb3f20,
     effects: [['+50% DAMAGE TO', GOOD], ['ENEMIES AT FULL HP', NOTE]],
     apply: (mods, n) => { mods.tenderizer = 0.5 * n; },
 }));

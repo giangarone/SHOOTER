@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // free hops would otherwise turn a safe shop into a guaranteed refill station.
 export const id = 'jackpot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'JACKPOT',
     max: 1,
-    theme: THEME.jackpot,
+    theme: 0xffef62,
     effects: [
       ['EACH GROUND JUMP:', NOTE],
       ['1% CHANCE OF FULL', GOOD],

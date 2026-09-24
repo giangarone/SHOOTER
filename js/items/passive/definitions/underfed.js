@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // of this.
 export const id = 'underfed';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'UNDERFED',
     max: 1,
-    theme: THEME.underfed,
+    theme: 0x7a8b6f,
     effects: [['ENEMIES HAVE 20%', GOOD], ['LESS HEALTH', NOTE], ['NOT BOSSES', NOTE]],
     apply: (mods, n) => { mods.enemyHpMult *= Math.pow(0.8, n); },
 }));

@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // leave - which is money that used to be worth nothing extra at all.
 export const id = 'vintageOrbs';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'VINTAGE ORBS',
     max: 1,
-    theme: THEME.vintageOrbs,
+    theme: 0xd9c26b,
     effects: [['ORBS GAIN +1% VALUE', GOOD], ['PER SECOND UNCOLLECTED', NOTE]],
     apply: (mods, n) => { mods.vintage = 0.01 * n; },
 }));

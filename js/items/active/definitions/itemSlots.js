@@ -2,6 +2,8 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemSlots';
 
+const ITEM_THEME = 0xff5252;
+
 // What one press costs. Flat, on PAY TO WIN's rule: it is pressed in a row
 // or not at all, and a price that climbed would turn the joke into a sum.
 // Two hundred and fifty - enough that a string of busts is a felt decision
@@ -11,10 +13,10 @@ const SPIN_COST = 250;
 // The three pockets of the wheel, in the order the banner names them.
 const SPIN_TIME = 0.9;
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SLOT MACHINE',
     charge: 0,
-    theme: THEME.gamble,
+    theme: ITEM_THEME,
     // THE CHEAPEST GAMBLE IN THE POOL, AND THE ONLY ONE PRICED IN MONEY. SIX
     // CHAMBERS plays with the health bar; this plays with the wallet, priced
     // squarely between an ammo refill and a box roll. Two pockets pay about
@@ -42,7 +44,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       s.click = 0;
       s.spun = 0;
       game.sfx.itemSpin();
-      game.effects.shockwave(game.player.pos, THEME.gamble, 4, 0.45);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 4, 0.45);
     },
     tick: (game, s, dt) => {
       s.spun += dt;
@@ -56,24 +58,26 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     },
     end: (game, s) => {
       const p = game.player;
+      // Prize flashes use health green or ammo gold; the machine's own red
+      // belongs to the spin and the empty result.
       if (s.outcome === 0) {
         p.heal(5);
         game.ui.banner('WIN: +5 HP');
         game.effects.burst(p.eyeInto(_v), 0x8affc1, 26, 6, 3, 0.6);
-        game.effects.shockwave(p.pos, THEME.vitality, 6, 0.5);
+        game.effects.shockwave(p.pos, 0x00e676, 6, 0.5);
         game.sfx.jackpot();
       } else if (s.outcome === 1) {
         p.reserveAmmo = Math.min(p.maxReserve, p.reserveAmmo + 15);
         game.ui.banner('WIN: +15 AMMO');
         game.ui.flashReserve();
         game.effects.burst(p.eyeInto(_v), 0xffd600, 26, 6, 3, 0.6);
-        game.effects.shockwave(p.pos, THEME.ammo, 6, 0.5);
+        game.effects.shockwave(p.pos, 0xffd600, 6, 0.5);
         game.sfx.itemAmmo();
       } else {
         game.ui.banner('BUST');
         // The lid closing, in grey: the one outcome with nothing in it has
         // to ANNOUNCE the nothing, or it reads as the press having failed.
-        game.effects.shockwave(p.pos, THEME.gamble, 5, 0.4);
+        game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.4);
         game.sfx.boxClose();
       }
     },

@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // quietly becomes the best armour in the pool.
 export const id = 'thinBlood';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'THIN BLOOD',
     max: 1,
-    theme: THEME.thinBlood,
+    theme: 0xe57373,
     effects: [['20% OF DAMAGE TAKEN', GOOD], ['IS PAID IN CREDITS:', NOTE], ['$10/HP, ONLY IN CREDIT', BAD]],
     apply: (mods, n) => { mods.thinBlood = 0.2 * n; mods.thinBloodRate = 10; },
 }));

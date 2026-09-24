@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'malady';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MALADY',
     max: 1,
-    theme: THEME.fire,
+    theme: 0xff5a00,
     // Poison and burn ONLY. Cryo, Terror and Petrify have no strength to
     // amplify, so the same trade on them would be a drawback with no upside.
     // The old line read "+50% POISON & BURN", which never said WHICH axis moved

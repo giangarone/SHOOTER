@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'luckyCorpse';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "LUCKY CORPSE",
     max: 1,
-    theme: THEME.luckyCorpse,
+    theme: 0x76d275,
     effects: [['1 ENEMY EACH WAVE', NOTE], ['DROPS 3 HEALTH + 3 AMMO', GOOD]],
     apply: (mods, n) => { mods.luckyCorpse = n; },
 }));

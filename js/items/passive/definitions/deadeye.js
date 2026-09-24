@@ -25,10 +25,10 @@ import { definePassiveItem } from '../shared.js';
 // there - it is the one place all six meet.
 export const id = 'deadeye';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DEADEYE',
     max: 1,
-    theme: THEME.deadeye,
+    theme: 0xff80ab,
     // Common, and the smaller of the two plain chances, because it is the
     // entry point to the whole family: 5% to 20% is the pick where the yellow
     // numbers stop being a curiosity and start being something the player can

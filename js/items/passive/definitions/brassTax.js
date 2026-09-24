@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'brassTax';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "BRASS TAX",
     max: 1,
-    theme: THEME.brassTax,
+    theme: 0xd6a72c,
     effects: [['EACH SHOT COSTS $1', BAD], ['PAID SHOTS: +30% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.brassTax = n; mods.brassTaxDamage = 0.3; },
 }));

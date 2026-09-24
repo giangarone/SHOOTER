@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'assassin';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ASSASSIN',
     max: 1,
-    theme: THEME.assassin,
+    theme: 0x9c27b0,
     // THE FIRST HIT ON A FRESH BODY, and once a body has been touched it is
     // never fresh again - not by healing, not by a wave boundary, because the
     // body itself does not survive either. So this pays exactly once per enemy

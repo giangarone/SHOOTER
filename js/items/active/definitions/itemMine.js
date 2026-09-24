@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMine';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'WELCOME MAT',
     charge: 30,
-    theme: THEME.shrapnel,
+    theme: 0xff7043,
     // THE PLAYER CANNOT SET IT OFF AND CAN STILL BE KILLED BY IT. Both halves
     // were asked for and both are right: the trigger belongs to the enemy, and
     // the blast belongs to the room. A mine you could safely stand next to

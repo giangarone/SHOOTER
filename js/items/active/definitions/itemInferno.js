@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemInferno';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff5a00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BRIMSTONE',
     charge: 40,
-    theme: THEME.fire,
+    theme: ITEM_THEME,
     // A FIXED RATE, not the player's own burn. Incendiary may not be owned -
     // most runs it is not - and an item that did nothing at all until you
     // happened to draft an unrelated passive item would be the only item in
@@ -31,7 +33,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.impact(e.pos, 0xff7a18, 6, 3, 2.5, 0.5);
         n++;
       }
-      game.effects.shockwave(game.player.pos, THEME.fire, 30, 0.9);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 0.9);
       if (n) game.effects.addShake(0.2);
       game.sfx.itemBlast();
     },

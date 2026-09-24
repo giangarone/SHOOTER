@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMercy';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x880e4f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'LAST RITES',
     charge: 40,
-    theme: THEME.executioner,
+    theme: ITEM_THEME,
     // FINISHES, IT DOES NOT KILL. Thirty percent is low enough that this is
     // never the thing that won the fight - the player already did the work -
     // and high enough that a room full of half-dead chaff clears in one press,
@@ -25,7 +27,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.impact(e.pos, 0xff2d6f, 10, 5, 3, 0.4);
         game.hurtEnemy(e, e.hp + 1);
       }
-      game.effects.shockwave(game.player.pos, THEME.executioner, 26, 0.8);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 26, 0.8);
       game.sfx.itemRites();
     },
 }));

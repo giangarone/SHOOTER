@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // trickle. See Player.heal.
 export const id = 'sterileField';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STERILE FIELD',
     max: 1,
-    theme: THEME.sterileField,
+    theme: 0xdff5ea,
     effects: [['ANY HEAL ALSO CLEARS', NOTE], ['STATUS EFFECTS ON YOU', GOOD]],
     apply: (mods, n) => { mods.sterileField = n; },
 }));

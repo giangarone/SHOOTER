@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // weakest. The cost is the rate and the one round it spends.
 export const id = 'southpaw';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SOUTHPAW',
     max: 1,
-    theme: THEME.southpaw,
+    theme: 0x7fd8c8,
     effects: [
       ['YOU CAN STILL FIRE', GOOD],
       ['WHILE RELOADING, AT', NOTE],

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'wadingBoots';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "WADING BOOTS",
     max: 1,
-    theme: THEME.wadingBoots,
+    theme: 0x27a8df,
     effects: [['POOLS + LAVA', NOTE], ['SLOW INSTEAD OF HURT', GOOD]],
     apply: (mods, n) => { mods.wadingSlow = 0.55; },
 }));

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemAmmo';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffb300;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BANDOLIER',
     charge: 40,
-    theme: THEME.brass,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE POOL THAT ANSWERS THE RESERVE. Ammo is the one
     // resource with no button on it: health has the TRAUMA KIT, the crowd has
     // six answers, and running dry has always meant walking to a station or to
@@ -26,7 +28,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       const before = p.reserveAmmo;
       p.reserveAmmo = Math.min(p.maxReserve, p.reserveAmmo + 30);
-      game.effects.shockwave(p.pos, THEME.brass, 5, 0.45);
+      game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.45);
       // Brass off the gun rather than a wash over the player: the thing that
       // changed is what is in the weapon, so the tell is at the weapon.
       game.effects.burst(p.muzzleInto(_v), 0xffb300, 18, 4, 2.4, 0.5);

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'piercingShot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PIERCING SHOT',
     max: 3,
-    theme: THEME.pierce,
+    theme: 0x76ff03,
     effects: (n) => [
       ['SHOTS PIERCE ' + step(n, (k) => String(k)), GOOD],
       ['ENEMIES EACH', NOTE],

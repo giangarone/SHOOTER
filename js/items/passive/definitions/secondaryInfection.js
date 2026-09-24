@@ -8,10 +8,10 @@ import { definePassiveItem } from '../shared.js';
 // pick is worth and why it is only ever worth it to a build that poisons.
 export const id = 'secondaryInfection';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SECONDARY INFECTION',
     max: 1,
-    theme: THEME.secondaryInfection,
+    theme: 0x2e9e4f,
     effects: [['POISON STACKS UP TO 3x', GOOD], ['ON THE SAME ENEMY', NOTE]],
     apply: (mods, n) => { mods.poisonStacks = 1 + 2 * n; },
 }));

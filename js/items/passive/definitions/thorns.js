@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // heals, blocks or caps the incoming hit.
 export const id = 'thorns';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'THORNS',
     max: 1,
-    theme: THEME.thorns,
+    theme: 0xd84315,
     effects: [['MELEE ATTACKERS TAKE', GOOD], ['THEIR DAMAGE BACK', NOTE]],
     apply: (mods, n) => { mods.thorns = 1 * n; },
 }));

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'petrify';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PETRIFY',
     max: 1,
-    theme: THEME.stone,
+    theme: 0x9aa5b1,
     effects: [['HITS: 12% CHANCE TO', GOOD], ['FREEZE FOR 1.5s', NOTE], ['FROZEN TAKE +50% DMG', GOOD]],
     apply: (mods, n) => {
       mods.petrifyChance = 0.12 * n;

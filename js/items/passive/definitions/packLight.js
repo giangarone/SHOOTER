@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'packLight';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "PACK LIGHT",
     max: 1,
-    theme: THEME.packLight,
+    theme: 0xf0c36a,
     effects: [['-100 RESERVE', BAD], ['+25% DAMAGE', GOOD], ['+20% MAX HP', GOOD]],
     apply: (mods, n) => { mods.reserveFlat -= 100 * n; mods.damage *= 1.25; mods.maxHpMult *= 1.2; },
 }));

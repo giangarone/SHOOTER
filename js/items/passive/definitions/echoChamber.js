@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // per-shot pick in the pool follows.
 export const id = 'echoChamber';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ECHO CHAMBER',
     max: 1,
-    theme: THEME.echoChamber,
+    theme: 0xffcc80,
     effects: [['EVERY 4th SHOT FIRES', GOOD], ['A HALF-DMG ECHO', NOTE], ['THAT COSTS NO AMMO', GOOD]],
     apply: (mods, n) => {
       mods.echoEvery = 4;

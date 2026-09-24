@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // in the pool.
 export const id = 'bellows';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BELLOWS',
     max: 1,
-    theme: THEME.bellows,
+    theme: 0x84b6c4,
     effects: [['TAKE 15% LESS DAMAGE', GOOD], ['AT FULL STAMINA', NOTE]],
     apply: (mods, n) => { mods.bellowsGuard = 0.15 * n; },
 }));

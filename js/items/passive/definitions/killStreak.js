@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // one perfect wave, so this pays a player who is playing well right now.
 export const id = 'killStreak';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'KILL STREAK',
     max: 1,
-    theme: THEME.killStreak,
+    theme: 0xaed581,
     effects: [['20 KILLS WITHOUT', NOTE], ['BEING HIT: HEAL 5,', GOOD], ['+10 AMMO', NOTE]],
     apply: (mods, n) => { mods.killStreak = 20; mods.streakHeal = 5 * n; mods.streakAmmo = 10 * n; },
 }));

@@ -92,88 +92,85 @@ import {
 } from './powerups.js';
 import { MoneyOrbs, BASE_MAGNET_RADIUS, ORB_LIFETIME } from './money.js';
 import {
-  PASSIVE_ITEMS, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines, THEME,
+  PASSIVE_ITEMS, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
   WAVETABLE,
 } from './items/passive/index.js';
 import { DONATION_ITEMS, DONATION_KINDS, donationItemKey } from './items/donation/index.js';
 
 // THE SECOND POOL'S COLOURS, where a pick has an effect in the arena rather
-// than only a number in the stat block. Read off the passive item table rather than
-// written out again, so a totem, its icon and the flash its effect makes in the
-// world can never end up three different colours - which is the whole reason
-// THEME exists.
-const THEME_MARK = THEME.weakPoint;
-const THEME_CANNON = THEME.cannonade;
-const THEME_ECHO = THEME.echoChamber;
-const THEME_CHAIN = THEME.chainFeed;
-const THEME_FUSE = THEME.delayedFuse;
-const THEME_OVERKILL = THEME.overkill;
-const THEME_FEAR = THEME.fearAura;
-const THEME_CONDUIT = THEME.statusConduit;
-const THEME_STAKES = THEME.highStakes;
-const THEME_VITAL = THEME.vitalTrigger;
-const THEME_BRUISE = THEME.bruiseRounds;
-const THEME_KILLSTREAK = THEME.killStreak;
-const THEME_OATH = THEME.bloodOath;
-const THEME_THUNDERCLAP = THEME.thunderclap;
-const THEME_LUCKY_CORPSE = THEME.luckyCorpse;
-const THEME_GHOST_PLATE = THEME.ghostPlate;
-const THEME_DEAD_SWITCH = THEME.deadMansSwitch;
-const THEME_MITOSIS = THEME.mitosis;
-// LIFE INSURANCE's payout. The item is drawn in THEME.holy like AEGIS, and the
-// claim wears it too: what the player has to read off the flash is which of
-// the two things that can save them from a killing blow just did.
-const THEME_INSURED = THEME.holy;
+// than only a number in the stat block. Read each item's own theme so its
+// totem, icon and effect flash stay the same colour when that item is edited.
+const THEME_MARK = PASSIVE_ITEMS.weakPoint.theme;
+const THEME_CANNON = PASSIVE_ITEMS.cannonade.theme;
+const THEME_ECHO = PASSIVE_ITEMS.echoChamber.theme;
+const THEME_CHAIN = PASSIVE_ITEMS.chainFeed.theme;
+const THEME_FUSE = PASSIVE_ITEMS.delayedFuse.theme;
+const THEME_OVERKILL = PASSIVE_ITEMS.overkill.theme;
+const THEME_FEAR = PASSIVE_ITEMS.fearAura.theme;
+const THEME_CONDUIT = PASSIVE_ITEMS.statusConduit.theme;
+const THEME_STAKES = PASSIVE_ITEMS.highStakes.theme;
+const THEME_VITAL = PASSIVE_ITEMS.vitalTrigger.theme;
+const THEME_BRUISE = PASSIVE_ITEMS.bruiseRounds.theme;
+const THEME_KILLSTREAK = PASSIVE_ITEMS.killStreak.theme;
+const THEME_OATH = PASSIVE_ITEMS.bloodOath.theme;
+const THEME_THUNDERCLAP = PASSIVE_ITEMS.thunderclap.theme;
+const THEME_LUCKY_CORPSE = PASSIVE_ITEMS.luckyCorpse.theme;
+const THEME_GHOST_PLATE = PASSIVE_ITEMS.ghostPlate.theme;
+const THEME_DEAD_SWITCH = PASSIVE_ITEMS.deadMansSwitch.theme;
+const THEME_MITOSIS = PASSIVE_ITEMS.mitosis.theme;
+// LIFE INSURANCE's payout. The item shares AEGIS's pale gold, and the claim
+// wears it too: the flash says which protection saved the player.
+const THEME_INSURED = ACTIVE_ITEMS.itemInsurance.theme;
 // The third pool's colours, for the flashes each of them throws.
-const THEME_REDHARVEST = THEME.redHarvest;
-const THEME_CURTAIN = THEME.curtainCall;
-const THEME_INTEREST = THEME.highInterest;
-const THEME_MOVINGDAY = THEME.movingDay;
-const THEME_QUORUM = THEME.quorum;
-const THEME_JACKPOT = THEME.jackpot;
-const THEME_MERCY = THEME.strayMercy;
-const THEME_BANDAGE = THEME.freshBandages;
-const THEME_GRISTLE = THEME.gristle;
-const THEME_UPDRAFT = THEME.updraft;
+const THEME_REDHARVEST = PASSIVE_ITEMS.redHarvest.theme;
+const THEME_CURTAIN = PASSIVE_ITEMS.curtainCall.theme;
+const THEME_INTEREST = PASSIVE_ITEMS.highInterest.theme;
+const THEME_MOVINGDAY = PASSIVE_ITEMS.movingDay.theme;
+const THEME_QUORUM = PASSIVE_ITEMS.quorum.theme;
+const THEME_JACKPOT = PASSIVE_ITEMS.jackpot.theme;
+const THEME_MERCY = PASSIVE_ITEMS.strayMercy.theme;
+const THEME_BANDAGE = PASSIVE_ITEMS.freshBandages.theme;
+const THEME_GRISTLE = PASSIVE_ITEMS.gristle.theme;
+const THEME_UPDRAFT = PASSIVE_ITEMS.updraft.theme;
 // The fourth pool's, for the flashes each of them throws.
-const THEME_SYNCOPATION = THEME.syncopation;
-const THEME_HEARTBEAT = THEME.heartbeat;
-const THEME_POCKET = THEME.pocketGrenade;
-const THEME_PRODIGAL = THEME.prodigalRounds;
-const THEME_FULLLOAD = THEME.fullLoad;
-const THEME_SCYTHE = THEME.scythe;
-const THEME_THROATCUT = THEME.throatCut;
-const THEME_BALLAST = THEME.ballastTanks;
-const THEME_FLOW = THEME.flowReload;
-const THEME_BEDBUGS = THEME.bedbugs;
-const THEME_SPLASHBACK = THEME.splashback;
-const THEME_FRUITS = THEME.firstFruits;
-const THEME_JUMPER = THEME.jumperCables;
-const THEME_DIME = THEME.dimeNovel;
+const THEME_SYNCOPATION = PASSIVE_ITEMS.syncopation.theme;
+const THEME_HEARTBEAT = PASSIVE_ITEMS.heartbeat.theme;
+const THEME_POCKET = PASSIVE_ITEMS.pocketGrenade.theme;
+const THEME_PRODIGAL = PASSIVE_ITEMS.prodigalRounds.theme;
+const THEME_FULLLOAD = PASSIVE_ITEMS.fullLoad.theme;
+const THEME_SCYTHE = PASSIVE_ITEMS.scythe.theme;
+const THEME_THROATCUT = PASSIVE_ITEMS.throatCut.theme;
+const THEME_BALLAST = PASSIVE_ITEMS.ballastTanks.theme;
+const THEME_FLOW = PASSIVE_ITEMS.flowReload.theme;
+const THEME_BEDBUGS = PASSIVE_ITEMS.bedbugs.theme;
+const THEME_SPLASHBACK = PASSIVE_ITEMS.splashback.theme;
+const THEME_FRUITS = PASSIVE_ITEMS.firstFruits.theme;
+const THEME_JUMPER = PASSIVE_ITEMS.jumperCables.theme;
+const THEME_DIME = PASSIVE_ITEMS.dimeNovel.theme;
 // The fifth pool's, for the flashes each of them throws.
-const THEME_POSSUM = THEME.possum;
-const THEME_STARE = THEME.deathStare;
+const THEME_POSSUM = PASSIVE_ITEMS.possum.theme;
+const THEME_STARE = PASSIVE_ITEMS.deathStare.theme;
 // The sixth pool's, for the flashes each of them throws.
-const THEME_MAGNA = THEME.magnaCarta;
-const THEME_SLIDERULE = THEME.slideRule;
-const THEME_REARVIEW = THEME.rearview;
-const THEME_MONSOON = THEME.monsoon;
-const THEME_STIGMATA = THEME.stigmata;
-const THEME_PLATED = THEME.platedDessert;
-const THEME_SHUFFLE = THEME.shuffle;
-const THEME_SOUL = THEME.soulHarvest;
-const THEME_CLAUSE = THEME.deathClause;
-const THEME_FLESH = THEME.fleshBank;
+const THEME_MAGNA = PASSIVE_ITEMS.magnaCarta.theme;
+const THEME_SLIDERULE = PASSIVE_ITEMS.slideRule.theme;
+const THEME_REARVIEW = PASSIVE_ITEMS.rearview.theme;
+const THEME_MONSOON = PASSIVE_ITEMS.monsoon.theme;
+const THEME_STIGMATA = PASSIVE_ITEMS.stigmata.theme;
+const THEME_PLATED = PASSIVE_ITEMS.platedDessert.theme;
+const THEME_SHUFFLE = PASSIVE_ITEMS.shuffle.theme;
+const THEME_SOUL = PASSIVE_ITEMS.soulHarvest.theme;
+const THEME_CLAUSE = PASSIVE_ITEMS.deathClause.theme;
+const THEME_FLESH = PASSIVE_ITEMS.fleshBank.theme;
 // The eighth pool's, for the flashes each of them throws. SIDECHAIN keeps
 // THUNDERCLAP's blue because the two are the same verb - a flat hit on every
 // body in the room - and ECHO keeps SKIPSTONE's because it IS that bounce,
 // twice. LFO throws none (the sweep IS the tell) and WAVETABLE draws its
 // flashes in the current element's own colour, so neither needs an entry.
-const THEME_SQUARE = THEME.squareWave;
-const THEME_MIDI = THEME.midiCable;
-const THEME_SIDECHAIN = THEME.sidechain;
-const THEME_ECHO_BOUNCE = THEME.echo;
-const THEME_CHORUS = THEME.chorus;
+const THEME_SQUARE = PASSIVE_ITEMS.squareWave.theme;
+const THEME_MIDI = PASSIVE_ITEMS.midiCable.theme;
+const THEME_SIDECHAIN = PASSIVE_ITEMS.sidechain.theme;
+const THEME_ECHO_BOUNCE = PASSIVE_ITEMS.echo.theme;
+const THEME_CHORUS = PASSIVE_ITEMS.chorus.theme;
 // COLD FOOT's creep. The pale blue enemies already wear for `slow` and the
 // player's own CHILLED chip is drawn in - one colour for one effect, wherever
 // it is coming from, which is the rule STATUS_TINT exists to hold.
@@ -1222,7 +1219,7 @@ const PLAYER_FX = [
     // player.js has no audio and no HUD to reach for.
     g.sfx.pickupAmmo();
     g.ui.flashReserve();
-    g.effects.shockwave(g.player.pos, THEME.lastBreath, 4, 0.4);
+    g.effects.shockwave(g.player.pos, PASSIVE_ITEMS.lastBreath.theme, 4, 0.4);
   }],
 ];
 
@@ -4756,7 +4753,7 @@ class Game {
     const synth = p.rollSynthPick();
     if (synth) {
       out.synth = PASSIVE_ITEMS[synth].name;
-      this.effects.shockwave(p.pos, THEME.synthesizer, 7, 0.55);
+      this.effects.shockwave(p.pos, PASSIVE_ITEMS.synthesizer.theme, 7, 0.55);
     }
     // MIDI CABLE. Only ever something the player is already carrying - the
     // card reroutes the slot, and an empty slot has nothing to reroute. The
@@ -7075,7 +7072,7 @@ class Game {
             legStart.y += 0.05;
             ray.ray.direction.y = -ray.ray.direction.y;
             ray.ray.direction.normalize();
-            this.effects.impact(h.point, THEME.skipstone, 3, 2.5, 1.2, 0.22);
+            this.effects.impact(h.point, PASSIVE_ITEMS.skipstone.theme, 3, 2.5, 1.2, 0.22);
           }
           ray.ray.origin.copy(legStart);
           hits.length = 0;
@@ -7974,7 +7971,7 @@ class Game {
         this.hurtEnemy(e, dealt);
         if (e.dead) e.meleeKill = true;
       }
-      this.effects.shockwave(this.player.pos, THEME.impact, 26, 0.8);
+      this.effects.shockwave(this.player.pos, ACTIVE_ITEMS.itemFeltThat.theme, 26, 0.8);
       this.effects.addShake(0.3);
     }
     // KNOCKBACK IS NOW A MOVE, NOT A TELEPORT. This used to add three metres to
@@ -8099,7 +8096,9 @@ class Game {
     if (this.player.mods.glancingBlow > 0
       && d * this.player.incomingMult * this.player.itemTakenMult
         <= this.player.mods.glancingBlow) {
-      this.effects.burst(pos, THEME.ceramic, 4, 3, 1.6, 0.2);
+      // A blocked hit uses the armour family's cyan, independent of either
+      // item's offer colour.
+      this.effects.burst(pos, 0x80deea, 4, 3, 1.6, 0.2);
       return;
     }
     // Holy Mantle. A ward eats the hit whole, however big it was, and is spent
@@ -9002,7 +9001,7 @@ class Game {
     const owed = this.player.medicalDebt;
     if (owed <= 0) return 0;
     this.player.medicalDebt = 0;
-    this.effects.shockwave(this.player.pos, THEME.pact, 8, 0.7);
+    this.effects.shockwave(this.player.pos, ACTIVE_ITEMS.itemMedicalDebt.theme, 8, 0.7);
     this._hurtPlayer(owed, this.player.eyeInto(this._killPos));
     return owed;
   }
@@ -12160,8 +12159,8 @@ class Game {
           en.knock(dx, dz, 0.35, 0.4);
           this.hurtEnemy(en, damage, this._knockback.set(dx, 0, dz));
         }
-        this.effects.shockwave(this.player.pos, THEME.stiltLegs, 3.6, 0.32);
-        this.effects.burst(this.player.pos, THEME.stiltLegs, 18, 5, 2.2, 0.4);
+        this.effects.shockwave(this.player.pos, PASSIVE_ITEMS.stiltLegs.theme, 3.6, 0.32);
+        this.effects.burst(this.player.pos, PASSIVE_ITEMS.stiltLegs.theme, 18, 5, 2.2, 0.4);
         this.effects.addShake(0.22);
         this.sfx.impact();
         this.pad.rumble(0.5, 0.3, 120, 1);

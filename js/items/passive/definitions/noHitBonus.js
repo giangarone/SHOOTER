@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'noHitBonus';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'NO-HIT BONUS',
     max: 1,
-    theme: THEME.flawless,
+    theme: 0xeaff6b,
     // The only PERMANENT growth in the pool, and the only reward for a skill
     // the game already measured and only ever paid in credits. It stacks for
     // the rest of the run, so a player who keeps clearing waves clean is

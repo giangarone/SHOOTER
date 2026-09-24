@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'thunderclap';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "THUNDERCLAP",
     max: 1,
-    theme: THEME.thunderclap,
+    theme: 0x86d7ff,
     effects: [['WHEN RELOAD FINISHES:', NOTE], ['5 DAMAGE TO ALL ENEMIES', GOOD]],
     apply: (mods, n) => { mods.thunderclap = 5 * n; },
 }));

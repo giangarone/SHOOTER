@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { THEME } from '../passive/shared.js';
 import {
   Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE,
   Snowman, SNOWMAN_FUSE,
@@ -77,7 +76,7 @@ export const PAY_TO_WIN_COST = 1000;
 export const PARACHUTE_COST = 5000;
 
 const ACTIVE_ITEM_CONTEXT = Object.freeze({
-  THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey,
+  THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey,
   MONKEY_FUSE, Snowman, SNOWMAN_FUSE,
   BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE,
   PAY_TO_WIN_COST, PARACHUTE_COST,

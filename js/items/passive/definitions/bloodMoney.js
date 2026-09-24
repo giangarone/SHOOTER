@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // player actually lost, never what was thrown at them.
 export const id = 'bloodMoney';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BLOOD MONEY',
     max: 3,
-    theme: THEME.tithe,
+    theme: 0xc79a3a,
     // COMPENSATION, NOT AN INCENTIVE. Two credits a point at the first tier is
     // a fraction of what the same seconds spent killing would have paid, so
     // standing in a fire to farm it is strictly worse than not - which is the

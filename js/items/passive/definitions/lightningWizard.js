@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'lightningWizard';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LIGHTNING WIZARD',
     max: 1,
-    theme: THEME.storm,
+    theme: 0x9fd8ff,
     // Rare per shot and heavy when it lands, which is the opposite trade to
     // Arc Rounds: that one is a small certainty on every hit, this is a large
     // uncertainty. At 5% a magazine usually contains one, so it reads as

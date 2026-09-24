@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemExecutive';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x880e4f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'EXECUTIVE DECISION',
     charge: 120,
-    theme: THEME.executioner,
+    theme: ITEM_THEME,
     // TWICE THE PRICE OF ANYTHING ELSE IN THE POOL, FOR ONE BOSS. A hundred
     // and twenty points is a hundred and twenty basic enemies - most of two
     // waves - which means it can be charged in the run-up to a boss and
@@ -29,7 +31,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     ready: (game) => !!game.bossFight && game.bossFight.parts.length > 0,
     use: (game) => {
       game._executeBoss();
-      game.effects.shockwave(game.player.pos, THEME.executioner, 30, 1.0);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 1.0);
       game.effects.addShake(0.8);
       game.ui.banner('TERMINATED');
       game.sfx.itemRites();

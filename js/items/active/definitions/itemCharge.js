@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemCharge';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x1de9b6;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BONESAW',
     charge: 15,
-    theme: THEME.surge,
+    theme: ITEM_THEME,
     // THE SAME DASH BLINK DRIVE FIRES, with a hitbox on it. Deliberately the
     // same movement - the same envelope, the same distance, the same
     // forward-only commitment (see DASH_TIME in player.js) - because the point
@@ -32,7 +34,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.dash(game.time, 1.25, p.pitch);
       p.invulnEnd = Math.max(p.invulnEnd, game.time + 0.7);
       s.hit = new Set();
-      game.effects.burst(game.player.pos, THEME.surge, 18, 6, 2, 0.4);
+      game.effects.burst(game.player.pos, ITEM_THEME, 18, 6, 2, 0.4);
       game.sfx.activeItemCharge();
     },
     tick: (game, s) => {

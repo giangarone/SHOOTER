@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'deadMansSwitch';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "DEAD MAN'S SWITCH",
     max: 1,
-    theme: THEME.deadMansSwitch,
+    theme: 0xa71930,
     effects: [['BELOW 10% HP:', NOTE], ['100 DAMAGE TO ALL', GOOD], ['10s COOLDOWN', NOTE]],
     apply: (mods, n) => { mods.deadSwitch = 100 * n; mods.deadSwitchAt = 0.1; mods.deadSwitchCd = 10; },
 }));

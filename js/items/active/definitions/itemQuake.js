@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemQuake';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x00e5c0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'TECTONIC',
     charge: 20,
-    theme: THEME.impact,
+    theme: ITEM_THEME,
     // THE FORCE IS THE POINT AND THE DAMAGE IS THE RECEIPT. Forty is not much;
     // nine metres of everything leaving at once is a great deal, and what the
     // player actually bought is the second and a half it takes them all to
@@ -34,7 +36,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game._shove(e, _v, 18 * (1 - d / 9) + 4);
         game.hurtEnemy(e, dmg);
       }
-      game.effects.shockwave(p.pos, THEME.impact, 9, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 9, 0.6);
       game.effects.burst(p.pos, 0x00e5c0, 30, 9, 3, 0.6);
       game.effects.addShake(0.45);
       game.pad.rumble(0.9, 0.7, 260, 2);

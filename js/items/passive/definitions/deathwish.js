@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'deathwish';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "DEATHWISH",
     max: 1,
-    theme: THEME.deathwish,
+    theme: 0xf51b51,
     effects: [['+40% DAMAGE', GOOD], ['SET TO 5 HP ON PICKUP', BAD]],
     apply: (mods, n) => { mods.damage *= 1.4; },
     onTake: (player) => { player.health = Math.min(player.maxHealth, 5); },

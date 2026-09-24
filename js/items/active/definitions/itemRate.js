@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- windows on the player ---------------------------------------------
 export const id = 'itemRate';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff9500;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'RED LINE',
     charge: 30,
-    theme: THEME.rate,
+    theme: ITEM_THEME,
     // Rides fireRateMult and fireRateBoostEnd - the fire-rate PICKUP's own two
     // fields - so it expires through machinery that already exists and shows
     // in the buff strip without being taught to, exactly the way OVERDRIVE
@@ -25,7 +27,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         p.fireRateBoostEnd = end;
         p.fireRateBoostFull = 6;
       }
-      game.effects.shockwave(p.pos, THEME.rate, 6, 0.55);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.55);
       game.sfx.itemSurge();
     },
 }));

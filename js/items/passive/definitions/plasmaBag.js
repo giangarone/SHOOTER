@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // SECOND SKIN costs a full item charge.
 export const id = 'plasmaBag';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PLASMA BAG',
     max: 1,
-    theme: THEME.plasmaBag,
+    theme: 0x5fd6c2,
     effects: [['HEALTH CRATES ALSO', NOTE], ['GIVE A 10 SHIELD', GOOD]],
     apply: (mods, n) => { mods.crateShield = 10 * n; },
 }));

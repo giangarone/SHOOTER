@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // its own. The floor is the difference between a price and a suicide button.
 export const id = 'deathClause';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DEATH CLAUSE',
     max: 1,
-    theme: THEME.deathClause,
+    theme: 0x5e35b1,
     effects: [['+20% DAMAGE', GOOD], ['MISS THE LAST ROUND', BAD], ['OF A MAG: LOSE 5 HP', BAD]],
     apply: (mods, n) => { mods.damage *= 1 + 0.2 * n; mods.deathClause = 5 * n; },
 }));

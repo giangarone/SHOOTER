@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // one to walk over.
 export const id = 'secondHelpings';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SECOND HELPINGS',
     max: 1,
-    theme: THEME.secondHelpings,
+    theme: 0xffe0b2,
     effects: [['3x THE HEALTH CRATES,', GOOD], ['EACH HEALS HALF', BAD]],
     apply: (mods, n) => {
       mods.crateLuck = 1 + 3 * n;

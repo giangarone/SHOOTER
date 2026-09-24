@@ -16,10 +16,10 @@ import { definePassiveItem } from '../shared.js';
 // found it over half, and the damage it dealt is what it is worth.
 export const id = 'throatCut';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'THROAT CUT',
     max: 1,
-    theme: THEME.throatCut,
+    theme: 0x97233f,
     effects: [['MELEE INSTANTLY KILLS', GOOD], ['ENEMIES UNDER 50% HP', NOTE], ['NOT BOSSES', BAD]],
     apply: (mods, n) => { mods.throatCut = 0.5 * n; },
 }));

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemParachute';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffc400;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'GOLDEN PARACHUTE',
     charge: 40,
-    theme: THEME.lodestone,
+    theme: ITEM_THEME,
     // FIVE THOUSAND DOLLARS TO NOT FIGHT THE WAVE. It is the most expensive
     // thing a player can buy with money - a box roll starts at a thousand -
     // and what it buys is the one thing money has never been able to buy in
@@ -41,7 +43,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       game.credits -= PARACHUTE_COST;
       game._creditsDirty = true;
       const n = game._clearWaveNow();
-      game.effects.shockwave(game.player.pos, THEME.lodestone, 30, 1.0);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 1.0);
       game.effects.addShake(0.35);
       game.ui.banner(n ? 'BOUGHT OUT' : 'NOTHING TO BUY');
       game.sfx.buy();

@@ -1,7 +1,6 @@
 import { discoverItems } from '../discover.js';
-import { GOOD, THEME } from './shared.js';
 
-export { THEME, effectLines } from './shared.js';
+export { effectLines } from './shared.js';
 
 const discovered = await discoverItems('passive', import.meta.url);
 export const PASSIVE_ITEMS = discovered.items;

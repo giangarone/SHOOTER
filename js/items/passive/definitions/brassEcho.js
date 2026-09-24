@@ -8,10 +8,10 @@ import { definePassiveItem } from '../shared.js';
 // the trigger pull was.
 export const id = 'brassEcho';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BRASS ECHO',
     max: 3,
-    theme: THEME.echo,
+    theme: 0x6fd8c8,
     effects: (n) => [
       ['HITS REFUND AMMO', GOOD],
       ['CHANCE ' + step(n, pctUp(5)), NOTE],

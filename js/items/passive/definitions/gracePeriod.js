@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'gracePeriod';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "GRACE PERIOD",
     max: 1,
-    theme: THEME.gracePeriod,
+    theme: 0xe8f5ff,
     effects: [['WHEN HIT:', NOTE], ['INVINCIBLE FOR 1s', GOOD]],
     apply: (mods, n) => { mods.gracePeriod = n; },
 }));

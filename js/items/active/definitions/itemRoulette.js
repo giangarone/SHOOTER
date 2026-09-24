@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemRoulette';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff5252;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SIX CHAMBERS',
     charge: 36,
-    theme: THEME.gamble,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE POOL THE PLAYER CANNOT PLAN AROUND. Fifty-fifty
     // between a full heal and one health, which is worth pressing at almost
     // any health total below half and worth nothing above it - so the decision
@@ -25,7 +27,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       // died to an outcome that had not happened yet.
       s.won = Math.random() < 0.5;
       game.sfx.itemSpin();
-      game.effects.shockwave(game.player.pos, THEME.gamble, 5, 0.6);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 5, 0.6);
     },
     tick: (game, s, dt) => {
       s.t = (s.t || 0) + dt;
@@ -41,14 +43,16 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       if (s.won) {
         p.health = p.maxHealth;
-        game.effects.shockwave(p.pos, THEME.vitality, 10, 0.7);
+        // The winning flash announces health, while the item's own red stays
+        // on its pedestal and the losing result.
+        game.effects.shockwave(p.pos, 0x00e676, 10, 0.7);
         game.effects.burst(p.eyeInto(_v), 0x8affc1, 40, 7, 4, 0.9);
         game.ui.banner('LOADED');
         game.sfx.itemHeal2();
       } else {
         p.health = 1;
         p.clearCarnage();
-        game.effects.shockwave(p.pos, THEME.gamble, 10, 0.7);
+        game.effects.shockwave(p.pos, ITEM_THEME, 10, 0.7);
         game.effects.burst(p.eyeInto(_v), 0xff2d6f, 40, 7, 4, 0.9);
         game.ui.banner('EMPTY');
         game.ui.damage();

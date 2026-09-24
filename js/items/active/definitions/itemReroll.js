@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemReroll';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xe0e0e0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SECOND OPINION',
     charge: 50,
-    theme: THEME.charge,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE POOL THAT DOES NOTHING IN A FIGHT, and it IS the
     // reroll rather than a token that buys one. It used to hand out two free
     // rerolls to be spent at a console afterwards, which made the press a
@@ -28,7 +30,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     ready: (game) => game.totemArea.active && !game.totemArea.claimed,
     use: (game) => {
       game._itemReroll();
-      game.effects.shockwave(game.player.pos, THEME.charge, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.ui.banner('REROLLED');
       game.sfx.reroll();
     },

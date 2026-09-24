@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'lamprey';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LAMPREY',
     max: 1,
-    theme: THEME.lamprey,
+    theme: 0x00897b,
     // TEN DAMAGE ON THE DOWNBEAT - once a beat, not twice. It used to bite on
     // every pulse, which is the half-beat edge the sentry guns and every fire
     // tick ride, and at ten a bite that made a free permanent companion worth

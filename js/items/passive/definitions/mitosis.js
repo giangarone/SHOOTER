@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'mitosis';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "MITOSIS",
     max: 1,
-    theme: THEME.mitosis,
+    theme: 0xa140b6,
     effects: [['KILLING SHOT SPLITS IN 2', GOOD], ['HALF-DAMAGE HOMING SHOTS', GOOD], ['EACH CAN SPLIT ONCE', NOTE]],
     apply: (mods, n) => { mods.mitosis = 0.5 * n; },
 }));

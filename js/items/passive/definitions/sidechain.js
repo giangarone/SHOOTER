@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // once-per-press flags.
 export const id = 'sidechain';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'SIDECHAIN COMPRESSION',
     max: 1,
-    theme: THEME.sidechain,
+    theme: 0x66c7ff,
     effects: [
       ['HITS DEAL 1 DAMAGE', GOOD],
       ['TO ALL OTHER ENEMIES', NOTE],

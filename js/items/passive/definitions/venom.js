@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // colours are held distinct from each other and from the hit flash.
 export const id = 'venom';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'VENOM ROUNDS',
     max: 1,
-    theme: THEME.poison,
+    theme: 0x39d353,
     // THE POISON IS ITS OWN FIXED NUMBER, and it ticks on the beat - once a
     // beat, where fire ticks twice. Generic weapon damage never moves it.
     effects: [['SHOTS POISON ENEMIES', GOOD], ['10 DAMAGE PER TICK, 4s', NOTE]],

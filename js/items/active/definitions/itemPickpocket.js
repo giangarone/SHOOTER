@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemPickpocket';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffb300;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PICKPOCKET',
     charge: 20,
-    theme: THEME.brass,
+    theme: ITEM_THEME,
     // FAITH HEALING'S POORER COUSIN, AND IT ASKS NOTHING ABOUT DISTANCE. One
     // health and five rounds per body ANYWHERE on the floor, which makes it
     // the item for the wave that has already spread out - the moment the ten
@@ -22,13 +24,13 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       for (const e of game.enemies) if (!e.dead) n++;
       if (!n) {
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.brass, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
       p.heal(n);
       p.reserveAmmo = Math.min(p.maxReserve, p.reserveAmmo + n * 5);
       game.ui.flashReserve();
-      game.effects.shockwave(p.pos, THEME.brass, 8, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 8, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xffb300, 24, 5, 3, 0.6);
       game.sfx.itemAmmo();
     },

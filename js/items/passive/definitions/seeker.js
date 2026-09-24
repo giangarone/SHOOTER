@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'seeker';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SEEKER',
     max: 1,
-    theme: THEME.precision,
+    theme: 0xff5fd2,
     // Rescues MISSES and nothing else. A shot already on target is never
     // touched, so this can never drag a bullet off the weak point the player
     // deliberately lined up - it only takes the shots that were going to hit

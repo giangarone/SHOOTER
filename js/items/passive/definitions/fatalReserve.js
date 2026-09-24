@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // totem and the fight is arithmetic; these are decided in the fight.
 export const id = 'fatalReserve';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FATAL RESERVE',
     max: 1,
-    theme: THEME.reserve,
+    theme: 0xd81b60,
     // THE BOTTOM OF THE MAGAZINE IS THE WORST PART OF IT, always has been: the
     // rounds you fire knowing a reload is coming, usually while backing away.
     // This pays for staying on the trigger through them, and it is the only

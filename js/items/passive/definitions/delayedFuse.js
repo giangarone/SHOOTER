@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // and genuinely bad against the one thing walking at you.
 export const id = 'delayedFuse';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DELAYED FUSE',
     max: 1,
-    theme: THEME.delayedFuse,
+    theme: 0xff7519,
     effects: [['SHOTS STICK TO ENEMIES', GOOD], ['THEN EXPLODE, 2s LATER', NOTE]],
     apply: (mods, n) => { mods.fuseDelay = 2; mods.fuseRadius = 2.5 * n; },
 }));

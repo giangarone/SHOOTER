@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // re-summoned every wave would be a pet the player buries once a minute.
 export const id = 'magpie';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MAGPIE',
     max: 1,
-    theme: THEME.magpie,
+    theme: 0x78909c,
     // IT DOES NOT EARN MONEY, IT SAVES IT. Every orb it walks onto is one the
     // player was going to collect anyway or was going to lose to ORB_LIFETIME,
     // and it is only ever worth something in the second case - so the pick is

@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // see Game.startWave.
 export const id = 'lateFee';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LATE FEE',
     max: 1,
-    theme: THEME.lateFee,
+    theme: 0xa1442e,
     effects: [['+3% DAMAGE PER 10s', GOOD], ['THE WAVE HAS RUN', NOTE]],
     apply: (mods, n) => { mods.lateFee = 0.03 * n; mods.lateFeeEvery = 10; },
 }));

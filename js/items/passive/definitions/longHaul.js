@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // landed ON - see the note there.
 export const id = 'longHaul';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LONG HAUL',
     max: 1,
-    theme: THEME.longHaul,
+    theme: 0xb03a2e,
     effects: [['VS BOSSES: +2% DAMAGE', GOOD], ['PER 5s OF FIGHT', NOTE], ['NO LIMIT', NOTE]],
     apply: (mods, n) => { mods.longHaulStep = 0.02 * n; mods.longHaulEvery = 5; },
 }));

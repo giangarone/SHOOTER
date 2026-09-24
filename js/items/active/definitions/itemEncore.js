@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the windows on the gun ---------------------------------------------
 export const id = 'itemEncore';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x6fd8c8;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'ENCORE',
     charge: 30,
-    theme: THEME.echo,
+    theme: ITEM_THEME,
     // EVERY TRIGGER PULL FIRED TWICE, AND THE SECOND ONE IS FREE. It is ECHO
     // CHAMBER's every-fourth-shot ghost turned all the way up for eight
     // seconds: the same pattern, the same spread, the same statuses, at full
@@ -26,7 +28,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     duration: 8,
     use: (game) => {
       game.player.encore = 1;
-      game.effects.shockwave(game.player.pos, THEME.echo, 6, 0.55);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.55);
       game.sfx.itemSurge();
     },
     end: (game) => { game.player.encore = 0; },

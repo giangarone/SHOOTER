@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemGraft';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xb2ff59;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'GRAFT',
     charge: 60,
-    theme: THEME.temper,
+    theme: ITEM_THEME,
     // THE ONLY ITEM THAT LEAVES A MARK ON THE RUN. Everything else in the pool
     // is spent the moment it is pressed; this one is three health that is
     // still there an hour later, and a run that carries it from wave four to
@@ -22,7 +24,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.hpBanked += 3;
       heal(p, 3);
-      game.effects.shockwave(p.pos, THEME.temper, 6, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xb2ff59, 24, 5, 3, 0.7);
       game.ui.banner('+3 MAX HP');
       game.sfx.itemGraft();

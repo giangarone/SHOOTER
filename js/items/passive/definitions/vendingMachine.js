@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'vendingMachine';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "VENDING MACHINE",
     max: 1,
-    theme: THEME.vendingMachine,
+    theme: 0xec407a,
     effects: [['EVERY 15 KILLS:', NOTE], ['DROP A RANDOM POWERUP', GOOD]],
     apply: (mods, n) => { mods.vendingEvery = 15; },
 }));

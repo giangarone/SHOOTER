@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // geometry, so a kerb counts, a crate counts and a stair counts.
 export const id = 'tightrope';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TIGHTROPE',
     max: 1,
-    theme: THEME.tightrope,
+    theme: 0xffab91,
     effects: [['+25% FIRE RATE', GOOD], ['WHILE AIRBORNE', NOTE]],
     apply: (mods, n) => { mods.highRate = 0.25 * n; },
 }));

@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // what a vent that costs a reload should be.
 export const id = 'reloadBurst';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'RELOAD BURST',
     max: 1,
-    theme: THEME.shrapnel,
+    theme: 0xff7043,
     effects: [['RELOAD THROWS 8 SHARDS', GOOD], ['4x YOUR DAMAGE', NOTE], ['THEY CANNOT HURT YOU', NOTE]],
     apply: (mods, n) => {
       mods.reloadShards = 8 * n;

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'coinLaundry';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "COIN LAUNDRY",
     max: 1,
-    theme: THEME.coinLaundry,
+    theme: 0xf2cd45,
     effects: [['ORBS AT FULL HEALTH', NOTE], ['WORTH +100%', GOOD]],
     apply: (mods, n) => { mods.coinLaundry = n; },
 }));

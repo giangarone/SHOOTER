@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // shooting into a crowd and pays nothing at all to one picking off stragglers.
 export const id = 'overkill';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'OVERKILL',
     max: 1,
-    theme: THEME.overkill,
+    theme: 0xff7a45,
     effects: [['EXCESS KILL DAMAGE', NOTE], ['CARRIES TO THE NEXT', GOOD], ['ENEMY IT CAN REACH', NOTE]],
     apply: (mods, n) => { mods.overkill = n; mods.overkillRange = 5; },
 }));

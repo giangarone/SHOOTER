@@ -3,10 +3,10 @@ import { defineActiveItem } from '../shared.js';
 // ---- things left in the arena ------------------------------------------
 export const id = 'itemTurret';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'LITTLE BROTHER',
     charge: 40,
-    theme: THEME.feed,
+    theme: 0xffab40,
     // FIRE FROM SOMEWHERE THE PLAYER IS NOT. That is the only thing in this
     // game a second gun can buy, and it is worth a slot: a turret behind the
     // crowd means the crowd is taking fire while it walks toward you, which is

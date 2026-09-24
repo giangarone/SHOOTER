@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'bottomFeed';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "BOTTOM FEED",
     max: 1,
-    theme: THEME.bottomFeed,
+    theme: 0x607d8b,
     effects: [['RELOAD FROM EMPTY:', NOTE], ['NEXT MAG +30% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.bottomFeedMag = 0.3 * n; },
 }));

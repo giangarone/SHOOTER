@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // one shared ceiling would let either eat the other's.
 export const id = 'platedDessert';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PLATED DESSERT',
     max: 1,
-    theme: THEME.platedDessert,
+    theme: 0xe6b03a,
     effects: [['FULL-HP CRATES GIVE', GOOD], ['+5 MAX HP INSTEAD', NOTE]],
     apply: (mods, n) => { mods.platedDessert = 5 * n; },
 }));

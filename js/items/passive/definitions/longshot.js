@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // one a run draws, it is being told to stand somewhere.
 export const id = 'longshot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LONGSHOT',
     max: 1,
-    theme: THEME.distance,
+    theme: 0x0288d1,
     // A RAMP, NOT A THRESHOLD. A flat "+30% past 20 metres" would be a cliff
     // the player cannot see, and the tell would be the damage number jumping
     // as they backed over an invisible line. It climbs the whole way instead -

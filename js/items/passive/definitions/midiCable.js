@@ -17,10 +17,10 @@ import { definePassiveItem } from '../shared.js';
 // enough to be built around, and what it pays is a fresh charge every wave.
 export const id = 'midiCable';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'MIDI CABLE',
     max: 1,
-    theme: THEME.midiCable,
+    theme: 0xb4f06e,
     effects: [
       ['ACTIVE ITEM BECOMES', GOOD],
       ['A RANDOM ONE EACH WAVE', NOTE],

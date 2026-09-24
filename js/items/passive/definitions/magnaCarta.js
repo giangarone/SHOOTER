@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // the only way "increase by 1" can stay true on the card.
 export const id = 'magnaCarta';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MAGNA CARTA',
     max: 1,
-    theme: THEME.magnaCarta,
+    theme: 0xc9b037,
     effects: [['EACH RELOAD FROM EMPTY:', NOTE], ['MAG +1, FOREVER', GOOD]],
     apply: (mods, n) => { mods.magnaCarta = n; },
 }));

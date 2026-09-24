@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // and a burning one clears a crowd.
 export const id = 'hellspitter';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HELLSPITTER',
     max: 1,
-    theme: THEME.hellspitter,
+    theme: 0xd1440f,
     effects: [['YOUR TURRETS IGNITE', GOOD], ['WHAT THEY HIT', NOTE]],
     apply: (mods, n) => { mods.turretBurn = 1 * n; mods.turretBurnTime = 3; },
 }));

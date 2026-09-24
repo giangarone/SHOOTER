@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // every one of those branches breaks the walk before the bounce can run.
 export const id = 'echo';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'ECHO',
     max: 1,
-    theme: THEME.echo,
+    theme: 0x6fd8c8,
     effects: [
       ['SHOTS BOUNCE OFF WALLS', GOOD],
       ['AND FLOOR, TWICE', NOTE],

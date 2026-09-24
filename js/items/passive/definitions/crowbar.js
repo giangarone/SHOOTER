@@ -26,10 +26,10 @@ import { definePassiveItem } from '../shared.js';
 // a kill is whatever the wave is handing out.
 export const id = 'crowbar';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CROWBAR',
     max: 1,
-    theme: THEME.crowbar,
+    theme: 0x9e7b4f,
     effects: [['MELEE: 4x DAMAGE', GOOD], ['AND +10 AMMO PER HIT', GOOD]],
     apply: (mods, n) => { mods.crowbar = 4 * n; mods.crowbarAmmo = 10 * n; },
 }));

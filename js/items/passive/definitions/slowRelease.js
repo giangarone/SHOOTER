@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // it is needed, which is the one thing a health crate has never asked for.
 export const id = 'slowRelease';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SLOW RELEASE',
     max: 1,
-    theme: THEME.slowRelease,
+    theme: 0x66d9a6,
     effects: [['HEALTH CRATES HEAL 2x,', GOOD], ['BUT OVER 20 SECONDS', NOTE]],
     apply: (mods, n) => { mods.slowRelease = 1 + n; mods.slowReleaseTime = 20; },
 }));

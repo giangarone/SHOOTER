@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // making ammunition rather than getting it back.
 export const id = 'prodigalRounds';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PRODIGAL ROUNDS',
     max: 1,
-    theme: THEME.prodigalRounds,
+    theme: 0xc8b560,
     effects: [['20% OF MISSED SHOTS', GOOD], ['RETURN TO THE RESERVE', NOTE]],
     apply: (mods, n) => { mods.prodigal = 0.2 * n; },
 }));

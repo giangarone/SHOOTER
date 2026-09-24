@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // them for reloading EARLY, which is the one thing those two do not ask for.
 export const id = 'cannonade';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CANNONADE',
     max: 1,
-    theme: THEME.cannonade,
+    theme: 0xff3d3d,
     effects: [['FIRST SHOT OF EACH', NOTE], ['MAGAZINE: 10x DAMAGE', GOOD]],
     apply: (mods, n) => { mods.firstShot = 10 * n; },
 }));

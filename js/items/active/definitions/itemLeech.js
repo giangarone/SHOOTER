@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemLeech';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff2d6f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'HAEMOPHAGE',
     charge: 60,
-    theme: THEME.blood,
+    theme: ITEM_THEME,
     // TWENTY SHOTS THAT HIT, not twenty trigger pulls - a magazine emptied
     // into a wall must not be a heal at all, and requiring the hit is also
     // what makes the item something the player has to shoot WELL to spend.
@@ -31,7 +33,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
 
     use: (game) => {
       game.player.leechShots = 20;
-      game.effects.shockwave(game.player.pos, THEME.blood, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.sfx.itemSurge();
     },
 }));

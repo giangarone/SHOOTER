@@ -35,10 +35,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the promise, and the debt ------------------------------------------
 export const id = 'itemInsurance';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xfff2b0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'LIFE INSURANCE',
     charge: 60,
-    theme: THEME.holy,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE POOL THAT PAYS OUT FOR A MISTAKE. Ten seconds in
     // which the hit that would have ended the run leaves the player at one
     // health and hands back twenty - so the window is not damage reduction, it
@@ -59,7 +61,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       const p = game.player;
       p.insuredEnd = game.time + 10;
-      game.effects.shockwave(p.pos, THEME.holy, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xfff2b0, 26, 5, 3, 0.7);
       game.sfx.itemSurge();
     },

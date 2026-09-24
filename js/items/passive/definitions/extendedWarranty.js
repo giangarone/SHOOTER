@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'extendedWarranty';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "EXTENDED WARRANTY",
     max: 1,
-    theme: THEME.extendedWarranty,
+    theme: 0x7653b5,
     effects: [['STATUSES YOU APPLY', NOTE], ['LAST +3s', GOOD]],
     apply: (mods, n) => { mods.statusDurationBonus = 3 * n; },
 }));

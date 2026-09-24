@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the shield ---------------------------------------------------------
 export const id = 'itemSecondSkin';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x4ef3ff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'SECOND SKIN',
     charge: 50,
-    theme: THEME.armor,
+    theme: ITEM_THEME,
     // TWENTY POINTS OF SHIELD, AND NO CLOCK ON THEM. The shield PICKUP is
     // fifty for fifteen seconds - a window to push into - and this is the
     // opposite trade: less than half as much, kept until something takes it.
@@ -29,7 +31,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.shield += 20;
       p.shieldEnd = 0;
-      game.effects.shockwave(p.pos, THEME.armor, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x4ef3ff, 26, 5, 3, 0.7);
       game.sfx.pickupShield();
     },

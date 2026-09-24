@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // outgrow the arena - twenty flawless waves is the target.
 export const id = 'untouched';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'UNTOUCHED',
     max: 1,
-    theme: THEME.temper,
+    theme: 0xb2ff59,
     effects: [['CLEAR A WAVE WITHOUT', NOTE], ['BEING HIT: +3 MAX HP', GOOD], ['PERMANENT, UP TO +60', NOTE]],
     apply: (mods, n) => {
       mods.hpPerCleanWave = 3 * n;

@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // standing in the lava is now a lit fuse walking through the crowd.
 export const id = 'statusConduit';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STATUS CONDUIT',
     max: 1,
-    theme: THEME.statusConduit,
+    theme: 0x7cb9e8,
     effects: [['STATUS EFFECTS ON YOU', GOOD], ['SPREAD TO ENEMIES', NOTE], ['WITHIN 5m', NOTE]],
     apply: (mods, n) => { mods.conduit = 5 * n; },
 }));

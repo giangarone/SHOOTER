@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // second run's worth of bar.
 export const id = 'gristle';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'GRISTLE',
     max: 1,
-    theme: THEME.gristle,
+    theme: 0xd7a3a3,
     effects: [['HEALTH CRATES: 30%', NOTE], ['CHANCE OF +1 MAX HP', GOOD], ['PERMANENTLY', NOTE]],
     apply: (mods, n) => { mods.gristleChance = 0.3 * n; mods.gristleHp = 1; },
 }));

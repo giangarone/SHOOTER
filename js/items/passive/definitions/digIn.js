@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // health bar you reached by standing in the shop.
 export const id = 'digIn';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DIG IN',
     max: 1,
-    theme: THEME.entrench,
+    theme: 0x8d6e63,
     effects: [['STAND STILL 3s:', NOTE], ['REGEN 3 HP/s', GOOD], ['ANY HIT RESETS IT', BAD]],
     apply: (mods, n) => {
       mods.plantRegen = 3 * n;

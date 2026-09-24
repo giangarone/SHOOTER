@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // the room moves. Switching targets is what breaks it, not missing alone.
 export const id = 'luckyStreak';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'LUCKY STREAK',
     max: 1,
-    theme: THEME.luckyStreak,
+    theme: 0xff5c8a,
     effects: [['+5% CRIT CHANCE PER HIT', GOOD], ['ON THE SAME ENEMY', NOTE], ['MISS OR SWITCH: RESET', BAD]],
     apply: (mods, n) => { mods.luckyStep = 0.05 * n; },
 }));

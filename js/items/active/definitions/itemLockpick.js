@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemLockpick';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xb388ff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'LOCKPICK',
     charge: 60,
-    theme: THEME.lockpick,
+    theme: ITEM_THEME,
     // THE DEAREST THING IN THE POOL THAT IS SPENT IN THE SHOP, and it has to
     // be: what it buys is the thing every other item in this file is bought
     // WITH. (EXECUTIVE DECISION costs twice as much, and is spent in a boss
@@ -32,7 +34,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     ready: (game) => game.mysteryBox.canBuy,
     use: (game) => {
       game._freeBoxRoll();
-      game.effects.shockwave(game.player.pos, THEME.lockpick, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.ui.banner('PICKED');
     },
 }));

@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // player can hear.
 export const id = 'wolfPack';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'WOLF PACK',
     max: 1,
-    theme: THEME.wolfPack,
+    theme: 0x8a9199,
     effects: [['+2% FIRE RATE', GOOD], ['PER ENEMY ALIVE, MAX 40%', NOTE]],
     apply: (mods, n) => { mods.wolfPack = 0.02 * n; mods.wolfPackCap = 0.4; },
 }));

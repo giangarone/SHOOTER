@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'killchain';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "KILLCHAIN",
     max: 1,
-    theme: THEME.killchain,
+    theme: 0xf03f7b,
     effects: [['ON KILL: +1s INVINCIBLE', GOOD], ['STACKS UP TO 5s', NOTE]],
     apply: (mods, n) => { mods.killchain = n; },
 }));

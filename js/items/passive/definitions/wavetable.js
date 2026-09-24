@@ -18,10 +18,10 @@ import { definePassiveItem } from '../shared.js';
 // draft spent a slot on.
 export const id = 'wavetable';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'WAVETABLE',
     max: 1,
-    theme: THEME.wavetable,
+    theme: 0x45e0b0,
     effects: [
       ['EACH MAGAZINE CARRIES', NOTE],
       ['FIRE, ICE, POISON, FEAR', GOOD],

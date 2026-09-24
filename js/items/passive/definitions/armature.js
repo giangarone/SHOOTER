@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // multipliers get their say on it exactly as they would on the original blow.
 export const id = 'armature';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ARMATURE',
     max: 1,
-    theme: THEME.armature,
+    theme: 0xe86a17,
     effects: [['EXCESS KILL DAMAGE', NOTE], ['ADDS TO YOUR NEXT SHOT', GOOD]],
     apply: (mods, n) => { mods.armature = n; },
 }));

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemPayToWin';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffd54f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PAY TO WIN',
     charge: 0,
-    theme: THEME.payToWin,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE GAME THAT IS NOT PAID FOR IN ENEMIES. Its meter is
     // never drawn, because there is nothing to draw - the cost is a thousand
     // dollars, every press, and the credits readout in the top corner is the
@@ -42,7 +44,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       for (const e of list) {
         if (!e.dead) game.hurtEnemy(e, dmg);
       }
-      game.effects.shockwave(p.pos, THEME.payToWin, 30, 0.9);
+      game.effects.shockwave(p.pos, ITEM_THEME, 30, 0.9);
       game.ui.banner('PAID');
       game.sfx.buy();
     },

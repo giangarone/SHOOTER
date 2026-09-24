@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // count, and it pays them 5 HP every time they get it right.
 export const id = 'finalDose';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FINAL DOSE',
     max: 1,
-    theme: THEME.finalDose,
+    theme: 0x4db6ac,
     effects: [['RELOAD WITH 1 ROUND', NOTE], ['LEFT: HEAL 5 HP', GOOD]],
     apply: (mods, n) => { mods.finalDose = 5 * n; },
 }));

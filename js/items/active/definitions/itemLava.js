@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemLava';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xdd2c00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FLOOR IS LAVA',
     charge: 40,
-    theme: THEME.hellfire,
+    theme: ITEM_THEME,
     // THE ONE ITEM THAT CHANGES WHERE THE GAME IS PLAYED. For four seconds the
     // arena floor is not a place anybody can stand - the player included - and
     // the only ground left is what the terrain generator put ABOVE it: the
@@ -27,7 +29,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     duration: 4,
     use: (game) => {
       game._lavaFloorStart();
-      game.effects.shockwave(game.player.pos, THEME.hellfire, 30, 1.0);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 30, 1.0);
       game.effects.addShake(0.4);
       game.ui.banner('THE FLOOR IS LAVA');
       game.sfx.itemBlast();

@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- melee, for once ----------------------------------------------------
 export const id = 'itemFeltThat';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x00e5c0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'EVERYONE FELT THAT',
     charge: 30,
-    theme: THEME.impact,
+    theme: ITEM_THEME,
     // THE ONLY ITEM IN THE POOL THAT IS ABOUT THE BUTT OF THE GUN. Melee is
     // otherwise a thing the player does when something is already on top of
     // them - one committed swing, a double bounty, and a real risk - and for
@@ -29,7 +31,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.meleeMult = 5;
       p.meleeShare = 1;
-      game.effects.shockwave(p.pos, THEME.impact, 8, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 8, 0.6);
       game.effects.burst(p.eyeInto(_v), 0x00e5c0, 26, 6, 3, 0.7);
       game.sfx.itemFrenzy();
     },

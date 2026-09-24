@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemCompound';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xe53935;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'COMPOUND INTEREST',
     charge: 20,
-    theme: THEME.power,
+    theme: ITEM_THEME,
     // GRAFT'S SIBLING, IN DAMAGE. One percent is deliberately almost nothing:
     // pressed once it is invisible, and that is the point - this is the only
     // item in the pool that is worth carrying rather than worth pressing, and
@@ -23,7 +25,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     use: (game) => {
       const p = game.player;
       p.compoundMult *= 1.01;
-      game.effects.shockwave(p.pos, THEME.power, 5, 0.5);
+      game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.5);
       game.effects.burst(p.eyeInto(_v), 0xe53935, 20, 5, 3, 0.6);
       game.ui.banner('+1% DAMAGE');
       game.sfx.itemGraft();

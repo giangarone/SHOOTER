@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemTopOff';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff2d6f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'TOP OFF',
     charge: 40,
-    theme: THEME.blood,
+    theme: ITEM_THEME,
     // (The name was SECOND WIND until it met the pool: the stamina passive of
     // that name got here first, and two offers that share a name are two
     // cards a totem cannot tell apart - see "no two offers share a name" in
@@ -39,7 +41,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       if (p.reloading > 0) p.reloading = 0;
       game.ui.flashReserve();
       game.ui.banner('TOP OFF');
-      game.effects.shockwave(p.pos, THEME.blood, 7, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xff2d6f, 20, 5, 3, 0.55);
       game.effects.burst(p.pos, 0xffd600, 16, 4, 3, 0.4);
       game.ui.damage();

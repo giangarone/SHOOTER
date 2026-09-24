@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // every other item comparison in the game goes.
 export const id = 'vitalTrigger';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'VITAL TRIGGER',
     max: 1,
-    theme: THEME.vitalTrigger,
+    theme: 0x64ffda,
     effects: [['USING YOUR ITEM', NOTE], ['ALSO HEALS 5 HP', GOOD]],
 
     apply: (mods, n) => { mods.itemHeal = 5 * n; },

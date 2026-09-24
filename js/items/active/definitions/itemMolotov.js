@@ -3,10 +3,10 @@ import { defineActiveItem } from '../shared.js';
 // ---- things left in the arena (the second helping) ----------------------
 export const id = 'itemMolotov';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MOLOTOV',
     charge: 20,
-    theme: THEME.fire,
+    theme: 0xff5a00,
     // FIREBREAK IS A LINE YOU HIDE BEHIND; THIS IS A CIRCLE YOU PUT SOMEWHERE
     // ELSE. The wall stands where the player is and stops what is coming; the
     // bottle is thrown across the room and makes the place the crowd is

@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // nothing like the runaway CARNAGE is.
 export const id = 'paperTrail';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PAPER TRAIL',
     max: 1,
-    theme: THEME.paperTrail,
+    theme: 0xcdb79e,
     effects: [['+1% DAMAGE PER $1,000', GOOD], ['EVERY SPENT, FOREVER', NOTE]],
     apply: (mods, n) => { mods.paperTrail = 0.01 * n; },
 }));

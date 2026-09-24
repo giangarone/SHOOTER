@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'hollowPoint';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HOLLOW POINT',
     max: 3,
-    theme: THEME.damage,
+    theme: 0xff3d00,
     effects: (n) => [
       ['DAMAGE ' + step(n, pctUp(30)), GOOD],
       ['MAGAZINE ' + step(n, pctDown(0.75)), BAD],

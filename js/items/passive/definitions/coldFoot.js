@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // ice has to be visibly safe, or a player will simply never sprint.
 export const id = 'coldFoot';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'COLD FOOT',
     max: 1,
-    theme: THEME.coldFoot,
+    theme: 0xa8e0ff,
     effects: [['SPRINTING LAYS DOWN ICE', GOOD], ['THAT SLOWS PURSUERS', NOTE]],
     apply: (mods, n) => { mods.coldFoot = 1.6 * n; mods.coldFootRadius = 2.2; },
 }));

@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemHealthSeek';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x00e676;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'HEALTH & SEEK',
     charge: 40,
-    theme: THEME.vitality,
+    theme: ITEM_THEME,
     // SEVENTY-FIVE HEALTH, SCATTERED WHERE THE PLAYER IS NOT. Three plates at
     // the crate's own twenty-five, spawned on open floor anywhere in the arena
     // - so what this item hands out is not a heal, it is three reasons to go
@@ -24,7 +26,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     effects: [['SPAWN 3 HEALTH PICKUPS', GOOD], ['AROUND THE ARENA', NOTE]],
     use: (game) => {
       game._scatterHealth(3);
-      game.effects.shockwave(game.player.pos, THEME.vitality, 8, 0.6);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 8, 0.6);
       game.ui.banner('DELIVERED');
       game.sfx.itemHeal2();
     },

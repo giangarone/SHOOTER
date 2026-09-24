@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'reactivePlating';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'REACTIVE PLATING',
     max: 3,
-    theme: THEME.shock,
+    theme: 0x00b0ff,
     effects: (n) => [
       ['SHOCKWAVE WHEN HIT', GOOD],
       ['DAMAGE ' + step(n, (k) => String(45 * k)), NOTE],

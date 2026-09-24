@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'beltFeed';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BELT FEED',
     max: 3,
-    theme: THEME.feed,
+    theme: 0xffab40,
     effects: (n) => [
       [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
       ['DRAW FROM THE RESERVE', NOTE],

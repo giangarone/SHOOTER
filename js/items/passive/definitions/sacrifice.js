@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // rest of the build - and the deeper the build, the worse the odds get.
 export const id = 'sacrifice';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SACRIFICE',
     max: 1,
-    theme: THEME.sacrifice,
+    theme: 0x6d1b7b,
     effects: [['+10% DAMAGE & FIRE RATE', GOOD], ['DESTROYS ONE OTHER', BAD], ['PASSIVE ITEM YOU OWN', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.1 * n;

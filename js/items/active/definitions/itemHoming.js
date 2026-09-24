@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemHoming';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff5fd2;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BIRD DOG',
     charge: 40,
-    theme: THEME.precision,
+    theme: ITEM_THEME,
     // SEEKER, ON A CLOCK. It reads the same _homeShot path the passive item
     // does - the same cone, the same line-of-sight check, the same bent tracer
     // - so a player who has carried Seeker already knows exactly what this
@@ -19,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     duration: 10,
     use: (game) => {
       game.player.itemHoming = 1;
-      game.effects.shockwave(game.player.pos, THEME.precision, 6, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.5);
       game.sfx.itemSurge();
     },
     end: (game) => { game.player.itemHoming = 0; },

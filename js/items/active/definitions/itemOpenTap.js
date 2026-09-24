@@ -2,12 +2,14 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemOpenTap';
 
+const ITEM_THEME = 0xffd180;
+
 const OPEN_TAP_TIME = 6;
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'OPEN TAP',
     charge: 30,
-    theme: THEME.salvo,
+    theme: ITEM_THEME,
     // OPENING SALVO's WINDOW, BOUGHT BY THE PLAYER rather than granted by the
     // wave. The machinery is deliberately the same one - Player.tryShoot's
     // free-fire branch reads both deadlines off the same lines - because
@@ -32,7 +34,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.freeFireEnd = Math.max(p.freeFireEnd, game.time + OPEN_TAP_TIME);
       if (p.reloading > 0) p.reloading = 0;
-      game.effects.shockwave(p.pos, THEME.salvo, 6, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.6);
       game.effects.burst(p.eyeInto(_v), 0xffd180, 20, 5, 3, 0.55);
       game.sfx.itemSurge();
     },

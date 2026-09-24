@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // player could not predict.
 export const id = 'soulHarvest';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SOUL HARVEST',
     max: 1,
-    theme: THEME.soulHarvest,
+    theme: 0xab47bc,
     effects: [['20% CHANCE A KILL', GOOD], ['BANKS 1 SHIELD', NOTE]],
     apply: (mods, n) => { mods.soulHarvest = 0.2 * n; },
 }));

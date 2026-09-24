@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'warChest';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'WAR CHEST',
     max: 1,
-    theme: THEME.warchest,
+    theme: 0xf57f17,
     // THE MONEY YOU DID NOT SPEND IS THE STAT. One point of damage per
     // thousand banked, read live off the balance, so it climbs as the wave
     // pays out and DROPS the moment the player buys anything - which is the

@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // way this is a free pick and the reason it is worth checking the sheet.
 export const id = 'boneMarrow';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BONE MARROW',
     max: 1,
-    theme: THEME.boneMarrow,
+    theme: 0x8bc34a,
     effects: [['+100 MAX HEALTH', GOOD], ['HEALING -50%', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 100 * n;

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'groundhog';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'GROUNDHOG',
     max: 1,
-    theme: THEME.groundhog,
+    theme: 0x795548,
     // THE THIRD THING CROUCHING IS FOR. It already buys a smaller target and,
     // with CROUCHFIRE, a faster trigger; this makes it the posture you reload
     // in as well, which is the one moment in a fight the player is doing

@@ -17,10 +17,10 @@ import { definePassiveItem } from '../shared.js';
 // payout, whichever size it was.
 export const id = 'crashCart';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CRASH CART',
     max: 1,
-    theme: THEME.crashCart,
+    theme: 0xff4d6d,
     effects: [['UNDER 20 HP, HEALTH', NOTE], ['CRATES HEAL 100 HP', GOOD]],
     apply: (mods, n) => { mods.crashCart = 100 * n; mods.crashCartAt = 20; },
 }));

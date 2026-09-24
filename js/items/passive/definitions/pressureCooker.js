@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'pressureCooker';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "PRESSURE COOKER",
     max: 1,
-    theme: THEME.pressureCooker,
+    theme: 0xf26945,
     effects: [['+20% DAMAGE PER ENEMY', GOOD], ['WITHIN 5m', NOTE]],
     apply: (mods, n) => { mods.pressureCooker = 0.2 * n; mods.pressureRadius = 5; },
 }));

@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'bloodTax';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "BLOOD TAX",
     max: 1,
-    theme: THEME.bloodTax,
+    theme: 0xc42d4f,
     effects: [['+20% DAMAGE', GOOD], ['-5 MAX HP', BAD]],
     apply: (mods, n) => { mods.damage *= 1.2; mods.maxHpFlat += 5 * n; },
 }));

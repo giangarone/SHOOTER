@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // shape: it is an emergency early and a way of playing late.
 export const id = 'cashCannon';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CASH CANNON',
     max: 1,
-    theme: THEME.cashCannon,
+    theme: 0xffe082,
     effects: [['OUT OF AMMO?', NOTE], ['KEEP SHOOTING: $10/SHOT', GOOD]],
     apply: (mods, n) => { mods.cashCannon = 10 * n; },
 }));

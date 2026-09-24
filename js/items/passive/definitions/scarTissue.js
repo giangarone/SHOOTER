@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // slow common.
 export const id = 'scarTissue';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SCAR TISSUE',
     max: 1,
-    theme: THEME.scar,
+    theme: 0xbf5f5f,
     // FIVE A WAVE, NOT TWO. Two was under the noise floor of a health bar that
     // scales with the wave: a player who took this on wave five and looked at
     // their bar on wave fifteen had earned twenty points, which is less than

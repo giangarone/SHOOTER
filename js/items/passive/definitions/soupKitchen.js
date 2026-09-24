@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // every other heal, with no opinions of its own about the rules.
 export const id = 'soupKitchen';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SOUP KITCHEN',
     max: 1,
-    theme: THEME.soupKitchen,
+    theme: 0x81c784,
     effects: [['AMMO PICKUPS', GOOD], ['ALSO HEAL 5 HP', NOTE]],
     apply: (mods, n) => { mods.soupKitchen = 5 * n; },
 }));

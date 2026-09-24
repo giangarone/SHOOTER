@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'telltale';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TELLTALE',
     max: 1,
-    theme: THEME.telltale,
+    theme: 0xe91e63,
     // EVERY THIRD HIT ON THE SAME BODY. The count lives on the enemy and dies
     // with it, so it is the exact opposite of Assassin: this one pays for
     // STAYING on a target, and the two together are a build that has an answer

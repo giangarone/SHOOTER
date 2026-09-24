@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemHeadCount';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffea00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'HEAD COUNT',
     charge: 20,
-    theme: THEME.hoard,
+    theme: ITEM_THEME,
     // A HUNDRED DOLLARS A HEAD, PAID FOR NOT HAVING KILLED THEM YET. It is the
     // one item in the pool that is worth MORE at the start of a wave than at
     // the end of one, which is a shape nothing else here has - and it is the
@@ -28,12 +30,12 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       for (const e of game.enemies) if (!e.dead) n++;
       if (!n) {
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.hoard, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
       game._dropMoney(p.pos, 100 * n);
       game.money.vacuum(0.4);
-      game.effects.shockwave(p.pos, THEME.hoard, 9, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 9, 0.6);
       game.ui.banner('COUNTED ' + n);
       game.sfx.credits();
     },

@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // wider than a crawler's.
 export const id = 'stigmata';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STIGMATA',
     max: 1,
-    theme: THEME.stigmata,
+    theme: 0xd33682,
     effects: [['MISSES PASSING WITHIN', NOTE], ['0.5m DEAL 10% OF', GOOD], ['THE SHOT AS CHIP', NOTE]],
     apply: (mods, n) => { mods.stigmata = n; },
 }));

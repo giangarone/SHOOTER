@@ -16,10 +16,10 @@ import { definePassiveItem } from '../shared.js';
 // at them and to stay off the rushers.
 export const id = 'strayMercy';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'STRAY MERCY',
     max: 1,
-    theme: THEME.strayMercy,
+    theme: 0xad3c5e,
     effects: [['5% OF ENEMY SHOTS', NOTE], ['HEAL YOU 20 HP', GOOD], ['INSTEAD OF HURTING', NOTE]],
     apply: (mods, n) => { mods.strayMercy = 0.05 * n; mods.strayMercyHeal = 20; },
 }));

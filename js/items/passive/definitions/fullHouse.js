@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'fullHouse';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "FULL HOUSE",
     max: 1,
-    theme: THEME.fullHouse,
+    theme: 0xee4d64,
     effects: [['+0.4% DAMAGE', GOOD], ['PER ROUND IN MAG', NOTE]],
     apply: (mods, n) => { mods.fullHouse = 0.004 * n; },
 }));

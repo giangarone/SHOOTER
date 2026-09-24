@@ -17,10 +17,10 @@ import { definePassiveItem } from '../shared.js';
 // much to PAY TO WIN's free press as to LANCE's.
 export const id = 'dimeNovel';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DIME NOVEL',
     max: 1,
-    theme: THEME.dimeNovel,
+    theme: 0xe8a0c8,
     effects: [['USING YOUR ITEM:', NOTE], ['+20% CRIT CHANCE', GOOD], ['FOR 20s', NOTE]],
     apply: (mods, n) => { mods.dimeCrit = 0.2 * n; mods.dimeTime = 20; },
 }));

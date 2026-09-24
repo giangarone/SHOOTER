@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // whichever one the player is offered, the other is out there.
 export const id = 'evenBetter';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'EVEN BETTER',
     max: 1,
-    theme: THEME.evenBetter,
+    theme: 0x5f9ee8,
     effects: [['+20% DAMAGE', GOOD], ['WHEN THE MAGAZINE', NOTE], ['HOLDS AN EVEN COUNT', NOTE]],
     apply: (mods, n) => { mods.evenBetter = 0.2 * n; },
 }));

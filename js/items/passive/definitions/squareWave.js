@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // the one more field a dedicated flip-flop would need resetting.
 export const id = 'squareWave';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'SQUARE WAVE',
     max: 1,
-    theme: THEME.squareWave,
+    theme: 0xff5a3c,
     effects: [
       ['SHOTS ALTERNATE:', NOTE],
       ['2x DAMAGE, THEN 1x', GOOD],

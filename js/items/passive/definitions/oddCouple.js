@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // names the count the player SAW when they pulled the trigger.
 export const id = 'oddCouple';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ODD COUPLE',
     max: 1,
-    theme: THEME.oddCouple,
+    theme: 0x9ecbff,
     effects: [['+20% DAMAGE', GOOD], ['WHEN THE MAGAZINE', NOTE], ['HOLDS AN ODD COUNT', NOTE]],
     apply: (mods, n) => { mods.oddCouple = 0.2 * n; },
 }));

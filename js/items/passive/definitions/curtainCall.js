@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // have something to do with it.
 export const id = 'curtainCall';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CURTAIN CALL',
     max: 1,
-    theme: THEME.curtainCall,
+    theme: 0xff6f91,
     effects: [['WAVE\'S LAST KILL DROPS', GOOD], ['3 HEALTH CRATES', NOTE]],
     apply: (mods, n) => { mods.curtainCall = 3 * n; },
 }));

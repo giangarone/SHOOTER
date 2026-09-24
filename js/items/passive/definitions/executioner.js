@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'executioner';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'EXECUTIONER',
     max: 1,
-    theme: THEME.executioner,
+    theme: 0x880e4f,
     // THE ONE PASSIVE ITEM THAT STILL COSTS MAX HEALTH. It was the most
     // expensive pick on that row at 50, and it keeps that price now that
     // nothing else does - halving a boss is worth a permanent third of the

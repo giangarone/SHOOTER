@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemPainfulPeace';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xfff2b0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PAINFUL PEACE',
     charge: 0,
-    theme: THEME.holy,
+    theme: ITEM_THEME,
     // AEGIS'S WINDOW, SOLD BY THE SECOND. Two seconds of the same
     // invulnEnd the sixty-point item opens for eight, bought with five
     // health through pay() - the price cannot be dodged, shielded or
@@ -30,7 +32,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       pay(p, 5);
       p.invulnEnd = Math.max(p.invulnEnd, game.time + 2);
-      game.effects.shockwave(p.pos, THEME.holy, 6, 0.55);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.55);
       game.effects.burst(p.eyeInto(_v), 0xfff2b0, 18, 5, 3, 0.5);
       game.ui.damage();
       game.sfx.pickupShield();

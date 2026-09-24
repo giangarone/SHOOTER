@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // all - see the note in Player.effectiveFireRate.
 export const id = 'hotMag';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HOT MAG',
     max: 1,
-    theme: THEME.hotMag,
+    theme: 0xff7f2a,
     effects: [['+1% FIRE RATE PER', GOOD], ['ROUND IN THE MAG', NOTE]],
     apply: (mods, n) => { mods.hotMag = 0.01 * n; },
 }));

@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // wave hands the next one three and not six - see Player.armWard.
 export const id = 'holyMantle';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HOLY MANTLE',
     max: 1,
-    theme: THEME.holy,
+    theme: 0xfff2b0,
     effects: [['FIRST 3 HITS EACH WAVE', GOOD], ['DEAL NO DAMAGE', NOTE]],
     apply: (mods, n) => { mods.wardPerWave = 3 * n; },
 }));

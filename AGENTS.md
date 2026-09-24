@@ -122,7 +122,7 @@ There is no list to update.
   `js/items/passive/definitions/`; active definitions live one per file in
   `js/items/active/definitions/`. Do not add imports to either `index.js`:
   `server.js` supplies the browser manifest and Node discovers the same files
-  directly. The filename, exported `id`, behavior and item-local
+  directly. The filename, exported `id`, behavior, `theme` colour and item-local
   `icon` belong to the same module. This is deliberate: two worktrees adding
   two items should add two unrelated paths and have nothing shared to merge.
 - `js/enemies/` is one file per theme, registered by `index.js`. `shared.js`
@@ -153,7 +153,8 @@ There is no list to update.
   path is easy to miss.
 - `js/pixelicons.js` renders every icon and holds a small GENERATED table of
   non-item drawings (see `tools/pixelart`). Every item exports its own 24x24
-  `icon` array from its definition; never add an item to that shared table.
+  `icon` array and numeric `theme` colour from its definition; never add an
+  item to that shared table.
   Every offer still needs a drawing and every drawing an offer —
   `npm run test:icons` is the check, and it runs in milliseconds.
 
@@ -171,7 +172,9 @@ block is rebuilt by `Player.rebuildMods()`.
 
 The item-local drawing is `export const icon = [...]`: exactly 24 strings of
 24 tone characters. `.` is empty; `0` through `4` are the outline/shadow/body/
-energy/highlight ramp described in `js/pixelicons.js`.
+energy/highlight ramp described in `js/pixelicons.js`. Put its base colour in
+the same definition as `theme: 0x...`; active items may reuse a local colour
+constant for their effects. Keep related items in recognisable colour families.
 
 For an active item, do the same under `js/items/active/definitions/` with
 `defineActiveItem`. The carried slot is `player.activeItem`, its charge state

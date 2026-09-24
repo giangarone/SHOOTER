@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'completionist';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "COMPLETIONIST",
     max: 1,
-    theme: THEME.completionist,
+    theme: 0x009fb7,
     effects: [['+1% RATE + DAMAGE', GOOD], ['PER ITEM, MAX +30%', NOTE]],
     apply: (mods, n) => { mods.completionist = 0.01 * n; },
 }));

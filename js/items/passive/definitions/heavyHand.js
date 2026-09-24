@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // against armour, against a boss, and to a magazine that has to last.
 export const id = 'heavyHand';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HEAVY HAND',
     max: 1,
-    theme: THEME.heavyHand,
+    theme: 0xa93226,
     effects: [['+60% DAMAGE', GOOD], ['-40% FIRE RATE', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.6 * n;

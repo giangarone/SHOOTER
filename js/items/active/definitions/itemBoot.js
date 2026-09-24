@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- getting out of somewhere ------------------------------------------
 export const id = 'itemBoot';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x82b1ff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BOOTSTRAP',
     charge: 30,
-    theme: THEME.leap,
+    theme: ITEM_THEME,
     // STRAIGHT UP, AND THAT IS THE WHOLE DESIGN. BLINK DRIVE goes forward,
     // which is useless when what is wrong is that you are surrounded; this
     // leaves the floor entirely, and the floor is where every melee enemy in
@@ -35,7 +37,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       p.vel.y = 17;
       p.onGround = false;
       p.jumpsLeft = 0;
-      game.effects.shockwave(_v, THEME.leap, 5, 0.5);
+      game.effects.shockwave(_v, ITEM_THEME, 5, 0.5);
       game.effects.burst(_v, 0xff8c1a, 30, 7, 6, 0.6);
       game.effects.addShake(0.3);
       game.sfx.itemBoot();

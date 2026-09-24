@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // mods.maxHpFlat.
 export const id = 'carnage';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CARNAGE',
     max: 1,
-    theme: THEME.carnage,
+    theme: 0xff1744,
     // A CAP, and a smaller step under it. Uncapped at 5% a kill it was the
     // best damage in the game after twenty kills and absurd after fifty. At 1%
     // to a ceiling of +100% the hundred-kill chain is the target rather than

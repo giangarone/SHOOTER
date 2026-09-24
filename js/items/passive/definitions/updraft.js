@@ -33,10 +33,10 @@ import { definePassiveItem } from '../shared.js';
 // found together.
 export const id = 'updraft';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'UPDRAFT',
     max: 1,
-    theme: THEME.updraft,
+    theme: 0x64c8e8,
     effects: [['HOLD JUMP TO FLY UP', GOOD], ['DRAINS STAMINA', BAD]],
     apply: (mods, n) => {
       mods.float = n;

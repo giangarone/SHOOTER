@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // and takes cover and pays nothing at all to one holding the trigger down.
 export const id = 'trueStrike';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TRUE STRIKE',
     max: 1,
-    theme: THEME.trueStrike,
+    theme: 0xf06292,
     effects: [
       ['+10% CRIT DAMAGE', GOOD],
       ['HOLD FIRE 2s, THEN:', NOTE],

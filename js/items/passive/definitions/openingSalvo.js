@@ -11,10 +11,10 @@ import { definePassiveItem } from '../shared.js';
 // game - see setBuffs in ui.js.
 export const id = 'openingSalvo';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'OPENING SALVO',
     max: 1,
-    theme: THEME.salvo,
+    theme: 0xffd180,
     effects: [['FIRST 10s OF EACH', NOTE], ['WAVE: SHOTS ARE FREE', GOOD], ['DAMAGE -5%', BAD]],
     apply: (mods, n) => {
       mods.salvoTime = 10 * n;

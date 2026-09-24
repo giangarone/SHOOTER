@@ -2791,8 +2791,10 @@ extrusion behind the face, so it reads as a thick cutout turning in the light
 rather than a sticker. Each plate
 is one merged, vertex-coloured, unlit mesh with the interior faces omitted, so
 it is a single draw call and takes no light - the shading is painted into the
-tones. Four of the five tones are derived from the offer's `theme`, so one
-drawing works for any colour. A totem builds an icon the first time it shows
+tones. Four of the five tones are derived from the offer's `theme`, declared in
+the same item definition as its drawing and behavior. Related items still use
+recognisable colour families, such as green for poison and pale blue for ice.
+A totem builds an icon the first time it shows
 one and keeps it hidden afterwards, which bounds the count by the size of the
 passive item pool rather than by how many waves have passed.
 

@@ -24,10 +24,10 @@ import { definePassiveItem } from '../shared.js';
 // is crossed, not to nail the player to the floor.
 export const id = 'deskJob';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DESK JOB',
     max: 1,
-    theme: THEME.deskJob,
+    theme: 0x996242,
     effects: [['+20% DAMAGE', GOOD], ['TAKE 20% LESS DAMAGE', GOOD], ['SPRINT DISABLED', BAD]],
     apply: (mods, n) => {
       mods.damage *= 1 + 0.2 * n;

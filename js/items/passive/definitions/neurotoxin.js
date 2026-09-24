@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'neurotoxin';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'NEUROTOXIN',
     max: 1,
-    theme: THEME.poison,
+    theme: 0x39d353,
     // Slowing a poisoned enemy would have been Cryo Rounds with a different
     // name - Cryo already halves their speed and their shots. Spreading is the
     // thing only poison does.

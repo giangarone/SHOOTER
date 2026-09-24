@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // is and it makes the entire health economy stop applying to you.
 export const id = 'healthyCore';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HEALTHY CORE',
     max: 1,
-    theme: THEME.healthyCore,
+    theme: 0x1b998b,
     effects: [['REGEN 1 HP/s', GOOD], ['IN COMBAT ONLY', NOTE], ['ALL OTHER HEALING OFF', BAD]],
     apply: (mods, n) => { mods.coreRegen = 1 * n; mods.healBlock = n; },
 }));

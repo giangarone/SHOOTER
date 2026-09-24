@@ -18,10 +18,10 @@ import { definePassiveItem } from '../shared.js';
 // more than fifty into a wave and keeps it. See Player.armWaveGrants.
 export const id = 'ballastTanks';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BALLAST TANKS',
     max: 1,
-    theme: THEME.ballastTanks,
+    theme: 0x2ab7d6,
     effects: [['START EACH WAVE', NOTE], ['WITH A 50 SHIELD', GOOD]],
     apply: (mods, n) => { mods.waveShield = 50 * n; },
 }));

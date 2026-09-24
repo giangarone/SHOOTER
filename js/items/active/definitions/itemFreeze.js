@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemFreeze';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x7fe3ff;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'CRYO PULSE',
     charge: 40,
-    theme: THEME.ice,
+    theme: ITEM_THEME,
     // The whole floor at once, through the same per-enemy status a cryo round
     // applies - which means bosses downgrade it to a slow through the
     // resistance block they already carry (see freezeSlow on a boss's stat block in
@@ -19,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     effects: [['FREEZE ALL ENEMIES', GOOD], ['FOR 5s', NOTE]],
     use: (game) => {
       for (const e of game.enemies) e.applyStatus('freeze', 5);
-      game.effects.shockwave(game.player.pos, THEME.ice, 26, 0.9);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 26, 0.9);
     },
 }));
 

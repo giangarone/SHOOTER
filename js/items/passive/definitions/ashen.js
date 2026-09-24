@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'ashen';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'ASHEN',
     max: 1,
-    theme: THEME.ember,
+    theme: 0xbf360c,
     // A lingering ZONE, not another instant blast: Blast Corpse and
     // Crystallize already own that shape, and a cloud you have to push enemies
     // through plays differently from a puff you never see.

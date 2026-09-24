@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'corneredAnimal';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "CORNERED ANIMAL",
     max: 1,
-    theme: THEME.corneredAnimal,
+    theme: 0x85624f,
     effects: [['NEAR MAP BORDER:', NOTE], ['+40% DAMAGE', GOOD]],
     apply: (mods, n) => { mods.corneredAnimal = 0.4 * n; },
 }));

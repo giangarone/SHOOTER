@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'twentyTwenty';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TWENTY/TWENTY',
     max: 1,
-    theme: THEME.precision,
+    theme: 0xff5fd2,
     // The ammo line is the honest half of the deal and has to be on the card:
     // firing the pattern twice spends two rounds (see Player.shotCost), which
     // is what stops +20% net damage from being free. A 30-round magazine is a

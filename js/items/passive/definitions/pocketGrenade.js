@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // punished the miss twice.
 export const id = 'pocketGrenade';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'POCKET GRENADE',
     max: 1,
-    theme: THEME.pocketGrenade,
+    theme: 0xff5722,
     effects: [['LAST ROUND OF EACH', NOTE], ['MAG: 3x DAMAGE BLAST', GOOD]],
     apply: (mods, n) => { mods.pocketGrenade = 3 * n; mods.pocketRadius = 4; },
 }));

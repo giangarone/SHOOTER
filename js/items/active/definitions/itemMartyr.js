@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMartyr';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff6f00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'MARTYR',
     charge: 60,
-    theme: THEME.blast,
+    theme: ITEM_THEME,
     // THE BIGGEST NUMBER IN THE POOL, AND THE ONLY ONE THAT COSTS EVERYTHING.
     // It is not a nuke with a downside: it is a trade the player makes at ten
     // percent health either way, and pressing it at full health is how the
@@ -24,7 +26,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       game._blast(_v, p.getEffectiveDamage(p.weapon.damage) * 20, 16, null, false);
       p.health = Math.min(p.health, 10);
       p.clearCarnage();
-      game.effects.shockwave(_v, THEME.blast, 16, 1.0);
+      game.effects.shockwave(_v, ITEM_THEME, 16, 1.0);
       game.effects.burst(p.eyeInto(_v), 0xffe9a8, 50, 16, 6, 0.9);
       game.effects.burst(p.pos, 0xff6f00, 60, 12, 8, 1.1);
       game.effects.addShake(0.9);

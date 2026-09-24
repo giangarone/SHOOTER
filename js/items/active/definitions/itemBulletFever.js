@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemBulletFever';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xffb300;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BULLET FEVER',
     charge: 10,
-    theme: THEME.brass,
+    theme: ITEM_THEME,
     // THE PAWN SHOP OF THE AMMO FAMILY. OPEN VEIN sells the whole reserve on
     // the big occasion; this trades sixty rounds for thirty health whenever
     // the shelf is full and the bar is thin - the everyday conversion, not
@@ -31,7 +33,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       // flash is a theft, not a sale.
       game.ui.flashReserve();
       game.effects.burst(p.eyeInto(_v), 0x8affc1, 22, 5, 3, 0.6);
-      game.effects.shockwave(p.pos, THEME.brass, 5, 0.5);
+      game.effects.shockwave(p.pos, ITEM_THEME, 5, 0.5);
       game.sfx.itemHeal2();
     },
 }));

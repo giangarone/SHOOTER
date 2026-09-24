@@ -19,10 +19,10 @@ import { definePassiveItem } from '../shared.js';
 // sells is one slow movement felt everywhere at once.
 export const id = 'lfo';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'LFO',
     max: 1,
-    theme: THEME.lfo,
+    theme: 0xff9838,
     effects: [
       ['DAMAGE +30% / -10%', GOOD],
       ['FIRE RATE +25% / -15%', GOOD],

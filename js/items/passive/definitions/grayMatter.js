@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // colours, the status tints, the theme light. The whole game, in grey.
 export const id = 'grayMatter';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'GRAY MATTER',
     max: 1,
-    theme: THEME.grayMatter,
+    theme: 0x9e9e9e,
     effects: [['+10% TO EVERY STAT', GOOD], ['THE WORLD TURNS GREY', BAD]],
     apply: (mods, n) => {
       mods.maxHpBonus += 10 * n;

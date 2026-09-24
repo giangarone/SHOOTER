@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemHumours';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x7b1fa2;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FOUR HUMOURS',
     charge: 40,
-    theme: THEME.affliction,
+    theme: ITEM_THEME,
     // EVERY ELEMENT IN THE GAME, ONE ROUND AT A TIME. The point is not the
     // damage - each of the four is weaker than the passive item that owns it -
     // it is that a crowd caught by eight seconds of this is burning AND
@@ -19,7 +21,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     duration: 8,
     use: (game) => {
       game.player.elementCycle = 0;
-      game.effects.shockwave(game.player.pos, THEME.affliction, 6, 0.55);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 6, 0.55);
       game.sfx.itemSurge();
     },
     end: (game) => { game.player.elementCycle = -1; },

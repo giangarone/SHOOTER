@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'overdraw';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'OVERDRAW',
     max: 1,
-    theme: THEME.overdraw,
+    theme: 0x69f0ae,
     // THE HEALTH ECONOMY'S ONLY LEAK, PLUGGED. A health crate walked over at
     // 98/100 used to be two points and a shrug, and every heal in the game -
     // Nanoweave's trickle, Vampiric's drip, the leech's two - quietly stopped

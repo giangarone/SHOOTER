@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // every multiplier - the "10 damage" on the card is what arrives.
 export const id = 'glancingBlow';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'GLANCING BLOW',
     max: 1,
-    theme: THEME.glancingBlow,
+    theme: 0xb2ebf2,
     effects: [['HITS OF 10 DAMAGE', NOTE], ['OR LESS ARE IGNORED', GOOD]],
     apply: (mods, n) => { mods.glancingBlow = 10 * n; },
 }));

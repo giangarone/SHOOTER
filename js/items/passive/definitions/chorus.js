@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // more lead per round, not more rounds per magazine.
 export const id = 'chorus';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'CHORUS',
     max: 1,
-    theme: THEME.chorus,
+    theme: 0xff8ad0,
     effects: [
       ['+2 PROJECTILES PER SHOT', GOOD],
       ['EACH AT -40% DMG', NOTE],

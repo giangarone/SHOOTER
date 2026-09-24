@@ -14,10 +14,10 @@ import { definePassiveItem } from '../shared.js';
 // decremented in both places.
 export const id = 'quorum';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'QUORUM',
     max: 1,
-    theme: THEME.quorum,
+    theme: 0xf9b233,
     effects: [['EVERY 10 KILLS:', NOTE], ['A FREE TURRET, 10s', GOOD]],
     apply: (mods, n) => { mods.quorumEvery = 10; mods.quorumLife = 10; mods.quorumMax = 3 * n; },
 }));

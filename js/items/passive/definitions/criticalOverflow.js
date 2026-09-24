@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // a build rather than a pick on its own.
 export const id = 'criticalOverflow';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CRITICAL OVERFLOW',
     max: 1,
-    theme: THEME.criticalOverflow,
+    theme: 0xd81b8f,
     effects: [['CRITS: +50% DMG', GOOD], ['AND REFUND 1 AMMO', GOOD], ['NON-CRITS COST +1 AMMO', BAD]],
     apply: (mods, n) => {
       mods.critMult *= 1 + 0.5 * n;

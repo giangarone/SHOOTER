@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemOncePunch';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x97233f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, Snowman, SNOWMAN_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'ONCE-PUNCH POLICY',
     charge: 40,
-    theme: THEME.throatCut,
+    theme: ITEM_THEME,
     // THE MELEE SWING, ONCE, WITH NO CEILING ON IT. The next swing that
     // CONNECTS kills whatever it connects with - a chaser, yes, but the card
     // is written about the other end of the ladder: a Colossus, a boss, the
@@ -30,7 +32,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     effects: [['NEXT MELEE HIT KILLS', GOOD], ['ANY ENEMY - BOSSES TOO', GOOD], ['KEEPS UNTIL IT LANDS', NOTE]],
     use: (game) => {
       game.player.meleeExecute = 1;
-      game.effects.shockwave(game.player.pos, THEME.throatCut, 7, 0.6);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 7, 0.6);
       game.effects.burst(game.player.eyeInto(_v), 0x97233f, 20, 5, 3, 0.55);
       game.sfx.itemRites();
     },

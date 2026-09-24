@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'marksman';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MARKSMAN',
     max: 1,
-    theme: THEME.marksman,
+    theme: 0xf50057,
     // The same pick, bigger. Two entries rather than one that
     // stacks because the crit chance is a number with a CEILING that matters -
     // past about half, a crit stops reading as a crit and starts reading as

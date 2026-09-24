@@ -2,10 +2,10 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMonkey';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'ORGAN GRINDER',
     charge: 50,
-    theme: THEME.hex,
+    theme: 0x6a1b9a,
     // THE ONLY ITEM IN THE GAME THAT TAKES THE PLAYER OUT OF THE FIGHT WITHOUT
     // MOVING THEM. Every other answer to being surrounded is about where the
     // PLAYER ends up - the dash, TECTONIC's shove, FIREBREAK's line, AEGIS's

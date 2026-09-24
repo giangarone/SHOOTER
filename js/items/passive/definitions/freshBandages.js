@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // nothing.
 export const id = 'freshBandages';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FRESH BANDAGES',
     max: 1,
-    theme: THEME.freshBandages,
+    theme: 0xa5d6a7,
     effects: [['EACH RELOAD HEALS 2 HP', GOOD], ['AT HALF HP OR BELOW', NOTE]],
     apply: (mods, n) => { mods.bandage = 2 * n; },
 }));

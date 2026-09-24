@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the floor, and the wallet ------------------------------------------
 export const id = 'itemTransfusion';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff2d6f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'BLOOD TRANSFUSION',
     charge: 20,
-    theme: THEME.blood,
+    theme: ITEM_THEME,
     // EVERY PLATE ON THE FLOOR BECOMES A HEALTH PLATE. It is the one item that
     // acts on the LOOT rather than on the room, and what it is worth is
     // decided entirely by what a wave happened to drop - which makes it the
@@ -29,10 +31,10 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       if (!n) {
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.blood, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
-      game.effects.shockwave(p.pos, THEME.blood, 26, 0.8);
+      game.effects.shockwave(p.pos, ITEM_THEME, 26, 0.8);
       game.ui.banner('TRANSFUSED ' + n);
       game.sfx.itemHeal2();
     },

@@ -13,10 +13,10 @@ import { definePassiveItem } from '../shared.js';
 // than the one this card describes.
 export const id = 'pureHeart';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PURE OF HEART',
     max: 1,
-    theme: THEME.pureHeart,
+    theme: 0xa5d6ff,
     effects: [
       ['NO PICKUPS EVER DROP', BAD],
       ['+20% DAMAGE', GOOD],

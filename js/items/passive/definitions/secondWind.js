@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // sprint build is paying, not the run.
 export const id = 'secondWind';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SECOND WIND',
     max: 1,
-    theme: THEME.wind,
+    theme: 0x26c6da,
     effects: [['SPRINT TWICE AS LONG', GOOD], ['STAMINA BACK 2x FASTER', GOOD]],
     apply: (mods, n) => {
       mods.staminaDrain *= Math.pow(0.5, n);

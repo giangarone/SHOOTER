@@ -19,7 +19,9 @@ import { defineActiveItem } from '../shared.js';
 // ---- the room, all at once ---------------------------------------------
 export const id = 'itemPurify';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0x66bb6a;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'WHITE CELL',
     // FIFTEEN, NOT TWENTY. It is the cheapest item in the pool and it should
     // be: what it answers is a status the player is already suffering, so a
@@ -27,7 +29,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
     // after the thing it was for. Everything else here creates an opportunity;
     // this one only ever undoes something.
     charge: 15,
-    theme: THEME.antidote,
+    theme: ITEM_THEME,
     // THE CLEANSE ALONE IS NOT THE ITEM. Every status in the game arrives from
     // something that is still there - a lava patch under your feet, a gas
     // cloud you are inside of, a cinder that is still chasing you - so a
@@ -42,7 +44,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const p = game.player;
       p.clearStatuses();
       p.statusLockEnd = Math.max(p.statusLockEnd, game.time + 2);
-      game.effects.shockwave(p.pos, THEME.antidote, 6, 0.55);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.55);
       game.effects.burst(p.eyeInto(_v), 0xd6ffdd, 22, 5, 3, 0.6);
       game.sfx.itemHeal2();
     },

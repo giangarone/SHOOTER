@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'sponsorship';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "SPONSORSHIP",
     max: 1,
-    theme: THEME.sponsorship,
+    theme: 0xf28700,
     effects: [['+2% FIRE RATE PER ITEM', GOOD], ['MAX +30%', NOTE]],
     apply: (mods, n) => { mods.sponsorship = 0.02 * n; },
 }));

@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // point: what it rewards is shooting the magazine dry instead of topping up.
 export const id = 'harmWands';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HARM WANDS',
     max: 1,
-    theme: THEME.harmWands,
+    theme: 0xff8f6b,
     effects: [['LAST 15 ROUNDS OF', NOTE], ['EACH MAG: +50% FIRE RATE', GOOD]],
     apply: (mods, n) => { mods.harmWands = 15 * n; mods.harmWandsRate = 0.5 * n; },
 }));

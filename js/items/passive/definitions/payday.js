@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // a boss. The damage is what it charges, and it charges it on every source.
 export const id = 'payday';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'PAYDAY',
     max: 1,
-    theme: THEME.payday,
+    theme: 0xffca00,
     effects: [['+$100 PER KILL', GOOD], ['DAMAGE -10%', BAD]],
     apply: (mods, n) => {
       mods.killCredits = 100 * n;

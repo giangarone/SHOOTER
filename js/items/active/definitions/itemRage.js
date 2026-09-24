@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemRage';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff3d00;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'OVERDRIVE',
     charge: 60,
-    theme: THEME.damage,
+    theme: ITEM_THEME,
     // Rides damageBoostEnd, the same field the RAGE pickup uses, so it expires
     // through machinery that already exists and shows in the buff strip without
     // being taught to. Math.max against whatever is already running, because a
@@ -24,7 +26,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         p.damageBoostEnd = end;
         p.damageBoostFull = 10;
       }
-      game.effects.shockwave(p.pos, THEME.damage, 6, 0.6);
+      game.effects.shockwave(p.pos, ITEM_THEME, 6, 0.6);
     },
 }));
 

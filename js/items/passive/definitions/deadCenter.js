@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'deadCenter';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DEAD CENTER',
     max: 1,
-    theme: THEME.deadcenter,
+    theme: 0xad1457,
     // TWICE THE PAYOUT FOR HALF THE DICE. On a bare 5% that is 1.5x on one
     // shot in twenty against 3x on one in forty - almost exactly the same
     // damage per magazine, and nothing like the same magazine. It is cursed

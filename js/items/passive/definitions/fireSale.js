@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // six seconds, which on a long wave is the last few kills and nothing else.
 export const id = 'fireSale';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FIRE SALE',
     max: 1,
-    theme: THEME.fireSale,
+    theme: 0xff9e40,
     effects: [['ORBS & PICKUPS WORTH 2x', GOOD], ['BUT VANISH 70% FASTER', BAD]],
     apply: (mods, n) => { mods.lootMult = 1 + n; mods.lootDespawn = Math.pow(0.3, n); },
 }));

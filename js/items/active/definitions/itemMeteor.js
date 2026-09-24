@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemMeteor';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xbf360c;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FALLING SKY',
     charge: 60,
-    theme: THEME.ember,
+    theme: ITEM_THEME,
     // TWELVE ROCKS OVER THREE SECONDS, PLACED AT RANDOM. The randomness is the
     // item: it is the one thing in the pool the player does not aim, so what
     // they are buying is three seconds of the room being a worse place to
@@ -41,7 +43,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
           dmg
         ));
       }
-      game.effects.shockwave(game.player.pos, THEME.ember, 8, 0.5);
+      game.effects.shockwave(game.player.pos, ITEM_THEME, 8, 0.5);
       game.sfx.itemSky();
     },
 }));

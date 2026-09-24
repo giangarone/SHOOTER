@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'ammoFab';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'AMMO FABRICATOR',
     max: 3,
-    theme: THEME.fabricate,
+    theme: 0xffe57f,
     // Combat only, like Nanoweave: the wave break has no clock on it, and a
     // trickle that ran there was an infinite ammo box you reached by waiting.
     effects: (n) => [

@@ -7,10 +7,10 @@ import { definePassiveItem } from '../shared.js';
 // and the price is on the other end of the same bar.
 export const id = 'ironLung';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'IRON LUNG',
     max: 1,
-    theme: THEME.ironLung,
+    theme: 0x26a69a,
     effects: [['IMMUNE TO ALL STATUS', GOOD], ['HEALING -30%', BAD]],
     apply: (mods, n) => {
       mods.statusImmune = n;

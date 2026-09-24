@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'twinCell';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'TWIN CELL',
     max: 1,
-    theme: THEME.cell,
+    theme: 0xb0bec5,
     // A SECOND CHARGE, NOT A SECOND SLOT. The slot is still one deep and the
     // item in it is still the run's answer to one problem - what changes is
     // that the answer can be given twice in a row, which is a different thing

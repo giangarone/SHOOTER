@@ -3,10 +3,12 @@ import { defineActiveItem } from '../shared.js';
 // ---- the room's own count as the payload --------------------------------
 export const id = 'itemFaith';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xfff2b0;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'FAITH HEALING',
     charge: 40,
-    theme: THEME.holy,
+    theme: ITEM_THEME,
     // HEALED BY THE THING THAT IS TRYING TO KILL YOU, and the closer it is the
     // more it is worth. Two health per body inside ten metres is nothing at
     // all across an empty room and forty in the middle of a wave-twenty crowd,
@@ -32,11 +34,11 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       if (!n) {
         // The same voice WATERLINE gives a press that could not do anything.
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.holy, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
       p.heal(2 * n);
-      game.effects.shockwave(p.pos, THEME.holy, 10, 0.7);
+      game.effects.shockwave(p.pos, ITEM_THEME, 10, 0.7);
       game.effects.burst(p.eyeInto(_v), 0xfff2b0, 24, 5, 3, 0.7);
       game.sfx.itemHeal2();
     },

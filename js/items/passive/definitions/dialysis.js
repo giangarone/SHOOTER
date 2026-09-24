@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'dialysis';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "DIALYSIS",
     max: 1,
-    theme: THEME.dialysis,
+    theme: 0x43a047,
     effects: [['ENEMY POISON TICKS', NOTE], ['50% FASTER', GOOD]],
     apply: (mods, n) => { mods.poisonTickRate = 1.5; },
 }));

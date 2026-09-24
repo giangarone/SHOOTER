@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'berserker';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BERSERKER',
     max: 2,
-    theme: THEME.rage,
+    theme: 0x8b0000,
     // Deliberately no numbers: the shape of the deal is the whole pick, and a
     // percentage that only pays at an HP the player is trying not to be at
     // told them less than the sentence does.

@@ -20,10 +20,10 @@ import { definePassiveItem } from '../shared.js';
 // untouchable can have it, and they will not kill anything while they are.
 export const id = 'flowReload';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'FLOW RELOAD',
     max: 1,
-    theme: THEME.flowReload,
+    theme: 0x2bb3c9,
     effects: [['EVERY RELOAD:', NOTE], ['1s INVULNERABLE', GOOD]],
     apply: (mods, n) => { mods.flowReload = 1 * n; },
 }));

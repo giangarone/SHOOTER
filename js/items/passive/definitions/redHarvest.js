@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // landing nine pellets on one chest is one crit and one coin, not nine.
 export const id = 'redHarvest';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'RED HARVEST',
     max: 1,
-    theme: THEME.redHarvest,
+    theme: 0xe0245e,
     effects: [['CRITS HEAL 1 HP', GOOD], ['50% OF THE TIME', NOTE]],
     apply: (mods, n) => { mods.critHealChance = 0.5 * n; mods.critHeal = 1; },
 }));

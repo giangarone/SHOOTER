@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // that is running out of both at once.
 export const id = 'bruiseRounds';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BRUISE ROUNDS',
     max: 1,
-    theme: THEME.bruiseRounds,
+    theme: 0xff8a65,
     effects: [['TAKING A HIT REFILLS', GOOD], ['YOUR MAGAZINE', NOTE]],
     apply: (mods, n) => { mods.bruise = n; },
 }));

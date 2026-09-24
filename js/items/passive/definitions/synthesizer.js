@@ -22,10 +22,10 @@ import { definePassiveItem } from '../shared.js';
 // pick having done nothing at all.
 export const id = 'synthesizer';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: 'SYNTHESIZER',
     max: 1,
-    theme: THEME.synthesizer,
+    theme: 0x8f6fd8,
     effects: [
       ['A NEW RANDOM PASSIVE', GOOD],
       ['ITEM EFFECT EACH WAVE', NOTE],

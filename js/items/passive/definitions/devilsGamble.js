@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'devilsGamble';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: "DEVIL'S GAMBLE",
     max: 1,
-    theme: THEME.gamble,
+    theme: 0xff5252,
     // Rolled once per SHOT, not per pellet: a shotgun whose nine pellets each
     // rolled their own coin would average out to nothing, and the whole point
     // is that a shot is either a windfall or a waste.

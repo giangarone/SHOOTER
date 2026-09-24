@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'sprayEconomy';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "SPRAY ECONOMY",
     max: 1,
-    theme: THEME.sprayEconomy,
+    theme: 0x229b91,
     effects: [['+5% PER CONSECUTIVE MISS', GOOD], ['RESETS ON HIT', NOTE]],
     apply: (mods, n) => { mods.sprayEconomy = 0.05 * n; },
 }));

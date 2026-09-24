@@ -2,10 +2,12 @@ import { defineActiveItem } from '../shared.js';
 
 export const id = 'itemPhlebotomy';
 
-export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
+const ITEM_THEME = 0xff2d6f;
+
+export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb, Bee, Meteor, Lob, Monkey, MONKEY_FUSE, BOUND, _v, _dir, nearestEnemies, facing, heal, pay, GOOD, NOTE, PAY_TO_WIN_COST, PARACHUTE_COST }) => ({
     name: 'PHLEBOTOMY',
     charge: 20,
-    theme: THEME.blood,
+    theme: ITEM_THEME,
     // WHAT IS MISSING OFF YOUR BAR, DEALT TO EVERY BODY IN THE ROOM. At full
     // health it is a dead press and at four health it is the largest number in
     // the game applied to everything at once, which makes it the only item in
@@ -28,7 +30,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
       const dmg = Math.max(0, p.maxHealth - p.health);
       if (dmg <= 0) {
         game.sfx.denied();
-        game.effects.shockwave(p.pos, THEME.blood, 3, 0.3);
+        game.effects.shockwave(p.pos, ITEM_THEME, 3, 0.3);
         return;
       }
       // A copy of the list, for PAY TO WIN's reason: a splitter's children are
@@ -39,7 +41,7 @@ export default defineActiveItem(({ THREE, THEME, Turret, Mine, Bomb, FireWall, H
         game.effects.impact(e.pos, 0xff2d6f, 8, 4, 2.5, 0.4);
         game.hurtEnemy(e, dmg);
       }
-      game.effects.shockwave(p.pos, THEME.blood, 30, 0.9);
+      game.effects.shockwave(p.pos, ITEM_THEME, 30, 0.9);
       game.effects.addShake(0.3);
       game.sfx.itemPact();
     },

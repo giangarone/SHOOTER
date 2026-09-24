@@ -10,10 +10,10 @@ import { definePassiveItem } from '../shared.js';
 // job.
 export const id = 'raffleTicket';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'RAFFLE TICKET',
     max: 1,
-    theme: THEME.raffleTicket,
+    theme: 0xc5a3ff,
     effects: [['EVERY BOX ROLL BOUGHT:', NOTE], ['+5% ITEM CHARGE RATE', GOOD], ['FOREVER', NOTE]],
     apply: (mods, n) => { mods.raffle = 0.05 * n; },
 }));

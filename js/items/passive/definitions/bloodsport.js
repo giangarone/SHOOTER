@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'bloodsport';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'BLOODSPORT',
     max: 2,
-    theme: THEME.bloodsport,
+    theme: 0xc62828,
     // THE MELEE ALREADY PAYS DOUBLE CREDITS and has always been the most
     // dangerous way to finish anything - you have to be inside its reach to
     // use it. This is the second half of that bargain: a swing that connects

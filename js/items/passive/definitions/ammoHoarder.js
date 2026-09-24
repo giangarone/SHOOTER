@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'ammoHoarder';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'AMMO HOARDER',
     max: 1,
-    theme: THEME.hoard,
+    theme: 0xffea00,
     // It is the only passive item that touches reserve CAPACITY rather than
     // reserve income, which is what makes it worth a slot
     // next to Scavenger and Ammo Fabricator instead of competing with them.

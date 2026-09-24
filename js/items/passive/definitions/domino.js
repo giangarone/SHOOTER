@@ -5,10 +5,10 @@ import { definePassiveItem } from '../shared.js';
 // only kind of scaling the crit family does not already have.
 export const id = 'domino';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DOMINO',
     max: 1,
-    theme: THEME.domino,
+    theme: 0xc2185b,
     effects: [['AFTER A CRIT: NEXT', NOTE], ['SHOT HAS +30% CRIT', GOOD]],
     apply: (mods, n) => { mods.domino = 0.3 * n; },
 }));

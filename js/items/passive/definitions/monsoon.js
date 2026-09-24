@@ -12,10 +12,10 @@ import { definePassiveItem } from '../shared.js';
 // the second one within five seconds is the first stack.
 export const id = 'monsoon';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MONSOON',
     max: 1,
-    theme: THEME.monsoon,
+    theme: 0x00796b,
     effects: [['KILLS 5s APART STACK', GOOD], ['+3% FIRE RATE, MAX 10', NOTE]],
     apply: (mods, n) => {
       mods.monsoon = 0.03 * n;

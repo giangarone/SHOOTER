@@ -9,10 +9,10 @@ import { definePassiveItem } from '../shared.js';
 // a discount they were saving up for anyway.
 export const id = 'highStakes';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HIGH STAKES',
     max: 1,
-    theme: THEME.highStakes,
+    theme: 0xff1493,
     effects: [['REROLLS & BOX ROLLS', GOOD], ['ARE FREE', GOOD], ['10% PER ROLL: YOU', BAD], ['DROP TO 1 HP & 1 AMMO', BAD]],
     apply: (mods, n) => { mods.highStakes = n; mods.stakesOdds = 0.1; },
 }));

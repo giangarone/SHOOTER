@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'cheekweld';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'CHEEKWELD',
     max: 1,
-    theme: THEME.cheekweld,
+    theme: 0x00acc1,
     // ARMOUR ON A POSTURE THAT USED TO BE ALL COST. Aiming already trades
     // movement for accuracy, which in a game about crowds is a trade the
     // player mostly declines - so the sights are the one thing in the control

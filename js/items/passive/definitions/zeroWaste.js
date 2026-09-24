@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'zeroWaste';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "ZERO WASTE",
     max: 1,
-    theme: THEME.zeroWaste,
+    theme: 0x80cbc4,
     effects: [['EXPIRING HEALTH + AMMO', NOTE], ['PAY YOU HALF', GOOD]],
     apply: (mods, n) => { mods.zeroWaste = 0.5 * n; },
 }));

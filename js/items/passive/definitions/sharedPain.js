@@ -6,10 +6,10 @@ import { definePassiveItem } from '../shared.js';
 // Every source, so poison, turrets, blasts and lightning are all in it.
 export const id = 'sharedPain';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SHARED PAIN',
     max: 1,
-    theme: THEME.sharedPain,
+    theme: 0x7e57c2,
     effects: [['EVERY HIT SPLITS ITS', GOOD], ['DAMAGE EVENLY ACROSS', NOTE], ['ALL ENEMIES', NOTE]],
     apply: (mods, n) => { mods.sharedPain = n; },
 }));

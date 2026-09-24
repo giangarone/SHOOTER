@@ -2,10 +2,10 @@ import { definePassiveItem } from '../shared.js';
 
 export const id = 'preservative';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE }) => ({
     name: "PRESERVATIVE",
     max: 1,
-    theme: THEME.preservative,
+    theme: 0x88c957,
     effects: [['ORBS + PICKUPS', NOTE], ['LAST 4x LONGER', GOOD]],
     apply: (mods, n) => { mods.lootDespawn *= 4; },
 }));

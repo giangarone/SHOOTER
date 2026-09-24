@@ -15,10 +15,10 @@ import { definePassiveItem } from '../shared.js';
 // The reserve's own ceiling is the cap; there is no second one.
 export const id = 'movingDay';
 
-export default definePassiveItem(({ THEME, GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
+export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'MOVING DAY',
     max: 1,
-    theme: THEME.movingDay,
+    theme: 0xc9a227,
     effects: [['AT WAVE END:', NOTE], ['FLOOR ORBS BECOME', NOTE], ['5 AMMO EACH', GOOD]],
     apply: (mods, n) => { mods.movingDay = 5 * n; },
 }));
