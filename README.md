@@ -2783,11 +2783,12 @@ marksmanship test nobody asked for, and a totem that is half inert reads as a
 bug. The floating label panel above is deliberately outside the box: it hangs
 wide and high over the arena, and a stray shot up there stays a miss.
 
-Each offer's icon is a 24x24 pixel-art plate from `js/pixelicons.js`, looked up
-by the passive item's own id - entries do not name an icon, so two passive items
-cannot end up wearing one shape however the pool is edited. The art is flat and
-2D; the object is not, carrying three pixels of extrusion behind the face so it
-reads as a thick cutout turning in the light rather than a sticker. Each plate
+Each item's icon is a 24x24 pixel-art plate exported beside its definition and
+rendered by `js/pixelicons.js`. It is looked up by the item's own id - entries
+do not name an icon, so two items cannot end up wearing one shape however the
+pool is edited. The art is flat and 2D; the object carries three pixels of
+extrusion behind the face, so it reads as a thick cutout turning in the light
+rather than a sticker. Each plate
 is one merged, vertex-coloured, unlit mesh with the interior faces omitted, so
 it is a single draw call and takes no light - the shading is painted into the
 tones. Four of the five tones are derived from the offer's `theme`, so one
@@ -2795,17 +2796,16 @@ drawing works for any colour. A totem builds an icon the first time it shows
 one and keeps it hidden afterwards, which bounds the count by the size of the
 passive item pool rather than by how many waves have passed.
 
-The legacy drawings live in `tools/pixelart/`: shapes in `icons.py`, a shared
-lighting pass in `canvas.py`, and `build.py` to regenerate the table. A newly
-added item instead exports its finished 24-row `icon` beside its definition,
-so item branches do not rewrite one generated catalogue. `js/pixelicons.js`
-combines both sources at load time, with an item-local drawing taking
-precedence. The lighting pass is the point - it puts the shadow on the lower
-right and the highlight on the upper left of every form in the catalogue, so
-sixty-five icons look like one set instead of sixty-five decisions about where
-the light is. `pixel-icon-sheet.html` shows all of them at once, which is the
-only way to tell whether two read alike; `pixel-icon-viewer.html` puts any one
-of them in a mock column.
+Every item exports its finished 24-row `icon` beside its behavior. The 16
+non-item drawings for stations, pickups, the weapon and statuses live in
+`tools/pixelart/`: shapes in `icons.py`, a shared lighting pass in `canvas.py`,
+and `build.py` to regenerate their small table in `js/pixelicons.js`. The
+renderer combines these sources and rejects missing, malformed or duplicate
+drawings at boot. The lighting pass puts the shadow on the lower right and the
+highlight on the upper left of each generated form. Item drawings use the same
+five-tone palette and generated outline. `pixel-icon-sheet.html` shows all of
+them at once, which is the only way to tell whether two read alike;
+`pixel-icon-viewer.html` puts any one of them in a mock column.
 
 The icon **orbits** its pillar to whatever side the player is on and turns to
 face them, so it is legible from every angle. This is also why the art can be
@@ -2986,7 +2986,7 @@ js/enemies/         the enemy roster, one file per theme
   strata.js  swamp.js  fungal.js  insects.js  coral.js  jungle.js  tempest.js  brine.js  plague.js  solar.js  hive.js
   cathedral.js  bone.js  obsidian.js  sapphire.js
 js/nav.js           navigation grid + flow field enemies steer by
-js/pixelicons.js    24x24 pixel-art totem icons (generated - see tools/pixelart)
+js/pixelicons.js    24x24 icon renderer and generated non-item art
 js/effects.js       particle pool, tracers, muzzle flash, shake
 js/ui.js            HUD DOM bindings
 js/sfx.js           WebAudio synth sounds
@@ -3141,7 +3141,7 @@ test/sprint.mjs     the second gear and the stamina that pays for it
 pixel-icon-sheet.html    every icon at once, at full size and at arena range
 pixel-icon-viewer.html   one icon at a time, in a mock column
 enemy-viewer.html        the enemy roster as flat silhouettes
-tools/pixelart/          the icon drawings + the shared lighting pass
+tools/pixelart/          non-item drawings + their shared lighting pass
 tools/analyze_beats.py   offline beat analysis -> soundtrack.beats.json
 tools/verify_beats.py    renders an excerpt with a click on every mapped beat
 assets/audio/soundtrack.beats.json   the beat map (generated, committed)

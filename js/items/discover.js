@@ -71,20 +71,17 @@ export async function discoverItems(kind, catalogueUrl, options = {}) {
           && (definition.onTake === undefined || typeof definition.onTake === 'function');
     if (!valid) throw new Error(`invalid ${kind} item definition: ${module.id}`);
     catalogue[module.id] = Object.freeze(definition);
-    // A new item may carry its own 24x24 drawing. Existing drawings remain in
-    // the generated legacy catalogue until they are next touched; new work
-    // never has to edit that shared file just to add an offer.
-    if (module.icon !== undefined) {
-      if (!Array.isArray(module.icon) || module.icon.length !== 24
-          || module.icon.some((row) => typeof row !== 'string' || row.length !== 24
-            || /[^.01234]/.test(row))) {
-        throw new Error(`${kind} item ${module.id} has a malformed icon`);
-      }
-      icons[module.id] = Object.freeze(module.icon.slice());
-    }
-    if (schema === 'donation' && module.icon === undefined) {
+    // Every item owns its drawing. A missing icon must fail at discovery,
+    // before that item is rolled and a player reaches its offer.
+    if (module.icon === undefined) {
       throw new Error(`${kind} item ${module.id} has no icon`);
     }
+    if (!Array.isArray(module.icon) || module.icon.length !== 24
+        || module.icon.some((row) => typeof row !== 'string' || row.length !== 24
+          || /[^.01234]/.test(row))) {
+      throw new Error(`${kind} item ${module.id} has a malformed icon`);
+    }
+    icons[module.id] = Object.freeze(module.icon.slice());
   }
   return Object.freeze({
     items: Object.freeze(catalogue),

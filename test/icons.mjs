@@ -1,27 +1,22 @@
-// Every offer has a drawing, every drawing has an offer, and every drawing is
-// a well-formed 24x24.
+// Every item owns a drawing, every offer has one, and every drawing is a
+// well-formed 24x24.
 //
-// The old 3D catalogue needed this test to police "one shape per offer": icons
-// were named by a separate `icon:` field, so two passive items could quietly point
-// at the same shape, and a typo fell back to a generic shard without an error.
-// Neither is possible now - the catalogue is keyed by passive item id, so a
-// collision cannot be expressed and a typo is a missing key rather than a
-// silent substitution - which leaves three things worth checking:
+// Items carry their art beside their behavior. This checks that the item
+// catalogues still require it and that the remaining non-item drawings have a
+// user, so an offer cannot silently fall back to the wrong shape:
 //
-//   1. A passive item with NO drawing. buildPixelIcon() throws on an unknown key,
-//      so this is a crash the first time that passive item is rolled, in a run the
-//      player has already spent twenty minutes on.
-//   2. A drawing nothing uses. Harmless at runtime, but it means a passive item
-//      was renamed or removed and its art was left behind - so the next person
-//      to look at the catalogue is reading a shape for something that is gone.
-//   3. A malformed map. The rows are generated, but they are generated into a
-//      hand-editable file, and resolveIcon() pads and truncates silently.
+//   1. An item with NO drawing. Discovery now rejects this at boot, before a
+//      player can roll the item twenty minutes into a run.
+//   2. A drawing nothing uses. Harmless at runtime, but it means a non-item
+//      owner was renamed or removed and its art was left behind.
+//   3. A malformed map. Item drawings are hand-editable beside their definitions;
+//      the generated non-item drawings have to obey the same grid contract.
 //
 // Pure data - no browser, no renderer - so it runs in milliseconds and can be
 // the thing that fails first.
-import { PASSIVE_ITEMS } from '../js/items/passive/index.js';
-import { ACTIVE_ITEMS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items/active/index.js';
-import { DONATION_ITEMS, donationItemKey } from '../js/items/donation/index.js';
+import { PASSIVE_ITEMS, PASSIVE_ITEM_ICONS } from '../js/items/passive/index.js';
+import { ACTIVE_ITEMS, ACTIVE_ITEM_ICONS, itemCells, ITEM_BAR_MAX_CELLS } from '../js/items/active/index.js';
+import { DONATION_ITEMS, DONATION_ITEM_ICONS, donationItemKey } from '../js/items/donation/index.js';
 import { WEAPONS } from '../js/weapons.js';
 import { POWERUP_TYPES, AMMO_PICKUP } from '../js/powerups.js';
 import { PLAYER_STATUS } from '../js/status.js';
@@ -51,6 +46,15 @@ const ok = (name, cond, extra = '') => {
 
 const drawn = new Set(PIXEL_ICON_KEYS);
 const users = {};
+const itemKeys = [
+  ...Object.keys(PASSIVE_ITEMS),
+  ...Object.keys(ACTIVE_ITEMS),
+  ...Object.entries(DONATION_ITEMS).flatMap(([kind, pool]) =>
+    Object.keys(pool).map((id) => donationItemKey(kind, id))),
+];
+const ownedIcons = [PASSIVE_ITEM_ICONS, ACTIVE_ITEM_ICONS, DONATION_ITEM_ICONS];
+const missingLocal = itemKeys.filter((key) => !ownedIcons.some((icons) => Object.hasOwn(icons, key)));
+ok('every item owns its drawing', missingLocal.length === 0, missingLocal.join(', '));
 for (const id of Object.keys(PASSIVE_ITEMS)) users[id] = PASSIVE_ITEMS[id].name;
 for (const [name, icon] of Object.entries(STATION_ICONS)) users[icon] = name;
 for (const [key, def] of Object.entries(POWERUP_TYPES)) users[def.icon] = 'PICKUP ' + key;
@@ -82,8 +86,8 @@ ok(
 const orphans = [...drawn].filter((k) => !users[k]);
 ok('no drawing is left over', orphans.length === 0, orphans.join(', '));
 
-// resolveIcon() pads short rows and truncates long ones without complaining,
-// which would turn a mangled map into a subtly wrong icon rather than an error.
+// resolveIcon() now reads validated rows without padding or truncation, so a
+// malformed source fails at boot instead of quietly changing the drawing.
 const TONES = new Set(['.', '0', '1', '2', '3', '4']);
 const malformed = [];
 for (const k of drawn) {

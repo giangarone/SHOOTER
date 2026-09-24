@@ -151,9 +151,9 @@ There is no list to update.
   you take a handle, release it on every path out, including the one where the
   thing dies early. Several suites assert pools drain precisely because that
   path is easy to miss.
-- `js/pixelicons.js` is GENERATED (see `tools/pixelart`) and holds the legacy
-  icon catalogue plus non-item icons. A new item should export its own 24x24
-  `icon` array from its definition instead of editing that shared catalogue.
+- `js/pixelicons.js` renders every icon and holds a small GENERATED table of
+  non-item drawings (see `tools/pixelart`). Every item exports its own 24x24
+  `icon` array from its definition; never add an item to that shared table.
   Every offer still needs a drawing and every drawing an offer —
   `npm run test:icons` is the check, and it runs in milliseconds.
 
