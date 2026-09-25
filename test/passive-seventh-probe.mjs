@@ -94,9 +94,15 @@ export async function probeSeventh(page, id) {
           break;
         case 'killchain':
           p.invulnEnd = g.time;
-          for (let i = 0; i < 5; i++) p.onKill(g.time);
+          p.onKill(g.time);
+          detail.first = p.invulnEnd - g.time;
+          for (let i = 0; i < 4; i++) p.onKill(g.time);
           detail.window = p.invulnEnd - g.time;
-          result.ok = Math.abs(detail.window - 5) < 1e-9;
+          p.onKill(g.time);
+          detail.afterCap = p.invulnEnd - g.time;
+          result.ok = Math.abs(detail.first - 0.2) < 1e-9
+            && Math.abs(detail.window - 1) < 1e-9
+            && Math.abs(detail.afterCap - 1) < 1e-9;
           break;
         case 'zeroWaste': {
           // Both directions of the redesign. A crate walked over pays only

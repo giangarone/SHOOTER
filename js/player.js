@@ -2112,12 +2112,12 @@ export class Player {
       this.shieldEnd = 0;
       this.soulFx = true;
     }
-    // KILLCHAIN extends what remains rather than opening a fresh one-second
-    // window. Five quick kills therefore bank five seconds; a sixth can only
-    // replace time that has already elapsed, never push the ceiling outward.
+    // KILLCHAIN extends what remains rather than opening a fresh window. Five
+    // quick kills therefore bank one second; a sixth can only replace time that
+    // has already elapsed, never push the ceiling outward.
     if (this.mods.killchain > 0) {
       this.invulnEnd = Math.min(
-        time + 5, Math.max(time, this.invulnEnd) + this.mods.killchain
+        time + 1, Math.max(time, this.invulnEnd) + this.mods.killchain
       );
     }
     this.bumpCarnage();

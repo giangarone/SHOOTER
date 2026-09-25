@@ -2292,7 +2292,7 @@ position and wave counter.
 | LUCKY CORPSE | One random enemy each wave drops 3 health and 3 ammo pickups |
 | DEATHWISH | +40% damage; taking it leaves you at 5 HP |
 | GRACE PERIOD | Taking a hit grants 1s of invincibility |
-| KILLCHAIN | A kill adds 1s of invincibility, up to 5s banked |
+| KILLCHAIN | A kill adds 0.2s of invincibility, up to 1s banked |
 | ZERO WASTE | A health or ammo pickup about to despawn grants half of itself to you instead of vanishing |
 | BLOOD TAX | +20% damage, -5 max HP |
 | PRESSURE COOKER | +20% damage per enemy within 5m |
@@ -2318,8 +2318,8 @@ position and wave counter.
 LUCKY CORPSE marks the wave's body when it is created. Boss waves mark the
 boss, and a Schism that divides carries the mark into one random child rather
 than paying for a split that was not a kill. KILLCHAIN extends the time still
-left instead of reopening a fresh one-second window, so five fast kills really
-do bank five seconds and never more.
+left instead of reopening a fresh window, so each kill adds 0.2s and rapid kills
+can bank up to 1s.
 
 GHOST PLATE has its own shield ledger. That lets it reform without erasing a
 shield pickup, while the HUD draws both as one readable total. ZERO WASTE pays
