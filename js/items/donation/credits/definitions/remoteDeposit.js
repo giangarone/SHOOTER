@@ -3,7 +3,7 @@ import { defineDonationItem } from '../../shared.js';
 export const id = 'remoteDeposit';
 export default defineDonationItem(({ GOOD, NOTE }) => ({
   name: 'REMOTE DEPOSIT', theme: 0x35b6ff,
-  effects: [['BANK 50% OF DROPPED CREDITS', GOOD], ['THE OTHER HALF STAYS PUT', NOTE]],
+  effects: [['AUTO-COLLECT HALF OF CREDITS', GOOD], ['REST STAYS ON THE FLOOR', NOTE]],
   apply: (mods) => { mods.donationCreditSiphon = 0.5; },
 }));
 

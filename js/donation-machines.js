@@ -18,12 +18,12 @@ export const DONATION_BANK_Z = BOUND - 1.25;
 
 export const DONATION_MACHINE_CONFIG = Object.freeze({
   ammo: Object.freeze({
-    title: 'AMMO DONATION', color: 0xffd600, cost: 30,
-    costLabel: '30 RESERVE ROUNDS', shortCost: '30 AMMO',
+    title: 'AMMO DONATION', color: 0xffd600, cost: 60,
+    costLabel: '60 RESERVE ROUNDS', shortCost: '60 AMMO',
   }),
   health: Object.freeze({
-    title: 'HEALTH DONATION', color: 0xff2d6f, cost: 10,
-    costLabel: '10 HEALTH', shortCost: '10 HP',
+    title: 'HEALTH DONATION', color: 0xff2d6f, cost: 20,
+    costLabel: '20 HEALTH', shortCost: '20 HP',
   }),
   credits: Object.freeze({
     title: 'CREDITS DONATION', color: 0x00e676, cost: 1000,

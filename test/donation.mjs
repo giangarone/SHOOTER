@@ -76,9 +76,9 @@ try {
       machine('ammo').config.color === 0xffd600
         && machine('health').config.color === 0xff2d6f
         && machine('credits').config.color === 0x00e676);
-    t('machine costs are fixed at 30, 10 and 1000',
-      machine('ammo').config.cost === 30
-        && machine('health').config.cost === 10
+    t('machine costs are fixed at 60, 20 and 1000',
+      machine('ammo').config.cost === 60
+        && machine('health').config.cost === 20
         && machine('credits').config.cost === 1000);
     t('the cabinets occupy three distinct positions',
       new Set(area.machines.map((m) => `${m.pos.x},${m.pos.z}`)).size === 3);
@@ -107,8 +107,8 @@ try {
     const keyboardPrompts = area.machines.map((m) => g._usePrompt({ kind: 'donation', target: m })[0]);
     t('keyboard prompts name Use and every fixed cost',
       keyboardPrompts.every((text) => text.includes(g.keys.label('use')))
-        && keyboardPrompts[0].includes('30 AMMO')
-        && keyboardPrompts[1].includes('10 HP')
+        && keyboardPrompts[0].includes('60 AMMO')
+        && keyboardPrompts[1].includes('20 HP')
         && keyboardPrompts[2].includes('$1,000'), keyboardPrompts.join(' | '));
     t('donation prompts never advertise shooting',
       keyboardPrompts.every((text) => !text.includes('SHOOT')), keyboardPrompts.join(' | '));
@@ -134,22 +134,22 @@ try {
     // ---- exact refusal thresholds ---------------------------------------
     reset();
     const ammo = machine('ammo');
-    p.reserveAmmo = 29;
+    p.reserveAmmo = 59;
     const ammoLow = g._useDonationMachine(ammo);
-    p.reserveAmmo = 30;
+    p.reserveAmmo = 60;
     const ammoPaid = g._useDonationMachine(ammo);
-    t('ammo refuses below 30 reserve rounds without charging',
+    t('ammo refuses below 60 reserve rounds without charging',
       !ammoLow && p.donationProgress.ammo === 1, `reserve=${p.reserveAmmo}`);
-    t('ammo pays exactly 30 reserve rounds', ammoPaid && p.reserveAmmo === 0);
+    t('ammo pays exactly 60 reserve rounds', ammoPaid && p.reserveAmmo === 0);
 
     const health = machine('health');
-    p.health = 10;
+    p.health = 20;
     p.shield = 40;
     const damageBefore = g.waveDamageTaken;
     const healthLow = g._useDonationMachine(health);
-    p.health = 11;
+    p.health = 21;
     const healthPaid = g._useDonationMachine(health);
-    t('health requires at least 11 HP', !healthLow && healthPaid && p.health === 1);
+    t('health requires at least 21 HP', !healthLow && healthPaid && p.health === 1);
     t('health donation bypasses shields and damage reactions',
       p.shield === 40 && g.waveDamageTaken === damageBefore,
       `shield=${p.shield} damage=${g.waveDamageTaken - damageBefore}`);
@@ -172,7 +172,6 @@ try {
 
     // ---- completion, pickup, tiers and non-duplicates -------------------
     reset();
-    const rateBeforeReward = p.mods.fireRate;
     p.reserveAmmo = 10000;
     const random = Math.random;
     Math.random = () => 0;
@@ -180,7 +179,7 @@ try {
     Math.random = random;
     t('five donations complete the first tier',
       p.donationTiers.ammo === 1 && p.donationProgress.ammo === 0
-        && ammo.completedThisShop && ammo.pendingId === 'clockworkSear'
+        && ammo.completedThisShop && ammo.pendingId === 'ammoAlchemist'
         && own('ammo').length === 0,
       `tiers=${p.donationTiers.ammo} pending=${ammo.pendingId}`);
     t('the completed meter is full as the cabinet starts sinking',
@@ -211,24 +210,24 @@ try {
     area.update(30, g.time + 30, p.pos, p);
     t('the cabinet sinks but an unclaimed reward remains indefinitely',
       ammo.state === 'hidden' && !ammo.group.visible
-        && ammo.pendingId === 'clockworkSear' && ammo.displayGroup.visible
-        && ammo.icons.clockworkSear.visible && own('ammo').length === 0);
+        && ammo.pendingId === 'ammoAlchemist' && ammo.displayGroup.visible
+        && ammo.icons.ammoAlchemist.visible && own('ammo').length === 0);
     const pickupPrompt = g._usePrompt({ kind: 'donation', target: ammo })[0];
     t('the floating reward asks for a second Use press',
       pickupPrompt.includes(g.keys.label('use'))
-        && pickupPrompt.includes('TAKE') && pickupPrompt.includes('CLOCKWORK SEAR'),
+        && pickupPrompt.includes('TAKE') && pickupPrompt.includes('AMMO ALCHEMIST'),
       pickupPrompt);
 
     p.pos.copy(ammo.pos);
     g.tryUse();
     t('the second Use press grants and removes the floating reward',
-      !!p.donationItems['donation/ammo/clockworkSear']
+      !!p.donationItems['donation/ammo/ammoAlchemist']
         && !ammo.pendingId && !ammo.displayGroup.visible);
     t('the picked-up reward is replayed into modifiers',
-      p.mods.fireRate === rateBeforeReward * 1.2,
-      `before=${rateBeforeReward} donation=${p.mods.fireRate}`);
+      p.mods.donationAlchemist === 8,
+      `donationAlchemist=${p.mods.donationAlchemist}`);
     t('the build sheet includes picked-up donation rewards',
-      g._statPassives().some((row) => row.id === 'donation/ammo/clockworkSear'));
+      g._statPassives().some((row) => row.id === 'donation/ammo/ammoAlchemist'));
     t('pickup does not re-enable the completed cabinet',
       ammo.state === 'hidden' && ammo.completedThisShop);
 
@@ -284,8 +283,10 @@ try {
     p.donationTiers.health = 0;
     p.rebuildMods();
     startShop();
-    p.health = p.maxHealth;
-    for (let i = 0; i < 5; i++) g._useDonationMachine(health);
+    for (let i = 0; i < 5; i++) {
+      p.health = Math.max(p.maxHealth, 100);
+      g._useDonationMachine(health);
+    }
     area.update(30, g.time + 60, p.pos, p);
     const declinedId = health.pendingId;
     t('an unclaimed reward never auto-grants or times out',
@@ -296,6 +297,8 @@ try {
 
     // The same non-duplicate ladder is shared as machinery, not ownership:
     // exhaust the other two and prove each one fills only its own namespace.
+    // Health pays from the bar, so the bar is refilled around EACH donation -
+    // longer ladders outrun any single shop's worth of health.
     const exhaust = (kind) => {
       const m = machine(kind);
       for (const key of own(kind)) delete p.donationItems[key];
@@ -304,10 +307,12 @@ try {
       const count = Object.keys(g.__donationItemsForTest[kind]).length;
       for (let tier = 0; tier < count; tier++) {
         startShop();
-        if (kind === 'health') p.health = Math.max(p.maxHealth, 100);
-        else g.credits = 100000;
         const required = 5 + tier;
-        for (let i = 0; i < required; i++) g._useDonationMachine(m);
+        for (let i = 0; i < required; i++) {
+          if (kind === 'health') p.health = Math.max(p.maxHealth, 100);
+          else g.credits = 100000;
+          g._useDonationMachine(m);
+        }
         g._takeDonationReward(m);
       }
     };
@@ -315,9 +320,11 @@ try {
     exhaust('health');
     exhaust('credits');
     Math.random = random;
+    const healthPool = Object.keys(g.__donationItemsForTest.health).length;
+    const creditsPool = Object.keys(g.__donationItemsForTest.credits).length;
     t('health and credit pools draw every reward without duplicates',
-      own('health').length === 3 && new Set(own('health')).size === 3
-        && own('credits').length === 2 && new Set(own('credits')).size === 2,
+      own('health').length === healthPool && new Set(own('health')).size === healthPool
+        && own('credits').length === creditsPool && new Set(own('credits')).size === creditsPool,
       `health=${own('health').join(',')} credits=${own('credits').join(',')}`);
 
     // Same filename in another pool would still be a different compound key;
@@ -418,6 +425,267 @@ try {
       g.credits === 50 && floorShare === 50, `bank=${g.credits} return=${floorShare}`);
     t('REMOTE DEPOSIT leaves the other half as ordinary floor credits',
       Math.abs(floorValue - 50) < 1e-4, `floor=${floorValue}`);
+
+    // ---- the second generation's twenty-one mechanics -------------------
+    const V = p.pos.constructor;
+    const fakeBody = () => ({
+      wardT: 0, hp: 100, maxHp: 100, dead: false, boss: false, radius: 0.4,
+      pos: new V(0, 0, -3), everHit: false, hitTally: 0, markTally: 0, marked: false,
+      carapace: 0, buffT: 0, freezeVuln: 1, type: 'chaser',
+      status: { freeze: 0, burn: 0, poison: 0, slow: 0, fear: 0 },
+      takeDamage() {}, applyStatus(status, duration, power) { this.applied = { status, duration, power }; },
+    });
+
+    // AMMO - SCRAP METAL: a partial reload seats full and converts the
+    // leftovers one for one; the fresh magazine is billed in FULL.
+    reset();
+    p.takeDonationItem('ammo', 'scrapMetal', g);
+    p.reserveAmmo = 300; p.reloading = 0; p.mag = 7;
+    const magSizeWas = p.magSize;
+    p.startReload();
+    p.update(p.reloadTime + 0.05, neutral, g.arena.obstacles, (g.time || 1) + 10, true);
+    t('SCRAP METAL converts leftover rounds into shield points',
+      p.shield === 7 && p.magOnReload === 7, `shield=${p.shield}`);
+    t('SCRAP METAL bills the fresh magazine in full',
+      p.mag === magSizeWas && p.reserveAmmo === 300 - magSizeWas && p.scrapFx,
+      `mag=${p.mag} reserve=${p.reserveAmmo}`);
+
+    // CHAIN LETTER: builds per hit to its 40% cap, broken by one miss.
+    reset();
+    p.takeDonationItem('ammo', 'chainLetter', g);
+    const chainBase = p.effectiveFireRate;
+    p.bumpChain(true); p.bumpChain(true);
+    const afterTwo = p.effectiveFireRate / chainBase;
+    for (let i = 0; i < 20; i++) p.bumpChain(true);
+    t('CHAIN LETTER climbs 4% per connected shot',
+      Math.abs(afterTwo - 1.08) < 1e-9 && p.chainHits === 22,
+      `afterTwo=${afterTwo} hits=${p.chainHits}`);
+    t('CHAIN LETTER caps at +40% and a miss resets it',
+      p.effectiveFireRate / chainBase === 1.4 && (p.bumpChain(false), p.chainHits === 0),
+      `rate=${p.effectiveFireRate / chainBase}`);
+
+    // LIGHTER and SNAKE: a crit lands its status, an ordinary shot does not.
+    reset();
+    p.takeDonationItem('ammo', 'lighter', g);
+    let fb = fakeBody();
+    g._beginShot();
+    g._landShot(fb, fb.pos, new V(0, 0, -1), 0, 0, true);
+    const critApplied = { ...fb.applied };
+    fb = fakeBody();
+    g._beginShot();
+    g._landShot(fb, fb.pos, new V(0, 0, -1), 0, 0, false);
+    const flatApplied = fb.applied;
+    t('LIGHTER burns a critical hit for 3s',
+      critApplied.status === 'burn' && critApplied.duration === 3
+        && critApplied.power === p.fireTickDamage,
+      JSON.stringify(critApplied));
+    p.takeDonationItem('ammo', 'snake', g);
+    fb = fakeBody();
+    g._beginShot();
+    g._landShot(fb, fb.pos, new V(0, 0, -1), 5, 0, true);
+    t('SNAKE poisons the same critical hit for 4s',
+      fb.applied.status === 'poison' && fb.applied.duration === 4
+        && fb.applied.power === p.poisonTickDamage, JSON.stringify(fb.applied));
+    t('neither status lands off a non-critical hit', flatApplied === undefined,
+      JSON.stringify(flatApplied));
+
+    // LUCKY NUMBER: the seventh trigger pull crits whatever the die says and
+    // heals on landing; a miss spends the flag and pays nothing.
+    reset();
+    p.takeDonationItem('ammo', 'luckyNumber', g);
+    Math.random = () => 0.999;
+    const luckyRolls = [0, 0, 0, 0, 0, 0, 0].map(() => p.rollCrit());
+    const luckyArmed = luckyRolls.slice(0, 6).every((r) => r === false)
+      && luckyRolls[6] === true && p.luckyShot === true && p.luckyShots === 0;
+    p.health = 40;
+    g._critHeal(true);
+    const luckyLandedHp = p.health;
+    for (let i = 0; i < 7; i++) p.rollCrit();
+    g._critHeal(false);
+    const luckyMissedHp = p.health;
+    Math.random = random;
+    t('LUCKY NUMBER makes every seventh shot a guaranteed crit',
+      luckyArmed, JSON.stringify(luckyRolls));
+    t('LUCKY NUMBER heals 2 HP when its crit lands and not when it misses',
+      luckyLandedHp === 42 && luckyMissedHp === 42 && p.luckyShot === false,
+      `landed=${luckyLandedHp} missed=${luckyMissedHp}`);
+    // PAPER CROWN: full health adds its 40% to the crit die.
+    reset();
+    p.takeDonationItem('ammo', 'paperCrown', g);
+    p.health = p.maxHealth;
+    Math.random = () => 0.4;
+    const crownFull = p.rollCrit();
+    p.health = p.maxHealth - 40;
+    const crownHurt = p.rollCrit();
+    Math.random = random;
+    t('PAPER CROWN only rolls at full health',
+      crownFull === true && crownHurt === false, `${crownFull}/${crownHurt}`);
+
+    // HALF TRUTH: the second of two crits is the doubled one.
+    reset();
+    p.takeDonationItem('ammo', 'halfTruth', g);
+    const hitK = [];
+    for (let i = 0; i < 3; i++) {
+      fb = fakeBody();
+      g._beginShot();
+      g._resolveHit(fb, true);
+      hitK.push(g._hitMult(fb, true));
+    }
+    t('HALF TRUTH doubles every other critical hit',
+      hitK[0] === p.mods.critMult && hitK[1] === p.mods.critMult * 2
+        && hitK[2] === p.mods.critMult,
+      JSON.stringify(hitK));
+
+    // BAD OMEN: the thirteenth kill burns everything left standing.
+    reset();
+    p.takeDonationItem('ammo', 'badOmen', g);
+    g.enemies.length = 0;
+    const omenA = fakeBody(); const omenB = fakeBody();
+    g.enemies.push(omenA, omenB);
+    p.omenKills = 12;
+    g._badOmen();
+    t('BAD OMEN burns every standing enemy for 4s on the thirteenth kill',
+      p.omenKills === 0 && omenA.applied.status === 'burn'
+        && omenA.applied.duration === 4 && omenB.applied.status === 'burn',
+      JSON.stringify([omenA.applied, omenB.applied]));
+    g.enemies.length = 0;
+
+    // AMMO ALCHEMIST: a crate arms an eight-second element; shots carry it.
+    reset();
+    p.takeDonationItem('ammo', 'ammoAlchemist', g);
+    Math.random = () => 0;
+    g._armAlchemy();
+    Math.random = random;
+    const armedBurn = p.alchemistEl && p.alchemistEl.label === 'BURN'
+      && p.alchemistEnd === g.time + 8;
+    fb = fakeBody();
+    g._beginShot();
+    g._landShot(fb, fb.pos, new V(0, 0, -1), 0, 0);
+    t('AMMO ALCHEMIST arms a random 8s element off the ammo pickup',
+      armedBurn && fb.applied && fb.applied.status === 'burn'
+        && fb.applied.power === p.fireTickDamage,
+      `el=${p.alchemistEl && p.alchemistEl.label} end=${p.alchemistEnd - g.time}`);
+    p.alchemistEl = null; p.alchemistEnd = 0;
+
+    // HEALTH - CERAMIC SKIN.
+    reset();
+    const skinBase = p.maxHealth;
+    p.takeDonationItem('health', 'ceramicSkin', g);
+    t('CERAMIC SKIN adds exactly 40 max health', p.maxHealth === skinBase + 40,
+      `${skinBase} -> ${p.maxHealth}`);
+
+    // MED SCHOOL, ILL WILL, MALICE AFORETHOUGHT - flat modifiers.
+    p.takeDonationItem('health', 'medSchool', g);
+    const medCrit = p.mods.critChance - 0.05;
+    p.takeDonationItem('health', 'illWill', g);
+    const illDmg = p.mods.damage;
+    p.takeDonationItem('health', 'maliceAforethought', g);
+    t('MED SCHOOL adds exactly 30% crit chance',
+      Math.abs(medCrit - 0.3) < 1e-9, `crit=${p.mods.critChance}`);
+    t('ILL WILL grants 15% and MALICE AFORETHOUGHT 20% on top of it',
+      Math.abs(illDmg - 1.15) < 1e-9 && Math.abs(p.mods.damage - 1.38) < 1e-9,
+      `dmg=${p.mods.damage}`);
+
+    // DIRECT DEPOSIT: every fifth shot pays 1 HP.
+    reset();
+    p.takeDonationItem('health', 'directDeposit', g);
+    p.health = 50; p.shotTally = 0;
+    for (let i = 0; i < 4; i++) p._noteShot();
+    const beforeFifth = p.health;
+    p._noteShot();
+    t('DIRECT DEPOSIT heals 1 HP on every fifth shot',
+      beforeFifth === 50 && p.health === 51 && p.shotTally === 5,
+      `hp=${p.health} tally=${p.shotTally}`);
+
+    // GOLD STAR: ten clean kills per permanent step, capped, replayed by
+    // rebuildMods - and wiped by damage through _hurtPlayer's own ledger.
+    reset();
+    p.takeDonationItem('health', 'goldStar', g);
+    for (let i = 0; i < 10; i++) g._goldStarKill();
+    t('GOLD STAR banks a permanent +4% damage step per ten clean kills',
+      p.goldStars === 1 && p.goldKills === 0
+        && Math.abs(p.mods.damage - 1.04) < 1e-9,
+      `stars=${p.goldStars} dmg=${p.mods.damage}`);
+    for (let i = 0; i < 130; i++) g._goldStarKill();
+    t('GOLD STAR caps its ladder at the promised +40%',
+      p.goldStars === 10 && Math.abs(p.mods.damage - 1.4) < 1e-9,
+      `stars=${p.goldStars} dmg=${p.mods.damage}`);
+
+    // KARMA: a heal per donation, whatever the machine.
+    reset();
+    p.takeDonationItem('health', 'karma', g);
+    p.health = 40; g.credits = 2000;
+    g._useDonationMachine(machine('credits'));
+    t('KARMA heals 5 HP per donation made', p.health === 45 && g.credits === 1000,
+      `health=${p.health} credits=${g.credits}`);
+
+    // CREDITS - TITHING BLADE: a tenth of damage dealt, into the balance.
+    reset();
+    p.takeDonationItem('credits', 'tithingBlade', g);
+    g.credits = 0;
+    const titheTarget = new (g.__EnemyForTest)('chaser', new V(0, 0, -9), 1, 1, 1);
+    titheTarget.takeDamage(100);
+    const bankedTithe = g.credits;
+    titheTarget.dispose();
+    g.scene.remove(titheTarget.group);
+    t('TITHING BLADE converts 10% of damage dealt to credits instantly',
+      bankedTithe === 10, `credits=${bankedTithe}`);
+
+    // NEXT OF KIN: the drop table's luck multiplier.
+    p.takeDonationItem('credits', 'nextOfKin', g);
+    t('NEXT OF KIN raises every drop roll by 30%',
+      Math.abs(p.mods.dropLuck - 1.3) < 1e-9, `dropLuck=${p.mods.dropLuck}`);
+
+    // THE TAB: purchases reach into debt, down to a hard -$10,000.
+    p.reserveAmmo = 0; g.credits = 200;
+    const blockedWithoutTab = g._stationBlocked(g.totemArea.ammoStation);
+    p.takeDonationItem('credits', 'theTab', g);
+    g.credits = 200;
+    const beforeTab = g._stationBlocked(g.totemArea.ammoStation);
+    const ammoCost = g._ammoCost();
+    g._useStation(g.totemArea.ammoStation);
+    const spentIntoDebt = g.credits === 200 - ammoCost && p.reserveAmmo === 90 && ammoCost > 200;
+    g.credits = -9499;
+    const atFloorEdge = g._canAfford(500);
+    g.credits = -9501;
+    const pastFloorEdge = g._canAfford(500);
+    t('THE TAB lets a purchase run the balance negative',
+      blockedWithoutTab !== null && beforeTab === null && spentIntoDebt,
+      `blocked=${blockedWithoutTab} credits=${g.credits}`);
+    t('THE TAB refuses only past its -$10,000 floor',
+      atFloorEdge === true && pastFloorEdge === false,
+      `edge=${atFloorEdge} past=${pastFloorEdge}`);
+    t('THE TAB opens the credit-running machine on an empty wallet',
+      (g.credits = 0, g._donationBlocked(machine('credits')) === null));
+
+    // HOUSE MONEY: the first thirty seconds of a wave pay double.
+    reset();
+    p.takeDonationItem('credits', 'houseMoney', g);
+    p.flawlessStreak = 0; g.credits = 0;
+    g.waveState = 'active'; g._waveStartedAt = g.time;
+    let houseFloor = 0;
+    g.money.clear(); g._dropMoney(p.pos, 100);
+    for (let i = 0; i < g.money.count; i++) houseFloor += g.money.value[i];
+    g._waveStartedAt = g.time - 31;
+    let houseLate = 0;
+    g.money.clear(); g._dropMoney(p.pos, 100);
+    for (let i = 0; i < g.money.count; i++) houseLate += g.money.value[i];
+    g.waveState = 'intermission'; g._waveStartedAt = undefined;
+    t('HOUSE MONEY doubles payouts inside the first 30s of a wave only',
+      Math.abs(houseFloor - 200) < 1e-4 && Math.abs(houseLate - 100) < 1e-4,
+      `early=${houseFloor} late=${houseLate}`);
+    g.money.clear();
+
+    // WIDOW'S MITE: a shop-entry top-up, exactly to the line.
+    p.takeDonationItem('credits', 'widowsMite', g);
+    g.credits = 3200.5;
+    const miteGrant = g._widowsMite();
+    const miteLands = g.credits;
+    const miteEven = (g.credits = 6000, g._widowsMite());
+    t("WIDOW'S MITE tops a sub-$5,000 shop entry up to exactly $5,000",
+      Math.abs(miteGrant - 1799.5) < 1e-9 && miteLands === 5000
+        && miteEven === 0 && g.credits === 6000,
+      `grant=${miteGrant}`);
 
     // A new run owns none of the ledgers that survived the previous shops.
     g.autoTest = true;

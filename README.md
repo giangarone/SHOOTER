@@ -927,8 +927,8 @@ context. The start screen says so, and one click anywhere fixes it.
   Buying ammo leaves the totems standing; rerolling redraws all three.
 - **Donation Machines**: every shop also raises a separate, evenly spaced bank
   of three Use-only cabinets behind the Mystery Box, centred on it against the
-  nearest wall. The yellow cabinet takes 30 reserve rounds, the red cabinet
-  takes 10 HP (only above 10), and the green cabinet takes $1,000. Each has its own
+  nearest wall. The yellow cabinet takes 60 reserve rounds, the red cabinet
+  takes 20 HP (only above 20), and the green cabinet takes $1,000. Each has its own
   bottom-up segmented meter, tier ladder and permanent reward pool; firing into
   the cabinet stops the shot but never pays.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
@@ -1134,11 +1134,32 @@ The machine-exclusive pools are:
 | Ammo | CLOCKWORK SEAR | +20% fire rate |
 | Ammo | DRUM MAJOR | +30 magazine capacity |
 | Ammo | SKULL RECEIPT | Headshots refund all ammunition spent by that trigger pull |
+| Ammo | SCRAP METAL | A reload started with rounds still in the magazine converts them, one shield point each |
+| Ammo | CHAIN LETTER | +4% fire rate per consecutive hit, capping at +40%; a miss resets the streak |
+| Ammo | AMMO ALCHEMIST | Picking up an ammo crate arms a random eight-second shot element: burn, venom, ice, lightning or fear |
+| Ammo | LIGHTER | Critical hits apply a 3s burn |
+| Ammo | SNAKE | Critical hits apply a 4s venom |
+| Ammo | LUCKY NUMBER | Every seventh shot is a guaranteed crit; it heals 2 HP if it hits |
+| Ammo | BAD OMEN | Every thirteenth kill burns every standing enemy for 4s |
+| Ammo | PAPER CROWN | +40% crit chance while at full health |
+| Ammo | HALF TRUTH | Every other critical hit deals double damage |
 | Health | IVORY DRIP | Generates 1 permanent shield per combat second, up to 20 |
 | Health | PANIC PLATE | 50% damage resistance while below 50 HP |
 | Health | SECOND HEART | +20 max health and fills the health bar on pickup |
+| Health | CERAMIC SKIN | +40 max health |
+| Health | DIRECT DEPOSIT | Heals 1 HP on every fifth shot |
+| Health | MED SCHOOL | +30% crit chance |
+| Health | ILL WILL | +15% damage |
+| Health | MALICE AFORETHOUGHT | +20% damage |
+| Health | GOLD STAR | Ten kills without taking damage grants a permanent +4% damage, up to +40% |
+| Health | KARMA | Heals 5 HP for every donation made |
 | Credits | SIGNING BONUS | Grants $10,000 on pickup |
 | Credits | REMOTE DEPOSIT | Banks 50% of each credit payout immediately; the other half remains on the floor |
+| Credits | TITHING BLADE | 10% of all damage dealt converts to credits instantly |
+| Credits | NEXT OF KIN | +30% pickup drop rate |
+| Credits | THE TAB | The shop sells to a negative balance, down to a hard floor of -$10,000 |
+| Credits | HOUSE MONEY | Payouts earned in the first 30 seconds of a wave are doubled |
+| Credits | WIDOW'S MITE | Entering a shop below $5,000 tops the balance up to exactly $5,000 |
 
 Progress, completed tiers and claimed rewards last across shops for the current
 run and reset with a new run or match. In local versus they are Player snapshot

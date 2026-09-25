@@ -168,10 +168,11 @@ try {
       m.group.visible = true;
     }
     g.player.pos.set(donation.pos.x - 1.5, 0, donation.pos.z);
-    g.player.reserveAmmo = 60;
+    g.player.reserveAmmo = donation.config.cost * 2;
     await tap(B.TRIANGLE);
     t('triangle performs one ammo donation',
-      g.player.donationProgress.ammo === 1 && g.player.reserveAmmo === 30,
+      g.player.donationProgress.ammo === 1
+        && g.player.reserveAmmo === donation.config.cost,
       `progress=${g.player.donationProgress.ammo} reserve=${g.player.reserveAmmo}`);
     g.donationMachines.dismiss();
 

@@ -96,6 +96,9 @@ import {
   WAVETABLE,
 } from './items/passive/index.js';
 import { DONATION_ITEMS, DONATION_KINDS, donationItemKey } from './items/donation/index.js';
+// AMMO ALCHEMIST's element bank, which lives with the donation catalogue the
+// way WAVETABLE lives with the passive one - see shared.js for why.
+import { ALCHEMY_ELEMENTS } from './items/donation/shared.js';
 
 // THE SECOND POOL'S COLOURS, where a pick has an effect in the arena rather
 // than only a number in the stat block. Read each item's own theme so its
@@ -132,6 +135,14 @@ const THEME_MERCY = PASSIVE_ITEMS.strayMercy.theme;
 const THEME_BANDAGE = PASSIVE_ITEMS.freshBandages.theme;
 const THEME_GRISTLE = PASSIVE_ITEMS.gristle.theme;
 const THEME_UPDRAFT = PASSIVE_ITEMS.updraft.theme;
+// The donation machine's own arena colours, read off each reward's theme on
+// the same terms every THEME_ above follows.
+const THEME_OMEN = DONATION_ITEMS.ammo.badOmen.theme;
+const THEME_GOLD_STAR = DONATION_ITEMS.health.goldStar.theme;
+const THEME_MITE = DONATION_ITEMS.credits.widowsMite.theme;
+const THEME_KARMA = DONATION_ITEMS.health.karma.theme;
+const THEME_SCRAP = DONATION_ITEMS.ammo.scrapMetal.theme;
+const THEME_LUCKY = DONATION_ITEMS.ammo.luckyNumber.theme;
 // The fourth pool's, for the flashes each of them throws.
 const THEME_SYNCOPATION = PASSIVE_ITEMS.syncopation.theme;
 const THEME_HEARTBEAT = PASSIVE_ITEMS.heartbeat.theme;
@@ -1248,6 +1259,32 @@ const PLAYER_FX = [
     g.ui.flashReserve();
     g.effects.shockwave(g.player.pos, PASSIVE_ITEMS.lastBreath.theme, 4, 0.4);
   }],
+  ['scrapFx', (g) => {
+    // SCRAP METAL's conversion, on soulFx's terms: the HUD's shield count
+    // moving is the real tell, and this ring is what says the reload just
+    // paid for something rather than merely happened.
+    g.effects.shockwave(g.player.pos, THEME_SCRAP, 4.5, 0.4);
+    g.sfx.pickupShield();
+  }],
+  ['luckyHealFx', (g) => {
+    // LUCKY NUMBER's two points. No banner: the seventh shot's crit is
+    // already the loudest thing that happened to that body, and the green
+    // impact beside it is the second half of the same event.
+    g.effects.impact(
+      g.player.eyeInto(g._killPos), THEME_LUCKY, 6, 2.5, 2, 0.28
+    );
+    g.sfx.pickupHealth();
+  }],
+  ['goldFx', (g) => {
+    // GOLD STAR's tenth clean kill. A banner, like KILL STREAK's: a permanent
+    // step on the build is earned roughly once a wave at best, so it is never
+    // often enough to wipe anything worth reading.
+    g.ui.banner('GOLD STAR \u00b7 +4% DAMAGE');
+    g.effects.shockwave(g.player.pos, THEME_GOLD_STAR, 6, 0.55);
+    g.effects.burst(g.player.eyeInto(g._killPos), THEME_GOLD_STAR, 18, 5, 2.6, 0.6);
+    g.sfx.passiveItem();
+    g.pad.rumble(0.4, 0.4, 150, 2);
+  }],
 ];
 
 class Game {
@@ -1936,6 +1973,15 @@ class Game {
     // the same time - see setDamageSink in enemy.js.
     setDamageSink((pos, dealt, crit, head) => {
       if (dealt > 0) this.effects.damageNumber(pos, dealt, crit, head);
+      // TITHING BLADE. The sink is the one place every point of damage in the
+      // game passes through - bullets, blasts, ticks, turrets - so the tithe
+      // cannot miss a source or be paid twice for one. Collected as it lands
+      // and straight into the balance, because the card says instantly: this
+      // is a conversion, not loot, and it never touches the floor the magnet
+      // and LODESTONE feed on.
+      if (dealt > 0 && this.player.mods.donationTithe > 0) {
+        this.addCredits(dealt * this.player.mods.donationTithe);
+      }
     });
     // A capacitor's plate coming off. A ring rather than a number, because
     // nothing was dealt - the shot was spent, and what the player needs to
@@ -4356,6 +4402,10 @@ class Game {
     this._shotWasHead = false;
     this._reflected = false;
     this._chipHits.clear();
+    // HALF TRUTH's answer for this trigger pull, decided in _resolveHit when
+    // the first critical body of the shot is met and read by _hitMult for
+    // every body the same shot lands on.
+    this._shotCritDouble = false;
   }
 
   /**
@@ -4438,6 +4488,9 @@ class Game {
     this.player.settlePity(hitAny, this._shotWasCrit);
     this._critHeal(this._shotWasCrit);
     this.player.bumpStreak(hitAny);
+    // CHAIN LETTER, on the same shot-grain line the trigger pull's streak
+    // settles on - the lance is one press wherever its beam ended up.
+    this.player.bumpChain(hitAny);
     if (hitAny) {
       this.stats.hits++;
       this.ui.hitMarker();
@@ -4522,6 +4575,9 @@ class Game {
     this._critHeal(this._shotWasCrit);
     this._shotHits.clear();
     this._shotCrit.clear();
+    // CHAIN LETTER, beside the streak settlement: a dump is one press, so it
+    // is one step of the chain however many rounds were in the magazine.
+    p.bumpChain(hitAny);
     // ARMATURE, handed back - see the heldArmature note above.
     this._shotArmature = heldArmature;
     targets.length = 0;
@@ -5628,6 +5684,24 @@ class Game {
   }
 
   /**
+   * HOUSE MONEY's rate, read at the drop rather than cached anywhere: the
+   * window is a fact about the WAVE's clock, and _waveStartedAt is nulled at
+   * the intermission precisely so nothing can pay double-time for money that
+   * was earned in a fight. Returns a multiplier rather than a boolean so the
+   * drop line stays arithmetic.
+   *
+   * UNDEFINED-SAFE on purpose: _waveStartedAt is deliberately undefined until
+   * the first wave books it (see the intermission branch), and a helper that
+   * threw on a fresh boot would be a helper that only ever failed in tests.
+   */
+  _houseMult() {
+    const m = this.player.mods;
+    if (m.donationHouse <= 0) return 1;
+    if (this.waveState !== 'active' || this._waveStartedAt === undefined) return 1;
+    return this.time - this._waveStartedAt < m.donationHouse ? 2 : 1;
+  }
+
+  /**
    * @param {boolean} split whether the player multiplier applies. TRUE for
    *   everything a player earns for themselves; FALSE for a payout that is
    *   ALREADY shared out to every player by hand, which is the boss bounty and
@@ -5642,8 +5716,14 @@ class Game {
     // orbs are visibly bigger, and the item charge that comes back out of this
     // is deliberately NOT doubled, because charge is priced on the enemy's own
     // value and nothing that touches money may reach it (see _bankKillCharge).
+    //
+    // HOUSE MONEY rides on the same line for the same reason: EARNED here
+    // means dropped, which is the one moment the payout exists - and doubling
+    // it at the drop makes the orbs themselves visibly worth double for the
+    // window, exactly the read a MIDAS run gets. Gated on the wave being
+    // LIVE, so the clear's own vacuum and INTEREST are paid at face value.
     const paid = amount * this.player.mods.creditMult * this.flawlessMult()
-      * this.player.mods.lootMult;
+      * this.player.mods.lootMult * this._houseMult();
     // THE TWO FIGURES ARE DIFFERENT ON PURPOSE, and collapsing them back into
     // one is the mistake this comment exists to stop.
     //
@@ -6117,6 +6197,66 @@ class Game {
   }
 
   /**
+   * BAD OMEN. Every thirteenth booked kill, everything left standing catches
+   * fire - booked, not killed-by-the-player, on VENDING MACHINE's terms: the
+   * counter asks when a body died, not what killed it, and a poison tick
+   * finishing somebody across the room is as much a kill as the shot was.
+   *
+   * THE BURN IS LIGHTER'S, at the shared fire tick for the table's own four
+   * seconds, rather than a damage figure of its own: BAD OMEN pays for AREA,
+   * and the whole room's worth of burning bodies is what the card bought.
+   * Every one of them wears the tint and drips the embers the status owns,
+   * so the effect announces itself without a single particle spent here.
+   */
+  _badOmen() {
+    const m = this.player.mods;
+    this.player.omenKills++;
+    if (this.player.omenKills < m.donationOmenEvery) return;
+    this.player.omenKills = 0;
+    let burned = 0;
+    for (const e of this.enemies) {
+      // The body whose death paid for this is dead and off the list's future;
+      // everything still standing takes it, exactly as "all enemies" reads.
+      if (e.dead) continue;
+      e.applyStatus('burn', m.donationOmenTime, this.player.fireTickDamage);
+      burned++;
+    }
+    if (!burned) return;
+    this.ui.banner('BAD OMEN');
+    this.effects.shockwave(this.player.pos, THEME_OMEN, 18, 0.6);
+    this.effects.addShake(0.2);
+    this.sfx.impact();
+    this.pad.rumble(0.6, 0.5, 220, 3);
+  }
+
+  /**
+   * GOLD STAR. Ten clean kills buy a permanent damage step, and the streak
+   * only has to survive KILLS - it is broken by a hit (see the cleanKills
+   * reset in _hurtPlayer, which this counter resets beside) and by nothing
+   * else, so a wave boundary or a shop cannot rob a player mid-ladder.
+   *
+   * COUNTED ON THE PLAYER, paid through rebuildMods, on NO-HIT BONUS's exact
+   * terms: the stacks are events the run earned and the build cannot replay
+   * them away. Counting STOPS at the cap rather than running past it, for the
+   * reason addNoHitStack stops - a number that keeps climbing after it stops
+   * paying is a lie the HUD would be telling all run.
+   */
+  _goldStarKill() {
+    const m = this.player.mods;
+    const maxStars = Math.round(m.donationGoldCap / m.donationGoldStep);
+    this.player.goldKills++;
+    if (this.player.goldKills < m.donationGoldEvery) return;
+    if (this.player.goldStars >= maxStars) {
+      this.player.goldKills = 0;
+      return;
+    }
+    this.player.goldKills = 0;
+    this.player.goldStars++;
+    this.player.rebuildMods();
+    this.player.goldFx = true;
+  }
+
+  /**
    * The placement the two picks above share: count the caller's flag against
    * its cap, and if there is room, drop the item's own turret beside the
    * player.
@@ -6559,6 +6699,18 @@ class Game {
     // CRITICAL OVERFLOW asks one question about the whole trigger pull - did
     // this shot crit - and a crit is only ever resolved against a BODY, so the
     // answer is collected here and settled once in shoot().
+    //
+    // HALF TRUTH, decided on the same first-crit-of-the-shot edge: the tally
+    // is the run's count of critical HITS (one per trigger pull, on the house
+    // rule every other crit effect follows), and the odd ones are the doubled
+    // ones - SQUARE WAVE's parity, so the first crit a fresh pick lands reads
+    // as the ordinary one and the second as the windfall. `_shotCritDouble`
+    // carries the answer to _hitMult, which every body this shot lands on
+    // reads; the decision is made here because this is the one place that
+    // knows the shot's crit has actually met a body.
+    if (crit && m.donationHalfTruth > 0 && !this._shotWasCrit) {
+      this._shotCritDouble = (this.player.critTally++ & 1) === 1;
+    }
     if (crit) this._shotWasCrit = true;
     this._shotCrit.set(en, crit);
     return crit;
@@ -6603,6 +6755,13 @@ class Game {
     if (this.player.pityShot && crit && m.pityMult > 0) {
       k = (k / (m.critMult || 1)) * m.pityMult;
     }
+    // HALF TRUTH. Doubles the crit's own damage, ON TOP of whatever the crit
+    // family has done to critMult rather than replacing it: the card says the
+    // critical hit deals double, and a Dead Center build that doubled one of
+    // these has earned both numbers. Headshot and the range picks still
+    // compose, because - like the pity branch above - this is a question
+    // about the SHOT and those are questions about WHERE it landed.
+    if (crit && m.donationHalfTruth > 0 && this._shotCritDouble) k *= 2;
     // LONG HAUL. Uncapped, and the only uncapped number in either pool that is
     // measured in seconds - the ceiling is that the fight ENDS. It belongs here
     // because it is a question about what the hit landed ON, which is the only
@@ -6773,6 +6932,20 @@ class Game {
     }
     if (m.slowTime) en.applyStatus('slow', m.slowTime);
     if (m.fearTime) en.applyStatus('fear', m.fearTime);
+    // LIGHTER and SNAKE, on the same terms the four above follow: per SHOT per
+    // body, never per pellet - a scattergun that crits puts one burn on a
+    // chest however many pellets carried it. The strengths are the dedicated
+    // picks' own (Incendiary's fire, Venom's poison), because what the machine
+    // reward buys is the TRIGGER - a crit instead of every hit - not a weaker
+    // version of the element.
+    if (crit) {
+      if (m.donationCritBurn > 0) {
+        en.applyStatus('burn', m.donationCritBurn, this.player.fireTickDamage);
+      }
+      if (m.donationCritVenom > 0) {
+        en.applyStatus('poison', m.donationCritVenom, this.player.poisonTickDamage);
+      }
+    }
     // WAVETABLE. One more status, paid for by the magazine the round left
     // rather than by a pick: whatever element the current magazine carries
     // lands with the hit, on the same per-SHOT terms the four above follow -
@@ -6783,6 +6956,23 @@ class Game {
     if (m.wavetable > 0) {
       const el = WAVETABLE[this.player.wavetable % WAVETABLE.length];
       if (el.status === 'burn') {
+        en.applyStatus('burn', el.dur, this.player.fireTickDamage * el.power);
+      } else if (el.status === 'poison') {
+        en.applyStatus('poison', el.dur, this.player.poisonTickDamage * el.power);
+      } else {
+        en.applyStatus(el.status, el.dur);
+      }
+      this.effects.impact(point, el.color, 8, 4, 2, 0.3);
+    }
+    // AMMO ALCHEMIST, WAVETABLE's temporary cousin: one element, rolled by
+    // the ammo pickup that armed it, carried by every shot for the window the
+    // crate paid for. Per SHOT on the same terms the block above follows, and
+    // the impact flash is the element's own colour for the same reason - the
+    // colour is the only readout of which of the five this round carried.
+    if (this.player.alchemistEl && this.player.alchemistEnd > this.time) {
+      const el = this.player.alchemistEl;
+      if (el.status === 'arc') this._chain(en, dealt * 0.6, 7);
+      else if (el.status === 'burn') {
         en.applyStatus('burn', el.dur, this.player.fireTickDamage * el.power);
       } else if (el.status === 'poison') {
         en.applyStatus('poison', el.dur, this.player.poisonTickDamage * el.power);
@@ -7638,6 +7828,9 @@ class Game {
     // same boolean the hitmarker below does so the two can never disagree.
     this.player.bumpStreak(hitAny);
     this.player.noteAccuracy(hitAny);
+    // CHAIN LETTER, off the same boolean on the same line for its reason: the
+    // streak must never disagree with what the hitmarker just said.
+    this.player.bumpChain(hitAny);
 
     // OVERLOAD. The magazine running dry calls lightning down on the whole
     // room. Fired here rather than in tryShoot() because it has to be the
@@ -7887,6 +8080,11 @@ class Game {
 
     const d = Math.hypot(bestDX, bestDZ) || 1;
     this._shotCrit.clear();
+    // A swing runs the shot pipeline's crit machinery without _beginShot, so
+    // the per-shot ledgers have to be zeroed by hand: HALF TRUTH's parity is
+    // decided against `_shotWasCrit`, and a swing that inherited the last
+    // trigger pull's `true` would never re-decide it.
+    this._shotWasCrit = false;
     const hot = this._resolveHit(target, crit, false);
     // EVERYONE FELT THAT's five, folded in with the crit and the range picks
     // rather than applied afterwards, so the number that lands on the body and
@@ -8082,6 +8280,19 @@ class Game {
    */
   _critHeal(crit) {
     const m = this.player.mods;
+    // LUCKY NUMBER settles here, on the same four callers, for the same
+    // reason PITY PARTY settles where they can all reach it: the flag was
+    // armed by rollCrit and must be spent by the end of the press that spent
+    // the guaranteed crit. A crit answer of true means the round met a BODY
+    // (see _resolveHit), which is the whole of the card's "if you hit an
+    // enemy"; a miss consumes the flag and pays nothing, exactly as a
+    // TRUE STRIKE round spent into the void is spent.
+    if (this.player.luckyShot) {
+      this.player.luckyShot = false;
+      if (crit && this.player.heal(m.donationLuckyHeal) > 0) {
+        this.player.luckyHealFx = true;
+      }
+    }
     if (!crit || !(m.critHealChance > 0) || Math.random() >= m.critHealChance) return;
     if (this.player.heal(m.critHeal) <= 0) return;
     this.effects.impact(
@@ -8188,6 +8399,11 @@ class Game {
     // KILL STREAK's counter, broken by the same hit that breaks the flawless
     // streak below - "without taking damage" means the same thing to both.
     this.player.cleanKills = 0;
+    // GOLD STAR's ladder, broken by the same hit for the same reason: the
+    // streak it asks about is KILLS WITHOUT TAKING DAMAGE, and a graze the
+    // mantle ate never reached the player (see the ward and dodge branches
+    // above), so only a hit that landed clears it.
+    this.player.goldKills = 0;
     // BRUISE ROUNDS. A full magazine for a hit, made rather than moved: the
     // reserve is never touched, which is what makes it worth having to a build
     // that is out of both at once.
@@ -8798,6 +9014,11 @@ class Game {
         // banner would wipe the first before it could be read.
         const earned = this._payInterest();
         if (earned > 0) msg += '  INTEREST +$' + earned;
+        // WIDOW'S MITE, after INTEREST for the reason that method gives, and
+        // folded into the clear banner for the reason INTEREST is: a second
+        // banner here would wipe this one before it could be read.
+        const mite = this._widowsMite();
+        if (mite > 0) msg += '  MITE +$' + Math.round(mite);
         // FULL LOAD, last of all.
         //
         // AT THE CLEAR AND NOT AT THE OPEN, which is the whole of what makes it
@@ -9015,6 +9236,32 @@ class Game {
   }
 
   /**
+   * WIDOW'S MITE. Entering a shop under the line tops the balance up TO it,
+   * exactly - not by a fixed grant, so a player three dollars short gets
+   * three dollars and one three thousand short gets the same ending number.
+   *
+   * THE LINE IS ABSOLUTE rather than a percentage, which is what makes it a
+   * promise about what the player can AFFORD at the stations rather than a
+   * reward for arriving poor: at five thousand every price in the first block
+   * is reachable, and that is the whole design of the number.
+   *
+   * Called at the same boundary INTEREST is and AFTER it, so the line is
+   * measured against the balance the wave's own payouts actually left.
+   * Returns the grant for the banner - and zero for a balance already over
+   * the line, so the caller stays quiet rather than announcing nothing.
+   */
+  _widowsMite() {
+    const line = this.player.mods.donationMite;
+    if (line <= 0 || this.credits >= line) return 0;
+    const grant = line - this.credits;
+    this.credits = line;
+    this._creditsDirty = true;
+    this.effects.shockwave(this.player.pos, THEME_MITE, 6, 0.5);
+    this.sfx.credits();
+    return grant;
+  }
+
+  /**
    * MEDICAL DEBT's bill, at the end of the wave that ran it up.
    *
    * IT CAN KILL, and that is the item. It goes through _hurtPlayer like any
@@ -9128,7 +9375,7 @@ class Game {
     // Through _priceLabel like every other price in the room. It used to build
     // its own '$' + cost here, which is why the box was the one console that
     // could never say FREE at all - not even at a cost of zero.
-    box.setPrice(this._priceLabel(cost), stakes || this.credits >= cost);
+    box.setPrice(this._priceLabel(cost), stakes || this._canAfford(cost));
   }
 
   // WHAT THE TWO CREDIT CONSOLES COST RIGHT NOW. Both prices step up every
@@ -9189,6 +9436,28 @@ class Game {
     if (!(amount > 0)) return;
     this.credits -= amount;
     this.player.spentTotal += amount;
+  }
+
+  /**
+   * THE TAB. One affordability rule for every priced thing in the shop, so
+   * the refusal a player hears can never disagree with the label they read.
+   *
+   * WITH THE TAB CLOSED (the default) this answers exactly what
+   * `credits >= cost` always answered, which is what keeps the two stations,
+   * the box and the credit machine honest for every run that has not earned
+   * the reward: a refactor of the comparison is the one place the shop could
+   * quietly start selling to broke players.
+   *
+   * WITH IT OPEN the wallet may go negative, down to the floor the card names
+   * and not a cent further - the tenth-thousand dollar of debt buys exactly
+   * like the first, and the eleventh is refused at the same door every price
+   * is. `_spend` needs no change: the balance is a float and the HUD floors
+   * it, so a negative number displays as readily as a positive one.
+   */
+  _canAfford(cost) {
+    if (this.credits >= cost) return true;
+    const floor = this.player.mods.donationTab;
+    return floor < 0 && this.credits - cost >= floor;
   }
 
   // Takes the payment for a reroll. The caller has already established the
@@ -9270,14 +9539,14 @@ class Game {
     area.ammoStation.setLabel(
       AMMO_PURCHASE.name,
       '$' + ammo,
-      this.credits >= ammo && AMMO_PURCHASE.enabled(this.player)
+      this._canAfford(ammo) && AMMO_PURCHASE.enabled(this.player)
     );
     const cost = this._rerollCost();
     // Lit for a HIGH STAKES run whatever the balance says, because for that run
     // the price is not what decides - the coin is.
     const stakes = this.player.mods.highStakes > 0;
     area.rerollStation.setLabel(
-      'REROLL', this._priceLabel(cost), (stakes || this.credits >= cost) && area.active
+      'REROLL', this._priceLabel(cost), (stakes || this._canAfford(cost)) && area.active
     );
   }
 
@@ -9353,7 +9622,7 @@ class Game {
     // what makes the one time in ten a real risk rather than a discount they
     // were saving up for anyway. See _gambleTill.
     const stakes = this.player.mods.highStakes > 0;
-    if (!box.canBuy || (!stakes && this.credits < cost)) {
+    if (!box.canBuy || (!stakes && !this._canAfford(cost))) {
       this.sfx.denied();
       // A refusal has to be felt, or a player who cannot afford something
       // presses again and again into silence.
@@ -9579,7 +9848,7 @@ class Game {
       if (id) return [lead + 'TAKE &nbsp;·&nbsp; ' + ACTIVE_ITEMS[id].name, false];
       if (!t.canBuy) return [null, false];
       const cost = this._boxCost();
-      if (this.credits < cost) {
+      if (!this._canAfford(cost)) {
         return ['MYSTERY BOX &nbsp;·&nbsp; NEED $' + cost, true];
       }
       return [
@@ -9631,14 +9900,16 @@ class Game {
   _stationBlocked(st) {
     if (st.kind === 'ammo') {
       if (!AMMO_PURCHASE.enabled(this.player)) return 'AMMO FULL';
-      if (this.credits < this._ammoCost()) return 'NEED $' + this._ammoCost();
+      if (!this._canAfford(this._ammoCost())) return 'NEED $' + this._ammoCost();
       return null;
     }
     const cost = this._rerollCost();
     if (!this.totemArea.active || this.totemArea.claimed) return 'NOTHING TO REROLL';
     // HIGH STAKES pays the till, so the wallet is not what stands between the
     // player and a reroll - see _gambleTill. The same rule the box follows.
-    if (this.player.mods.highStakes <= 0 && this.credits < cost) return 'NEED $' + cost;
+    if (this.player.mods.highStakes <= 0 && !this._canAfford(cost)) {
+      return 'NEED $' + cost;
+    }
     return null;
   }
 
@@ -9650,12 +9921,12 @@ class Game {
     if (donationSoldOut(this.player, machine.kind)) return 'SOLD OUT';
     const cost = machine.config.cost;
     if (machine.kind === 'ammo' && this.player.reserveAmmo < cost) {
-      return 'NEED 30 RESERVE';
+      return 'NEED ' + cost + ' RESERVE';
     }
     if (machine.kind === 'health' && this.player.health <= cost) {
-      return 'NEED 11 HP';
+      return 'NEED ' + (cost + 1) + ' HP';
     }
-    if (machine.kind === 'credits' && this.credits < cost) {
+    if (machine.kind === 'credits' && !this._canAfford(cost)) {
       return 'NEED $1,000';
     }
     return null;
@@ -9697,6 +9968,17 @@ class Game {
       // _spend still records it for PAPER TRAIL.
       this._spend(cost);
       this._creditsDirty = true;
+    }
+    // KARMA. Paid the moment the donation is made, whatever the machine and
+    // whatever the tier - the card rewards the act, not the completion. It
+    // goes through heal() like every other heal in the game, so HEALTHY CORE
+    // still refuses it and OVERDRAW still banks what does not fit; on the
+    // health machine it is deliberately less than the 20 HP price, so a
+    // karma run still feels each donation it makes.
+    if (this.player.mods.donationKarma > 0
+      && this.player.heal(this.player.mods.donationKarma) > 0) {
+      this.effects.burst(machine.pos, THEME_KARMA, 10, 3.5, 1.8, 0.4);
+      this.sfx.pickupHealth();
     }
 
     const required = donationRequirement(this.player, kind);
@@ -10395,6 +10677,26 @@ class Game {
     }
   }
 
+  /**
+   * AMMO ALCHEMIST, armed by walking over an ammo crate. One element out of
+   * the five, rolled NOW and held for the whole window - the card grants "a
+   * random 8s shot buff", one thing, not a new die on every trigger pull.
+   *
+   * THE BANNER NAMES IT because the colour of the impact flash is otherwise
+   * the only readout of which element landed, and a player who has to infer
+   * FIRE from the second body they shot learns the pickup's answer one fight
+   * too late.
+   */
+  _armAlchemy() {
+    const el = ALCHEMY_ELEMENTS[(Math.random() * ALCHEMY_ELEMENTS.length) | 0];
+    this.player.alchemistEl = el;
+    this.player.alchemistEnd = this.time + this.player.mods.donationAlchemist;
+    this.ui.banner('AMMO ALCHEMIST \u00b7 ' + el.label);
+    this.effects.burst(this.player.eyeInto(this._killPos), el.color, 14, 4, 2, 0.4);
+    this.effects.shockwave(this.player.pos, el.color, 3.5, 0.35);
+    this.sfx.pickupBuff();
+  }
+
   // Ticks pickups and collects any the player is standing on. Iterates
   // backwards so removals don't skip entries.
   _updatePickups(dt) {
@@ -10426,6 +10728,14 @@ class Game {
       }
       if (p.tryPickup(this.player.pos)) {
         p.type.apply(this.player, this.time);
+        // AMMO ALCHEMIST. Armed at the PICKUP and nowhere else - not the
+        // wave-clear sweep, which is a bank rather than a pickup, and which
+        // deliberately does not start timed buffs either (see _vacuumPickups)
+        // because a shot element spent walking around a shop is an element
+        // the player never had.
+        if (p.typeKey === 'ammo' && this.player.mods.donationAlchemist > 0) {
+          this._armAlchemy();
+        }
         // THE MAGNET. The only pickup whose effect is not on the player, so it
         // is the only one main.js has to know by name: everything on the floor
         // comes in at once, the same sweep a wave clear does.
@@ -10632,6 +10942,11 @@ class Game {
           this._quorumTurret();
         }
       }
+      // BAD OMEN and GOLD STAR, counted on the same booking the turret is:
+      // whatever killed the body, the sweep is the one place a kill becomes
+      // a fact the build can be paid on.
+      if (this.player.mods.donationOmenTime > 0) this._badOmen();
+      if (this.player.mods.donationGoldStep > 0) this._goldStarKill();
       // Splitter children are worth 0, so they extend the chain without
       // paying for it. They still drop a little money - see
       // SPLIT_CHILD_CREDITS - because they are three bodies you have to stop

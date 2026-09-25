@@ -602,6 +602,36 @@ const DEFAULT_MODS = {
   donationMagFlat: 0,      // flat rounds added after magazine multipliers
   donationHeadshotFree: 0, // refund the ammunition spent by a headshot
   donationCreditSiphon: 0, // share of each payout banked before it hits floor
+  // The second generation of machine rewards. Same contract as the block
+  // above: zero is "not owned", every reader tests for it, and anything a
+  // SHOT, a KILL or a PICKUP moves during play lives on the Player instead
+  // (see the counters in reset()).
+  donationScrap: 0,        // SCRAP METAL: partial reloads convert the rounds
+                           // still in the magazine into shield, one for one
+  donationChainStep: 0,    // CHAIN LETTER: fire rate gained per consecutive
+  donationChainCap: 0,     // hit, and the ceiling the streak stops at
+  donationAlchemist: 0,    // AMMO ALCHEMIST: seconds of shot element an ammo
+                           // pickup arms - the element itself is on the Player
+  donationCritBurn: 0,     // LIGHTER: seconds of burn a critical hit applies
+  donationCritVenom: 0,    // SNAKE: seconds of poison a critical hit applies
+  donationLuckyEvery: 0,   // LUCKY NUMBER: shots between guaranteed crits,
+  donationLuckyHeal: 0,    // and the HP such a shot heals if it lands
+  donationOmenEvery: 0,    // BAD OMEN: kills between room-wide burns,
+  donationOmenTime: 0,     // and how long that burn lasts
+  donationPaperCrown: 0,  // PAPER CROWN: crit chance added at full health
+  donationHalfTruth: 0,    // HALF TRUTH: every other critical hit is doubled
+  donationDirectDeposit: 0, // DIRECT DEPOSIT: shots between 1 HP heals
+  donationGoldStep: 0,     // GOLD STAR: damage per stack of ten clean kills,
+  donationGoldCap: 0,      // the ceiling those stacks stop at,
+  donationGoldEvery: 0,   // and the clean kills a stack costs
+  donationKarma: 0,        // KARMA: HP healed for every donation made
+  donationTithe: 0,        // TITHING BLADE: share of damage dealt paid as
+                           // credits, instantly
+  donationTab: 0,          // THE TAB: the floor the balance may sink to, as a
+                           // negative number. Zero is the tab being closed.
+  donationHouse: 0,        // HOUSE MONEY: seconds at each wave's open during
+                           // which every payout is doubled
+  donationMite: 0,         // WIDOW'S MITE: the line a shop entry tops up to
 };
 
 // The only ground speed there is. Sprint used to sit on top of a 6.5 walk;
@@ -1432,13 +1462,21 @@ export class Player {
     // step the player can see on the counter.
     const monsoon = this.mods.monsoon > 0
       ? 1 + this.mods.monsoon * this.monsoonStacks : 1;
+    // CHAIN LETTER, read live for MONSOON's reason: the count moves between
+    // shots, and a getter is the one place it can be read without every caller
+    // having to know it changed. The cap is enforced HERE rather than at the
+    // bump so the counter itself can keep telling the truth about how long
+    // the streak is while the bonus has stopped climbing.
+    const chain = this.mods.donationChainStep > 0
+      ? 1 + Math.min(this.mods.donationChainCap, this.mods.donationChainStep * this.chainHits)
+      : 1;
     // LFO's rate half. Read live off the phase like every posture bonus is,
     // so the gun speeds up and slows down on the second the clock says and
     // not on the next trigger pull after it.
     const lfo = this.lfoMults.rate;
     return this.weapon.fireRate * this.fireRateMult * this.itemRateMult
       * this.mods.fireRate * crouch * this.paceMult * spirit * hip
-      * wands * high * fumes * hot * wolf * monsoon * lfo;
+      * wands * high * fumes * hot * wolf * monsoon * chain * lfo;
   }
 
   /**
@@ -1600,6 +1638,18 @@ export class Player {
       this.mods.damage *= k;
       this.mods.fireRate *= k;
     }
+    // GOLD STAR, on No-Hit Bonus's terms and after the replay for its reason:
+    // the stacks are EVENTS the run earned, and replaying the build must never
+    // refund one. Additive and clamped at the cap so the number the banner
+    // promised is the number the build can actually reach - a run that keeps
+    // its streak clean past the cap is earning nothing it was not already
+    // paid for, and the counter stops counting once it is full (see
+    // _goldStarKill in main.js).
+    if (this.mods.donationGoldStep > 0 && this.goldStars > 0) {
+      this.mods.damage *= 1 + Math.min(
+        this.mods.donationGoldCap, this.mods.donationGoldStep * this.goldStars
+      );
+    }
     // A build-list mutation (Sacrifice or Shuffle) must take a removed Ghost
     // Plate with it. The run reset calls rebuildMods before this field exists,
     // hence the own-property guard.
@@ -1662,6 +1712,18 @@ export class Player {
   noteAccuracy(hit) {
     if (this.mods.sprayEconomy <= 0) return;
     this.sprayMisses = hit ? 0 : this.sprayMisses + 1;
+  }
+
+  // CHAIN LETTER, on HOT STREAK's terms: called once per SHOT with the same
+  // boolean the hitmarker is drawn from, so the streak can never disagree with
+  // what the player just saw. A miss drops it to zero in one step rather than
+  // walking back down - the whole stack is the price of one bad round, which
+  // is what keeps the pick honest about being a streak. The CAP is enforced
+  // where the bonus is read (see effectiveFireRate), so the counter can keep
+  // counting a streak that has stopped paying.
+  bumpChain(hit) {
+    if (this.mods.donationChainStep <= 0) return;
+    this.chainHits = hit ? this.chainHits + 1 : 0;
   }
 
   // BLINK DRIVE's motion. Fired by the item (js/items/active/index.js) rather than by a
@@ -2269,6 +2331,10 @@ export class Player {
     // EVERY subsequent hit in the run at five times damage. One stale shot is
     // survivable; a permanent one is not, and this is the line that bounds it.
     this.pityShot = false;
+    // LUCKY NUMBER's owed crit, cleared on the same belt-and-braces terms:
+    // _critHeal settles it at the end of every trigger pull, and this line is
+    // here so no path can ever spend one without settling it.
+    this.luckyShot = false;
     // TRUE STRIKE, first and unconditionally: four shots that were BOUGHT with
     // two seconds off the trigger are not a die roll, and spending one on a
     // shot that would have crit anyway is the honest reading of "the next four
@@ -2288,10 +2354,30 @@ export class Player {
       this.dominoNext = m.domino > 0;
       return true;
     }
+    // LUCKY NUMBER, third and owed like the two above: every seventh trigger
+    // pull crits whatever the die says, and `luckyShot` is what _critHeal
+    // reads for the heal - settled by the same places pityShot is, so a
+    // guaranteed crit that found nothing is spent rather than carried.
+    //
+    // THE COUNTER COUNTS SHOTS, not hits: the card's own "if you hit" makes
+    // the heal conditional on landing, which only means something if the
+    // seventh pull can also miss.
+    if (m.donationLuckyEvery > 0 && ++this.luckyShots >= m.donationLuckyEvery) {
+      this.luckyShots = 0;
+      this.luckyShot = true;
+      this.dominoNext = m.domino > 0;
+      return true;
+    }
     let chance = m.critChance;
     // IRON LITURGY, off the aim flag rather than off the raise animation -
     // CHEEKWELD's rule, and the pair are meant to be found together.
     if (m.aimCrit > 0 && this.aiming) chance += m.aimCrit;
+    // PAPER CROWN. Full health on PACE CAR's terms and for its reason: `>=`
+    // against the max, because health is a float refilled by a rate times dt
+    // and a hundredth of a point short is full as far as anybody can see.
+    if (m.donationPaperCrown > 0 && this.health >= this.maxHealth) {
+      chance += m.donationPaperCrown;
+    }
     // DIME NOVEL. Twenty seconds off the button the player was going to press
     // anyway, which is the whole shape of it: it asks for no change of play and
     // pays a build that presses its item the moment the bar fills rather than
@@ -2638,6 +2724,22 @@ export class Player {
     // in its bank.
     this.synthItem = null;
     this.wavetable = 0;
+    // Donation-reward counters, likewise: every one of them is moved by a
+    // SHOT, a KILL, a PICKUP or a DONATION, so none of them can live in mods
+    // without the next draft pick refunding it. `alchemistEnd` is a deadline
+    // and is rebased across a versus handoff - see PLAYER_CLOCKS in versus.js.
+    this.chainHits = 0;
+    this.luckyShots = 0;
+    this.luckyShot = false;
+    this.critTally = 0;
+    this.omenKills = 0;
+    this.goldKills = 0;
+    this.goldStars = 0;
+    this.alchemistEnd = 0;
+    this.alchemistEl = null;
+    this.scrapFx = false;
+    this.luckyHealFx = false;
+    this.goldFx = false;
     // OVERDRAW's remainder, in HP, between whole points of item charge. See
     // heal(). Zeroed everywhere activeItemCharge is, because it is the same meter.
     this._overdrawAcc = 0;
@@ -3023,10 +3125,27 @@ export class Player {
         // reload, and a 29-round magazine went downrange for 580 damage at a
         // cost of ONE round off the reserve, three hundred times a run.
         // Paying the full magazine is what makes the bomb a trade.
-        const keep = this.mods.primedMag > 0 ? 0 : this.mag;
+        //
+        // SCRAP METAL wastes them too, and buys something with the waste: a
+        // reload started with rounds still in the magazine CONVERTS them -
+        // one shield point each, permanent until spent on exactly the terms
+        // Soul Harvest's single point is. `leftover` is what the magazine
+        // holds NOW rather than what `magOnReload` recorded at the press, so
+        // a round SOUTHPAW squeezed out mid-reload is a round that has
+        // already left and cannot be converted twice.
+        const scrap = this.mods.donationScrap > 0 && this.magOnReload > 0;
+        const leftover = this.mag;
+        const keep = (this.mods.primedMag > 0 || scrap) ? 0 : this.mag;
         const take = Math.min(this.magSize - keep, this.reserveAmmo);
         this.mag = keep + take;
         this.reserveAmmo -= take;
+        if (scrap) {
+          this.shield += leftover;
+          // No expiry: the rounds were spent, and a shield counting down on a
+          // clock the player never started would be giving the conversion back.
+          this.shieldEnd = 0;
+          this.scrapFx = true;
+        }
         reloadFinished = true;
         this.breachReady = true;
         // CANNONADE. The fresh magazine's first round is the ten-times one,
@@ -4601,6 +4720,15 @@ export class Player {
     this.lastShotAt = this.now;
     this.shotTally++;
     this.waveShots++;
+    // DIRECT DEPOSIT. The shot count is this method's own, so the heal rides
+    // the same edge every other per-shot settlement does - and it is a quiet
+    // one on purpose: a point of health five shots in is a thing the bar
+    // shows, and a banner every fifth trigger pull would wipe the wave line
+    // all fight long. heal() decides the full-bar question.
+    if (this.mods.donationDirectDeposit > 0
+      && this.shotTally % this.mods.donationDirectDeposit === 0) {
+      this.heal(1);
+    }
     // BRASS TAX. The trigger still fires when the wallet is empty; it simply
     // loses the paid damage. `cashOwed` is settled by Game after tryShoot, so
     // several shots in one frame cannot all spend the same final dollar.

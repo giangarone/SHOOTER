@@ -345,6 +345,10 @@ const PLAYER_CLOCKS = [
   // Seventh-pool deadlines. Recharge, cooldown and the short wading slow all
   // freeze on the bench just like the shield and invulnerability windows do.
   'ghostPlateBrokenAt', 'deadSwitchEnd', 'wadingEnd',
+  // AMMO ALCHEMIST's window. The crate was picked up in a fight, and a
+  // benched player must not come back to an element that expired while
+  // somebody else was playing.
+  'alchemistEnd',
 ];
 
 // The same trap, on Game's side of the line.
