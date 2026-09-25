@@ -9777,7 +9777,7 @@ class Game {
   }
 
   /**
-   * DEBUG: $1,000 on the 0 key.
+   * DEBUG: $1,000,000 on the 0 key.
    *
    * A TEST HOOK, not a feature. The shop, the ammo console and the mystery box
    * all cost thousands, and reaching that honestly means playing eight waves
@@ -9795,10 +9795,10 @@ class Game {
    */
   _debugCredits() {
     if (this.state !== 'playing') return;
-    this.credits += 1000;
+    this.credits += 1000000;
     this._creditsDirty = true;
     this.sfx.coin();
-    this.ui.banner('DEBUG  +$1,000');
+    this.ui.banner('DEBUG  +$1,000,000');
   }
 
   /**
