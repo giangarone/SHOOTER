@@ -93,7 +93,7 @@ try {
       `boxX=${g.mysteryBox.pos.x} xs=${xs.join(',')}`);
     const sortedXs = [...xs].sort((a, b) => a - b);
     t('the cabinets leave a little air between each other',
-      sortedXs[1] - sortedXs[0] === 2.5 && sortedXs[2] - sortedXs[1] === 2.5,
+      sortedXs[1] - sortedXs[0] === 3.0 && sortedXs[2] - sortedXs[1] === 3.0,
       `xs=${sortedXs.join(',')}`);
     const cornerAlpha = area.machines.map((m) =>
       m.panel.canvas.getContext('2d').getImageData(10, 10, 1, 1).data[3]);
@@ -187,6 +187,18 @@ try {
       ammo.state === 'sinking'
         && ammo.meterMaterial.uniforms.uFilled.value === 5
         && ammo.meterMaterial.uniforms.uSections.value === 5);
+    const rewardBar = (() => {
+      const def = g.__donationItemsForTest.ammo[ammo.pendingId];
+      const d = ammo.panel.canvas.getContext('2d').getImageData(192, 23, 1, 1).data;
+      const theme = [(def.theme >> 16) & 255, (def.theme >> 8) & 255, def.theme & 255];
+      const machine = [(ammo.config.color >> 16) & 255, (ammo.config.color >> 8) & 255, ammo.config.color & 255];
+      return { got: [d[0], d[1], d[2]], theme, machine };
+    })();
+    t('the reward panel wears the item theme, not the machine colour',
+      rewardBar.got[0] === rewardBar.theme[0]
+        && rewardBar.got[1] === rewardBar.theme[1]
+        && rewardBar.got[2] === rewardBar.theme[2],
+      `got=${rewardBar.got.join(',')} theme=${rewardBar.theme.join(',')} machine=${rewardBar.machine.join(',')}`);
 
     const paidAtCompletion = p.reserveAmmo;
     const locked = g._useDonationMachine(ammo);

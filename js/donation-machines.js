@@ -146,7 +146,7 @@ function drawReward(machine, def) {
   const c = canvas.getContext('2d');
   c.clearRect(0, 0, canvas.width, canvas.height);
   c.textAlign = 'center';
-  const col = hex(machine.config.color);
+  const col = hex(def.theme);
 
   c.fillStyle = col;
   c.shadowColor = col;
@@ -154,6 +154,7 @@ function drawReward(machine, def) {
   roundRect(c, 62, 20, canvas.width - 124, 7, 4);
   c.fill();
   c.shadowBlur = 0;
+  c.fillStyle = col;
   pxText(c, def.name, canvas.width / 2, 68, 28, canvas.width - 40);
   const lines = Array.isArray(def.effects) ? def.effects : def.effects(0);
   const start = lines.length > 2 ? 116 : 132;
@@ -346,7 +347,7 @@ export class DonationMachineArea {
     // directly before its nearest wall. The centre cabinet and the midpoint
     // of the outer pair share the box's x=0 centreline exactly.
     const z = DONATION_BANK_Z;
-    const spacing = 2.5;
+    const spacing = 3.0;
     this.machines = [
       new DonationMachine('ammo', -spacing, z, scene),
       new DonationMachine('health', 0, z, scene),
