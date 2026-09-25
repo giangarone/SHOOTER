@@ -54,6 +54,7 @@ import * as THREE from 'three';
 import { buildPixelIcon, resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
 import { PASSIVE_ITEMS } from './js/items/passive/index.js';
 import { ACTIVE_ITEMS } from './js/items/active/index.js';
+import { DONATION_ITEMS, donationItemKey } from './js/items/donation/index.js';
 
 import { POWERUP_TYPES, AMMO_PICKUP } from './js/powerups.js';
 import { PLAYER_STATUS } from './js/status.js';
@@ -83,10 +84,18 @@ EXTRA[AMMO_PICKUP.icon] = { name: 'AMMO PICKUP', theme: AMMO_PICKUP.color };
 for (const def of Object.values(PLAYER_STATUS)) {
   EXTRA[def.icon] = { name: def.label, theme: def.color };
 }
+// Donation rewards are keyed by machine as well as filename, exactly the way
+// test/icons.mjs keys them, so the lookup cannot drift from the catalogue.
+const DONATION = {};
+for (const [kind, pool] of Object.entries(DONATION_ITEMS)) {
+  for (const [id, def] of Object.entries(pool)) {
+    DONATION[donationItemKey(kind, id)] = def;
+  }
+}
 // A drawing nothing claims still gets a cell, named after its key. `npm run
 // test:icons` is what fails on an orphan; a contact sheet that refused to draw
 // would only hide the thing it exists to show.
-const meta = (k) => PASSIVE_ITEMS[k] || ACTIVE_ITEMS[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
+const meta = (k) => PASSIVE_ITEMS[k] || ACTIVE_ITEMS[k] || DONATION[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
 
 const pick = document.getElementById('pick');
 for (const k of PIXEL_ICON_KEYS) {
