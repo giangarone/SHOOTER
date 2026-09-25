@@ -361,10 +361,35 @@ export class SFX {
     this.tone({ f: 190, f2: 60, t: 0.16, type: 'triangle', v: 0.3 });
     this.noise({ t: 0.18, v: 0.22, f: 900 });
   }
-  melee() {
-    this.tone({ f: 120, f2: 60, t: 0.08, type: 'sawtooth', v: 0.4 });
-    this.noise({ t: 0.12, v: 0.35, f: 800, delay: 0.02 });
-    this.tone({ f: 300, f2: 100, t: 0.15, type: 'triangle', v: 0.25, delay: 0.08 });
+  // THE MELEE, IN TWO HALVES. The old single voice was a sawtooth answered
+  // by a triangle - pitched twice over, which is why a rifle butt to the face
+  // rang like an alarm. A swing is air and a hit is meat, and they happen an
+  // eighth of a second apart (see MELEE_SWING in main.js), so they are two
+  // voices: the whoosh on the button, the crunch on the connect. Nothing
+  // pitched in either - both layers the old one carried are gone entirely.
+  //
+  // The whoosh is shared: the dash and the dodge are the same displacement of
+  // air, so both ride it rather than owning a third copy.
+  meleeSwing() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.noise({ t: 0.05, v: 0.2, f: r(3600, 4400), mode: 'highpass' });
+    this.noise({
+      t: 0.14, v: 0.34, f: r(3200, 4000), f2: r(700, 1000), mode: 'bandpass', q: 1.4,
+    });
+  }
+
+  // The connect. A low thump for the weight behind it and a short tear for
+  // the give - the death set's gritty texture at melee range, which is what
+  // keeps it in the family. Only paid when the swing found something:
+  // _meleeStrike says nothing on a miss, and neither does this.
+  meleeHit() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.tone({ f: r(130, 150), f2: 44, t: 0.16, type: 'sine', v: 0.55 });
+    this.noise({ t: 0.12, v: 0.4, f: r(600, 800) });
+    this.noise({
+      t: 0.1, v: 0.3, f: r(1800, 2600), f2: r(300, 450), mode: 'bandpass', q: 1.6,
+    });
+    this.noise({ t: 0.025, v: 0.22, f: r(4200, 5600), mode: 'highpass' });
   }
   pickupAmmo() {
     this.tone({ f: 520, t: 0.04, v: 0.25 });
@@ -882,5 +907,92 @@ export class SFX {
     this.tone({ f: 330, f2: 660, t: 0.2, type: 'sine', v: 0.3 });
     this.noise({ t: 0.3, v: 0.15, f: 2000 });
     this.tone({ f: 990, f2: 1980, t: 0.25, type: 'triangle', v: 0.2, delay: 0.1 });
+  }
+
+  // ---- MOVEMENT FOLEY ------------------------------------------------------
+  //
+  // ONE FAMILY, and deliberately the least musical thing in this file. Every
+  // voice here is filtered noise over a low sine weight, with no pitched layer
+  // anywhere - boots, cloth and floor against a soundtrack the feet must never
+  // argue with. The gun owns the attack, the pickups own the notes, and these
+  // sit under both: footsteps are the quietest thing in the game, and the
+  // slide and the landing are one step up. Randomised inside each recipe the
+  // way the gun is, so a corridor crossed at a run never becomes a loop.
+  //
+  // Driven by the stride phase in player.js rather than by a timer, so the
+  // cadence is the cadence the gun is already bobbing at. Walk, sprint and
+  // crouch differ in WEIGHT, not in timing, because they differ in speed and
+  // the phase is distance-driven.
+
+  // ONE STEP. `kind` is walk, sprint or crouch: the same boots, heavier or
+  // lighter. The sprint lands lower and louder with grit on the front; the
+  // crouch is the walk with the top taken off and half the level, which is
+  // what slow and low sounds like rather than what a different pair of boots
+  // does.
+  step(kind = 'walk') {
+    const r = (a, b) => a + Math.random() * (b - a);
+    if (kind === 'sprint') {
+      this.noise({ t: 0.07, v: 0.2, f: r(400, 650) });
+      this.noise({ t: 0.02, v: 0.04, f: r(1500, 2000), mode: 'highpass' });
+      this.tone({ f: r(80, 96), f2: 42, t: 0.11, type: 'sine', v: 0.26 });
+    } else if (kind === 'crouch') {
+      this.noise({ t: 0.07, v: 0.08, f: r(350, 550) });
+      this.tone({ f: r(86, 100), f2: 50, t: 0.08, type: 'sine', v: 0.1 });
+    } else {
+      this.noise({ t: 0.06, v: 0.13, f: r(500, 800) });
+      this.tone({ f: r(92, 108), f2: 48, t: 0.09, type: 'sine', v: 0.16 });
+    }
+  }
+
+  // THE GROUND JUMP: the push-off, not the flight. A sole scuffing off the
+  // floor with the weight under it - smaller than the air jump's voice on
+  // purpose, because leaving the floor you were standing on is the quieter
+  // half of jumping.
+  jump() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.noise({ t: 0.1, v: 0.18, f: r(500, 750) });
+    this.noise({ t: 0.03, v: 0.06, f: r(1800, 2400), mode: 'highpass' });
+    this.tone({ f: r(118, 138), f2: 64, t: 0.14, type: 'sine', v: 0.22 });
+  }
+
+  // THE AIR JUMP: the second hop, with no floor under it to push against. The
+  // same weight going UP instead of down - a short rise where the ground jump
+  // falls - so the two read as one verb in two places rather than as two.
+  airJump() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.noise({ t: 0.09, v: 0.15, f: r(700, 1100) });
+    this.tone({ f: r(180, 210), f2: r(320, 380), t: 0.14, type: 'sine', v: 0.2 });
+  }
+
+  // THE LANDING. `s` is 0..1 off the fall that earned it - a hop back onto
+  // the same floor is a tap, a full jump is a thud, and anything off the
+  // catwalk lands harder still. WHAT EARNED IT is decided by the caller:
+  // player.js only raises this past a full step of drop, so stairs and kerbs
+  // arrive in silence and this never has to guess.
+  land(s = 0.5) {
+    const k = Math.max(0, Math.min(1, s));
+    const r = (a, b) => a + Math.random() * (b - a);
+    this.tone({ f: r(70, 84), f2: 36, t: 0.14 + 0.14 * k, type: 'sine', v: 0.2 + 0.3 * k });
+    this.noise({ t: 0.08 + 0.1 * k, v: 0.12 + 0.24 * k, f: r(600, 900) });
+    // Grit only on a real landing: a hop does not scuff.
+    if (k > 0.45) this.noise({ t: 0.03, v: 0.12, f: r(2600, 3400), mode: 'highpass' });
+  }
+
+  // THE SLIDE. One shot over the slide's own length: the soft drop of going
+  // down on the front, then muffled white noise while the floor goes past.
+  // STATIONARY, deliberately: the old voice swept its bandpass cutoff down two
+  // octaves over the move, and a moving resonant filter reads as a pitch bend
+  // rather than as friction. The filter barely drifts here; the motion is in
+  // the decay. NOT a loop either - 0.65 against the slide's 0.75, so it is
+  // over before the player is up, and a slide cut short by a jump or a ledge
+  // never leaves a tail behind it.
+  slide() {
+    const r = (a, b) => a + Math.random() * (b - a);
+    // Going down is weight, not an impact: a soft low thud with no click.
+    this.noise({ t: 0.08, v: 0.2, f: r(400, 550) });
+    this.tone({ f: r(70, 84), t: 0.12, type: 'sine', v: 0.18 });
+    // The slide itself: lowpassed noise with only a slight downward drift as
+    // the move bleeds speed. Muffled, and the same from start to finish.
+    this.noise({ t: 0.65, v: 0.26, f: r(1000, 1300), f2: r(700, 900) });
   }
 }

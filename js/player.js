@@ -1030,6 +1030,10 @@ const ADS_GUN_Z = -0.55;
 // to be faster or slower, this is the one number to move: it is the only thing
 // setting the rate, and the amplitudes below do not depend on it.
 const BOB_STRIDE = 7.5;
+// Below this speed the feet are shuffling rather than striding - standing
+// still, landing jitters, the frame a sprint key is found. The bob's own
+// amplitude eases through it, but a footstep is binary and needs the line.
+const STEP_MIN_SPEED = 2.5;
 // Amplitudes at a full walk, in camera-space metres and radians. Big enough to
 // be an animation rather than a shimmer - the weapon travels about five
 // centimetres either side of centre and rolls four degrees into the swing,
@@ -2506,6 +2510,21 @@ export class Player {
     this.jumpFx = false;
     this.dashFx = false;
     this.slideFx = false;
+    // Movement foley, on the same one-shot contract: player.js hears nothing,
+    // main.js pays each flag once through PLAYER_FX. stepKind rides beside
+    // stepFx because a flag cannot carry which boots it was; landStrength
+    // rides beside landFx because a flag cannot carry how far the fall was.
+    this.groundJumpFx = false;
+    this.landFx = false;
+    this.landStrength = 0;
+    this.stepFx = false;
+    this.stepKind = 'walk';
+    // The air's peak, for the landing's drop. While grounded it tracks the
+    // floor; in the air it holds the highest point reached, so the landing
+    // measures the fall itself rather than the difference between two floors -
+    // which is what keeps stair descents silent while a hop up onto a crate
+    // still lands audibly.
+    this._airPeak = 0;
     this.rebuildMods();
     this.weaponKey = STARTING_WEAPON;
     this.mag = WEAPONS[STARTING_WEAPON].magSize;
@@ -3311,6 +3330,10 @@ export class Player {
       // every posture and window bonus is.
       this.vel.y = JUMP_V * (this.mods.bicycleKick > 0 ? BICYCLE_JUMP_MULT : 1);
       this.onGround = false;
+      // The push-off, heard: the ground jump never had a voice, where the air
+      // jump has jumpFx beside it. Raised even out of a slide or a crouch -
+      // both still leave the floor from the feet.
+      this.groundJumpFx = true;
       // JACKPOT. THE GROUND JUMP AND NOT THE AIR ONE, deliberately: this
       // branch is held-key (bunny-hopping down a corridor is movement the game
       // already had), the air jump is edge-triggered off a charge, and rolling
@@ -3461,8 +3484,26 @@ export class Player {
     if (this.onGround && !this._wasGrounded) {
       this.stiltLanding = this.slamArmed;
       this.slamArmed = false;
+      // THE LANDING, HEARD. Only past a full step of drop: a stair tread or a
+      // kerb is walked, never landed on, and the drop is what knows the
+      // difference when the impact speed cannot - a long headless frame falls
+      // fast off a low step. The strength is the drop itself, for the same
+      // reason: a frame-rate measure would make the same jump land harder on
+      // a slow machine. A Stilt slam pays its own crash in main.js.
+      if (!this.stiltLanding) {
+        const drop = this._airPeak - this.pos.y;
+        if (drop > STEP_HEIGHT) {
+          this.landFx = true;
+          this.landStrength = Math.max(0.15, Math.min(1, (drop - STEP_HEIGHT) / 3.4));
+        }
+      }
     }
     this._wasGrounded = this.onGround;
+    // The peak, tracked. Grounded it is the floor underfoot - which is what
+    // keeps a stair descent silent, tread by tread; airborne it only ever
+    // rises, so the landing reads the whole fall.
+    if (this.onGround) this._airPeak = this.pos.y;
+    else this._airPeak = Math.max(this._airPeak, this.pos.y);
     // ---- THE STEP -----------------------------------------------------------
     //
     // Walk into something low enough and you go up it instead of stopping.
@@ -3647,9 +3688,37 @@ export class Player {
     // Metres travelled, turned into stride phase. Only accumulated while the
     // player is on the ground and actually moving, so a jump does not silently
     // advance the cycle and the gun picks the stride back up where it left it.
+    const prevPh = this._bobPhase;
     if (this.onGround) this._bobPhase += (speed / BOB_STRIDE) * Math.PI * 2 * dt;
     if (this._bobPhase > Math.PI * 2) this._bobPhase -= Math.PI * 2;
     const ph = this._bobPhase;
+
+    // THE FOOTSTEPS, off the stride phase itself - never a parallel
+    // accumulator, which advances on its own clock and is exactly how a step
+    // ends up sounding at the top of the bob. A step sounds where the gun
+    // bottoms out: the dip is (cos(ph*2)-1)*0.5 (see below), whose minima sit
+    // at PI/2 and 3PI/2, the instants the sway is at full stretch and the
+    // foot plants. Crossing either one this frame IS the footfall, wrap
+    // included, so the sound and the dip agree at every speed and can never
+    // drift apart. Silent in a slide (the friction owns that) and in a dash
+    // (the drive owns that), and at a standstill, where the phase barely
+    // moves and no crossing can happen.
+    if (this.onGround && speed > STEP_MIN_SPEED
+      && !this.sliding && this.now >= this.dashEnd) {
+      const advanced = (speed / BOB_STRIDE) * Math.PI * 2 * dt;
+      // Any interval a half cycle or longer holds a footfall - the two sit PI
+      // apart - so a hitch that skips clean over both still lands one step
+      // rather than none. One flag a frame either way: percussion cannot
+      // catch up, and must not try.
+      const crossed = (a) => (ph >= prevPh)
+        ? (a > prevPh && a <= ph)
+        : (a > prevPh || a <= ph);
+      if (advanced >= Math.PI
+        || crossed(Math.PI / 2) || crossed(3 * Math.PI / 2)) {
+        this.stepFx = true;
+        this.stepKind = this.sprinting ? 'sprint' : (this.crouching ? 'crouch' : 'walk');
+      }
+    }
 
     // THE SIGHTS STOP IT DEAD, and the same number that raises the gun is what
     // takes the bob away - so the animation fades out over the raise rather

@@ -462,7 +462,7 @@ export function aiGulper(e, a) {
           ctx.effects.burst(_brineAt, 0x8ff0e0, 12, 4, 2, 0.4);
         }
       }
-      if (ctx.sfx) ctx.sfx.melee();
+      if (ctx.sfx) ctx.sfx.meleeHit();
     }
     if (gs.t <= 0 || e.blockedBy > 0.05) {
       gs.state = 'swallow';

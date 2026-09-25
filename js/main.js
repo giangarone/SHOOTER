@@ -1181,20 +1181,40 @@ const PLAYER_FX = [
   }],
   ['jumpFx', (g) => {
     g.effects.shockwave(g.player.pos, 0x82b1ff, 1.6, 0.22);
-    g.sfx.melee();
+    g.sfx.airJump();
     g.pad.rumble(0.3, 0.2, 80, 1);
+  }],
+  ['groundJumpFx', (g) => {
+    // Smaller than the air jump in every channel: a push-off, not a burst.
+    // Dust at the feet rather than a ring, and no rumble - a held key
+    // bunny-hopping down a corridor must never buzz the pad.
+    g.effects.burst(g.player.pos, 0xbfd4e6, 6, 2, 0.8, 0.3);
+    g.sfx.jump();
+  }],
+  ['landFx', (g) => {
+    // The dust and the rumble are gated heavier than the sound: a hop taps,
+    // and only a real landing gets the floor and the pad involved.
+    const s = g.player.landStrength || 0;
+    g.sfx.land(s);
+    if (s > 0.3) g.effects.burst(g.player.pos, 0xbfd4e6, Math.round(4 + 10 * s), 3, 1.2, 0.4);
+    if (s > 0.55) g.pad.rumble(0.25 + 0.3 * s, 0.2, 110, 1);
+  }],
+  ['stepFx', (g) => {
+    // No banner, no effect, no rumble - the quietest flag in the table. The
+    // kind rides beside it on the player, set on the same frame.
+    g.sfx.step(g.player.stepKind);
   }],
   ['slideFx', (g) => {
     // Dust at the player's feet and a short shove of the pad - the one
     // movement in the game that puts them on the floor should be felt through
     // it.
     g.effects.burst(g.player.pos, 0xbfd4e6, 12, 3, 1.2, 0.45);
-    g.sfx.melee();
+    g.sfx.slide();
     g.pad.rumble(0.45, 0.25, 200, 1);
   }],
   ['dashFx', (g) => {
     g.effects.shockwave(g.player.pos, 0x1de9b6, 2.2, 0.22);
-    g.sfx.melee();
+    g.sfx.meleeSwing();
     // A dash is the biggest thing the player does that nothing hits them
     // for, so it is the one movement that gets a shove rather than a tick.
     g.pad.rumble(0.55, 0.3, 150, 2);
@@ -7793,7 +7813,9 @@ class Game {
   // event. See _meleeStrike for the hit itself, and MELEE_SWING for the delay.
   tryMelee() {
     if (!this.player.tryMelee()) return;
-    this.sfx.melee();
+    // The whoosh only: the crunch waits for the strike, 0.12s later, and only
+    // if it found something - see _meleeStrike.
+    this.sfx.meleeSwing();
     this._meleeSwing = MELEE_SWING;
   }
 
@@ -8004,6 +8026,9 @@ class Game {
     // moves it - a spray of gold sparks on top was a fifth signal for one
     // event, and the loudest of the five.
     this.ui.hitMarker();
+    // The crunch, on the connect the whoosh promised. Beside the hitmarker,
+    // which is the frame's other tell that the swing found something.
+    this.sfx.meleeHit();
     this.effects.addShake(0.08);
     this.pad.rumble(0.7, 0.4, 130, 2);
     // A SWING IS A TRIGGER PULL for everything that counts them - it rolls its
@@ -8097,7 +8122,7 @@ class Game {
       this.player.startDodge(this.time);
       this.effects.shockwave(this.player.pos, 0x18ffff, 3, 0.35);
       this.effects.burst(pos, 0x18ffff, 14, 5, 2.5, 0.4);
-      this.sfx.melee();
+      this.sfx.meleeSwing();
       this.ui.banner('DODGE');
       return;
     }

@@ -16,6 +16,10 @@
 //      run behind it is still the plain crouch toggle it always was.
 //   6. Melee hits exactly one enemy per swing, lands on a delay rather than on
 //      the button, draws no ring on the floor, and pays double for the kill.
+//   7. Movement foley: footsteps in the posture's own kind, at the stride's
+//      rate and in phase with the gun dip, push-off and landing voices for
+//      the jumps, one voice per slide, silence over stairs - and the melee
+//      split into a whoosh on the button and a crunch on the connect.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8219;
@@ -378,6 +382,188 @@ try {
     t('a shot kill pays what the body is worth', shot > 0, String(shot));
     t('a melee kill pays double', Math.abs(swung - shot * 2) < 1e-6,
       swung + ' vs ' + shot * 2);
+
+    // ---- 7. movement foley --------------------------------------------------
+    // Spies on the five movement voices (plus the air jump's new one), then
+    // walks, sprints, crouches, jumps, lands and slides across the same bare
+    // floor. The spies replace the recipes, not the flags - the whole one-shot
+    // path through PLAYER_FX is what is being exercised.
+    const sfxCalls = { step: [], stepPhase: [], jump: 0, airJump: 0, land: [], slide: 0, swing: 0, crunch: 0 };
+    g.sfx.step = (k) => { sfxCalls.step.push(k); sfxCalls.stepPhase.push(g.player._bobPhase); };
+    g.sfx.meleeSwing = () => sfxCalls.swing++;
+    g.sfx.meleeHit = () => sfxCalls.crunch++;
+    g.sfx.jump = () => sfxCalls.jump++;
+    g.sfx.airJump = () => sfxCalls.airJump++;
+    g.sfx.land = (s) => sfxCalls.land.push(s);
+    g.sfx.slide = () => sfxCalls.slide++;
+    const foleyRest = async () => {
+      await rest();
+      sfxCalls.step.length = 0;
+      sfxCalls.stepPhase.length = 0;
+      sfxCalls.jump = 0;
+      sfxCalls.airJump = 0;
+      sfxCalls.land.length = 0;
+      sfxCalls.slide = 0;
+    };
+
+    // Walk: walk steps only, at the stride's own cadence.
+    await foleyRest();
+    set({ forward: true });
+    await frames(90);
+    const walkSteps = sfxCalls.step.slice();
+    const walkPhases = sfxCalls.stepPhase.slice(0, walkSteps.length);
+    t('walking plays walk footsteps',
+      walkSteps.length >= 3 && walkSteps.every((k) => k === 'walk'),
+      walkSteps.length + ' steps');
+    // IN SYNC WITH THE GUN. The dip bottoms out at PI/2 and 3PI/2 and tops
+    // out at 0 and PI, so a step the stride actually placed sits nearer a
+    // minimum than a maximum - and a step fired off a drifting accumulator
+    // would sit nearer neither. Compared as means rather than maxima, so one
+    // long headless frame cannot fail it.
+    const circ = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    const meanTo = (refs) => walkPhases.reduce(
+      (s, p) => s + Math.min(...refs.map((r) => circ(p, r))), 0) / walkPhases.length;
+    t('footsteps land with the dip, not against it',
+      meanTo([Math.PI / 2, 3 * Math.PI / 2]) < meanTo([0, Math.PI]),
+      'dip ' + meanTo([Math.PI / 2, 3 * Math.PI / 2]).toFixed(2)
+      + ' vs top ' + meanTo([0, Math.PI]).toFixed(2));
+
+    // Sprint: sprint steps, and more of them over the same frames. Stamina is
+    // topped up throughout: ninety slow headless frames outlast the bar, and
+    // the run dropping to a walk halfway would be measuring the bar rather
+    // than the boots.
+    await foleyRest();
+    set({ forward: true, sprint: true });
+    for (let i = 0; i < 90; i++) { await frames(1); p.stamina = 100; }
+    const runSteps = sfxCalls.step.slice();
+    t('sprinting plays sprint footsteps',
+      runSteps.length >= 3 && runSteps.every((k) => k === 'sprint'),
+      runSteps.length + ' steps');
+    t('a sprint steps faster than a walk',
+      runSteps.length > walkSteps.length,
+      walkSteps.length + ' -> ' + runSteps.length);
+
+    // Crouched: the soft kind, at the slow gear's rate.
+    await foleyRest();
+    set({ crouch: true });
+    await frames(2);
+    set({ crouch: false, forward: true });
+    await frames(90);
+    const crouchSteps = sfxCalls.step.slice();
+    t('crouching plays crouch footsteps',
+      crouchSteps.length >= 1 && crouchSteps.every((k) => k === 'crouch'),
+      crouchSteps.length + ' steps');
+
+    // Ground jump and the landing that follows it - a pure hop, so the
+    // strength below is the strength of one jump and nothing else.
+    await foleyRest();
+    set({ jump: true });
+    await frames(2);
+    set({ jump: false });
+    const tookOff = sfxCalls.jump;
+    for (let i = 0; i < 120 && (!p.onGround || p.pos.y > 0.01); i++) await frames(1);
+    await frames(3);
+    t('a ground jump sounds the push-off', tookOff >= 1, String(tookOff));
+    t('and the landing lands once', sfxCalls.land.length === 1,
+      sfxCalls.land.length + ' landings');
+    t('with a strength inside 0..1',
+      sfxCalls.land.every((s) => s >= 0.15 && s <= 1),
+      sfxCalls.land.map((s) => s.toFixed(2)).join(','));
+    const hopStrength = sfxCalls.land[0];
+
+    // The air jump keeps its own voice, on a fresh flight.
+    await foleyRest();
+    set({ jump: true });
+    await frames(2);
+    set({ jump: false });
+    await frames(4);
+    // The air charge granted directly: Double Jump owns the economy, this
+    // only needs the voice the flag pays for.
+    p.jumpsLeft = 1;
+    set({ jump: true });
+    await frames(2);
+    const aired = sfxCalls.airJump;
+    set({ jump: false });
+    for (let i = 0; i < 120 && (!p.onGround || p.pos.y > 0.01); i++) await frames(1);
+    await frames(3);
+    t('an air jump keeps its own voice', aired === 1, String(aired));
+
+    // A long fall lands harder than the hop - the strength is the drop, so
+    // the same jump sounds the same on any machine.
+    await foleyRest();
+    p.pos.set(0, 4, 0);
+    p.vel.set(0, 0, 0);
+    for (let i = 0; i < 120 && (!p.onGround || p.pos.y > 0.01); i++) await frames(1);
+    await frames(3);
+    t('a long fall lands harder than a hop',
+      sfxCalls.land.length === 1 && sfxCalls.land[0] > hopStrength + 0.2,
+      hopStrength.toFixed(2) + ' -> ' + sfxCalls.land.map((s) => s.toFixed(2)).join(','));
+
+    // Slide: one voice for the whole move, and no footsteps inside it.
+    await foleyRest();
+    set({ forward: true, sprint: true });
+    await frames(25);
+    set({ crouch: true });
+    await frames(1);
+    set({ crouch: false });
+    const slidOpen = p.sliding && sfxCalls.slide === 1;
+    let stepsDuringSlide = 0;
+    for (let i = 0; i < 120 && p.sliding; i++) {
+      const before = sfxCalls.step.length;
+      await frames(1);
+      if (p.sliding) stepsDuringSlide += sfxCalls.step.length - before;
+    }
+    t('a slide plays its voice once',
+      slidOpen && sfxCalls.slide === 1, String(sfxCalls.slide));
+    t('and no footsteps play inside it', stepsDuringSlide === 0,
+      String(stepsDuringSlide));
+
+    // Stairs: a half-metre kerb stepped up and off in silence. Stepped by
+    // hand - the frames() helper clears the arena, kerb included.
+    await foleyRest();
+    const kerb = { min: { x: -2, y: 0, z: -4 }, max: { x: 2, y: 0.5, z: -2 } };
+    g.arena.obstacles.push(kerb);
+    set({ forward: true });
+    let maxY = 0;
+    for (let i = 0; i < 120; i++) {
+      await step();
+      maxY = Math.max(maxY, p.pos.y);
+    }
+    set({ forward: false });
+    const crossed = Math.abs(p.pos.z) > 3;
+    const steppedOff = Math.abs(p.pos.y) < 0.05;
+    g.arena.obstacles.pop();
+    t('a kerb is stepped up without a landing',
+      maxY > 0.4 && sfxCalls.land.length === 0,
+      'maxY ' + maxY.toFixed(2) + ', landings ' + sfxCalls.land.length);
+    t('and stepped off in silence too',
+      crossed && steppedOff && sfxCalls.land.length === 0,
+      'z ' + p.pos.z.toFixed(2) + ' y ' + p.pos.y.toFixed(2));
+
+    // The melee, in two halves. A whiff is the whoosh and nothing after it;
+    // a connect lands the crunch on the strike's delay, not on the button.
+    // Stepped by hand - frames() would clear the victim.
+    await foleyRest();
+    p.meleeCd = 0;
+    g.tryMelee();
+    await frames(20);
+    t('a swing sounds the whoosh on the button', sfxCalls.swing === 1,
+      String(sfxCalls.swing));
+    t('and a miss stays silent after it', sfxCalls.crunch === 0,
+      String(sfxCalls.crunch));
+    sfxCalls.swing = 0;
+    sfxCalls.crunch = 0;
+    p.meleeCd = 0;
+    clear();
+    const victim = new Enemy('chaser', new THREE.Vector3(0, 0, -2), 1, 1, 1);
+    victim.group.position.copy(victim.pos);
+    g.scene.add(victim.group);
+    g.enemies.push(victim);
+    g.tryMelee();
+    for (let i = 0; i < 30; i++) await step();
+    t('a connect lands the crunch with the strike',
+      sfxCalls.swing === 1 && sfxCalls.crunch === 1,
+      'swing ' + sfxCalls.swing + ' crunch ' + sfxCalls.crunch);
 
     clear();
     return out;

@@ -117,9 +117,9 @@ export default defineActiveItem(({ THREE, Turret, Mine, Bomb, FireWall, HoleOrb,
           landed = true;
         }
       }
-      // One shared whoosh per frame the ring connected, however many blades
+      // One shared crunch per frame the ring connected, however many blades
       // landed in it - the same rule the trigger's hitmarker follows.
-      if (landed) game.sfx.melee();
+      if (landed) game.sfx.meleeHit();
     },
     end: (game, s) => {
       for (const b of s.blades) game.scene.remove(b);
