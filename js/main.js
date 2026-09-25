@@ -1143,6 +1143,13 @@ const PLAYER_FX = [
     g.ui.flashReserve();
     g.sfx.reload();
   }],
+  ['reloadFx', (g) => {
+    // A reload BEGINNING down any path - the R key, a dry trigger pull, or
+    // the last round going downrange. The real length, so the seating knock
+    // lands on seating even under Speed Loader. Raised only by startReload();
+    // the seating-edge callers above and below keep their own direct sound.
+    g.sfx.reload(g.player.reloadTime);
+  }],
   ['jackpotFx', (g) => {
     // BEFORE the jump flash so the two land on one frame as one event rather
     // than as a jump and then a surprise. The SOUND is the whole tell - it
@@ -4059,7 +4066,10 @@ class Game {
 
   tryReload() {
     if (this.state !== 'playing') return;
-    if (this.player.startReload()) this.sfx.reload();
+    // The sound rides the reloadFx flag startReload() raises, paid through
+    // PLAYER_FX - the same flag the dry trigger and the last round raise, so
+    // every reload sounds alike whatever started it.
+    this.player.startReload();
   }
 
   // FIRES THE ACTIVE ITEM. Q and L1 both land here, and so does a double-tapped

@@ -2754,6 +2754,9 @@ export class Player {
     this.reserveAmmo = 90;
     this.fireCd = 0;
     this.reloading = 0;
+    // A reload STARTING, announced to main.js the one-shot-flag way - see
+    // startReload and PLAYER_FX. Raised and paid within one frame.
+    this.reloadFx = false;
     // The magazine count the LAST trigger pull saw, before that pull was
     // billed. Read by Game._resolveHit for FATAL RESERVE and by nothing else.
     this.magAtShot = 0;
@@ -4210,7 +4213,9 @@ export class Player {
   }
 
   // Returns false when a reload is pointless (already reloading, mag full, or
-  // no reserve), so callers can skip the sound.
+  // no reserve). A started reload raises reloadFx, paid through PLAYER_FX in
+  // main.js - player.js has no audio - so every path that gets here sounds
+  // alike: the R key, the dry trigger pull, and the last round going downrange.
   startReload() {
     // BELT FED DREAM. There is no magazine, so there is nothing to reload and
     // no dry click either - the gun runs off the reserve until the reserve is
@@ -4233,6 +4238,7 @@ export class Player {
     // decision the pick offers.
     this.magOnReload = this.mag;
     this.reloading = this.reloadTime;
+    this.reloadFx = true;
     return true;
   }
 
@@ -4273,6 +4279,10 @@ export class Player {
       if (this.lastShotAutoReload && this.mag > 0) {
         this.reloading = 0;
         this.magOnReload = 0;
+        // And un-announce it: the auto-reload this trigger pull started never
+        // happened, and its flag has not been paid yet - both run inside the
+        // same shoot() call, ahead of the loop's second drain.
+        this.reloadFx = false;
       }
     } else if (this.lastShotPool === 'reserve') {
       this.reserveAmmo = Math.min(this.maxReserve, this.reserveAmmo + spent);

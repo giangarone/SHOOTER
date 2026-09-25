@@ -22,8 +22,9 @@ export class SFX {
   constructor() {
     this.ctx = null;
     this.master = null;
-    // Only used to time the reload's final click. Must match
-    // Player.reloadTime in player.js.
+    // Fallback clock for the reload's mechanical events. tryReload() passes
+    // the real Player.reloadTime so the seat lands on seating even under
+    // Speed Loader; this matches the base weapon reloadTime in weapons.js.
     this.reloadDur = 1.4;
     // Ladder state for coin(). Context time, so it survives a pause.
     this._coinAt = -10;
@@ -269,10 +270,51 @@ export class SFX {
   hurt() {
     this.tone({ f: 110, f2: 55, t: 0.25, type: 'sawtooth', v: 0.45 });
   }
-  reload() {
-    this.tone({ f: 300, t: 0.05, v: 0.3 });
-    this.tone({ f: 420, t: 0.05, v: 0.3, delay: 0.12 });
-    this.tone({ f: 560, t: 0.06, v: 0.35, delay: this.reloadDur - 0.1 });
+  // THE RELOAD. A magazine being changed, not a console confirming
+  // something: the old recipe was three tuned beeps, which is why it never
+  // read as a reload. Nothing in here is a note - every layer is noise or a
+  // low thump, so there is nothing the ear can hear as pitched and nothing
+  // that can land in or out of key with the track.
+  //
+  // Four events on the animation's own clock (see _animateReload in
+  // player.js): the release click as the spent mag comes free, its clatter
+  // going, the heavy clack of the fresh one driven home, and the seat knock
+  // with the slide racked just before the gun goes live. Metallic character
+  // comes from narrow bandpass ringing (high Q); weight from a low sine
+  // underneath. The fresh mag going in is the loudest event, the way it is in
+  // the animation's seat spike.
+  //
+  // `dur` is the reload's real length - Speed Loader and friends shorten it -
+  // so the seat still lands on seating. It defaults to reloadDur for the
+  // callers that fire off a seating edge rather than a fresh reload.
+  reload(dur = this.reloadDur) {
+    const D = dur > 0.35 ? dur : this.reloadDur;
+    const r = (a, b) => a + Math.random() * (b - a);
+    const dOut = D * 0.22 + r(-0.01, 0.01);
+    const dDrop = D * 0.38 + r(-0.015, 0.015);
+    const dIn = D * 0.62 + r(-0.015, 0.015);
+    const dSeat = D * 0.78;
+    const dRack = Math.max(dSeat + 0.09, D - 0.09);
+    // 1. RELEASE. The catch letting go and the spent mag coming free: a short
+    // metallic tick with a high click on the front.
+    this.noise({ t: 0.025, v: 0.3, f: r(4200, 5200), mode: 'highpass', delay: dOut });
+    this.noise({ t: 0.045, v: 0.24, f: r(2400, 2900), mode: 'bandpass', q: 3, delay: dOut });
+    // 2. THE SPENT MAG GOING. Soft and low, dropped rather than driven - the
+    // quietest event, so the fresh one landing after it reads as heavier.
+    this.noise({ t: 0.07, v: 0.13, f: r(700, 900), mode: 'lowpass', delay: dDrop });
+    this.noise({ t: 0.03, v: 0.09, f: r(5500, 6800), mode: 'highpass', delay: dDrop + 0.02 });
+    // 3. THE FRESH MAG DRIVEN HOME. The loudest event: a narrow clank with a
+    // low thump under it for the weight of the hand behind it.
+    this.noise({ t: 0.025, v: 0.3, f: r(4800, 5800), mode: 'highpass', delay: dIn });
+    this.noise({ t: 0.07, v: 0.42, f: r(1700, 2100), mode: 'bandpass', q: 3.5, delay: dIn });
+    this.tone({ f: r(150, 170), f2: 62, t: 0.12, type: 'sine', v: 0.4, delay: dIn });
+    // 4. SEATED, on the animation's seat spike - the knock as the mag bottoms
+    // out - with the slide racked a beat later, two quick metallic snaps, just
+    // before the gun goes live again.
+    this.noise({ t: 0.05, v: 0.34, f: r(2900, 3400), mode: 'bandpass', q: 4, delay: dSeat });
+    this.tone({ f: r(120, 140), f2: 55, t: 0.14, type: 'sine', v: 0.38, delay: dSeat });
+    this.noise({ t: 0.03, v: 0.26, f: r(2200, 2600), mode: 'bandpass', q: 3, delay: dRack });
+    this.noise({ t: 0.035, v: 0.3, f: r(2600, 3100), mode: 'bandpass', q: 3, delay: dRack + 0.05 });
   }
   // NOT the wave stinger any more, despite the name: wave start and wave
   // clear are deliberately silent. What is left are the three moments that
