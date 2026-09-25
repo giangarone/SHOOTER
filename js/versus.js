@@ -251,7 +251,7 @@ export class VersusMatch {
 // handoff, and that is exactly the bug this mode cannot afford.
 const PLAYER_SKIP = new Set([
   // Session objects. The camera and the viewmodel outlive every run.
-  'camera', 'gunModels', 'muzzle', 'magPart',
+  'camera', 'gunModels', 'muzzle', 'ejectPort', 'magPart',
   'gunBaseX', 'gunBaseY', 'gunBaseZ', 'magBaseY',
 
   // ---- THE BODY, WHICH IS NOT THE RUN ------------------------------------

@@ -230,6 +230,12 @@ moment as grey matter, deliberately *not* additive, because residue occludes
 rather than glows. Nothing flies out of it as particles — the streak already
 carries the direction downrange.
 
+Each successful trigger pull also ejects a small brass casing from the rifle's
+visible receiver port. Casings are preallocated, leave in world space, and use
+the same low-bounce, ground-drag, tumble, and final shrink curve as the corpse
+debris pool before they retire. Sustained fire therefore spends no new scene
+objects, and a casing keeps its own arc while the weapon recoils around it.
+
 The movement penalty scales continuously off live speed rather than switching
 on past a threshold: standing, walking and sprinting are three different guns,
 and a full sprint roughly doubles the standing cone. It used to be a flat

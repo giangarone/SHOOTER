@@ -259,7 +259,7 @@ import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './
 import { Pad, BTN, BTN_NAMES } from './pad.js';
 import { MenuDriver, renderControls, cap } from './padmenu.js';
 import { Keybinds, KEY_ACTIONS, PAD_ACTIONS, isPadFixed } from './keybind.js';
-import { resolveCircle, BOSS_HEIGHT } from './utils.js';
+import { resolveCircle, groundSurface, BOSS_HEIGHT } from './utils.js';
 import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
@@ -2648,6 +2648,7 @@ class Game {
     // Corpses outlive the enemies that own them, so the roster being torn down
     // is not enough to take them with it.
     this.effects.clearCorpses();
+    this.effects.clearCasings();
     // THE PETS GO WITH THE ENTITIES AND NOT WITH THE HAZARDS, which is the one
     // line that makes them companions rather than deployables: _clearHazards
     // runs at every wave end, and this runs at a run reset, a death and a
@@ -7366,6 +7367,10 @@ class Game {
     this.pad.rumble(0.18 + w.shake * 1.4, 0.42, 55, 1);
 
     const muzzle = this.player.muzzleInto(this._muzzle);
+    this.effects.ejectCasing(
+      this.player.ejectPort,
+      groundSurface(this.player.pos, 0.4, this.arena.obstacles)
+    );
     // The blast rides the camera's forward, not any one pellet's ray - the
     // blast is the gun's, the streaks draw the spread.
     this.camera.getWorldDirection(this._killPos);

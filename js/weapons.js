@@ -73,6 +73,14 @@ function muzzleAt(x, y, z) {
   return m;
 }
 
+function ejectionAt(x, y, z) {
+  const m = new THREE.Object3D();
+  m.name = 'ejectPort';
+  m.position.set(x, y, z);
+  m.rotation.y = -Math.PI / 2;
+  return m;
+}
+
 // THE RIFLE, PART BY PART.
 //
 // Still boxes and short cylinders, like everything else in the game - what
@@ -132,7 +140,8 @@ function buildPulseRifle() {
   part(new THREE.BoxGeometry(0.11, 0.014, 0.024), steel, 0, 0.041, 0.186);
   // EJECTION PORT, a flush steel plate on the visible flank. It ends before
   // the tag's seat begins so the versus strip never has to fight it.
-  part(new THREE.BoxGeometry(0.006, 0.032, 0.12), steel, -0.047, 0, -0.1);
+  const ejectionPort = part(new THREE.BoxGeometry(0.006, 0.032, 0.12), steel, -0.047, 0, -0.1);
+  ejectionPort.name = 'ejectionPort';
   // SELECTOR, a short lever just under the tag.
   part(new THREE.BoxGeometry(0.01, 0.014, 0.04), steel, -0.048, -0.043, 0.07, -0.45);
 
@@ -218,7 +227,13 @@ function buildPulseRifle() {
   part(new THREE.BoxGeometry(0.046, 0.02, 0.09), poly, 0, 0.048, 0.25);
   part(new THREE.BoxGeometry(0.058, 0.108, 0.024), dark, 0, -0.01, 0.307);
 
-  g.add(...parts, magazine, buildPlayerTag(), muzzleAt(0, 0.008, -0.77));
+  g.add(
+    ...parts,
+    magazine,
+    buildPlayerTag(),
+    muzzleAt(0, 0.008, -0.77),
+    ejectionAt(-0.056, 0.004, -0.1)
+  );
   return g;
 }
 

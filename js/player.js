@@ -1280,6 +1280,7 @@ export class Player {
     const model = this.gun;
     model.visible = true;
     this.muzzle = model.getObjectByName('muzzle');
+    this.ejectPort = model.getObjectByName('ejectPort') || null;
     this.gunBaseZ = model.userData.baseZ;
     this.gunBaseY = model.userData.baseY;
     this.gunBaseX = model.userData.baseX;

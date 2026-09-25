@@ -111,6 +111,45 @@ const CORPSE_FLASH_INTENSITY = 0.9;
 const CORPSE_OUT = 2.6;
 const CORPSE_UP = 3.4;
 
+const DEBRIS_GRAVITY = CORPSE_GRAVITY;
+const DEBRIS_BOUNCE = CORPSE_BOUNCE;
+const DEBRIS_GROUND_DRAG = 0.55;
+const DEBRIS_SPIN_DRAG = 0.4;
+const DEBRIS_SHRINK = CORPSE_SHRINK;
+const DEBRIS_SHRINK_EXP = 0.7;
+const CASING_SLOTS = 16;
+const CASING_LIFE = 1;
+const CASING_FLOOR_CLEARANCE = 0.008;
+const CASING_SIDE_SPEED = 1.45;
+const CASING_UP_SPEED = 0.85;
+const CASING_SPIN = 17;
+const CASING_LENGTH = 0.045;
+const CASING_RADIUS = 0.0055;
+const CASING_SEGMENTS = 8;
+
+function stepDebris(mesh, vel, spin, base, index, dt, floorY, life, maxLife, shrinkAt) {
+  const i3 = index * 3;
+  vel[i3 + 1] -= DEBRIS_GRAVITY * dt;
+  mesh.position.x += vel[i3] * dt;
+  mesh.position.y += vel[i3 + 1] * dt;
+  mesh.position.z += vel[i3 + 2] * dt;
+  if (mesh.position.y <= floorY && vel[i3 + 1] < 0) {
+    mesh.position.y = floorY;
+    vel[i3 + 1] = -vel[i3 + 1] * DEBRIS_BOUNCE;
+    vel[i3] *= DEBRIS_GROUND_DRAG;
+    vel[i3 + 2] *= DEBRIS_GROUND_DRAG;
+    spin[i3] *= DEBRIS_SPIN_DRAG;
+    spin[i3 + 1] *= DEBRIS_SPIN_DRAG;
+    spin[i3 + 2] *= DEBRIS_SPIN_DRAG;
+  }
+  mesh.rotation.x += spin[i3] * dt;
+  mesh.rotation.y += spin[i3 + 1] * dt;
+  mesh.rotation.z += spin[i3 + 2] * dt;
+  const t = Math.max(0, life / maxLife);
+  const k = t >= shrinkAt ? 1 : (t / shrinkAt) ** DEBRIS_SHRINK_EXP;
+  mesh.scale.set(base[i3] * k, base[i3 + 1] * k, base[i3 + 2] * k);
+}
+
 // Points along a homing tracer. Enough that the bend reads as a curve rather
 // than as two straight lines meeting at an angle.
 const ARC_SEGMENTS = 12;
@@ -816,6 +855,46 @@ export class Effects {
       });
     }
 
+    this.casings = [];
+    const casingBodyGeometry = new THREE.CylinderGeometry(
+      CASING_RADIUS, CASING_RADIUS, CASING_LENGTH, CASING_SEGMENTS
+    );
+    casingBodyGeometry.rotateX(Math.PI / 2);
+    const casingRimGeometry = new THREE.TorusGeometry(
+      CASING_RADIUS * 1.02, 0.0011, 4, CASING_SEGMENTS
+    );
+    const casingMouthGeometry = new THREE.CircleGeometry(
+      CASING_RADIUS * 0.78, CASING_SEGMENTS
+    );
+    const casingMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc8903f, roughness: 0.28, metalness: 0.55,
+      emissive: 0x1a0d02, emissiveIntensity: 0.1,
+    });
+    const casingInsideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x20140a, roughness: 0.45, metalness: 0.25,
+    });
+    for (let i = 0; i < CASING_SLOTS; i++) {
+      const mesh = new THREE.Group();
+      const body = new THREE.Mesh(casingBodyGeometry, casingMaterial);
+      const rim = new THREE.Mesh(casingRimGeometry, casingMaterial);
+      rim.position.z = CASING_LENGTH / 2;
+      const mouth = new THREE.Mesh(casingMouthGeometry, casingInsideMaterial);
+      mouth.position.z = CASING_LENGTH / 2 + 0.00025;
+      mesh.add(body, rim, mouth);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.casings.push({
+        mesh,
+        vel: new Float32Array(3),
+        spin: new Float32Array(3),
+        base: new Float32Array([1, 1, 1]),
+        life: 0,
+        maxLife: CASING_LIFE,
+        floorY: 0,
+      });
+    }
+
     // TELEGRAPH MARKS. Ground markers for attacks that announce themselves
     // before they land - a mortar's impact circle, a boss's charge lane.
     //
@@ -995,6 +1074,8 @@ export class Effects {
 
     // Scratch, allocated once - nothing in this file allocates at runtime.
     this._tracerAt = new THREE.Vector3();
+    this._casingAt = new THREE.Vector3();
+    this._casingDir = new THREE.Vector3();
 
     this.flashLight = new THREE.PointLight(0xffc36b, 0, 7);
     scene.add(this.flashLight);
@@ -1409,33 +1490,11 @@ export class Effects {
           }
         }
       }
-      // The last third of the life closes the pieces down to nothing, on a
-      // curve rather than a ramp so they are still full size for most of the
-      // fall and then go quickly.
-      const t = c.life / CORPSE_LIFE;
-      const k = t >= CORPSE_SHRINK ? 1 : (t / CORPSE_SHRINK) ** 0.7;
       for (let i = 0; i < c.n; i++) {
-        const m = c.meshes[i];
-        const i3 = i * 3;
-        c.vel[i3 + 1] -= CORPSE_GRAVITY * dt;
-        m.position.x += c.vel[i3] * dt;
-        m.position.y += c.vel[i3 + 1] * dt;
-        m.position.z += c.vel[i3 + 2] * dt;
-        if (m.position.y <= c.floorY && c.vel[i3 + 1] < 0) {
-          m.position.y = c.floorY;
-          c.vel[i3 + 1] = -c.vel[i3 + 1] * CORPSE_BOUNCE;
-          // Ground drag, on the slide and on the tumble together: a piece that
-          // landed should come to rest, not keep rolling for the whole life.
-          c.vel[i3] *= 0.55;
-          c.vel[i3 + 2] *= 0.55;
-          c.spin[i3] *= 0.4;
-          c.spin[i3 + 1] *= 0.4;
-          c.spin[i3 + 2] *= 0.4;
-        }
-        m.rotation.x += c.spin[i3] * dt;
-        m.rotation.y += c.spin[i3 + 1] * dt;
-        m.rotation.z += c.spin[i3 + 2] * dt;
-        m.scale.set(c.base[i3] * k, c.base[i3 + 1] * k, c.base[i3 + 2] * k);
+        stepDebris(
+          c.meshes[i], c.vel, c.spin, c.base, i, dt,
+          c.floorY, c.life, CORPSE_LIFE, DEBRIS_SHRINK
+        );
       }
     }
   }
@@ -1463,6 +1522,68 @@ export class Effects {
    */
   clearCorpses() {
     for (const c of this.corpses) if (c.life > 0) this._retireCorpse(c);
+  }
+
+  ejectCasing(port, floorY = 0) {
+    if (!port) return;
+    let slot = null;
+    for (const c of this.casings) {
+      if (c.life <= 0) {
+        slot = c;
+        break;
+      }
+    }
+    if (!slot) {
+      slot = this.casings[0];
+      for (const c of this.casings) if (c.life < slot.life) slot = c;
+      this._retireCasing(slot);
+    }
+    port.getWorldPosition(this._casingAt);
+    port.getWorldDirection(this._casingDir);
+    slot.mesh.position.copy(this._casingAt);
+    const side = CASING_SIDE_SPEED * (0.85 + Math.random() * 0.3);
+    slot.vel[0] = this._casingDir.x * side;
+    slot.vel[1] = this._casingDir.y * side + CASING_UP_SPEED * (0.8 + Math.random() * 0.4);
+    slot.vel[2] = this._casingDir.z * side;
+    slot.spin[0] = (Math.random() - 0.5) * CASING_SPIN * 2;
+    slot.spin[1] = (Math.random() - 0.5) * CASING_SPIN * 2;
+    slot.spin[2] = (Math.random() - 0.5) * CASING_SPIN * 2;
+    slot.mesh.rotation.set(
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2,
+      Math.random() * Math.PI * 2
+    );
+    slot.mesh.scale.set(1, 1, 1);
+    slot.mesh.visible = true;
+    slot.floorY = floorY + CASING_FLOOR_CLEARANCE;
+    slot.life = slot.maxLife = CASING_LIFE;
+  }
+
+  _retireCasing(c) {
+    c.life = 0;
+    c.vel.fill(0);
+    c.spin.fill(0);
+    c.mesh.scale.set(1, 1, 1);
+    c.mesh.visible = false;
+  }
+
+  clearCasings() {
+    for (const c of this.casings) if (c.life > 0) this._retireCasing(c);
+  }
+
+  _stepCasings(dt) {
+    for (const c of this.casings) {
+      if (c.life <= 0) continue;
+      c.life -= dt;
+      if (c.life <= 0) {
+        this._retireCasing(c);
+        continue;
+      }
+      stepDebris(
+        c.mesh, c.vel, c.spin, c.base, 0, dt,
+        c.floorY, c.life, c.maxLife, DEBRIS_SHRINK
+      );
+    }
   }
 
   // Claim a telegraph slot. Returns a handle to pass to markSet/markRelease,
@@ -2136,6 +2257,7 @@ export class Effects {
       }
       this._drawBlast(b, 1 - b.life / BLAST_LIFE);
     }
+    this._stepCasings(dt);
     this._stepCorpses(dt);
     this._stepPool(this.sparks, dt);
     this._stepPool(this.impacts, dt);

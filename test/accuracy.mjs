@@ -372,6 +372,96 @@ try {
       }
     }
 
+    {
+      const poolSize = g.effects.casings.length;
+      g.effects.clearCasings();
+      const portAt = p.ejectPort.getWorldPosition(g.effects._casingAt);
+      g.effects.ejectCasing(p.ejectPort, 0);
+      const c = g.effects.casings.find((x) => x.life > 0);
+      const offset = c
+        ? Math.hypot(
+          c.mesh.position.x - portAt.x,
+          c.mesh.position.y - portAt.y,
+          c.mesh.position.z - portAt.z
+        )
+        : Infinity;
+      t('a casing is born at the ejection port', c != null && offset < 1e-4, offset);
+      if (c) {
+        const dir = p.ejectPort.getWorldDirection(g._killPos);
+        const along = c.vel[0] * dir.x + c.vel[1] * dir.y + c.vel[2] * dir.z;
+        t('it leaves along the port normal', along > 0.5, along.toFixed(3));
+      } else {
+        t('it leaves along the port normal', false, 'no live casing');
+      }
+
+      g.effects.clearCasings();
+      p.mag = 9999;
+      p.reserveAmmo = 9999;
+      p.fireCd = 0;
+      p.reloading = 0;
+      p.status.fear = 0;
+      g.input.shootFresh = false;
+      g.shoot();
+      const shotLive = g.effects.casings.filter((x) => x.life > 0).length;
+      p.fireCd = 1;
+      g.shoot();
+      const afterBlocked = g.effects.casings.filter((x) => x.life > 0).length;
+      t('one successful trigger pull births one casing', shotLive === 1, String(shotLive));
+      t('a cooling trigger does not eject another', afterBlocked === shotLive,
+        shotLive + ' -> ' + afterBlocked);
+
+      g.effects.clearCasings();
+      g.effects.ejectCasing(p.ejectPort, 0);
+      const phys = g.effects.casings.find((x) => x.life > 0);
+      if (phys) {
+        phys.vel[0] = 0;
+        phys.vel[1] = -2;
+        phys.vel[2] = 0;
+        phys.mesh.position.y = 1;
+        let bounced = false;
+        let below = false;
+        let maxV = -Infinity;
+        for (let i = 0; i < 30; i++) {
+          const before = phys.vel[1];
+          g.effects.update(1 / 60);
+          maxV = Math.max(maxV, phys.vel[1]);
+          if (before < 0 && phys.vel[1] > 0) bounced = true;
+          if (phys.mesh.position.y < phys.floorY - 1e-5) below = true;
+        }
+        t('a casing bounces and stays above its floor', bounced && !below,
+          'bounced=' + bounced + ' below=' + below + ' maxV=' + maxV.toFixed(3)
+          + ' y=' + phys.mesh.position.y.toFixed(3) + ' floor=' + phys.floorY);
+        phys.life = 0.3;
+        phys.mesh.scale.set(1, 1, 1);
+        g.effects.update(0.01);
+        const firstScale = phys.mesh.scale.x;
+        g.effects.update(0.01);
+        const secondScale = phys.mesh.scale.x;
+        t('a casing uses the corpse shrink curve',
+          firstScale < 1 && secondScale < firstScale,
+          firstScale.toFixed(3) + ' -> ' + secondScale.toFixed(3));
+        phys.life = 0.001;
+        g.effects.update(1 / 60);
+        t('the casing pool drains', phys.life === 0 && !phys.mesh.visible,
+          'life=' + phys.life + ' visible=' + phys.mesh.visible);
+      } else {
+        t('a casing bounces and stays above its floor', false, 'no live casing');
+        t('a casing uses the corpse shrink curve', false, 'no live casing');
+        t('the casing pool drains', false, 'no live casing');
+      }
+
+      g.effects.clearCasings();
+      const sceneBefore = g.scene.children.length;
+      for (let i = 0; i < poolSize + 4; i++) g.effects.ejectCasing(p.ejectPort, 0);
+      const live = g.effects.casings.filter((x) => x.life > 0).length;
+      t('the casing pool stays bounded', live === poolSize && g.scene.children.length === sceneBefore,
+        poolSize + ' slots, ' + live + ' live');
+      g.effects.ejectCasing(p.ejectPort, 0);
+      g._clearEntities();
+      t('clearing entities drains the casing pool',
+        g.effects.casings.every((x) => x.life === 0 && !x.mesh.visible), 'clearEntities');
+    }
+
     // ---- 6. HAIR TRIGGER ---------------------------------------------------
     // One trigger pull of a fixed length, measured before and after the card,
     // so the two readings differ by the passive item and by nothing else.
