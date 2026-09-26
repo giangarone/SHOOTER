@@ -42,10 +42,9 @@
 //       and the start screen's sheet. CROSS/CIRCLE/OPTIONS cancel a capture
 //       rather than binding, DEFAULTS puts the shipped layout back, and the
 //       save is real: a fresh table reads it.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8212;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

@@ -28,10 +28,9 @@
 //      block of rows for the controller, and the input mode picks which one
 //      the eye gets - asserted here for the swap itself; the pad rows' own
 //      rebind behaviour is test/pad.mjs's, on a synthetic DualSense.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8245;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

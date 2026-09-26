@@ -16,7 +16,7 @@
 // repeat scaling is covered too.
 //
 // Usage: node test/boss.mjs [waveList]
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8211;
 // A WAVE NO LONGER NAMES A BOSS. Which fight wave 5 is depends on which of
@@ -33,7 +33,6 @@ const THEMES_UNDER_TEST = (process.argv[2] || '').split(',').filter(Boolean);
 // enough - and they are spread up the curve so bossScale() is exercised too.
 const PIN_WAVES = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

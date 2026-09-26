@@ -19,10 +19,9 @@
 //   9. HIGH STAKES prices read FREE, on both consoles.
 //  10. The Forge-Tyrant opens its core often enough to be a mechanic.
 //  11. BOTTOM FEEDER's window is on the HUD.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8241;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

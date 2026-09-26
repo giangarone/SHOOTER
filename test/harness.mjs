@@ -124,3 +124,22 @@ export async function launchBrowser(extra = {}) {
   };
   return browser;
 }
+
+// One line, needed by nearly every suite and identical in all of them.
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The boot every game-state suite performs: one page, console and page errors
+// captured for the trailing 'no console errors' assertion, and the game waited
+// on EXISTING rather than on the document loading - on a loaded runner __game
+// can take seconds to appear, and a goto alone raced it (see smoke.mjs's note).
+// Suites that boot differently - a viewport, extra request logging, a second
+// page - keep their own block; this exists for the ones that were byte-identical.
+export async function bootPage(browser, port) {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
+  await page.goto(`http://127.0.0.1:${port}/?autotest`, { waitUntil: 'load', timeout: 30000 });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  return { page, errors };
+}

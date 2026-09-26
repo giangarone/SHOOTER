@@ -7,3 +7,4 @@ server.log
 
 # smoke test screenshot artifact
 test/shot.png
+__pycache__/

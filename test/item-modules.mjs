@@ -5,13 +5,12 @@ import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { launchBrowser, ROOT, startServer } from './harness.mjs';
+import { launchBrowser, ROOT, sleep, startServer } from './harness.mjs';
 import { buildPages } from '../tools/build-pages.mjs';
 import { DONATION_ITEMS } from '../js/items/donation/index.js';
 
 const PORT = 8249;
 const PAGES_PORT = 8250;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

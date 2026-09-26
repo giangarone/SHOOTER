@@ -12,10 +12,9 @@
 // amount however many are bought, that the reel MOVES rather than showing one
 // item for four seconds, that the item the player is carrying cannot appear on
 // it, and that the shot path and the E path are the same funnel.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8203;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

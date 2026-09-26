@@ -1,4 +1,4 @@
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8199;
 // Caps the game promises to hold. Mirrors the constants in js/main.js.
@@ -6,7 +6,6 @@ const MAX_ACTIVE_PICKUPS = 12;
 const MAX_ACTIVE_AMMO = 5;
 const MAX_PROJECTILES = 72;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

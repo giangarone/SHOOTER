@@ -20,10 +20,9 @@
 //   7. Movement opens the cone from either pose, and costs less down the
 //      sights than from the hip.
 //   8. A reload takes the gun out of the aim and hands it back after.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8213;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

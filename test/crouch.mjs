@@ -20,10 +20,9 @@
 //      rate and in phase with the gun dip, push-off and landing voices for
 //      the jumps, one voice per slide, silence over stairs - and the melee
 //      split into a whoosh on the button and a crunch on the connect.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8219;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

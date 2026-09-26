@@ -21,10 +21,9 @@
 //   4. A geode fires at where the player HAS BEEN, not where they are.
 //   5. A gargoyle holds its perch, is armoured there, comes down only when
 //      walked under, and is unarmoured once it has.
-import { launchBrowser, startServer } from './harness.mjs';
+import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8233;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
@@ -39,12 +38,7 @@ const STRATA_TYPES = ['scree', 'slinger', 'bulwark', 'geode', 'warden', 'gargoyl
 
 try {
   browser = await launchBrowser();
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  const { page, errors } = await bootPage(browser, PORT);
 
   const out = await page.evaluate(async (STRATA_TYPES) => {
     const g = window.__game;

@@ -22,10 +22,9 @@
 // Plus the shower this all pays for: the flawless bonus is thrown at the
 // player's OWN FEET, inside the magnet radius, and before the hold in
 // MoneyOrbs.spawn it was collected on its first frame and never seen at all.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8223;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

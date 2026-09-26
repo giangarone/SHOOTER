@@ -30,10 +30,9 @@
 // what surfaced was a null dereference in test/active.mjs. Nothing here can
 // catch that directly - but the last block in this file walks every new pick
 // through a live loop, which is what made it reproducible.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8242;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

@@ -22,10 +22,9 @@
 //   SOUTHPAW    - the trigger answers during the reload, once, at a fifth of
 //                 the rate, off the reserve - and the reload itself still
 //                 seats and tops the magazine as it always did.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8246;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

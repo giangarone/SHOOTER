@@ -33,10 +33,9 @@
 // WHAT IS ASSERTED, and the shape of it matters: STANDING ON THE LINE COSTS
 // AND STANDING OFF IT DOES NOT, measured as health both ways, because a test
 // that only asks "did it hurt me" cannot tell a wire from an aura.
-import { launchBrowser, startServer } from './harness.mjs';
+import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8226;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
@@ -51,12 +50,7 @@ const TEMPEST_TYPES = ['arcling', 'coil', 'dynamo', 'stormcaller', 'capacitor', 
 
 try {
   browser = await launchBrowser();
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  const { page, errors } = await bootPage(browser, PORT);
 
   const out = await page.evaluate(async (TEMPEST_TYPES) => {
     const g = window.__game;

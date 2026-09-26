@@ -25,10 +25,9 @@
 //   measured with a wall between it and the player and a shooter's round
 //   in the same place; a pallbearer's committed slam is measured on its lane
 //   and after a sidestep; a vigil's lance is measured on the beam against off it.
-import { launchBrowser, startServer } from './harness.mjs';
+import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8247;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
@@ -43,12 +42,7 @@ const CATHEDRAL_TYPES = ['penitent', 'curate', 'pallbearer', 'thurible', 'sacris
 
 try {
   browser = await launchBrowser();
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  const { page, errors } = await bootPage(browser, PORT);
 
   const out = await page.evaluate(async (CATHEDRAL_TYPES) => {
     const g = window.__game;

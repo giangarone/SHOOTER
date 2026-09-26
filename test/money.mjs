@@ -19,10 +19,9 @@
 // The first two are the ones worth having a test for at all: an economy that
 // quietly leaks a few credits per kill is invisible for twenty waves and then
 // wrong by thousands.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8221;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

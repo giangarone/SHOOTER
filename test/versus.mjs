@@ -47,10 +47,9 @@
 //      own, because the bug this is most likely to catch is not in the
 //      arithmetic - it is main.js and the match disagreeing about which wave
 //      the arena is building, or the menu offering a seat no colour covers.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8230;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

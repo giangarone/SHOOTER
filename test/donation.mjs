@@ -1,9 +1,8 @@
 // Donation Machine integration: one fixture, three payment paths, fair roulette
 // landings, per-player progression, forfeiture and permanent shared rewards.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8261;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

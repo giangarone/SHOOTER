@@ -105,7 +105,9 @@ browser suite imports from it:
 - `CHROME` — `puppeteer-core` ships no browser. The harness takes `CHROME`,
   `CHROME_PATH` or `PUPPETEER_EXECUTABLE_PATH` if set, then probes the usual
   macOS, Linux and Windows locations, then throws naming every path it tried.
-- `startServer(port)` — one spawn, absolute script, explicit cwd.
+- `startServer(port)` — one spawn, absolute script, explicit cwd. `sleep` and
+  `bootPage` live here too: the one-liner and the byte-identical page boot the
+  suites used to each carry their own copy of.
 
 **Every suite owns a unique port.** They collide silently if not: the second
 server fails to bind and that suite quietly tests the first one's game. If you

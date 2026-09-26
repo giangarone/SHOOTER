@@ -19,10 +19,9 @@
 //                               already paid for
 //   the trickle cannot be farmed a boss wave's adds never stop arriving, so
 //                               they are the one thing with a ceiling on them
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8231;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

@@ -23,10 +23,9 @@
 // guarantee they encoded - two runs of a wave get the same loot - is nothing:
 // that was the cost of rolling rather than scheduling, and it was paid on
 // purpose.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8217;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

@@ -11,10 +11,9 @@
 //   cover still works           an enemy behind a pillar is not reachable
 //   one enemy, then stop        a homed shot does not carry on through pierce
 //   the arc pool drains         curved tracers are returned
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8220;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT);
 await sleep(800);
 

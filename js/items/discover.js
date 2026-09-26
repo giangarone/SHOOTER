@@ -4,6 +4,17 @@
 // both environments a new branch only adds its item module, so independently-
 // created items merge as independent Git paths instead of registry edits.
 
+// The two rules every catalogue loader agrees on: what a definition file's
+// name looks like, and which directories are catalogues. The dev server, the
+// Pages build and the Node branch below all enforce them, so they are said
+// once, here.
+export const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
+export const ITEM_CATALOGUES = {
+  passive: 'passive',
+  active: 'active',
+  donation: 'donation',
+};
+
 export async function discoverItems(kind, catalogueUrl, options = {}) {
   const directoryPath = options.directory || './definitions/';
   const modulePath = options.modulePath || `js/items/${kind}/modules/`;
@@ -17,7 +28,7 @@ export async function discoverItems(kind, catalogueUrl, options = {}) {
     ]);
     const directory = new URL(directoryPath, catalogueUrl);
     files = (await readdir(fileURLToPath(directory)))
-      .filter((name) => /^[A-Za-z_$][\w$]*\.js$/.test(name))
+      .filter((name) => ITEM_DEFINITION.test(name))
       .sort();
     moduleUrls = files.map((file) => new URL(file, directory).href);
   } else {
@@ -30,7 +41,7 @@ export async function discoverItems(kind, catalogueUrl, options = {}) {
     const manifest = await response.json();
     if (!Array.isArray(manifest) || manifest.some((entry) =>
       !entry || typeof entry !== 'object'
-      || !/^[A-Za-z_$][\w$]*\.js$/.test(entry.file)
+      || !ITEM_DEFINITION.test(entry.file)
       || !/^[a-f0-9]{64}$/.test(entry.token))) {
       throw new Error(`invalid ${kind} item manifest`);
     }

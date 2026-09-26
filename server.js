@@ -4,6 +4,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ITEM_CATALOGUES, ITEM_DEFINITION } from './js/items/discover.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] ?? 8123);
@@ -26,13 +27,11 @@ const TYPES = {
 // ~80MB: without this the browser has to hold the entire file before the
 // <audio> element can play, and seeking within it does not work at all.
 const RANGED = new Set(['.m4a']);
-const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
-const ITEM_CATALOGUES = {
-  passive: 'passive',
-  active: 'active',
-  donation: 'donation',
-};
 
+// The token is name-keyed rather than content-keyed on purpose: the dev
+// server answers with no-store, so a stable URL that survives an edit is the
+// useful property. The Pages build (tools/build-pages.mjs) deploys an
+// immutable artifact and hashes the CONTENT instead.
 const itemModuleToken = (kind, file) => createHash('sha256')
   .update(`${kind}/${file}`)
   .digest('hex');

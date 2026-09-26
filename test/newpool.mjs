@@ -15,10 +15,9 @@
 // Assassin's freshness are concerned. Without the per-shot cache a scattergun
 // would tick the tally eight times a shell and Telltale would read as a
 // permanent crit - which looks like good luck, not like a bug, for a long time.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8234;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 

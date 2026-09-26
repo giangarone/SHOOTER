@@ -6,15 +6,10 @@ import { createHash } from 'node:crypto';
 import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ITEM_CATALOGUES, ITEM_DEFINITION } from '../js/items/discover.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUTPUT = path.join(ROOT, '.pages');
-const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
-const ITEM_CATALOGUES = {
-  passive: 'passive',
-  active: 'active',
-  donation: 'donation',
-};
 const SITE_ENTRIES = [
   'assets',
   'css',

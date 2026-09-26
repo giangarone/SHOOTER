@@ -27,10 +27,9 @@
 //   current that ignores cover is a brute with no counter. So every assertion
 //   below is a PAIR wherever a pair is possible - it struck AND it fed, it
 //   walled AND the wall came down, it pulled AND cover stopped it.
-import { launchBrowser, startServer } from './harness.mjs';
+import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8227;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
@@ -45,12 +44,7 @@ const BRINE_TYPES = ['gulper', 'angler', 'barnacle', 'vent', 'howler', 'drifter'
 
 try {
   browser = await launchBrowser();
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  const { page, errors } = await bootPage(browser, PORT);
 
   const out = await page.evaluate(async (BRINE_TYPES) => {
     const g = window.__game;

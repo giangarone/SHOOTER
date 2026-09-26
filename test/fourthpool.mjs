@@ -34,10 +34,9 @@
 // magazine would grow without bound - slowly enough that it reads as a good
 // build for about fifteen seconds. The `bedbugsNoCascade` assertion is the
 // whole reason that one is paid where it is.
-import { launchBrowser, startServer } from './harness.mjs';
+import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8243;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = startServer(PORT, { stdio: 'inherit' });
 await sleep(800);
 
