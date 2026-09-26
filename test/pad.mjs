@@ -156,25 +156,21 @@ try {
     await frames(2);
     t('no pointer lock in pad mode', document.pointerLockElement === null);
 
-    // Triangle is the real rebindable Use path into a Donation Machine. Raise
-    // only that bank and stand inside the ammo cabinet's radius so this proves
-    // the controller poll, action table and shared resolver all reach the
-    // same one-donation payment as keyboard Use.
-    const donation = g.donationMachines.byKind.ammo;
-    g.donationMachines.present(g.player);
-    for (const m of g.donationMachines.machines) {
-      m.state = 'up';
-      m.rise = 1;
-      m.group.visible = true;
-    }
+    // Exercise the real rebound Use path; the spin lock prevents repeated
+    // payments from one press while the roulette is running.
+    const donation = g.donationMachine;
+    g._dismissDonationMachine();
+    donation.present(g.player, () => 0);
+    donation.state = 'up';
+    donation.rise = 1;
+    donation.group.visible = true;
     g.player.pos.set(donation.pos.x - 1.5, 0, donation.pos.z);
     g.player.reserveAmmo = donation.config.cost * 2;
     await tap(B.TRIANGLE);
-    t('triangle performs one ammo donation',
-      g.player.donationProgress.ammo === 1
-        && g.player.reserveAmmo === donation.config.cost,
-      `progress=${g.player.donationProgress.ammo} reserve=${g.player.reserveAmmo}`);
-    g.donationMachines.dismiss();
+    t('triangle starts one paid ammo roulette spin',
+      donation.spinning && g.player.reserveAmmo === donation.config.cost,
+      `spinning=${donation.spinning} reserve=${g.player.reserveAmmo}`);
+    g._dismissDonationMachine();
 
     // ---- 2. analogue movement ---------------------------------------------
     // Same push, twice: once at full deflection and once at half, measured as
@@ -765,18 +761,13 @@ try {
     t('the beam is down while the panel is up',
       document.body.classList.contains('reading'));
     {
-      // The three exclusive catalogues are dealt from the same discovered
-      // pools as their cabinets. Counts, sections and click paths all stay
-      // current when a reward definition is added without this suite learning
-      // its name.
       const { DONATION_ITEMS } = await import('./js/items/donation/index.js');
       const donationDefs = g._debugDonationDefs();
-      t('each Donation Machine pool has its own debug section',
-        Object.entries(DONATION_ITEMS).every(([kind, pool]) =>
-          g.ui.debugDonations[kind].children.length === Object.keys(pool).length),
-        Object.entries(g.ui.debugDonations)
-          .map(([kind, grid]) => `${kind}=${grid.children.length}`).join(' '));
-      const reward = donationDefs.ammo[0];
+      t('the shared Donation Machine pool has one debug section',
+        g.ui.debugDonation.children.length === Object.keys(DONATION_ITEMS).length
+          && document.querySelectorAll('[id^="debug-donation"]').length === 1,
+        `rewards=${g.ui.debugDonation.children.length}`);
+      const reward = donationDefs[0];
       const tile = g.ui._debugTiles[reward.id].el;
       delete g.player.donationItems[reward.id];
       g.player.rebuildMods();
@@ -828,12 +819,12 @@ try {
         search.value = q;
         search.dispatchEvent(new Event('input', { bubbles: true }));
       };
-      const donationDefs = Object.values(g._debugDonationDefs()).flat();
+      const donationDefs = g._debugDonationDefs();
       const defs = [...g._debugPassiveDefs(), ...g._debugActiveDefs(), ...donationDefs];
       const hayOf = (d) => (d.name + ' ' +
         (Array.isArray(d.effects) ? d.effects.map((e) => e[0]).join(' ') : '')).toLowerCase();
       const itemGrids = [
-        g.ui.debugActives, g.ui.debugPassives, ...Object.values(g.ui.debugDonations),
+        g.ui.debugActives, g.ui.debugPassives, g.ui.debugDonation,
       ];
       const standing = () =>
         itemGrids.flatMap((grid) => [...grid.children])

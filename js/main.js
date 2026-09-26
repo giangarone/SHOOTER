@@ -95,7 +95,7 @@ import {
   PASSIVE_ITEMS, AMMO_PURCHASE, rollTotems, rerollCost, boxCost, effectLines,
   WAVETABLE,
 } from './items/passive/index.js';
-import { DONATION_ITEMS, DONATION_KINDS, donationItemKey } from './items/donation/index.js';
+import { DONATION_ITEMS, donationItemKey } from './items/donation/index.js';
 // AMMO ALCHEMIST's element bank, which lives with the donation catalogue the
 // way WAVETABLE lives with the passive one - see shared.js for why.
 import { ALCHEMY_ELEMENTS } from './items/donation/shared.js';
@@ -137,12 +137,12 @@ const THEME_GRISTLE = PASSIVE_ITEMS.gristle.theme;
 const THEME_UPDRAFT = PASSIVE_ITEMS.updraft.theme;
 // The donation machine's own arena colours, read off each reward's theme on
 // the same terms every THEME_ above follows.
-const THEME_OMEN = DONATION_ITEMS.ammo.badOmen.theme;
-const THEME_GOLD_STAR = DONATION_ITEMS.health.goldStar.theme;
-const THEME_MITE = DONATION_ITEMS.credits.widowsMite.theme;
-const THEME_KARMA = DONATION_ITEMS.health.karma.theme;
-const THEME_SCRAP = DONATION_ITEMS.ammo.scrapMetal.theme;
-const THEME_LUCKY = DONATION_ITEMS.ammo.luckyNumber.theme;
+const THEME_OMEN = DONATION_ITEMS.badOmen.theme;
+const THEME_GOLD_STAR = DONATION_ITEMS.goldStar.theme;
+const THEME_MITE = DONATION_ITEMS.widowsMite.theme;
+const THEME_KARMA = DONATION_ITEMS.karma.theme;
+const THEME_SCRAP = DONATION_ITEMS.scrapMetal.theme;
+const THEME_LUCKY = DONATION_ITEMS.luckyNumber.theme;
 // The fourth pool's, for the flashes each of them throws.
 const THEME_SYNCOPATION = PASSIVE_ITEMS.syncopation.theme;
 const THEME_HEARTBEAT = PASSIVE_ITEMS.heartbeat.theme;
@@ -253,8 +253,8 @@ const PIP_SIZE = 0.75;
 const PIP_GROW = 0.35;
 import { TotemArea, ARM_TIME_ITEM, ROW_Z as TOTEM_ROW_Z } from './totems.js';
 import {
-  DonationMachineArea, DONATION_MACHINE_CONFIG,
-  donationRequirement, donationSoldOut, randomUnownedDonationItem,
+  DonationMachine, DONATION_MACHINE_CONFIG,
+  donationSoldOut, randomUnownedDonationItem,
 } from './donation-machines.js';
 import {
   ACTIVE_ITEMS, shuffledPool, rollItem, RunningActiveItems, HUMOURS,
@@ -1362,7 +1362,7 @@ class Game {
     // A separate bank behind the box at its nearest wall. Like the row and
     // the box, all three cabinets are constructed once and only raised during
     // a shop.
-    this.donationMachines = new DonationMachineArea(this.scene);
+    this.donationMachine = new DonationMachine(this.scene);
     this.player = new Player(this.camera, this.scene);
     this.effects = new Effects(this.scene);
     // Every credit in the game, lying on the floor. One Points object for the
@@ -2082,10 +2082,9 @@ class Game {
         flawlessStreak: this.player.flawlessStreak,
         flawlessMult: this.flawlessMult(),
         passiveItems: { ...this.player.passiveItems },
-        donationProgress: { ...this.player.donationProgress },
-        donationTiers: { ...this.player.donationTiers },
+        donationChance: this.player.donationChance,
         donationItems: { ...this.player.donationItems },
-        donationMachines: this.donationMachines.snapshot(this.player),
+        donationMachine: this.donationMachine.snapshot(this.player),
         passiveItemCount: Object.values(this.player.passiveItems).reduce((a, b) => a + b, 0),
         weapon: this.player.weapon.name,
         maxHealth: this.player.maxHealth,
@@ -3853,7 +3852,7 @@ class Game {
     this._swapped = false;
     this.totemArea.dismiss();
     this.mysteryBox.dismiss();
-    this.donationMachines.dismiss();
+    this.donationMachine.dismiss();
     this.wave = 0;
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
@@ -3929,7 +3928,7 @@ class Game {
     if (dismissRow) {
       this.totemArea.dismiss();
       this.mysteryBox.dismiss();
-      this.donationMachines.dismiss();
+      this._dismissDonationMachine();
     }
     this.ui.setPrompt(null, false);
     this._pass = false;
@@ -4025,13 +4024,15 @@ class Game {
     // the only one that reaches here with anything still running.
     this.runningActiveItems.clear(this);
     this._clearDeployed();
+    // A paid roulette forfeiture belongs to the outgoing run. Resolve it
+    // before the snapshot and before match.advance changes the active seat.
+    this._dismissDonationMachine();
     if (cleared) m.slots[m.active] = captureRun(this);
     m.advance(cleared);
     if (m.winner >= 0) { this._matchOver(); return; }
     this._clearEntities();
     this.totemArea.dismiss();
     this.mysteryBox.dismiss();
-    this.donationMachines.dismiss();
     // The room keeps the last fight's mood otherwise, and the incoming player
     // would walk into a boss's red on an ordinary wave.
     this.rig.setEnraged(false);
@@ -4358,7 +4359,7 @@ class Game {
    * Everything a shot can land on, built once per press into the scratch
    * list. What VARIES between the three callers is which extras ride along:
    *
-   * - SHOP FURNITURE (totems, stations, box and Donation Machines) is the
+   * - SHOP FURNITURE (totems, stations, box and Donation Machine) is the
    *   trigger's alone. LANCE and MAG DUMP are item volleys, and neither has
    *   ever bought anything - if a
    *   dump pellet is ever meant to shop for the player, that is one flag at
@@ -4382,7 +4383,7 @@ class Game {
     if (props) {
       this.totemArea.addTargets(targets);
       this.mysteryBox.addTargets(targets);
-      this.donationMachines.addTargets(targets);
+      this.donationMachine.addTargets(targets);
     }
     return targets;
   }
@@ -4899,11 +4900,11 @@ class Game {
   startWave() {
     // The item row keeps wave-break hours. An unclaimed TOTEM set is
     // deliberately left standing into the next wave - that pick is still there
-    // to be taken - but the box and Donation Machines standing through a fight
+    // to be taken - but the box and Donation Machine standing through a fight
     // would be solid shot targets in a room the player is running around at
     // speed. They go whether or not anything was taken.
     this.mysteryBox.dismiss();
-    this.donationMachines.dismiss();
+    this._dismissDonationMachine();
     // The pass ends where every wave break ends: with the wave. A pass cut
     // short before the handover still owes it - a match cannot start a wave
     // with the previous player's run loaded.
@@ -9061,7 +9062,7 @@ class Game {
         }
         this._presentTotems();
         this._presentBox();
-        this._presentDonationMachines();
+        this._presentDonationMachine();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the
@@ -9328,13 +9329,11 @@ class Game {
     this.sfx.boxRise();
   }
 
-  // The machines keep run-long state on the Player, so raising the bank is a
-  // pure redraw of that player's three ledgers. In versus this is called only
-  // for the run that just cleared the wave; the row is dismissed before the
-  // handoff and the incoming player's values are restored independently.
-  _presentDonationMachines() {
+  // Each new shop deals one payment kind against the active player's shared
+  // chance and reward ownership. Rerolling the totems leaves this deal intact.
+  _presentDonationMachine() {
     if (!this.totemArea.active) return;
-    this.donationMachines.present(this.player);
+    this.donationMachine.present(this.player);
   }
 
   /**
@@ -9585,7 +9584,7 @@ class Game {
     // spinning is forfeited, which is the same rule an unclaimed totem set has
     // always followed - one boundary, one thing that closes it.
     this.mysteryBox.dismiss();
-    this.donationMachines.dismiss();
+    this._dismissDonationMachine();
   }
 
   /**
@@ -9721,7 +9720,8 @@ class Game {
   _updateTotems(dt) {
     this.totemArea.update(dt, this.time, this.player.pos);
     this.mysteryBox.update(dt, this.time, this.player.pos);
-    this.donationMachines.update(dt, this.time, this.player.pos, this.player);
+    this.donationMachine.update(dt, this.time);
+    this._donationEvents();
     this._boxAudio();
 
     const use = this._useTarget();
@@ -9783,8 +9783,8 @@ class Game {
    * What E would act on right now, or null.
    *
    * ONE RESOLVER FOR THE PROMPT AND THE KEY, so the line on screen can never
-   * name something other than what the press does. Nine things can be in reach
-   * across the totems, consoles, box and machine bank, and several of their
+   * name something other than what the press does. Seven things can be in reach
+   * across the totems, consoles, box and machine, and several of their
    * radii overlap, so the NEAREST wins rather than whichever happened to be
    * checked first.
    *
@@ -9804,7 +9804,7 @@ class Game {
     // The box ranks with the rest: same contract, same resolver. It owns no
     // consoles, so it contributes exactly one candidate.
     consider(this.mysteryBox.usable(this.player.pos), 'box');
-    consider(this.donationMachines.usable(this.player.pos), 'donation');
+    consider(this.donationMachine.usable(this.player.pos), 'donation');
     return best;
   }
 
@@ -9861,7 +9861,7 @@ class Game {
       if (t.pendingId) {
         return [
           this._useOnlyLead() + 'TAKE &nbsp;·&nbsp; '
-          + DONATION_ITEMS[t.kind][t.pendingId].name,
+          + DONATION_ITEMS[t.pendingId].name,
           false,
         ];
       }
@@ -9913,12 +9913,13 @@ class Game {
     return null;
   }
 
-  // One affordability rule shared by the prompt and the payment path. A
-  // refusal is side-effect free. A completed cabinet stays unavailable until
-  // the next shop; the other two machines remain independent.
+  // The prompt and payment path share refusals, so a held/repeated Use can
+  // never charge again while the wheel is spinning or the shop has closed.
   _donationBlocked(machine) {
+    if (!machine.shopOpen) return 'SHOP CLOSED';
     if (machine.completedThisShop) return 'COMPLETE THIS SHOP';
-    if (donationSoldOut(this.player, machine.kind)) return 'SOLD OUT';
+    if (machine.spinning) return 'SPINNING';
+    if (donationSoldOut(this.player)) return 'SOLD OUT';
     const cost = machine.config.cost;
     if (machine.kind === 'ammo' && this.player.reserveAmmo < cost) {
       return 'NEED ' + cost + ' RESERVE';
@@ -9947,13 +9948,14 @@ class Game {
     } else this._useStation(use.target);
   }
 
-  _useDonationMachine(machine) {
+  _useDonationMachine(machine, random = Math.random) {
     if (!machine.isUp() || this._donationBlocked(machine)) {
       this.sfx.denied();
       this.pad.rumble(0.15, 0.5, 60, 1);
       return false;
     }
 
+    if (!machine.startSpin(this.player.donationChance, random)) return false;
     const kind = machine.kind;
     const cost = machine.config.cost;
     if (kind === 'ammo') {
@@ -9969,48 +9971,64 @@ class Game {
       this._spend(cost);
       this._creditsDirty = true;
     }
-    // KARMA. Paid the moment the donation is made, whatever the machine and
-    // whatever the tier - the card rewards the act, not the completion. It
-    // goes through heal() like every other heal in the game, so HEALTHY CORE
-    // still refuses it and OVERDRAW still banks what does not fit; on the
-    // health machine it is deliberately less than the 20 HP price, so a
-    // karma run still feels each donation it makes.
+    // KARMA rewards the payment, including a later forfeiture. heal() keeps
+    // HEALTHY CORE's refusal and OVERDRAW's banking on their ordinary paths.
     if (this.player.mods.donationKarma > 0
       && this.player.heal(this.player.mods.donationKarma) > 0) {
       this.effects.burst(machine.pos, THEME_KARMA, 10, 3.5, 1.8, 0.4);
       this.sfx.pickupHealth();
     }
 
-    const required = donationRequirement(this.player, kind);
-    const progress = (this.player.donationProgress[kind] || 0) + 1;
-    if (progress < required) {
-      this.player.donationProgress[kind] = progress;
-      machine.setProgress(progress, required, false);
-      this.sfx.buy();
-      this.effects.burst(machine.pos, machine.config.color, 12, 4, 1.8, 0.38);
-      this.pad.rumble(0.22, 0.35, 80, 1);
-      return true;
+    this.sfx.donationStart();
+    this.effects.burst(machine.pos, machine.config.color, 12, 4, 1.8, 0.38);
+    this.pad.rumble(0.22, 0.35, 80, 1);
+    return true;
+  }
+
+  _dismissDonationMachine() {
+    if (this.donationMachine.dismiss()) {
+      this.player.donationChance = Math.min(100, this.player.donationChance + 5);
     }
+  }
 
-    const itemId = randomUnownedDonationItem(this.player, kind);
-    if (!itemId) return false;
-    this.player.donationProgress[kind] = 0;
-    this.player.donationTiers[kind] = (this.player.donationTiers[kind] || 0) + 1;
-    machine.reveal(itemId, required);
-
+  // Furniture emits events from the game clock, never delayed callbacks.
+  // Cancelling it clears those events before another player can be restored.
+  _donationEvents() {
+    const machine = this.donationMachine;
+    const event = machine.event;
+    machine.event = null;
+    if (!event) return;
+    if (event === 'tick') {
+      this.sfx.donationTick(machine.tickProgress);
+      return;
+    }
+    if (event === 'loss') {
+      this.player.donationChance = Math.min(100, this.player.donationChance + 5);
+      machine.setChance(this.player.donationChance, donationSoldOut(this.player));
+      this.sfx.donationLoss();
+      this.pad.rumble(0.12, 0.25, 100, 1);
+      return;
+    }
+    const itemId = randomUnownedDonationItem(this.player);
+    this.player.donationChance = 10;
+    if (!itemId) {
+      // The debug panel may exhaust the pool while a paused spin is pending.
+      machine.setChance(10, true);
+      return;
+    }
+    machine.reveal(itemId);
     this._killPos.set(machine.pos.x, 1.65, machine.pos.z);
     this.effects.burst(this._killPos, machine.config.color, 42, 8, 3.2, 0.9);
     this.effects.shockwave(this._killPos, machine.config.color, 6, 0.6);
     this.effects.addShake(0.18);
     this.sfx.donationComplete();
     this.pad.rumble(0.75, 0.55, 320, 3);
-    return true;
   }
 
   _takeDonationReward(machine) {
     const itemId = machine.pendingId;
-    if (!itemId || !this.player.takeDonationItem(machine.kind, itemId, this)) return false;
-    const def = DONATION_ITEMS[machine.kind][itemId];
+    if (!itemId || !this.player.takeDonationItem(itemId, this)) return false;
+    const def = DONATION_ITEMS[itemId];
     machine.takeReward();
     this._killPos.set(machine.pos.x, 2.05, machine.pos.z);
     this.effects.burst(this._killPos, def.theme, 30, 7, 2.5, 0.7);
@@ -10182,24 +10200,21 @@ class Game {
     }));
   }
 
-  // Donation catalogues stay split by cabinet so the panel grows directly
-  // from the same three discovered pools as the machines. Their compound id
-  // is also their icon and ownership key, so duplicate filenames in different
-  // cabinets remain independent here just as they are in a run.
   _debugDonationDefs() {
-    return Object.fromEntries(DONATION_KINDS.map((kind) => [kind,
-      Object.entries(DONATION_ITEMS[kind]).map(([id, def]) => ({
-        id: donationItemKey(kind, id),
-        name: def.name,
-        theme: def.theme,
-        effects: def.effects,
-      })),
-    ]));
+    return Object.entries(DONATION_ITEMS).map(([id, def]) => ({
+      id: donationItemKey(id),
+      name: def.name,
+      theme: def.theme,
+      effects: def.effects,
+    }));
   }
 
   _debugRefresh() {
     this.ui.refreshDebug(this.player.passiveItems, this.player.activeItem,
       this.player.donationItems, this.wave, this._forcedTheme);
+    if (this.donationMachine.shopOpen && !this.donationMachine.completedThisShop) {
+      this.donationMachine.setChance(this.player.donationChance, donationSoldOut(this.player));
+    }
   }
 
   // A TIER AT A TIME, through the player's own takePassiveItem - so a stacking
@@ -10242,8 +10257,8 @@ class Game {
   }
 
   _debugGiveDonation(key) {
-    const [, kind, id] = key.split('/');
-    if (!this.player.takeDonationItem(kind, id, this)) return;
+    const [, id] = key.split('/');
+    if (!this.player.takeDonationItem(id, this)) return;
     this._debugRefresh();
     this.sfx.menuMove();
   }
@@ -10283,7 +10298,7 @@ class Game {
     this._pendingBuffs.length = 0;
     this.totemArea.dismiss();
     this.mysteryBox.dismiss();
-    this.donationMachines.dismiss();
+    this._dismissDonationMachine();
     this.ui.setPrompt(null, false);
     this.player.health = this.player.maxHealth;
     // THE MATCH'S COUNTER MOVES WITH THE ARENA'S. `wave` is what the arena
@@ -12374,18 +12389,16 @@ class Game {
         tier: n,
       });
     }
-    for (const kind of DONATION_KINDS) {
-      for (const [id, def] of Object.entries(DONATION_ITEMS[kind])) {
-        const key = donationItemKey(kind, id);
-        if (!this.player.donationItems[key]) continue;
-        out.push({
-          id: key,
-          name: def.name,
-          effects: Array.isArray(def.effects) ? def.effects : def.effects(0),
-          theme: def.theme,
-          tier: 1,
-        });
-      }
+    for (const [id, def] of Object.entries(DONATION_ITEMS)) {
+      const key = donationItemKey(id);
+      if (!this.player.donationItems[key]) continue;
+      out.push({
+        id: key,
+        name: def.name,
+        effects: Array.isArray(def.effects) ? def.effects : def.effects(0),
+        theme: def.theme,
+        tier: 1,
+      });
     }
     return out;
   }

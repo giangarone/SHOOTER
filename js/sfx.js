@@ -409,9 +409,22 @@ export class SFX {
     this.tone({ f: 660, f2: 1320, t: 0.2, type: 'sine', v: 0.25, delay: 0.09 });
     this.tone({ f: 990, f2: 1760, t: 0.26, type: 'sine', v: 0.2, delay: 0.18 });
   }
+  donationStart() {
+    this.noise({ t: 0.14, v: 0.12, f: 1600, mode: 'bandpass' });
+    this.tone({ f: 180, f2: 360, t: 0.18, type: 'triangle', v: 0.15 });
+  }
+  donationTick(progress) {
+    // Frame-driven, short voices: pausing or forfeiting leaves no scheduled
+    // ticking behind, and wheel deceleration naturally spaces the clicks out.
+    this.tone({ f: 650 + progress * 450, t: 0.035, type: 'triangle', v: 0.12 });
+    this.noise({ t: 0.025, v: 0.045, f: 2600, mode: 'bandpass' });
+  }
+  donationLoss() {
+    this.tone({ f: 260, f2: 180, t: 0.20, type: 'triangle', v: 0.14 });
+  }
   donationComplete() {
-    // A heavier, longer ascent than a normal passive pickup: five or more
-    // separate payments just resolved into one permanent reward.
+    // The settled win gets its own ascent; collecting the floating reward
+    // later still uses the ordinary item pickup sound.
     this.tone({ f: 196, f2: 392, t: 0.28, type: 'triangle', v: 0.28 });
     this.tone({ f: 392, f2: 784, t: 0.34, type: 'sine', v: 0.26, delay: 0.10 });
     this.tone({ f: 784, f2: 1568, t: 0.42, type: 'sine', v: 0.22, delay: 0.22 });

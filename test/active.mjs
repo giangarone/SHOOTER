@@ -1682,7 +1682,7 @@ try {
   // every break now, so the LONGER arm is simply what a totem always gets.
   ok('totems armed for the long delay', r.totemArm >= 1, String(r.totemArm));
   ok('a roll is charged once, at the box price',
-    r.rollCostIsBoxCost && r.rollCharged > 0, String(r.rollCharged));
+    r.rollCostIsBoxCost && r.rollCharged === 2500, String(r.rollCharged));
   ok('paying opens it', r.opensOnPurchase);
   ok('it cannot be bought twice mid-spin', r.noDoubleBuy);
   ok('an empty wallet rolls nothing', r.brokeRefused && r.brokeStillBuyable);
@@ -1710,11 +1710,11 @@ try {
   // feeding it credits until it hands over the item you wanted is the shop
   // answering a question already asked, so the second asking costs double - and
   // the counter is the box's own, reset when a fresh set of totems rises.
-  ok('rolls double within one visit, from $1,000',
-    JSON.stringify(r.fiveRollsOneVisit) === '[1000,2000,4000,8000,16000]',
+  ok('rolls double within one visit, from $2,500',
+    JSON.stringify(r.fiveRollsOneVisit) === '[2500,5000,10000,20000,40000]',
     JSON.stringify(r.fiveRollsOneVisit));
   ok('the price steps up per block of five waves',
-    JSON.stringify(r.waveLadder) === '[1000,1000,1500,2000]', JSON.stringify(r.waveLadder));
+    JSON.stringify(r.waveLadder) === '[2500,2500,3000,3500]', JSON.stringify(r.waveLadder));
 
   // ---- the ten seconds ----
   ok('an item nobody takes goes back in',

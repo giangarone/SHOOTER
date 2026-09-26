@@ -62,9 +62,9 @@ async function fragments(parts, kind) {
 }
 
 try {
-  check('Node discovers three independent donation catalogues',
-    Object.values(DONATION_ITEMS).every((pool) => Object.keys(pool).length > 0),
-    Object.entries(DONATION_ITEMS).map(([kind, pool]) => `${kind}=${Object.keys(pool).length}`).join(' '));
+  check('Node discovers one shared donation catalogue',
+    Object.keys(DONATION_ITEMS).length > 0,
+    `donation=${Object.keys(DONATION_ITEMS).length}`);
   browser = await launchBrowser();
   const page = await browser.newPage();
   const errors = [];
@@ -74,8 +74,8 @@ try {
   page.on('pageerror', (error) => errors.push('PAGEERROR: ' + error.message));
   page.on('request', (request) => {
     const url = request.url();
-    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/definitions\//.test(url)) directDefinitionRequests.push(url);
-    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/modules\/[a-f0-9]{64}\.js$/.test(url)) opaqueModuleRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation)\/definitions\//.test(url)) directDefinitionRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation)\/modules\/[a-f0-9]{64}\.js$/.test(url)) opaqueModuleRequests.push(url);
   });
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
   await sleep(1500);
@@ -83,16 +83,12 @@ try {
   const catalogue = await page.evaluate(() => ({
     passive: Object.keys(window.__game.__passiveItemsForTest),
     active: Object.keys(window.__game.__activeItemsForTest),
-    'donation-ammo': Object.keys(window.__game.__donationItemsForTest.ammo),
-    'donation-health': Object.keys(window.__game.__donationItemsForTest.health),
-    'donation-credits': Object.keys(window.__game.__donationItemsForTest.credits),
+    donation: Object.keys(window.__game.__donationItemsForTest),
   }));
   const catalogueTotal = Object.values(catalogue).reduce((n, ids) => n + ids.length, 0);
   check('the directory-driven item catalogues boot',
     catalogue.passive.length > 0 && catalogue.active.length > 0
-      && catalogue['donation-ammo'].length === Object.keys(DONATION_ITEMS.ammo).length
-      && catalogue['donation-health'].length === Object.keys(DONATION_ITEMS.health).length
-      && catalogue['donation-credits'].length === Object.keys(DONATION_ITEMS.credits).length,
+      && catalogue.donation.length === Object.keys(DONATION_ITEMS).length,
     `${catalogue.passive.length} passive / ${catalogue.active.length} active / ${catalogueTotal - catalogue.passive.length - catalogue.active.length} donation`);
   check('browser item URLs are opaque to content blockers',
     directDefinitionRequests.length === 0
@@ -105,9 +101,7 @@ try {
   const all = [
     ...await fragments(['passive'], 'passive'),
     ...await fragments(['active'], 'active'),
-    ...await fragments(['donation', 'ammo'], 'donation-ammo'),
-    ...await fragments(['donation', 'health'], 'donation-health'),
-    ...await fragments(['donation', 'credits'], 'donation-credits'),
+    ...await fragments(['donation'], 'donation'),
   ];
   for (const fragment of all) {
     check(`${fragment.kind} fragment names a real item`,
@@ -135,8 +129,8 @@ try {
   pagesPage.on('pageerror', (error) => pagesErrors.push('PAGEERROR: ' + error.message));
   pagesPage.on('request', (request) => {
     const url = request.url();
-    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/definitions\//.test(url)) pagesNamedRequests.push(url);
-    if (/\/js\/items\/(?:passive|active|donation\/(?:ammo|health|credits))\/modules\/[a-f0-9]{64}\.js$/.test(url)) {
+    if (/\/js\/items\/(?:passive|active|donation)\/definitions\//.test(url)) pagesNamedRequests.push(url);
+    if (/\/js\/items\/(?:passive|active|donation)\/modules\/[a-f0-9]{64}\.js$/.test(url)) {
       pagesOpaqueRequests.push(url);
     }
   });
@@ -147,9 +141,7 @@ try {
   const pagesCatalogue = await pagesPage.evaluate(() => ({
     passive: Object.keys(window.__game.__passiveItemsForTest),
     active: Object.keys(window.__game.__activeItemsForTest),
-    'donation-ammo': Object.keys(window.__game.__donationItemsForTest.ammo),
-    'donation-health': Object.keys(window.__game.__donationItemsForTest.health),
-    'donation-credits': Object.keys(window.__game.__donationItemsForTest.credits),
+    donation: Object.keys(window.__game.__donationItemsForTest),
   }));
   const pagesTotal = Object.values(pagesCatalogue).reduce((n, ids) => n + ids.length, 0);
   check('the generated GitHub Pages site boots below a project path',

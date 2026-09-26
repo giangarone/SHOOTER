@@ -34,7 +34,7 @@ export async function probeEighth(page, id) {
     const weaponAim = p.weapon.aimSpread;
     const addTotem = g.totemArea.addTargets;
     const addBox = g.mysteryBox.addTargets;
-    const addCabinets = g.donationMachines.addTargets;
+    const addCabinets = g.donationMachine.addTargets;
 
     // The fixture's toolkit. `bare`/`give` are the same helpers the other
     // fragments use; `spawn` stands a body up ON the roster so the real shot
@@ -102,7 +102,7 @@ export async function probeEighth(page, id) {
       g.arena.meshList.length = g.terrain._baseMeshes;
       g.totemArea.addTargets = () => {};
       g.mysteryBox.addTargets = () => {};
-      g.donationMachines.addTargets = () => {};
+      g.donationMachine.addTargets = () => {};
       p.pos.set(0, 0, 0);
       // The cone is pinned to zero for every case here: several of them
       // count legs or measure exact damage, and a jittered round is a round
@@ -391,7 +391,7 @@ export async function probeEighth(page, id) {
       delete g.effects.tracer;
       g.totemArea.addTargets = addTotem;
       g.mysteryBox.addTargets = addBox;
-      g.donationMachines.addTargets = addCabinets;
+      g.donationMachine.addTargets = addCabinets;
       g.arena.meshList.length = 0;
       g.arena.meshList.push(...meshList);
       g.enemies.length = 0;

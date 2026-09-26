@@ -103,14 +103,21 @@ try {
       'active=' + g.match.active + ' wave=' + g.match.wave);
     t('both snapshot slots are seeded', !!g.match.slots[0] && !!g.match.slots[1]);
     t('the match has no winner yet', g.match.winner === -1, String(g.match.winner));
-    Object.assign(g.player.donationProgress, { ammo: 2, health: 1, credits: 3 });
-    Object.assign(g.player.donationTiers, { ammo: 1, health: 0, credits: 2 });
-    g.player.donationItems['donation/ammo/drumMajor'] = true;
+    g.player.donationChance = 35;
+    g.player.donationItems['donation/drumMajor'] = true;
     g.player.rebuildMods();
 
     // ---- 2. a CLEAR hands over ---------------------------------------------
     t('wave 1 starts', (await until(() => g.waveState === 'active')) >= 0, g.waveState);
     t('an empty wave clears', (await until(() => g.waveState === 'intermission')) >= 0, g.waveState);
+    g._dismissDonationMachine();
+    g.donationMachine.present(g.player, () => 0.99);
+    g.donationMachine.state = 'up';
+    g.donationMachine.rise = 1;
+    g.credits = 2000;
+    t('Player 1 can start a credit spin before passing',
+      g._useDonationMachine(g.donationMachine, () => 0));
+    await raw(2);
     // Forfeiting the pick is what ends the turn - see the intermission gate in
     // _updateWave. Claiming one would end it identically and needs a live offer.
     g.totemArea.dismiss();
@@ -124,14 +131,18 @@ try {
     t('Player 2 is on wave 2', g.wave === 2 && g.match.wave === 2,
       'wave=' + g.wave + '/' + g.match.wave);
     t('Player 2 has a run of their own', g.player.health > 0, 'hp=' + Math.round(g.player.health));
-    t('Player 2 starts with independent Donation Machine ledgers',
-      Object.values(g.player.donationProgress).every((n) => n === 0)
-        && Object.values(g.player.donationTiers).every((n) => n === 0)
-        && Object.keys(g.player.donationItems).length === 0,
-      JSON.stringify(g.player.donationProgress));
-    Object.assign(g.player.donationProgress, { ammo: 4, health: 3, credits: 2 });
-    Object.assign(g.player.donationTiers, { ammo: 0, health: 2, credits: 1 });
-    g.player.donationItems['donation/health/ivoryDrip'] = true;
+    t('Player 2 starts with an independent roulette chance and rewards',
+      g.player.donationChance === 10 && Object.keys(g.player.donationItems).length === 0,
+      String(g.player.donationChance));
+    t('Player 1 saved their forfeiture once before the handoff',
+      g.match.slots[0].player.donationChance === 40
+        && g.match.slots[0].game.credits === 1000,
+      JSON.stringify({ chance: g.match.slots[0].player.donationChance,
+        credits: g.match.slots[0].game.credits }));
+    t('no spin or reward can finish against the incoming player',
+      !g.donationMachine.spinning && !g.donationMachine.pendingId);
+    g.player.donationChance = 60;
+    g.player.donationItems['donation/ivoryDrip'] = true;
     g.player.rebuildMods();
 
     // ---- 2b. THE BOX KNOWS WHOSE SLOT IT IS LOOKING AT ---------------------
@@ -205,20 +216,13 @@ try {
     t('the caption came down', !caption());
     t('Player 1 got their run back alive', g.player.health > 0,
       'hp=' + Math.round(g.player.health));
-    t('Player 1 restores all three machine tracks, tiers and rewards',
-      g.player.donationProgress.ammo === 2
-        && g.player.donationProgress.health === 1
-        && g.player.donationProgress.credits === 3
-        && g.player.donationTiers.ammo === 1
-        && g.player.donationTiers.health === 0
-        && g.player.donationTiers.credits === 2
-        && !!g.player.donationItems['donation/ammo/drumMajor']
-        && !g.player.donationItems['donation/health/ivoryDrip'],
-      JSON.stringify({
-        progress: g.player.donationProgress,
-        tiers: g.player.donationTiers,
-        items: g.player.donationItems,
-      }));
+    t('Player 1 restores their roulette chance and reward set',
+      g.player.donationChance === 40
+        && !!g.player.donationItems['donation/drumMajor']
+        && !g.player.donationItems['donation/ivoryDrip'],
+      JSON.stringify({ chance: g.player.donationChance, items: g.player.donationItems }));
+    t('the failed opponent attempt did not overwrite Player 1 progression',
+      g.match.slots[0].player.donationChance === 40);
 
     // ---- 5. clearing the challenge WINS, on the wave -----------------------
     g.player.maxHealth = 9999;
@@ -451,17 +455,37 @@ try {
 
     // THE LADDER. One rung per clear, and the seat moves on.
     g.player.maxHealth = 9999; g.player.health = 9999;
+    g.player.donationChance = 20;
+    g.player.takeDonationItem('drumMajor', g);
     await until(() => g.waveState === 'active');
     await clearTurn();
     t('4P: a clear advances the wave and passes to P2',
       g.wave === 2 && g.match.wave === 2 && g.match.active === 1,
       'wave=' + g.wave + '/' + g.match.wave + ' active=' + g.match.active);
+    t('4P: Player 2 starts without Player 1 roulette state',
+      g.player.donationChance === 10 && !g.player.donationItems['donation/drumMajor']);
+    g.player.donationChance = 35;
+    g.player.takeDonationItem('ivoryDrip', g);
     await clearTurn();
+    g.player.donationChance = 50;
+    g.player.takeDonationItem('ghostCasings', g);
     await clearTurn();
+    g.player.donationChance = 65;
+    g.player.takeDonationItem('chainLetter', g);
     await clearTurn();
     t('4P: four rungs later it is P1 again, on wave 5',
       g.match.active === 0 && g.wave === 5 && g.match.wave === 5,
       'active=' + g.match.active + ' wave=' + g.wave + '/' + g.match.wave);
+
+    t('4P: a full rotation restores four independent roulette chances',
+      g.player.donationChance === 20
+        && g.match.slots.map((slot) => slot.player.donationChance).join() === '20,35,50,65',
+      g.match.slots.map((slot) => slot.player.donationChance).join());
+    t('4P: a full rotation keeps shared-pool rewards exclusive to their owner',
+      g.player.donationItems['donation/drumMajor']
+        && Object.keys(g.player.donationItems).length === 1
+        && g.match.slots.every((slot, i) => Object.keys(slot.player.donationItems).length === 1
+          && slot.player.donationItems[`donation/${['drumMajor', 'ivoryDrip', 'ghostCasings', 'chainLetter'][i]}`]));
 
     // A FAILURE PINS THE WAVE. This is the assertion the mode's whole shape
     // rests on: the contest exists to put every survivor on the SAME wave, so

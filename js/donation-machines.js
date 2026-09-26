@@ -1,29 +1,34 @@
-// Three permanent shop fixtures which trade a fixed resource for progress
-// toward a machine-exclusive build item. The catalogue and the payment live
-// outside this file: a machine is furniture. It draws the state it is handed,
-// exposes the same present/dismiss/update/usable/addTargets contract as the
-// other shop installations, and never decides what a player owns.
+// One reusable shop cabinet. Payment and player progression belong to Game;
+// this owns the wheel, its frame-driven events and the floating reward. No
+// timers survive a shop close or resolve against a different player's run.
 
 import * as THREE from 'three';
-import { BOUND } from './arena.js';
+import { BOX_Z } from './mysterybox.js';
 import { buildPixelIcon } from './pixelicons.js';
 import { DONATION_ITEMS, donationItemKey } from './items/donation/index.js';
 import {
-  DIM_TEXT, HIT_MAT, SIGN_COLOR, SUNK_Y, RISE_SECONDS,
+  DIM_TEXT, HIT_MAT, SIGN_COLOR, SUNK_Y, RISE_SECONDS, TOTEM_X,
   hex, makePanel, pxText, roundRect,
 } from './totems.js';
 
 export const DONATION_USE_RADIUS = 2.6;
-export const DONATION_BANK_Z = BOUND - 1.25;
+export const DONATION_SPIN_SECONDS = 3;
+export const DONATION_KINDS = Object.freeze(['ammo', 'health', 'credits']);
+const TAU = Math.PI * 2;
+const wrapAngle = (angle) => ((angle % TAU) + TAU) % TAU;
+
+export function randomDonationKind(random = Math.random) {
+  return DONATION_KINDS[Math.floor(random() * DONATION_KINDS.length)];
+}
 
 export const DONATION_MACHINE_CONFIG = Object.freeze({
   ammo: Object.freeze({
-    title: 'AMMO DONATION', color: 0xffd600, cost: 60,
-    costLabel: '60 RESERVE ROUNDS', shortCost: '60 AMMO',
+    title: 'AMMO DONATION', color: 0xffd600, cost: 90,
+    costLabel: '90 RESERVE ROUNDS', shortCost: '90 AMMO',
   }),
   health: Object.freeze({
-    title: 'HEALTH DONATION', color: 0xff2d6f, cost: 20,
-    costLabel: '20 HEALTH', shortCost: '20 HP',
+    title: 'HEALTH DONATION', color: 0xff3b30, cost: 25,
+    costLabel: '25 HEALTH', shortCost: '25 HP',
   }),
   credits: Object.freeze({
     title: 'CREDITS DONATION', color: 0x00e676, cost: 1000,
@@ -31,14 +36,9 @@ export const DONATION_MACHINE_CONFIG = Object.freeze({
   }),
 });
 
-export function donationRequirement(player, kind) {
-  return 10 + 5 * (player.donationTiers[kind] || 0);
-}
-
-export function donationSoldOut(player, kind) {
-  const pool = DONATION_ITEMS[kind];
-  for (const id in pool) {
-    if (!player.donationItems[donationItemKey(kind, id)]) return false;
+export function donationSoldOut(player) {
+  for (const id in DONATION_ITEMS) {
+    if (!player.donationItems[donationItemKey(id)]) return false;
   }
   return true;
 }
@@ -46,16 +46,16 @@ export function donationSoldOut(player, kind) {
 // Uniform selection without constructing a filtered array on the interaction
 // path. The first pass counts the open entries; the second walks to the chosen
 // index. Catalogue iteration order has no effect on the odds.
-export function randomUnownedDonationItem(player, kind, random = Math.random) {
-  const pool = DONATION_ITEMS[kind];
+export function randomUnownedDonationItem(player, random = Math.random) {
+  const pool = DONATION_ITEMS;
   let count = 0;
   for (const id in pool) {
-    if (!player.donationItems[donationItemKey(kind, id)]) count++;
+    if (!player.donationItems[donationItemKey(id)]) count++;
   }
   if (!count) return null;
   let chosen = Math.floor(random() * count);
   for (const id in pool) {
-    if (player.donationItems[donationItemKey(kind, id)]) continue;
+    if (player.donationItems[donationItemKey(id)]) continue;
     if (chosen-- === 0) return id;
   }
   return null;
@@ -65,7 +65,14 @@ const BODY_GEOM = new THREE.BoxGeometry(1.3, 2.1, 0.82);
 const FACE_GEOM = new THREE.BoxGeometry(0.92, 1.52, 0.08);
 const TRIM_GEOM = new THREE.BoxGeometry(1.05, 0.08, 0.1);
 const HIT_GEOM = new THREE.BoxGeometry(1.5, 2.6, 1.05);
-const METER_GEOM = new THREE.PlaneGeometry(0.52, 0.94);
+const WHEEL_GEOM = new THREE.PlaneGeometry(0.82, 0.82);
+const pointerShape = new THREE.Shape();
+pointerShape.moveTo(-0.065, 0.07);
+pointerShape.lineTo(0.065, 0.07);
+pointerShape.lineTo(0, -0.045);
+pointerShape.closePath();
+const POINTER_GEOM = new THREE.ShapeGeometry(pointerShape);
+const POINTER_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const BODY_MAT = new THREE.MeshStandardMaterial({
   color: 0x111722, roughness: 0.55, metalness: 0.65,
 });
@@ -73,12 +80,12 @@ const FACE_MAT = new THREE.MeshStandardMaterial({
   color: 0x05080e, roughness: 0.4, metalness: 0.7,
 });
 
-function meterMaterial(color) {
+function wheelMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) },
-      uFilled: { value: 0 },
-      uSections: { value: 10 },
+      uChance: { value: 0.1 },
+      uAngle: { value: 0 },
       uFlash: { value: 0 },
     },
     vertexShader: `
@@ -90,20 +97,26 @@ function meterMaterial(color) {
     `,
     fragmentShader: `
       uniform vec3 uColor;
-      uniform float uFilled;
-      uniform float uSections;
+      uniform float uChance;
+      uniform float uAngle;
       uniform float uFlash;
       varying vec2 vUv;
       void main() {
-        float section = floor(vUv.y * uSections);
-        float inside = step(section + 0.5, uFilled);
-        float localY = fract(vUv.y * uSections);
-        float gap = min(0.18, 0.8 / uSections);
-        float bar = step(gap, localY) * step(localY, 1.0 - gap);
-        vec3 dark = mix(vec3(0.012, 0.018, 0.028), uColor, 0.10);
-        vec3 lit = uColor * (1.0 + uFlash * 0.9);
-        vec3 col = mix(dark, lit, inside) * bar;
-        col += uColor * 0.025 * (1.0 - bar);
+        vec2 p = vUv - 0.5;
+        float r = length(p);
+        if (r > 0.49) discard;
+        // Clockwise from the fixed pointer at twelve o'clock. The landing
+        // phase uses this same convention so the visible wedge IS the odds.
+        float angle = mod(atan(p.x, p.y) - uAngle + 6.28318530718, 6.28318530718);
+        float win = 1.0 - step(6.28318530718 * uChance, angle);
+        vec3 col = mix(vec3(0.055, 0.065, 0.085), uColor, win);
+        float spoke = fract(angle / 6.28318530718 * 20.0);
+        float gap = 1.0 - smoothstep(0.0, 0.022, min(spoke, 1.0 - spoke));
+        col *= 1.0 - gap * 0.35;
+        col *= 0.65 + 0.35 * smoothstep(0.08, 0.44, r);
+        col += uColor * uFlash * win * 0.65;
+        if (r > 0.455) col = uColor * (0.65 + uFlash * 0.5);
+        if (r < 0.075) col = vec3(0.75, 0.8, 0.9);
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -132,7 +145,7 @@ function drawNormal(machine) {
   c.fillStyle = machine.soldOut ? DIM_TEXT : col;
   pxText(
     c,
-    machine.soldOut ? 'SOLD OUT' : `${machine.progress} / ${machine.required}`,
+    machine.soldOut ? 'SOLD OUT' : machine.status,
     canvas.width / 2,
     178,
     28,
@@ -168,14 +181,29 @@ function drawReward(machine, def) {
 }
 
 export class DonationMachine {
-  constructor(kind, x, z, scene) {
-    this.kind = kind;
-    this.config = DONATION_MACHINE_CONFIG[kind];
+  constructor(scene) {
+    // Looking toward the box from the passive row reverses world X: the
+    // positive-X offer's lane puts the cabinet on the player's left.
+    const x = TOTEM_X[2];
+    const z = BOX_Z;
+    this.kind = 'ammo';
+    this.config = DONATION_MACHINE_CONFIG[this.kind];
     this.pos = new THREE.Vector3(x, 0, z);
     this.state = 'hidden';
     this.rise = 0;
-    this.progress = 0;
-    this.required = 10;
+    this.chance = 10;
+    this.shopOpen = false;
+    this.spinning = false;
+    this.spinElapsed = 0;
+    this.spinChance = 10;
+    this.landingAngle = 0;
+    this.spinWon = false;
+    this.spinStartAngle = 0;
+    this.spinTravel = 0;
+    this.tickIndex = 0;
+    this.tickProgress = 0;
+    this.event = null;
+    this.status = '';
     this.soldOut = false;
     this.pendingId = null;
     this.completedThisShop = false;
@@ -183,8 +211,7 @@ export class DonationMachine {
 
     this.group = new THREE.Group();
     this.group.position.set(x, SUNK_Y, z);
-    // Local +Z is the front. The bank stands at the +Z wall, so a half turn
-    // makes every face point back into the arena and toward the Mystery Box.
+    // Face the passive row, alongside the box.
     this.group.rotation.y = Math.PI;
     this.group.visible = false;
 
@@ -205,10 +232,13 @@ export class DonationMachine {
       this.group.add(trim);
     }
 
-    this.meterMaterial = meterMaterial(this.config.color);
-    this.meter = new THREE.Mesh(METER_GEOM, this.meterMaterial);
-    this.meter.position.set(0, 1.13, 0.485);
-    this.group.add(this.meter);
+    this.wheelMaterial = wheelMaterial(this.config.color);
+    this.wheel = new THREE.Mesh(WHEEL_GEOM, this.wheelMaterial);
+    this.wheel.position.set(0, 1.13, 0.485);
+    this.group.add(this.wheel);
+    const pointer = new THREE.Mesh(POINTER_GEOM, POINTER_MAT);
+    pointer.position.set(0, 1.54, 0.50);
+    this.group.add(pointer);
 
     this.hit = new THREE.Mesh(HIT_GEOM, HIT_MAT);
     this.hit.position.y = 1.3;
@@ -229,15 +259,14 @@ export class DonationMachine {
     this.displayGroup.visible = false;
     this.displayGroup.add(this.panel.sprite);
 
-    // This pool's exclusive reward plates are built once with the cabinet. A
-    // reveal only toggles visibility; completing a tier never allocates scene
-    // data, regardless of how many definition files the pool contains.
+    // Build the shared reward plates once. Every reveal reuses the same scene
+    // resources, even when a later shop chooses a different payment kind.
     this.icons = {};
     this.iconAnchor = new THREE.Group();
     this.iconAnchor.position.set(0, 2.16, 0.66);
     this.iconAnchor.scale.setScalar(1.15);
-    for (const [id, def] of Object.entries(DONATION_ITEMS[kind])) {
-      const icon = buildPixelIcon(donationItemKey(kind, id), def.theme);
+    for (const [id, def] of Object.entries(DONATION_ITEMS)) {
+      const icon = buildPixelIcon(donationItemKey(id), def.theme);
       icon.visible = false;
       this.icons[id] = icon;
       this.iconAnchor.add(icon);
@@ -249,18 +278,39 @@ export class DonationMachine {
     scene.add(this.displayGroup);
   }
 
-  present() {
+  present(player, random = Math.random) {
+    // A redraw or reroll during the same shop must not reset a spin or deal
+    // another payment kind, including after this shop's win sank the body.
+    if (this.shopOpen) return;
+    this.shopOpen = true;
+    this.kind = randomDonationKind(random);
+    this.config = DONATION_MACHINE_CONFIG[this.kind];
     this.clearPending();
     this.completedThisShop = false;
+    this.spinning = false;
+    this.event = null;
+    this.status = '';
+    this.flash = 0;
+    this.wheelMaterial.uniforms.uColor.value.setHex(this.config.color);
+    this.wheelMaterial.uniforms.uAngle.value = 0;
+    this.trimMaterial.color.setHex(this.config.color);
+    this.setChance(player.donationChance, donationSoldOut(player));
     if (this.state !== 'up') this.state = 'rising';
     this.group.visible = true;
     this.displayGroup.visible = true;
   }
 
+  // Return the unfinished payment to Game as a forfeiture, exactly once.
+  // Game records it BEFORE a versus snapshot; the furniture never owns a run.
   dismiss() {
+    const forfeited = this.spinning;
+    this.spinning = false;
+    this.event = null;
+    this.shopOpen = false;
     this.clearPending();
     if (this.state !== 'hidden') this.state = 'sinking';
     else this.displayGroup.visible = false;
+    return forfeited;
   }
 
   isUp() {
@@ -274,26 +324,39 @@ export class DonationMachine {
     return d2 < DONATION_USE_RADIUS * DONATION_USE_RADIUS ? d2 : -1;
   }
 
-  setProgress(progress, required, soldOut = false) {
-    this.progress = progress;
-    this.required = required;
+  setChance(chance, soldOut = false) {
+    this.chance = chance;
     this.soldOut = soldOut;
-    if (this.pendingId) return;
-    this.meterMaterial.uniforms.uFilled.value = progress;
-    this.meterMaterial.uniforms.uSections.value = required;
+    if (this.pendingId || this.spinning) return;
+    this.wheelMaterial.uniforms.uChance.value = chance / 100;
     drawNormal(this);
   }
 
-  reveal(itemId, completedRequirement) {
-    const def = DONATION_ITEMS[this.kind][itemId];
+  startSpin(chance, random = Math.random) {
+    if (!this.shopOpen || !this.isUp() || this.spinning
+        || this.completedThisShop || this.soldOut) return false;
+    this.spinning = true;
+    this.spinElapsed = 0;
+    this.spinChance = chance;
+    this.landingAngle = random() * TAU;
+    this.spinWon = this.landingAngle < TAU * chance / 100;
+    this.spinStartAngle = wrapAngle(this.wheelMaterial.uniforms.uAngle.value);
+    this.spinTravel = TAU * 6 + wrapAngle(-this.landingAngle - this.spinStartAngle);
+    this.tickIndex = 0;
+    this.tickProgress = 0;
+    this.event = null;
+    this.status = '';
+    this.wheelMaterial.uniforms.uChance.value = chance / 100;
+    drawNormal(this);
+    return true;
+  }
+
+  reveal(itemId) {
+    const def = DONATION_ITEMS[itemId];
     if (!def) return;
     this.pendingId = itemId;
     this.completedThisShop = true;
-    this.required = completedRequirement;
-    this.progress = completedRequirement;
     this.flash = 1;
-    this.meterMaterial.uniforms.uFilled.value = completedRequirement;
-    this.meterMaterial.uniforms.uSections.value = completedRequirement;
     for (const id in this.icons) this.icons[id].visible = id === itemId;
     drawReward(this, def);
     // Keep the reward display in world space while its cabinet disappears.
@@ -316,6 +379,25 @@ export class DonationMachine {
   }
 
   update(dt, time) {
+    this.event = null;
+    if (this.spinning) {
+      this.spinElapsed = Math.min(DONATION_SPIN_SECONDS, this.spinElapsed + dt);
+      const t = this.spinElapsed / DONATION_SPIN_SECONDS;
+      const eased = 1 - Math.pow(1 - t, 3);
+      const travel = this.spinTravel * eased;
+      this.wheelMaterial.uniforms.uAngle.value = this.spinStartAngle + travel;
+      const tick = Math.floor(travel / (TAU / 20));
+      if (tick > this.tickIndex) {
+        this.tickIndex = tick;
+        this.tickProgress = t;
+        this.event = 'tick';
+      }
+      if (t >= 1) {
+        this.spinning = false;
+        this.status = this.spinWon ? 'WIN' : 'TRY AGAIN';
+        this.event = this.spinWon ? 'win' : 'loss';
+      }
+    }
     if (this.state === 'hidden' && !this.pendingId) return;
     if (this.state === 'rising') {
       this.rise = Math.min(1, this.rise + dt / RISE_SECONDS);
@@ -334,95 +416,42 @@ export class DonationMachine {
     if (this.state === 'hidden' && !this.pendingId) this.displayGroup.visible = false;
     this.flash = Math.max(0, this.flash - dt * 2.4);
     const pulse = this.flash * (0.5 + 0.5 * Math.sin(time * 28));
-    this.meterMaterial.uniforms.uFlash.value = pulse;
+    this.wheelMaterial.uniforms.uFlash.value = pulse;
     this.trimMaterial.color.setHex(this.config.color).multiplyScalar(1 + pulse * 0.45);
     this.group.scale.setScalar(1 + pulse * 0.025);
     this.iconAnchor.position.y = 2.16 + Math.sin(time * 2.8 + this.pos.z) * 0.07;
   }
-}
-
-export class DonationMachineArea {
-  constructor(scene) {
-    // From the arena centre the bank sits behind the Mystery Box at z=9.5,
-    // directly before its nearest wall. The centre cabinet and the midpoint
-    // of the outer pair share the box's x=0 centreline exactly.
-    const z = DONATION_BANK_Z;
-    const spacing = 3.0;
-    this.machines = [
-      new DonationMachine('ammo', -spacing, z, scene),
-      new DonationMachine('health', 0, z, scene),
-      new DonationMachine('credits', spacing, z, scene),
-    ];
-    this.byKind = Object.fromEntries(this.machines.map((m) => [m.kind, m]));
-  }
 
   get active() {
-    return this.machines.some((m) => m.state !== 'hidden' || m.pendingId);
-  }
-
-  present(player) {
-    for (const machine of this.machines) {
-      machine.present();
-      machine.setProgress(
-        player.donationProgress[machine.kind] || 0,
-        donationRequirement(player, machine.kind),
-        donationSoldOut(player, machine.kind)
-      );
-    }
-  }
-
-  dismiss() {
-    for (const machine of this.machines) machine.dismiss();
-  }
-
-  update(dt, time, playerPos, player) {
-    for (const machine of this.machines) machine.update(dt, time, playerPos);
+    return this.state !== 'hidden' || !!this.pendingId;
   }
 
   usable(playerPos) {
-    let best = null;
-    let bestD = Infinity;
-    for (const machine of this.machines) {
-      if (!machine.pendingId && !machine.isUp()) continue;
-      if (!machine.pendingId && machine.completedThisShop) continue;
-      const d2 = machine.useDistance(playerPos);
-      if (d2 < 0 || d2 >= bestD) continue;
-      best = machine;
-      bestD = d2;
-    }
-    return best ? { target: best, d2: bestD } : null;
+    if (!this.shopOpen || (!this.pendingId && (!this.isUp() || this.completedThisShop))) return null;
+    const d2 = this.useDistance(playerPos);
+    return d2 < 0 ? null : { target: this, d2 };
   }
 
   addTargets(out) {
-    for (const machine of this.machines) {
-      if (machine.state !== 'hidden') out.push(machine.hit);
-    }
-  }
-
-  setProgress(kind, progress, required, soldOut = false) {
-    const machine = this.byKind[kind];
-    if (machine) machine.setProgress(progress, required, soldOut);
-  }
-
-  reveal(kind, itemId, completedRequirement) {
-    const machine = this.byKind[kind];
-    if (machine) machine.reveal(itemId, completedRequirement);
+    if (this.state !== 'hidden') out.push(this.hit);
   }
 
   snapshot(player) {
-    return this.machines.map((machine) => ({
-      kind: machine.kind,
-      color: machine.config.color,
-      cost: machine.config.cost,
-      progress: player.donationProgress[machine.kind] || 0,
-      completedTiers: player.donationTiers[machine.kind] || 0,
-      required: donationRequirement(player, machine.kind),
-      filledSections: machine.meterMaterial.uniforms.uFilled.value,
-      visibleSections: machine.meterMaterial.uniforms.uSections.value,
-      pendingId: machine.pendingId,
-      completedThisShop: machine.completedThisShop,
-      soldOut: donationSoldOut(player, machine.kind),
-      state: machine.state,
-    }));
+    return {
+      kind: this.kind,
+      color: this.config.color,
+      cost: this.config.cost,
+      chance: player.donationChance,
+      spinChance: this.spinChance,
+      spinning: this.spinning,
+      spinElapsed: this.spinElapsed,
+      angle: this.wheelMaterial.uniforms.uAngle.value,
+      landingAngle: this.landingAngle,
+      pendingId: this.pendingId,
+      completedThisShop: this.completedThisShop,
+      soldOut: donationSoldOut(player),
+      state: this.state,
+    };
   }
+
 }

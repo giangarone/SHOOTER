@@ -112,10 +112,10 @@ export const STATION_RADIUS = 2.6;
 // set left UNCLAIMED into the next wave, and terrain.js reserves a circle
 // around the row for exactly that - see the `reserved` argument to
 // generateLayout.
-// Exported so items.js can place its own row relative to this one rather than
-// hardcoding a second magic number that has to be kept in step.
+// Exported so other shop fixtures can share the row and its lanes rather than
+// hardcoding positions that have to be kept in step.
 export const ROW_Z = -5;
-const TOTEM_X = [-3.6, 0, 3.6];
+export const TOTEM_X = [-3.6, 0, 3.6];
 const STATION_X = [-6.9, 6.9];
 
 const RISE_TIME = 0.7;

@@ -49,8 +49,7 @@ const users = {};
 const itemKeys = [
   ...Object.keys(PASSIVE_ITEMS),
   ...Object.keys(ACTIVE_ITEMS),
-  ...Object.entries(DONATION_ITEMS).flatMap(([kind, pool]) =>
-    Object.keys(pool).map((id) => donationItemKey(kind, id))),
+  ...Object.keys(DONATION_ITEMS).map(donationItemKey),
 ];
 const ownedIcons = [PASSIVE_ITEM_ICONS, ACTIVE_ITEM_ICONS, DONATION_ITEM_ICONS];
 const missingLocal = itemKeys.filter((key) => !ownedIcons.some((icons) => Object.hasOwn(icons, key)));
@@ -68,12 +67,8 @@ for (const w of Object.values(WEAPONS)) if (w.icon) users[w.icon] = 'WEAPON ' + 
 // two failures apply: an item with no drawing crashes the first pedestal that
 // offers it, and a drawing nothing uses is art left behind by a rename.
 for (const key of Object.keys(ACTIVE_ITEMS)) users[key] = 'ITEM ' + ACTIVE_ITEMS[key].name;
-// Donation rewards are keyed by machine as well as filename. That lets two
-// future catalogues use the same id without sharing either art or ownership.
-for (const [kind, pool] of Object.entries(DONATION_ITEMS)) {
-  for (const [id, def] of Object.entries(pool)) {
-    users[donationItemKey(kind, id)] = kind.toUpperCase() + ' DONATION ' + def.name;
-  }
+for (const [id, def] of Object.entries(DONATION_ITEMS)) {
+  users[donationItemKey(id)] = 'DONATION ' + def.name;
 }
 
 const missing = Object.entries(users).filter(([k]) => !drawn.has(k));
@@ -182,7 +177,7 @@ console.log(
   `${Object.keys(PLAYER_STATUS).length} statuses + ` +
   `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons + ` +
   `${Object.keys(ACTIVE_ITEMS).length} items + ` +
-  `${Object.values(DONATION_ITEMS).reduce((n, pool) => n + Object.keys(pool).length, 0)} donation rewards) ` +
+  `${Object.keys(DONATION_ITEMS).length} donation rewards) ` +
   `over ${PIXEL_ICON_KEYS.length} drawings`
 );
 console.log(fails ? 'ICON TEST FAIL' : 'ICON TEST PASS');

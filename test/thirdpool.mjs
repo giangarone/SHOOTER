@@ -504,14 +504,15 @@ try {
     give('overclock');
     o.trailSurvives = P.spentTotal === 2000;
     // Donation credits use that same door, but never High Stakes' waiver.
-    const creditMachine = g.donationMachines.byKind.credits;
+    const creditMachine = g.donationMachine;
+    g._dismissDonationMachine();
+    creditMachine.present(P, () => 0.99);
     creditMachine.state = 'up';
     creditMachine.rise = 1;
     creditMachine.group.visible = true;
     creditMachine.clearPending();
     creditMachine.completedThisShop = false;
-    P.donationProgress.credits = 0;
-    P.donationTiers.credits = 0;
+    P.donationChance = 10;
     for (const key of Object.keys(P.donationItems)) delete P.donationItems[key];
     P.spentTotal = 0;
     g.credits = 2000;
@@ -519,7 +520,8 @@ try {
     o.donationPaid = g._useDonationMachine(creditMachine);
     o.donationBalance = g.credits;
     o.donationSpent = P.spentTotal;
-    o.donationProgress = P.donationProgress.credits;
+    o.donationSpinning = creditMachine.spinning;
+    g._dismissDonationMachine();
     P.mods.highStakes = 0;
     g.credits = creditsHeld;
     P.spentTotal = 0;
@@ -925,8 +927,8 @@ try {
     `counted=${r.trailCounted} billed=${r.trailBilled}`);
   ok('credit donations count and High Stakes cannot waive them',
     r.donationPaid && r.donationBalance === 1000
-      && r.donationSpent === 1000 && r.donationProgress === 1,
-    `balance=${r.donationBalance} spent=${r.donationSpent} progress=${r.donationProgress}`);
+      && r.donationSpent === 1000 && r.donationSpinning,
+    `balance=${r.donationBalance} spent=${r.donationSpent} spinning=${r.donationSpinning}`);
   ok('and a draft pick does not hand it back', r.trailSurvives);
 
   ok('a charge point is a charge point without the ticket', r.raffleBare === 10,

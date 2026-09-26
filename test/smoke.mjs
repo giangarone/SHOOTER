@@ -86,68 +86,65 @@ try {
   // projectile type appears, so only the steady state is meaningful.
   const early = samples[Math.floor(samples.length * 2 / 3)];
   const rep = samples[samples.length - 1];
-  // Warm every fixed Donation Machine resource, including all nine reward
+  // Warm every fixed Donation Machine resource, including every shared reward
   // plates, then hammer redraw/reveal/present/dismiss. The ordinary bot may
   // die before its first shop and it never donates deliberately, so a sample
   // series alone could leave this whole installation unrendered and let a
   // per-donation GPU leak pass vacuously.
   const donationResources = await page.evaluate(() => {
     const g = window.__game;
-    const area = g.donationMachines;
-    const render = () => {
-      g.scene.updateMatrixWorld(true);
-      // Through the same render target and post-process path as a game frame.
-      // Rendering straight to the canvas compiles a second output-colour-space
-      // variant of every material and measures the test rather than the game.
-      g.crt.render(g.scene, g.camera);
-    };
-    area.present(g.player);
-    for (const machine of area.machines) {
-      machine.state = 'up';
-      machine.rise = 1;
-      machine.group.visible = true;
-      machine.group.position.y = 0;
-      machine.group.traverse((object) => { object.frustumCulled = false; });
-      machine.displayGroup.traverse((object) => { object.frustumCulled = false; });
-      for (const id of Object.keys(machine.icons)) {
-        machine.reveal(id, 5);
-        render();
-      }
-      machine.clearPending();
-      machine.completedThisShop = false;
-      machine.state = 'up';
-      machine.setProgress(0, 5, false);
-    }
-    render();
+    const machine = g.donationMachine;
     const read = () => ({
       geometries: g.renderer.info.memory.geometries,
       textures: g.renderer.info.memory.textures,
       programs: g.renderer.info.programs.length,
       lights: g._countLights(),
     });
+    const before = read();
+    const render = () => {
+      g.scene.updateMatrixWorld(true);
+      g.crt.render(g.scene, g.camera);
+    };
+    machine.dismiss();
+    machine.present(g.player);
+    machine.state = 'up';
+    machine.rise = 1;
+    machine.group.position.y = 0;
+    machine.group.traverse((object) => { object.frustumCulled = false; });
+    machine.displayGroup.traverse((object) => { object.frustumCulled = false; });
+    for (const id of Object.keys(machine.icons)) {
+      machine.reveal(id);
+      render();
+    }
+    machine.dismiss();
+    machine.present(g.player);
+    machine.state = 'up';
+    machine.setChance(10);
+    render();
     const settled = read();
 
     for (let i = 0; i < 40; i++) {
-      area.present(g.player);
-      for (const machine of area.machines) {
-        machine.state = 'up';
-        machine.rise = 1;
-        machine.group.visible = true;
-        const required = 5 + i;
-        machine.setProgress(i % required, required, false);
-        if ((i % 4) === 0) {
-          const id = Object.keys(machine.icons)[i % Object.keys(machine.icons).length];
-          machine.reveal(id, required);
-        }
+      machine.dismiss();
+      machine.present(g.player, () => (i % 3 + 0.5) / 3);
+      machine.state = 'up';
+      machine.rise = 1;
+      machine.group.visible = true;
+      machine.setChance(10 + (i % 19) * 5);
+      machine.startSpin(machine.chance, () => (i % 4) / 4);
+      machine.update(1.5, g.time + i);
+      render();
+      machine.update(1.5, g.time + i + 1.5);
+      if (machine.spinWon) {
+        const id = Object.keys(machine.icons)[i % Object.keys(machine.icons).length];
+        machine.reveal(id);
       }
       render();
-      area.dismiss();
-      area.update(1, g.time + i, g.player.pos, g.player);
+      machine.dismiss();
+      machine.update(1, g.time + i + 2.5);
       render();
     }
-    return { settled, after: read() };
+    return { before, settled, after: read(), rewards: Object.keys(machine.icons).length };
   });
-  peak.geometries = Math.max(peak.geometries, donationResources.after.geometries);
   peak.programs = Math.max(peak.programs, donationResources.after.programs);
   peak.textures = Math.max(peak.textures, donationResources.after.textures);
   await page.screenshot({ path: 'test/shot.png' });
@@ -195,6 +192,13 @@ try {
     // changing light count triggers a full recompile of every material in the
     // scene. Pickups used to add one PointLight each; the count must be fixed.
     ['light count constant', samples.every((r) => r.lights === samples[0].lights)],
+    // Forced full-catalogue rendering uploads drawings a normal one-minute
+    // run never shows. Bound those separately rather than spending the game's
+    // ordinary geometry budget on every unclaimed reward at once: one mesh
+    // per reward, plus six cabinet geometries and the shared sprite quad.
+    ['donation warmup uploads only its fixed cabinet and reward meshes',
+      donationResources.settled.geometries - donationResources.before.geometries
+        <= donationResources.rewards + 7],
     ['donation machine resources stay fixed after warmup',
       donationResources.after.geometries === donationResources.settled.geometries
         && donationResources.after.textures === donationResources.settled.textures
@@ -226,8 +230,8 @@ try {
     // game runs. Per-instance allocation climbed past this within a minute.
     ['geometry count bounded', peak.geometries < 120],
     // The fixed set of canvas panels (three totems, two stations, the mystery
-    // box) uploads in one step the first time a shop rises, then never grows
-    // again. The box's question mark is drawn at construction and uploads with
+    // box and donation cabinet) uploads in one step when a shop first rises,
+    // then never grows again. The box's question mark is drawn at construction and uploads with
     // the first frame that shows it. WHEN
     // that step happens depends on how fast the bot clears wave 1, so any
     // assertion pinned to a sample index is flaky - two earlier attempts here
@@ -237,9 +241,9 @@ try {
     ['texture count non-decreasing',
       samples.every((r, i) => i === 0 || r.textures >= samples[i - 1].textures)],
     // The canvases are the part of this that is worth naming and the part that
-    // moves: NINE PANELS - three totem cards, two console labels (every
-    // Station carries its own), the mystery box's card and the three Donation
-    // Machine cards - plus ONE
+    // moves: SEVEN PANELS - three totem cards, two console labels (every
+    // Station carries its own), the mystery box's card and the Donation
+    // Machine card - plus ONE
     // GLYPH, the question mark on the box's four sides. Then the soft glow dot
     // every halo and puff tints, the hard-edged spark dot the particles use,
     // the creep field, the surface tile the floor and walls share, and the
@@ -284,15 +288,15 @@ try {
     // And to EIGHTEEN for the MUZZLE BLAST's fire contour: one canvas shared
     // by every blast slot (fireball and petals alike).
     //
-    // And to TWENTY-ONE for the three Donation Machine cards. Their meters
-    // are shader geometry and spend no texture; the cards are the title, cost,
-    // numeric progress and reward description the player has to read.
+    // And to NINETEEN for the shared Donation Machine card. Its roulette
+    // uses shader geometry and no texture; one reusable panel supplies the
+    // title, cost and floating reward description for all three payment kinds.
     //
     // It is a BUDGET, not a leak canary: the check above ('non-decreasing') is
     // what catches a texture being allocated per wave. This one catches the
     // budget being spent without anyone noticing, which is why raising it is a
     // deliberate edit with a list attached rather than a nudge.
-    ['texture count bounded', peak.textures <= 21],
+    ['texture count bounded', peak.textures <= 19],
   ];
 
   const shutter = await page.evaluate(() => {

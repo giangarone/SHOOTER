@@ -18,7 +18,7 @@ import {
   PASSIVE_ITEMS, PASSIVE_ITEM_KEYS, WAVETABLE,
 } from './items/passive/index.js';
 import {
-  DONATION_ITEMS, DONATION_KINDS, donationItemKey,
+  DONATION_ITEMS, donationItemKey,
 } from './items/donation/index.js';
 import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
@@ -592,7 +592,7 @@ const DEFAULT_MODS = {
   chorusDamage: 1,      // ...each at this fraction of the shot
 
   // ---- DONATION MACHINE REWARDS -----------------------------------------
-  // These fields are replayed from the three machine-exclusive catalogues in
+  // These fields are replayed from the shared donation catalogue in
   // rebuildMods(), while one-time pickup behavior stays on each definition.
   donationShieldRate: 0,   // shield per combat second
   donationShieldCap: 0,    // and the most that trickle may build
@@ -1609,10 +1609,8 @@ export class Player {
     // namespaced away from the passive pool. Replay them here, beside normal
     // passives, so every later rebuild keeps their effects without teaching
     // the core stat machinery which machine produced which item.
-    for (const kind of DONATION_KINDS) {
-      for (const [id, def] of Object.entries(DONATION_ITEMS[kind])) {
-        if (this.donationItems[donationItemKey(kind, id)]) def.apply(this.mods);
-      }
+    for (const [id, def] of Object.entries(DONATION_ITEMS)) {
+      if (this.donationItems[donationItemKey(id)]) def.apply(this.mods);
     }
     // SYNTHESIZER'S RENTAL, replayed on top of the owned list rather than
     // into it: the grant is an effect the wave is wearing, not a pick, so it
@@ -1860,15 +1858,12 @@ export class Player {
     return true;
   }
 
-  // The single grant path for every Donation Machine reward. The compound
-  // key is intentional: future pools may use the same filename without
-  // sharing ownership, and owning the normal passive with that id is also a
-  // completely separate fact.
-  takeDonationItem(machineKind, itemId, context) {
-    const pool = DONATION_ITEMS[machineKind];
-    const def = pool && pool[itemId];
+  // Keep ownership separate from normal passives, while every payment kind
+  // draws from the same rewards and invokes the same one-time pickup hooks.
+  takeDonationItem(itemId, context) {
+    const def = DONATION_ITEMS[itemId];
     if (!def) return false;
-    const key = donationItemKey(machineKind, itemId);
+    const key = donationItemKey(itemId);
     if (this.donationItems[key]) return false;
     this.donationItems[key] = true;
     this.rebuildMods();
@@ -2558,11 +2553,9 @@ export class Player {
     // mods, so reading them before the wipe would seed the new run with the
     // last one's stats.
     this.passiveItems = {};
-    // Three flat, snapshot-safe ledgers. Versus swaps the Player's run fields
-    // wholesale, so each participant carries an independent progress track,
-    // tier ladder and namespaced reward set for every machine.
-    this.donationProgress = { ammo: 0, health: 0, credits: 0 };
-    this.donationTiers = { ammo: 0, health: 0, credits: 0 };
+    // Plain run state rides the versus snapshot automatically. The chance is
+    // shared across payment kinds, but never across participants.
+    this.donationChance = 10;
     this.donationItems = {};
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.

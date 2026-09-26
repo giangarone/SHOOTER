@@ -925,12 +925,14 @@ context. The start screen says so, and one click anywhere fixes it.
   leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
   Buying ammo leaves the totems standing; rerolling redraws all three.
-- **Donation Machines**: every shop also raises a separate, evenly spaced bank
-  of three Use-only cabinets behind the Mystery Box, centred on it against the
-  nearest wall. The yellow cabinet takes 60 reserve rounds, the red cabinet
-  takes 20 HP (only above 20), and the green cabinet takes $1,000. Each has its own
-  bottom-up segmented meter, tier ladder and permanent reward pool; firing into
-  the cabinet stops the shot but never pays.
+- **Mystery Box**: rolls start at $2,500, rising by $500 every five waves.
+  Each purchase doubles the next roll's price at that shop; a fresh shop
+  resets that multiplier.
+- **Donation Machine**: each shop raises one Use-only cabinet to the left of
+  the Mystery Box, aligned with an outer passive item. Health, Ammo and Credits
+  are equally likely: red takes 25 HP (only above 25), yellow takes 90 reserve
+  rounds, and green takes $1,000. Each payment spins a three-second roulette for an unowned
+  permanent reward from one shared pool. Shots stop at the cabinet but never pay.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
   MONEY ORBS where the enemy died - chunky pixel-art spheres drawn on an
   eleven-pixel grid in the shader, wearing the ceiling's own colour with a few
@@ -1081,90 +1083,104 @@ draws around it; it is emptied when a fresh shop opens, not when a set is
 rerolled. Paying an escalating price for the answer the console already gave is
 the moment a reroll stops feeling like a purchase.
 
-## Donation Machines
+## Donation Machine
 
-The Donation Machine bank rises behind the Mystery Box in every shop, centred
-on the box directly in front of its nearest wall, and sinks when the totem pick
-closes it. These are Use interactions, not shot interactions: the prompt names
-E or the rebindable controller Use button (Triangle by default), the fixed cost,
-and the resource the cabinet accepts. Ammo is taken from reserve only. Health
-is a price rather than damage, so it cannot be paid with shield and does not
-trigger hit reactions. Credits go through the shared spending ledger, so PAPER
-TRAIL counts them, while HIGH STAKES cannot waive them.
+One cabinet rises to the left of the Mystery Box in each shop, at the same
+depth and aligned with an outer passive item. Health, Ammo and Credits have
+equal chances of being selected; rerolling the totems does not change the
+selected cabinet. These are Use interactions: E or the rebindable controller
+Use button (Triangle by default). Shots stop at the cabinet but cannot purchase a spin.
 
-Each cabinet begins at `0 / 10`. A donation fills one whole segment from the
-bottom; completing a cabinet grants one random unowned item from that cabinet's
-pool and makes its next requirement five longer: 10, then 15, then 20, without a
-cap. Completion immediately disables and sinks that cabinet for the rest of
-the current shop, so each machine can finish at most once per shop. Its item,
-name and effect lines remain floating where the cabinet stood until the player
-presses Use a second time to take it; it never auto-grants or expires while the
-shop remains open. Closing the shop forfeits an unclaimed item. Only the
-completed cabinet locks; the other two machines, the Mystery Box and the totems
-remain usable. The next shop raises it empty at its longer requirement. A
-cabinet becomes `SOLD OUT` once its independent pool has actually been claimed.
+| Cabinet | Color | Cost per spin |
+| --- | --- | --- |
+| Health | Red | 25 Health; requires more than 25 HP |
+| Ammo | Yellow | 90 reserve rounds; magazine rounds cannot pay |
+| Credits | Green | $1,000 Credits |
 
-Donation rewards are passive-style permanent build items, but they are not in
-the normal passive pool or the active-item slot. Their definitions are
-directory-driven under:
+Health is a price rather than damage: shields cannot pay it and hit reactions
+and flawless records are unaffected. Credit payments use the spending ledger,
+so PAPER TRAIL counts them and HIGH STAKES cannot waive them. KARMA heals for
+every successful payment, including a spin that is later forfeited.
+
+Every player begins at a 10% win chance. A loss adds five percentage points for
+the next spin: 10%, 15%, 20%, and so on, capped at a guaranteed 100% win. This
+chance carries across shops and payment kinds. The cabinet's circular roulette
+shows it as a colored winning wedge under a fixed pointer; no numeric chance
+or progress count appears in play. A spin lasts three seconds, with several
+revolutions, decelerating mechanical ticks and a win fanfare. Its uniformly
+random landing angle determines the result. Further payments are blocked
+while it spins; movement, other purchases and the final totem pick stay usable.
+Pausing freezes the spin.
+
+A win resets the chance to 10% and sinks and disables the cabinet for that
+shop. One random unowned item, its name and its effects remain floating where
+the cabinet stood until Use collects it. Its effects and one-time pickup hooks
+run on collection, not on the win. The reward never expires while the shop is
+open. Closing the shop forfeits an uncollected reward and retains the reset
+chance. Closing during a spin instead forfeits that spin: the payment stays
+spent, no item is awarded, and the next chance rises by five points even if
+its hidden landing angle would have won. A cabinet shows `SOLD OUT` once the
+player owns every shared reward.
+
+Donation rewards are permanent build items, separate from normal passives and
+the active-item slot. All three payment kinds draw from the same directory:
 
 ```
-js/items/donation/ammo/definitions/
-js/items/donation/health/definitions/
-js/items/donation/credits/definitions/
+js/items/donation/definitions/
 ```
 
 Each file exports a filename-matching `id`, a definition with `name`, `theme`,
-`effects` and `apply`, and its own 24x24 `icon`. A definition may also provide
-`onTake` for a one-time pickup event such as a full heal or a credit grant. The
-local server, Node loader and static Pages build discover the three directories
-independently. Adding a machine-exclusive reward therefore adds only its
-definition file (and an optional matching test fragment); neither the machine
-system nor a registry is edited. Ownership and icon keys are namespaced as
-`donation/<machine>/<id>`, so the same id may exist in multiple machine pools.
-The debug panel discovers the same catalogues and gives ammo, health and credit
-rewards their own sections automatically.
+`effects` and `apply`, and its own 24x24 `icon`. Optional `onTake` hooks own
+one-time collection effects such as full healing or credit grants. The local
+server, Node loader and static Pages build discover this one catalogue.
+Adding a reward adds its definition and an optional matching test fragment
+under `test/items/donation/`; no item registry needs editing. Ownership and
+icon keys are `donation/<id>`, and the debug panel discovers all rewards in one
+**Donation Machine** section.
 
-The machine-exclusive pools are:
+The shared reward pool is:
 
-| Machine | Reward | Effect |
-| --- | --- | --- |
-| Ammo | GHOST CASINGS | 40% of trigger pulls spend no ammunition |
-| Ammo | OVERPRESSURE | +40% damage |
-| Ammo | CLOCKWORK SEAR | +20% fire rate |
-| Ammo | DRUM MAJOR | +30 magazine capacity |
-| Ammo | SKULL RECEIPT | Headshots refund all ammunition spent by that trigger pull |
-| Ammo | SCRAP METAL | A reload started with rounds still in the magazine converts them, one shield point each |
-| Ammo | CHAIN LETTER | +4% fire rate per consecutive hit, capping at +40%; a miss resets the streak |
-| Ammo | AMMO ALCHEMIST | Picking up an ammo crate arms a random eight-second shot element: burn, venom, ice, lightning or fear |
-| Ammo | LIGHTER | Critical hits apply a 3s burn |
-| Ammo | SNAKE | Critical hits apply a 4s venom |
-| Ammo | LUCKY NUMBER | Every seventh shot is a guaranteed crit; it heals 2 HP if it hits |
-| Ammo | BAD OMEN | Every thirteenth kill burns every standing enemy for 4s |
-| Ammo | PAPER CROWN | +40% crit chance while at full health |
-| Ammo | HALF TRUTH | Every other critical hit deals double damage |
-| Health | IVORY DRIP | Generates 1 permanent shield per combat second, up to 20 |
-| Health | PANIC PLATE | 50% damage resistance while below 50 HP |
-| Health | SECOND HEART | +20 max health and fills the health bar on pickup |
-| Health | CERAMIC SKIN | +40 max health |
-| Health | DIRECT DEPOSIT | Heals 1 HP on every fifth shot |
-| Health | MED SCHOOL | +30% crit chance |
-| Health | ILL WILL | +15% damage |
-| Health | MALICE AFORETHOUGHT | +20% damage |
-| Health | GOLD STAR | Ten kills without taking damage grants a permanent +4% damage, up to +40% |
-| Health | KARMA | Heals 5 HP for every donation made |
-| Credits | SIGNING BONUS | Grants $10,000 on pickup |
-| Credits | REMOTE DEPOSIT | Banks 50% of each credit payout immediately; the other half remains on the floor |
-| Credits | TITHING BLADE | 10% of all damage dealt converts to credits instantly |
-| Credits | NEXT OF KIN | +30% pickup drop rate |
-| Credits | THE TAB | The shop sells to a negative balance, down to a hard floor of -$10,000 |
-| Credits | HOUSE MONEY | Payouts earned in the first 30 seconds of a wave are doubled |
-| Credits | WIDOW'S MITE | Entering a shop below $5,000 tops the balance up to exactly $5,000 |
+| Reward | Effect |
+| --- | --- |
+| GHOST CASINGS | 40% of trigger pulls spend no ammunition |
+| OVERPRESSURE | +40% damage |
+| CLOCKWORK SEAR | +20% fire rate |
+| DRUM MAJOR | +30 magazine capacity |
+| SKULL RECEIPT | Headshots refund all ammunition spent by that trigger pull |
+| SCRAP METAL | A reload started with rounds still in the magazine converts them, one shield point each |
+| CHAIN LETTER | +4% fire rate per consecutive hit, capping at +40%; a miss resets the streak |
+| AMMO ALCHEMIST | Picking up an ammo crate arms a random eight-second shot element: burn, venom, ice, lightning or fear |
+| LIGHTER | Critical hits apply a 3s burn |
+| SNAKE | Critical hits apply a 4s venom |
+| LUCKY NUMBER | Every seventh shot is a guaranteed crit; it heals 2 HP if it hits |
+| BAD OMEN | Every thirteenth kill burns every standing enemy for 4s |
+| PAPER CROWN | +40% crit chance while at full health |
+| HALF TRUTH | Every other critical hit deals double damage |
+| IVORY DRIP | Generates 1 permanent shield per combat second, up to 20 |
+| PANIC PLATE | 50% damage resistance while below 50 HP |
+| SECOND HEART | +20 max health and fills the health bar on pickup |
+| CERAMIC SKIN | +40 max health |
+| DIRECT DEPOSIT | Heals 1 HP on every fifth shot |
+| MED SCHOOL | +30% crit chance |
+| ILL WILL | +15% damage |
+| MALICE AFORETHOUGHT | +20% damage |
+| GOLD STAR | Ten kills without taking damage grants a permanent +4% damage, up to +40% |
+| KARMA | Heals 5 HP for every donation made |
+| SIGNING BONUS | Grants $10,000 on pickup |
+| REMOTE DEPOSIT | Banks 50% of each credit payout immediately; the other half remains on the floor |
+| TITHING BLADE | 10% of all damage dealt converts to credits instantly |
+| NEXT OF KIN | +30% pickup drop rate |
+| THE TAB | The shop sells to a negative balance, down to a hard floor of -$10,000 |
+| HOUSE MONEY | Payouts earned in the first 30 seconds of a wave are doubled |
+| WIDOW'S MITE | Entering a shop below $5,000 tops the balance up to exactly $5,000 |
 
-Progress, completed tiers and claimed rewards last across shops for the current
-run and reset with a new run or match. In local versus they are Player snapshot
-state: every participant restores their own three tracks, tiers and reward set
-when the controller passes, just like health, ammo and the rest of their build.
+Chance and collected rewards last across shops for the current run and reset
+with a new run or match. In local versus they are Player snapshot state, so
+each participant restores their own chance, ownership and resource costs on
+handoff. An unfinished spin is forfeited before the outgoing run is captured;
+it cannot finish against the incoming player. Failed-wave retries retain the
+mode's existing rule: restore the player's last committed run. Progress is
+saved in memory for the match, not across page reloads or new runs.
 
 ### The critical hit, as a build
 
@@ -3033,11 +3049,11 @@ js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item
 js/items/active/index.js       active catalogue and timed-item runtime
 js/items/active/definitions/   one file per active item
-js/items/donation/index.js     three independent Donation Machine catalogues
-js/items/donation/*/definitions/  one file per machine-exclusive reward
+js/items/donation/index.js     shared Donation Machine catalogue
+js/items/donation/definitions/ one file per shared reward
 tools/build-pages.mjs          generates the static Pages artifact and item manifests
 js/mysterybox.js               the box that offers active items
-js/donation-machines.js        the three shop cabinets, meters and floating pickups
+js/donation-machines.js        the shared cabinet, roulette and floating pickups
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
@@ -3059,7 +3075,7 @@ test/pad.mjs        controller support, driven by a synthetic DualSense - the
                     buttons, the menus, and the pad's own rebind rows
 test/active.mjs     the active item slot, its row, and the eleven that came in
                     with it
-test/donation.mjs   Donation Machine costs, tiers, rewards and reset
+test/donation.mjs   Donation Machine costs, roulette, forfeiture, rewards and reset
 test/themes.mjs     the theme table and the balance law: every role filled, no
                     type in two themes, and every stat block inside the
                     envelope its role has to share across every theme

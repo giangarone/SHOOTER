@@ -30,9 +30,7 @@ const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
 const ITEM_CATALOGUES = {
   passive: 'passive',
   active: 'active',
-  'donation-ammo': 'donation/ammo',
-  'donation-health': 'donation/health',
-  'donation-credits': 'donation/credits',
+  donation: 'donation',
 };
 
 const itemModuleToken = (kind, file) => createHash('sha256')
@@ -56,7 +54,7 @@ http
       // cannot enumerate a directory themselves. The manifest pairs each
       // filename with an opaque module token: item names such as `magpie`
       // otherwise trip URL-based content blockers before our code can load.
-      const itemManifest = /^\/__item_manifest__\/(passive|active|donation-(?:ammo|health|credits))\.json$/.exec(p);
+      const itemManifest = /^\/__item_manifest__\/(passive|active|donation)\.json$/.exec(p);
       if (itemManifest) {
         const definitions = await itemDefinitions(itemManifest[1]);
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -66,11 +64,9 @@ http
       // Keep each virtual path exactly where its definition directory sat, so
       // relative imports of the catalogue's shared.js resolve without source
       // rewriting. Only the server maps the token back to a filename.
-      const itemModule = /^\/js\/items\/(passive|active|donation\/(?:ammo|health|credits))\/modules\/([a-f0-9]{64})\.js$/.exec(p);
+      const itemModule = /^\/js\/items\/(passive|active|donation)\/modules\/([a-f0-9]{64})\.js$/.exec(p);
       if (itemModule) {
-        const kind = itemModule[1].startsWith('donation/')
-          ? 'donation-' + itemModule[1].slice('donation/'.length)
-          : itemModule[1];
+        const kind = itemModule[1];
         const definitions = await itemDefinitions(kind);
         const definition = definitions.find(({ token }) => token === itemModule[2]);
         if (!definition) {

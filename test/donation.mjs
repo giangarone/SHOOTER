@@ -1,5 +1,5 @@
-// Donation Machine integration: the fixtures, three payment paths, independent
-// ladders, non-duplicate catalogues, reveal state and permanent build rewards.
+// Donation Machine integration: one fixture, three payment paths, fair roulette
+// landings, per-player progression, forfeiture and permanent shared rewards.
 import { launchBrowser, startServer } from './harness.mjs';
 
 const PORT = 8261;
@@ -23,9 +23,9 @@ try {
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, {
     waitUntil: 'load', timeout: 30000,
   });
-  await page.waitForFunction('window.__game && window.__game.donationMachines', { timeout: 30000 });
+  await page.waitForFunction('window.__game && window.__game.donationMachine', { timeout: 30000 });
 
-  const results = await page.evaluate(() => {
+  const results = await page.evaluate(async () => {
     const g = window.__game;
     const p = g.player;
     const out = [];
@@ -36,318 +36,257 @@ try {
     g.queue.length = 0;
     g._clearEntities();
 
-    const area = g.donationMachines;
-    const machine = (kind) => area.byKind[kind];
-    const own = (kind) => Object.keys(p.donationItems)
-      .filter((key) => key.startsWith(`donation/${kind}/`));
-    const reset = () => {
-      Object.assign(p.donationProgress, { ammo: 0, health: 0, credits: 0 });
-      Object.assign(p.donationTiers, { ammo: 0, health: 0, credits: 0 });
-      for (const key of Object.keys(p.donationItems)) delete p.donationItems[key];
-      for (const key of Object.keys(p.passiveItems)) delete p.passiveItems[key];
-      p.rebuildMods();
-      p.health = p.maxHealth;
-      p.reserveAmmo = p.maxReserve;
-      p.shield = 0;
-      g.credits = 0;
-      p.spentTotal = 0;
-      for (const m of area.machines) {
-        m.clearPending();
-        m.completedThisShop = false;
-        m.state = 'up';
-        m.rise = 1;
-        m.group.visible = true;
-        m.group.position.y = 0;
-        m.displayGroup.visible = true;
-        m.displayGroup.position.y = 0;
-        m.setProgress(0, 5, false);
-      }
-    };
-
-    reset();
-    area.present(p);
-    for (const m of area.machines) { m.state = 'up'; m.rise = 1; }
-
-    // ---- fixtures and prompts -------------------------------------------
-    const snap = area.snapshot(p);
-    t('three separate machines rise in the shop',
-      snap.length === 3 && snap.every((m) => m.state === 'up'), JSON.stringify(snap));
-    t('machine colours are yellow, red and green',
-      machine('ammo').config.color === 0xffd600
-        && machine('health').config.color === 0xff2d6f
-        && machine('credits').config.color === 0x00e676);
-    t('machine costs are fixed at 60, 20 and 1000',
-      machine('ammo').config.cost === 60
-        && machine('health').config.cost === 20
-        && machine('credits').config.cost === 1000);
-    t('the cabinets occupy three distinct positions',
-      new Set(area.machines.map((m) => `${m.pos.x},${m.pos.z}`)).size === 3);
-    const xs = area.machines.map((m) => m.pos.x);
-    t('the bank is behind the Mystery Box at its nearest wall',
-      area.machines.every((m) => m.pos.z > g.mysteryBox.pos.z && m.pos.z > 18)
-        && new Set(area.machines.map((m) => m.pos.z)).size === 1,
-      `boxZ=${g.mysteryBox.pos.z} machineZ=${machine('health').pos.z}`);
-    t('the bank is perfectly centred on the Mystery Box',
-      machine('health').pos.x === g.mysteryBox.pos.x
-        && Math.abs((Math.min(...xs) + Math.max(...xs)) / 2 - g.mysteryBox.pos.x) < 1e-9,
-      `boxX=${g.mysteryBox.pos.x} xs=${xs.join(',')}`);
-    const sortedXs = [...xs].sort((a, b) => a - b);
-    t('the cabinets leave a little air between each other',
-      sortedXs[1] - sortedXs[0] === 3.0 && sortedXs[2] - sortedXs[1] === 3.0,
-      `xs=${sortedXs.join(',')}`);
-    const cornerAlpha = area.machines.map((m) =>
-      m.panel.canvas.getContext('2d').getImageData(10, 10, 1, 1).data[3]);
-    t('machine labels have no background fill or frame',
-      cornerAlpha.every((alpha) => alpha === 0), cornerAlpha.join(','));
-
-    p.reserveAmmo = 300;
-    p.health = p.maxHealth;
-    g.credits = 5000;
-    g.inputMode = 'kbm';
-    const keyboardPrompts = area.machines.map((m) => g._usePrompt({ kind: 'donation', target: m })[0]);
-    t('keyboard prompts name Use and every fixed cost',
-      keyboardPrompts.every((text) => text.includes(g.keys.label('use')))
-        && keyboardPrompts[0].includes('60 AMMO')
-        && keyboardPrompts[1].includes('20 HP')
-        && keyboardPrompts[2].includes('$1,000'), keyboardPrompts.join(' | '));
-    t('donation prompts never advertise shooting',
-      keyboardPrompts.every((text) => !text.includes('SHOOT')), keyboardPrompts.join(' | '));
-    g.inputMode = 'pad';
-    const padPrompt = g._usePrompt({ kind: 'donation', target: machine('ammo') })[0];
-    t('pad prompt names the rebound Use button',
-      padPrompt.includes(g.keys.padBtn('use')) && !padPrompt.includes(g.keys.padBtn('shoot')),
-      padPrompt);
-    g.inputMode = 'kbm';
-
-    // A centred pellet reaches the cabinet and stops, but cannot donate.
-    p.pos.set(machine('ammo').pos.x - 3, 0, machine('ammo').pos.z);
-    p.yaw = -Math.PI / 2;
-    p.pitch = 0;
-    p.applyCamera();
-    g.scene.updateMatrixWorld(true);
-    const ammoBeforeShot = p.reserveAmmo;
-    const progressBeforeShot = p.donationProgress.ammo;
-    g._firePellet(p.eyeInto(g._killPos), g._buildShotTargets({ props: true }), 0, p.weapon);
-    t('shots never donate', p.reserveAmmo === ammoBeforeShot
-      && p.donationProgress.ammo === progressBeforeShot);
-
-    // ---- exact refusal thresholds ---------------------------------------
-    reset();
-    const ammo = machine('ammo');
-    p.reserveAmmo = 59;
-    const ammoLow = g._useDonationMachine(ammo);
-    p.reserveAmmo = 60;
-    const ammoPaid = g._useDonationMachine(ammo);
-    t('ammo refuses below 60 reserve rounds without charging',
-      !ammoLow && p.donationProgress.ammo === 1, `reserve=${p.reserveAmmo}`);
-    t('ammo pays exactly 60 reserve rounds', ammoPaid && p.reserveAmmo === 0);
-
-    const health = machine('health');
-    p.health = 20;
-    p.shield = 40;
-    const damageBefore = g.waveDamageTaken;
-    const healthLow = g._useDonationMachine(health);
-    p.health = 21;
-    const healthPaid = g._useDonationMachine(health);
-    t('health requires at least 21 HP', !healthLow && healthPaid && p.health === 1);
-    t('health donation bypasses shields and damage reactions',
-      p.shield === 40 && g.waveDamageTaken === damageBefore,
-      `shield=${p.shield} damage=${g.waveDamageTaken - damageBefore}`);
-
-    const credits = machine('credits');
-    g.credits = 999;
-    const creditsLow = g._useDonationMachine(credits);
-    g.credits = 1000;
-    p.spentTotal = 0;
-    const creditsPaid = g._useDonationMachine(credits);
-    t('credits refuse below $1,000 and then charge exactly $1,000',
-      !creditsLow && creditsPaid && g.credits === 0);
-    t('credit donations use the shared spending ledger', p.spentTotal === 1000,
-      `spent=${p.spentTotal}`);
-    t('the three progress tracks are independent',
-      p.donationProgress.ammo === 1
-        && p.donationProgress.health === 1
-        && p.donationProgress.credits === 1,
-      JSON.stringify(p.donationProgress));
-
-    // ---- completion, pickup, tiers and non-duplicates -------------------
-    reset();
-    p.reserveAmmo = 10000;
+    const m = g.donationMachine;
     const random = Math.random;
-    Math.random = () => 0;
-    for (let i = 0; i < 10; i++) g._useDonationMachine(ammo);
-    Math.random = random;
-    t('ten donations complete the first tier',
-      p.donationTiers.ammo === 1 && p.donationProgress.ammo === 0
-        && ammo.completedThisShop && ammo.pendingId === 'ammoAlchemist'
-        && own('ammo').length === 0,
-      `tiers=${p.donationTiers.ammo} pending=${ammo.pendingId}`);
-    t('the completed meter is full as the cabinet starts sinking',
-      ammo.state === 'sinking'
-        && ammo.meterMaterial.uniforms.uFilled.value === 10
-        && ammo.meterMaterial.uniforms.uSections.value === 10);
-    const rewardBar = (() => {
-      const def = g.__donationItemsForTest.ammo[ammo.pendingId];
-      const d = ammo.panel.canvas.getContext('2d').getImageData(192, 23, 1, 1).data;
-      const theme = [(def.theme >> 16) & 255, (def.theme >> 8) & 255, def.theme & 255];
-      const machine = [(ammo.config.color >> 16) & 255, (ammo.config.color >> 8) & 255, ammo.config.color & 255];
-      return { got: [d[0], d[1], d[2]], theme, machine };
-    })();
-    t('the reward panel wears the item theme, not the machine colour',
-      rewardBar.got[0] === rewardBar.theme[0]
-        && rewardBar.got[1] === rewardBar.theme[1]
-        && rewardBar.got[2] === rewardBar.theme[2],
-      `got=${rewardBar.got.join(',')} theme=${rewardBar.theme.join(',')} machine=${rewardBar.machine.join(',')}`);
-
-    const paidAtCompletion = p.reserveAmmo;
-    const locked = g._useDonationMachine(ammo);
-    p.health = 100;
-    const otherWorks = g._useDonationMachine(health);
-    t('only the completing machine is disabled for this shop',
-      !locked && p.reserveAmmo === paidAtCompletion && otherWorks
-        && p.donationProgress.health === 1);
-
-    area.update(30, g.time + 30, p.pos, p);
-    t('the cabinet sinks but an unclaimed reward remains indefinitely',
-      ammo.state === 'hidden' && !ammo.group.visible
-        && ammo.pendingId === 'ammoAlchemist' && ammo.displayGroup.visible
-        && ammo.icons.ammoAlchemist.visible && own('ammo').length === 0);
-    const pickupPrompt = g._usePrompt({ kind: 'donation', target: ammo })[0];
-    t('the floating reward asks for a second Use press',
-      pickupPrompt.includes(g.keys.label('use'))
-        && pickupPrompt.includes('TAKE') && pickupPrompt.includes('AMMO ALCHEMIST'),
-      pickupPrompt);
-
-    p.pos.copy(ammo.pos);
-    g.tryUse();
-    t('the second Use press grants and removes the floating reward',
-      !!p.donationItems['donation/ammo/ammoAlchemist']
-        && !ammo.pendingId && !ammo.displayGroup.visible);
-    t('the picked-up reward is replayed into modifiers',
-      p.mods.donationAlchemist === 8,
-      `donationAlchemist=${p.mods.donationAlchemist}`);
-    t('the build sheet includes picked-up donation rewards',
-      g._statPassives().some((row) => row.id === 'donation/ammo/ammoAlchemist'));
-    t('pickup does not re-enable the completed cabinet',
-      ammo.state === 'hidden' && ammo.completedThisShop);
-
-    const startShop = () => {
-      area.present(p);
-      for (const m of area.machines) {
-        m.state = 'up';
-        m.rise = 1;
-        m.group.visible = true;
-        m.group.position.y = 0;
-        m.displayGroup.visible = true;
-        m.displayGroup.position.y = 0;
-      }
+    const poolIds = Object.keys(g.__donationItemsForTest);
+    const step = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const tick = (seconds) => {
+      m.update(seconds, g.time + seconds);
+      g._donationEvents();
     };
-
-    // Always choosing index zero now takes the next unowned id: it cannot
-    // hand Clockwork Sear out again even though the RNG repeats exactly.
-    Math.random = () => 0;
-    startShop();
-    p.reserveAmmo = 10000;
-    for (let i = 0; i < 15; i++) g._useDonationMachine(ammo);
-    g._takeDonationReward(ammo);
-    startShop();
-    p.reserveAmmo = 10000;
-    for (let i = 0; i < 20; i++) g._useDonationMachine(ammo);
-    g._takeDonationReward(ammo);
-    Math.random = random;
-    t('requirements advance 10 to 15 to 20', p.donationTiers.ammo === 3,
-      `tiers=${p.donationTiers.ammo}`);
-    t('draws are non-duplicate within the machine pool',
-      own('ammo').length === 3 && new Set(own('ammo')).size === 3,
-      own('ammo').join(', '));
-    // Ammo has five genuinely distinct rewards. Finish its last two tiers so
-    // sold-out is still proved against the actual directory, not a stale
-    // placeholder count.
-    for (let tier = 3; tier < Object.keys(g.__donationItemsForTest.ammo).length; tier++) {
-      startShop();
-      p.reserveAmmo = 10000;
-      for (let i = 0; i < 10 + 5 * tier; i++) g._useDonationMachine(ammo);
-      g._takeDonationReward(ammo);
-    }
-    startShop();
-    const beforeSoldOut = p.reserveAmmo;
-    const refusedSoldOut = g._useDonationMachine(ammo);
-    t('an exhausted pool is sold out and costs nothing',
-      !refusedSoldOut && p.reserveAmmo === beforeSoldOut
-        && area.snapshot(p).find((m) => m.kind === 'ammo').soldOut);
-
-    // Declining a reward leaves it through the shop, then forfeits it when
-    // that shop closes. Merely generating an item is not ownership.
-    for (const key of own('health')) delete p.donationItems[key];
-    p.donationProgress.health = 0;
-    p.donationTiers.health = 0;
-    p.rebuildMods();
-    startShop();
-    for (let i = 0; i < 10; i++) {
-      p.health = Math.max(p.maxHealth, 100);
-      g._useDonationMachine(health);
-    }
-    area.update(30, g.time + 60, p.pos, p);
-    const declinedId = health.pendingId;
-    t('an unclaimed reward never auto-grants or times out',
-      !!declinedId && own('health').length === 0 && health.displayGroup.visible);
-    area.dismiss();
-    t('closing the shop removes an unclaimed reward without granting it',
-      !health.pendingId && own('health').length === 0 && !health.displayGroup.visible);
-
-    // The same non-duplicate ladder is shared as machinery, not ownership:
-    // exhaust the other two and prove each one fills only its own namespace.
-    // Health pays from the bar, so the bar is refilled around EACH donation -
-    // longer ladders outrun any single shop's worth of health.
-    const exhaust = (kind) => {
-      const m = machine(kind);
-      for (const key of own(kind)) delete p.donationItems[key];
-      p.donationProgress[kind] = 0;
-      p.donationTiers[kind] = 0;
-      const count = Object.keys(g.__donationItemsForTest[kind]).length;
-      for (let tier = 0; tier < count; tier++) {
-        startShop();
-        const required = 10 + 5 * tier;
-        for (let i = 0; i < required; i++) {
-          if (kind === 'health') p.health = Math.max(p.maxHealth, 100);
-          else g.credits = 100000;
-          g._useDonationMachine(m);
-        }
-        g._takeDonationReward(m);
-      }
+    const machine = (kind) => {
+      g._dismissDonationMachine();
+      m.present(p, () => ({ ammo: 0.5, health: 1.5, credits: 2.5 }[kind]) / 3);
+      m.state = 'up';
+      m.rise = 1;
+      m.group.position.y = 0;
+      m.displayGroup.position.y = 0;
+      return m;
     };
-    Math.random = () => 0;
-    exhaust('health');
-    exhaust('credits');
+    const reset = () => {
+      g._dismissDonationMachine();
+      p.reset();
+      g.credits = 0;
+      g.money.clear();
+      machine('ammo');
+    };
+    g._presentTotems();
+    reset();
+
+    // ---- one cabinet and one stable shop deal --------------------------
+    const { cap } = await import('./js/padmenu.js');
+    const { DONATION_KINDS, DONATION_SPIN_SECONDS, randomDonationKind,
+      randomUnownedDonationItem } = await import('./js/donation-machines.js');
+    const picks = Array.from({ length: 300 }, (_, i) => randomDonationKind(() => (i + 0.5) / 300));
+    t('each machine kind occupies exactly one third of the random range',
+      DONATION_KINDS.every((kind) => picks.filter((k) => k === kind).length === 100));
+    const positions = [];
+    const prompts = [];
+    for (const kind of DONATION_KINDS) {
+      machine(kind);
+      positions.push(`${m.pos.x},${m.pos.z}`);
+      const targets = [];
+      m.addTargets(targets);
+      t(`${kind} shop has one cabinet and one hit target`, targets.length === 1 && targets[0] === m.hit);
+      const chosen = m.kind;
+      m.present(p, () => 0);
+      g._itemReroll();
+      t(`${kind} shop rerolls retain the chosen cabinet`, m.kind === chosen);
+      g.inputMode = 'kbm';
+      prompts.push(g._usePrompt({ kind: 'donation', target: m })[0]);
+    }
+    t('every variant stands left of the box, aligned with an outer passive item',
+      new Set(positions).size === 1 && m.pos.x > g.mysteryBox.pos.x
+        && m.pos.x === g.totemArea.totems[2].pos.x
+        && m.pos.z === g.mysteryBox.pos.z, positions.join(' / '));
+    const config = g.__donationConfigForTest;
+    t('payment colors are red, yellow and green',
+      config.health.color === 0xff3b30 && config.ammo.color === 0xffd600 && config.credits.color === 0x00e676);
+    t('payment costs are 25 health, 90 reserve ammo and 1000 credits',
+      config.health.cost === 25 && config.ammo.cost === 90 && config.credits.cost === 1000);
+    t('keyboard prompts show rebound Use and each fixed cost',
+      prompts.every((text) => text.includes(g.keys.label('use')))
+        && prompts[0].includes('90 AMMO') && prompts[1].includes('25 HP') && prompts[2].includes('$1,000'),
+      prompts.join(' | '));
+    t('prompts show neither shoot nor numeric probability',
+      prompts.every((text) => !text.includes('SHOOT') && !text.includes('%')));
+    g.inputMode = 'pad';
+    t('controller prompt uses the rebound Use button',
+      g._usePrompt({ kind: 'donation', target: machine('ammo') })[0].includes(cap(g.keys.padBtn('use'))));
+    g.inputMode = 'kbm';
+    t('machine label has no background frame',
+      m.panel.canvas.getContext('2d').getImageData(10, 10, 1, 1).data[3] === 0);
+    t('roulette replaces all meter and tier state',
+      !!m.wheel && !m.meter && !('donationProgress' in p) && !('donationTiers' in p));
+
+    // ---- price boundaries and independent loss resolution --------------
+    reset();
+    p.reserveAmmo = 89;
+    const shortAmmo = g._useDonationMachine(m);
+    p.reserveAmmo = 90;
+    p.mag = p.magSize;
+    const heldMag = p.mag;
+    const ammoPaid = g._useDonationMachine(m, () => 0.99);
+    const repeated = g._useDonationMachine(m, () => 0);
+    t('ammo payment uses exactly 90 reserve rounds and never the magazine',
+      !shortAmmo && ammoPaid && p.reserveAmmo === 0 && p.mag === heldMag);
+    t('spin lock refuses another payment and leaves chance unchanged until settlement',
+      !repeated && m.spinning && p.donationChance === 10 && m.spinChance === 10);
+    tick(2.9);
+    t('a spin remains active before three seconds', m.spinning && p.donationChance === 10);
+    tick(0.1);
+    t('a completed loss adds five points and expands the wedge',
+      !m.spinning && p.donationChance === 15 && m.wheelMaterial.uniforms.uChance.value === 0.15);
+    machine('health');
+    t('chance follows the player across shops and payment kinds',
+      p.donationChance === 15 && m.chance === 15);
+    p.health = 25; p.shield = 50;
+    const shortHp = g._useDonationMachine(m);
+    p.health = 26;
+    const oldHurt = p.lastHurt;
+    const oldWaveDamage = g.waveDamageTaken;
+    const healthPaid = g._useDonationMachine(m, () => 0.99);
+    t('health payment cannot kill and bypasses shield and damage reactions',
+      !shortHp && healthPaid && p.health === 1 && p.shield === 50
+        && p.lastHurt === oldHurt && g.waveDamageTaken === oldWaveDamage);
+    tick(DONATION_SPIN_SECONDS);
+    machine('credits');
+    g.credits = 999;
+    const shortCredits = g._useDonationMachine(m);
+    g.credits = 1000; p.spentTotal = 0; p.mods.highStakes = 1;
+    const creditsPaid = g._useDonationMachine(m, () => 0.99);
+    t('credits payment bills 1000 through the ledger without High Stakes waiver',
+      !shortCredits && creditsPaid && g.credits === 0 && p.spentTotal === 1000);
+    p.mods.highStakes = 0;
+    tick(DONATION_SPIN_SECONDS);
+    t('three different payment kinds advance the same progression', p.donationChance === 25);
+
+    // ---- wheel landing, guaranteed win and collection ------------------
+    const landings = [0, 0.099, 0.1, 0.149, 0.15, 0.49, 0.5, 0.999];
+    for (const chance of [10, 15, 50, 100]) {
+      for (const landing of landings) {
+        reset(); p.donationChance = chance; m.setChance(chance);
+        g._useDonationMachine(m, () => landing);
+        tick(DONATION_SPIN_SECONDS);
+        const phase = ((-m.wheelMaterial.uniforms.uAngle.value % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        t(`chance ${chance} landing ${landing} matches the wheel`,
+          !!m.pendingId === (landing < chance / 100)
+            && Math.abs(phase - landing * 2 * Math.PI) < 1e-8);
+      }
+    }
+    reset(); g.credits = 100000;
+    const progression = [p.donationChance];
+    for (let i = 0; i < 18; i++) {
+      machine('credits');
+      g._useDonationMachine(m, () => 0.999);
+      tick(DONATION_SPIN_SECONDS);
+      progression.push(p.donationChance);
+    }
+    t('loss progression reaches 100 without overshooting',
+      progression.every((chance, i) => chance === 10 + 5 * i), progression.join(','));
+    machine('ammo'); p.reserveAmmo = 90;
+    g._useDonationMachine(m, () => 0.999);
+    tick(DONATION_SPIN_SECONDS);
+    const reward = m.pendingId;
+    t('100 guarantees an unowned reward and resets the chance',
+      !!reward && p.donationChance === 10 && !p.donationItems[`donation/${reward}`]);
+    t('a win disables and sinks the body while its reward stays floating',
+      m.completedThisShop && m.state === 'sinking' && m.displayGroup.visible
+        && m.displayGroup.position.y === 0 && m.icons[reward].visible);
+    const pickupPrompt = g._usePrompt({ kind: 'donation', target: m })[0];
+    t('won reward names Use to collect', pickupPrompt.includes(g.keys.label('use'))
+      && pickupPrompt.includes(g.__donationItemsForTest[reward].name));
+    tick(1);
+    t('reward remains usable after the cabinet is hidden', m.state === 'hidden'
+      && !!m.usable(m.pos) && !!m.pendingId);
+    t('reward pickup grants once through shared ownership and the build sheet',
+      g._takeDonationReward(m) && !g._takeDonationReward(m)
+        && !!p.donationItems[`donation/${reward}`]
+        && g._statPassives().some((row) => row.id === `donation/${reward}`));
+    t('collecting never reopens the completed cabinet', !m.usable(m.pos));
+
+    // A former health-pool reward can come from an ammo payment, and its
+    // one-time hook only runs when the player actually collects it.
+    reset(); p.health = 7;
+    const rewardIndex = poolIds.indexOf('secondHeart');
+    g._useDonationMachine(m, () => 0);
+    Math.random = () => (rewardIndex + 0.5) / poolIds.length;
+    tick(DONATION_SPIN_SECONDS);
     Math.random = random;
-    const healthPool = Object.keys(g.__donationItemsForTest.health).length;
-    const creditsPool = Object.keys(g.__donationItemsForTest.credits).length;
-    t('health and credit pools draw every reward without duplicates',
-      own('health').length === healthPool && new Set(own('health')).size === healthPool
-        && own('credits').length === creditsPool && new Set(own('credits')).size === creditsPool,
-      `health=${own('health').join(',')} credits=${own('credits').join(',')}`);
+    const healthBeforeTake = p.health;
+    g._takeDonationReward(m);
+    t('ammo roulette can award SECOND HEART and runs its hook on collection',
+      healthBeforeTake === 7 && p.health === p.maxHealth
+        && p.donationItems['donation/secondHeart']);
 
-    // Same filename in another pool would still be a different compound key;
-    // the currently seeded pools are also three distinct catalogue objects.
-    t('reward pools are separate from each other and the passive pool',
-      g.__donationItemsForTest.ammo !== g.__donationItemsForTest.health
-        && g.__donationItemsForTest.health !== g.__donationItemsForTest.credits
-        && !Object.keys(g.__passiveItemsForTest).some((id) => id.startsWith('donation/')));
+    // ---- closure and pool exhaustion -----------------------------------
+    reset(); machine('credits'); g.credits = 2000;
+    g._useDonationMachine(m, () => 0);
+    tick(1);
+    // Every real totem claim path closes through this same method.
+    const closingTotem = g.totemArea.totems[0];
+    closingTotem.state = 'up';
+    g._claimTotem(closingTotem, true);
+    g._dismissDonationMachine();
+    tick(10);
+    t('closing a shop forfeits a hidden win, retains payment and raises chance once',
+      p.donationChance === 15 && g.credits === 1000 && !m.spinning
+        && !m.pendingId && Object.keys(p.donationItems).length === 0);
+    machine('credits'); p.donationChance = 100; m.setChance(100); g.credits = 2000;
+    g._useDonationMachine(m, () => 0.99);
+    g._dismissDonationMachine();
+    t('forfeiture at 100 remains capped at 100', p.donationChance === 100);
+    machine('credits'); g.credits = 2000;
+    g._useDonationMachine(m, () => 0);
+    tick(DONATION_SPIN_SECONDS);
+    g._dismissDonationMachine();
+    t('uncollected win is forfeited without changing the reset chance',
+      p.donationChance === 10 && !m.pendingId && Object.keys(p.donationItems).length === 0);
+    g._presentTotems();
+    reset();
+    for (let i = 0; i < poolIds.length; i++) {
+      machine(DONATION_KINDS[i % 3]);
+      p.health = p.maxHealth; p.reserveAmmo = p.maxReserve; g.credits = 2000;
+      g._useDonationMachine(m, () => 0);
+      Math.random = () => 0;
+      tick(DONATION_SPIN_SECONDS);
+      Math.random = random;
+      g._takeDonationReward(m);
+    }
+    machine('credits'); g.credits = 2000;
+    const soldOutPaid = g._useDonationMachine(m);
+    t('every kind draws unique rewards from the same complete pool',
+      Object.keys(p.donationItems).length === poolIds.length);
+    t('shared exhaustion refuses payment and shows SOLD OUT',
+      !soldOutPaid && g.credits === 2000 && m.soldOut
+        && g._donationBlocked(m) === 'SOLD OUT' && randomUnownedDonationItem(p) === null);
+    g._debugDropDonation(`donation/${poolIds[0]}`);
+    t('removing a debug reward reopens a sold-out cabinet immediately',
+      !m.soldOut && g._useDonationMachine(m, () => 0.99));
+    tick(DONATION_SPIN_SECONDS);
+    t('rewards remain separate from the normal passive pool',
+      poolIds.every((id) => !Object.hasOwn(g.__passiveItemsForTest, `donation/${id}`)));
+    t('placeholder rewards are gone from the shared pool',
+      !poolIds.some((id) => ['fatHandgun', 'magnaCarta', 'slideRule', 'fleshBank',
+        'platedDessert', 'soulHarvest', 'lateFee', 'thinBlood', 'deathClause'].includes(id)));
 
-    const poolIds = Object.fromEntries(Object.entries(g.__donationItemsForTest)
-      .map(([kind, pool]) => [kind, Object.keys(pool)]));
-    t('placeholder rewards are completely gone from every machine pool',
-      !poolIds.ammo.some((id) => ['fatHandgun', 'magnaCarta', 'slideRule'].includes(id))
-        && !poolIds.health.some((id) => ['fleshBank', 'platedDessert', 'soulHarvest'].includes(id))
-        && !poolIds.credits.some((id) => ['lateFee', 'thinBlood', 'deathClause'].includes(id)),
-      JSON.stringify(poolIds));
+    // ---- real game clock, pause and shot-only cover ---------------------
+    reset();
+    const beforeShot = p.reserveAmmo;
+    p.pos.set(m.pos.x, 0, m.pos.z - 2);
+    p.yaw = Math.PI; p.pitch = 0; p.applyCamera();
+    g.shoot();
+    t('shots cannot buy spins or change roulette chance',
+      !m.spinning && p.reserveAmmo === beforeShot && p.donationChance === 10);
+    g._useDonationMachine(m, () => 0.99);
+    await step();
+    g.pause();
+    const frozenElapsed = m.spinElapsed;
+    const frozenChance = p.donationChance;
+    for (let i = 0; i < 8; i++) await step();
+    t('pausing freezes the roulette and progression',
+      m.spinElapsed === frozenElapsed && p.donationChance === frozenChance && m.spinning);
+    g.resume();
+    for (let i = 0; i < 700 && m.spinning; i++) await step();
+    t('the actual frame loop settles a resumed three-second spin once',
+      !m.spinning && m.spinElapsed === 3 && p.donationChance === 15);
 
-    // ---- the ten exclusive reward mechanics ----------------------------
+    // ---- the original reward mechanics ----------------------------
     reset();
     const baseDamage = p.getEffectiveDamage(10);
     const baseRate = p.effectiveFireRate;
     const baseMag = p.magSize;
-    for (const id of poolIds.ammo) p.takeDonationItem('ammo', id, g);
+    for (const id of ['overpressure', 'clockworkSear', 'drumMajor', 'ghostCasings', 'skullReceipt']) p.takeDonationItem(id, g);
     t('OVERPRESSURE grants exactly 40% damage',
       Math.abs(p.getEffectiveDamage(10) / baseDamage - 1.4) < 1e-9);
     t('CLOCKWORK SEAR grants exactly 20% fire rate',
@@ -378,11 +317,11 @@ try {
     reset();
     const oldMax = p.maxHealth;
     p.health = 7;
-    p.takeDonationItem('health', 'secondHeart', g);
+    p.takeDonationItem('secondHeart', g);
     t('SECOND HEART adds 20 max health and fills the new bar on pickup',
       p.maxHealth === oldMax + 20 && p.health === p.maxHealth,
       `${p.health}/${p.maxHealth}`);
-    p.takeDonationItem('health', 'panicPlate', g);
+    p.takeDonationItem('panicPlate', g);
     p.health = 50;
     const atFifty = p.incomingMult;
     p.health = 49;
@@ -390,7 +329,7 @@ try {
     t('PANIC PLATE halves damage only below 50 HP',
       atFifty === 1 && underFifty === 0.5,
       `at50=${atFifty} under50=${underFifty}`);
-    p.takeDonationItem('health', 'ivoryDrip', g);
+    p.takeDonationItem('ivoryDrip', g);
     p.shield = 0;
     p._donationShieldAcc = 0;
     const neutral = { move: { x: 0, z: 0 }, look: { x: 0, y: 0 } };
@@ -411,10 +350,10 @@ try {
 
     reset();
     g.credits = 125;
-    p.takeDonationItem('credits', 'signingBonus', g);
+    p.takeDonationItem('signingBonus', g);
     t('SIGNING BONUS grants exactly $10,000 on pickup', g.credits === 10125,
       `credits=${g.credits}`);
-    p.takeDonationItem('credits', 'remoteDeposit', g);
+    p.takeDonationItem('remoteDeposit', g);
     g.money.clear();
     g.credits = 0;
     p.flawlessStreak = 0;
@@ -439,7 +378,7 @@ try {
     // AMMO - SCRAP METAL: a partial reload seats full and converts the
     // leftovers one for one; the fresh magazine is billed in FULL.
     reset();
-    p.takeDonationItem('ammo', 'scrapMetal', g);
+    p.takeDonationItem('scrapMetal', g);
     p.reserveAmmo = 300; p.reloading = 0; p.mag = 7;
     const magSizeWas = p.magSize;
     p.startReload();
@@ -452,7 +391,7 @@ try {
 
     // CHAIN LETTER: builds per hit to its 40% cap, broken by one miss.
     reset();
-    p.takeDonationItem('ammo', 'chainLetter', g);
+    p.takeDonationItem('chainLetter', g);
     const chainBase = p.effectiveFireRate;
     p.bumpChain(true); p.bumpChain(true);
     const afterTwo = p.effectiveFireRate / chainBase;
@@ -466,7 +405,7 @@ try {
 
     // LIGHTER and SNAKE: a crit lands its status, an ordinary shot does not.
     reset();
-    p.takeDonationItem('ammo', 'lighter', g);
+    p.takeDonationItem('lighter', g);
     let fb = fakeBody();
     g._beginShot();
     g._landShot(fb, fb.pos, new V(0, 0, -1), 0, 0, true);
@@ -479,7 +418,7 @@ try {
       critApplied.status === 'burn' && critApplied.duration === 3
         && critApplied.power === p.fireTickDamage,
       JSON.stringify(critApplied));
-    p.takeDonationItem('ammo', 'snake', g);
+    p.takeDonationItem('snake', g);
     fb = fakeBody();
     g._beginShot();
     g._landShot(fb, fb.pos, new V(0, 0, -1), 5, 0, true);
@@ -492,7 +431,7 @@ try {
     // LUCKY NUMBER: the seventh trigger pull crits whatever the die says and
     // heals on landing; a miss spends the flag and pays nothing.
     reset();
-    p.takeDonationItem('ammo', 'luckyNumber', g);
+    p.takeDonationItem('luckyNumber', g);
     Math.random = () => 0.999;
     const luckyRolls = [0, 0, 0, 0, 0, 0, 0].map(() => p.rollCrit());
     const luckyArmed = luckyRolls.slice(0, 6).every((r) => r === false)
@@ -511,7 +450,7 @@ try {
       `landed=${luckyLandedHp} missed=${luckyMissedHp}`);
     // PAPER CROWN: full health adds its 40% to the crit die.
     reset();
-    p.takeDonationItem('ammo', 'paperCrown', g);
+    p.takeDonationItem('paperCrown', g);
     p.health = p.maxHealth;
     Math.random = () => 0.4;
     const crownFull = p.rollCrit();
@@ -523,7 +462,7 @@ try {
 
     // HALF TRUTH: the second of two crits is the doubled one.
     reset();
-    p.takeDonationItem('ammo', 'halfTruth', g);
+    p.takeDonationItem('halfTruth', g);
     const hitK = [];
     for (let i = 0; i < 3; i++) {
       fb = fakeBody();
@@ -538,7 +477,7 @@ try {
 
     // BAD OMEN: the thirteenth kill burns everything left standing.
     reset();
-    p.takeDonationItem('ammo', 'badOmen', g);
+    p.takeDonationItem('badOmen', g);
     g.enemies.length = 0;
     const omenA = fakeBody(); const omenB = fakeBody();
     g.enemies.push(omenA, omenB);
@@ -552,7 +491,7 @@ try {
 
     // AMMO ALCHEMIST: a crate arms an eight-second element; shots carry it.
     reset();
-    p.takeDonationItem('ammo', 'ammoAlchemist', g);
+    p.takeDonationItem('ammoAlchemist', g);
     Math.random = () => 0;
     g._armAlchemy();
     Math.random = random;
@@ -570,16 +509,16 @@ try {
     // HEALTH - CERAMIC SKIN.
     reset();
     const skinBase = p.maxHealth;
-    p.takeDonationItem('health', 'ceramicSkin', g);
+    p.takeDonationItem('ceramicSkin', g);
     t('CERAMIC SKIN adds exactly 40 max health', p.maxHealth === skinBase + 40,
       `${skinBase} -> ${p.maxHealth}`);
 
     // MED SCHOOL, ILL WILL, MALICE AFORETHOUGHT - flat modifiers.
-    p.takeDonationItem('health', 'medSchool', g);
+    p.takeDonationItem('medSchool', g);
     const medCrit = p.mods.critChance - 0.05;
-    p.takeDonationItem('health', 'illWill', g);
+    p.takeDonationItem('illWill', g);
     const illDmg = p.mods.damage;
-    p.takeDonationItem('health', 'maliceAforethought', g);
+    p.takeDonationItem('maliceAforethought', g);
     t('MED SCHOOL adds exactly 30% crit chance',
       Math.abs(medCrit - 0.3) < 1e-9, `crit=${p.mods.critChance}`);
     t('ILL WILL grants 15% and MALICE AFORETHOUGHT 20% on top of it',
@@ -588,7 +527,7 @@ try {
 
     // DIRECT DEPOSIT: every fifth shot pays 1 HP.
     reset();
-    p.takeDonationItem('health', 'directDeposit', g);
+    p.takeDonationItem('directDeposit', g);
     p.health = 50; p.shotTally = 0;
     for (let i = 0; i < 4; i++) p._noteShot();
     const beforeFifth = p.health;
@@ -600,7 +539,7 @@ try {
     // GOLD STAR: ten clean kills per permanent step, capped, replayed by
     // rebuildMods - and wiped by damage through _hurtPlayer's own ledger.
     reset();
-    p.takeDonationItem('health', 'goldStar', g);
+    p.takeDonationItem('goldStar', g);
     for (let i = 0; i < 10; i++) g._goldStarKill();
     t('GOLD STAR banks a permanent +4% damage step per ten clean kills',
       p.goldStars === 1 && p.goldKills === 0
@@ -613,7 +552,7 @@ try {
 
     // KARMA: a heal per donation, whatever the machine.
     reset();
-    p.takeDonationItem('health', 'karma', g);
+    p.takeDonationItem('karma', g);
     p.health = 40; g.credits = 2000;
     g._useDonationMachine(machine('credits'));
     t('KARMA heals 5 HP per donation made', p.health === 45 && g.credits === 1000,
@@ -621,7 +560,7 @@ try {
 
     // CREDITS - TITHING BLADE: a tenth of damage dealt, into the balance.
     reset();
-    p.takeDonationItem('credits', 'tithingBlade', g);
+    p.takeDonationItem('tithingBlade', g);
     g.credits = 0;
     const titheTarget = new (g.__EnemyForTest)('chaser', new V(0, 0, -9), 1, 1, 1);
     titheTarget.takeDamage(100);
@@ -632,14 +571,14 @@ try {
       bankedTithe === 10, `credits=${bankedTithe}`);
 
     // NEXT OF KIN: the drop table's luck multiplier.
-    p.takeDonationItem('credits', 'nextOfKin', g);
+    p.takeDonationItem('nextOfKin', g);
     t('NEXT OF KIN raises every drop roll by 30%',
       Math.abs(p.mods.dropLuck - 1.3) < 1e-9, `dropLuck=${p.mods.dropLuck}`);
 
     // THE TAB: purchases reach into debt, down to a hard -$10,000.
     p.reserveAmmo = 0; g.credits = 200;
     const blockedWithoutTab = g._stationBlocked(g.totemArea.ammoStation);
-    p.takeDonationItem('credits', 'theTab', g);
+    p.takeDonationItem('theTab', g);
     g.credits = 200;
     const beforeTab = g._stationBlocked(g.totemArea.ammoStation);
     const ammoCost = g._ammoCost();
@@ -660,7 +599,7 @@ try {
 
     // HOUSE MONEY: the first thirty seconds of a wave pay double.
     reset();
-    p.takeDonationItem('credits', 'houseMoney', g);
+    p.takeDonationItem('houseMoney', g);
     p.flawlessStreak = 0; g.credits = 0;
     g.waveState = 'active'; g._waveStartedAt = g.time;
     let houseFloor = 0;
@@ -677,7 +616,7 @@ try {
     g.money.clear();
 
     // WIDOW'S MITE: a shop-entry top-up, exactly to the line.
-    p.takeDonationItem('credits', 'widowsMite', g);
+    p.takeDonationItem('widowsMite', g);
     g.credits = 3200.5;
     const miteGrant = g._widowsMite();
     const miteLands = g.credits;
@@ -687,14 +626,14 @@ try {
         && miteEven === 0 && g.credits === 6000,
       `grant=${miteGrant}`);
 
-    // A new run owns none of the ledgers that survived the previous shops.
+    // A new run cannot inherit an unfinished payment from the old body.
+    machine('credits'); g.credits = 2000;
+    g._useDonationMachine(m, () => 0);
     g.autoTest = true;
     g.beginGame();
-    t('a new run resets progress, tiers and claimed rewards',
-      Object.values(p.donationProgress).every((n) => n === 0)
-        && Object.values(p.donationTiers).every((n) => n === 0)
-        && Object.keys(p.donationItems).length === 0,
-      JSON.stringify({ progress: p.donationProgress, tiers: p.donationTiers }));
+    t('a new run resets chance and rewards and cancels an old spin',
+      p.donationChance === 10 && Object.keys(p.donationItems).length === 0
+        && !m.spinning && !m.pendingId);
 
     return out;
   });

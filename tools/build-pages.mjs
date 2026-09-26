@@ -13,9 +13,7 @@ const ITEM_DEFINITION = /^[A-Za-z_$][\w$]*\.js$/;
 const ITEM_CATALOGUES = {
   passive: 'passive',
   active: 'active',
-  'donation-ammo': 'donation/ammo',
-  'donation-health': 'donation/health',
-  'donation-credits': 'donation/credits',
+  donation: 'donation',
 };
 const SITE_ENTRIES = [
   'assets',
@@ -68,5 +66,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const { output, counts } = await buildPages();
   console.log(`Pages artifact: ${output}`);
   console.log(`${counts.passive} passive items / ${counts.active} active items / `
-    + `${counts['donation-ammo'] + counts['donation-health'] + counts['donation-credits']} donation items`);
+    + `${counts.donation} donation items`);
 }

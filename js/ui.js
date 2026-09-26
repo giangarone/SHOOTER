@@ -98,11 +98,7 @@ export class UI {
     this.debugPanel = $('debug-panel');
     this.debugPassives = $('debug-passives');
     this.debugActives = $('debug-actives');
-    this.debugDonations = {
-      ammo: $('debug-donation-ammo'),
-      health: $('debug-donation-health'),
-      credits: $('debug-donation-credits'),
-    };
+    this.debugDonation = $('debug-donation');
     this.debugWaves = $('debug-waves');
     this.debugThemes = $('debug-themes');
     this.debugWaveNow = $('debug-wave-now');
@@ -1059,12 +1055,8 @@ export class UI {
     for (const def of actives) {
       this.debugActives.appendChild(this._debugTile(def, on.active, null));
     }
-    for (const [kind, defs] of Object.entries(donations)) {
-      for (const def of defs) {
-        this.debugDonations[kind].appendChild(
-          this._debugTile(def, on.donation, on.dropDonation)
-        );
-      }
+    for (const def of donations) {
+      this.debugDonation.appendChild(this._debugTile(def, on.donation, on.dropDonation));
     }
     // Forty buttons, which covers the whole boss rotation twice and every
     // enemy unlock in the game. Anything past it goes in the box beside them.
@@ -1190,7 +1182,7 @@ export class UI {
         words.length > 0 && !words.every((w) => t.hay.includes(w)));
     }
     for (const grid of [
-      this.debugActives, this.debugPassives, ...Object.values(this.debugDonations),
+      this.debugActives, this.debugPassives, this.debugDonation,
     ]) {
       const any = [...grid.children].some((el) => !el.classList.contains('filtered'));
       grid.closest('.debug-sec').classList.toggle('hidden', !any);

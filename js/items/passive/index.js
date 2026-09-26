@@ -113,10 +113,8 @@ export function rerollCost(n, wave = 1) {
   return blockPrice(wave, REROLL_BASE, REROLL_STEP) * Math.pow(2, n);
 }
 
-// $1,000 at waves 1-5, $1,500 at 6-10, and $500 a block after that. Half the
-// reroll's opening price, because the box asks for the item SLOT as well as
-// the money - a roll the player takes costs them whatever they were carrying.
-export const BOX_BASE = 1000;
+// $2,500 at waves 1-5, $3,000 at 6-10, and $500 a block after that.
+export const BOX_BASE = 2500;
 export const BOX_STEP = 500;
 
 // WHAT ONE ROLL OF THE MYSTERY BOX COSTS, for the nth roll bought at a single
