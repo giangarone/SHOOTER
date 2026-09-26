@@ -175,17 +175,17 @@ try {
     p.reserveAmmo = 10000;
     const random = Math.random;
     Math.random = () => 0;
-    for (let i = 0; i < 5; i++) g._useDonationMachine(ammo);
+    for (let i = 0; i < 10; i++) g._useDonationMachine(ammo);
     Math.random = random;
-    t('five donations complete the first tier',
+    t('ten donations complete the first tier',
       p.donationTiers.ammo === 1 && p.donationProgress.ammo === 0
         && ammo.completedThisShop && ammo.pendingId === 'ammoAlchemist'
         && own('ammo').length === 0,
       `tiers=${p.donationTiers.ammo} pending=${ammo.pendingId}`);
     t('the completed meter is full as the cabinet starts sinking',
       ammo.state === 'sinking'
-        && ammo.meterMaterial.uniforms.uFilled.value === 5
-        && ammo.meterMaterial.uniforms.uSections.value === 5);
+        && ammo.meterMaterial.uniforms.uFilled.value === 10
+        && ammo.meterMaterial.uniforms.uSections.value === 10);
     const rewardBar = (() => {
       const def = g.__donationItemsForTest.ammo[ammo.pendingId];
       const d = ammo.panel.canvas.getContext('2d').getImageData(192, 23, 1, 1).data;
@@ -248,14 +248,14 @@ try {
     Math.random = () => 0;
     startShop();
     p.reserveAmmo = 10000;
-    for (let i = 0; i < 6; i++) g._useDonationMachine(ammo);
+    for (let i = 0; i < 15; i++) g._useDonationMachine(ammo);
     g._takeDonationReward(ammo);
     startShop();
     p.reserveAmmo = 10000;
-    for (let i = 0; i < 7; i++) g._useDonationMachine(ammo);
+    for (let i = 0; i < 20; i++) g._useDonationMachine(ammo);
     g._takeDonationReward(ammo);
     Math.random = random;
-    t('requirements advance 5 to 6 to 7', p.donationTiers.ammo === 3,
+    t('requirements advance 10 to 15 to 20', p.donationTiers.ammo === 3,
       `tiers=${p.donationTiers.ammo}`);
     t('draws are non-duplicate within the machine pool',
       own('ammo').length === 3 && new Set(own('ammo')).size === 3,
@@ -266,7 +266,7 @@ try {
     for (let tier = 3; tier < Object.keys(g.__donationItemsForTest.ammo).length; tier++) {
       startShop();
       p.reserveAmmo = 10000;
-      for (let i = 0; i < 5 + tier; i++) g._useDonationMachine(ammo);
+      for (let i = 0; i < 10 + 5 * tier; i++) g._useDonationMachine(ammo);
       g._takeDonationReward(ammo);
     }
     startShop();
@@ -283,7 +283,7 @@ try {
     p.donationTiers.health = 0;
     p.rebuildMods();
     startShop();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       p.health = Math.max(p.maxHealth, 100);
       g._useDonationMachine(health);
     }
@@ -307,7 +307,7 @@ try {
       const count = Object.keys(g.__donationItemsForTest[kind]).length;
       for (let tier = 0; tier < count; tier++) {
         startShop();
-        const required = 5 + tier;
+        const required = 10 + 5 * tier;
         for (let i = 0; i < required; i++) {
           if (kind === 'health') p.health = Math.max(p.maxHealth, 100);
           else g.credits = 100000;

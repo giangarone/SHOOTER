@@ -333,7 +333,5 @@ export const WEAPONS = {
   },
 };
 
-export const WEAPON_KEYS = Object.keys(WEAPONS);
-
 // The gun every run starts with.
 export const STARTING_WEAPON = 'pulseRifle';

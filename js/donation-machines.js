@@ -32,7 +32,7 @@ export const DONATION_MACHINE_CONFIG = Object.freeze({
 });
 
 export function donationRequirement(player, kind) {
-  return 5 + (player.donationTiers[kind] || 0);
+  return 10 + 5 * (player.donationTiers[kind] || 0);
 }
 
 export function donationSoldOut(player, kind) {
@@ -78,7 +78,7 @@ function meterMaterial(color) {
     uniforms: {
       uColor: { value: new THREE.Color(color) },
       uFilled: { value: 0 },
-      uSections: { value: 5 },
+      uSections: { value: 10 },
       uFlash: { value: 0 },
     },
     vertexShader: `
@@ -175,7 +175,7 @@ export class DonationMachine {
     this.state = 'hidden';
     this.rise = 0;
     this.progress = 0;
-    this.required = 5;
+    this.required = 10;
     this.soldOut = false;
     this.pendingId = null;
     this.completedThisShop = false;

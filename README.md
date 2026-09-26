@@ -1092,9 +1092,9 @@ is a price rather than damage, so it cannot be paid with shield and does not
 trigger hit reactions. Credits go through the shared spending ledger, so PAPER
 TRAIL counts them, while HIGH STAKES cannot waive them.
 
-Each cabinet begins at `0 / 5`. A donation fills one whole segment from the
+Each cabinet begins at `0 / 10`. A donation fills one whole segment from the
 bottom; completing a cabinet grants one random unowned item from that cabinet's
-pool and makes its next requirement one longer: 5, then 6, then 7, without a
+pool and makes its next requirement five longer: 10, then 15, then 20, without a
 cap. Completion immediately disables and sinks that cabinet for the rest of
 the current shop, so each machine can finish at most once per shop. Its item,
 name and effect lines remain floating where the cabinet stood until the player
