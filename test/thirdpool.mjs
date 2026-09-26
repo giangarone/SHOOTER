@@ -506,6 +506,7 @@ try {
     // Donation credits use that same door, but never High Stakes' waiver.
     const creditMachine = g.donationMachine;
     g._dismissDonationMachine();
+    P.donationWins = 0;
     creditMachine.present(P, () => 0.99);
     creditMachine.state = 'up';
     creditMachine.rise = 1;
@@ -926,8 +927,8 @@ try {
     r.trailCounted === 2000 && r.trailBilled === 2000,
     `counted=${r.trailCounted} billed=${r.trailBilled}`);
   ok('credit donations count and High Stakes cannot waive them',
-    r.donationPaid && r.donationBalance === 0
-      && r.donationSpent === 2000 && r.donationSpinning,
+    r.donationPaid && r.donationBalance === 1000
+      && r.donationSpent === 1000 && r.donationSpinning,
     `balance=${r.donationBalance} spent=${r.donationSpent} spinning=${r.donationSpinning}`);
   ok('and a draft pick does not hand it back', r.trailSurvives);
 

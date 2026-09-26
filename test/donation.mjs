@@ -111,11 +111,11 @@ try {
     const config = g.__donationConfigForTest;
     t('payment colors are red, yellow and green',
       config.health.color === 0xff3b30 && config.ammo.color === 0xffd600 && config.credits.color === 0x00e676);
-    t('payment costs are 25 health, 90 reserve ammo and 2000 credits',
-      config.health.cost === 25 && config.ammo.cost === 90 && config.credits.cost === 2000);
-    t('keyboard prompts show rebound Use and each fixed cost',
+    t('first-machine costs are 25 health, 60 reserve ammo and 1000 credits',
+      config.health.cost === 25 && config.ammo.cost === 60 && config.credits.cost === 1000);
+    t('keyboard prompts show rebound Use and each first-machine cost',
       prompts.every((text) => text.includes(g.keys.label('use')))
-        && prompts[0].includes('90 AMMO') && prompts[1].includes('25 HP') && prompts[2].includes('$2,000'),
+        && prompts[0].includes('60 AMMO') && prompts[1].includes('25 HP') && prompts[2].includes('$1,000'),
       prompts.join(' | '));
     t('prompts show neither shoot nor numeric probability',
       prompts.every((text) => !text.includes('SHOOT') && !text.includes('%')));
@@ -133,14 +133,14 @@ try {
 
     // ---- price boundaries and independent loss resolution --------------
     reset();
-    p.reserveAmmo = 89;
+    p.reserveAmmo = 59;
     const shortAmmo = g._useDonationMachine(m);
-    p.reserveAmmo = 90;
+    p.reserveAmmo = 60;
     p.mag = p.magSize;
     const heldMag = p.mag;
     const ammoPaid = g._useDonationMachine(m, () => 0.99);
     const repeated = g._useDonationMachine(m, () => 0);
-    t('ammo payment uses exactly 90 reserve rounds and never the magazine',
+    t('first ammo payment uses exactly 60 reserve rounds and never the magazine',
       !shortAmmo && ammoPaid && p.reserveAmmo === 0 && p.mag === heldMag);
     t('spin lock refuses another payment and leaves chance unchanged until settlement',
       !repeated && m.spinning && p.donationChance === 5 && m.spinChance === 5);
@@ -164,16 +164,65 @@ try {
         && p.lastHurt === oldHurt && g.waveDamageTaken === oldWaveDamage);
     tick(DONATION_SPIN_SECONDS);
     machine('credits');
-    g.credits = 1999;
+    g.credits = 999;
     const shortCredits = g._useDonationMachine(m);
-    t('credit refusal uses the new two-thousand-credit price', g._donationBlocked(m) === 'NEED $2,000');
-    g.credits = 2000; p.spentTotal = 0; p.mods.highStakes = 1;
+    t('first credit refusal uses the one-thousand-credit price', g._donationBlocked(m) === 'NEED $1,000');
+    g.credits = 1000; p.spentTotal = 0; p.mods.highStakes = 1;
     const creditsPaid = g._useDonationMachine(m, () => 0.99);
-    t('credits payment bills 2000 through the ledger without High Stakes waiver',
-      !shortCredits && creditsPaid && g.credits === 0 && p.spentTotal === 2000);
+    t('first credit payment bills 1000 through the ledger without High Stakes waiver',
+      !shortCredits && creditsPaid && g.credits === 0 && p.spentTotal === 1000);
     p.mods.highStakes = 0;
     tick(DONATION_SPIN_SECONDS);
     t('three different payment kinds advance the same progression', p.donationChance === 20);
+
+    const costTiers = [
+      { health: 25, credits: 1000, ammo: 60 },
+      { health: 30, credits: 1500, ammo: 90 },
+      { health: 35, credits: 2000, ammo: 120 },
+      { health: 40, credits: 2500, ammo: 150 },
+    ];
+    for (const wins of [0, 1, 2, 3, 4, 7, 30]) {
+      for (const kind of DONATION_KINDS) {
+        reset(); p.donationWins = wins; machine(kind);
+        const cost = costTiers[Math.min(wins, 3)][kind];
+        p.health = p.maxHealth; p.shield = 50; p.reserveAmmo = p.maxReserve;
+        p.mag = p.magSize; g.credits = 10000; p.spentTotal = 0;
+        const printedCost = cost.toLocaleString('en-US');
+        const label = kind === 'credits' ? '$' + cost.toLocaleString('en-US')
+          : cost + (kind === 'health' ? ' HP' : ' AMMO');
+        t(`${wins} payouts: ${kind} cabinet and Use prompt quote the current price`,
+          m.config.cost === cost && m.snapshot(p).cost === cost
+            && m.config.costLabel.includes(printedCost)
+            && g._usePrompt({ kind: 'donation', target: m })[0].includes(label));
+        m.present(p, () => 0.99);
+        g._itemReroll();
+        t(`${wins} payouts: rerolling keeps the ${kind} price`, m.config.cost === cost);
+        if (kind === 'health') p.health = cost;
+        else if (kind === 'ammo') p.reserveAmmo = cost - 1;
+        else g.credits = cost - 1;
+        const blocked = g._donationBlocked(m);
+        const refused = !g._useDonationMachine(m);
+        t(`${wins} payouts: ${kind} refuses an insufficient payment without spending`,
+          refused && !m.spinning && p.spentTotal === 0
+            && (kind === 'health' ? p.health === cost && blocked === `NEED ${cost + 1} HP`
+              : kind === 'ammo' ? p.reserveAmmo === cost - 1 && blocked === `NEED ${cost} RESERVE`
+                : g.credits === cost - 1 && blocked === `NEED ${label}`));
+        if (kind === 'health') p.health = cost + 1;
+        else if (kind === 'ammo') p.reserveAmmo = cost;
+        else { g.credits = cost; p.mods.highStakes = 1; }
+        const paid = g._useDonationMachine(m, () => 0.99);
+        t(`${wins} payouts: ${kind} spends its exact price and preserves the magazine/shield`,
+          paid && p.mag === p.magSize && p.shield === 50
+            && (kind === 'health' ? p.health === 1
+              : kind === 'ammo' ? p.reserveAmmo === 0
+                : g.credits === 0 && p.spentTotal === cost));
+        tick(DONATION_SPIN_SECONDS);
+        t(`${wins} payouts: a loss leaves the ${kind} price unchanged`,
+          p.donationWins === wins && m.config.cost === cost);
+        machine(kind);
+        t(`${wins} payouts: another shop without a win keeps the ${kind} price`, m.config.cost === cost);
+      }
+    }
 
     // ---- wheel landing, guaranteed win and collection ------------------
     for (const chance of [5, 6, 9, 13, 17, 37, 99, 100]) {
@@ -228,7 +277,9 @@ try {
     for (let wins = 1; wins <= 6; wins++) {
       const increase = [5, 4, 3, 2, 1, 1, 1][wins];
       machine('credits');
-      g.credits = 200000;
+      g.credits = 300000;
+      const price = costTiers[Math.min(wins, 3)].credits;
+      t(`${wins} real payouts: the next machine uses the advanced credit price`, m.config.cost === price);
       const chances = [p.donationChance];
       g._useDonationMachine(m, () => 0);
       tick(1);
@@ -238,7 +289,7 @@ try {
       chances.push(p.donationChance);
       t(`${wins} payouts: an interrupted hidden win adds ${increase} points exactly once`,
         p.donationChance === 5 + increase && p.donationWins === wins
-          && g.credits === 198000 && !m.pendingId);
+          && g.credits === 300000 - price && !m.pendingId);
       machine('credits');
       t(`${wins} payouts: a new shop restores the precise wedge and loss step`,
         m.wheelMaterial.uniforms.uChance.value === (5 + increase) / 100
@@ -332,7 +383,7 @@ try {
         && p.donationItems['donation/secondHeart']);
 
     // ---- closure and pool exhaustion -----------------------------------
-    reset(); machine('credits'); g.credits = 2000;
+    reset(); machine('credits'); g.credits = 1000;
     g._useDonationMachine(m, () => 0);
     tick(1);
     // Every real totem claim path closes through this same method.
@@ -355,28 +406,32 @@ try {
     t('uncollected win is forfeited without changing the reset chance',
       p.donationChance === 5 && p.donationWins === 1
         && !m.pendingId && Object.keys(p.donationItems).length === 0);
+    machine('health');
+    t('leaving a won reward behind still advances the next payment type to the second cost level',
+      m.config.cost === 30);
     g._presentTotems();
     reset();
     for (let i = 0; i < poolIds.length; i++) {
       machine(DONATION_KINDS[i % 3]);
-      p.health = p.maxHealth; p.reserveAmmo = p.maxReserve; g.credits = 2000;
+      p.health = p.maxHealth; p.reserveAmmo = p.maxReserve; g.credits = 2500;
       g._useDonationMachine(m, () => 0);
       Math.random = () => 0;
       tick(DONATION_SPIN_SECONDS);
       Math.random = random;
       g._takeDonationReward(m);
     }
-    machine('credits'); g.credits = 2000;
+    machine('credits'); g.credits = 2500;
     const soldOutPaid = g._useDonationMachine(m);
     t('every kind draws unique rewards from the same complete pool',
       Object.keys(p.donationItems).length === poolIds.length);
     t('shared exhaustion refuses payment and shows SOLD OUT',
-      !soldOutPaid && g.credits === 2000 && m.soldOut
+      !soldOutPaid && g.credits === 2500 && m.soldOut
         && p.donationWins === poolIds.length
         && g._donationBlocked(m) === 'SOLD OUT' && randomUnownedDonationItem(p) === null);
     g._debugDropDonation(`donation/${poolIds[0]}`);
     t('removing a debug reward reopens a sold-out cabinet immediately',
-      !m.soldOut && p.donationWins === poolIds.length && g._useDonationMachine(m, () => 0.99));
+      !m.soldOut && p.donationWins === poolIds.length && m.config.cost === 2500
+        && g._useDonationMachine(m, () => 0.99));
     tick(DONATION_SPIN_SECONDS);
     t('late-game difficulty keeps a one-point increase after reward removal',
       p.donationChance === 6 && p.donationWins === poolIds.length);
@@ -389,7 +444,7 @@ try {
     reset();
     p.takeDonationItem(poolIds[0], g);
     t('granting a reward directly does not count as a machine payout',
-      p.donationWins === 0 && p.donationChance === 5);
+      p.donationWins === 0 && p.donationChance === 5 && m.config.cost === 60);
     g._useDonationMachine(m, () => 0);
     for (const id of poolIds) p.donationItems[`donation/${id}`] = true;
     tick(DONATION_SPIN_SECONDS);
@@ -689,7 +744,7 @@ try {
     // KARMA: a heal per donation, whatever the machine.
     reset();
     p.takeDonationItem('karma', g);
-    p.health = 40; g.credits = 2000;
+    p.health = 40; g.credits = 1000;
     g._useDonationMachine(machine('credits'));
     t('KARMA heals 5 HP per donation made', p.health === 45 && g.credits === 0,
       `health=${p.health} credits=${g.credits}`);
@@ -765,14 +820,16 @@ try {
 
     // A new run cannot inherit an unfinished payment from the old body.
     p.donationWins = 6;
-    machine('credits'); g.credits = 2000;
-    g._useDonationMachine(m, () => 0);
+    machine('credits'); g.credits = 2500;
+    t('the old run can start a spin at the maximum credit price', g._useDonationMachine(m, () => 0));
     g.autoTest = true;
     g.beginGame();
     t('a new run resets chance and rewards and cancels an old spin',
       p.donationChance === 5 && p.donationWins === 0 && p.lastDonationKind === null
         && Object.keys(p.donationItems).length === 0
         && !m.spinning && !m.pendingId);
+    machine('credits');
+    t('a new run returns donation costs to the first level', m.config.cost === 1000);
 
     return out;
   });

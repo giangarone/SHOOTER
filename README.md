@@ -941,10 +941,11 @@ context. The start screen says so, and one click anywhere fixes it.
 - **Donation Machine**: each shop raises one Use-only cabinet to the left of
   the Mystery Box, aligned with an outer passive item. Health, Ammo and Credits
   start equally likely; later shops give the player's last cabinet a 20% chance
-  and the other two 40% each. Red takes 25 HP (only above 25), yellow takes 90
-  reserve rounds, and green takes $2,000. Each payment spins a three-second
-  roulette for an unowned permanent reward from one shared pool. Shots stop at
-  the cabinet but never pay.
+  and the other two 40% each. The first payout costs 25 HP, 60 reserve rounds or
+  $1,000 per spin. Each payout raises subsequent costs, capped at 40 HP, 150
+  rounds or $2,500 from the fourth payout onward. Each payment spins a
+  three-second roulette for an unowned permanent reward from one shared pool.
+  Shots stop at the cabinet but never pay.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
   MONEY ORBS where the enemy died - chunky pixel-art spheres drawn on an
   eleven-pixel grid in the shader, wearing the ceiling's own colour with a few
@@ -1106,11 +1107,21 @@ Rerolling the totems does not change the selected cabinet or its history.
 These are Use interactions: E or the rebindable controller
 Use button (Triangle by default). Shots stop at the cabinet but cannot purchase a spin.
 
-| Cabinet | Color | Cost per spin |
-| --- | --- | --- |
-| Health | Red | 25 Health; requires more than 25 HP |
-| Ammo | Yellow | 90 reserve rounds; magazine rounds cannot pay |
-| Credits | Green | $2,000 Credits |
+The cost per spin follows each player's previous machine payouts, shared
+across all payment types:
+
+| Machine payout being pursued | Health (red) | Credits (green) | Reserve ammo (yellow) |
+| --- | --- | --- | --- |
+| First | 25 HP | $1,000 | 60 rounds |
+| Second | 30 HP | $1,500 | 90 rounds |
+| Third | 35 HP | $2,000 | 120 rounds |
+| Fourth and later | 40 HP | $2,500 | 150 rounds |
+
+Losses, forfeited spins and unused shops do not raise the cost. A revealed win
+advances the price even if its reward is left behind; debug item grants and
+removals do not affect it. Shop rerolls retain the current cost, and a new run
+or match resets it. Health requires more HP than the payment, so it cannot
+kill the player. Ammo donations never spend magazine rounds.
 
 Health is a price rather than damage: shields cannot pay it and hit reactions
 and flawless records are unaffected. Credit payments use the spending ledger,
@@ -3083,7 +3094,7 @@ js/items/donation/definitions/ one file per shared reward
 tools/build-pages.mjs          generates the static Pages artifact and item manifests
 js/mysterybox.js               the box that offers active items
 js/donation-machines.js        the shared cabinet, roulette and floating pickups
-js/donation-rules.js           starting odds and payout-scaled loss progression
+js/donation-rules.js           starting odds, payout-scaled costs and loss progression
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep

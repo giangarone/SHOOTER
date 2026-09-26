@@ -116,6 +116,7 @@ try {
     g.donationMachine.state = 'up';
     g.donationMachine.rise = 1;
     g.credits = 2000;
+    t('Player 1 prices their third payout at 2000 credits', g.donationMachine.config.cost === 2000);
     t('Player 1 can start a credit spin before passing',
       g._useDonationMachine(g.donationMachine, () => 0));
     await raw(2);
@@ -155,11 +156,13 @@ try {
     g.donationMachine.state = 'up';
     g.donationMachine.rise = 1;
     g.credits = 2000;
+    g.player.reserveAmmo = 300;
+    t('Player 2 prices late-game ammo at 150 rounds', g.donationMachine.config.cost === 150);
     g._useDonationMachine(g.donationMachine, () => 0);
     g._dismissDonationMachine();
     g._dismissDonationMachine();
     t('Player 2 forfeits at their own one-point step without changing Player 1',
-      g.player.donationChance === 61 && g.player.donationWins === 4
+      g.player.donationChance === 61 && g.player.donationWins === 4 && g.player.reserveAmmo === 150
         && g.player.lastDonationKind === 'ammo'
         && g.match.slots[0].player.donationChance === 38
         && g.match.slots[0].player.lastDonationKind === 'credits'
@@ -428,6 +431,15 @@ try {
       await until(() => g.waveState === 'intermission' || g.state === 'gameover');
       if (g.state === 'gameover') return;
       donationHistory[g.match.active] = g.player.lastDonationKind;
+      const cost = [
+        { health: 25, credits: 1000, ammo: 60 },
+        { health: 30, credits: 1500, ammo: 90 },
+        { health: 35, credits: 2000, ammo: 120 },
+        { health: 40, credits: 2500, ammo: 150 },
+      ][Math.min(3, g.player.donationWins)][g.donationMachine.kind];
+      t(`4P: Player ${g.match.active + 1} sees their own donation price`,
+        g.donationMachine.config.cost === cost,
+        `${g.player.donationWins} payouts, ${g.donationMachine.kind} cost=${g.donationMachine.config.cost}`);
       if (buyAmmo) {
         const area = g.totemArea;
         await until(() => area.ammoStation.isUp());

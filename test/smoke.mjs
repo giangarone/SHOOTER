@@ -125,6 +125,7 @@ try {
 
     for (let i = 0; i < 40; i++) {
       machine.dismiss();
+      g.player.donationWins = i % 8;
       machine.present(g.player, () => (i % 3 + 0.5) / 3);
       machine.state = 'up';
       machine.rise = 1;

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { BOX_Z } from './mysterybox.js';
 import { buildPixelIcon } from './pixelicons.js';
 import { DONATION_ITEMS, donationItemKey } from './items/donation/index.js';
-import { DONATION_START_CHANCE, donationLossStep } from './donation-rules.js';
+import { DONATION_START_CHANCE, DONATION_COST_TIERS, donationLossStep } from './donation-rules.js';
 import {
   DIM_TEXT, HIT_MAT, SIGN_COLOR, SUNK_Y, RISE_SECONDS, TOTEM_X,
   hex, makePanel, pxText, roundRect,
@@ -31,20 +31,29 @@ export function randomDonationKind(random = Math.random, lastKind = null) {
   return DONATION_KINDS[DONATION_KINDS.length - 1];
 }
 
-export const DONATION_MACHINE_CONFIG = Object.freeze({
-  ammo: Object.freeze({
-    title: 'AMMO DONATION', color: 0xffd600, cost: 90,
-    costLabel: '90 RESERVE ROUNDS', shortCost: '90 AMMO',
-  }),
-  health: Object.freeze({
-    title: 'HEALTH DONATION', color: 0xff3b30, cost: 25,
-    costLabel: '25 HEALTH', shortCost: '25 HP',
-  }),
-  credits: Object.freeze({
-    title: 'CREDITS DONATION', color: 0x00e676, cost: 2000,
-    costLabel: '$2,000 CREDITS', shortCost: '$2,000',
-  }),
+const DONATION_MACHINE_LOOK = Object.freeze({
+  ammo: { title: 'AMMO DONATION', color: 0xffd600 },
+  health: { title: 'HEALTH DONATION', color: 0xff3b30 },
+  credits: { title: 'CREDITS DONATION', color: 0x00e676 },
 });
+
+// Cache the twelve labels once: a new shop selects the participant's price
+// without creating new configuration objects or formatting on the spin path.
+const DONATION_CONFIG_TIERS = DONATION_COST_TIERS.map((costs) => Object.freeze(
+  Object.fromEntries(DONATION_KINDS.map((kind) => {
+    const cost = costs[kind];
+    const shortCost = kind === 'credits' ? '$' + cost.toLocaleString('en-US')
+      : cost + (kind === 'health' ? ' HP' : ' AMMO');
+    const costLabel = kind === 'credits' ? shortCost + ' CREDITS'
+      : cost + (kind === 'health' ? ' HEALTH' : ' RESERVE ROUNDS');
+    return [kind, Object.freeze({ ...DONATION_MACHINE_LOOK[kind], cost, shortCost, costLabel })];
+  }))
+));
+export const DONATION_MACHINE_CONFIG = DONATION_CONFIG_TIERS[0];
+
+export function donationMachineConfig(kind, wins = 0) {
+  return DONATION_CONFIG_TIERS[Math.min(wins, DONATION_CONFIG_TIERS.length - 1)][kind];
+}
 
 export function donationSoldOut(player) {
   for (const id in DONATION_ITEMS) {
@@ -194,7 +203,7 @@ export class DonationMachine {
     const x = TOTEM_X[2];
     const z = BOX_Z;
     this.kind = 'ammo';
-    this.config = DONATION_MACHINE_CONFIG[this.kind];
+    this.config = donationMachineConfig(this.kind);
     this.pos = new THREE.Vector3(x, 0, z);
     this.state = 'hidden';
     this.rise = 0;
@@ -294,7 +303,7 @@ export class DonationMachine {
     // Seeing the cabinet advances history even without a payment. The shop
     // guard above keeps rerolls from advancing it again.
     player.lastDonationKind = this.kind;
-    this.config = DONATION_MACHINE_CONFIG[this.kind];
+    this.config = donationMachineConfig(this.kind, player.donationWins);
     this.clearPending();
     this.completedThisShop = false;
     this.spinning = false;
