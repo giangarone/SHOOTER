@@ -104,6 +104,7 @@ try {
     t('both snapshot slots are seeded', !!g.match.slots[0] && !!g.match.slots[1]);
     t('the match has no winner yet', g.match.winner === -1, String(g.match.winner));
     g.player.donationChance = 35;
+    g.player.donationWins = 2;
     g.player.donationItems['donation/drumMajor'] = true;
     g.player.rebuildMods();
 
@@ -132,18 +133,37 @@ try {
       'wave=' + g.wave + '/' + g.match.wave);
     t('Player 2 has a run of their own', g.player.health > 0, 'hp=' + Math.round(g.player.health));
     t('Player 2 starts with an independent roulette chance and rewards',
-      g.player.donationChance === 10 && Object.keys(g.player.donationItems).length === 0,
+      g.player.donationChance === 5 && g.player.donationWins === 0
+        && g.player.lastDonationKind === null
+        && Object.keys(g.player.donationItems).length === 0,
       String(g.player.donationChance));
     t('Player 1 saved their forfeiture once before the handoff',
-      g.match.slots[0].player.donationChance === 40
-        && g.match.slots[0].game.credits === 1000,
+      g.match.slots[0].player.donationChance === 38
+        && g.match.slots[0].player.donationWins === 2
+        && g.match.slots[0].player.lastDonationKind === 'credits'
+        && g.match.slots[0].game.credits === 0,
       JSON.stringify({ chance: g.match.slots[0].player.donationChance,
+        wins: g.match.slots[0].player.donationWins,
         credits: g.match.slots[0].game.credits }));
     t('no spin or reward can finish against the incoming player',
       !g.donationMachine.spinning && !g.donationMachine.pendingId);
     g.player.donationChance = 60;
+    g.player.donationWins = 4;
     g.player.donationItems['donation/ivoryDrip'] = true;
     g.player.rebuildMods();
+    g.donationMachine.present(g.player, () => 0);
+    g.donationMachine.state = 'up';
+    g.donationMachine.rise = 1;
+    g.credits = 2000;
+    g._useDonationMachine(g.donationMachine, () => 0);
+    g._dismissDonationMachine();
+    g._dismissDonationMachine();
+    t('Player 2 forfeits at their own one-point step without changing Player 1',
+      g.player.donationChance === 61 && g.player.donationWins === 4
+        && g.player.lastDonationKind === 'ammo'
+        && g.match.slots[0].player.donationChance === 38
+        && g.match.slots[0].player.lastDonationKind === 'credits'
+        && g.match.slots[0].player.donationWins === 2);
 
     // ---- 2b. THE BOX KNOWS WHOSE SLOT IT IS LOOKING AT ---------------------
     //
@@ -217,12 +237,15 @@ try {
     t('Player 1 got their run back alive', g.player.health > 0,
       'hp=' + Math.round(g.player.health));
     t('Player 1 restores their roulette chance and reward set',
-      g.player.donationChance === 40
+      g.player.donationChance === 38 && g.player.donationWins === 2
+        && g.player.lastDonationKind === 'credits'
         && !!g.player.donationItems['donation/drumMajor']
         && !g.player.donationItems['donation/ivoryDrip'],
-      JSON.stringify({ chance: g.player.donationChance, items: g.player.donationItems }));
+      JSON.stringify({ chance: g.player.donationChance,
+        wins: g.player.donationWins, items: g.player.donationItems }));
     t('the failed opponent attempt did not overwrite Player 1 progression',
-      g.match.slots[0].player.donationChance === 40);
+      g.match.slots[0].player.donationChance === 38
+        && g.match.slots[0].player.donationWins === 2);
 
     // ---- 5. clearing the challenge WINS, on the wave -----------------------
     g.player.maxHealth = 9999;
@@ -400,9 +423,11 @@ try {
     // because the bug this is most likely to catch is not in the arithmetic -
     // it is main.js and the match disagreeing about which wave the arena is
     // building.
+    const donationHistory = [];
     const clearTurn = async () => {
       await until(() => g.waveState === 'intermission' || g.state === 'gameover');
       if (g.state === 'gameover') return;
+      donationHistory[g.match.active] = g.player.lastDonationKind;
       g.totemArea.dismiss();
       await until(() => g._pass || g.state === 'gameover');
       if (g.state === 'gameover') return;
@@ -456,6 +481,7 @@ try {
     // THE LADDER. One rung per clear, and the seat moves on.
     g.player.maxHealth = 9999; g.player.health = 9999;
     g.player.donationChance = 20;
+    g.player.donationWins = 1;
     g.player.takeDonationItem('drumMajor', g);
     await until(() => g.waveState === 'active');
     await clearTurn();
@@ -463,14 +489,18 @@ try {
       g.wave === 2 && g.match.wave === 2 && g.match.active === 1,
       'wave=' + g.wave + '/' + g.match.wave + ' active=' + g.match.active);
     t('4P: Player 2 starts without Player 1 roulette state',
-      g.player.donationChance === 10 && !g.player.donationItems['donation/drumMajor']);
+      g.player.donationChance === 5 && g.player.donationWins === 0
+        && !g.player.donationItems['donation/drumMajor']);
     g.player.donationChance = 35;
+    g.player.donationWins = 2;
     g.player.takeDonationItem('ivoryDrip', g);
     await clearTurn();
     g.player.donationChance = 50;
+    g.player.donationWins = 3;
     g.player.takeDonationItem('ghostCasings', g);
     await clearTurn();
     g.player.donationChance = 65;
+    g.player.donationWins = 7;
     g.player.takeDonationItem('chainLetter', g);
     await clearTurn();
     t('4P: four rungs later it is P1 again, on wave 5',
@@ -481,6 +511,15 @@ try {
       g.player.donationChance === 20
         && g.match.slots.map((slot) => slot.player.donationChance).join() === '20,35,50,65',
       g.match.slots.map((slot) => slot.player.donationChance).join());
+    t('4P: a full rotation restores independent machine payout counts',
+      g.player.donationWins === 1
+        && g.match.slots.map((slot) => slot.player.donationWins).join() === '1,2,3,7',
+      g.match.slots.map((slot) => slot.player.donationWins).join());
+    t('4P: each player restores their own last displayed donation machine',
+      g.player.lastDonationKind === donationHistory[0]
+        && donationHistory.every((kind) => ['ammo', 'health', 'credits'].includes(kind))
+        && g.match.slots.every((slot, i) => slot.player.lastDonationKind === donationHistory[i]),
+      g.match.slots.map((slot) => slot.player.lastDonationKind).join());
     t('4P: a full rotation keeps shared-pool rewards exclusive to their owner',
       g.player.donationItems['donation/drumMajor']
         && Object.keys(g.player.donationItems).length === 1

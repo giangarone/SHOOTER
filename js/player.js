@@ -20,6 +20,7 @@ import {
 import {
   DONATION_ITEMS, donationItemKey,
 } from './items/donation/index.js';
+import { DONATION_START_CHANCE } from './donation-rules.js';
 import { WEAPONS, STARTING_WEAPON, setGunTag } from './weapons.js';
 import { PLAYER_STATUS, PLAYER_STATUS_KEYS } from './status.js';
 // UPDRAFT climbs, and the room is a closed box - see the ceiling clamp in
@@ -2553,9 +2554,11 @@ export class Player {
     // mods, so reading them before the wipe would seed the new run with the
     // last one's stats.
     this.passiveItems = {};
-    // Plain run state rides the versus snapshot automatically. The chance is
-    // shared across payment kinds, but never across participants.
-    this.donationChance = 10;
+    // Plain run state rides the versus snapshot automatically. Chance, payout
+    // count and cabinet history belong to the participant, not the furniture.
+    this.donationChance = DONATION_START_CHANCE;
+    this.donationWins = 0;
+    this.lastDonationKind = null;
     this.donationItems = {};
     // Before rebuildMods, or the wiped run would be rebuilt with the last
     // one's flawless stacks still multiplying it.

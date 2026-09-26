@@ -70,6 +70,24 @@ try {
     const picks = Array.from({ length: 300 }, (_, i) => randomDonationKind(() => (i + 0.5) / 300));
     t('each machine kind occupies exactly one third of the random range',
       DONATION_KINDS.every((kind) => picks.filter((k) => k === kind).length === 100));
+    for (const last of DONATION_KINDS) {
+      const weighted = Array.from({ length: 100 }, (_, i) =>
+        randomDonationKind(() => (i + 0.5) / 100, last));
+      t(`after ${last}, its next-shop chance is 20% and the others are 40% each`,
+        DONATION_KINDS.every((kind) => weighted.filter((k) => k === kind).length
+          === (kind === last ? 20 : 40)));
+    }
+    for (const [last, draw, expected] of [
+      ['ammo', 0.3, 'health'], ['health', 0.6, 'credits'], ['credits', 0.7, 'health'],
+    ]) {
+      g._dismissDonationMachine();
+      p.lastDonationKind = last;
+      m.present(p, () => draw);
+      t(`a real shop uses the player's ${last} history and remembers ${expected} without payment`,
+        m.kind === expected && p.lastDonationKind === expected);
+      g._dismissDonationMachine();
+      t('closing an unused shop retains its machine history', p.lastDonationKind === expected);
+    }
     const positions = [];
     const prompts = [];
     for (const kind of DONATION_KINDS) {
@@ -81,7 +99,8 @@ try {
       const chosen = m.kind;
       m.present(p, () => 0);
       g._itemReroll();
-      t(`${kind} shop rerolls retain the chosen cabinet`, m.kind === chosen);
+      t(`${kind} shop rerolls retain the chosen cabinet and history`,
+        m.kind === chosen && p.lastDonationKind === chosen);
       g.inputMode = 'kbm';
       prompts.push(g._usePrompt({ kind: 'donation', target: m })[0]);
     }
@@ -92,11 +111,11 @@ try {
     const config = g.__donationConfigForTest;
     t('payment colors are red, yellow and green',
       config.health.color === 0xff3b30 && config.ammo.color === 0xffd600 && config.credits.color === 0x00e676);
-    t('payment costs are 25 health, 90 reserve ammo and 1000 credits',
-      config.health.cost === 25 && config.ammo.cost === 90 && config.credits.cost === 1000);
+    t('payment costs are 25 health, 90 reserve ammo and 2000 credits',
+      config.health.cost === 25 && config.ammo.cost === 90 && config.credits.cost === 2000);
     t('keyboard prompts show rebound Use and each fixed cost',
       prompts.every((text) => text.includes(g.keys.label('use')))
-        && prompts[0].includes('90 AMMO') && prompts[1].includes('25 HP') && prompts[2].includes('$1,000'),
+        && prompts[0].includes('90 AMMO') && prompts[1].includes('25 HP') && prompts[2].includes('$2,000'),
       prompts.join(' | '));
     t('prompts show neither shoot nor numeric probability',
       prompts.every((text) => !text.includes('SHOOT') && !text.includes('%')));
@@ -108,6 +127,9 @@ try {
       m.panel.canvas.getContext('2d').getImageData(10, 10, 1, 1).data[3] === 0);
     t('roulette replaces all meter and tier state',
       !!m.wheel && !m.meter && !('donationProgress' in p) && !('donationTiers' in p));
+    t('a fresh run starts at five percent with no machine payouts',
+      p.donationChance === 5 && p.donationWins === 0
+        && m.wheelMaterial.uniforms.uChance.value === 0.05);
 
     // ---- price boundaries and independent loss resolution --------------
     reset();
@@ -121,15 +143,16 @@ try {
     t('ammo payment uses exactly 90 reserve rounds and never the magazine',
       !shortAmmo && ammoPaid && p.reserveAmmo === 0 && p.mag === heldMag);
     t('spin lock refuses another payment and leaves chance unchanged until settlement',
-      !repeated && m.spinning && p.donationChance === 10 && m.spinChance === 10);
+      !repeated && m.spinning && p.donationChance === 5 && m.spinChance === 5);
     tick(2.9);
-    t('a spin remains active before three seconds', m.spinning && p.donationChance === 10);
+    t('a spin remains active before three seconds', m.spinning && p.donationChance === 5);
     tick(0.1);
     t('a completed loss adds five points and expands the wedge',
-      !m.spinning && p.donationChance === 15 && m.wheelMaterial.uniforms.uChance.value === 0.15);
+      !m.spinning && p.donationChance === 10 && p.donationWins === 0
+        && m.wheelMaterial.uniforms.uChance.value === 0.1);
     machine('health');
     t('chance follows the player across shops and payment kinds',
-      p.donationChance === 15 && m.chance === 15);
+      p.donationChance === 10 && m.chance === 10);
     p.health = 25; p.shield = 50;
     const shortHp = g._useDonationMachine(m);
     p.health = 26;
@@ -141,19 +164,21 @@ try {
         && p.lastHurt === oldHurt && g.waveDamageTaken === oldWaveDamage);
     tick(DONATION_SPIN_SECONDS);
     machine('credits');
-    g.credits = 999;
+    g.credits = 1999;
     const shortCredits = g._useDonationMachine(m);
-    g.credits = 1000; p.spentTotal = 0; p.mods.highStakes = 1;
+    t('credit refusal uses the new two-thousand-credit price', g._donationBlocked(m) === 'NEED $2,000');
+    g.credits = 2000; p.spentTotal = 0; p.mods.highStakes = 1;
     const creditsPaid = g._useDonationMachine(m, () => 0.99);
-    t('credits payment bills 1000 through the ledger without High Stakes waiver',
-      !shortCredits && creditsPaid && g.credits === 0 && p.spentTotal === 1000);
+    t('credits payment bills 2000 through the ledger without High Stakes waiver',
+      !shortCredits && creditsPaid && g.credits === 0 && p.spentTotal === 2000);
     p.mods.highStakes = 0;
     tick(DONATION_SPIN_SECONDS);
-    t('three different payment kinds advance the same progression', p.donationChance === 25);
+    t('three different payment kinds advance the same progression', p.donationChance === 20);
 
     // ---- wheel landing, guaranteed win and collection ------------------
-    const landings = [0, 0.099, 0.1, 0.149, 0.15, 0.49, 0.5, 0.999];
-    for (const chance of [10, 15, 50, 100]) {
+    for (const chance of [5, 6, 9, 13, 17, 37, 99, 100]) {
+      const landings = [0, (chance - 0.001) / 100, chance / 100,
+        (chance + 0.001) / 100, 0.499, 0.999].filter((angle) => angle < 1);
       for (const landing of landings) {
         reset(); p.donationChance = chance; m.setChance(chance);
         g._useDonationMachine(m, () => landing);
@@ -166,20 +191,22 @@ try {
     }
     reset(); g.credits = 100000;
     const progression = [p.donationChance];
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 19; i++) {
       machine('credits');
       g._useDonationMachine(m, () => 0.999);
       tick(DONATION_SPIN_SECONDS);
       progression.push(p.donationChance);
     }
     t('loss progression reaches 100 without overshooting',
-      progression.every((chance, i) => chance === 10 + 5 * i), progression.join(','));
+      progression.length === 20 && progression.every((chance, i) => chance === 5 + 5 * i),
+      progression.join(','));
     machine('ammo'); p.reserveAmmo = 90;
     g._useDonationMachine(m, () => 0.999);
     tick(DONATION_SPIN_SECONDS);
     const reward = m.pendingId;
     t('100 guarantees an unowned reward and resets the chance',
-      !!reward && p.donationChance === 10 && !p.donationItems[`donation/${reward}`]);
+      !!reward && p.donationChance === 5 && p.donationWins === 1
+        && !p.donationItems[`donation/${reward}`]);
     t('a win disables and sinks the body while its reward stays floating',
       m.completedThisShop && m.state === 'sinking' && m.displayGroup.visible
         && m.displayGroup.position.y === 0 && m.icons[reward].visible);
@@ -192,8 +219,103 @@ try {
     t('reward pickup grants once through shared ownership and the build sheet',
       g._takeDonationReward(m) && !g._takeDonationReward(m)
         && !!p.donationItems[`donation/${reward}`]
+        && p.donationWins === 1
         && g._statPassives().some((row) => row.id === `donation/${reward}`));
     t('collecting never reopens the completed cabinet', !m.usable(m.pos));
+
+    // Win through each difficulty using real payments. Leave later rewards
+    // uncollected so difficulty cannot secretly derive from item ownership.
+    for (let wins = 1; wins <= 6; wins++) {
+      const increase = [5, 4, 3, 2, 1, 1, 1][wins];
+      machine('credits');
+      g.credits = 200000;
+      const chances = [p.donationChance];
+      g._useDonationMachine(m, () => 0);
+      tick(1);
+      g._dismissDonationMachine();
+      g._dismissDonationMachine();
+      tick(10);
+      chances.push(p.donationChance);
+      t(`${wins} payouts: an interrupted hidden win adds ${increase} points exactly once`,
+        p.donationChance === 5 + increase && p.donationWins === wins
+          && g.credits === 198000 && !m.pendingId);
+      machine('credits');
+      t(`${wins} payouts: a new shop restores the precise wedge and loss step`,
+        m.wheelMaterial.uniforms.uChance.value === (5 + increase) / 100
+          && m.snapshot(p).lossStep === increase);
+      for (let i = 0; i < 100 && p.donationChance < 100; i++) {
+        g._useDonationMachine(m, () => 0.999);
+        tick(DONATION_SPIN_SECONDS);
+        chances.push(p.donationChance);
+      }
+      t(`${wins} payouts: losses add ${increase} points and stop at 100`,
+        p.donationChance === 100 && p.donationWins === wins
+          && chances.every((chance, i) => chance === Math.min(100, 5 + increase * i)),
+        chances.join(','));
+      g._useDonationMachine(m, () => 0.999);
+      tick(DONATION_SPIN_SECONDS);
+      g._donationEvents();
+      t(`${wins + 1} payouts: a guaranteed win resets to five and counts once`,
+        !!m.pendingId && p.donationChance === 5 && p.donationWins === wins + 1);
+    }
+
+    // Tick cadence depends on angular travel, never a probability grid.
+    reset();
+    const clicks = [];
+    const oldTick = g.sfx.donationTick;
+    try {
+      g.sfx.donationTick = () => clicks.push(m.spinElapsed);
+      g._useDonationMachine(m, () => 0.987);
+      for (let i = 0; i < 1801 && m.spinning; i++) tick(1 / 600);
+    } finally {
+      g.sfx.donationTick = oldTick;
+    }
+    t('the wheel clicks ten times per revolution instead of at every percent',
+      clicks.length === Math.floor(m.spinTravel / (2 * Math.PI) * 10),
+      `${clicks.length} clicks over ${(m.spinTravel / (2 * Math.PI)).toFixed(3)} turns`);
+    t('mechanical clicks slow with the wheel',
+      clicks.at(-1) - clicks.at(-6) > (clicks[5] - clicks[0]) * 3);
+
+    // Sample the actual shader. A thin divider on the former five-percent
+    // grid would darken these pixels even though the whole wheel is winning.
+    const THREE = await import('three');
+    const target = new THREE.WebGLRenderTarget(1024, 1024);
+    const wheelScene = new THREE.Scene();
+    wheelScene.add(new THREE.Mesh(m.wheel.geometry, m.wheelMaterial));
+    const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 10);
+    camera.position.z = 1;
+    const oldTarget = g.renderer.getRenderTarget();
+    const uniforms = m.wheelMaterial.uniforms;
+    const savedUniforms = [uniforms.uChance.value, uniforms.uAngle.value, uniforms.uFlash.value];
+    const pixel = new Uint8Array(4);
+    const redAt = (fraction) => {
+      const a = fraction * Math.PI * 2;
+      const x = Math.floor((0.5 + 0.82 * 0.3 * Math.sin(a)) * 1024);
+      const y = Math.floor((0.5 + 0.82 * 0.3 * Math.cos(a)) * 1024);
+      g.renderer.readRenderTargetPixels(target, x, y, 1, 1, pixel);
+      return pixel[0];
+    };
+    try {
+      uniforms.uAngle.value = 0;
+      uniforms.uFlash.value = 0;
+      uniforms.uChance.value = 1;
+      g.renderer.setRenderTarget(target);
+      g.renderer.render(wheelScene, camera);
+      const tones = Array.from({ length: 40 }, (_, i) => redAt((i + 1) / 40));
+      t('the rendered wheel has no section dividers',
+        Math.min(...tones) > 100 && Math.max(...tones) - Math.min(...tones) <= 3,
+        `${Math.min(...tones)}..${Math.max(...tones)}`);
+      for (const chance of [6, 9, 13, 17, 37]) {
+        uniforms.uChance.value = chance / 100;
+        g.renderer.render(wheelScene, camera);
+        t(`the rendered winning wedge uses exactly ${chance}%`,
+          redAt((chance - 0.5) / 100) > 100 && redAt((chance + 0.5) / 100) < 30);
+      }
+    } finally {
+      [uniforms.uChance.value, uniforms.uAngle.value, uniforms.uFlash.value] = savedUniforms;
+      g.renderer.setRenderTarget(oldTarget);
+      target.dispose();
+    }
 
     // A former health-pool reward can come from an ammo payment, and its
     // one-time hook only runs when the player actually collects it.
@@ -220,7 +342,7 @@ try {
     g._dismissDonationMachine();
     tick(10);
     t('closing a shop forfeits a hidden win, retains payment and raises chance once',
-      p.donationChance === 15 && g.credits === 1000 && !m.spinning
+      p.donationChance === 10 && p.donationWins === 0 && g.credits === 0 && !m.spinning
         && !m.pendingId && Object.keys(p.donationItems).length === 0);
     machine('credits'); p.donationChance = 100; m.setChance(100); g.credits = 2000;
     g._useDonationMachine(m, () => 0.99);
@@ -231,7 +353,8 @@ try {
     tick(DONATION_SPIN_SECONDS);
     g._dismissDonationMachine();
     t('uncollected win is forfeited without changing the reset chance',
-      p.donationChance === 10 && !m.pendingId && Object.keys(p.donationItems).length === 0);
+      p.donationChance === 5 && p.donationWins === 1
+        && !m.pendingId && Object.keys(p.donationItems).length === 0);
     g._presentTotems();
     reset();
     for (let i = 0; i < poolIds.length; i++) {
@@ -249,16 +372,29 @@ try {
       Object.keys(p.donationItems).length === poolIds.length);
     t('shared exhaustion refuses payment and shows SOLD OUT',
       !soldOutPaid && g.credits === 2000 && m.soldOut
+        && p.donationWins === poolIds.length
         && g._donationBlocked(m) === 'SOLD OUT' && randomUnownedDonationItem(p) === null);
     g._debugDropDonation(`donation/${poolIds[0]}`);
     t('removing a debug reward reopens a sold-out cabinet immediately',
-      !m.soldOut && g._useDonationMachine(m, () => 0.99));
+      !m.soldOut && p.donationWins === poolIds.length && g._useDonationMachine(m, () => 0.99));
     tick(DONATION_SPIN_SECONDS);
+    t('late-game difficulty keeps a one-point increase after reward removal',
+      p.donationChance === 6 && p.donationWins === poolIds.length);
     t('rewards remain separate from the normal passive pool',
       poolIds.every((id) => !Object.hasOwn(g.__passiveItemsForTest, `donation/${id}`)));
     t('placeholder rewards are gone from the shared pool',
       !poolIds.some((id) => ['fatHandgun', 'magnaCarta', 'slideRule', 'fleshBank',
         'platedDessert', 'soulHarvest', 'lateFee', 'thinBlood', 'deathClause'].includes(id)));
+
+    reset();
+    p.takeDonationItem(poolIds[0], g);
+    t('granting a reward directly does not count as a machine payout',
+      p.donationWins === 0 && p.donationChance === 5);
+    g._useDonationMachine(m, () => 0);
+    for (const id of poolIds) p.donationItems[`donation/${id}`] = true;
+    tick(DONATION_SPIN_SECONDS);
+    t('exhausting rewards during a spin cannot count a payout without a reward',
+      p.donationWins === 0 && p.donationChance === 5 && !m.pendingId && m.soldOut);
 
     // ---- real game clock, pause and shot-only cover ---------------------
     reset();
@@ -267,7 +403,7 @@ try {
     p.yaw = Math.PI; p.pitch = 0; p.applyCamera();
     g.shoot();
     t('shots cannot buy spins or change roulette chance',
-      !m.spinning && p.reserveAmmo === beforeShot && p.donationChance === 10);
+      !m.spinning && p.reserveAmmo === beforeShot && p.donationChance === 5);
     g._useDonationMachine(m, () => 0.99);
     await step();
     g.pause();
@@ -279,7 +415,7 @@ try {
     g.resume();
     for (let i = 0; i < 700 && m.spinning; i++) await step();
     t('the actual frame loop settles a resumed three-second spin once',
-      !m.spinning && m.spinElapsed === 3 && p.donationChance === 15);
+      !m.spinning && m.spinElapsed === 3 && p.donationChance === 10);
 
     // ---- the original reward mechanics ----------------------------
     reset();
@@ -555,7 +691,7 @@ try {
     p.takeDonationItem('karma', g);
     p.health = 40; g.credits = 2000;
     g._useDonationMachine(machine('credits'));
-    t('KARMA heals 5 HP per donation made', p.health === 45 && g.credits === 1000,
+    t('KARMA heals 5 HP per donation made', p.health === 45 && g.credits === 0,
       `health=${p.health} credits=${g.credits}`);
 
     // CREDITS - TITHING BLADE: a tenth of damage dealt, into the balance.
@@ -627,12 +763,14 @@ try {
       `grant=${miteGrant}`);
 
     // A new run cannot inherit an unfinished payment from the old body.
+    p.donationWins = 6;
     machine('credits'); g.credits = 2000;
     g._useDonationMachine(m, () => 0);
     g.autoTest = true;
     g.beginGame();
     t('a new run resets chance and rewards and cancels an old spin',
-      p.donationChance === 10 && Object.keys(p.donationItems).length === 0
+      p.donationChance === 5 && p.donationWins === 0 && p.lastDonationKind === null
+        && Object.keys(p.donationItems).length === 0
         && !m.spinning && !m.pendingId);
 
     return out;

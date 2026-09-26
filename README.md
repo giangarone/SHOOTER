@@ -936,9 +936,11 @@ context. The start screen says so, and one click anywhere fixes it.
   resets that multiplier.
 - **Donation Machine**: each shop raises one Use-only cabinet to the left of
   the Mystery Box, aligned with an outer passive item. Health, Ammo and Credits
-  are equally likely: red takes 25 HP (only above 25), yellow takes 90 reserve
-  rounds, and green takes $1,000. Each payment spins a three-second roulette for an unowned
-  permanent reward from one shared pool. Shots stop at the cabinet but never pay.
+  start equally likely; later shops give the player's last cabinet a 20% chance
+  and the other two 40% each. Red takes 25 HP (only above 25), yellow takes 90
+  reserve rounds, and green takes $2,000. Each payment spins a three-second
+  roulette for an unowned permanent reward from one shared pool. Shots stop at
+  the cabinet but never pay.
 - **Money is on the floor.** Kills do not pay into the balance - they drop
   MONEY ORBS where the enemy died - chunky pixel-art spheres drawn on an
   eleven-pixel grid in the shader, wearing the ceiling's own colour with a few
@@ -1093,40 +1095,55 @@ the moment a reroll stops feeling like a purchase.
 
 One cabinet rises to the left of the Mystery Box in each shop, at the same
 depth and aligned with an outer passive item. Health, Ammo and Credits have
-equal chances of being selected; rerolling the totems does not change the
-selected cabinet. These are Use interactions: E or the rebindable controller
+equal chances in a player's first shop. Later shops give that player's last
+cabinet a 20% chance and the other two 40% each. History records appearances,
+including shops without a donation, and stays separate for each participant.
+Rerolling the totems does not change the selected cabinet or its history.
+These are Use interactions: E or the rebindable controller
 Use button (Triangle by default). Shots stop at the cabinet but cannot purchase a spin.
 
 | Cabinet | Color | Cost per spin |
 | --- | --- | --- |
 | Health | Red | 25 Health; requires more than 25 HP |
 | Ammo | Yellow | 90 reserve rounds; magazine rounds cannot pay |
-| Credits | Green | $1,000 Credits |
+| Credits | Green | $2,000 Credits |
 
 Health is a price rather than damage: shields cannot pay it and hit reactions
 and flawless records are unaffected. Credit payments use the spending ledger,
 so PAPER TRAIL counts them and HIGH STAKES cannot waive them. KARMA heals for
 every successful payment, including a spin that is later forfeited.
 
-Every player begins at a 10% win chance. A loss adds five percentage points for
-the next spin: 10%, 15%, 20%, and so on, capped at a guaranteed 100% win. This
-chance carries across shops and payment kinds. The cabinet's circular roulette
-shows it as a colored winning wedge under a fixed pointer; no numeric chance
-or progress count appears in play. A spin lasts three seconds, with several
-revolutions, decelerating mechanical ticks and a win fanfare. Its uniformly
-random landing angle determines the result. Further payments are blocked
-while it spins; movement, other purchases and the final totem pick stay usable.
-Pausing freezes the spin.
+Every player begins at a 5% win chance. Each machine payout resets that chance
+to 5% and reduces the increase earned by a failed spin:
 
-A win resets the chance to 10% and sinks and disables the cabinet for that
+| Previous machine payouts | Percentage points added per loss |
+| --- | --- |
+| 0 | 5 |
+| 1 | 4 |
+| 2 | 3 |
+| 3 | 2 |
+| 4 or more | 1 |
+
+Chance is capped at a guaranteed 100% win and carries across shops and payment
+kinds, along with the player's payout count. The circular roulette shows the
+exact chance as a smooth colored winning wedge under a fixed pointer, with no
+section dividers, numeric chance or progress count. A spin lasts three seconds,
+with several revolutions, decelerating mechanical ticks and a win fanfare.
+Ticks occur ten times per revolution, independently of the wedge size. A
+uniformly random landing angle determines the result. Further payments are
+blocked while it spins; movement, other purchases and the final totem pick stay
+usable. Pausing freezes the spin.
+
+A win resets the chance to 5% and sinks and disables the cabinet for that
 shop. One random unowned item, its name and its effects remain floating where
 the cabinet stood until Use collects it. Its effects and one-time pickup hooks
 run on collection, not on the win. The reward never expires while the shop is
-open. Closing the shop forfeits an uncollected reward and retains the reset
-chance. Closing during a spin instead forfeits that spin: the payment stays
-spent, no item is awarded, and the next chance rises by five points even if
-its hidden landing angle would have won. A cabinet shows `SOLD OUT` once the
-player owns every shared reward.
+open. Payouts count when the reward appears, including an uncollected reward
+forfeited by closing the shop; debug grants and removals do not change that
+count. Closing during a spin instead forfeits that spin: the payment stays
+spent, no item is awarded, and the next chance rises by the current loss step
+even if its hidden landing angle would have won. A cabinet shows `SOLD OUT`
+once the player owns every shared reward.
 
 Donation rewards are permanent build items, separate from normal passives and
 the active-item slot. All three payment kinds draw from the same directory:
@@ -1180,12 +1197,14 @@ The shared reward pool is:
 | HOUSE MONEY | Payouts earned in the first 30 seconds of a wave are doubled |
 | WIDOW'S MITE | Entering a shop below $5,000 tops the balance up to exactly $5,000 |
 
-Chance and collected rewards last across shops for the current run and reset
-with a new run or match. In local versus they are Player snapshot state, so
-each participant restores their own chance, ownership and resource costs on
-handoff. An unfinished spin is forfeited before the outgoing run is captured;
-it cannot finish against the incoming player. Failed-wave retries retain the
-mode's existing rule: restore the player's last committed run. Progress is
+Chance, payout count, last cabinet and collected rewards last across shops for
+the current run and reset with a new run or match. In local versus they are
+Player snapshot state, so each participant restores their own chance, payout
+count, last cabinet, ownership and resource costs on handoff. An unfinished
+spin is forfeited before the outgoing run is captured; it cannot finish against
+the incoming player.
+Failed-wave retries retain the mode's existing rule: restore the player's last
+committed run. Progress is
 saved in memory for the match, not across page reloads or new runs.
 
 ### The critical hit, as a build
@@ -3060,6 +3079,7 @@ js/items/donation/definitions/ one file per shared reward
 tools/build-pages.mjs          generates the static Pages artifact and item manifests
 js/mysterybox.js               the box that offers active items
 js/donation-machines.js        the shared cabinet, roulette and floating pickups
+js/donation-rules.js           starting odds and payout-scaled loss progression
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
 js/companions.js    the two things that are alive: the magpie and the lamprey
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep

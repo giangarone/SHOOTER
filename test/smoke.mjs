@@ -119,7 +119,7 @@ try {
     machine.dismiss();
     machine.present(g.player);
     machine.state = 'up';
-    machine.setChance(10);
+    machine.setChance(5);
     render();
     const settled = read();
 
@@ -129,7 +129,7 @@ try {
       machine.state = 'up';
       machine.rise = 1;
       machine.group.visible = true;
-      machine.setChance(10 + (i % 19) * 5);
+      machine.setChance(5 + (i * 7) % 96);
       machine.startSpin(machine.chance, () => (i % 4) / 4);
       machine.update(1.5, g.time + i);
       render();

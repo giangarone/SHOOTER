@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { BOX_Z } from './mysterybox.js';
 import { buildPixelIcon } from './pixelicons.js';
 import { DONATION_ITEMS, donationItemKey } from './items/donation/index.js';
+import { DONATION_START_CHANCE, donationLossStep } from './donation-rules.js';
 import {
   DIM_TEXT, HIT_MAT, SIGN_COLOR, SUNK_Y, RISE_SECONDS, TOTEM_X,
   hex, makePanel, pxText, roundRect,
@@ -15,10 +16,19 @@ export const DONATION_USE_RADIUS = 2.6;
 export const DONATION_SPIN_SECONDS = 3;
 export const DONATION_KINDS = Object.freeze(['ammo', 'health', 'credits']);
 const TAU = Math.PI * 2;
+const TICKS_PER_TURN = 10;
 const wrapAngle = (angle) => ((angle % TAU) + TAU) % TAU;
 
-export function randomDonationKind(random = Math.random) {
-  return DONATION_KINDS[Math.floor(random() * DONATION_KINDS.length)];
+export function randomDonationKind(random = Math.random, lastKind = null) {
+  if (!DONATION_KINDS.includes(lastKind)) {
+    return DONATION_KINDS[Math.floor(random() * DONATION_KINDS.length)];
+  }
+  let choice = random() * 5;
+  for (const kind of DONATION_KINDS) {
+    choice -= kind === lastKind ? 1 : 2;
+    if (choice < 0) return kind;
+  }
+  return DONATION_KINDS[DONATION_KINDS.length - 1];
 }
 
 export const DONATION_MACHINE_CONFIG = Object.freeze({
@@ -31,8 +41,8 @@ export const DONATION_MACHINE_CONFIG = Object.freeze({
     costLabel: '25 HEALTH', shortCost: '25 HP',
   }),
   credits: Object.freeze({
-    title: 'CREDITS DONATION', color: 0x00e676, cost: 1000,
-    costLabel: '$1,000 CREDITS', shortCost: '$1,000',
+    title: 'CREDITS DONATION', color: 0x00e676, cost: 2000,
+    costLabel: '$2,000 CREDITS', shortCost: '$2,000',
   }),
 });
 
@@ -84,7 +94,7 @@ function wheelMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) },
-      uChance: { value: 0.1 },
+      uChance: { value: DONATION_START_CHANCE / 100 },
       uAngle: { value: 0 },
       uFlash: { value: 0 },
     },
@@ -110,9 +120,6 @@ function wheelMaterial(color) {
         float angle = mod(atan(p.x, p.y) - uAngle + 6.28318530718, 6.28318530718);
         float win = 1.0 - step(6.28318530718 * uChance, angle);
         vec3 col = mix(vec3(0.055, 0.065, 0.085), uColor, win);
-        float spoke = fract(angle / 6.28318530718 * 20.0);
-        float gap = 1.0 - smoothstep(0.0, 0.022, min(spoke, 1.0 - spoke));
-        col *= 1.0 - gap * 0.35;
         col *= 0.65 + 0.35 * smoothstep(0.08, 0.44, r);
         col += uColor * uFlash * win * 0.65;
         if (r > 0.455) col = uColor * (0.65 + uFlash * 0.5);
@@ -191,11 +198,11 @@ export class DonationMachine {
     this.pos = new THREE.Vector3(x, 0, z);
     this.state = 'hidden';
     this.rise = 0;
-    this.chance = 10;
+    this.chance = DONATION_START_CHANCE;
     this.shopOpen = false;
     this.spinning = false;
     this.spinElapsed = 0;
-    this.spinChance = 10;
+    this.spinChance = DONATION_START_CHANCE;
     this.landingAngle = 0;
     this.spinWon = false;
     this.spinStartAngle = 0;
@@ -283,7 +290,10 @@ export class DonationMachine {
     // another payment kind, including after this shop's win sank the body.
     if (this.shopOpen) return;
     this.shopOpen = true;
-    this.kind = randomDonationKind(random);
+    this.kind = randomDonationKind(random, player.lastDonationKind);
+    // Seeing the cabinet advances history even without a payment. The shop
+    // guard above keeps rerolls from advancing it again.
+    player.lastDonationKind = this.kind;
     this.config = DONATION_MACHINE_CONFIG[this.kind];
     this.clearPending();
     this.completedThisShop = false;
@@ -386,7 +396,8 @@ export class DonationMachine {
       const eased = 1 - Math.pow(1 - t, 3);
       const travel = this.spinTravel * eased;
       this.wheelMaterial.uniforms.uAngle.value = this.spinStartAngle + travel;
-      const tick = Math.floor(travel / (TAU / 20));
+      // Sound detents stay sparse even when the continuous wedge grows by 1%.
+      const tick = Math.floor(travel / (TAU / TICKS_PER_TURN));
       if (tick > this.tickIndex) {
         this.tickIndex = tick;
         this.tickProgress = t;
@@ -439,9 +450,12 @@ export class DonationMachine {
   snapshot(player) {
     return {
       kind: this.kind,
+      lastKind: player.lastDonationKind,
       color: this.config.color,
       cost: this.config.cost,
       chance: player.donationChance,
+      wins: player.donationWins,
+      lossStep: donationLossStep(player.donationWins),
       spinChance: this.spinChance,
       spinning: this.spinning,
       spinElapsed: this.spinElapsed,

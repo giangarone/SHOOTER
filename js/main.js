@@ -96,6 +96,7 @@ import {
   WAVETABLE,
 } from './items/passive/index.js';
 import { DONATION_ITEMS, donationItemKey } from './items/donation/index.js';
+import { DONATION_START_CHANCE, donationChanceAfterLoss } from './donation-rules.js';
 // AMMO ALCHEMIST's element bank, which lives with the donation catalogue the
 // way WAVETABLE lives with the passive one - see shared.js for why.
 import { ALCHEMY_ELEMENTS } from './items/donation/shared.js';
@@ -2079,6 +2080,8 @@ class Game {
         flawlessMult: this.flawlessMult(),
         passiveItems: { ...this.player.passiveItems },
         donationChance: this.player.donationChance,
+        donationWins: this.player.donationWins,
+        lastDonationKind: this.player.lastDonationKind,
         donationItems: { ...this.player.donationItems },
         donationMachine: this.donationMachine.snapshot(this.player),
         passiveItemCount: Object.values(this.player.passiveItems).reduce((a, b) => a + b, 0),
@@ -9925,7 +9928,7 @@ class Game {
       return 'NEED ' + (cost + 1) + ' HP';
     }
     if (machine.kind === 'credits' && !this._canAfford(cost)) {
-      return 'NEED $1,000';
+      return 'NEED ' + machine.config.shortCost;
     }
     return null;
   }
@@ -9984,7 +9987,7 @@ class Game {
 
   _dismissDonationMachine() {
     if (this.donationMachine.dismiss()) {
-      this.player.donationChance = Math.min(100, this.player.donationChance + 5);
+      this.player.donationChance = donationChanceAfterLoss(this.player);
     }
   }
 
@@ -10000,19 +10003,20 @@ class Game {
       return;
     }
     if (event === 'loss') {
-      this.player.donationChance = Math.min(100, this.player.donationChance + 5);
+      this.player.donationChance = donationChanceAfterLoss(this.player);
       machine.setChance(this.player.donationChance, donationSoldOut(this.player));
       this.sfx.donationLoss();
       this.pad.rumble(0.12, 0.25, 100, 1);
       return;
     }
     const itemId = randomUnownedDonationItem(this.player);
-    this.player.donationChance = 10;
+    this.player.donationChance = DONATION_START_CHANCE;
     if (!itemId) {
       // The debug panel may exhaust the pool while a paused spin is pending.
-      machine.setChance(10, true);
+      machine.setChance(DONATION_START_CHANCE, true);
       return;
     }
+    this.player.donationWins++;
     machine.reveal(itemId);
     this._killPos.set(machine.pos.x, 1.65, machine.pos.z);
     this.effects.burst(this._killPos, machine.config.color, 42, 8, 3.2, 0.9);
