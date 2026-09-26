@@ -1781,7 +1781,7 @@ CELL is the CEILING; a run holding both banks two charges and fills them faster.
 | UPDRAFT | Hold jump to fly upward. It spends stamina |
 | JACKPOT | During combat, every ground jump has a 1% chance of full health and a full reserve |
 | SCORCHED EARTH | Sliding leaves a trail of fire that burns enemies |
-| QUORUM | Every 10 kills summons a free sentry turret for 10s |
+| QUORUM | Every 10 of your kills summons a free sentry turret for 5s |
 
 UPDRAFT **climbs**, and that is the whole pick rather than a stronger version of
 a glide. A glide changes how a fall ends; this changes where the fight is. The
@@ -1844,7 +1844,11 @@ where the two overlap.
 QUORUM is PANIC TURRET's gun bought with kills instead of with blows - the same
 class, the same one-of-the-player's-shots per round, the same half-beat. One
 answers a run that is losing and the other a run that is winning, which is why
-they are one gun at two prices. It carries its own flag and its own cap counted
+they are one gun at two prices. The kills that pay for it are the PLAYER'S:
+a sentry tags the bodies it books (turretKill, on meleeKill's precedent) and
+the tally skips them, or the gun would stand up its own replacement every ten
+kills - a self-funding machine is upkeep, not a reward. It carries its own
+flag and its own cap counted
 over the deployed list, so a run holding both gets both caps rather than one
 eating the other's.
 

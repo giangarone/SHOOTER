@@ -4,8 +4,10 @@ import { definePassiveItem } from '../shared.js';
 
 // PANIC TURRET, BOUGHT WITH KILLS INSTEAD OF WITH BLOWS. That pick answers a
 // run that is losing and this one answers a run that is winning, which is why
-// they are the same gun at two different prices - ten bodies and ten seconds,
-// against one hit and ten seconds.
+// they are the same gun at two different tenures - ten seconds against five,
+// and only the PLAYER'S kills pay: a sentry's own bodies are tagged where it
+// fires (see Turret.update) and skipped by the tally, or the gun stands up
+// its own replacement every ten and never stops.
 //
 // IT IS THE ITEM'S OWN TURRET, unchanged: same class, same one-of-the-
 // player's-shots per round, same half-beat. Its own cap, counted over the
@@ -18,8 +20,8 @@ export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs 
     name: 'QUORUM',
     max: 1,
     theme: 0xf9b233,
-    effects: [['EVERY 10 KILLS:', NOTE], ['A FREE TURRET, 10s', GOOD]],
-    apply: (mods, n) => { mods.quorumEvery = 10; mods.quorumLife = 10; mods.quorumMax = 3 * n; },
+    effects: [['EVERY 10 KILLS:', NOTE], ['A FREE TURRET, 5s', GOOD]],
+    apply: (mods, n) => { mods.quorumEvery = 10; mods.quorumLife = 5; mods.quorumMax = 3 * n; },
 }));
 
 export const icon = [

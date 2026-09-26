@@ -10934,8 +10934,12 @@ class Game {
       if (this.player.mods.curtainCall > 0) {
         this._lastKillPos = e.pos.clone();
       }
-      // QUORUM. Ten bodies, one gun - see _quorumTurret.
-      if (this.player.mods.quorumEvery > 0) {
+      // QUORUM. Ten bodies, one gun - see _quorumTurret. The player's bodies,
+      // specifically: a sentry's kills are tagged turretKill where it fires
+      // (see Turret.update) and skipped here, or the gun stands up its own
+      // replacement every ten kills forever - a turret became a self-funding
+      // machine instead of a reward for the player's own ten.
+      if (this.player.mods.quorumEvery > 0 && !e.turretKill) {
         this.player.quorumKills++;
         if (this.player.quorumKills >= this.player.mods.quorumEvery) {
           this.player.quorumKills = 0;

@@ -707,6 +707,34 @@ try {
     g._quorumTurret();
     o.quorumCapped = g._deployed.filter((d) => d.quorum).length;
     o.quorumLife = g._deployed[0] ? g._deployed[0].life : 0;
+
+    // THE TALLY BOOKS THE PLAYER'S BODIES ONLY. A sentry tags its own kills
+    // (turretKill, see Turret.update) and the sweep skips them - otherwise ten
+    // of a turret's own kills stand up the next turret and the item is upkeep
+    // that pays for itself. One body is left for the standing gun, one is
+    // killed by the player directly, and the counter must move on ONLY the
+    // second.
+    P.quorumKills = 0;
+    const qt = g._deployed[0];
+    qt.pos.set(2, 0, 2);
+    const bySentry = spawn('chaser', 4, 4);
+    bySentry.hp = 1;
+    const qctx = g._deployCtx;
+    qctx.obstacles = [];
+    for (let i = 0; i < 6 && !bySentry.dead; i++) {
+      qctx.pulse = 300 + i;
+      qctx.pulseWhole = i % 2 === 0;
+      qctx.time = g.time;
+      qt.update(0.016, qctx);
+    }
+    o.quorumSentryKills = bySentry.dead ? 1 : 0;
+    tick(2);
+    o.quorumSentryFed = P.quorumKills;
+    const byPlayer = spawn('chaser', -4, -4);
+    byPlayer.hp = 1;
+    g.hurtEnemy(byPlayer, 10);
+    tick(2);
+    o.quorumPlayerFed = P.quorumKills;
     for (const d of g._deployed) d.destroy();
     g._deployed.length = 0;
 
@@ -983,7 +1011,11 @@ try {
 
   ok('quorum stands up its turrets', r.quorumUp === 3, String(r.quorumUp));
   ok('and caps them', r.quorumCapped === 3, String(r.quorumCapped));
-  ok('and they live ten seconds', near(r.quorumLife, 10), String(r.quorumLife));
+  ok('and they live five seconds', near(r.quorumLife, 5), String(r.quorumLife));
+  ok('and the tally ignores the sentries\' own kills',
+    r.quorumSentryKills === 1 && r.quorumSentryFed === 0,
+    `sentryKilled=${r.quorumSentryKills} tally=${r.quorumSentryFed}`);
+  ok('and counts the player\'s', r.quorumPlayerFed === 1, String(r.quorumPlayerFed));
 
   // ---- the pool ----
   ok('every new passive item is in the pool', r.missing.length === 0, r.missing.join(', '));

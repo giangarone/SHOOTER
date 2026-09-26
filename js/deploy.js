@@ -249,7 +249,11 @@ export class Turret {
       // needs.
       if (ctx.flashAmmo) ctx.flashAmmo();
     }
-    ctx.hurtEnemy(target, dmg);
+    // THE KILL CARRIES THE SENTRY'S NAME, on meleeKill's exact precedent (see
+    // _meleeStrike): QUORUM's tally counts the player's own bodies, so a kill
+    // this gun books is one the tally must never see - ten bodies fed BY a
+    // turret would otherwise stand up the next turret by themselves.
+    if (ctx.hurtEnemy(target, dmg)) target.turretKill = true;
     // VENOMGRID and HELLSPITTER. They use the same fixed poison and fire bases
     // as every player-owned status, with MALADY applied on top. Applied after
     // the damage so a body the shot killed is not given eight seconds of

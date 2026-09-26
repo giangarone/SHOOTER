@@ -211,6 +211,10 @@ export class Enemy {
     // read once by the death sweep in main.js - see MELEE_KILL_MULT. It lives
     // here rather than in a set on the game so that it dies with the enemy.
     this.meleeKill = false;
+    // Set by a sentry's own round (see Turret.update), read by the same sweep
+    // for the opposite reason: QUORUM's tally is the player's kills and a
+    // turret's bodies must not buy its replacement.
+    this.turretKill = false;
     // LUCKY CORPSE's one marked body. The wave chooses it; the death sweep
     // pays it, and the flag dies with this enemy.
     this.luckyCorpse = false;
