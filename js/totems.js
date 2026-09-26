@@ -879,8 +879,8 @@ export class Station {
 
     // With the body gone the console still has to be shootable, so it takes
     // the same invisible claim volume a totem has, sized around the mark and
-    // the icon orbiting over it. A station purchase is repeatable and
-    // rate-limited, so a stray hit costs a shot, not a build.
+    // the icon orbiting over it. The ammo purchase ends at one refill; the
+    // reroll is repeatable and rate-limited, so a stray hit costs a shot.
     this.hit = new THREE.Mesh(STATION_HIT_GEOM, HIT_MAT);
     this.hit.position.y = 1.3;
     // How main.js tells a station hit from an ordinary wall hit.
@@ -1052,6 +1052,9 @@ export class TotemArea {
     // and a box roll are different purchases, and alternating between them
     // should not price either out - see boxCost in items/passive/index.js.
     this.boxRolls = 0;
+    // Stock belongs to the shop, so replacing its offers cannot sell a second
+    // refill to fuel the same Ammo Donation Machine.
+    this.ammoPurchased = false;
     // EVERY PASSIVE ITEM THIS SHOP HAS ALREADY SHOWN, over all its sets. A reroll is
     // the player saying "not these three", and a set that hands one of them
     // back is the console charging an escalating price for the answer it has
@@ -1084,12 +1087,14 @@ export class TotemArea {
    * @param {boolean} resetRerolls  false when this is itself a reroll, so the
    *   escalating price is not reset by the set it just paid for. The box's
    *   counter rides along with it: a reroll does not make the box cheap again
-   *   any more than it makes itself cheap again.
+   *   any more than it makes itself cheap again. Ammo stock follows the same
+   *   shop boundary and is never restored by a reroll.
    */
   present(offers, resetRerolls = true, armTime = undefined) {
     if (resetRerolls) {
       this.rerolls = 0;
       this.boxRolls = 0;
+      this.ammoPurchased = false;
     }
     this.totems.forEach((t, i) => {
       if (i < offers.length) t.present(offers[i], armTime);
@@ -1099,10 +1104,12 @@ export class TotemArea {
       this.dismiss();
       return;
     }
-    // Unconditional: show() itself knows to leave a standing console alone,
-    // and the old `if hidden` test missed one caught mid-sink, which then
-    // finished sinking and left the row with no shop beside it.
-    for (const s of this.stations) s.show();
+    // show() catches a console mid-sink at a fresh shop, but spent ammo stock
+    // must keep sinking when only the passive offers were rerolled.
+    for (const s of this.stations) {
+      if (s === this.ammoStation && this.ammoPurchased) continue;
+      s.show();
+    }
   }
 
   // Sinks everything - the claimed totem, its two siblings and both stations.
@@ -1153,6 +1160,7 @@ export class TotemArea {
       out.push(t.hit);
     }
     for (const s of this.stations) {
+      if (s === this.ammoStation && this.ammoPurchased) continue;
       if (s.state !== 'hidden') out.push(s.hit);
     }
   }

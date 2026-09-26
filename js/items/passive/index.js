@@ -131,20 +131,24 @@ export function boxCost(wave = 1, rolls = 0) {
   return blockPrice(wave, BOX_BASE, BOX_STEP) * Math.pow(2, rolls);
 }
 
-// $500 at waves 1-5, $600 at 6-10, and $100 a block after that. See
+// $1,000 at waves 1-5, $1,250 at 6-10, and $250 a block after that. See
 // blockPrice(): `cost` is a function of the wave, not a number, so every
 // caller has to say which wave it is pricing for.
-export const AMMO_BASE = 500;
-export const AMMO_STEP = 100;
+export const AMMO_BASE = 1000;
+export const AMMO_STEP = 250;
 
 export const AMMO_PURCHASE = {
-  name: 'AMMO',
-  detail: '+90 ROUNDS',
-  // A refill has to compete with a reroll for the same wallet, so it is
-  // priced like one: several waves' earnings, not pocket change.
+  name: 'MAX AMMO',
+  detail: 'FULL MAGAZINE + RESERVE',
   cost: (wave = 1) => blockPrice(wave, AMMO_BASE, AMMO_STEP),
-  enabled: (player) => player.reserveAmmo < player.maxReserve,
+  enabled: (player) => player.reserveAmmo < player.maxReserve
+    || (player.mods.beltFedDream <= 0 && player.mag < player.magSize),
   apply: (player) => {
-    player.reserveAmmo = Math.min(player.maxReserve, player.reserveAmmo + 90);
+    const filledMagazine = player.mods.beltFedDream <= 0 && player.mag < player.magSize;
+    player.reserveAmmo = player.maxReserve;
+    player.mag = player.mods.beltFedDream > 0 ? player.maxReserve : player.magSize;
+    // A reload left running would spend rounds from the reserve just filled.
+    player.reloading = 0;
+    if (filledMagazine) player.magFresh = true;
   },
 };

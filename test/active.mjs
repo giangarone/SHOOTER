@@ -477,14 +477,88 @@ try {
     const [brokeText, brokeBlocked] = g._usePrompt(useBroke);
     out.brokePromptBlocked = brokeBlocked && brokeText.includes(String(g._boxCost()));
 
-    // E at a station buys ammo, even standing where a totem's range reaches.
+    // MAX AMMO is one purchase for the shop, not one per totem redraw.
     stage();
-    P.reserveAmmo = 0;
-    g.credits = 5000;
-    standAt(g.totemArea.ammoStation.pos.x, g.totemArea.ammoStation.pos.z - 1);
+    const ammoStation = g.totemArea.ammoStation;
+    const ammoPrices = [];
+    for (const wave of [1, 5, 6, 10, 11, 15, 16, 20, 21]) {
+      g.wave = wave;
+      ammoPrices.push(g._ammoCost());
+    }
+    out.ammoPriceLadder = ammoPrices;
+    g.wave = 1;
+    P.mag = 2; P.reserveAmmo = 0; P.reloading = 1;
+    g.credits = 999;
+    standAt(ammoStation.pos.x, ammoStation.pos.z - 1);
     out.promptNamesStation = g._useTarget() && g._useTarget().kind === 'station';
+    const shortPrompt = g._usePrompt(g._useTarget());
     g.tryUse();
-    out.keyBoughtAmmo = P.reserveAmmo === 90;
+    out.ammoShortRefused = shortPrompt[1] && shortPrompt[0].includes('1000')
+      && g.credits === 999 && P.mag === 2 && P.reserveAmmo === 0
+      && !g.totemArea.ammoPurchased && ammoStation.isUp();
+    g.credits = 1000; P.spentTotal = 0;
+    const maxPrompt = g._usePrompt(g._useTarget())[0];
+    out.ammoPrompt = maxPrompt.includes('MAX AMMO') && maxPrompt.includes('FULL MAGAZINE + RESERVE');
+    g.tryUse();
+    out.keyBoughtAmmo = P.reserveAmmo === P.maxReserve && P.mag === P.magSize
+      && P.reloading === 0 && P.magFresh && g.credits === 0 && P.spentTotal === 1000;
+    const targets = [];
+    g.totemArea.addTargets(targets);
+    out.ammoGone = g.totemArea.ammoPurchased && ammoStation.state === 'sinking'
+      && !targets.includes(ammoStation.hit) && !g.totemArea.stationInRange(P.pos);
+    P.reserveAmmo = 0; P.mag = 0; g.credits = 100000;
+    g._useStation(ammoStation);
+    ammoStation.shootCd = 0;
+    g._shootStation(ammoStation);
+    out.ammoRepeatRefused = g._stationBlocked(ammoStation) === 'SOLD OUT'
+      && g.credits === 100000 && P.reserveAmmo === 0 && P.mag === 0
+      && P.spentTotal === 1000;
+    g._useStation(g.totemArea.rerollStation);
+    out.ammoPaidRerollKeepsSpent = g.totemArea.rerolls === 1
+      && g.totemArea.ammoPurchased && ammoStation.state === 'sinking';
+    g._itemReroll();
+    out.ammoFreeRerollKeepsSpent = g.totemArea.ammoPurchased && ammoStation.state === 'sinking';
+    g.totemArea.update(1, g.time, P.pos);
+    out.ammoHidden = ammoStation.state === 'hidden' && !ammoStation.group.visible;
+
+    stage();
+    out.ammoRestocked = !g.totemArea.ammoPurchased && ammoStation.isUp();
+    P.mag = P.magSize; P.reserveAmmo = P.maxReserve; g.credits = 1000;
+    g._useStation(ammoStation);
+    out.ammoFullRefused = g._stationBlocked(ammoStation) === 'AMMO FULL'
+      && g.credits === 1000 && !g.totemArea.ammoPurchased;
+    P.mag = 0;
+    g._useStation(ammoStation);
+    out.ammoMagazineOnly = P.mag === P.magSize && P.reserveAmmo === P.maxReserve
+      && g.credits === 0 && g.totemArea.ammoPurchased;
+
+    stage();
+    P.passiveItems = { extendedMag: 1, ammoHoarder: 1 };
+    P.rebuildMods();
+    P.mag = 0; P.reserveAmmo = 0; P.reloading = 1;
+    g.credits = 1000;
+    g._useStation(ammoStation);
+    out.ammoBuildCapacity = { mag: P.mag, maxMag: P.magSize, reserve: P.reserveAmmo,
+      maxReserve: P.maxReserve, reloading: P.reloading };
+    P.update(1.5, g.input, g.arena.obstacles, g.time, false);
+    out.ammoReloadCannotSpend = P.mag === P.magSize && P.reserveAmmo === P.maxReserve;
+
+    stage();
+    P.passiveItems = { beltFedDream: 1 };
+    P.rebuildMods();
+    P.mag = 0; P.reserveAmmo = 0; g.credits = 1000;
+    g._useStation(ammoStation);
+    out.ammoBeltFed = P.mag === P.maxReserve && P.reserveAmmo === P.maxReserve;
+    P.passiveItems = {};
+    P.rebuildMods();
+
+    stage();
+    P.reserveAmmo = 0; g.credits = 1000;
+    standAt(ammoStation.pos.x, ammoStation.pos.z - 4);
+    aimAt(ammoStation.hit);
+    fire();
+    out.shotBoughtMaxAmmo = P.mag === P.magSize && P.reserveAmmo === P.maxReserve
+      && g.credits === 0 && g.totemArea.ammoPurchased && ammoStation.state === 'sinking';
 
     // --- THE READOUT: one segment per point, and no number anywhere ---
     // The bar is the ONLY place the charge cost is stated, and it states it in
@@ -1760,7 +1834,28 @@ try {
   ok('E at an open box takes the item',
     r.promptStillNamesBox && r.promptTextNamesItem && r.keyTookItem);
   ok('a broke player is told the price', r.brokePromptBlocked);
-  ok('E at a station buys ammo', r.promptNamesStation && r.keyBoughtAmmo);
+  ok('MAX AMMO starts at $1,000 and adds $250 every five waves',
+    r.ammoPriceLadder.join() === '1000,1000,1250,1250,1500,1500,1750,1750,2000',
+    r.ammoPriceLadder.join());
+  ok('an unaffordable ammo refill leaves the stock and ammo untouched', r.ammoShortRefused);
+  ok('the ammo prompt promises a full magazine and reserve', r.ammoPrompt);
+  ok('E fills both ammo stores, cancels reload and records the exact payment',
+    r.promptNamesStation && r.keyBoughtAmmo);
+  ok('purchased ammo stops accepting Use and shots immediately, then disappears', r.ammoGone && r.ammoHidden);
+  ok('using or shooting spent ammo stock cannot charge a second time', r.ammoRepeatRefused);
+  ok('paid and free rerolls cannot restore spent ammo stock',
+    r.ammoPaidRerollKeepsSpent && r.ammoFreeRerollKeepsSpent);
+  ok('the next shop restocks the ammo station', r.ammoRestocked);
+  ok('already-full ammo refuses payment and preserves the stock', r.ammoFullRefused);
+  ok('a player with full reserves can buy a refill for an empty magazine', r.ammoMagazineOnly);
+  ok('MAX AMMO respects increased magazine and reserve capacities',
+    r.ammoBuildCapacity.mag === r.ammoBuildCapacity.maxMag && r.ammoBuildCapacity.mag > 30
+      && r.ammoBuildCapacity.reserve === r.ammoBuildCapacity.maxReserve
+      && r.ammoBuildCapacity.reserve > 300 && r.ammoBuildCapacity.reloading === 0,
+    JSON.stringify(r.ammoBuildCapacity));
+  ok('an interrupted reload cannot consume the newly full reserve', r.ammoReloadCannotSpend);
+  ok('belt-fed ammo mirrors the full reserve immediately', r.ammoBeltFed);
+  ok('shooting the station buys one full refill and sinks it', r.shotBoughtMaxAmmo);
 
   // ---- the readout ----
   // The RENDERED count, off the live element - the arithmetic behind it is

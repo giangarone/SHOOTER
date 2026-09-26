@@ -9538,7 +9538,7 @@ class Game {
     area.ammoStation.setLabel(
       AMMO_PURCHASE.name,
       '$' + ammo,
-      this._canAfford(ammo) && AMMO_PURCHASE.enabled(this.player)
+      !area.ammoPurchased && this._canAfford(ammo) && AMMO_PURCHASE.enabled(this.player)
     );
     const cost = this._rerollCost();
     // Lit for a HIGH STAKES run whatever the balance says, because for that run
@@ -9899,6 +9899,7 @@ class Game {
   // the purchase so the two can never disagree.
   _stationBlocked(st) {
     if (st.kind === 'ammo') {
+      if (this.totemArea.ammoPurchased) return 'SOLD OUT';
       if (!AMMO_PURCHASE.enabled(this.player)) return 'AMMO FULL';
       if (!this._canAfford(this._ammoCost())) return 'NEED $' + this._ammoCost();
       return null;
@@ -10063,6 +10064,9 @@ class Game {
     if (st.kind === 'ammo') {
       this._spend(this._ammoCost());
       AMMO_PURCHASE.apply(this.player, this.time);
+      this.totemArea.ammoPurchased = true;
+      st.sink();
+      this.ui.flashReserve();
       this.sfx.buy();
     } else {
       this._payReroll(this._rerollCost());

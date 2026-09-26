@@ -18,9 +18,9 @@ export { PAY_TO_WIN_COST } from './shared.js';
 // FIVE TIMES PAY TO WIN'S, and flat for the same reason: it is the largest
 // single price in the game and it has to stay a number the player can hold
 // against their balance rather than a sum that changes with the wave. Five
-// thousand is roughly three box rolls or a dozen ammo refills - a whole run's
-// savings on an early wave, and a wave's takings on a late one, which is
-// exactly the curve an escape hatch should have.
+// thousand competes with two first box rolls or five full ammo refills at
+// early-wave prices; later it is one wave's takings, the curve an escape hatch
+// should have.
 export { PARACHUTE_COST } from './shared.js';
 
 export const ACTIVE_ITEM_KEYS = Object.keys(ACTIVE_ITEMS);

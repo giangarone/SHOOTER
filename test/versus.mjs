@@ -424,10 +424,22 @@ try {
     // it is main.js and the match disagreeing about which wave the arena is
     // building.
     const donationHistory = [];
-    const clearTurn = async () => {
+    const clearTurn = async (buyAmmo = false) => {
       await until(() => g.waveState === 'intermission' || g.state === 'gameover');
       if (g.state === 'gameover') return;
       donationHistory[g.match.active] = g.player.lastDonationKind;
+      if (buyAmmo) {
+        const area = g.totemArea;
+        await until(() => area.ammoStation.isUp());
+        t(`4P: Player ${g.match.active + 1} enters a shop with fresh ammo stock`,
+          !area.ammoPurchased && area.ammoStation.isUp());
+        g.player.mag = 0; g.player.reserveAmmo = 0;
+        g.credits = g._ammoCost();
+        g._useStation(area.ammoStation);
+        t(`4P: Player ${g.match.active + 1} buys their own one-use ammo refill`,
+          area.ammoPurchased && g.credits === 0
+            && g.player.mag === g.player.magSize && g.player.reserveAmmo === g.player.maxReserve);
+      }
       g.totemArea.dismiss();
       await until(() => g._pass || g.state === 'gameover');
       if (g.state === 'gameover') return;
@@ -484,7 +496,7 @@ try {
     g.player.donationWins = 1;
     g.player.takeDonationItem('drumMajor', g);
     await until(() => g.waveState === 'active');
-    await clearTurn();
+    await clearTurn(true);
     t('4P: a clear advances the wave and passes to P2',
       g.wave === 2 && g.match.wave === 2 && g.match.active === 1,
       'wave=' + g.wave + '/' + g.match.wave + ' active=' + g.match.active);
@@ -494,7 +506,7 @@ try {
     g.player.donationChance = 35;
     g.player.donationWins = 2;
     g.player.takeDonationItem('ivoryDrip', g);
-    await clearTurn();
+    await clearTurn(true);
     g.player.donationChance = 50;
     g.player.donationWins = 3;
     g.player.takeDonationItem('ghostCasings', g);

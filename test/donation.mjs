@@ -719,7 +719,8 @@ try {
     const beforeTab = g._stationBlocked(g.totemArea.ammoStation);
     const ammoCost = g._ammoCost();
     g._useStation(g.totemArea.ammoStation);
-    const spentIntoDebt = g.credits === 200 - ammoCost && p.reserveAmmo === 90 && ammoCost > 200;
+    const spentIntoDebt = g.credits === 200 - ammoCost && p.reserveAmmo === p.maxReserve
+      && p.mag === p.magSize && g.totemArea.ammoPurchased && ammoCost > 200;
     g.credits = -9499;
     const atFloorEdge = g._canAfford(500);
     g.credits = -9501;

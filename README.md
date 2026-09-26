@@ -930,7 +930,11 @@ context. The start screen says so, and one click anywhere fixes it.
 - **The next wave waits for your pick.** No menu opens and the camera never
   leaves your hands, but the run holds at the boundary until a totem is taken.
 - **Stations**: ammo and a totem reroll, bought with E beside the totems.
-  Buying ammo leaves the totems standing; rerolling redraws all three.
+  MAX AMMO fills the magazine and reserves to the current build's capacity,
+  cancels an unfinished reload, and sinks after one purchase per shop. It costs
+  $1,000 at waves 1–5, then rises by $250 every five waves. Rerolling redraws all
+  three passive offers and keeps a purchased ammo station gone; the next shop
+  restocks it. A player already full in both magazine and reserves cannot buy.
 - **Mystery Box**: rolls start at $2,500, rising by $500 every five waves.
   Each purchase doubles the next roll's price at that shop; a fresh shop
   resets that multiplier.
