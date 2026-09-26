@@ -394,7 +394,7 @@ export class DonationMachine {
       }
       if (t >= 1) {
         this.spinning = false;
-        this.status = this.spinWon ? 'WIN' : 'TRY AGAIN';
+        this.status = this.spinWon ? 'WIN' : '';
         this.event = this.spinWon ? 'win' : 'loss';
       }
     }

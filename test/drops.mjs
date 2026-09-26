@@ -14,6 +14,10 @@
 //                               gets more of what keeps them alive, never more
 //                               damage
 //   one drop per kill at most   so a single death can never carpet the floor
+//   boss ammo is earned         milestones always pay ammo once; relief only
+//                               covers a live boss, an empty floor and <40 rounds
+//   boss ammo is reachable      random floor positions exclude terrain and
+//                               every boss part, including fallback placements
 //
 // The old budget assertions are gone with the budget. What replaced the
 // guarantee they encoded - two runs of a wave get the same loot - is nothing:
@@ -177,99 +181,327 @@ try {
     pinataRates.plain > 0 && pinataRates.helped > pinataRates.plain * 1.5,
     `plain=${pinataRates.plain.toFixed(3)} helped=${pinataRates.helped.toFixed(3)}`);
 
-  // ---- boss bleeds at its thresholds ----
-  const boss = await page.evaluate(async () => {
+  // ---- boss milestones and ammunition relief ----
+  // Drive a real fight on fixed ticks so kills, healing and the bot cannot
+  // change the resource boundary while it is being measured.
+  const supplies = await page.evaluate(async () => {
     const g = window.__game;
-    // PIN THE THEME THE FIGHT IS DEALT FROM. Which boss wave 5 is depends on
-    // the run's random deal, and two of the ten bosses CHANGE `parts` while
-    // the health bar falls: SCHISM splits at half health (parts[0] dies, the
-    // bar refills to full as its children arrive whole), and the CHOIR stands
-    // up as three bodies on its first frame. Both leave this walk writing to
-    // a part that is no longer the bar - SCHISM reported bled=2 for a
-    // mechanic that was working, once per run in ten. COLOSSUS neither splits
-    // nor raises, so its parts list is the one this walk assumed all along.
-    // Same pin boss.mjs uses for the fights it needs by name.
+    const P = g.player;
+    const { AMMO_PICKUP } = await import('./js/powerups.js');
+    const out = {};
+    g.autoTest = false;
+    g.state = 'paused';
+    g._clearEntities();
+    P.reset();
     g.setTheme('rust');
     g.wave = 4;
-    g.enemies.forEach((e) => { e.dead = true; });
-    g.queue.length = 0;
-    g.waveState = 'idle'; g.interT = 0.05;
-    const alive = setInterval(() => { g.player.health = g.player.maxHealth; }, 40);
-    await new Promise((r) => {
-      const t = setInterval(() => { if (g.bossFight) { clearInterval(t); r(); } }, 60);
-    });
-    let bled = 0;
-    const orig = g._placeDrop.bind(g);
-    g._placeDrop = (kind, pos) => { bled++; return orig(kind, pos); };
-    const b = g.bossFight.parts[0];
-    const seen = [];
-    const THRESHOLDS = [0.75, 0.5, 0.25];
-    // WAIT FOR THE COUNTER, NOT FOR A FIXED SLICE OF TIME. This used to walk
-    // the boss down and give each step a quarter of a game second, on the
-    // assumption that a quarter second is several frames. On a two-core CI
-    // runner rendering through software GL it can be NO frames, and a bleed is
-    // only ever checked on a frame - so the suite reported bled=1 for a
-    // mechanic that was working, which is worse than useless: an assertion
-    // that fails on a slow host is one nobody trusts when it fails for real.
-    //
-    // Polling the game's own bleedAt keeps the assertion exact - it still
-    // catches a threshold that never fires - while letting a slow host take as
-    // long as it needs.
-    const waitForBleed = (want, ms = 8000) => new Promise((resolve) => {
-      const started = Date.now();
-      const t = setInterval(() => {
-        if (!g.bossFight || g.bossFight.bleedAt >= want || Date.now() - started > ms) {
-          clearInterval(t);
-          resolve();
-        }
-      }, 30);
-    });
-    // Walk the boss down through every threshold.
-    for (const f of [0.8, 0.7, 0.55, 0.45, 0.3, 0.2]) {
-      b.hp = b.maxHp * f;
-      await waitForBleed(THRESHOLDS.filter((t) => f <= t).length);
-      seen.push({ f, bled, bleedAt: g.bossFight ? g.bossFight.bleedAt : -1 });
-    }
-    g._placeDrop = orig;
-    clearInterval(alive);
-    // The pin was for this walk; later blocks go back to the run's own deal.
-    g.setTheme(null);
-    return { seen, bled, thresholds: g.bossFight ? g.bossFight.bleedAt : -1 };
-  });
-  check('boss bleeds once per threshold', boss.bled === 3,
-    `bled=${boss.bled} bleedAt=${boss.thresholds} (want 3)`);
+    g.startWave();
+    const bf = g.bossFight;
+    const b = bf.parts[0];
+    const clear = () => {
+      g.powerups.forEach((p) => p.destroy());
+      g.powerups.length = 0;
+    };
+    const remove = () => g.powerups.shift().destroy();
+    const kinds = () => g.powerups.map((p) => p.typeKey);
+    const rewind = () => { clear(); bf.bleedAt = 0; bf.ammoOwed = 0; };
+    const tick = () => { g.time += 0.05; g._updateWave(0.05); };
 
-  // ---- relief fires when starved ----
-  const relief = await page.evaluate(async () => {
-    const g = window.__game;
-    // Relief only runs while a wave is ACTIVE - it is a combat safety net, not
-    // a between-waves handout. Put the game back into a live wave first.
-    g.wave = 6;
-    g.enemies.forEach((e) => { e.dead = true; });
+    // Low health used to make all three milestones health drops even when
+    // the fight would need ammunition later. The full reserve must not waive
+    // supplies already earned through damage either.
+    P.health = 1;
+    P.reserveAmmo = P.maxReserve;
+    const seen = [];
+    for (const f of [0.8, 0.75, 0.55, 0.5, 0.3, 0.25]) {
+      b.hp = b.maxHp * f;
+      tick();
+      seen.push(g.powerups.length);
+    }
+    out.milestones = { seen, kinds: kinds(), crossed: bf.bleedAt };
+    b.hp = b.maxHp * 0.9;
+    tick();
+    b.hp = b.maxHp * 0.2;
+    tick();
+    out.noRepeat = g.powerups.length === 3;
+
+    rewind();
+    b.hp = b.maxHp * 0.2;
+    tick();
+    out.leap = { kinds: kinds(), crossed: bf.bleedAt };
+
+    const clearFloor = (p) => p.pos.y === 0 && Math.abs(p.pos.x) <= 19.5
+      && Math.abs(p.pos.z) <= 19.5
+      && !g.arena.obstacles.some((o) => p.pos.x > o.min.x - 0.8 && p.pos.x < o.max.x + 0.8
+        && p.pos.z > o.min.z - 0.8 && p.pos.z < o.max.z + 0.8)
+      && bf.parts.every((part) => Math.hypot(p.pos.x - part.pos.x, p.pos.z - part.pos.z)
+        >= part.radius + 0.8);
+    out.openFloor = g.powerups.every(clearFloor);
+
+    // Offer the boss footprint and an obstacle before each chosen open point.
+    // A corpse-position spawn, or an unchecked random point, cannot pass.
+    const savedObstacles = g.arena.obstacles;
+    const savedPos = b.pos.clone();
+    const random = Math.random;
+    try {
+      rewind();
+      b.pos.set(0, 0, 12);
+      g.arena.obstacles = [...savedObstacles, {
+        min: { x: -16, z: -16 }, max: { x: -14, z: -14 },
+      }];
+      const open = [];
+      for (let x = -18; x <= 18; x += 6) {
+        for (let z = -18; z <= 18; z += 6) {
+          const pos = { x, y: 0, z };
+          if (Math.hypot(x, z) >= 10 && clearFloor({ pos })) open.push(pos);
+        }
+      }
+      const chosen = [open[0], open[Math.floor(open.length / 2)], open.at(-1)];
+      for (let i = 0; i < 3; i++) {
+        const candidates = [b.pos.x, b.pos.z, -15, -15, chosen[i].x, chosen[i].z]
+          .map((v) => (v / 19.5 + 1) / 2);
+        let n = 0;
+        Math.random = () => candidates[n++] ?? 0.5;
+        b.hp = b.maxHp * [0.75, 0.5, 0.25][i];
+        g._bossBleed();
+      }
+      out.placement = {
+        clear: g.powerups.length === 3 && g.powerups.every(clearFloor),
+        selected: g.powerups.every((p, i) => Math.hypot(
+          p.pos.x - chosen[i].x, p.pos.z - chosen[i].z
+        ) < 1e-8),
+        positions: g.powerups.map((p) => [p.pos.x, p.pos.z]),
+      };
+
+      rewind();
+      b.pos.set(-11.5, 0, 0);
+      g.arena.obstacles = [...savedObstacles, {
+        min: { x: -14, z: -2 }, max: { x: -9, z: 2 },
+      }];
+      // Reject all 40 random samples; the fallback's first point is occupied.
+      Math.random = () => 0.5;
+      b.hp = b.maxHp * 0.2;
+      g._bossBleed();
+      out.fallback = g.powerups.length === 3 && g.powerups.every(clearFloor);
+
+      rewind();
+      g.arena.obstacles = [{ min: { x: -22, z: -22 }, max: { x: 22, z: 22 } }];
+      g._bossBleed();
+      out.blockedFloor = g.powerups.length === 0 && bf.ammoOwed === 3;
+    } finally {
+      Math.random = random;
+      g.arena.obstacles = savedObstacles;
+      b.pos.copy(savedPos);
+    }
+    g._bossBleed();
+    out.floorCleared = g.powerups.length === 3 && bf.ammoOwed === 0
+      && g.powerups.every(clearFloor);
+
+    // A full floor queues rewards; healing while blocked must not erase
+    // them, and freeing one slot must never break the five-ammo cap.
+    rewind();
+    for (let i = 0; i < 5; i++) g._placeDrop('ammo', b.pos);
+    tick();
+    out.ammoCap = { count: g.powerups.length, owed: bf.ammoOwed, crossed: bf.bleedAt };
+    b.hp = b.maxHp * 0.9;
+    const released = [];
+    for (let i = 0; i < 3; i++) {
+      remove();
+      tick();
+      released.push({ count: g.powerups.length, owed: bf.ammoOwed });
+    }
+    tick();
+    out.released = released;
+    out.noExtra = g.powerups.length === 5 && bf.ammoOwed === 0;
+
+    rewind();
+    b.hp = b.maxHp * 0.2;
+    for (let i = 0; i < 12; i++) g._placeDrop('damageBoost', b.pos);
+    tick();
+    out.floorCap = { count: g.powerups.length, owed: bf.ammoOwed };
+    for (let i = 0; i < 3; i++) remove();
+    tick();
+    out.floorReleased = {
+      count: g.powerups.length, ammo: g._ammoActive(), owed: bf.ammoOwed,
+    };
+
+    // The same bar drives split/multipart bosses: three drops for the whole
+    // fight, not three for every body.
+    rewind();
+    const other = new g.__EnemyForTest('colossus', b.pos.clone(), 1, 1, 1);
+    const otherSpot = out.placement.positions.find(([x, z]) =>
+      Math.hypot(x - b.pos.x, z - b.pos.z) > b.radius + other.radius + 1.6);
+    other.pos.set(otherSpot[0], 0, otherSpot[1]);
+    bf.parts.push(other);
+    bf.totalMaxHp = b.maxHp + other.maxHp;
+    for (const part of bf.parts) part.hp = part.maxHp * 0.2;
+    try {
+      const openSpot = out.placement.positions.find(([x, z]) => clearFloor({ pos: { x, y: 0, z } }));
+      const candidates = [...otherSpot, ...openSpot].map((v) => (v / 19.5 + 1) / 2);
+      let n = 0;
+      Math.random = () => candidates[n++] ?? 0.5;
+      g._bossBleed();
+      out.multipart = { kinds: kinds(), crossed: bf.bleedAt, clear: g.powerups.every(clearFloor) };
+    } finally {
+      Math.random = random;
+      bf.parts.pop();
+      other.dispose();
+      bf.totalMaxHp = b.maxHp;
+    }
+
+    rewind();
+    b.hp = b.maxHp * 0.75;
+    P.reserveAmmo = 0;
+    P.mag = 0;
+    g._reliefT = 0;
+    tick();
+    out.milestoneBeforeRelief = kinds();
+
+    // Every relief check below crosses its deadline on the same live boss.
+    // Only the gate under test changes: wave kind, ammunition or loose ammo.
+    clear();
+    b.hp = b.maxHp;
+    P.health = 1;
+    P.reserveAmmo = 0;
+    P.mag = 0;
+    g.bossFight = null;
+    g.queue.push('chaser');
+    g.spawnTimer = 1e6;
+    g._reliefT = 0;
+    tick();
+    g._updateReliefDrop(10);
+    out.normal = kinds();
     g.queue.length = 0;
-    g.totemArea.dismiss();
-    g.waveState = 'idle'; g.interT = 0.05;
-    await window.__simWait(3, () => g.waveState === 'active');
-    g.powerups.forEach((p) => p.destroy());
-    g.powerups.length = 0;
-    // maxHealth is a GETTER off mods, so it cannot be assigned; starve the
-    // player through the fields that are real.
-    const hold = setInterval(() => {
-      g.player.health = g.player.maxHealth * 0.2;
-      g.player.reserveAmmo = 0;
-      g.player.mag = 0;
-    }, 30);
-    g._reliefT = 0.05;
-    const before = g.powerups.length;
-    await window.__simWait(4, () => g.powerups.length > before);
-    clearInterval(hold);
-    const kinds = g.powerups.map((p) => p.typeKey);
-    return { before, after: g.powerups.length, kinds, waveState: g.waveState };
+    g.bossFight = bf;
+
+    P.reserveAmmo = 10;
+    P.mag = 30;
+    g._reliefT = 0;
+    tick();
+    out.forty = kinds();
+    P.reserveAmmo = 9;
+    g._reliefT = 0;
+    tick();
+    out.thirtyNine = kinds();
+    out.distance = Math.hypot(g.powerups[0].pos.x - P.pos.x, g.powerups[0].pos.z - P.pos.z);
+    g.powerups[0].type.apply(P, g.time);
+    out.amount = P.reserveAmmo === 9 + AMMO_PICKUP.amount;
+
+    clear();
+    P.reserveAmmo = 0;
+    P.mag = 0;
+    g._updateReliefDrop(9.9);
+    out.cooldown = kinds();
+    g._updateReliefDrop(0.11);
+    out.afterCooldown = kinds();
+
+    clear();
+    const V = P.pos.constructor;
+    g._placeDrop('ammo', new V(15, 0, 15));
+    g._reliefT = 0;
+    tick();
+    g._updateReliefDrop(10);
+    out.existing = kinds();
+    clear();
+    g._updateReliefDrop(2.1);
+    out.afterCollection = kinds();
+
+    clear();
+    P.reserveAmmo = P.maxReserve;
+    P.health = 1;
+    g._reliefT = 0;
+    tick();
+    out.healthOnly = kinds();
+    P.reserveAmmo = 0;
+    for (let i = 0; i < 12; i++) g._placeDrop('health', b.pos);
+    g._reliefT = 0;
+    tick();
+    out.reliefCap = { count: g.powerups.length, ammo: g._ammoActive() };
+    clear();
+    g.waveState = 'intermission';
+    g._reliefT = 0;
+    g._updateReliefDrop(10);
+    out.intermission = kinds();
+    g.waveState = 'active';
+    const parts = bf.parts;
+    bf.parts = [];
+    g._updateReliefDrop(10);
+    g._bossBleed();
+    out.defeated = kinds();
+    bf.parts = parts;
+    b.hp = 0;
+    g._updateReliefDrop(10);
+    out.zeroHp = kinds();
+
+    // Fresh fights must neither inherit old milestone debt nor a relief
+    // deadline shortened by the previous player/wave.
+    g._clearEntities();
+    g.wave = 4;
+    g.startWave();
+    P.reserveAmmo = 0;
+    P.mag = 0;
+    g._updateReliefDrop(9.9);
+    out.fresh = { crossed: g.bossFight.bleedAt, owed: g.bossFight.ammoOwed, kinds: kinds() };
+    g._updateReliefDrop(0.11);
+    out.freshReady = kinds();
+    g._clearEntities();
+    g.startWave();
+    P.reserveAmmo = 0;
+    P.mag = 0;
+    g._updateReliefDrop(11);
+    out.nextNormal = { boss: !!g.bossFight, kinds: kinds() };
+    g.setTheme(null);
+    return out;
   });
-  check('relief spawns when starved', relief.after > relief.before,
-    `pickups ${relief.before}->${relief.after} state=${relief.waveState} ${JSON.stringify(relief.kinds)}`);
-  check('relief favours ammo when both are empty', relief.kinds.includes('ammo'),
-    JSON.stringify(relief.kinds));
+  const ammoOnly = (kinds, count = 1) => kinds.length === count && kinds.every((k) => k === 'ammo');
+  check('boss milestones pay ammo exactly at 75%, 50% and 25%, even at low health',
+    JSON.stringify(supplies.milestones.seen) === '[0,1,1,2,2,3]'
+      && ammoOnly(supplies.milestones.kinds, 3), JSON.stringify(supplies.milestones));
+  check('healing and repeated checks never duplicate milestone ammo', supplies.noRepeat);
+  check('one hit crossing several milestones earns each one',
+    ammoOnly(supplies.leap.kinds, 3) && supplies.leap.crossed === 3, JSON.stringify(supplies.leap));
+  check('boss ammo lands at random open floor points away from the boss and obstacles',
+    supplies.openFloor && supplies.placement.clear && supplies.placement.selected
+      && new Set(supplies.placement.positions.map(String)).size === 3,
+    JSON.stringify(supplies.placement));
+  check('fallback boss ammo positions remain reachable', supplies.fallback);
+  check('no reachable floor defers ammo until a clear location opens',
+    supplies.blockedFloor && supplies.floorCleared);
+  check('full ammo floor queues all earned milestone supplies',
+    supplies.ammoCap.count === 5 && supplies.ammoCap.owed === 3 && supplies.ammoCap.crossed === 3,
+    JSON.stringify(supplies.ammoCap));
+  check('queued supplies survive healing and release once as slots open',
+    supplies.released.every((r, i) => r.count === 5 && r.owed === 2 - i) && supplies.noExtra,
+    JSON.stringify(supplies.released));
+  check('milestones respect the total pickup cap and resume when room opens',
+    supplies.floorCap.count === 12 && supplies.floorCap.owed === 3
+      && supplies.floorReleased.count === 12 && supplies.floorReleased.ammo === 3
+      && supplies.floorReleased.owed === 0, JSON.stringify(supplies.floorReleased));
+  check('multipart boss milestones belong to the shared health bar',
+    ammoOnly(supplies.multipart.kinds, 3) && supplies.multipart.crossed === 3);
+  check('multipart ammo stays clear of every boss body', supplies.multipart.clear);
+  check('milestone ammo prevents simultaneous emergency supplies',
+    ammoOnly(supplies.milestoneBeforeRelief), JSON.stringify(supplies.milestoneBeforeRelief));
+  check('normal waves never spawn emergency supplies, even with both bars empty',
+    supplies.normal.length === 0, JSON.stringify(supplies.normal));
+  check('40 total rounds refuse relief; 39 permit one ammo pickup',
+    supplies.forty.length === 0 && ammoOnly(supplies.thirtyNine), JSON.stringify(supplies.thirtyNine));
+  check('boss relief supplies the normal ammo amount near the player',
+    supplies.amount && supplies.distance >= 6 && supplies.distance <= 11, String(supplies.distance));
+  check('boss relief preserves the ten-second cooldown',
+    supplies.cooldown.length === 0 && ammoOnly(supplies.afterCooldown));
+  check('an existing ammo pickup anywhere on the floor blocks emergency ammo',
+    ammoOnly(supplies.existing) && ammoOnly(supplies.afterCollection));
+  check('low health alone never produces an emergency pickup', supplies.healthOnly.length === 0);
+  check('boss relief respects the total pickup cap',
+    supplies.reliefCap.count === 12 && supplies.reliefCap.ammo === 0);
+  check('intermissions and defeated bosses never spawn relief',
+    supplies.intermission.length === 0 && supplies.defeated.length === 0 && supplies.zeroHp.length === 0);
+  check('a fresh boss resets milestone debt and the ten-second relief cooldown',
+    supplies.fresh.crossed === 0 && supplies.fresh.owed === 0 && supplies.fresh.kinds.length === 0
+      && ammoOnly(supplies.freshReady), JSON.stringify(supplies.fresh));
+  check('returning to a normal wave removes boss emergency supplies',
+    !supplies.nextNormal.boss && supplies.nextNormal.kinds.length === 0);
 
   // ---- ground zones hand their decals back ----
   // Every lingering zone holds a slot in the creep pool for its whole life.
@@ -284,6 +516,8 @@ try {
   // visible flag. Same question, asked of the thing that answers it.
   const creep = await page.evaluate(async () => {
     const g = window.__game;
+    g.state = 'playing';
+    g.player.health = g.player.maxHealth;
     g._ash.forEach((a) => g.effects.creepRelease(a.creep));
     g._ash.length = 0;
     g._hazard.forEach((h) => g.effects.creepRelease(h.creep));

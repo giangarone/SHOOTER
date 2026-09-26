@@ -147,17 +147,28 @@ try {
       g.powerups.length = 0;
       return got;
     })();
-    o.pureRelief = (() => {
+    const reliefWith = (pure) => {
       bare();
-      give('pureHeart');
-      P.health = 1;                       // under RELIEF_HEALTH_FRAC
-      P.reserveAmmo = 0;                  // and under RELIEF_AMMO
+      if (pure) give('pureHeart');
+      P.health = 1;
+      P.reserveAmmo = 0;
+      P.mag = 0;
+      // Open the boss-only gate before testing the item's refusal; without
+      // this, a normal-wave refusal would make the item pass vacuously.
+      const saved = g.bossFight;
+      const part = dummy();
+      g.bossFight = { parts: [part], totalMaxHp: part.maxHp };
       g._reliefT = 0;
       g._updateReliefDrop(0.05);
       const got = g.powerups.length;
+      g.powerups.forEach((p) => p.destroy());
       g.powerups.length = 0;
+      g.bossFight = saved;
+      part.dispose();
       return got;
-    })();
+    };
+    o.pureBareRelief = reliefWith(false);
+    o.pureRelief = reliefWith(true);
     o.pureScatter = (() => {
       bare();
       give('pureHeart');
@@ -451,7 +462,8 @@ try {
   ok('a desperate bare floor wants the drops', r.pureBareRoll > 0,
     String(r.pureBareRoll));
   ok('pure of heart shuts the roll', r.pureRoll === 0, String(r.pureRoll));
-  ok('and the relief net', r.pureRelief === 0, String(r.pureRelief));
+  ok('and the boss relief net', r.pureBareRelief > 0 && r.pureRelief === 0,
+    `bare=${r.pureBareRelief} pure=${r.pureRelief}`);
   ok('and the scatter', r.pureScatter === 0, String(r.pureScatter));
   ok('pure of heart pays +20 max HP', r.pureMax === 20, String(r.pureMax));
   ok('and +20% damage', near(r.pureDmg, 1.2), String(r.pureDmg));

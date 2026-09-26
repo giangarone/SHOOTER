@@ -734,8 +734,8 @@ export class Powerup {
 //      crate-hugging pickup is still reachable from outside the crate.
 //
 // Rejection sampling: the free area is most of the arena, so this lands on the
-// first or second try in practice. The fallback ring exists only so the
-// function can never return nothing.
+// first or second try in practice. Checked fallback rings handle a crowded
+// arena without putting a pickup inside the obstruction that rejected it.
 const CENTER_KEEPOUT = 10;
 const SPAWN_BOUND = BOUND - 2.5;
 const PICKUP_CLEARANCE = 0.8;
@@ -750,20 +750,37 @@ function blocked(x, z, obstacles) {
   return false;
 }
 
-function randomSpawnPos(arena) {
+function randomSpawnPos(arena, avoid = []) {
   const obstacles = arena.obstacles;
+  const clear = (x, z) => {
+    if (blocked(x, z, obstacles)) return false;
+    for (const body of avoid) {
+      const dx = x - body.pos.x;
+      const dz = z - body.pos.z;
+      const r = body.radius + PICKUP_CLEARANCE;
+      if (dx * dx + dz * dz < r * r) return false;
+    }
+    return true;
+  };
   for (let i = 0; i < 40; i++) {
     const x = (Math.random() * 2 - 1) * SPAWN_BOUND;
     const z = (Math.random() * 2 - 1) * SPAWN_BOUND;
     if (x * x + z * z < CENTER_KEEPOUT * CENTER_KEEPOUT) continue;
-    if (blocked(x, z, obstacles)) continue;
+    if (!clear(x, z)) continue;
     return new THREE.Vector3(x, 0, z);
   }
-  // Every sample was rejected - drop it on the keep-out ring instead, which is
-  // open floor by construction.
+  // Terrain and a boss can occupy the old fallback ring too. Never trade
+  // guaranteed supplies for a guaranteed unreachable pickup.
   const a = Math.random() * Math.PI * 2;
-  const r = CENTER_KEEPOUT + 1.5;
-  return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
+  for (let r = CENTER_KEEPOUT + 1.5; r <= SPAWN_BOUND; r += 4) {
+    for (let i = 0; i < 64; i++) {
+      const ang = a + i * Math.PI * 2 / 64;
+      const x = Math.cos(ang) * r;
+      const z = Math.sin(ang) * r;
+      if (clear(x, z)) return new THREE.Vector3(x, 0, z);
+    }
+  }
+  return null;
 }
 
 // A pickup left exactly where something died. The XZ comes from an enemy whose
@@ -800,7 +817,7 @@ function surfaceUnder(at, fromY, obstacles) {
 
 // The safety-net spawn. Placed in a ring around the player rather than
 // anywhere on the map: it exists because the player is in trouble with no
-// kills coming, and a health pack twenty metres away is no help at all. Close
+// kills coming, and ammo twenty metres away is no help at all. Close
 // enough to reach under pressure, far enough that it still has to be walked to.
 export function spawnRelief(typeKey, arena, near, scene, glowTex, time) {
   for (let i = 0; i < 30; i++) {
@@ -820,26 +837,24 @@ export function spawnRelief(typeKey, arena, near, scene, glowTex, time) {
   }
   // Nowhere clear nearby - fall back to open floor anywhere rather than
   // withholding the one pickup meant to stop a death spiral.
-  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time, defFor(typeKey));
+  return spawnAnywhere(typeKey, arena, scene, glowTex, time);
 }
 
 /**
- * HEALTH & SEEK's spawn: a pickup on open floor ANYWHERE in the arena.
+ * A pickup on open floor anywhere in the arena, for HEALTH & SEEK and boss
+ * milestone ammo. Boss parts are excluded so a live body cannot hide its reward.
  *
- * The third spawner, and the only one with no reference point at all. A kill's
- * drop lands on the body and the relief net lands in a ring around the player,
- * because both of those are answers to something that just happened; this one
- * is the item saying "somewhere else", and somewhere else is the whole payload
- * - three plates at the player's feet would be a heal with extra steps.
+ * Unlike a kill's drop or the relief net, these supplies have no target point:
+ * scattering them makes the player move to collect them.
  *
- * randomSpawnPos already refuses the middle of the arena and the inside of an
- * obstacle, and falls back to open floor when every sample is rejected, so
- * this can never fail to produce a pickup.
+ * If no clear location exists, the caller can defer the pickup rather than
+ * leave it somewhere the player cannot reach.
  *
- * @returns {Powerup}
+ * @returns {Powerup|null}
  */
-export function spawnAnywhere(typeKey, arena, scene, glowTex, time) {
-  return new Powerup(typeKey, randomSpawnPos(arena), scene, glowTex, time, defFor(typeKey));
+export function spawnAnywhere(typeKey, arena, scene, glowTex, time, avoid = []) {
+  const at = randomSpawnPos(arena, avoid);
+  return at ? new Powerup(typeKey, at, scene, glowTex, time, defFor(typeKey)) : null;
 }
 
 // Ammo lives outside POWERUP_TYPES (see the note on AMMO_PICKUP), so every

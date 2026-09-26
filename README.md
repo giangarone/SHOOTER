@@ -904,9 +904,15 @@ context. The start screen says so, and one click anywhere fixes it.
   kill in seventy, a magnet one in eighty, a shield one in a hundred and
   twenty. Only health and ammo scale with need: their chances climb as those
   bars empty, steeply near empty, so a player in trouble gets more of what
-  keeps them alive and never more damage. Bosses still shed a pickup at each
-  quarter of their health, and if you are starving with no kills coming, one
-  is placed near you so the fight cannot dead-end.
+  keeps them alive and never more damage. Bosses guarantee an ammo pickup at
+  75%, 50% and 25% remaining health, placed randomly on open arena floor away
+  from the boss and obstacles. Milestone supplies wait for room if the floor's
+  pickup limits are reached, and healing cannot repeat a milestone.
+- **Emergency ammo is only available during boss fights.** Below 40 total
+  rounds (magazine plus reserve), an ammo pickup can appear near the player
+  on the existing ten-second supply cooldown, but only if no ammo pickup is
+  already lying on the floor. Normal waves have no emergency supplies, and
+  low health never triggers an emergency pickup.
 - **Six pickups, each a pixel-art plate** wearing the same 24x24 drawing its
   HUD chip does - one authored icon, rendered as extruded voxels in the world
   and flat to a canvas in the HUD, so the thing you picked up and the thing

@@ -286,10 +286,8 @@ const padtest = new URLSearchParams(location.search).has('padtest');
 // Pickup budget. Every pickup in the arena is a draw call and a collision
 // check, and unbounded spawning was the cause of the arena filling with ammo.
 const MAX_ACTIVE_PICKUPS = 12;
-// How much loose ammo the arena may hold at once. The old timer needed this to
-// stop it flooding the map; the budget bounds a wave's total now, but the cap
-// stays because need-weighting alone would let an empty player's whole budget
-// land as ammo and nothing else.
+// Need-weighted kills and boss milestones share this cap so a fight cannot
+// fill the floor with redundant ammunition.
 const MAX_ACTIVE_AMMO = 5;
 
 // ---- drops ---------------------------------------------------------------
@@ -301,18 +299,16 @@ const MAX_ACTIVE_AMMO = 5;
 // than scheduling. Health and ammo, and only those two, get likelier as the
 // bars they refill empty.
 //
-// The boss still sheds a pickup as it crosses each health threshold. A boss
+// The boss sheds ammunition as it crosses each health threshold. A boss
 // fight is the longest stretch in the game with almost nothing dying in it,
 // and a run of bad rolls across its few add kills would leave the player with
 // nothing at all for forty seconds.
 const BOSS_BLEED_THRESHOLDS = [0.75, 0.5, 0.25];
 
-// The safety net. Kill drops alone would be a death spiral: out of ammo means
-// no kills, and no kills means no ammo. If either bar is under its floor and
-// nothing has dropped for a while, one is placed near the player regardless of
-// how the fight is going.
+// Boss-only ammunition relief keeps an empty gun from ending a long fight.
+// Existing ammo must be collected first; normal waves have no emergency
+// supplies, and lost health never triggers a handout.
 const RELIEF_INTERVAL = 10;
-const RELIEF_HEALTH_FRAC = 0.35;
 const RELIEF_AMMO = 40;
 // Retry delay used when a spawn is skipped because a cap is already reached,
 // so a blocked spawn can never be retried every single frame.
@@ -5068,8 +5064,9 @@ class Game {
       addTimer: 3,
       maxAdds: this._cfg.maxAdds,
       addInterval: this._cfg.addInterval,
-      // How many health thresholds the boss has already bled a pickup at.
+      // Keep crossings when a full floor delays the earned ammunition.
       bleedAt: 0,
+      ammoOwed: 0,
       // LONG HAUL's clock. Absolute game time, and a boss fight never crosses
       // a versus handoff (a turn ends on the PICK after the wave), so there is
       // nothing here to rebase - see PLAYER_CLOCKS in versus.js.
@@ -8875,10 +8872,10 @@ class Game {
         this.spawnEnemy(this.queue.shift());
         this.spawnTimer = this._cfg.spawnInterval;
       }
-      this._updateReliefDrop(dt);
       if (this.bossFight) {
         this._updateBossAdds(dt);
         this._bossBleed();
+        this._updateReliefDrop(dt);
         this._bossChargeDrain();
       }
 
@@ -10352,53 +10349,30 @@ class Game {
     this.sfx.menuMove();
   }
 
-  // The safety net, and the only pickup that is not dropped by something dying.
-  //
-  // Without it the drop system has a death spiral in it: low ammo means no
-  // kills, and no kills means no ammo. A player who is genuinely stuck gets one
-  // placed near them regardless of how the fight is going. It is deliberately
-  // slow and conditional - it should feel like the game catching you, not like
-  // a supply line.
+  // A boss may outlast the reserve even when the player keeps landing hits.
+  // Relief cannot replace an earned drop the player has chosen not to fetch.
   _updateReliefDrop(dt) {
+    if (this.waveState !== 'active' || !this.bossFight?.parts.length
+        || this._bossHpFrac() <= 0) return;
     this._reliefT -= dt;
     if (this._reliefT > 0) return;
     if (this.powerups.length >= MAX_ACTIVE_PICKUPS) {
       this._reliefT = SPAWN_RETRY;
       return;
     }
-    const hpFrac = this.player.health / this.player.maxHealth;
     const ammo = this.player.reserveAmmo + this.player.mag;
-    const needHealth = hpFrac < RELIEF_HEALTH_FRAC;
-    const needAmmo = ammo < RELIEF_AMMO;
-    if (!needHealth && !needAmmo) {
+    if (ammo >= RELIEF_AMMO) {
       // Checked often, but the clock only starts once something is actually
       // wrong - so a comfortable player never banks relief they did not need.
       this._reliefT = 1;
       return;
     }
-    // Ammo first when both are low: health with an empty gun only postpones it.
-    //
-    // But the ammo cap is a promise the whole drop system holds, and relief is
-    // the one path that used to be able to break it - a starving player is
-    // exactly the state that fires this every ten seconds, so left unchecked it
-    // was the only way six ammo boxes could be on the floor at once. When the
-    // cap is already reached the boxes ARE there and the player simply has not
-    // walked to them, so relief falls back to health if that is also low and
-    // otherwise waits.
-    let kind = needAmmo ? 'ammo' : 'health';
-    if (kind === 'ammo') {
-      let ammoActive = 0;
-      for (const p of this.powerups) if (p.typeKey === 'ammo') ammoActive++;
-      if (ammoActive >= MAX_ACTIVE_AMMO) {
-        if (!needHealth) {
-          this._reliefT = SPAWN_RETRY;
-          return;
-        }
-        kind = 'health';
-      }
+    if (this._ammoActive() > 0) {
+      this._reliefT = SPAWN_RETRY;
+      return;
     }
     this._addPickup(
-      spawnRelief(kind, this.arena, this.player.pos, this.scene, this.effects.glowTex, this.time)
+      spawnRelief('ammo', this.arena, this.player.pos, this.scene, this.effects.glowTex, this.time)
     );
     this._reliefT = RELIEF_INTERVAL;
   }
@@ -10493,8 +10467,8 @@ class Game {
     return p;
   }
 
-  // Places a drop of a KNOWN kind. The boss bleed and the relief net both know
-  // what they want; only a kill has to roll for it.
+  // Places a drop of a known kind at its source. Random arena supplies use
+  // spawnAnywhere so a living boss cannot trap them underneath its body.
   _placeDrop(kind, pos) {
     this._addPickup(
       spawnDropAt(kind, pos, this.scene, this.effects.glowTex, this.time, this.arena.obstacles)
@@ -10534,7 +10508,7 @@ class Game {
     this.sfx.pickupBuff();
   }
 
-  // A boss sheds a pickup as it crosses each health threshold. Without this a
+  // A boss sheds ammo as it crosses each health threshold. Without this a
   // forty-second boss fight would be the longest stretch in the game with no
   // resources in it at all: one kill, at the very end.
   _bossBleed() {
@@ -10543,24 +10517,27 @@ class Game {
     // would trip every remaining threshold at once on a corpse.
     if (!bf || !bf.parts.length) return;
     const frac = this._bossHpFrac();
+    bf.ammoOwed ??= 0;
     while (bf.bleedAt < BOSS_BLEED_THRESHOLDS.length
       && frac <= BOSS_BLEED_THRESHOLDS[bf.bleedAt]) {
       bf.bleedAt++;
-      const part = bf.parts[0];
-      if (!part || this.powerups.length >= MAX_ACTIVE_PICKUPS) continue;
-      // Need-first, like a kill's roll, but guaranteed: whichever bar is
-      // emptier, and ammo when they are level - a boss fight is where the
-      // reserve goes.
-      const hpFrac = this.player.health / this.player.maxHealth;
-      const ammoFrac = (this.player.reserveAmmo + this.player.mag) / this.player.maxReserve;
-      const wantAmmo = (ammoFrac <= hpFrac || hpFrac >= 1)
-        && this._ammoActive() < MAX_ACTIVE_AMMO;
-      // A full bar takes no health plate - the same rule rollDrop() holds for
-      // kills. With the ammo boxes already capped as well there is nothing the
-      // player needs, so the threshold is spent on nothing rather than on a
-      // pickup that cannot be used.
-      if (!wantAmmo && hpFrac >= 1) continue;
-      this._placeDrop(wantAmmo ? 'ammo' : 'health', part.pos);
+      bf.ammoOwed++;
+    }
+    // A full floor must delay a guaranteed reward rather than erase it.
+    // Record crossings separately so a healing boss cannot cancel or repeat
+    // supplies the player already earned.
+    while (bf.ammoOwed > 0 && this.powerups.length < MAX_ACTIVE_PICKUPS
+      && this._ammoActive() < MAX_ACTIVE_AMMO) {
+      const pickup = spawnAnywhere(
+        'ammo', this.arena, this.scene, this.effects.glowTex, this.time, bf.parts
+      );
+      if (!pickup) break;
+      this._addPickup(pickup);
+      this.effects.burst(
+        this._killPos.set(pickup.pos.x, pickup.pos.y + 0.9, pickup.pos.z),
+        0xffe95e, 10, 3, 2, 0.5
+      );
+      bf.ammoOwed--;
     }
   }
 
