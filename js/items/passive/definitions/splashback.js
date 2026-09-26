@@ -21,7 +21,9 @@ export const id = 'splashback';
 export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'SPLASHBACK',
     max: 1,
-    theme: 0x4dd0e1,
+    // Pale spray-blue - the water family SKIPSTONE already owns, one step off
+    // its exact cyan so the two cards cannot be confused for each other.
+    theme: 0x80d8ff,
     effects: [['YOUR SHOTS ALSO APPLY', GOOD], ['STATUS EFFECTS YOU CARRY', NOTE]],
     apply: (mods, n) => { mods.splashback = n; },
 }));

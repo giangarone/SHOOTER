@@ -14,7 +14,9 @@ export const id = 'deathStare';
 export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'DEATH STARE',
     max: 1,
-    theme: 0xb06bff,
+    // Cold pale ice for the petrify - TERROR's purple is the fear family's,
+    // and this pick freezes rather than frightens.
+    theme: 0x84ffff,
     effects: [
       ['MELEE HITS THAT LAND', NOTE],
       ['PETRIFY THE ATTACKER', GOOD],
