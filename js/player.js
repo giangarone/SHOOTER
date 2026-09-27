@@ -316,7 +316,8 @@ const DEFAULT_MODS = {
   rations: 0,           // Emergency Rations: the HP every wave opens on
   finalDose: 0,         // Final Dose: HP healed by reloading on one round
   aimHeal: 0,           // Aim or Bleed: HP per shot that connected
-  missCost: 0,          // and HP per shot that did not
+  missCost: 0,          // and HP per shot that did not, on a
+  missCostChance: 0,    // 60% roll per miss - an every-miss bill would be a strobe
   killStreak: 0,        // Kill Streak: kills without being hit that pay out
   streakHeal: 0,        // and what they pay
   streakAmmo: 0,

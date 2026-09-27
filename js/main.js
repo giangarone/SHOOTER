@@ -7826,9 +7826,11 @@ class Game {
     if (mods.aimHeal > 0 || mods.missCost > 0) {
       if (hitAny) {
         this.player.heal(mods.aimHeal);
-      } else if (mods.missCost > 0 && this.player.health > 1) {
+      } else if (mods.missCost > 0 && this.player.health > 1
+        && Math.random() < mods.missCostChance) {
         this.player.health = Math.max(1, this.player.health - mods.missCost);
-        this.ui.damage();
+        // NO damage flash and NO hurt sound: fired at most-miss rates, both
+        // would be a strobe. The health bar ticking down is the whole tell.
       }
     }
     // DEATH CLAUSE. Only the FINAL ROUND of the magazine is covered - the

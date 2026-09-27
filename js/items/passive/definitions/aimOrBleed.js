@@ -10,8 +10,8 @@ export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs 
     name: 'AIM OR BLEED',
     max: 1,
     theme: 0xef5350,
-    effects: [['HITS HEAL 1 HP', GOOD], ['MISSES COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
-    apply: (mods, n) => { mods.aimHeal = 1 * n; mods.missCost = 1 * n; },
+    effects: [['HITS HEAL 1 HP', GOOD], ['60% OF MISSES COST 1 HP', BAD], ['NEVER BELOW 1 HP', NOTE]],
+    apply: (mods, n) => { mods.aimHeal = 1 * n; mods.missCost = 1 * n; mods.missCostChance = 0.6 * n; },
 }));
 
 export const icon = [
