@@ -488,6 +488,11 @@ export const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
 export const ICON_Y = 1.5;
 export const ICON_RX = 0.5;
 export const ICON_RZ = 0.5;
+// The yaw wobble the icon viewer swings past with, ridden ON TOP of the
+// player-facing yaw: aiming alone pins the icon dead flat to the player, and
+// the swing alone would hide it edge-on half the time.
+const ICON_SWING_RATE = 0.6;
+const ICON_SWING = 0.75;
 // pixelicons.js builds every plate at roughly 0.6m across, which is legible in
 // the hand and too small over a 3.4m-wide mark seen from across the arena.
 export const ICON_SCALE = 1.35;
@@ -808,7 +813,7 @@ export class Totem {
       const a = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
       this.iconAnchor.position.x = Math.sin(a) * ICON_RX;
       this.iconAnchor.position.z = Math.cos(a) * ICON_RZ;
-      this.iconAnchor.rotation.y = a;
+      this.iconAnchor.rotation.y = a + Math.sin(time * ICON_SWING_RATE + this.pos.x) * ICON_SWING;
       // The card rides the same angle, further out - see PANEL_R. A sprite is
       // already camera-facing, so all it needs is to be on the near side of
       // the light rather than inside it.
@@ -1028,7 +1033,7 @@ export class Station {
       const a = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
       this.iconAnchor.position.x = Math.sin(a) * ST_ICON_RX;
       this.iconAnchor.position.z = Math.cos(a) * ST_ICON_RZ;
-      this.iconAnchor.rotation.y = a;
+      this.iconAnchor.rotation.y = a + Math.sin(time * ICON_SWING_RATE + this.pos.x) * ICON_SWING;
       this.panel.sprite.position.x = Math.sin(a) * ST_PANEL_R;
       this.panel.sprite.position.z = Math.cos(a) * ST_PANEL_R;
     }
