@@ -1282,10 +1282,10 @@ ward, curse and every multiplier - so they cover the hazard path for free and
 neither is farmable: the rate is a fraction of what the same seconds spent
 killing would pay, and the ramp is bounded by a wave the player does not choose.
 
-### The two companions
+### The companions
 
 Nothing else the player owns is alive. A turret is furniture with a cooldown and
-the bees are a cloud on a timer; MAGPIE and LAMPREY are around for the whole run,
+the bees are a cloud on a timer; the companions are around for the whole run,
 they decide where to go by themselves, and the player will watch them. They live
 in `js/companions.js` and they are **not deployables** - `_clearHazards` sweeps
 that list at every wave end, and a pet the player had to bury once a minute
@@ -1310,6 +1310,32 @@ and it is only re-picked once the player has walked out of the band it is
 comfortable in, because something circling continuously in the near periphery is
 exactly what the eye keeps looking at, and the player has a fight to watch.
 
+The newer five answer questions about the PLAYER rather than the room, and each
+is one rule with no reload:
+
+- MARSH TOAD stays at heel and licks **every** status off you, once it has
+  hopped close enough to reach you, on a five-second cooldown - WHITE CELL's
+  cleanse made into a pet. A burn that lands between licks runs, which is the
+  whole difference between a pet and a button.
+- RUBBER CHICKEN is the decoy that is already there: the frame a hit **lands**
+  (dodged, warded and grazed hits do not count, exactly as for PANIC TURRET) it
+  plants where it stands and squeaks for three seconds, and the crowd is aimed
+  at IT. It is literally a lure on ORGAN GRINDER's terms - the same `lure` /
+  `armed` / complete-`decoy` contract `_findLure` reads, answered by a companion
+  instead of a deployable because it was never thrown.
+- PARROT listens to the one funnel every press goes through
+  (`Game.tryActiveItem`) and, at most once per thirty seconds, memorises one;
+  five seconds later it replays it through the same `RunningActiveItems` list a
+  press fires into, free. The bird copies the press, **not the bill**: items
+  whose `use` charges a price of their own (PAY TO WIN, LANCE, BLOOD PACT and
+  kin) are never mimicked, and the item's own `ready()` is still asked at fire
+  time.
+- PACK RAT and FERRYMAN run fetch errands - ammo and health respectively, one
+  plate at a time, within the magpie's leash of the fight. The plate is never
+  collected by the pet: it rides the pet's back as a live pickup, and is the
+  player's to take by walking over it - before, during or after the haul - on
+  the same proximity test that has always collected it.
+
 ### The rest
 
 | Passive Item | Effect |
@@ -1325,6 +1351,11 @@ exactly what the eye keeps looking at, and the player has a fight to watch.
 | TWIN CELL | Hold 2 active-item charges |
 | MAGPIE | A bird that collects credits |
 | LAMPREY | A leech that guards you |
+| MARSH TOAD | A toad that licks bad effects off you, every 5s |
+| RUBBER CHICKEN | When you are hit, everything aims at it for 3s |
+| PARROT | Repeats your active item 5s later, every 30s |
+| PACK RAT | A rat that fetches ammo crates to your feet |
+| FERRYMAN | A ferryman that brings health plates to your feet |
 
 ### Posture, and the bottom of the magazine
 
@@ -3100,7 +3131,7 @@ js/mysterybox.js               the box that offers active items
 js/donation-machines.js        the shared cabinet, roulette and floating pickups
 js/donation-rules.js           starting odds, payout-scaled costs and loss progression
 js/deploy.js        what an item LEAVES in the arena: turret, mine, monkey, bees
-js/companions.js    the two things that are alive: the magpie and the lamprey
+js/companions.js    the things that are ALIVE: magpie, lamprey and the five familiars
 js/money.js         money orbs: one Points pool, the magnet, the wave sweep
 js/weapons.js       weapon stats + first-person models
 js/totems.js        wave-end totems + ammo/reroll stations

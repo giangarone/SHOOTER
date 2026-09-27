@@ -73,7 +73,7 @@ import { CrtPass } from './crt.js';
 import { UI } from './ui.js';
 import { SFX } from './sfx.js';
 import { Music } from './music.js';
-import { Magpie, Lamprey } from './companions.js';
+import { Magpie, Lamprey, MarshToad, RubberChicken, Parrot, PackRat, Ferryman } from './companions.js';
 import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType } from './waves.js';
 import { THEMES } from './themes.js';
@@ -1912,9 +1912,10 @@ class Game {
     // it is built by _updateEnemies itself, because the moment it opens is a
     // frame the enemy sweep is already in.
     this._possumDecoy = null;
-    // The pets, one fixed slot per species: 0 is the MAGPIE, 1 the LAMPREY.
-    // See _syncCompanions.
-    this._companions = [null, null];
+    // The pets, one fixed slot per species: 0 is the MAGPIE, 1 the LAMPREY,
+    // 2 the MARSH TOAD, 3 the RUBBER CHICKEN, 4 the PARROT, 5 the PACK RAT,
+    // 6 the FERRYMAN. See _syncCompanions.
+    this._companions = [null, null, null, null, null, null, null];
     this._deployCtx = {
       obstacles: this.arena.ground,
       enemies: this.enemies,
@@ -1951,9 +1952,14 @@ class Game {
     //     _collectOrb, whoever picked the orb up.
     //   * no onBlast, no deploy, no addHazard. A pet cannot put anything in the
     //     arena and cannot hurt the player.
+    //   * pickups, for the two porters: PACK RAT and FERRYMAN fetch crates off
+    //     the floor, and the floor is this list. They never collect - a plate
+    //     riding a pet's back is still the player's, on the same proximity
+    //     test that has always collected it (see _updatePickups).
     this._compCtx = {
       obstacles: this.arena.obstacles,
       enemies: this.enemies,
+      pickups: this.powerups,
       effects: this.effects,
       sfx: this.sfx,
       hurtEnemy: (e, dmg, dir) => this.hurtEnemy(e, dmg, dir),
@@ -4201,6 +4207,10 @@ class Game {
       this.effects.shockwave(this.player.pos, THEME_DIME, 4, 0.4);
     }
     this.runningActiveItems.start(this, id, def);
+    // THE PARROT HEARS IT HERE. One call into the pets, no bookkeeping: this
+    // is the one funnel every press goes through, which is exactly where a
+    // bird that repeats the press has to listen.
+    for (const c of this._companions) if (c && c.onItemUsed) c.onItemUsed(id, this.time);
     this.sfx.itemUse();
     this.pad.rumble(0.6, 0.5, 200, 2);
   }
@@ -4272,6 +4282,14 @@ class Game {
    * The most recent throw is the one the player is thinking about.
    */
   _findLure() {
+    // THE CHICKEN FIRST. The monkey's "newest wins" rule below exists because
+    // the most recent throw is the one the player is thinking about; the
+    // rubber chicken arms on the HIT, which is always the most recent thing
+    // that happened - and a pet on that contract is a companion, not a
+    // deployable, so it is never in the list below.
+    for (const c of this._companions) {
+      if (c && c.lure && c.armed) return c;
+    }
     for (let i = this._deployed.length - 1; i >= 0; i--) {
       const d = this._deployed[i];
       if (d.lure && d.armed) return d;
@@ -4311,6 +4329,11 @@ class Game {
     const live = this.state === 'playing' && !this._pass;
     this._companion(0, live && m.magpie > 0, Magpie);
     this._companion(1, live && m.lamprey > 0, Lamprey);
+    this._companion(2, live && m.marshToad > 0, MarshToad);
+    this._companion(3, live && m.rubberChicken > 0, RubberChicken);
+    this._companion(4, live && m.parrot > 0, Parrot);
+    this._companion(5, live && m.packRat > 0, PackRat);
+    this._companion(6, live && m.ferryman > 0, Ferryman);
   }
 
   // One slot of the companion list. A fixed index per species rather than a
@@ -4327,7 +4350,6 @@ class Game {
   }
 
   _updateCompanions(dt) {
-    if (!this._companions[0] && !this._companions[1]) return;
     const ctx = this._compCtx;
     ctx.pulse = this.music.pulse;
     ctx.pulseWhole = this.music.pulseWhole;
@@ -8421,6 +8443,12 @@ class Game {
     }
     // PANIC TURRET, placed by the hit that just landed.
     if (this.player.mods.panicTurret > 0) this._panicTurret();
+    // RUBBER CHICKEN - the hit that just landed is what sets it off. The bird
+    // finds out HERE, on the same booking as PANIC TURRET: a hit that was
+    // dodged, warded or grazed away never reaches this line, which is exactly
+    // the population "after you take a hit" means. Whoever answers is the
+    // pet's own business (see js/companions.js).
+    for (const c of this._companions) if (c && c.onPlayerHurt) c.onPlayerHurt(this.time);
     // JUMPER CABLES. Beside PANIC TURRET and BRUISE ROUNDS because it is the
     // third of the same shape: something the player gets back for having been
     // hit, paid on the blow and not on the damage.

@@ -816,6 +816,38 @@ export class SFX {
     this.tone({ f: 260, f2: 520, t: 0.16, type: 'sine', v: 0.18, delay: 0.03 });
   }
 
+  // THE TOAD'S LICK. A slap, not a croak: the sound is the tongue, and the
+  // little rise under it is whatever it took off you coming loose.
+  toad() {
+    this.noise({ t: 0.08, v: 0.15, f: 750, f2: 190, mode: 'lowpass' });
+    this.tone({ f: 190, f2: 340, t: 0.11, type: 'triangle', v: 0.13, delay: 0.02 });
+  }
+
+  // THE RUBBER CHICKEN. A squeeze toy, so the pitch goes UP on the press and
+  // wheezes DOWN on the release - that two-note shape is the whole noise the
+  // real thing makes, at a volume that survives exactly three seconds of fame.
+  chicken(hard = 1) {
+    const v = 0.1 + 0.12 * hard;
+    this.tone({ f: 700 + 250 * hard, f2: 1350, t: 0.09, type: 'square', v });
+    this.tone({ f: 1150, f2: 480, t: 0.16, type: 'square', v: v * 0.8, delay: 0.09 });
+  }
+
+  // THE PARROT'S SQUAWK, replaying the press. A screech rides on one falling
+  // note - brighter than the chicken, drier than the lamprey, and short,
+  // because a bird that re-fires your pact with hell should not out-shout it.
+  parrot() {
+    this.noise({ t: 0.12, v: 0.13, f: 2500, f2: 950, mode: 'bandpass', q: 1.6 });
+    this.tone({ f: 1350, f2: 880, t: 0.1, type: 'sawtooth', v: 0.09, delay: 0.02 });
+  }
+
+  // A PORTER DUCKING UNDER A PLATE, and setting it back down. Two small
+  // notes, low - an errand, not an event, so it must never compete with the
+  // pickup chime the plate makes when the player actually takes it.
+  fetchGrab() {
+    this.tone({ f: 540, f2: 760, t: 0.06, type: 'triangle', v: 0.09 });
+    this.tone({ f: 760, f2: 620, t: 0.06, type: 'triangle', v: 0.07, delay: 0.06 });
+  }
+
   // LITTLE BROTHER'S shot. Deliberately thinner and higher than the player's
   // own gun: two guns firing in one room have to be tellable apart, and the
   // one the player is not holding is the one that gives way.
