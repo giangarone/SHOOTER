@@ -234,6 +234,14 @@ const DEFAULT_MODS = {
                         // waiting for someone to read the wrong one.
   magpie: 0,            // Magpie: the bird that collects orbs
   lamprey: 0,           // Lamprey: the leech that guards the player
+  // ---- THE FAMILIARS -------------------------------------------------------
+  // Five more pets, on the same contract: zero is "not owned" and
+  // Game._syncCompanions stands the animal up the frame it reads a one.
+  marshToad: 0,         // Marsh Toad: licks statuses off the player, 5s cooldown
+  rubberChicken: 0,     // Rubber Chicken: a hit makes the crowd aim at IT, 3s
+  parrot: 0,            // Parrot: repeats the active-item press, 5s late, 30s cooldown
+  packRat: 0,           // Pack Rat: carries ammo plates to the player's feet
+  ferryman: 0,          // Ferryman: carries health plates to the player's feet
 
   // ---- THE POSTURE AND MAGAZINE PICKS -------------------------------------
   //
