@@ -33,6 +33,7 @@
 import { resolveIcon, pixelPalette, GRID, PIXEL_ICON_KEYS } from './js/pixelicons.js';
 import { PASSIVE_ITEMS } from './js/items/passive/index.js';
 import { ACTIVE_ITEMS } from './js/items/active/index.js';
+import { DONATION_ITEMS, donationItemKey } from './js/items/donation/index.js';
 
 // Every icon in the table has one job - to be told apart from all the others
 // at a glance - and that is a judgement you can only make with the whole set
@@ -65,10 +66,16 @@ EXTRA[AMMO_PICKUP.icon] = { name: 'AMMO PICKUP', theme: AMMO_PICKUP.color };
 for (const def of Object.values(PLAYER_STATUS)) {
   EXTRA[def.icon] = { name: def.label, theme: def.color };
 }
+// Donation rewards are keyed `donation/<id>` in the icon table but bare in
+// their catalogue - the same join test/icons.mjs does, and the same one the
+// single-icon viewer does. Miss it and every machine item wears the grey
+// fallback colour under its own key instead of its name.
+const DONATION = Object.fromEntries(Object.entries(DONATION_ITEMS)
+  .map(([id, def]) => [donationItemKey(id), def]));
 // A drawing nothing claims still gets a cell, named after its key. `npm run
 // test:icons` is what fails on an orphan; a contact sheet that refused to draw
 // would only hide the thing it exists to show.
-const meta = (k) => PASSIVE_ITEMS[k] || ACTIVE_ITEMS[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
+const meta = (k) => PASSIVE_ITEMS[k] || ACTIVE_ITEMS[k] || DONATION[k] || EXTRA[k] || { name: k, theme: 0x9fb4d8 };
 
 const grid = document.getElementById('grid');
 const cells = [];
