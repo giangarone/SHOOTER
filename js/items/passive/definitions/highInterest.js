@@ -9,15 +9,18 @@ import { definePassiveItem } from '../shared.js';
 // empty and not before.
 //
 // IT COMPOUNDS, as the word means: the interest is paid into the balance the
-// next wave's interest is measured against.
+// next wave's interest is measured against. THE CAP is what keeps that honest:
+// a compounding fifth paid more than every other money pick combined once a
+// run got rich, so the rate came down to a tenth and the payout is bounded at
+// $2,000 a wave - banking still pays, it just stops being the whole build.
 export const id = 'highInterest';
 
 export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs }) => ({
     name: 'HIGH INTEREST',
     max: 1,
     theme: 0xe0b040,
-    effects: [['UNSPENT CREDITS EARN', NOTE], ['20% INTEREST', GOOD], ['AT EVERY WAVE END', NOTE]],
-    apply: (mods, n) => { mods.interest = 0.2 * n; },
+    effects: [['UNSPENT CREDITS EARN', NOTE], ['10% INTEREST', GOOD], ['CAPPED $2,000 PER WAVE', NOTE]],
+    apply: (mods, n) => { mods.interest = 0.1 * n; mods.interestCap = 2000; },
 }));
 
 export const icon = [

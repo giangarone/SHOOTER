@@ -376,7 +376,8 @@ const DEFAULT_MODS = {
                         // thing in a different pool - see Game._strayMercy.
   gristleChance: 0,     // Gristle: chance a health crate also banks
   gristleHp: 0,         // this much PERMANENT max health
-  interest: 0,          // High Interest: fraction of the balance paid at a wave end
+  interest: 0,          // High Interest: fraction of the balance paid at a wave end,
+  interestCap: 0,       // no more than this much per wave
   paperTrail: 0,        // Paper Trail: damage gained per $1,000 ever SPENT
   beltStep: 0,          // Money Belt: damage taken reduced by this much per
   beltPer: 0,           // this many credits held, up to
@@ -609,7 +610,7 @@ const DEFAULT_MODS = {
   donationLowHpAt: 0,
   donationFreeShot: 0,     // chance a trigger pull spends no ammunition
   donationMagFlat: 0,      // flat rounds added after magazine multipliers
-  donationHeadshotFree: 0, // refund the ammunition spent by a headshot
+  donationHeadshotFree: 0, // chance a headshot refunds the ammunition it spent
   donationCreditSiphon: 0, // share of each payout banked before it hits floor
   // The second generation of machine rewards. Same contract as the block
   // above: zero is "not owned", every reader tests for it, and anything a

@@ -232,10 +232,16 @@ export class UI {
     // Keyed off the displayed numbers, not the clamped bar width, so overheal
     // ticking back down to full still updates the readout - and so a shield
     // being eaten on a full health bar moves the bar at all.
+    //
+    // THE MAXIMUM IS ONE OF THE DISPLAYED NUMBERS, and must be in this key: a
+    // CERAMIC SKIN pick raises it without touching hp or shield, and a guard
+    // that missed that left the readout on the old maximum until the next hit
+    // or heal happened to move hp.
     const shown = Math.ceil(Math.max(0, h));
     const sh = Math.ceil(Math.max(0, shield));
-    if (this._c.hp === shown && this._c.shield === sh) return;
+    if (this._c.hp === shown && this._c.hpMax === max && this._c.shield === sh) return;
     this._c.hp = shown;
+    this._c.hpMax = max;
     this._c.shield = sh;
     const live = Math.max(0, h);
     const den = Math.max(max, live) + Math.max(0, shield);
@@ -1135,12 +1141,12 @@ export class UI {
     tier.className = 'dtile-tier';
     name.appendChild(tier);
     body.appendChild(name);
-    // WHAT IT DOES, in the pool's own words. A cost keeps its red - the same
-    // rule the build sheet follows in _entry below - because a drawback read
-    // as a benefit is the one way this list can mislead the person reading it.
+    // WHAT IT DOES, in the pool's own words, coloured by sign as the build
+    // sheet colours it in _entry below - muted until the tile lights as owned,
+    // when it takes the card's own green and red.
     for (const [text, sign] of Array.isArray(def.effects) ? def.effects : []) {
       const line = document.createElement('span');
-      line.className = sign < 0 ? 'dtile-line bad' : 'dtile-line';
+      line.className = sign < 0 ? 'dtile-line bad' : sign > 0 ? 'dtile-line good' : 'dtile-line';
       line.textContent = text;
       body.appendChild(line);
     }
@@ -1280,10 +1286,10 @@ export class UI {
     // they get here; this is the net under that.
     for (const [text, sign] of Array.isArray(def.effects) ? def.effects : []) {
       const line = document.createElement('div');
-      // PLAIN, EXCEPT FOR A COST. See .inv-line in styles.css: the sign colours
-      // belong to an offer being weighed, and this is a sheet of things already
-      // owned. Only a live drawback is still worth a colour.
-      line.className = sign < 0 ? 'inv-line bad' : 'inv-line';
+      // COLOURED BY SIGN, green for a benefit and red for a cost - the same
+      // read the totem card gave the lines when the offer was weighed. See
+      // .inv-line in styles.css.
+      line.className = sign < 0 ? 'inv-line bad' : sign > 0 ? 'inv-line good' : 'inv-line';
       line.textContent = text;
       body.appendChild(line);
     }

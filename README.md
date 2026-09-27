@@ -1184,7 +1184,7 @@ The shared reward pool is:
 | OVERPRESSURE | +40% damage |
 | CLOCKWORK SEAR | +20% fire rate |
 | DRUM MAJOR | +30 magazine capacity |
-| SKULL RECEIPT | Headshots refund all ammunition spent by that trigger pull |
+| SKULL RECEIPT | 40% of headshots refund all ammunition spent by that trigger pull |
 | SCRAP METAL | A reload started with rounds still in the magazine converts them, one shield point each |
 | CHAIN LETTER | +4% fire rate per consecutive hit, capping at +40%; a miss resets the streak |
 | AMMO ALCHEMIST | Picking up an ammo crate arms a random eight-second shot element: burn, venom, ice, lightning or fear |
@@ -1764,7 +1764,7 @@ which three crates are worth nothing.
 
 | Passive Item | Effect |
 | --- | --- |
-| HIGH INTEREST | Banked credits earn 20% interest at every wave end, compounding |
+| HIGH INTEREST | Banked credits earn 10% interest at every wave end, compounding, capped at $2,000 |
 | PAPER TRAIL | +1% damage per $1,000 the run has ever spent, permanently |
 | MONEY BELT | -1% damage taken per $500 held, up to -20% |
 | FIRE SALE | Orbs and pickups are worth 2x and despawn 70% faster |

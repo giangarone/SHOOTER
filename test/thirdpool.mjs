@@ -464,7 +464,8 @@ try {
 
     // ---- 5. MONEY -----------------------------------------------------------
 
-    // HIGH INTEREST. A fifth of the balance, at the boundary, compounding.
+    // HIGH INTEREST. A tenth of the balance, capped at $2,000, at the
+    // boundary, compounding.
     bare();
     give('highInterest');
     const heldCredits = g.credits;
@@ -473,6 +474,9 @@ try {
     o.interestBalanceOne = g.credits;
     o.interestTwo = g._payInterest();
     o.interestBalanceTwo = g.credits;
+    g.credits = 50000;
+    o.interestCapped = g._payInterest();
+    o.interestBalanceCap = g.credits;
     g.credits = 0;
     o.interestBroke = g._payInterest();
     // ...and nothing at all without it.
@@ -939,10 +943,13 @@ try {
   ok('and a run without it drops none', r.curtainBare === 0, String(r.curtainBare));
 
   // ---- money ----
-  ok('high interest pays a fifth', r.interestOne === 200 && r.interestBalanceOne === 1200,
+  ok('high interest pays a tenth', r.interestOne === 100 && r.interestBalanceOne === 1100,
     `${r.interestOne}/${r.interestBalanceOne}`);
-  ok('and it compounds', r.interestTwo === 240 && r.interestBalanceTwo === 1440,
+  ok('and it compounds', r.interestTwo === 110 && r.interestBalanceTwo === 1210,
     `${r.interestTwo}/${r.interestBalanceTwo}`);
+  ok('and it is capped at two grand a wave',
+    r.interestCapped === 2000 && r.interestBalanceCap === 52000,
+    `${r.interestCapped}/${r.interestBalanceCap}`);
   ok('and an empty wallet earns nothing', r.interestBroke === 0, String(r.interestBroke));
   ok('and a run without it earns nothing', r.interestBare === 0, String(r.interestBare));
 

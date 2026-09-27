@@ -7749,7 +7749,12 @@ class Game {
     // and before any last-round mechanic asks whether the magazine emptied.
     // A refunded headshot did not empty it, so Pocket Grenade, Chain Feed and
     // Death Clause must all see the zero cost written by refundLastShotAmmo.
-    if (mods.donationHeadshotFree > 0 && this._shotWasHead) {
+    //
+    // THE REFUND IS A ROLL, not a promise: a flat hundred percent made a
+    // precise trigger the only ammo economy a build ever needed, so forty
+    // percent of headshots pay instead of all of them.
+    if (mods.donationHeadshotFree > 0 && this._shotWasHead
+      && Math.random() < mods.donationHeadshotFree) {
       if (this.player.refundLastShotAmmo()) this.ui.flashReserve();
     }
     // POCKET GRENADE. The round that emptied the magazine, as a blast.
@@ -9238,7 +9243,7 @@ class Game {
   }
 
   /**
-   * HIGH INTEREST. A fifth of the balance, at every wave end.
+   * HIGH INTEREST. A tenth of the balance, up to $2,000, at every wave end.
    *
    * PAID AT THE BOUNDARY AND NOT PER SECOND, which is the whole of why this is
    * not a way of farming the shop: a rate would make standing still the best
@@ -9255,7 +9260,9 @@ class Game {
   _payInterest() {
     const rate = this.player.mods.interest;
     if (rate <= 0 || this.credits <= 0) return 0;
-    const earned = Math.floor(this.credits * rate);
+    let earned = Math.floor(this.credits * rate);
+    const cap = this.player.mods.interestCap;
+    if (cap > 0) earned = Math.min(earned, cap);
     if (earned <= 0) return 0;
     this.credits += earned;
     this._creditsDirty = true;

@@ -19,6 +19,7 @@
 //   9. HIGH STAKES prices read FREE, on both consoles.
 //  10. The Forge-Tyrant opens its core often enough to be a mechanic.
 //  11. BOTTOM FEEDER's window is on the HUD.
+//  12. SKULL RECEIPT refunds a headshot's ammunition only on a made 40% roll.
 import { launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8241;
@@ -423,6 +424,70 @@ try {
   });
   check('BOTTOM FEEDER wears a chip while its window is open', chip.shown);
   check('and it goes when the window does', !chip.gone);
+
+  // ---- 12. SKULL RECEIPT's roll ----
+  // Fired through Game.shoot(), the real trigger path: the refund is settled
+  // there (see the SKULL RECEIPT note in main.js), not in _firePellet - the
+  // straight-at-the-head setup is section 2's own.
+  const receipt = await page.evaluate(async () => {
+    const g = window.__game;
+    const Enemy = g.__EnemyForTest;
+    const THREE = await import('three');
+    const p = g.player;
+    const e = new Enemy('tank', new THREE.Vector3(0, 0, 0), 1, 1, 1);
+    g.scene.add(e.group);
+    e.hp = 100000;
+    g.enemies.length = 0;
+    g.enemies.push(e);
+    e.pos.set(0, 0, -8);
+    e.group.position.copy(e.pos);
+    e.group.updateMatrixWorld(true);
+    const at = new THREE.Vector3();
+    e.head.getWorldPosition(at);
+    g.camera.position.set(0, at.y, 0);
+    g.camera.lookAt(at);
+    g.camera.updateMatrixWorld(true);
+    p.takeDonationItem('skullReceipt', g);
+    // A pinned cone, same as section 2's spread of zero: a mocked Math.random
+    // would otherwise spend the shot's whole jitter walking off the head.
+    const spread0 = g._shotSpread;
+    g._shotSpread = () => 0;
+    let refunds = 0;
+    const orig = p.refundLastShotAmmo.bind(p);
+    p.refundLastShotAmmo = () => { refunds++; return orig(); };
+    // A mid-magazine round, so the refund landing is a number that moves.
+    const fire = () => {
+      p.mag = 5;
+      p.fireCd = 0;
+      p.reloading = 0;
+      p.status.fear = 0;
+      g.input.shootFresh = true;
+      refunds = 0;
+      g.shoot();
+      return { refunds, mag: p.mag, head: g._shotWasHead };
+    };
+    const real = Math.random;
+    Math.random = () => 0;      // a made roll: 0 < 0.4 always
+    const won = fire();
+    const wonHead = won.head;
+    Math.random = () => 0.99;   // and a missed one
+    const lost = fire();
+    Math.random = real;
+    g._shotSpread = spread0;
+    p.refundLastShotAmmo = orig;
+    delete p.donationItems.skullReceipt;
+    p.rebuildMods();
+    g.input.shootFresh = false;
+    e.dispose();
+    g.scene.remove(e.group);
+    g.enemies.length = 0;
+    return { won, lost, wonHead };
+  });
+  check('SKULL RECEIPT sees the headshot', receipt.wonHead, JSON.stringify(receipt.won));
+  check('and pays the trigger back on a made roll',
+    receipt.won.refunds === 1 && receipt.won.mag === 5, JSON.stringify(receipt.won));
+  check('and not on a missed one',
+    receipt.lost.refunds === 0 && receipt.lost.mag === 4, JSON.stringify(receipt.lost));
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

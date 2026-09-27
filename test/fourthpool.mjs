@@ -614,6 +614,14 @@ try {
     // reserve they will not spend.
     g.ui.setHealth(100, 100, 1);
     o.barOnePoint = bar();
+    // A MAX-ONLY CHANGE MUST REPAINT. CERAMIC SKIN raises the denominator
+    // without touching hp or shield, and the write-cache used to key off only
+    // those two - the readout kept the old maximum until the next hit or heal
+    // happened to move hp.
+    g.ui._c = {};
+    g.ui.setHealth(100, 100, 0);
+    g.ui.setHealth(100, 140, 0);
+    o.barGrownMax = bar();
 
     // PLASMA BAG, through the crate's OWN apply() - a test that re-implemented
     // the payload would be asserting on its own copy of the thing under test.
@@ -1297,6 +1305,8 @@ try {
   // not spend.
   ok('and a single point of shield still lights a cell',
     r.barOnePoint.shield > 0, String(r.barOnePoint.shield));
+  ok('a max-health change alone repaints the readout',
+    /140/.test(r.barGrownMax.text), r.barGrownMax.text);
 
   ok('a crate gives no shield on its own', r.crateShieldBare === 0,
     String(r.crateShieldBare));

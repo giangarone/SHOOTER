@@ -3,8 +3,8 @@ import { defineDonationItem } from '../shared.js';
 export const id = 'skullReceipt';
 export default defineDonationItem(({ GOOD }) => ({
   name: 'SKULL RECEIPT', theme: 0xc9d3d8,
-  effects: [['HEADSHOTS USE NO AMMO', GOOD]],
-  apply: (mods) => { mods.donationHeadshotFree = 1; },
+  effects: [['HEADSHOTS USE NO AMMO 40% OF THE TIME', GOOD]],
+  apply: (mods) => { mods.donationHeadshotFree = 0.4; },
 }));
 
 // A skull sighted for the headshot, stamped above its torn receipt.
