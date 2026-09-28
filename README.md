@@ -2959,6 +2959,10 @@ player is clear the field is ignored entirely, which is most of the time in an
 arena this open and costs one segment/box test. Otherwise the enemy follows the
 downhill chain a few cells ahead and aims at the farthest cell it still has a
 clear line to, which cuts the staircase off the path and rounds corners.
+On clear ground, each ground enemy keeps a slight left or right approach
+angle of its own. That spreads a chasing crowd before bodies collide. The
+angle fades as they close in, and a blocked side step gives way to the normal
+route, so narrow gaps and jump takeoffs stay precise.
 
 Retreats - a feared enemy, a shooter backing off its preferred range - reverse
 the straight line instead of the path. Running away has no destination to route

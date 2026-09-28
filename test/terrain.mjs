@@ -452,6 +452,58 @@ check('grid spans the interior', cellCentre(0) === -18 && cellCentre(9) === 18);
     big.blocked[cell(big, 0, 1.4)] === 0 &&
     big.dist[cell(big, 0, 8)] !== Infinity);
 
+  // Two chasers starting in the same spot should split paths yet both still
+  // close on the real player. Run them separately so crowd push cannot supply
+  // the difference by accident.
+  {
+    const type = '__terrainApproach';
+    ENEMY_TYPES[type] = {
+      hp: 100, speed: 3.4, damage: 1, value: 1, scale: 1,
+      radius: 0.5, mass: 1, color: 0xff4400, eye: 0xffffff,
+      ai: (_e, a) => {
+        if (a.dist > 1) { a.vx = a.px * a.sp; a.vz = a.pz * a.sp; }
+      },
+    };
+    const grid = new NavGrid([], 22, 0.5);
+    const chasers = [0, 1].map(() => new Enemy(type, new THREE.Vector3(-10, 0, 0), 1, 1, 1));
+    const halfway = [];
+    const final = [];
+    for (const e of chasers) {
+      const ctx = {
+        player: { pos: new THREE.Vector3(0, 0, 0) },
+        enemies: [e], obstacles: [], nav: grid, time: 0, beat: 0, level: 0,
+      };
+      for (let i = 0; i < 90; i++) {
+        ctx.time += 1 / 60;
+        grid.update(1 / 60, 0, 0);
+        e.update(1 / 60, ctx);
+      }
+      halfway.push({ x: e.pos.x, z: e.pos.z });
+      for (let i = 0; i < 180; i++) {
+        ctx.time += 1 / 60;
+        grid.update(1 / 60, 0, 0);
+        e.update(1 / 60, ctx);
+      }
+      final.push(Math.hypot(e.pos.x, e.pos.z));
+      e.dispose();
+    }
+    delete ENEMY_TYPES[type];
+    check('chasers take distinct approaches without crowd push',
+      halfway[0].z * halfway[1].z < 0 &&
+      Math.abs(halfway[0].z - halfway[1].z) > 0.9 &&
+      halfway.every((p) => p.x > -7), JSON.stringify(halfway));
+    check('both varied approaches still reach the player',
+      final.every((d) => d < 1.3), JSON.stringify(final));
+    const sideCover = [box(-8.6, 1.5, 0.9, 0.7, 3, 0.5)];
+    const guarded = new NavGrid(sideCover, 22, 0.5);
+    guarded.update(1, 0, 0);
+    const heading = {};
+    guarded.steer(-10, 0, heading, 0, 0.5, 0.22);
+    check('an angled approach yields to nearby cover',
+      guarded._sight(-10, 0, 0, 0, 0) && Math.abs(heading.z) < 0.01,
+      JSON.stringify(heading));
+  }
+
   // ---- COVER YOU CANNOT STEP ONTO --------------------------------------
   //
   // The gap between the two numbers: a 0.95m speaker cabinet is over

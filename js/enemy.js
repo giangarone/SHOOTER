@@ -326,6 +326,11 @@ export class Enemy {
     // instead of climbing. See the blend in update().
     this._navX = 0;
     this._navZ = 0;
+    // A stable side preference spreads a wave out before bodies actually
+    // overlap. Alternate sides so a whole spawn cannot drift to one flank;
+    // vary the angle per body without a new random draw each frame.
+    const spread = (Math.imul(this.id, 0x9e3779b1) >>> 0) / 0x100000000;
+    this.approachBias = (this.id & 1 ? 1 : -1) * (0.11 + spread * 0.11);
     this.attackCd = 0.8 + Math.random();
     this.windup = 0;
     // Seconds left on a swing that has already been thrown - see _meleeCycle.
@@ -998,7 +1003,8 @@ export class Enemy {
     // standing ON the crate, and the route it gets back is the one a thing on
     // top of the crate would want.
     _steer.jump = false;
-    if (nav && nav.steer(this.pos.x, this.pos.z, _steer, this.pos.y, this.radius)) {
+    if (nav && nav.steer(this.pos.x, this.pos.z, _steer, this.pos.y,
+                         this.radius, this.approachBias)) {
       px = _steer.x;
       pz = _steer.z;
     }

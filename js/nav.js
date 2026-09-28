@@ -17,8 +17,8 @@
 //
 // TWO SMOOTHING PASSES keep it from looking like grid movement:
 //   1. If the straight line to the player is clear, the field is ignored
-//      entirely and the enemy walks straight - which is most of the time, in
-//      an arena this open, and costs one slab test.
+//      entirely. A small per-enemy side angle can spread the approach when
+//      the next steps are clear; it fades near the player.
 //   2. Otherwise the enemy follows the downhill chain a few cells ahead and
 //      aims at the FARTHEST cell it still has a clear line to. That is string
 //      pulling: it cuts the staircase off a grid path and rounds corners.
@@ -714,19 +714,43 @@ export class NavGrid {
    * @param {number} x
    * @param {number} z
    * @param {{x:number, z:number}} out  written in place
+   * @param {number} approachBias  signed per-enemy angle on clear approaches
    * @returns {boolean}  false when there is no usable route and the caller
    *   should fall back to heading straight at the player
    */
-  steer(x, z, out, y = 0, radius = this.radius) {
+  steer(x, z, out, y = 0, radius = this.radius, approachBias = 0) {
     if (this.wide && radius > this.radius + 0.05) {
-      return this.wide.steer(x, z, out, y);
+      return this.wide.steer(x, z, out, y, radius, approachBias);
     }
     out.jump = false;
     if (!this.ready) return false;
 
     // Pass 1: nothing in the way, so ignore the grid entirely.
     if (this._sight(x, z, this.tx, this.tz, Math.min(y, this.ty))) {
-      return this._aim(x, z, this.tx, this.tz, out);
+      if (!this._aim(x, z, this.tx, this.tz, out)) return false;
+      // A small, per-body approach angle breaks up the single-file chase on
+      // open floor. Fade it before melee range; test the angled next steps so
+      // cover and arena edges still get the exact route they need.
+      const distance = Math.hypot(this.tx - x, this.tz - z);
+      const angle = approachBias * Math.min(1, Math.max(0, (distance - 2) / 4));
+      if (angle !== 0) {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const bx = out.x * cos - out.z * sin;
+        const bz = out.x * sin + out.z * cos;
+        const edge = this.bound - this.radius;
+        const aheadX = x + bx * 2;
+        const aheadZ = z + bz * 2;
+        const base = Math.min(y, this.ty);
+        const ahead = this.index(aheadX, aheadZ);
+        if (Math.abs(aheadX) < edge && Math.abs(aheadZ) < edge &&
+            !this.blocked[ahead] && this.height[ahead] <= base + this.stepHeight &&
+            this._sight(x, z, aheadX, aheadZ, base)) {
+          out.x = bx;
+          out.z = bz;
+        }
+      }
+      return true;
     }
 
     let c = this._standCell(x, z, y);
