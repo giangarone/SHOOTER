@@ -3,16 +3,17 @@
 // one that comes round it.
 //
 // HOW IT WORKS
-//   The arena floor is baked once into a coarse occupancy grid: a cell is
+//   Each arena layout is baked into a coarse occupancy grid: a cell is
 //   blocked if its centre falls inside any obstacle AABB grown by the enemy
-//   radius, so a path through open cells is a path a 0.5m-wide enemy can
-//   actually walk. Every few frames a breadth-first flood from the player's
-//   cell fills a distance field over that grid, and an enemy steers by walking
-//   downhill through it.
+//   radius, so an open cell is somewhere an enemy can stand. Short, clear
+//   jumps between cells are baked beside the walking links. Every few frames
+//   a reverse Dijkstra search from the player prices both kinds of travel,
+//   and each enemy follows the cheapest route.
 //
-//   One field serves every enemy. That is the whole reason for doing it this
-//   way rather than an A* per enemy: thirty enemies all want a route to the
-//   same place, so the route is computed once and read thirty times.
+//   One field serves every enemy in a clearance size. The widest bosses use a
+//   second field behind navBig, because a jump cleared for a 1.6m radius can
+//   still clip a 2m body. This is cheaper than an A* for each of thirty
+//   enemies chasing the same player.
 //
 // TWO SMOOTHING PASSES keep it from looking like grid movement:
 //   1. If the straight line to the player is clear, the field is ignored
@@ -50,11 +51,14 @@
 // and the piece library in terrain.js: decks stay under it, walls stay over.
 //
 // The arena is rebuilt between waves and never during one, so the bake runs
-// again on each new layout - see rebake(). Nothing here allocates after the
-// constructor: the height field, the distance field, the queue and the blocked
-// mask are typed arrays sized once and rewritten in place.
+// again on each new layout - see rebake(). The per-cell search arrays are
+// reused; jump links are rebuilt only when the obstacle layout changes.
 
 import { segmentClear, AGENT_HEIGHT, STEP_HEIGHT } from './utils.js';
+import {
+  JUMP_RISE, BOSS_JUMP_RISE, JUMP_RANGE, BOSS_JUMP_RANGE, JUMP_COST,
+  jumpClear, jumpLift,
+} from './enemy-jump.js';
 
 // Half a metre. Fine enough to find the gap between two crates, coarse enough
 // that a full flood is ~8000 cells - well under a millisecond.
@@ -103,12 +107,12 @@ export class NavGrid {
    * @param {number} bound
    * @param {number} agentRadius
    * @param {number} agentHeight
-   * @param {number} stepHeight  how far up this agent walks. Pass 0 for one
-   *   that cannot climb at all - bosses are routed that way, since a body that
-   *   size stepping onto a crate looks like a bug rather than a step.
+   * @param {number} stepHeight  how far up this agent walks without jumping.
+   * @param {number} wideRadius  optional second field for larger bodies using
+   *   this same shared grid; their jump clearance must match their true size.
    */
   constructor(obstacles, bound, agentRadius = 0.5, agentHeight = AGENT_HEIGHT,
-              stepHeight = STEP_HEIGHT) {
+              stepHeight = STEP_HEIGHT, wideRadius = 0) {
     // Ground agents path UNDER anything suspended above their heads, so the
     // catwalks are filtered out here rather than special-cased later. This one
     // list feeds the bake AND both line-of-sight tests below, so filtering
@@ -124,6 +128,7 @@ export class NavGrid {
     this.agentHeight = agentHeight;
     this.stepHeight = stepHeight;
     this.bound = bound;
+    this.allObstacles = obstacles;
     this.obstacles = obstacles.filter((o) => o.min.y <= agentHeight);
     this.radius = agentRadius;
     // Line-of-sight is tested a little tighter than the agent really is.
@@ -139,7 +144,19 @@ export class NavGrid {
     // steering below; written only by _bake.
     this.height = new Float32Array(n);
     this.dist = new Float32Array(n);
-    this.queue = new Int32Array(n);
+    this.queue = new Int32Array(n); // fixed-size Dijkstra heap
+    this.heapPos = new Int32Array(n);
+    this.settled = new Uint8Array(n);
+    this.next = new Int32Array(n);
+    this.nextJump = new Int32Array(n);
+    this.jumpHead = new Int32Array(n);
+    this.jumpFrom = [];
+    this.jumpNext = [];
+    this.jumpCost = [];
+    this.jumpLift = [];
+    this.heapSize = 0;
+    this.jumpRise = agentRadius > 0.8 ? BOSS_JUMP_RISE : JUMP_RISE;
+    this.jumpRange = agentRadius > 0.8 ? BOSS_JUMP_RANGE : JUMP_RANGE;
     this.ready = false;
     this.targetCell = -1;
     this.timer = 0;
@@ -151,23 +168,27 @@ export class NavGrid {
     this.ty = 0;
 
     this._bake(bound);
+    this.wide = wideRadius > agentRadius
+      ? new NavGrid(obstacles, bound, wideRadius, agentHeight, stepHeight)
+      : null;
   }
 
   /**
    * Re-derive the grid from a changed obstacle list. Called once per wave,
    * after terrain has finished rising and published its AABBs.
    *
-   * Allocates nothing but the filtered array: `blocked`, `dist` and `queue`
-   * are sized off the arena, which does not change, so they are rewritten in
-   * place. The field is invalidated rather than reflooded here - the next
-   * update() call does that, against the player's position at the time.
+   * The per-cell arrays are sized off the arena and reused. The obstacle
+   * filter and jump links are rebuilt for the new layout, then the field is
+   * invalidated until the next update() call sees the player's position.
    */
   rebake(obstacles) {
+    this.allObstacles = obstacles;
     this.obstacles = obstacles.filter((o) => o.min.y <= this.agentHeight);
     this._bake(this.bound);
     this.ready = false;
     this.targetCell = -1;
     this.timer = 0;
+    if (this.wide) this.wide.rebake(obstacles);
   }
 
   // Marks every cell an enemy cannot stand in. Obstacles are grown by a little
@@ -179,10 +200,7 @@ export class NavGrid {
     // unreachable, and leaving them open lets a route hug a wall it will then
     // be shoved off.
     const edge = bound - 0.6;
-    // An agent that cannot step treats ANY raised surface as a wall, which is
-    // exactly the behaviour this grid had before it knew about height - so a
-    // boss grid is bit-for-bit what it always was.
-    const maxStand = this.stepHeight > 0 ? MAX_STAND : 0.02;
+    const maxStand = MAX_STAND;
     // WHAT BREAKS A SIGHTLINE, in two lists, because the answer depends on
     // how high the agent is standing.
     //
@@ -233,6 +251,90 @@ export class NavGrid {
         this.height[i] = top;
       }
     }
+    this._bakeJumps();
+  }
+
+  // Directed shortcuts over low geometry. The grid still carries ordinary
+  // walking edges, so a jump wins only when its distance plus takeoff cost is
+  // shorter than going around. A landing on raised ground needs real support;
+  // the grown occupancy cell alone can describe air beside a narrow crate.
+  _bakeJumps() {
+    const { dim, blocked, height, jumpHead } = this;
+    jumpHead.fill(-1);
+    this.jumpFrom.length = 0;
+    this.jumpNext.length = 0;
+    this.jumpCost.length = 0;
+    this.jumpLift.length = 0;
+    const maxCells = Math.floor(this.jumpRange / CELL);
+    for (let a = 0; a < blocked.length; a++) {
+      if (blocked[a]) continue;
+      const cx = a % dim;
+      const cz = (a / dim) | 0;
+      const ay = height[a];
+      const ax = this.cellX(a);
+      const az = this.cellZ(a);
+      for (let k = 0; k < 4; k++) {
+        let firstLen = 1;
+        let fx = cx + NX[k];
+        let fz = cz + NZ[k];
+        if (fx < 0 || fz < 0 || fx >= dim || fz >= dim) continue;
+        let first = fz * dim + fx;
+        // The grown grid can put a large boss's nearest floor cell slightly
+        // inside its real collision radius. Start one cell farther back when
+        // necessary; the actual arc check below rejects any unsafe launch.
+        if (height[first] <= ay + this.stepHeight + 1e-4) {
+          firstLen = 2;
+          fx += NX[k];
+          fz += NZ[k];
+          if (fx < 0 || fz < 0 || fx >= dim || fz >= dim) continue;
+          first = fz * dim + fx;
+        }
+        if (blocked[first] || height[first] <= ay + this.stepHeight + 1e-4 ||
+            height[first] > ay + this.jumpRise) continue;
+        let highest = height[first];
+        let highLanding = false;
+        for (let len = firstLen + 1; len <= maxCells; len++) {
+          const ix = cx + NX[k] * len;
+          const iz = cz + NZ[k] * len;
+          if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) break;
+          const b = iz * dim + ix;
+          if (blocked[b] || height[b] > ay + this.jumpRise) break;
+          highest = Math.max(highest, height[b]);
+          const by = height[b];
+          const elevated = by > ay + this.stepHeight + 1e-4;
+          if (elevated && highLanding) continue;
+          if (!elevated && by < ay - DROP_MAX) break;
+          const bx = this.cellX(b);
+          const bz = this.cellZ(b);
+          if (elevated && !this._landingSupported(bx, bz, by)) continue;
+          const lift = jumpLift(ay, by, highest);
+          if (!jumpClear(ax, ay, az, bx, by, bz, this.radius,
+                         this.agentHeight, lift, this.allObstacles)) continue;
+          const edge = this.jumpFrom.length;
+          this.jumpFrom.push(a);
+          this.jumpNext.push(jumpHead[b]);
+          this.jumpCost.push(len + JUMP_COST);
+          this.jumpLift.push(lift);
+          jumpHead[b] = edge;
+          if (elevated) highLanding = true;
+          else break; // first floor beyond the obstacle is the useful crossing
+        }
+      }
+    }
+  }
+
+  _landingSupported(x, z, y) {
+    for (const b of this.obstacles) {
+      if (Math.abs(b.max.y - y) > 0.04 ||
+          x <= b.min.x + 0.05 || x >= b.max.x - 0.05 ||
+          z <= b.min.z + 0.05 || z >= b.max.z - 0.05) continue;
+      // A boss standing on a speaker-sized box looks suspended in mid-air.
+      if (this.radius > 0.8 &&
+          (b.max.x - b.min.x < this.radius * 1.5 ||
+           b.max.z - b.min.z < this.radius * 1.5)) continue;
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -358,6 +460,7 @@ export class NavGrid {
   // REBUILD_INTERVAL, and only when the player has actually changed cell -
   // standing still costs nothing.
   update(dt, x, z, y = 0) {
+    if (this.wide) this.wide.update(dt, x, z, y);
     this.tx = x;
     this.tz = z;
     this.ty = y;
@@ -371,11 +474,9 @@ export class NavGrid {
     this.ready = true;
   }
 
-  // Breadth-first flood outward from the player. Costs differ between straight
-  // and diagonal steps, so this is not a shortest-path field in the strict
-  // sense - but every cell is written from a neighbour with a strictly smaller
-  // value, which is the only property downhill steering needs: there are no
-  // local minima to trap an enemy short of the player.
+  // A reverse Dijkstra field makes each cell choose between walking and a
+  // jump by actual travel cost. The old FIFO flood visited each cell only
+  // once; it could not compare a short jump with a longer route around cover.
   _flood(target) {
     // THE PLAYER IS NOT ALWAYS SOMEWHERE A ROUTE CAN END. Inside a wall's
     // grown footprint, up on a crate it jumped onto, sealed in a pocket the
@@ -397,28 +498,21 @@ export class NavGrid {
   }
 
   /**
-   * One breadth-first pass. `ring` seeds from the open cells bordering the
+   * One weighted search. `ring` seeds from the open cells bordering the
    * island the first pass found, rather than from the target itself; the
-   * island is still sitting in `queue[0..n)` from that pass when it is called,
-   * which is why the two are not independent and this is private to _flood.
+   * island is still marked by finite `dist` values from that pass, which is
+   * why the two are not independent and this is private to _flood.
    *
    * @returns {number} how many cells the flood reached
    */
   _floodFrom(target, ring) {
-    const { dim, dist, blocked, queue } = this;
-    let head = 0;
-    let tail = 0;
+    const { dim, dist, blocked, next, nextJump, settled, heapPos } = this;
+    let seeds = null;
 
-    if (!ring) {
-      dist.fill(Infinity);
-      if (!blocked[target]) {
-        dist[target] = 0;
-        queue[tail++] = target;
-      }
-    } else {
+    if (ring) {
       // The island's own cells, borrowed before dist is wiped: everything the
       // first pass reached is at a finite distance and nothing else is.
-      const seeds = [];
+      seeds = [];
       for (let i = 0; i < dist.length; i++) {
         if (dist[i] === Infinity) continue;
         const cx = i % dim;
@@ -431,17 +525,11 @@ export class NavGrid {
           if (!blocked[j] && dist[j] === Infinity) seeds.push(j);
         }
       }
-      dist.fill(Infinity);
-      for (const j of seeds) {
-        if (dist[j] !== Infinity) continue;
-        dist[j] = 0;
-        queue[tail++] = j;
-      }
       // Nothing borders it - the player is sealed in. Widen until something
       // open turns up, so the field is never left empty.
       const tX = target % dim;
       const tZ = (target / dim) | 0;
-      for (let r = 1; r <= 12 && tail === 0; r++) {
+      for (let r = 1; r <= 12 && seeds.length === 0; r++) {
         for (let dz = -r; dz <= r; dz++) {
           for (let dx = -r; dx <= r; dx++) {
             // Ring only: the interior was covered by a smaller r.
@@ -451,15 +539,33 @@ export class NavGrid {
             if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) continue;
             const i = iz * dim + ix;
             if (blocked[i] || dist[i] !== Infinity) continue;
-            dist[i] = 0;
-            queue[tail++] = i;
+            seeds.push(i);
           }
         }
       }
     }
+    dist.fill(Infinity);
+    next.fill(-1);
+    nextJump.fill(-1);
+    settled.fill(0);
+    heapPos.fill(-1);
+    this.heapSize = 0;
+    if (ring) {
+      for (const j of seeds) {
+        if (dist[j] !== Infinity) continue;
+        dist[j] = 0;
+        this._heapPush(j);
+      }
+    } else if (!blocked[target]) {
+      dist[target] = 0;
+      this._heapPush(target);
+    }
 
-    while (head < tail) {
-      const c = queue[head++];
+    let reached = 0;
+    while (this.heapSize > 0) {
+      const c = this._heapPop();
+      settled[c] = 1;
+      reached++;
       const d = dist[c];
       const cx = c % dim;
       const cz = (c / dim) | 0;
@@ -468,7 +574,7 @@ export class NavGrid {
         const iz = cz + NZ[k];
         if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) continue;
         const i = iz * dim + ix;
-        if (blocked[i] || dist[i] !== Infinity) continue;
+        if (blocked[i] || settled[i]) continue;
         // THE FLOOD RUNS OUTWARD FROM THE PLAYER, so a step from `c` to `i` in
         // the field is a step from `i` to `c` when an enemy walks it. The
         // arguments are reversed here for exactly that reason: what is being
@@ -483,37 +589,72 @@ export class NavGrid {
         // them. Reversed like the step above: the agent's move is toward `c`.
         if (NX[k] !== 0 && NZ[k] !== 0 &&
             (!this._passable(i, cz * dim + ix) || !this._passable(i, iz * dim + cx))) continue;
-        dist[i] = d + NCOST[k];
-        queue[tail++] = i;
+        const cost = d + NCOST[k];
+        if (cost >= dist[i]) continue;
+        dist[i] = cost;
+        next[i] = c;
+        nextJump[i] = -1;
+        this._heapPush(i);
+      }
+      // Every jump is stored under its LANDING cell, so the reverse flood
+      // reaches its takeoff just as it reaches walking predecessors above.
+      for (let edge = this.jumpHead[c]; edge >= 0; edge = this.jumpNext[edge]) {
+        const i = this.jumpFrom[edge];
+        if (settled[i]) continue;
+        const cost = d + this.jumpCost[edge];
+        if (cost >= dist[i]) continue;
+        dist[i] = cost;
+        next[i] = c;
+        nextJump[i] = edge;
+        this._heapPush(i);
       }
     }
-    return tail;
+    return reached;
   }
 
-  // The open neighbour with the smallest distance, or -1 if this cell has no
-  // downhill (which only happens on a seed cell or outside the flood).
+  // The winning edge was saved during the weighted flood. Re-choosing merely
+  // the lowest neighbouring distance could discard a useful jump here.
   _downhill(c) {
-    const { dim, dist, blocked } = this;
-    const cx = c % dim;
-    const cz = (c / dim) | 0;
-    let best = -1;
-    let bestD = dist[c];
-    for (let k = 0; k < 8; k++) {
-      const ix = cx + NX[k];
-      const iz = cz + NZ[k];
-      if (ix < 0 || iz < 0 || ix >= dim || iz >= dim) continue;
-      const i = iz * dim + ix;
-      if (blocked[i] || dist[i] >= bestD) continue;
-      if (!this._passable(c, i)) continue;
-      // Same corner rule the flood used to build the field - see the note
-      // there. The two have to agree, or steering picks a diagonal the route
-      // was never planned through.
-      if (NX[k] !== 0 && NZ[k] !== 0 &&
-          (!this._passable(c, cz * dim + ix) || !this._passable(c, iz * dim + cx))) continue;
-      bestD = dist[i];
-      best = i;
+    return this.next[c];
+  }
+
+  _heapPush(i) {
+    const { queue, heapPos, dist } = this;
+    let p = heapPos[i];
+    if (p < 0) p = this.heapSize++;
+    while (p > 0) {
+      const parent = (p - 1) >> 1;
+      const j = queue[parent];
+      if (dist[j] <= dist[i]) break;
+      queue[p] = j;
+      heapPos[j] = p;
+      p = parent;
     }
-    return best;
+    queue[p] = i;
+    heapPos[i] = p;
+  }
+
+  _heapPop() {
+    const { queue, heapPos, dist } = this;
+    const root = queue[0];
+    heapPos[root] = -1;
+    const last = queue[--this.heapSize];
+    if (this.heapSize > 0) {
+      let p = 0;
+      while (true) {
+        const left = p * 2 + 1;
+        if (left >= this.heapSize) break;
+        const right = left + 1;
+        const child = right < this.heapSize && dist[queue[right]] < dist[queue[left]] ? right : left;
+        if (dist[last] <= dist[queue[child]]) break;
+        queue[p] = queue[child];
+        heapPos[queue[p]] = p;
+        p = child;
+      }
+      queue[p] = last;
+      heapPos[last] = p;
+    }
+    return root;
   }
 
   /**
@@ -576,7 +717,11 @@ export class NavGrid {
    * @returns {boolean}  false when there is no usable route and the caller
    *   should fall back to heading straight at the player
    */
-  steer(x, z, out, y = 0) {
+  steer(x, z, out, y = 0, radius = this.radius) {
+    if (this.wide && radius > this.radius + 0.05) {
+      return this.wide.steer(x, z, out, y);
+    }
+    out.jump = false;
     if (!this.ready) return false;
 
     // Pass 1: nothing in the way, so ignore the grid entirely.
@@ -602,8 +747,27 @@ export class NavGrid {
     let wz = this.cellZ(c);
     let have = recovered;
     for (let step = 0; step < LOOKAHEAD; step++) {
-      const nxt = this._downhill(c);
+      const from = c;
+      const nxt = this._downhill(from);
       if (nxt < 0) break;
+      const edge = this.nextJump[from];
+      if (edge >= 0) {
+        const takeX = this.cellX(from);
+        const takeZ = this.cellZ(from);
+        if (!recovered && Math.hypot(x - takeX, z - takeZ) <= 0.36 &&
+            Math.abs(y - this.height[from]) < 0.3) {
+          out.jump = true;
+          out.jumpX = this.cellX(nxt);
+          out.jumpZ = this.cellZ(nxt);
+          out.jumpY = this.height[nxt];
+          out.jumpLift = this.jumpLift[edge];
+          return this._aim(x, z, out.jumpX, out.jumpZ, out);
+        }
+        if (this._sight(x, z, takeX, takeZ, Math.min(y, this.height[from]))) {
+          return this._aim(x, z, takeX, takeZ, out);
+        }
+        return have ? this._aim(x, z, wx, wz, out) : false;
+      }
       c = nxt;
       const px = this.cellX(c);
       const pz = this.cellZ(c);

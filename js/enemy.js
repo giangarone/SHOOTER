@@ -2,8 +2,8 @@
 //
 // An Enemy owns a THREE.Group (its model) and a `pos` vector that is the
 // source of truth for its location; the group follows pos each update. Like
-// the player, pos is at floor level. Enemies never leave the ground plane -
-// they slide around obstacles rather than climbing them.
+// the player, pos is at floor level. Ground enemies walk, step and take short
+// navigation jumps; fliers use their own altitude instead.
 //
 // Behaviour by type:
 //   chaser/splitter/tank  close to melee range, wind up, then hit
@@ -47,6 +47,7 @@ import * as THREE from 'three';
 import {
   resolveCircle, pointInObstacle, groundSurface, AGENT_HEIGHT, BOSS_HEIGHT, STEP_HEIGHT,
 } from './utils.js';
+import { jumpClear, jumpProgress, jumpY } from './enemy-jump.js';
 import {
   ARENA_HALF, BALLOON_RISE, BODY_BASE_INTENSITY, BODY_FLASH_HEX,
   BODY_FLASH_INTENSITY, CONDUIT_RESIST, CONDUIT_SPEED, ENEMY_TYPES, FLARE_BURST,
@@ -307,6 +308,16 @@ export class Enemy {
     // took a step up. Eased to zero every frame - see the ground block in
     // update().
     this._stepLag = 0;
+    this.jumpTime = 0;
+    this.jumpElapsed = 0;
+    this.jumpCd = 0;
+    this.jumpFromX = 0;
+    this.jumpFromY = 0;
+    this.jumpFromZ = 0;
+    this.jumpToX = 0;
+    this.jumpToY = 0;
+    this.jumpToZ = 0;
+    this.jumpLift = 0;
     // LAST FRAME'S WALKING HEADING, and zero until there has been one. The
     // grid answers per frame with no memory of what it said last frame, and
     // at the edge of a stair tread - where the surface underfoot flickers
@@ -899,6 +910,48 @@ export class Enemy {
     return true;
   }
 
+  _startJump(x, y, z, lift, ctx) {
+    if (this.jumpCd > 0 || !jumpClear(
+      this.pos.x, this.pos.y, this.pos.z, x, y, z,
+      this.radius, this.collideH, lift, ctx.obstacles)) return false;
+    this.jumpFromX = this.pos.x;
+    this.jumpFromY = this.pos.y;
+    this.jumpFromZ = this.pos.z;
+    this.jumpToX = x;
+    this.jumpToY = y;
+    this.jumpToZ = z;
+    this.jumpLift = lift;
+    this.jumpElapsed = 0;
+    this.jumpTime = (this.boss ? 0.68 : 0.54) + Math.hypot(x - this.pos.x, z - this.pos.z) / 9;
+    this._stepLag = 0;
+    this.blockedBy = 0;
+    this.faceLocked = false;
+    this.group.rotation.z = 0;
+    return true;
+  }
+
+  _updateJump(dt, ctx) {
+    this.jumpElapsed = Math.min(this.jumpTime, this.jumpElapsed + dt);
+    const t = this.jumpElapsed / this.jumpTime;
+    const u = jumpProgress(t);
+    this.pos.x = this.jumpFromX + (this.jumpToX - this.jumpFromX) * u;
+    this.pos.z = this.jumpFromZ + (this.jumpToZ - this.jumpFromZ) * u;
+    this.pos.y = jumpY(this.jumpFromY, this.jumpToY, this.jumpLift, t);
+    const x = this.pos.x;
+    const z = this.pos.z;
+    resolveCircle(this.pos, this.radius, ctx.obstacles, this.collideH);
+    // Temporary encounter geometry may appear after a route was baked. Stop
+    // the arc instead of snapping through a newly raised wall next frame.
+    if (Math.hypot(this.pos.x - x, this.pos.z - z) > 0.05 || t >= 1) {
+      this.jumpTime = 0;
+      this.jumpCd = 0.25;
+    }
+    this.blockedBy = 0;
+    this.group.position.copy(this.pos);
+    this.group.rotation.y = Math.atan2(this.jumpFromX - this.jumpToX,
+                                       this.jumpFromZ - this.jumpToZ);
+  }
+
   // One AI + movement step. Computes a desired velocity for this frame, adds
   // crowd separation, clamps it, moves, then resolves against obstacles.
   update(dt, ctx) {
@@ -915,6 +968,20 @@ export class Enemy {
     const nx = dx * inv;
     const nz = dz * inv;
     this.attackCd -= dt;
+    this.jumpCd = Math.max(0, this.jumpCd - dt);
+    if (this.igniteT > 0) this.igniteT -= dt;
+    // Freeze, fear and a balloon take precedence over a planned traversal.
+    // Leaving the arc active would move a visibly petrified body through the
+    // obstacle for another second before the status branch got a frame.
+    if (this.jumpTime > 0 &&
+        (this.status.freeze > 0 || this.status.fear > 0 || this.balloonT > 0)) {
+      this.jumpTime = 0;
+      this.jumpCd = 0.25;
+    }
+    if (this.jumpTime > 0) {
+      this._updateJump(dt, ctx);
+      return;
+    }
 
     // Walking heading: around the level rather than into it. Falls back to the
     // straight line when there is no grid, or no route through it.
@@ -930,10 +997,16 @@ export class Enemy {
     // the grid needs it: without it an enemy pressed against a crate is read as
     // standing ON the crate, and the route it gets back is the one a thing on
     // top of the crate would want.
-    if (nav && nav.steer(this.pos.x, this.pos.z, _steer, this.pos.y)) {
+    _steer.jump = false;
+    if (nav && nav.steer(this.pos.x, this.pos.z, _steer, this.pos.y, this.radius)) {
       px = _steer.x;
       pz = _steer.z;
     }
+    const navJump = _steer.jump;
+    const jumpX = _steer.jumpX;
+    const jumpY = _steer.jumpY;
+    const jumpZ = _steer.jumpZ;
+    const jumpLift = _steer.jumpLift;
     // TURN, RATHER THAN SNAP. The heading above is recomputed from scratch
     // every frame, and around the corner of a stair or a crate two consecutive
     // frames can disagree by most of a half-turn; taken literally that is an
@@ -1019,6 +1092,22 @@ export class Enemy {
       if (def.ai) def.ai(this, _a);
       vx = _a.vx;
       vz = _a.vz;
+    }
+
+    // Only a deliberate chase takes a traversal link. An inert support, a
+    // retreating target or a boss in a scripted charge must finish its own
+    // behaviour; proximity to a jump edge alone is not an order to leap.
+    if (navJump && !this.flying && !this.phase && this.stepMul <= 1.4 &&
+        this.balloonT <= 0 &&
+        this.status.freeze <= 0 && this.status.fear <= 0 && sp > 0.1) {
+      const along = vx * px + vz * pz;
+      const across = vx * pz - vz * px;
+      if (along > sp * 0.2 && Math.abs(across) < along * 0.75 &&
+          Math.hypot(vx, vz) <= sp * 1.25 &&
+          this._startJump(jumpX, jumpY, jumpZ, jumpLift, ctx)) {
+        this._updateJump(dt, ctx);
+        return;
+      }
     }
 
     // Push apart from crowding neighbours (squared test first to skip the sqrt).
@@ -1170,7 +1259,6 @@ export class Enemy {
     // stoop and down to make a climb read as effort. A frozen flier holds the
     // altitude it had - dropping it out of the sky would be a free kill on the
     // one status that is already the strongest thing in the pool.
-    if (this.igniteT > 0) this.igniteT -= dt;
     if (this.flying && this.status.freeze <= 0 && this.balloonT <= 0) {
       const target = Math.min(FLY_MAX_Y, this.hoverY);
       this.pos.y += (target - this.pos.y) * Math.min(1, dt * this.flyRate);

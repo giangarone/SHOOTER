@@ -1015,9 +1015,12 @@ context. The start screen says so, and one click anywhere fixes it.
   warm and slow while you pick a passive item, and combat starting again is the
   drop.
 - Optional verticality: speaker stack to wall ledge to catwalk, each hop inside
-  the jump arc. The decks are suspended above head height, so enemies walk
-  underneath them and enemy fire passes straight through - the high ground buys
-  sightlines and costs you cover.
+  the jump arc. The decks are suspended above head height, so ordinary ground
+  enemies walk underneath them and enemy fire passes straight through - the
+  high ground buys sightlines and costs you cover. Mobile ground enemies,
+  including bosses, can take short jumps onto reachable raised ground when
+  that is the better route; fliers still cross low cover without using the
+  ground route.
 - HUD: health, ammo, score, wave + enemies remaining
 - Start, pause, and game-over screens with restart. The pause screen also has
   **EXIT**, which asks first: the confirmation is the one screen in the cabinet
@@ -2939,13 +2942,17 @@ the front.
 
 ## Enemy movement
 
-Enemies route with a flow field, not a straight line. `js/nav.js` bakes the
-arena's obstacle AABBs into a half-metre occupancy grid once at startup, grown
+Enemies route with a flow field, not a straight line. `js/nav.js` bakes each
+arena layout's obstacle AABBs into a half-metre occupancy grid, grown
 by the enemy radius so an open cell is a cell an enemy actually fits in. A
-breadth-first flood from the player's cell fills a distance field over that
-grid five times a second, and every enemy alive steers by walking downhill
-through the one field - which is the reason for a field rather than an A* per
-enemy: thirty enemies want a route to the same place, so it is computed once.
+reverse Dijkstra search from the player's cell prices walking links and short
+jump links together. Enemies share a field with others of the same clearance
+size, refreshed at most five times a second; the widest bosses use their own
+field so a route fits their full body. A jump costs a little extra time, so an
+enemy takes it when it shortens the pursuit enough to pay for takeoff and
+landing. The jump is checked against the full obstacle boxes, including
+overhead clearance, before it can become a
+route. Bosses use a wider grid and can follow stairs as well as jump cover.
 
 Two passes keep it from looking like grid movement. If the straight line to the
 player is clear the field is ignored entirely, which is most of the time in an
@@ -2958,9 +2965,9 @@ the straight line instead of the path. Running away has no destination to route
 to, and the collision resolver already slides them along whatever they back
 into.
 
-The player is often standing on a platform, which is a blocked cell. The flood
-seeds from the ring of open cells around it in that case, so enemies gather at
-the foot of the platform rather than losing the route entirely.
+When the player stands on a platform that a ground enemy cannot reach, the
+field seeds from reachable cells around it. Enemies gather at the foot rather
+than losing the route entirely.
 
 ## Weapons
 

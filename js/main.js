@@ -271,7 +271,7 @@ import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './
 import { Pad, BTN, BTN_NAMES } from './pad.js';
 import { MenuDriver, renderControls, cap } from './padmenu.js';
 import { Keybinds, KEY_ACTIONS, PAD_ACTIONS, isPadFixed } from './keybind.js';
-import { resolveCircle, groundSurface, BOSS_HEIGHT } from './utils.js';
+import { resolveCircle, groundSurface, BOSS_HEIGHT, STEP_HEIGHT } from './utils.js';
 import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
 // ?autotest makes the game play itself and exposes window.__game and
@@ -1343,7 +1343,8 @@ class Game {
     // a wall to this grid - which is exactly the routing it had before the
     // arena knew about height, and what it should keep: a body 3m across
     // taking a 0.6m step onto a crate reads as a bug, not as a step.
-    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT, 0);
+    this.navBig = new NavGrid(this.arena.obstacles, ARENA_BOUND, 1.6, BOSS_HEIGHT,
+      STEP_HEIGHT, 2.0);
     // The totems and their stations are static furniture: three totems and two
     // stations, built once and reused for every set. They are deliberately NOT
     // in the obstacle list. That USED to be because walking into one claimed

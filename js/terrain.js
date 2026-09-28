@@ -565,10 +565,9 @@ const PIECES = [
 // game has always been, and wave 1 is about a third of that.
 export function costBudget(wave) {
   // A BOSS WAVE IS DELIBERATELY LOOSER, not bare. Bosses steer by navBig,
-  // which is baked for a 1.6m agent AND cannot climb, so every raised thing is
-  // a wall to them and a room laid out for a normal wave is a room a boss
-  // wedges in. It still gets real terrain - it is a fight in the same arena -
-  // just enough of it that a body that size has lanes.
+  // which includes a field for the widest 2m-radius boss. Jumps help it cross
+  // low cover, but a normal wave can still leave too little room for that body
+  // to turn and land. It gets real terrain with wider lanes.
   if (isBossWave(wave)) return 28;
   // EVERY WAVE IS FURNISHED. The curve used to start at 6, which is four
   // pieces in a 44-metre room - a flat floor with a few things on it, which is
@@ -965,11 +964,9 @@ function floodFrom(g, x, z) {
   let start = iz * dim + ix;
   // THE SEED CELL MAY BE SOLID, and that is not a reason to call the layout
   // broken. A piece standing on the exact point this floods from - or, for the
-  // boss grid, any raised thing at all, since a boss cannot climb - would
-  // otherwise report the whole floor unreachable and throw away a perfectly
-  // good arena. NavGrid does the same thing for the same reason when the
-  // player is standing on a platform: spiral out to the nearest open cell and
-  // start there.
+  // conservative boss validator, any raised thing at all - would otherwise
+  // report the whole floor unreachable and throw away a playable arena.
+  // NavGrid also recovers from a target cell it cannot stand on.
   if (blocked[start]) {
     let found = -1;
     for (let r = 1; r <= 20 && found < 0; r++) {
@@ -1058,14 +1055,14 @@ export function validate(prims, bound, spawnPoints, wave) {
     if (!reachable(g, flood, s.x, s.z)) return { ok: false, why: 'spawn cut off' };
   }
 
-  // Bosses are 1.6m wide and much taller, so they get their own bake: gaps an
-  // ordinary enemy walks through are gaps a boss grinds against, and a boss
-  // that cannot reach the player is a wave that cannot end.
+  // Bosses reach a 2m radius and are much taller, so they get their own bake:
+  // gaps an ordinary enemy walks through can trap a boss. A boss that cannot
+  // reach the player is a wave that cannot end.
   if (isBossWave(wave)) {
-    // A boss is wide AND cannot climb, so it gets the no-step bake: every
-    // raised surface in the room is a wall to it. If a layout does not leave
-    // that body a route from each spawn to the middle, the wave cannot end.
-    const gb = bake(aabbs, bound, 1.6, 5, false);
+    // Keep a flat-floor route as a safety margin, even though live bosses can
+    // step and jump. A procedural room must remain playable if a temporary
+    // obstacle makes one of those traversal links unsafe during the fight.
+    const gb = bake(aabbs, bound, 2.0, 5, false);
     const fb = floodFrom(gb, 0, 0);
     if (fb.count === 0) return { ok: false, why: 'boss centre blocked' };
     for (const s of spawnPoints) {
@@ -1128,9 +1125,9 @@ function fallback() {
     order++;
   }
   // Two walls flanking the middle, and NOT ONE IN FRONT OF A SPAWN. That is
-  // the one measurement in the fallback that is not free: a boss is 1.6m wide
-  // and cannot climb, so it needs a clear run from every spawn point to the
-  // centre. Walls on the side lines - which is where they were first put -
+  // the one measurement in the fallback that is not free: a boss can have a
+  // 2m radius, so it needs a clear run from every spawn point to the centre.
+  // Walls on the side lines - which is where they were first put -
   // stand directly between the four edge spawns and the room, and the lane
   // left between a wall's end and the nearest corner deck was under a metre.
   // On the centre line they block sightlines across the middle instead, which
@@ -1155,13 +1152,14 @@ function fallback() {
   }
   // THE MIDDLE STAYS OPEN. A tiered block stood here for a while and it is
   // where the fallback went wrong twice over: it is the cell the validator
-  // floods from, and to a boss - which cannot climb - it is a solid pillar
+  // floods from, and to the conservative boss validator it is a solid pillar
   // sitting on the one square metre every route has to pass through.
   order++;
-  // Speaker cabinets filling the gaps between the towers.
+  // Speaker cabinets outside the tower ring. At eleven metres their grown
+  // footprints join the towers for a 2m-radius boss and seal the centre off.
   for (let i = 0; i < 6; i++) {
     const a = ((i + 0.5) / 6) * Math.PI * 2;
-    push('speaker', Math.cos(a) * 11, 0.475, Math.sin(a) * 11,
+    push('speaker', Math.cos(a) * 13.2, 0.475, Math.sin(a) * 13.2,
          0.95, 0.95, 0.95, true, true, 0.2);
     order++;
   }
@@ -1212,8 +1210,7 @@ export function generateLayout(wave, opts) {
     // cannot produce anything playable used to drop straight to the fallback -
     // eight props on a bare floor, in the middle of a run, with no way to tell
     // it apart from a bug. It bit boss waves hardest, because a boss is 1.6m
-    // wide AND cannot climb, so every raised thing in the room is a wall to it
-    // and a dense layout genuinely can cut one off.
+    // wide, so a dense layout can leave it without a reliable floor route.
     //
     // Backing the budget off over the last third of the tries produces a
     // thinner arena instead of no arena, which is a far better answer to "this

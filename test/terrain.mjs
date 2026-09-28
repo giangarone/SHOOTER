@@ -21,6 +21,8 @@ import {
   AGENT_HEIGHT, BOSS_HEIGHT, STEP_HEIGHT, stepSurface, resolveCircle,
 } from '../js/utils.js';
 import { NavGrid } from '../js/nav.js';
+import { Enemy, ENEMY_TYPES } from '../js/enemy.js';
+import * as THREE from 'three';
 
 // Mirrored from nav.js. A change there that is not made here would let the
 // generator produce decks the flow field quietly refuses to route onto.
@@ -334,8 +336,8 @@ for (let run = 0; run < RUNS; run++) {
     //    checks this; asserting the budget separately catches a curve change
     //    that quietly makes boss waves as dense as anything else.
     if (isBossWave(wave)) {
-      // Looser than a normal wave, not bare: a boss cannot climb, so every
-      // raised thing is a wall to it and it needs real lanes.
+      // Looser than a normal wave, not bare: even with jumps, a wide boss
+      // needs room to turn, land and use its attack lanes.
       check('boss wave ' + wave + ' is looser than a normal one',
         costBudget(wave) < costBudget(wave - 1), costBudget(wave) + '');
     }
@@ -442,12 +444,13 @@ check('grid spans the interior', cellCentre(0) === -18 && cellCentre(9) === 18);
     Math.abs(nav.height[cell(nav, 0, 1.4)] - 0.6) < 0.01 &&
     Math.abs(nav.height[cell(nav, 0, -5)] - 2.4) < 0.01);
 
-  // A boss cannot climb, so the very same stair is a wall to its grid - which
-  // is exactly the routing it had before the arena knew about height.
-  const big = new NavGrid(world, 22, 1.6, BOSS_HEIGHT, 0);
+  // The wide grid now uses the same riser rule. A boss should follow a real
+  // staircase to higher ground instead of waiting below it forever.
+  const big = new NavGrid(world, 22, 1.6, BOSS_HEIGHT);
   big.update(1, 0, -5);
-  check('a boss is not routed up anything',
-    big.blocked[cell(big, 0, 1.4)] === 1 && big.blocked[cell(big, 0, -5)] === 1);
+  check('a boss can route up a wide staircase',
+    big.blocked[cell(big, 0, 1.4)] === 0 &&
+    big.dist[cell(big, 0, 8)] !== Infinity);
 
   // ---- COVER YOU CANNOT STEP ONTO --------------------------------------
   //
@@ -475,24 +478,195 @@ check('grid spans the interior', cellCentre(0) === -18 && cellCentre(9) === 18);
     for (; steps < 400; steps++) {
       if (Math.hypot(4 - p.x, -p.z) < 1) break;
       if (!cnav.steer(p.x, p.z, out, 0)) break;
-      p.x += out.x * 0.08;
-      p.z += out.z * 0.08;
+      if (out.jump) {
+        p.x = out.jumpX;
+        p.z = out.jumpZ;
+        p.y = out.jumpY;
+      } else {
+        p.x += out.x * 0.08;
+        p.z += out.z * 0.08;
+      }
       resolveCircle(p, 0.5, crate, AGENT_HEIGHT);
     }
-    check('and an enemy walks round it rather than into it',
+    check('and an enemy crosses it without getting stuck',
       Math.hypot(4 - p.x, -p.z) < 1, steps + ' steps, ended at '
         + p.x.toFixed(2) + ',' + p.z.toFixed(2));
   }
 
-  // A CRATE THE PLAYER IS STANDING ON is a target no route can end at, and the
-  // flood has to notice: seeded there it fills the crate's own four cells and
-  // leaves the rest of the arena at Infinity, which is every enemy in the room
-  // falling back to walking straight at the player through the scenery.
+  // The shorter route over cover is a directed jump, including on the wide
+  // boss grid. Neither grid offers one on open floor or through a tall wall.
+  {
+    const crate = [box(0, 0.475, 0, 1, 0.95, 1)];
+    const small = new NavGrid(crate, 22, 0.5);
+    small.update(1, 5, 0);
+    const out = {};
+    small.steer(-1, 0, out, 0);
+    check('a ground enemy chooses a short jump over cover',
+      out.jump && out.jumpX > 0 && out.jumpY === 0,
+      JSON.stringify(out));
+    small.steer(-8, 0, out, 0);
+    check('it does not jump on clear floor', !out.jump);
+
+    const boss = new NavGrid(crate, 22, 1.6, BOSS_HEIGHT);
+    boss.update(1, 5, 0);
+    boss.steer(-2.5, 0, out, 0);
+    check('a boss can jump across the same cover',
+      out.jump && out.jumpX > 0 && out.jumpY === 0,
+      JSON.stringify(out));
+
+    const ceiling = box(0, 3.3, 0, 3, 0.2, 4);
+    const covered = new NavGrid([crate[0], ceiling], 22, 0.5);
+    covered.update(1, 5, 0);
+    covered.steer(-1, 0, out, 0);
+    check('a low ceiling rules out an otherwise valid jump',
+      !out.jump, JSON.stringify(out));
+  }
+
+  // The new links must reach an elevated target, not merely cross an object
+  // and land back at floor level. A platform with no stair is the hard case.
+  {
+    const raised = [box(0, 0.6, 0, 4, 1.2, 4)];
+    const climb = new NavGrid(raised, 22, 0.5);
+    climb.update(1, 0, 0, 1.2);
+    const c = cell(climb, -4, 0);
+    let jumps = 0;
+    let at = c;
+    for (let i = 0; i < 20 && at >= 0; i++) {
+      if (climb.nextJump[at] >= 0) jumps++;
+      at = climb.next[at];
+    }
+    check('a jump route reaches higher ground with no stair',
+      climb.dist[c] !== Infinity && jumps > 0,
+      'dist=' + climb.dist[c] + ' jumps=' + jumps);
+  }
+
+  // Run the same link through the real Enemy mover. A route alone can look
+  // valid while collision shoves the body back off the obstacle every frame.
+  const traverse = (boss, obstacle, start, goal) => {
+    const type = boss ? '__terrainBossJump' : '__terrainJump';
+    ENEMY_TYPES[type] = {
+      hp: 100, speed: boss ? 2.8 : 3.4, damage: 1, value: 1,
+      scale: boss ? 3 : 1, radius: boss ? 2.0 : 0.5,
+      mass: boss ? 5 : 1, boss, color: 0xff4400, eye: 0xffffff,
+      ai: (_e, a) => {
+        if (a.dist > 1) { a.vx = a.px * a.sp; a.vz = a.pz * a.sp; }
+      },
+    };
+    const grid = new NavGrid([obstacle], 22, boss ? 1.6 : 0.5,
+      boss ? BOSS_HEIGHT : AGENT_HEIGHT, STEP_HEIGHT, boss ? 2.0 : 0);
+    const e = new Enemy(type, new THREE.Vector3(start, 0, 0), 1, 1, 1);
+    const ctx = {
+      player: { pos: new THREE.Vector3(goal.x, goal.y, 0) },
+      enemies: [e], obstacles: [obstacle], nav: grid, navBig: grid,
+      time: 0, beat: 0, level: 0,
+    };
+    let peak = 0;
+    let jumped = false;
+    let reached = false;
+    for (let i = 0; i < 600; i++) {
+      ctx.time += 1 / 60;
+      grid.update(1 / 60, goal.x, 0, goal.y);
+      e.update(1 / 60, ctx);
+      peak = Math.max(peak, e.pos.y);
+      jumped ||= e.jumpTime > 0;
+      if (Math.abs(e.pos.x - goal.x) < 1.1 &&
+          Math.abs(e.pos.y - goal.y) < 0.15 && e.jumpTime === 0) {
+        reached = true;
+        break;
+      }
+    }
+    const result = { reached, jumped, peak, x: e.pos.x, y: e.pos.y };
+    e.dispose();
+    delete ENEMY_TYPES[type];
+    return result;
+  };
+  {
+    const barrier = box(0, 0.475, 0, 1.5, 0.95, 6);
+    for (const boss of [false, true]) {
+      const r = traverse(boss, barrier, boss ? -4.5 : -3.5, { x: 5, y: 0 });
+      check((boss ? 'boss' : 'enemy') + ' lands across short cover',
+        r.reached && r.jumped && r.peak > 0.95, JSON.stringify(r));
+    }
+    {
+      const type = '__terrainFrozenJump';
+      ENEMY_TYPES[type] = {
+        hp: 100, speed: 3.4, damage: 1, value: 1, scale: 1,
+        radius: 0.5, mass: 1, color: 0x44bbff, eye: 0xffffff,
+        ai: (_e, a) => { a.vx = a.px * a.sp; a.vz = a.pz * a.sp; },
+      };
+      const grid = new NavGrid([barrier], 22, 0.5);
+      const e = new Enemy(type, new THREE.Vector3(-3.5, 0, 0), 1, 1, 1);
+      const ctx = {
+        player: { pos: new THREE.Vector3(5, 0, 0) },
+        enemies: [e], obstacles: [barrier], nav: grid, navBig: grid,
+        time: 0, beat: 0, level: 0,
+      };
+      for (let i = 0; i < 180 && e.jumpElapsed < 0.3; i++) {
+        ctx.time += 1 / 60;
+        grid.update(1 / 60, 5, 0);
+        e.update(1 / 60, ctx);
+      }
+      const inAir = e.jumpTime > 0 && e.pos.y > 0.95;
+      const x = e.pos.x;
+      e.status.freeze = 1;
+      e.update(1 / 60, ctx);
+      check('freezing a jumper stops its horizontal travel immediately',
+        inAir && e.jumpTime === 0 && Math.abs(e.pos.x - x) < 0.01,
+        JSON.stringify({ inAir, x, after: e.pos.x, y: e.pos.y }));
+      e.dispose();
+      delete ENEMY_TYPES[type];
+    }
+    // The generic mover is only half of a boss jump. Colossus's real walk
+    // state must accept the link without turning a charge into traversal.
+    {
+      const grid = new NavGrid([barrier], 22, 1.6, BOSS_HEIGHT, STEP_HEIGHT, 2.0);
+      const e = new Enemy('colossus', new THREE.Vector3(-4.5, 0, 0), 1, 1, 1);
+      e.bs.state = 'walk';
+      e.bs.cd = e.bs.slamCd = e.bs.lobCd = e.bs.ventT = 99;
+      const noop = () => {};
+      const ctx = {
+        player: { pos: new THREE.Vector3(5, 0, 0) },
+        enemies: [e], obstacles: [barrier], nav: grid, navBig: grid,
+        time: 0, beat: 0, level: 0, bossEvent: noop, onHitPlayer: noop,
+        addProjectile: noop,
+        effects: { burst: noop, shockwave: noop, addShake: noop },
+      };
+      let peak = 0;
+      let jumped = false;
+      let crossed = false;
+      for (let i = 0; i < 600; i++) {
+        ctx.time += 1 / 60;
+        grid.update(1 / 60, 5, 0);
+        e.update(1 / 60, ctx);
+        peak = Math.max(peak, e.pos.y);
+        jumped ||= e.jumpTime > 0;
+        if (e.pos.x > 2.5 && e.jumpTime === 0) { crossed = true; break; }
+      }
+      check('Colossus uses the large-boss jump route in its chase',
+        crossed && jumped && peak > 0.95,
+        JSON.stringify({ crossed, jumped, peak, x: e.pos.x, z: e.pos.z }));
+      e.dispose();
+    }
+    const smallCover = traverse(false, box(0, 0.475, 0, 1, 0.95, 1),
+      -3, { x: 5, y: 0 });
+    check('walking around small cover stays cheaper than jumping',
+      smallCover.reached && !smallCover.jumped, JSON.stringify(smallCover));
+    const platform = box(0, 0.6, 0, 4, 1.2, 4);
+    for (const boss of [false, true]) {
+      const r = traverse(boss, platform, boss ? -4.5 : -3.5, { x: 0, y: 1.2 });
+      check((boss ? 'boss' : 'enemy') + ' reaches higher ground',
+        r.reached && r.jumped && r.peak > 1.2, JSON.stringify(r));
+    }
+  }
+
+  // A target on cover must still produce a route from the floor. When the
+  // jump is valid it reaches the target; otherwise the fallback ring keeps
+  // the rest of the arena in the field.
   {
     const crate = [box(6, 0.475, 0, 1.5, 0.95, 1.5)];
     const cnav = new NavGrid(crate, 22, 0.5);
     cnav.update(1, 6, 0, 0.95);
-    check('a target nothing can climb to still floods the arena',
+    check('a target on cover still floods the arena',
       cnav.dist[cell(cnav, -8, 0)] !== Infinity,
       'dist=' + cnav.dist[cell(cnav, -8, 0)]);
   }
