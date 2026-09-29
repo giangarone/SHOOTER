@@ -638,13 +638,20 @@ context. The start screen says so, and one click anywhere fixes it.
   **Veilrays** float under broad caps with trailing gills, seed three staggered
   eruptions along a captured line, then drift away through a recovery window.
   **THE SPORE REGENT** is a walking fungal grove: a giant layered canopy,
-  shelf-covered arms, buttress roots and a heart behind split bark shutters.
-  Its three attacks grow two diverging root lanes, rotate successive spore
-  fans, and bloom a fairy ring around your old position. The forks leave a
-  central corridor; the ring leaves a wide opening towards the boss. Every
-  attack ends with a 1.8-second heart opening that removes its 35% resistance.
-  At half health, roots grow farther, volleys gain a wave and the ring gains
-  petals; warning and recovery durations remain unchanged.
+  shelf-covered arms, buttress roots, puffball sacs on its chest and a heart
+  behind split bark shutters. Touching its body hurts at any moment, and it
+  never parks: it circles at mid range, bears down when you run, and deals six
+  attacks off a shuffled deck only a breath apart. A fairy ring blooms around
+  your stance with the centre filled and one gap facing the boss; a traced
+  fork of mycelium crawls outward while the regent strafes; spore shells burst
+  on your old position into lasting toxic clouds; fans of gill-shot rotate,
+  each with a gap that turns between volleys. It squares up and rampages down
+  a marked lane, sowing spore pockets in its wake, and it inhales - dragging
+  you in - before the ring it has been drawing detonates. Every attack ends
+  with a short heart opening that removes its 35% resistance. At half health
+  it enrages: faster dealing, a second wider ring, a second rampage leg,
+  a longer fork, a broader exhale - but warnings and escape gaps are never
+  shortened, and the centre of the ring is never the safe one.
 - **INSECTS: dark jade chitin, articulated legs and amber seams.**
   **Sicklemantises** raise paired blades before a fast, straight lunge down a
   marked lane. **Needletails** lift their segmented tails, then sweep three
@@ -3321,7 +3328,8 @@ test/rime.mjs       RIME end to end - the shard's conditional burst, the
 test/candy.mjs      CANDY counterplay, musical support, shell loss and the
                     Confectioner's five-pattern fight: lanes returned on death,
                     every dodge answered, every tell held honest
-test/fungal.mjs     FUNGAL growth patterns, bounded healing, boss openings and warning exhaustion
+test/fungal.mjs     FUNGAL growth patterns, bounded healing, the Spore Regent's
+                    six-attack deck, contact rule and warning exhaustion
 test/insects.mjs    INSECTS committed charges, pheromone links, boss patterns and warning cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/coral.mjs      CORAL captured patterns, healing, boss openings and warning ownership

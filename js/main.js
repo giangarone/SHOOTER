@@ -729,6 +729,11 @@ const MAX_CRYSTAL = 10;
 // four casts' worth in flight - the fight is meant to spend the room, not
 // delete it.
 const MAX_RUBBLE = 8;
+// FUNGAL's spore shroud - the Spore Regent's burst clouds and rampage
+// pockets. It is the ONLY hazard a boss lays, which is the whole defence of
+// the number: six is half a volley plus a charge's wake alive at once, and
+// the fight never shares the arena with another theme's clouds.
+const MAX_SPORE = 6;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -823,6 +828,12 @@ const CREEP_CRYSTAL = 0x5bd0ff;
 // Greyer than the hail and dimmer than the crystal, because it is dead stone
 // and those two are weather and light.
 const CREEP_RUBBLE = 0x9aa5b1;
+// FUNGAL's spores. No status either - the cloud bites while you stand in it
+// and is done with you the moment you step off - so it wears the theme's own
+// pale mint, whiter than the gas's working green by a mile: spores are the
+// thing you can SEE hanging in the air, and a second poison-green cloud would
+// read as a vitriol's from across the arena.
+const CREEP_SPORE = 0xa4f0c8;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -1022,6 +1033,15 @@ const HAZARD_KINDS = {
   // asked about was always the ground it became.
   rubble: {
     color: CREEP_RUBBLE, cap: MAX_RUBBLE,
+  },
+  // FUNGAL's spore shroud. NO status and no tail - the honey's bargain in the
+  // grove's coin: it bites for the whole time the player stands in the cloud
+  // and is done with them the moment they step off, which is what makes "be
+  // somewhere else" a complete answer to it. The cloud the kind hangs over
+  // the stain is the theme's whole point - spores are air you cannot afford
+  // to stand in, and they have to read from across the arena.
+  spore: {
+    color: CREEP_SPORE, cap: MAX_SPORE, cloud: true,
   },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
@@ -11754,10 +11774,11 @@ class Game {
     });
     const color = k.color;
     this._ashAt.set(x, 0.1, z);
-    if (kind === 'lava' || kind === 'frost') {
-      // A few embers - or a few flakes - where it fell. No ring: a trail
-      // walker drops one of these twice a second and a shockwave per drop
-      // would spend the whole ring pool.
+    if (kind === 'lava' || kind === 'frost' || kind === 'spore') {
+      // A few embers - or a few flakes, or a puff of spores - where it fell.
+      // No ring: a trail walker drops one of these several times a second and
+      // a shockwave per drop would spend the whole ring pool. The Regent's
+      // burst clouds get their splash from the mortar that delivers them.
       this.effects.burst(this._ashAt, color, 6, 1.6, 1.4, 0.5);
       return;
     }
