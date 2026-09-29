@@ -1,7 +1,9 @@
 // JUNGLE: buttress roots, jade leaves and golden pollen.
 import * as THREE from 'three';
-import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes,
-  orbit, landHit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot, contactReach, snapAim, faceSnap } from './shared.js';
+import { pointInObstacle } from '../utils.js';
+import { ENEMY_TYPES, SHARED_MATS, ARENA_HALF, partsFor, lump, slab, prism, spike, eyes,
+  orbit, landHit, segBlocked, releasePattern, beginPattern, tickPattern, capturedShot, contactReach, snapAim, faceSnap,
+  bossTouch, markGet, markDrop } from './shared.js';
 
 const COLOR = 0xffc45c;
 const ORBIT = { dist: 11, band: 2, out: 0.8, in: -0.7, strafe: 0.5, flip: 2, flipVar: 1 };
@@ -24,7 +26,7 @@ const TYPES = {
   sunfeather: { ...body, hp: 50, speed: 3.8, damage: 9, value: 300, fly: { height: 3.5 },
     hitbox: { r: 0.55, y: 0.4 }, head: { r: 0.28, y: 0.5 }, proj: shot(16, 6),
     build: buildSunfeather, ai: aiSunfeather, cleanup: jungleCleanup },
-  canopytitan: { ...body, name: 'CANOPY TITAN', hp: 3300, speed: 1.8, damage: 24, value: 6500,
+  canopytitan: { ...body, name: 'CANOPY TITAN', hp: 3300, speed: 2.4, damage: 24, value: 6500,
     scale: 2.7, radius: 1.8, mass: 9, boss: true, head: { r: 0.4, y: 1.85 },
     hitbox: { r: 0.9, y: 1.0 }, statusMul: 0.3, freezeSlow: true, slowFactor: 0.75,
     freezeVuln: 1, entropyExempt: true, fearMode: 'stagger', proj: shot(13, 7),
@@ -162,6 +164,7 @@ function buildCanopyTitan(e, g, s) {
 
 function jungleCleanup(e) {
   releasePattern(e);
+  markDrop(e);
   if (e.laneMark >= 0) e.laneFx.markRelease(e.laneMark);
   e.laneMark = undefined;
 }
@@ -291,72 +294,283 @@ function aiSunfeather(e, a) {
   if (a.dist < 20 && e.attackCd <= 0) { snapAim(e, a, true); e.state = 'tell'; e.timer = 1; e.attackCd = 4.5; }
 }
 function titanRest(e, a) {
-  jungleCleanup(e); rest(e, 1.9); e.bs.weakOpen = true;
-  e.bs.ventNote = 'HEARTWOOD EXPOSED'; a.ctx.bossEvent('vent', e);
+  jungleCleanup(e); rest(e, (e.bs.enraged ? 0.95 : 1.25) * e.rate);
+  e.bs.weakOpen = true; e.bs.ventNote = 'HEARTWOOD EXPOSED'; a.ctx.bossEvent('vent', e);
 }
+// The stalk loop's orbit: the titan closes past twelve metres and works a
+// ring inside them, so the fight is never a shooting gallery at one wall.
+const TITAN_ORBIT = { dist: 10, band: 3, out: 1, in: -0.9, strafe: 0.9, flip: 1.6, flipVar: 0.9 };
+// The eight appointments, drawn at random without an immediate repeat - the
+// fight is a bag, not a tape loop. bs.next forces one draw, for the suites.
+const TITAN_ATTACKS = ['roots', 'fruitfall', 'liana', 'leap', 'salvo', 'snare', 'spores', 'stampede'];
+const TITAN_TELLS = { roots: 0.55, fruitfall: 0.75, liana: 0.85, leap: 0.8, salvo: 0.5, snare: 0.5, spores: 0.9, stampede: 1.0 };
+// Scratch for the leap's clearance probe. Once per wind-up, not per frame.
+const _leapProbe = new THREE.Vector3();
 function aiCanopyTitan(e, a) {
-  const bs = e.bs;
-  if (!e.state) { e.state = 'stalk'; e.timer = 1.2; bs.turn = 0; }
-  bs.enraged = e.hp < e.maxHp * 0.5;
+  const bs = e.bs, ctx = a.ctx;
+  if (!e.state) { e.state = 'stalk'; e.timer = 0.9; }
+  // A one-shot latch at half health: the banner and the red room are an event
+  // the player must not lose behind a note that changes every few seconds.
+  if (!bs.enraged && e.hp < e.maxHp * 0.5) { bs.enraged = true; ctx.bossEvent('enrage', e); }
+  // HUGGING THE TRUNK IS NOT COVER. Contact pays in every state, on the
+  // shared boss cadence - the charge is exempt only because its touch is its
+  // own one-shot hit.
+  if (e.state !== 'charge') bossTouch(e, a);
   for (let i = 0; i < e.shutters.length; i++) e.shutters[i].position.x = (i ? 1 : -1) * (bs.weakOpen ? 0.58 : 0.18) * e.scale;
-  e.core.scale.setScalar(e.scale * (bs.weakOpen ? 1.4 : 1));
-  for (const arm of e.arms) arm.position.y = (e.state === 'pattern' || e.state === 'tell' ? 1.3 : 0.85) * e.scale;
-  if (e.state === 'pattern') { if (tickPattern(e, a)) titanRest(e, a); return; }
+  // The heart swells through every wind-up: the body itself is the tell
+  // before the floor is.
+  e.core.scale.setScalar(e.scale * (bs.weakOpen ? 1.4 : 1) *
+    (e.state === 'windup' ? 1 + Math.sin(ctx.time * 14) * 0.12 : 1));
+  // The arms carry the shape of the attack from across the room: HIGH through
+  // a warning or the run, BURIED while the snare is reaching under the floor.
+  const armY = e.state === 'snare' ? 0.5 : e.state === 'windup' || e.state === 'charge' ? 1.3 : 0.85;
+  for (const arm of e.arms) arm.position.y = armY * e.scale;
   e.timer -= a.dt;
+
+  if (e.state === 'pattern') {
+    // A WALKING tree: roots, fruit and the landing shock run while it keeps
+    // striding in at under half pace. Only the snare plants it - that one has
+    // its arms buried.
+    a.vx = a.px * a.sp * 0.45; a.vz = a.pz * a.sp * 0.45;
+    if (tickPattern(e, a)) titanRest(e, a);
+    return;
+  }
+
   if (e.state === 'charge') {
     faceSnap(e); e.stepMul = 4;
-    const speed = Math.min(7.2, e.speed * 4) * Math.min(1, a.sp / Math.max(0.001, e.speed)) *
+    const speed = Math.min(8.4, e.speed * 3.5) * Math.min(1, a.sp / Math.max(0.001, e.speed)) *
       Math.min(1, Math.max(0, e.timer + a.dt) / a.dt);
     a.vx = e.nx * speed; a.vz = e.nz * speed;
-    if (!e.hit && contactReach(e, a, 2.8)) { landHit(e, a.ctx, Math.min(30, e.damage)); e.hit = true; }
-    if (e.timer <= 0 || e.blockedBy > 0.05 || Math.abs(e.pos.x) > 20 || Math.abs(e.pos.z) > 20) titanRest(e, a);
+    if (!e.hit && contactReach(e, a, 2.8)) { landHit(e, ctx, Math.min(30, e.damage)); e.hit = true; }
+    if (e.timer <= 0 || e.blockedBy > 0.05 || Math.abs(e.pos.x) > 20 || Math.abs(e.pos.z) > 20) {
+      // THE ARRIVAL. A player it ran down already paid; any other end plants
+      // the titan and lets the landing shock ring out of the footprint - a
+      // short fill where it stopped, so baiting it into a wall still asks for
+      // the step back.
+      if (e.hit) { titanRest(e, a); return; }
+      e.state = 'pattern';
+      ctx.effects.shockwave(e.pos, COLOR, 2.5, 0.45);
+      ctx.effects.addShake(0.18); ctx.sfx.impact();
+      beginPattern(e, a, [point(e.pos.x, e.pos.z, 2.5, 0.5, Math.min(18, e.damage * 0.7))], COLOR);
+    }
     return;
   }
-  if (e.state === 'tell') {
-    faceSnap(e); lane(e, a, 12, 2.8, 1 - e.timer / 1.15);
-    if (e.timer <= 0) {
+
+  if (e.state === 'leapAir') {
+    // THE LANDING. No fresh warning: the circle has been on the floor since
+    // the crouch, full, and it meant exactly this. The brush-by in the same
+    // beat is not a second hit, so the touch cadence is held off briefly.
+    jungleCleanup(e); bs.touchCd = 0.8;
+    e.state = 'pattern';
+    ctx.effects.shockwave(e.pos, COLOR, 3.4, 0.5);
+    ctx.effects.burst(e.pos, COLOR, 26, 7, 3.5, 0.6);
+    ctx.effects.addShake(0.28); ctx.sfx.impact();
+    const points = [point(e.pos.x, e.pos.z, 2.6, 0.02, Math.min(26, e.damage * 0.9))];
+    // ...and the roots the landing drove down ring the footprint a beat later.
+    for (let i = 0; i < 6; i++) {
+      const a2 = i * Math.PI / 3 + Math.PI / 6;
+      points.push(point(e.pos.x + Math.cos(a2) * 4.4, e.pos.z + Math.sin(a2) * 4.4,
+        1.5, 0.6, Math.min(16, e.damage * 0.6)));
+    }
+    beginPattern(e, a, points, COLOR);
+    return;
+  }
+
+  if (e.state === 'windup') {
+    const fill = 1 - Math.max(0, e.timer) / bs.windup;
+    if (bs.attack === 'stampede' || bs.attack === 'liana') {
+      faceSnap(e);
+      lane(e, a, bs.attack === 'stampede' ? 14 : 15, bs.attack === 'stampede' ? 2.8 : 1.7, fill);
+    } else if (bs.attack === 'leap') {
+      // The landing circle from the first frame of the crouch, filled at the
+      // moment of takeoff. It never tracks after that - a leap committed is a
+      // leap the floor has already told you about.
+      const m = markGet(e, ctx.effects);   // acquires before e.fx is read
+      e.fx.markSet(m, bs.tx, bs.tz, 2.6, COLOR, fill);
+    } else if (bs.attack === 'spores') {
+      // Its own ring, taped on the floor at the radius the vent owns: the
+      // question the ring asks is how close you were standing when it let go.
+      const m = markGet(e, ctx.effects);
+      e.fx.markSet(m, e.pos.x, e.pos.z, 3.4, COLOR, fill);
+    } else {
+      faceSnap(e);
+    }
+    if (e.timer > 0) return;
+    if (bs.attack === 'roots') {
+      // Two branching roots diverge from the captured bearing. The narrow
+      // middle remains a route toward the exposed heart after the first pulse.
+      const damage = Math.min(22, e.damage * 0.75), points = [];
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+        points.push(point(e.tx + a.nx * i * 2.8 - a.nz * side * (1.8 + i),
+          e.tz + a.nz * i * 2.8 + a.nx * side * (1.8 + i), 1.5, 1.15 + i * 0.45, damage));
+      }
+      e.state = 'pattern'; beginPattern(e, a, points, COLOR);
+      return;
+    }
+    if (bs.attack === 'fruitfall') {
+      // The crown shakes its fruit loose over where the player STOOD: one on
+      // the spot, a ring around it. Keeping moving is the whole answer.
+      const damage = Math.min(20, e.damage * 0.7), points = [point(e.tx, e.tz, 2.1, 1.25, damage)];
+      const n = bs.enraged ? 6 : 4, base = Math.random() * Math.PI * 2;
+      for (let i = 0; i < n; i++) {
+        const ang = base + i * Math.PI * 2 / n;
+        points.push(point(e.tx + Math.cos(ang) * 3.7, e.tz + Math.sin(ang) * 3.7,
+          1.7, 1.55 + (i % 2) * 0.25, damage));
+      }
+      e.state = 'pattern'; beginPattern(e, a, points, COLOR);
+      ctx.effects.shockwave(e.pos, COLOR, 2, 0.4);
+      return;
+    }
+    if (bs.attack === 'liana') {
+      // No acquired lane, no wave - the rule every JUNGLE warning keeps.
       const warned = e.laneMark >= 0; jungleCleanup(e);
       if (!warned) { titanRest(e, a); return; }
-      e.state = 'charge'; e.timer = 1.2; e.hit = false;
+      // The thorn wave runs down the lane and never bends: the reads are all
+      // perpendicular. Walking straight back is the one line it catches.
+      const damage = Math.min(18, e.damage * 0.7), points = [];
+      for (let i = 0; i < 6; i++) {
+        const d = 2.3 + i * 2.1;
+        points.push(point(e.pos.x + e.nx * d, e.pos.z + e.nz * d, 1.35, 0.15 + i * 0.16, damage));
+      }
+      e.state = 'pattern'; beginPattern(e, a, points, COLOR);
+      return;
     }
+    if (bs.attack === 'leap') {
+      // Ceiling or cargo overhead can refuse the long arc; shorten along the
+      // same bearing, and spend the beat on a volley if none of it clears.
+      for (const f of [1, 0.6, 0.35]) {
+        const jx = e.pos.x + (bs.tx - e.pos.x) * f, jz = e.pos.z + (bs.tz - e.pos.z) * f;
+        if (!e._startJump(jx, 0, jz, 5.4, ctx)) continue;
+        bs.tx = jx; bs.tz = jz;
+        // The mark lands where the boss lands, full, the instant the arc is
+        // committed, and rides out the flight.
+        const m = markGet(e, ctx.effects);
+        e.fx.markSet(m, bs.tx, bs.tz, 2.6, COLOR, 1);
+        e.state = 'leapAir';
+        ctx.effects.burst(e.pos, COLOR, 24, 6, 3, 0.6);
+        ctx.effects.shockwave(e.pos, COLOR, 2.2, 0.4);
+        return;
+      }
+      markDrop(e); snapAim(e, a, true);
+      bs.attack = 'salvo'; bs.salvoLeft = 3; e.state = 'salvo'; e.timer = 0.05;
+      return;
+    }
+    if (bs.attack === 'salvo') { bs.salvoLeft = 3; e.state = 'salvo'; e.timer = 0.05; return; }
+    if (bs.attack === 'snare') { bs.snareLeft = bs.enraged ? 4 : 3; e.state = 'snare'; return; }
+    if (bs.attack === 'spores') {
+      markDrop(e);
+      e.state = 'spores'; bs.sporeLeft = bs.enraged ? 2 : 1;
+      bs.sporeSpin = Math.random() * Math.PI * 2;
+      // Both seams stand OFF the captured bearing: standing still is exactly
+      // where the ring is whole. The dodge is finding a gap, on either foot.
+      bs.sporeGap = e.aim + (Math.random() < 0.5 ? 1 : -1) * (0.9 + Math.random() * 0.5);
+      e.timer = 0.05;
+      return;
+    }
+    // stampede
+    const warned = e.laneMark >= 0; jungleCleanup(e);
+    if (!warned) { titanRest(e, a); return; }
+    e.state = 'charge'; e.timer = 1.0; e.hit = false;
     return;
   }
+
   if (e.state === 'salvo') {
+    // The volley is taken ON THE WALK - there is no frame of the fight in
+    // which it stands still to be shot - and the fan swings a stride between
+    // pulses, so holding one sidestep catches the next one.
     faceSnap(e);
+    orbit(e, a, TITAN_ORBIT);
     if (e.timer > 0) return;
-    const n = bs.enraged ? 7 : 5;
-    for (let i = 0; i < n; i++) capturedShot(e, a, e.aim, (i - (n - 1) / 2) * 0.2 + (1 - e.volley) * 0.2, 1.4 * e.scale);
-    e.timer = 0.6; e.volley++;
-    if (e.volley === 3) titanRest(e, a);
+    const n = bs.enraged ? 7 : 5, k = 3 - bs.salvoLeft;
+    for (let i = 0; i < n; i++) capturedShot(e, a, e.aim + (k - 1) * 0.14 * e.strafe, (i - (n - 1) / 2) * 0.2, 1.4 * e.scale);
+    ctx.effects.burst(e.pos, COLOR, 5, 3, 1.5, 0.3);
+    if (--bs.salvoLeft > 0) { e.timer = 0.45 * e.rate; return; }
+    titanRest(e, a);
     return;
   }
+
+  if (e.state === 'spores') {
+    // It backs off through the vent: the ring's origin walks away while the
+    // pollen closes in.
+    a.vx = -a.px * a.sp * 0.35; a.vz = -a.pz * a.sp * 0.35;
+    if (e.timer > 0) return;
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const ang = bs.sporeSpin + i * (Math.PI * 2) / n;
+      const near = (gap) => Math.abs((ang - gap + Math.PI * 3) % (Math.PI * 2) - Math.PI) < 0.3;
+      if (near(bs.sporeGap) || near(bs.sporeGap + Math.PI)) continue;
+      capturedShot(e, a, 0, ang, 0.9);
+    }
+    ctx.effects.burst(e.pos, COLOR, 16, 5, 3, 0.5);
+    if (--bs.sporeLeft > 0) { bs.sporeSpin += Math.PI / n; e.timer = 0.45 * e.rate; return; }
+    titanRest(e, a);
+    return;
+  }
+
+  if (e.state === 'snare') {
+    // Planted, arms buried. Each pulse captures the LIVE position at the
+    // moment its own warning starts - so every circle commits to a place, and
+    // the attack's question is whether you stopped moving, not where you
+    // stood when the titan crouched.
+    if (!tickPattern(e, a)) return;
+    if (--bs.snareLeft < 0) { titanRest(e, a); return; }
+    const r = bs.enraged ? 2.1 : 1.8;
+    beginPattern(e, a, [point(ctx.player.pos.x, ctx.player.pos.z, r, 0.7,
+      Math.min(18, e.damage * 0.7))], COLOR);
+    return;
+  }
+
   if (e.state === 'rest') {
     if (e.timer > 0) return;
-    bs.weakOpen = false; a.ctx.bossEvent('vent', e); e.state = 'stalk'; e.timer = bs.enraged ? 0.8 : 1.5;
+    bs.weakOpen = false; ctx.bossEvent('vent', e);
+    e.state = 'stalk'; e.timer = (bs.enraged ? 0.32 : 0.5) * e.rate;
+    return;
   }
-  a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
-  if (e.timer > 0 || a.dist > 28) return;
+
+  // STALK between appointments: closes at a stride past twelve metres, then
+  // works the ring. The stride needs the stepMul headroom to be real.
+  if (a.dist > 12) { e.stepMul = 1.9; a.vx = a.px * a.sp * 1.35; a.vz = a.pz * a.sp * 1.35; }
+  else { e.stepMul = 1.4; orbit(e, a, TITAN_ORBIT); }
+  if (e.timer > 0) return;
+  let name = bs.next;
+  bs.next = null;
+  if (!name) {
+    for (let tries = 0; tries < 8; tries++) {
+      name = TITAN_ATTACKS[Math.floor(Math.random() * TITAN_ATTACKS.length)];
+      if (name === bs.last) continue;
+      if (name === 'stampede' && a.dist < 6) continue;   // a run-up it needs
+      if (name === 'leap' && a.dist < 8) continue;       // a sky it needs
+      if (name === 'liana' && a.dist > 17) continue;     // a reach it has
+      break;
+    }
+  }
+  // The same vetoes applied to a forced pick, so the suites drive exactly
+  // what the bag would.
+  if (name === 'stampede' && a.dist < 6) name = 'liana';
+  if (name === 'leap' && a.dist < 8) name = 'fruitfall';
+  if (name === 'liana' && a.dist > 17) name = 'salvo';
+  bs.attack = name; bs.last = name;
   snapAim(e, a, true); a.vx = a.vz = 0;
-  bs.attack = ['roots', 'stampede', 'seeds', 'canopy'][bs.turn++ % 4];
-  if (bs.attack === 'stampede') { e.state = 'tell'; e.timer = 1.15; return; }
-  if (bs.attack === 'seeds') { e.state = 'salvo'; e.timer = 1.15; e.volley = 0; return; }
-  const damage = Math.min(22, e.damage * 0.75), points = [];
-  e.state = 'pattern';
-  if (bs.attack === 'roots') {
-    // Two branching roots diverge from the captured bearing. The narrow
-    // middle remains a route toward the exposed heart after the first pulse.
-    for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
-      points.push(point(e.tx + a.nx * i * 2.8 - a.nz * side * (1.8 + i),
-        e.tz + a.nz * i * 2.8 + a.nx * side * (1.8 + i), 1.5, 1.15 + i * 0.45, damage));
+  if (name === 'leap') {
+    // Committed at the CROUCH: where the player is plus a stride of lead,
+    // wobbled off the furniture until a landing the shoulders actually fit is
+    // found - a centre that is clear with a crate under one arm would abort
+    // the arc a body-length short of its own telegraph.
+    const p = ctx.player.pos, v = ctx.player.vel;
+    const B = ARENA_HALF - (e.radius - 0.5) - 0.4;
+    let ok = false;
+    for (let t = 0; t < 8 && !ok; t++) {
+      bs.tx = Math.max(-B, Math.min(B, p.x + v.x * 0.3 + (t ? (Math.random() - 0.5) * 3 : 0)));
+      bs.tz = Math.max(-B, Math.min(B, p.z + v.z * 0.3 + (t ? (Math.random() - 0.5) * 3 : 0)));
+      ok = true;
+      for (const [ox, oz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
+        _leapProbe.set(bs.tx + ox, 0.5, bs.tz + oz);
+        if (pointInObstacle(_leapProbe, ctx.obstacles)) { ok = false; break; }
+      }
     }
-  } else {
-    points.push(point(e.tx, e.tz, 2.4, 1.25, damage));
-    const n = bs.enraged ? 6 : 4;
-    for (let i = 0; i < n; i++) {
-      const angle = e.aim + i * Math.PI * 2 / n;
-      points.push(point(e.tx + Math.cos(angle) * 4.5, e.tz + Math.sin(angle) * 4.5,
-        1.6, 2.05 + (i % 2) * 0.25, damage));
-    }
+    if (!ok) bs.attack = bs.last = 'salvo';
   }
-  beginPattern(e, a, points, COLOR);
+  e.state = 'windup';
+  bs.windup = TITAN_TELLS[bs.attack] * e.rate;
+  e.timer = bs.windup;
 }

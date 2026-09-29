@@ -27,7 +27,7 @@ try {
       g._clearEntities(); g._clearHazards();
       g.waveState = 'active'; g.queue.length = 0; g.queue.push('vinecat'); g.spawnTimer = 1e6;
       ctx.obstacles = []; g._projCtx.obstacles = [];
-      p.pos.set(0, 0, 0); p.health = HEALTH; p.invulnEnd = -1; p.wardReady = false;
+      p.pos.set(0, 0, 0); p.vel.set(0, 0, 0); p.health = HEALTH; p.invulnEnd = -1; p.wardReady = false;
       p.mods.dodgeChance = 0; p.clearStatuses();
     };
     const put = (type, x, z) => {
@@ -120,46 +120,151 @@ try {
     run(0.7); const first = shots.length; p.pos.z = 8; run(0.8); const low = e.pos.y;
     ok('three high feathers precede a separately warned low dart', first === 3 && shots.length === 4 && low < high && Math.abs(shots[3].angle) < 0.02, JSON.stringify({ shots, low, high }));
 
-    clean(); shots.length = 0; e = put('canopytitan', -10, 0); e.speed = 0;
-    const attacks = new Set(), windows = new Set();
-    run(34, () => { if (e.bs.attack) attacks.add(e.bs.attack); if (e.bs.weakOpen) windows.add(e.bs.attack); });
-    ok('boss cycles four attacks and exposes its heart after every one', attacks.size === 4 && windows.size === 4, JSON.stringify({ attacks: [...attacks], windows: [...windows] }));
-    ok('boss fires real projectile salvos', shots.filter((s) => s.type === e.type).length >= 15);
-    e.bs.weakOpen = false; const closed = ENEMY_TYPES[e.type].armorDefault(e);
-    e.bs.weakOpen = true; const open = ENEMY_TYPES[e.type].armorDefault(e);
-    ok('heart window removes the closed armour', closed === 0.65 && open === 1);
-    const bossPattern = (attack, rage, escape = false) => {
-      clean(); shots.length = 0; const e = put('canopytitan', -10, 0); e.speed = 0;
-      if (rage) e.hp = e.maxHp * 0.4;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = attack;
-      run(0.3); const early = HEALTH - p.health, count = e.groundPattern?.length || 0;
-      if (escape) p.pos.z = 12;
-      until(() => e.bs.weakOpen, 6); run(DT);
-      const result = { early, count, damage: HEALTH - p.health, shots: shots.length,
-        open: e.bs.weakOpen, gap: Math.abs(e.shutters[0].position.x), marks: marks() };
-      p.pos.set(18, 0, 18); p.health = HEALTH; p.invulnEnd = -1;
-      run(1.5); result.recovery = e.bs.weakOpen;
-      return result;
+    // ---- the reworked CANOPY TITAN ---------------------------------------
+    // Contact in any state, on the shared cadence - hugging was the old
+    // fight's answer, so it is the first thing the new one prices.
+    {
+      clean(); const t = put('canopytitan', -2.5, 0); t.speed = 0; t.state = 'stalk'; t.timer = 99;
+      run(0.1); const first = HEALTH - p.health;
+      p.health = HEALTH; p.invulnEnd = -1; run(1.0); const duringCd = HEALTH - p.health;
+      p.invulnEnd = -1; run(0.5); const afterCd = HEALTH - p.health;
+      ok('touching the titan always costs, never faster than its cadence',
+        first > 0 && duringCd === 0 && afterCd > 0, JSON.stringify({ first, duringCd, afterCd }));
+    }
+    // The whole kit, one appointment at a time: every one fires from stalk,
+    // opens the heart afterwards and hands every warning back.
+    let kitShots = 0;
+    for (const name of ['roots', 'fruitfall', 'liana', 'leap', 'salvo', 'snare', 'spores', 'stampede']) {
+      clean(); shots.length = 0; const t = put('canopytitan', -10, 0); t.speed = 0;
+      t.state = 'stalk'; t.timer = 0; t.bs.next = name;
+      const opened = until(() => t.bs.weakOpen, 12); run(DT);
+      kitShots += shots.length;
+      ok(`titan ${name}: fires, opens the heart, drains every warning`,
+        opened && t.bs.attack === name && marks() === 0, JSON.stringify({ attack: t.bs.attack, open: opened, marks: marks() }));
+    }
+    ok('titan throws real projectiles across the kit', kitShots >= 20, `shots=${kitShots}`);
+    // Cadence and motion over a free 40-second fight: the two things the
+    // rework exists for. The old titan managed an appointment every six
+    // seconds and never left its corner; the new one closes, orbits and
+    // strides through its own casts.
+    {
+      clean(); const t = put('canopytitan', -14, 6); p.pos.set(10, 0, -8);
+      let appointments = 0, path = 0, minDist = 99, last = t.state, lx = t.pos.x, lz = t.pos.z;
+      run(40, () => {
+        if (t.state === 'windup' && last !== 'windup') appointments++;
+        last = t.state;
+        path += Math.hypot(t.pos.x - lx, t.pos.z - lz); lx = t.pos.x; lz = t.pos.z;
+        minDist = Math.min(minDist, Math.hypot(t.pos.x - p.pos.x, t.pos.z - p.pos.z));
+      });
+      ok('titan attacks far more often than the old four-move loop', appointments >= 6, `appointments=${appointments}`);
+      ok('titan closes and keeps moving around the arena', path > 22 && minDist < 8, `path=${path.toFixed(1)} minDist=${minDist.toFixed(1)}`);
+    }
+    const bossAttack = (name, setup, x = -10) => {
+      clean(); shots.length = 0; const t = put('canopytitan', x, 0); t.speed = 0;
+      t.state = 'stalk'; t.timer = 0; t.bs.next = name;
+      if (setup) setup(t);
+      return t;
     };
-    const calm = bossPattern(2, false), rage = bossPattern(2, true);
-    ok('enrage widens salvos without shortening recovery', calm.shots === 15 && rage.shots === 21 && calm.recovery && rage.recovery, JSON.stringify({ calm, rage }));
-    const calmCrown = bossPattern(3, false, true), rageCrown = bossPattern(3, true, true);
-    ok('enrage adds crown impacts while preserving an escape and recovery', rageCrown.count > calmCrown.count && rageCrown.damage === 0 && calmCrown.damage === 0 && rageCrown.recovery, JSON.stringify({ calmCrown, rageCrown }));
-    const impact = bossPattern(3, false), escape = bossPattern(3, false, true);
-    ok('boss ground attack warns, hits captured position, and can be escaped', impact.early === 0 && impact.damage > 0 && escape.damage === 0 && impact.marks === 0 && impact.open && impact.gap > 1, JSON.stringify({ impact, escape }));
+    {
+      let t = bossAttack('salvo'); until(() => t.bs.weakOpen, 8);
+      const calm = shots.length;
+      t = bossAttack('salvo', (x) => { x.hp = x.maxHp * 0.4; }); until(() => t.bs.weakOpen, 8);
+      const rage = shots.length;
+      ok('enrage widens seed fans from five lines to seven, recovery intact', calm === 15 && rage === 21 && t.bs.weakOpen, JSON.stringify({ calm, rage }));
+    }
+    {
+      const t = bossAttack('salvo');
+      t.bs.weakOpen = false; const closed = ENEMY_TYPES.canopytitan.armorDefault(t);
+      t.bs.weakOpen = true; const open = ENEMY_TYPES.canopytitan.armorDefault(t);
+      ok('heart window removes the closed armour', closed === 0.65 && open === 1);
+    }
+    const fruit = (rage, escape) => {
+      const t = bossAttack('fruitfall', rage ? (x) => { x.hp = x.maxHp * 0.4; } : null);
+      until(() => t.groundPattern && t.groundPattern.length > 0);
+      const count = t.groundPattern.length, early = HEALTH - p.health;
+      if (escape) p.pos.z = 12;
+      until(() => t.bs.weakOpen, 8); run(DT); p.pos.z = 0;
+      return { count, early, damage: HEALTH - p.health, open: t.bs.weakOpen,
+        gap: Math.abs(t.shutters[0].position.x), marks: marks() };
+    };
+    const fruitHit = fruit(false), fruitDodge = fruit(false, true), fruitRage = fruit(true, true);
+    ok('fruitfall warns the captured spot and a ring around it, then hits', fruitHit.count === 5 && fruitHit.early === 0 && fruitHit.damage > 0 && fruitHit.marks === 0 && fruitHit.open && fruitHit.gap > 1, JSON.stringify(fruitHit));
+    ok('fruitfall: leaving the marked crown dodges it', fruitDodge.damage === 0 && fruitDodge.open, JSON.stringify(fruitDodge));
+    ok('enrage shakes six fruit loose around the same safe exit', fruitRage.count === 7 && fruitRage.damage === 0, JSON.stringify(fruitRage));
+    const liana = (escape) => {
+      const t = bossAttack('liana');
+      until(() => t.laneMark >= 0); run(0.4);
+      const early = HEALTH - p.health;
+      if (escape) p.pos.set(0, 0, 6);
+      until(() => t.bs.weakOpen, 8); run(DT); p.pos.z = 0;
+      return { early, damage: HEALTH - p.health, open: t.bs.weakOpen, marks: marks() };
+    };
+    const lianaHit = liana(false), lianaDodge = liana(true);
+    ok('liana wave runs the marked lane into a stationary target', lianaHit.early === 0 && lianaHit.damage > 0 && lianaHit.marks === 0 && lianaHit.open, JSON.stringify(lianaHit));
+    ok('a perpendicular step leaves the whole wave', lianaDodge.damage === 0 && lianaDodge.open, JSON.stringify(lianaDodge));
+    const leap = (escape) => {
+      const t = bossAttack('leap');
+      let marked = false, moved = false, open = false;
+      for (let i = 0; i < 10 / DT && !open; i++) {
+        run(DT);
+        if (t.mark >= 0) marked = true;
+        if (escape && marked && !moved) { p.pos.set(0, 0, 12); moved = true; }
+        open = t.bs.weakOpen;
+      }
+      const travel = Math.hypot(t.pos.x + 10, t.pos.z);
+      const r = { marked, travel, damage: HEALTH - p.health, open: t.bs.weakOpen, marks: marks() };
+      p.pos.set(0, 0, 0);
+      return r;
+    };
+    const leapHit = leap(false), leapMiss = leap(true);
+    ok('leap marks its landing from the crouch, crosses the arena, and lands on it',
+      leapHit.marked && leapHit.travel > 5 && leapHit.damage > 0 && leapHit.marks === 0, JSON.stringify(leapHit));
+    ok('leap: leaving the circle dodges the whole landing', leapMiss.damage === 0 && leapMiss.open, JSON.stringify(leapMiss));
+    const snare = (move) => {
+      const t = bossAttack('snare', null, -9);
+      let steps = 0, z = 0, open = false;
+      for (let i = 0; i < 8 / DT && !open; i++) {
+        run(DT);
+        if (move && ++steps >= 33) { steps = 0; z = z === 0 ? 8 : -z; p.pos.z = z; }
+        open = t.bs.weakOpen;
+      }
+      const damage = HEALTH - p.health; p.pos.z = 0;
+      return { damage, open, marks: marks() };
+    };
+    const snareHit = snare(false), snareDodge = snare(true);
+    ok('snare pulses re-aim at a stationary target and keep costing it', snareHit.damage > 30 && snareHit.open && snareHit.marks === 0, JSON.stringify(snareHit));
+    ok('keeping moving beats the snare outright', snareDodge.damage === 0 && snareDodge.open, JSON.stringify(snareDodge));
+    {
+      bossAttack('spores');
+      until(() => shots.length > 0, 4);
+      const angs = shots.map((s) => (s.angle + Math.PI * 2) % (Math.PI * 2)).sort((x, y) => x - y);
+      const gaps = angs.map((v, i) => (i + 1 < angs.length ? angs[i + 1] : angs[0] + Math.PI * 2) - v);
+      const seams = gaps.filter((g) => g > 0.8).length;
+      ok('spore vent surrounds the titan with exactly two seams to slip',
+        shots.length >= 9 && shots.length <= 14 && seams === 2, JSON.stringify({ n: shots.length, seams, max: Math.max(...gaps).toFixed(2) }));
+    }
 
     const rush = (escape, cover = false, slow = false) => {
       clean(); const e = put('canopytitan', -7, 0); e.speed *= 8; e.damage *= 20;
       if (slow) e.applyStatus('slow', 8);
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = 1;
+      e.state = 'stalk'; e.timer = 0; e.bs.next = 'stampede';
       until(() => e.laneMark >= 0); run(0.3); const x = e.pos.x, early = HEALTH - p.health;
-      if (escape) p.pos.z = 10;
+      if (escape) { p.pos.z = 10; p.vel.set(0, 0, 0); }
       if (cover) ctx.obstacles = [new THREE.Box3(new THREE.Vector3(-4, 0, -3), new THREE.Vector3(-3, 6, 3))];
-      until(() => e.bs.weakOpen);
-      return { early, damage: HEALTH - p.health, travel: e.pos.x - x, z: e.pos.z, open: e.bs.weakOpen };
+      // Travel and bearing are read at the moment the CHARGE ends - the
+      // arrival plant afterwards is its own attack with its own drift.
+      let ended = false, travel = 0, z = 0, open = false;
+      for (let i = 0; i < 8 / DT && !open; i++) {
+        run(DT);
+        if (!ended && (e.state === 'pattern' || e.state === 'rest')) { ended = true; travel = e.pos.x - x; z = e.pos.z; }
+        open = e.bs.weakOpen;
+      }
+      const r = { early, damage: HEALTH - p.health, travel, z, open };
+      p.pos.z = 0;
+      return r;
     };
     const rushHit = rush(false), rushDodge = rush(true), rushCover = rush(false, true), rushSlow = rush(true, false, true);
-    ok('stampede warns and caps late-wave travel and damage', rushHit.early === 0 && rushHit.damage > 0 && rushHit.damage <= 30 && rushHit.travel + 2.8 <= 12.01 && rushHit.open, JSON.stringify(rushHit));
+    ok('stampede warns and caps late-wave travel and damage', rushHit.early === 0 && rushHit.damage > 0 && rushHit.damage <= 30 && rushHit.travel + 2.8 <= 11.31 && rushHit.open, JSON.stringify(rushHit));
     ok('stampede never turns onto a side step', rushDodge.damage === 0 && Math.abs(rushDodge.z) < 0.1, JSON.stringify(rushDodge));
     ok('cover stops stampede and opens the heart', rushCover.damage === 0 && rushCover.travel < 4 && rushCover.open, JSON.stringify(rushCover));
     ok('stampede still respects player slows', rushSlow.travel < rushDodge.travel * 0.8, JSON.stringify(rushSlow));
@@ -167,32 +272,39 @@ try {
 
     const rootBranch = (side) => {
       clean(); const e = put('canopytitan', -10, 0); e.speed = 0;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = 0; run(0.3);
-      p.pos.z = side ? 1.8 : 0; run(2.2);
-      return HEALTH - p.health;
+      e.state = 'stalk'; e.timer = 0; e.bs.next = 'roots'; run(0.3);
+      p.pos.z = side ? 1.8 : 0; run(2.2); const damage = HEALTH - p.health; p.pos.z = 0;
+      return damage;
     };
     const branchHit = rootBranch(true), corridor = rootBranch(false);
     ok('Titan roots hit the branching lanes and preserve the central corridor', branchHit > 0 && corridor === 0, JSON.stringify({ branchHit, corridor }));
 
-    for (let attack = 0; attack < 4; attack++) {
-      clean(); shots.length = 0; e = put('canopytitan', -5, 0); e.speed = 0;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = attack; run(0.3);
-      const name = e.bs.attack;
+    // Death mid-telegraph, once per shape of warning: ground pattern, lane,
+    // landing circle, vent ring. `hold` runs each attack until its marks are
+    // genuinely down before the kill.
+    for (const [name, hold] of [['roots', 0.8], ['fruitfall', 0.8], ['liana', 0.9], ['stampede', 0.3], ['leap', 0.3], ['spores', 0.3]]) {
+      // Ten metres out: inside every attack's own range gate, so the forced
+      // pick survives the same vetoes the bag applies.
+      clean(); shots.length = 0; e = put('canopytitan', -10, 0); e.speed = 0;
+      e.state = 'stalk'; e.timer = 0; e.bs.next = name; run(hold);
+      const held = marks();
       e.takeDamage(1e9); run(DT); p.health = HEALTH; p.invulnEnd = -1; run(3);
-      ok(`boss death cancels ${name} before impact and releases its warnings`, p.health === HEALTH && marks() === 0 && shots.length === 0);
+      ok(`boss death cancels ${name} before impact and releases its warnings`, held > 0 && p.health === HEALTH && marks() === 0 && shots.length === 0, `held=${held}`);
     }
     for (const type of ['vinecat', 'rootgorilla', 'seedpod', 'canopytitan']) {
       clean(); e = put(type, -3, 0); e.speed = 0;
-      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.turn = 0; }
+      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.next = 'roots'; }
       const held = [];
       while (true) { const h = g.effects.markAcquire(); if (h < 0) break; held.push(h); }
-      run(0.3); held.forEach((h) => g.effects.markRelease(h));
+      // 0.8 covers the titan's roots wind-up: the pattern must try to acquire
+      // while the pool is genuinely empty, not before it has asked.
+      run(0.8); held.forEach((h) => g.effects.markRelease(h));
       run(2.5);
       ok(`${type} cannot hit after failing to acquire its warning`, p.health === HEALTH, `damage=${HEALTH - p.health}`);
     }
     for (const type of ['vinecat', 'rootgorilla', 'seedpod', 'canopytitan']) {
       clean(); e = put(type, -3, 0); e.speed = 0;
-      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.turn = 0; }
+      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.next = 'roots'; }
       until(() => marks() > 0); const before = marks(); e.takeDamage(1e9); run(DT);
       ok(`${type} death returns every owned warning`, before > 0 && marks() === 0, `before=${before} after=${marks()}`);
       p.health = HEALTH; p.invulnEnd = -1; run(3);

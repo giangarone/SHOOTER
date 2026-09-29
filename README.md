@@ -724,15 +724,22 @@ context. The start screen says so, and one click anywhere fixes it.
   **Sunfeathers** climb for a broad feather fan, then descend for a separately
   warned single dart before climbing through recovery.
   **THE CANOPY TITAN** carries three leaf crowns, hanging golden fruit and
-  trailing vines over a massive bark gorilla. Branching root waves leave a
-  central passage; a marked stampede commits to a straight lane; three seed
-  fans sweep across a captured bearing; and a canopy crash hits the old centre
-  before fruit falls around it. Every attack exposes its heartwood for 1.9
-  seconds, opening the bark valves and removing 35% damage resistance.
-  Below half health it spends less time stalking, fires seven seeds per fan
-  instead of five, and drops six outer fruit instead of four. Its warnings
-  stay full length. Stampede speed and damage are capped even in later waves,
-  and both cover and slows still work.
+  trailing vines over a massive bark gorilla - and it never holds still. It
+  stalks the ring between attacks, closes on a runner, and brushing the trunk
+  at any moment costs. It keeps eight appointments: branching root waves that
+  leave a central passage; a fruit-fall of golden bombs onto and around where
+  you stood; a liana wave of thorns running down a marked lane, beaten by a
+  perpendicular step; a canopy leap onto a marked landing circle, ringed by
+  delayed roots; three seed fans fired on the walk, swinging between pulses;
+  a grasping snare that re-marks your live position every pulse, answered only
+  by staying on the move; a radial pollen vent with two seams to slip through;
+  and a lane-marked stampede that plants where it stops and rings the
+  footprint. Every attack exposes its heartwood briefly, opening the bark
+  valves and removing its 35% damage resistance. Below half health the red
+  room comes on: fans widen to seven seeds, six fruit fall, a second offset
+  pollen ring vents, the snare reaches a fourth time, and the pauses shrink.
+  Stampede speed and damage are capped even in later waves, cover and slows
+  still work, and every ground warning draws in JUNGLE gold.
   Both themes' ground patterns are shown in their own accent colour. Their
   owned warnings are returned on death or reset; an attack that could not
   acquire its warning skips that impact instead of dealing an invisible hit.
