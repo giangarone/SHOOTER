@@ -397,6 +397,36 @@ try {
       res.choirSinging = bodies.filter((e) => e.bs && e.bs.singing).length;
       // ...and the three have three different voices.
       res.choirVoices = new Set(bodies.map((e) => e.bs && e.bs.voice)).size;
+      // ---- 7b. the reworked fight MOVES, and it sings at a fight's pace ----
+      // The old choir's sin was standing in front of the player, waiting to
+      // be shot. Ten seconds of the live fight: the three bodies must cover
+      // real ground between casts, and the staggered clocks must put up
+      // telegraphs at a pace no single-cast boss could.
+      {
+        const lastPos = {};
+        let casts0 = 0;
+        for (const e of bodies) {
+          lastPos[e.id] = { x: e.pos.x, z: e.pos.z };
+          casts0 += e.bs ? e.bs.casts : 0;
+        }
+        let travelled = 0;
+        const until = g.time + 10;
+        while (g.time < until) {
+          await step();
+          for (const e of g.enemies) {
+            if (e.type !== 'choir' || e.dead || !e.bs) continue;
+            const lp = lastPos[e.id];
+            if (!lp) continue;
+            travelled += Math.hypot(e.pos.x - lp.x, e.pos.z - lp.z);
+            lp.x = e.pos.x;
+            lp.z = e.pos.z;
+          }
+        }
+        res.choirTravelled = +travelled.toFixed(1);
+        let casts1 = 0;
+        for (const e of g.enemies) if (e.type === 'choir' && !e.dead && e.bs) casts1 += e.bs.casts;
+        res.choirCasts = casts1 - casts0;
+      }
       // KILLING A SILENT ONE FREES THE REST.
       const silent = bodies.find((e) => e.bs && !e.bs.singing);
       const other = bodies.find((e) => e !== silent);
@@ -409,6 +439,225 @@ try {
       await steps(20);
       pinned = true;
       god = true;
+      clean();
+    }
+
+    // ---- 8. the five notes, driven by hand --------------------------------
+    // Each attack is driven through the body's OWN verse - bs.turn set to the
+    // wanted note and the clock zeroed - so what is asserted is the same path
+    // the fight walks, not a private back door. A solo body outside a boss
+    // fight runs the whole ai alone: _raiseChoir is a no-op with no fight on,
+    // and as the only voice it is the singer.
+    const VERSES = (await import('./js/enemies/brine.js')).CHOIR_VERSES;
+    res.verseCount = VERSES.length === 3 && VERSES.every((v) => v.length === 5);
+    res.verseCoverage = new Set(VERSES.flat()).size === 5;
+
+    const freshChoir = async (x, z) => {
+      clean();
+      const e = put('choir', x, z);
+      await steps(3);              // let it run: bs init needs a live frame
+      e.bs.hymnT = 999;            // the singer's note is driven separately
+      e.bs.cd = 999;
+      return e;
+    };
+    const forceCast = (e, name) => {
+      e.bs.state = 'roam';
+      if (e.bs.mark >= 0) { e.bs.fx.markRelease(e.bs.mark); e.bs.mark = -1; }
+      e.bs.turn = e.bs.verse.indexOf(name);
+      e.bs.cd = 0;
+    };
+
+    // UNDERTOW - the lane is drawn, the rush covers it, and the player ON it
+    // is bitten. Then the dodge: the same rush, stepped off the line, must
+    // cost nothing - the whole contract of a committed charge.
+    const runRush = async (dodge) => {
+      const e = await freshChoir(12, 0);
+      px = 0;
+      pz = 0;
+      forceCast(e, 'undertow');
+      god = false;
+      p.health = p.maxHealth;
+      p.invulnEnd = -1;
+      const h0 = p.health;
+      let sawTell = false;
+      let laneHeld = false;
+      let dashed = false;
+      let moved = 0;
+      let sx = 0;
+      let sz = 0;
+      let ended = false;
+      for (let i = 0; i < 300 && !ended; i++) {
+        await step();
+        const bs = e.bs;
+        if (bs.state === 'undertow-tell') {
+          sawTell = true;
+          if (bs.mark >= 0) laneHeld = true;
+        }
+        if (bs.state === 'dash') {
+          if (!dashed) {
+            dashed = true;
+            sx = e.pos.x;
+            sz = e.pos.z;
+            if (dodge) pz = 5;   // step off the line
+          }
+          moved = Math.max(moved, Math.hypot(e.pos.x - sx, e.pos.z - sz));
+        }
+        if (dashed && (bs.state === 'ebb' || bs.state === 'roam')) ended = true;
+      }
+      const lost = +(h0 - p.health).toFixed(2);
+      god = true;
+      p.health = p.maxHealth;
+      px = 0;
+      pz = 0;
+      return { sawTell, laneHeld, dashed, ended, moved: +moved.toFixed(1), lost };
+    };
+    res.rushHit = await runRush(false);
+    res.rushDodged = await runRush(true);
+
+    // THE CURRENT - a drag the open floor answers badly and cover breaks. The
+    // pair is the barnacle's own test at boss scale: same law, same counter.
+    const runRip = async (withWall) => {
+      const e = await freshChoir(0, 0);
+      if (withWall) {
+        const box = new THREE.Box3(
+          new THREE.Vector3(4, 0, -8), new THREE.Vector3(6.5, 5, 8)
+        );
+        g.arena.obstacles.push(box);
+        g.arena.ground.push(box);
+      }
+      pinned = false;
+      p.pos.set(10, 0, 0);
+      forceCast(e, 'riptide');
+      let moved = 0;
+      let sawRing = false;
+      let dragged = false;
+      for (let i = 0; i < 480; i++) {
+        await step();
+        e.pos.set(0, e.pos.y, 0);   // pin the body: a clean straight-line pull
+        if (e.bs.state === 'rip-tell' && e.bs.mark >= 0) sawRing = true;
+        if (e.bs.state === 'riptide') dragged = true;
+        moved = Math.max(moved, 10 - p.pos.x);
+        if (dragged && e.bs.state === 'roam') break;
+      }
+      pinned = true;
+      px = 0;
+      pz = 0;
+      return { moved: +moved.toFixed(2), sawRing, dragged };
+    };
+    res.ripOpen = await runRip(false);
+    res.ripWall = await runRip(true);
+
+    // INKSCREEN - telegraphed rings that land as INK, and ink costs nothing
+    // but sight. The zero is the mechanic: it is the drifter's whole bargain.
+    {
+      await freshChoir(1, 0);
+      px = 8;
+      pz = 0;
+      forceCast(g.enemies[g.enemies.length - 1], 'inkscreen');
+      let mortared = false;
+      let inked = 0;
+      for (let i = 0; i < 300; i++) {
+        await step();
+        if (g._mortars.some((m) => m.damage === 0 && m.ground && m.ground.kind === 'ink')) {
+          mortared = true;
+        }
+        inked = Math.max(inked, g._hazard.filter((h) => h.kind === 'ink').length);
+        if (inked >= 2) break;
+      }
+      res.inkWarned = mortared;
+      res.inkLanded = inked;
+      const h = g._hazard.find((x) => x.kind === 'ink');
+      if (h) {
+        px = h.x;
+        pz = h.z;
+        res.inkCost = await measure(40, null);
+      } else {
+        res.inkCost = -1;
+      }
+      clean();
+    }
+
+    // THE WELL RING - five wedges, one open: four columns rise, and they are
+    // real geometry while they stand.
+    {
+      await freshChoir(1, 0);
+      px = 9;
+      pz = 0;
+      forceCast(g.enemies[g.enemies.length - 1], 'wellring');
+      let scalds = 0;
+      let walls = 0;
+      for (let i = 0; i < 300; i++) {
+        await step();
+        scalds = Math.max(scalds, g._hazard.filter((h) => h.kind === 'scald').length);
+        walls = Math.max(walls, g.arena.obstacles.length);
+        if (scalds >= 4) break;
+      }
+      res.ringColumns = scalds;
+      res.ringWalls = walls;
+      clean();
+    }
+
+    // THE CHORUS - slow homing bubbles, and every one of them a target.
+    {
+      const e = await freshChoir(1, 0);
+      px = 12;
+      pz = 0;
+      forceCast(e, 'chorus');
+      let sawTell = false;
+      let shots = 0;
+      let homing = true;
+      let shootable = true;
+      for (let i = 0; i < 240; i++) {
+        await step();
+        if (e.bs.state === 'chorus-tell') sawTell = true;
+        const cur = g.projectiles.filter((pr) => pr.type === 'angler');
+        if (cur.length) {
+          shots = Math.max(shots, cur.length);
+          for (const pr of cur) {
+            if (!(pr.home > 0)) homing = false;
+            if (!pr.shootable) shootable = false;
+          }
+        }
+        if (shots >= 3 && !sawTell) break;
+        if (shots >= 3 && e.bs.state === 'roam') break;
+      }
+      res.chorusTold = sawTell;
+      res.chorusShots = shots;
+      res.chorusHoming = homing && shootable;
+      clean();
+    }
+
+    // THE HYMN - the singer's note, and being inside when it lands takes the
+    // trigger. Checked AFTER the wind-up, which is the whole contract.
+    {
+      const e = await freshChoir(6, 0);
+      px = 5;
+      pz = 0;
+      e.bs.hymnT = 0;
+      e.bs.cd = 0;
+      e.bs.state = 'roam';
+      let sang = false;
+      for (let i = 0; i < 300; i++) {
+        await step();
+        if (e.bs.state === 'hymn' && e.bs.mark >= 0) sang = true;
+        if (p.status.fear > 0) break;
+      }
+      res.hymnSang = sang;
+      res.hymnFeared = p.status.fear > 0;
+      clean();
+    }
+
+    // CONTACT - whatever a body is doing, being inside it is a bite. 1.2s a
+    // touch window is the whole roster's rule for bosses; the choir's is that
+    // it never stops being true while it sings.
+    {
+      const e = await freshChoir(1.6, 0);
+      e.bs.cd = 999;              // keep it roaming: the TOUCH is under test
+      const lost = await measure(100, () => {
+        px = e.pos.x;
+        pz = e.pos.z;
+      });
+      res.touchCost = lost;
       clean();
     }
 
@@ -458,8 +707,41 @@ try {
     `singing=${out.choirSinging}/${out.choirBodies}`);
   ok('and each body carries a different voice', out.choirVoices === 3,
     `voices=${out.choirVoices}`);
+  ok('the fight MOVES - the bodies wheel rather than park', out.choirTravelled > 25,
+    `travelled=${out.choirTravelled}m over 10s`);
+  ok('and it sings at a fight\'s pace, not the old one\'s', out.choirCasts >= 8,
+    `casts=${out.choirCasts} over 10s across the three`);
   ok('killing a silent one frees the rest', out.choirFreedRose,
     `freed=${out.choirFreed}`);
+
+  ok('every body carries the same five notes', out.verseCount && out.verseCoverage,
+    `verses=${JSON.stringify(out.verseCount)},coverage=${out.verseCoverage}`);
+  ok('the rush draws its lane and answers a lane-standing player',
+    out.rushHit.sawTell && out.rushHit.laneHeld && out.rushHit.dashed && out.rushHit.lost > 5,
+    `tell=${out.rushHit.sawTell} lane=${out.rushHit.laneHeld} moved=${out.rushHit.moved}m lost=${out.rushHit.lost}`);
+  ok('and stepping off the lane answers it - the charge commits',
+    out.rushDodged.dashed && out.rushDodged.ended && out.rushDodged.lost === 0,
+    `moved=${out.rushDodged.moved}m lost=${out.rushDodged.lost}`);
+  ok('the current drags the player across open floor',
+    out.ripOpen.dragged && out.ripOpen.sawRing && out.ripOpen.moved > 1.5,
+    `moved=${out.ripOpen.moved}m ring=${out.ripOpen.sawRing}`);
+  ok('and cover between them breaks it, as it does the barnacle\'s',
+    out.ripWall.dragged && out.ripWall.moved < out.ripOpen.moved * 0.4,
+    `open=${out.ripOpen.moved}m walled=${out.ripWall.moved}m`);
+  ok('inkscreen warns, then lands as ink', out.inkWarned && out.inkLanded >= 2,
+    `warned=${out.inkWarned} clouds=${out.inkLanded}`);
+  ok('and ink costs nothing but sight, exactly like the drifter\'s',
+    out.inkCost === 0, `lost=${out.inkCost}`);
+  ok('the well ring is a room closing with one gap: four pillars',
+    out.ringColumns === 4 && out.ringWalls === 4,
+    `columns=${out.ringColumns} walls=${out.ringWalls}`);
+  ok('the chorus fires a fan of homing TARGETS',
+    out.chorusTold && out.chorusShots >= 3 && out.chorusHoming,
+    `tell=${out.chorusTold} shots=${out.chorusShots} homingShootable=${out.chorusHoming}`);
+  ok('the hymn is telegraphed and takes the trigger',
+    out.hymnSang && out.hymnFeared, `sang=${out.hymnSang} feared=${out.hymnFeared}`);
+  ok('and touching a body is a bite at any time', out.touchCost > 0,
+    `lost=${out.touchCost}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

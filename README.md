@@ -763,13 +763,18 @@ context. The start screen says so, and one click anywhere fixes it.
   of the seventeen themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
   All seventeen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
-  health bar: damage on any of them comes off the same pool, so the bar falls
-  whichever one is shot - what changes is what happens when one DIES. One of
-  the three is always SINGING, lit and loud, and the other two are silent. Kill
-  the singer and the choir carries on a body short; kill a silent one and the
-  survivors are FREED - faster, and attacking twice as often - for the rest of
-  the fight. The singer rotates on its own clock, so the correct target keeps
-  moving. **THE CONDUCTOR**, TEMPEST's, is the only fight in the game whose
+  health bar, and the one fight that never holds still: the three of them WHEEL
+  around you instead of parking, every attack is one of the theme's own mechanics
+  grown to boss scale - a committed rush down a drawn lane, a drag toward a maw
+  that only cover breaks, telegraphed blooms of blinding ink, a ring of rising
+  pillars with one gap in it, and fans of homing bubbles you can shoot out of
+  the air - while the one that is SINGING carries the howl that takes your
+  trigger. Touching any of them is a bite, any time. And the bar is one pool,
+  so damage on any of them is the same damage - what changes is what happens
+  when one DIES. Kill the singer and the choir carries on a body short; kill a
+  silent one and the survivors are FREED - faster, and attacking twice as often
+  - for the rest of the fight. The singer rotates on its own clock, so the
+  correct target keeps moving. **THE CONDUCTOR**, TEMPEST's, is the only fight in the game whose
   clock is the music: it counts bars on the beat, drives a pylon into the floor
   on each of the first three and DISCHARGES along every line it has on the
   fourth - boss to pylon and pylon to pylon, so three pylons is six live wires

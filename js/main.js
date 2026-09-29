@@ -12017,11 +12017,14 @@ class Game {
       this._ashAt.set(m.x, 0, m.z);
       // A mortar IS a discrete hit that the player was shown and could have
       // walked out of, so unlike a pool it goes through the normal path and
-      // the ward is allowed to eat it.
+      // the ward is allowed to eat it. One with NO damage is a pure warning
+      // for what it leaves - the choir's ink blooms land only as cloud, and
+      // a zero-point "hit" would still roll the dodge, spend the ward and
+      // break the streaks for a hit that never was.
       const dx = this.player.pos.x - m.x;
       const dz = this.player.pos.z - m.z;
       const d = Math.hypot(dx, dz);
-      if (d < m.radius) this._hurtPlayer(m.damage * (1 - d / m.radius), this._ashAt);
+      if (m.damage > 0 && d < m.radius) this._hurtPlayer(m.damage * (1 - d / m.radius), this._ashAt);
       this.effects.shockwave(this._ashAt, 0xff5533, m.radius, 0.35);
       this.effects.burst(this._ashAt, 0xff7043, 20, 6, 2.5, 0.6);
       this.effects.addShake(0.14);

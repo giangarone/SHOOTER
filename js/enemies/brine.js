@@ -12,9 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, MELEE_REACH_Y, SHARED_MATS, _blinkAt, aiMelee, eyes, geo,
-  landHit, lump, orbit, partsFor, prism, releaseMarks, segBlocked, shard, slab,
-  spike,
+  BOSS_REACH_Y, ENEMY_TYPES, MELEE_REACH_Y, SHARED_MATS, _blinkAt, _reachY,
+  aiMelee, bossTouch, eyes, faceSnap, geo, landHit, lump, orbit, partsFor,
+  prism, releaseMarks, segBlocked, shard, slab, snapAim, spike,
 } from './shared.js';
 
 // THE HOWL. Wind-up, radius, how long the player loses the trigger for, and
@@ -692,41 +692,228 @@ export function aiDrifter(e, a) {
   a.ctx.addHazard(e.pos.x, e.pos.z, DRIFT_R, DRIFT_LIFE, 0, 'ink');
 }
 
+// ---- THE DROWNED CHOIR ---------------------------------------------------
+//
+// THREE BODIES, ONE BAR - and a fight that never holds still. The first
+// choir stood its ground and sang one of three notes every few seconds; this
+// one WHEELS around the player the whole fight, casts on staggered clocks
+// short enough that a telegraph is nearly always up somewhere, and every
+// note is one of the theme's own mechanics at boss scale:
+//
+//   undertow   the gulper's strike. A lane is drawn at full length and
+//              fills; the rush down it is COMMITTED and faster than the
+//              player's walk, and the deliberate back-drift after it is the
+//              window the strike buys.
+//   riptide    the barnacle's current. The ring rides the PLAYER while the
+//              maw opens, then the body anchors and drags, and what breaks
+//              the line is what breaks every drag in this theme: cover.
+//   inkscreen  the drifter's curtain, thrown. Mortar-telegraphed blooms of
+//              ink where the player is and where they were going - it costs
+//              sight, never health.
+//   wellring   the vent's column as a room closing: five wedges around the
+//              player, one left open. The pillars rise where the circles
+//              stood, so the gap the warning showed is the gap that is there.
+//   chorus     the angler's bubble as a bar of music: a rearing tell, then
+//              a fan of slow homing rounds down a LOCKED line - every one of
+//              them a target, which is the theme's own discipline test.
+//
+// ...and over all of it the HYMN, which only the SINGER carries: the
+// howler's scream at boss scale, a wide ring around the body that takes the
+// trigger from anyone still inside it when it lands. The one note in the
+// song that cannot be shot out of the air is the one you are told the
+// longest about.
+//
+// What did NOT change: the bar is still one pool shared three ways, and the
+// wrong kill is still punished - the singer is lit and sings the louder,
+// faster half; kill the singer and the choir carries on a body short, kill
+// a silent one and the rest are FREED. And touching a body is always a
+// bite, from any state: bossTouch never stops for the song.
+
 // How long one body holds the song, and what killing the WRONG one is worth.
 export const CHOIR_SING = 4.5;
 
 export const CHOIR_FREED = 1.45;
 
-export const CHOIR_CD = 3.4;
+// How often ONE body sings, before the wave's `rate` and the freed and
+// singing multipliers hurry it. Down from 3.4 in the old fight: with three
+// bodies on staggered clocks something is always being telegraphed, which
+// is the point of the rework.
+export const CHOIR_CD = 2.2;
 
-export const CHOIR_PULL = 3.0;
+// THE WHEEL. Each body holds the station a third of the circle from its
+// sisters', and the circle itself never stops turning - the fight orbits
+// the player between casts, so the same note never arrives twice from the
+// same bearing and "where is it coming from next" is always being asked.
+export const CHOIR_ORBIT = 9.5;
 
-export const CHOIR_INK_R = 5.0;
+export const CHOIR_WHEEL = 0.3;
+
+// THE RUSH. 14 m/s: faster than the player's walk and slower than the
+// sprint - the gulper's law at boss scale, so the answer is to step off the
+// lane, not to outrun it. The dash covers its length in one commitment.
+export const CHOIR_RUSH_WINDUP = 0.85;
+
+export const CHOIR_RUSH_LEN = 18;
+
+export const CHOIR_RUSH_W = 2.4;
+
+export const CHOIR_RUSH_SPEED = 14;
+
+export const CHOIR_RUSH_DUR = 1.45;
+
+// Contact anywhere along the rush, once, and capped the way every boss blow
+// is - the wave-50 multiplier on an uncapped 1.6x hit is a one-shot.
+export const CHOIR_RUSH_CAP = 40;
+
+// Not from arm's length, where it would be a second swing with extra steps;
+// not from across the arena, where the lane is up so long it is scenery.
+export const CHOIR_RUSH_MIN = 6;
+
+export const CHOIR_RUSH_RANGE = 26;
+
+// THE GIVE-GROUND, hit or miss: a deliberate back-drift at half pace, and
+// the window the player is paid in for the dodge.
+export const CHOIR_RUSH_EBB = 0.9;
+
+// THE CURRENT.
+export const CHOIR_RIP_WINDUP = 0.75;
+
+export const CHOIR_RIP_RANGE = 17;
+
+export const CHOIR_RIP_HOLD = 1.7;
+
+// Stronger than the barnacle's 2.6 - a boss's current is the hardest pull
+// in the theme, still under a walking player: swimming out stays possible,
+// standing still in it does not.
+export const CHOIR_RIP_PULL = 4.6;
+
+export const CHOIR_RIP_EYE = 1.6;
+
+// INKSCREEN. Dealt at ZERO like the drifter's curtain: what it costs is
+// never health, it is the seconds the rest of the choir get inside the dark.
+export const CHOIR_INK_N = 2;
+
+export const CHOIR_INK_R = 3.6;
+
+export const CHOIR_INK_DELAY = 1.3;
+
+export const CHOIR_INK_LIFE = 4.5;
+
+// THE WELL RING.
+export const CHOIR_RING_N = 5;
+
+export const CHOIR_RING_R = 3.6;
 
 export const CHOIR_COL_R = 2.0;
 
-// How far out the ring of columns lands. Wide enough to be a room closing
-// rather than a pillar dropped on somebody's head.
-export const CHOIR_RING = 3.4;
+export const CHOIR_RING_CAP = 26;
+
+// THE CHORUS. Slow, homing, and every round a target: what it spends is the
+// player's trigger while the other notes are up; what it costs the choir is
+// that the trigger can spend it back.
+export const CHOIR_CHORUS_WINDUP = 0.7;
+
+export const CHOIR_CHORUS_N = 3;
+
+// THE HYMN - the singer's own note, on its own clock. Telegraphed as long
+// as the howler's, because the attack that takes the trigger is the one
+// being caught inside must always be a mistake rather than a coin toss.
+export const CHOIR_HYMN_R = 10;
+
+export const CHOIR_HYMN_WINDUP = 1.4;
+
+export const CHOIR_HYMN_GAP = 4.0;
+
+// Each body's VERSE is a different rotation of the same five notes - voice 0
+// opens with the current, 1 with the ink, 2 with the pillars - so which body
+// it is still shapes the fight, and no body's song is only its own mechanic.
+// Exported for the brine suite, which drives a body through its own verse.
+export const CHOIR_VERSES = [
+  ['riptide', 'undertow', 'inkscreen', 'chorus', 'wellring'],
+  ['inkscreen', 'chorus', 'undertow', 'wellring', 'riptide'],
+  ['wellring', 'undertow', 'chorus', 'riptide', 'inkscreen'],
+];
 
 export const _choirAt = new THREE.Vector3();
+
+// The current's sightline, at the height the maw drags from - the SAME
+// question the barnacle's own pull asks: something solid on the line means
+// there is no current.
+function choirSees(e, p, ctx) {
+  return !segBlocked(
+    e.pos.x, CHOIR_RIP_EYE, e.pos.z, p.pos.x, CHOIR_RIP_EYE, p.pos.z, ctx.obstacles
+  );
+}
+
+// Which note this body sings next. Its verse is walked in order and a note
+// that cannot be taken is SKIPPED, not waited on - a rush needs a lane, the
+// current needs the player in reach with no other current already running -
+// so a body always finds something to sing instead of idling behind a cast
+// it cannot make.
+function choirPick(e, a) {
+  const bs = e.bs;
+  const ctx = a.ctx;
+  // The singer's own note, and only while it is singing.
+  if (bs.singing && bs.hymnT <= 0 && a.dist < CHOIR_HYMN_R + 5) return 'hymn';
+  for (let k = 0; k < 5; k++) {
+    const c = bs.verse[bs.turn % 5];
+    bs.turn++;
+    if (c === 'undertow' && (a.dist < CHOIR_RUSH_MIN || a.dist > CHOIR_RUSH_RANGE)) continue;
+    if (c === 'riptide') {
+      if (a.dist > CHOIR_RIP_RANGE) continue;
+      // ONE CURRENT AT A TIME. The drag is the strongest thing the choir
+      // does, and two sisters dragging at once would be a stun wearing a
+      // warning - it keeps its strength by coming alone.
+      let busy = false;
+      for (const o of ctx.enemies) {
+        if (o !== e && !o.dead && o.type === 'choir' && o.bs &&
+          (o.bs.state === 'rip-tell' || o.bs.state === 'riptide')) busy = true;
+      }
+      if (busy) continue;
+    }
+    return c;
+  }
+  // The chorus is legal at any range: a body that found nothing else still
+  // has something to say.
+  return 'chorus';
+}
 
 export function aiChoir(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
+  const p = ctx.player;
+  if (!p) return;
+
   if (bs.voice === undefined) {
     // The body main.js stood up. It asks to be made three; the handler gives
     // this one voice 0 and the other two 1 and 2, and splits the pool between
     // them so the bar is unchanged by the fight becoming a choir.
     bs.voice = 0;
-    bs.freed = 1;
-    bs.cd = CHOIR_CD;
     ctx.bossEvent('choir', e);
   }
-  if (bs.freed === undefined) {
-    bs.freed = 1;
-    bs.cd = CHOIR_CD;
+  if (bs.state === undefined) {
+    bs.freed = bs.freed === undefined ? 1 : bs.freed;
+    bs.state = 'roam';
+    // Staggered by voice, so the three of them open the song a third of a
+    // bar apart rather than in unison.
+    bs.cd = (0.6 + bs.voice * 0.7) * e.rate;
+    bs.turn = 0;
+    bs.verse = CHOIR_VERSES[bs.voice % 3];
+    bs.mark = -1;
+    bs.fx = ctx.effects;
+    bs.hymnT = 1.5;
+    bs.casts = 0;
   }
+  // Held fresh every frame: releaseMarks reaches the pool through bs.fx at
+  // death, and a stale one would strand a mark mid-song.
+  bs.fx = ctx.effects;
+  if (bs.hymnT > 0) bs.hymnT -= a.dt;
+
+  // CONTACT IS ALWAYS A BITE, from any state - the thing attacking you is a
+  // BODY, and being inside it is the mistake the whole theme is about. The
+  // rush is the one exception: it arrives as its own heavier hit and would
+  // double-bill the same frame.
+  if (bs.state !== 'dash') bossTouch(e, a);
 
   // ---- who is singing -------------------------------------------------
   // COMPUTED, NOT STORED. Every body derives the singer from the same two
@@ -740,10 +927,10 @@ export function aiChoir(e, a) {
     n++;
     sum += o.id;
   }
-  // RANK, not a sort. A body's place in the choir is how many live bodies have
-  // a smaller id than it, which every body can work out about every other one
-  // without allocating anything - and with three of them the nested walk is
-  // nine comparisons.
+  // RANK, not a sort. A body's place in the choir is how many live bodies
+  // have a smaller id than it, which every body can work out about every
+  // other one without allocating anything - and with three of them the
+  // nested walk is nine comparisons.
   const want = n > 0 ? Math.floor(ctx.time / CHOIR_SING) % n : 0;
   let singerId = -1;
   for (const o of ctx.enemies) {
@@ -783,75 +970,318 @@ export function aiChoir(e, a) {
     ctx.bossEvent('enrage', e);
   }
 
-  // The maw is the targeting information. It opens on the singer and shuts on
-  // everybody else, and it is the only difference between the three bodies.
-  const mawWant = bs.singing ? 1 : 0;
-  bs.maw = (bs.maw || 0) + (mawWant - (bs.maw || 0)) * Math.min(1, a.dt * 5);
+  // The maw is the targeting information, as it always was: open on the
+  // singer, shut on the silent - and opened WIDE by every wind a body is
+  // making, so the face says the same thing as the floor for the player who
+  // is watching the enemy rather than the ring.
+  const open = Math.min(1,
+    (bs.singing ? 0.55 : 0) + (bs.state !== 'roam' && bs.state !== 'ebb' ? 0.45 : 0));
+  bs.maw = (bs.maw || 0) + (open - (bs.maw || 0)) * Math.min(1, a.dt * 6);
   if (e.choirMaw) e.choirMaw.scale.setScalar((0.6 + bs.maw * 1.1) * e.scale);
-  e._setEyeAlert(bs.singing);
+  e._setEyeAlert(bs.state !== 'roam' && bs.state !== 'ebb');
 
-  // The columns it called for, arriving. Held in one slot on the boss rather
-  // than in a list, so one round is in the air at a time and a choir cannot
-  // bury the arena while the player is dealing with the other two voices.
-  if (e.choirCols > 0) {
-    e.choirCols -= a.dt;
-    if (e.choirCols <= 0) {
-      for (let i = 0; i < 3; i++) {
-        const ang = e.choirA + (i / 3) * Math.PI * 2;
-        const cx = e.choirX + Math.cos(ang) * CHOIR_RING;
-        const cz = e.choirZ + Math.sin(ang) * CHOIR_RING;
-        ctx.addHazard(cx, cz, CHOIR_COL_R, VENT_LIFE, VENT_DPS, 'scald');
-        if (ctx.effects) {
-          _choirAt.set(cx, 0.4, cz);
-          _brineTo.set(cx, 4.2, cz);
-          ctx.effects.beam(_choirAt, _brineTo, 0xa8ffe8);
-        }
-      }
-      if (ctx.sfx) ctx.sfx.impact();
+  // ---- the committed states run out whatever happens ------------------
+  // A rush already out of the gate, the drift after it and a current already
+  // holding are NOT called back by fear: the stagger rule the other bosses
+  // keep is about what is still being AIMED, not what has already been sung.
+  if (bs.state === 'dash') {
+    bs.t -= a.dt;
+    // Without raising the step cap, update()'s clamp turns fourteen metres a
+    // second into a brisk walk - the gulper's own footnote, kept.
+    e.stepMul = CHOIR_RUSH_SPEED / Math.max(0.5, a.sp);
+    a.vx = e.nx * CHOIR_RUSH_SPEED;
+    a.vz = e.nz * CHOIR_RUSH_SPEED;
+    faceSnap(e);
+    // Contact anywhere down the rush is the bite, once - heavier than a
+    // touch, and capped the way every boss's promise caps its hits.
+    if (!bs.rushHit && a.dist < e.radius + 1.6 && _reachY(a) < BOSS_REACH_Y) {
+      bs.rushHit = true;
+      ctx.onHitPlayer(Math.min(CHOIR_RUSH_CAP, e.damage * 1.6), e.pos, e);
+      _choirAt.set(e.pos.x, 1.4, e.pos.z);
+      ctx.effects.burst(_choirAt, 0x8ff0e0, 20, 6, 2, 0.5);
+      ctx.effects.addShake(0.25);
+      if (ctx.sfx) ctx.sfx.meleeHit();
     }
+    if (bs.t <= 0 || e.blockedBy > 0.05) {
+      const slammed = e.blockedBy > 0.05;
+      if (slammed) {
+        _choirAt.set(e.pos.x, 0.4, e.pos.z);
+        ctx.effects.shockwave(_choirAt, ENEMY_TYPES.choir.color, 5, 0.45);
+        ctx.effects.burst(_choirAt, 0xa8ffe8, 20, 6, 2, 0.5);
+        ctx.effects.addShake(0.2);
+      }
+      bs.state = 'ebb';
+      bs.t = CHOIR_RUSH_EBB * (slammed ? 1.6 : 1);
+      e.stepMul = 1.4;
+    }
+    return;
   }
 
-  aiMelee(e, a);
-  bs.cd -= a.dt * bs.freed;
-  if (bs.cd > 0 || a.dist > 26) return;
-  bs.cd = CHOIR_CD * e.rate;
-  const p = ctx.player;
-  if (!p) return;
+  if (bs.state === 'ebb') {
+    bs.t -= a.dt;
+    e.stepMul = 1.4;
+    // THE GIVE-GROUND, the gulper's swallow at boss scale: backwards at half
+    // pace, slower than the player closes - the window, and the only time in
+    // the fight a body is retreating.
+    a.vx = -a.nx * a.sp * 0.55;
+    a.vz = -a.nz * a.sp * 0.55;
+    if (bs.t <= 0) bs.state = 'roam';
+    return;
+  }
 
-  // ONE MECHANIC EACH, and they are the theme's own three. A choir is BRINE's
-  // roster with a single bar over it, which is what makes the boss wave read
-  // as the end of the block rather than as an unrelated fight.
-  if (bs.voice === 0) {
-    // The barnacle's current.
-    if (ctx.pullPlayer) ctx.pullPlayer(e.pos.x - p.pos.x, e.pos.z - p.pos.z, CHOIR_PULL);
-    if (ctx.effects) {
-      _choirAt.set(e.pos.x, 1.2, e.pos.z);
-      _brineTo.set(p.pos.x, 1.2, p.pos.z);
+  if (bs.state === 'riptide') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    // Planted for the whole hold: the drag is the attack and the rooted body
+    // is the window it pays. COVER BREAKS THE CURRENT - the barnacle's law,
+    // kept at boss scale, because a drag through a pillar would be one with
+    // no answer.
+    if (a.dist < CHOIR_RIP_RANGE + 5 && choirSees(e, p, ctx)) {
+      if (ctx.pullPlayer) ctx.pullPlayer(e.pos.x - p.pos.x, e.pos.z - p.pos.z, CHOIR_RIP_PULL);
+      _choirAt.set(e.pos.x, CHOIR_RIP_EYE, e.pos.z);
+      _brineTo.set(p.pos.x, CHOIR_RIP_EYE, p.pos.z);
       ctx.effects.beam(_choirAt, _brineTo, 0x8ff0e0);
-      ctx.effects.shockwave(p.pos, 0x1f8a8a, 3.0, 0.3);
+      if (e.choirMaw) e.choirMaw.scale.setScalar((0.7 + Math.sin(ctx.time * 10) * 0.22) * e.scale);
     }
-  } else if (bs.voice === 1) {
-    // The drifter's ink, over the player rather than under itself: a boss that
-    // inked its own feet would be hiding from the fight.
-    ctx.addHazard(p.pos.x, p.pos.z, CHOIR_INK_R, 4.5, 0, 'ink');
-  } else {
-    // The vent's column, three of them in a ring around the player, so it is
-    // a room being closed rather than one pillar being dropped. The bearing is
-    // rolled ONCE and kept, because the mortars and the columns they become
-    // have to land in the same three places - rolling it twice would put the
-    // pillars somewhere the circles never were.
-    e.choirX = p.pos.x;
-    e.choirZ = p.pos.z;
-    e.choirA = Math.random() * Math.PI * 2;
-    e.choirCols = VENT_LEAD;
-    for (let i = 0; i < 3; i++) {
-      const ang = e.choirA + (i / 3) * Math.PI * 2;
-      ctx.addMortar(
-        e.choirX + Math.cos(ang) * CHOIR_RING, e.choirZ + Math.sin(ang) * CHOIR_RING,
-        CHOIR_COL_R + 0.5, VENT_LEAD, VENT_HIT
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'roam';
+    }
+    return;
+  }
+
+  // Terror staggers a boss rather than sending it running - the contract
+  // fearMode:'stagger' declares. A note still being TELEGRAPHED is called
+  // off here, and the mark goes back with it: a feared body that kept its
+  // warning drawn would be a hit arriving after the fight it came from.
+  if (e.status.fear > 0) {
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markRelease(bs.mark);
+      bs.mark = -1;
+    }
+    if (bs.state !== 'roam') bs.state = 'roam';
+    bs.cd = Math.max(bs.cd, 0.8);
+    return;
+  }
+
+  // ---- the tells --------------------------------------------------------
+  if (bs.state === 'undertow-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    faceSnap(e);
+    // The lane at full length from the first frame, filling as the wind runs
+    // out: the AREA reads instantly, the fill says when.
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markSet(
+        bs.mark,
+        e.pos.x + e.nx * CHOIR_RUSH_LEN * 0.5, e.pos.z + e.nz * CHOIR_RUSH_LEN * 0.5,
+        CHOIR_RUSH_W, 0x8ff0e0, 1 - Math.max(0, bs.t) / CHOIR_RUSH_WINDUP,
+        CHOIR_RUSH_LEN / (2 * CHOIR_RUSH_W), Math.atan2(-e.nx, -e.nz)
       );
     }
-    ctx.bossEvent('charge', e);
+    if (bs.t <= 0) {
+      if (bs.mark >= 0 && bs.fx) {
+        bs.fx.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      bs.state = 'dash';
+      bs.t = CHOIR_RUSH_DUR;
+      bs.rushHit = false;
+      _choirAt.set(e.pos.x, 0.5, e.pos.z);
+      ctx.effects.burst(_choirAt, 0x8ff0e0, 18, 6, 2, 0.5);
+      if (ctx.sfx) ctx.sfx.meleeHit();
+      ctx.bossEvent('charge', e);
+    }
+    return;
+  }
+
+  if (bs.state === 'rip-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    // Planted, and the ring rides the PLAYER rather than the body: it is not
+    // where the current reaches, it is where YOU are about to be seized, so
+    // the warning stands in the exact spot that stops being safe.
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markSet(bs.mark, p.pos.x, p.pos.z, 2.1, 0x8ff0e0,
+        1 - Math.max(0, bs.t) / CHOIR_RIP_WINDUP, 1, 0, 0.5);
+    }
+    _choirAt.set(e.pos.x, CHOIR_RIP_EYE, e.pos.z);
+    _brineTo.set(p.pos.x, CHOIR_RIP_EYE, p.pos.z);
+    ctx.effects.beam(_choirAt, _brineTo, 0x8ff0e0);
+    if (bs.t <= 0) {
+      if (bs.mark >= 0 && bs.fx) {
+        bs.fx.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      bs.state = 'riptide';
+      bs.t = CHOIR_RIP_HOLD;
+      _choirAt.set(e.pos.x, 1.2, e.pos.z);
+      ctx.effects.burst(_choirAt, 0x8ff0e0, 14, 5, 1.6, 0.4);
+    }
+    return;
+  }
+
+  if (bs.state === 'chorus-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    faceSnap(e);
+    if (bs.t <= 0) {
+      bs.state = 'roam';
+      e._setEyeAlert(false);
+      const n = CHOIR_CHORUS_N + (bs.alone ? 2 : 0);
+      const base = Math.atan2(e.nz, e.nx);
+      // Locked at the TELEGRAPH, as every committed attack in the game is:
+      // the fan goes down the line the body squared up on, and stepping off
+      // it is the answer - a fan that tracked would be homing twice over.
+      const live = Math.atan2(p.pos.z - e.pos.z, p.pos.x - e.pos.x);
+      for (let i = 0; i < n; i++) {
+        ctx.addProjectile(
+          e.pos.x + e.nx * 1.4, e.pos.y + 2.4, e.pos.z + e.nz * 1.4,
+          'angler', e._projScale(), base + (i - (n - 1) / 2) * 0.26 - live
+        );
+      }
+      _choirAt.set(e.pos.x + e.nx * 1.4, e.pos.y + 2.4, e.pos.z + e.nz * 1.4);
+      ctx.effects.burst(_choirAt, 0xa8ffe8, 16, 5, 2, 0.4);
+      if (ctx.sfx) ctx.sfx.impact();
+    }
+    return;
+  }
+
+  if (bs.state === 'hymn') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    // Drawn at the exact radius the scream covers and filling as the verse
+    // runs down - the howler's contract at boss scale: the player is told
+    // where, told how big, and being inside when it lands is the mistake.
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markSet(bs.mark, e.pos.x, e.pos.z, CHOIR_HYMN_R,
+        ENEMY_TYPES.choir.color, 1 - Math.max(0, bs.t) / CHOIR_HYMN_WINDUP, 1, 0, 0.2);
+    }
+    if (bs.t <= 0) {
+      if (bs.mark >= 0 && bs.fx) {
+        bs.fx.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      bs.state = 'roam';
+      e._setEyeAlert(false);
+      _choirAt.set(e.pos.x, 0.06, e.pos.z);
+      ctx.effects.shockwave(_choirAt, ENEMY_TYPES.choir.color, CHOIR_HYMN_R, 0.5);
+      _choirAt.set(e.pos.x, 1.6, e.pos.z);
+      ctx.effects.burst(_choirAt, 0xa8ffe8, 24, 6, 1.6, 0.6);
+      ctx.effects.addShake(0.2);
+      if (ctx.sfx) ctx.sfx.impact();
+      // The radius is checked at the moment it LANDS, not when it started:
+      // the whole point of the long wind-up is that leaving works.
+      if (a.dist < CHOIR_HYMN_R && ctx.applyPlayerStatus) {
+        ctx.applyPlayerStatus('fear', HOWL_FEAR);
+      }
+    }
+    return;
+  }
+
+  if (bs.state === 'cast') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.t <= 0) bs.state = 'roam';
+    return;
+  }
+
+  // ---- roam: the wheel, and the next note -------------------------------
+  bs.cd -= a.dt * bs.freed * (bs.singing ? 1.35 : 1);
+  // Each body holds the station a third of the circle from its sisters', and
+  // the circle itself turns the whole time - the fight orbits the player
+  // between casts instead of parking in front of them.
+  const wheelAng = bs.voice * (Math.PI * 2 / 3) + ctx.time * CHOIR_WHEEL;
+  const wx = p.pos.x + Math.cos(wheelAng) * CHOIR_ORBIT - e.pos.x;
+  const wz = p.pos.z + Math.sin(wheelAng) * CHOIR_ORBIT - e.pos.z;
+  const wd = Math.hypot(wx, wz);
+  if (wd > 0.5) {
+    a.vx = (wx / wd) * a.sp;
+    a.vz = (wz / wd) * a.sp;
+  }
+  if (bs.cd > 0) return;
+  bs.cd = (CHOIR_CD + Math.random() * 0.9) * e.rate;
+  const cast = choirPick(e, a);
+  bs.casts++;
+  if (cast === 'undertow') {
+    snapAim(e, a, true);
+    bs.state = 'undertow-tell';
+    bs.t = CHOIR_RUSH_WINDUP;
+    bs.mark = ctx.effects.markAcquire();
+    return;
+  }
+  if (cast === 'riptide') {
+    bs.state = 'rip-tell';
+    bs.t = CHOIR_RIP_WINDUP;
+    bs.mark = ctx.effects.markAcquire();
+    e.flash = 0.15;
+    return;
+  }
+  if (cast === 'chorus') {
+    snapAim(e, a, true);
+    bs.state = 'chorus-tell';
+    bs.t = CHOIR_CHORUS_WINDUP;
+    return;
+  }
+  if (cast === 'hymn') {
+    bs.state = 'hymn';
+    bs.t = CHOIR_HYMN_WINDUP;
+    bs.hymnT = CHOIR_HYMN_GAP * e.rate;
+    bs.mark = ctx.effects.markAcquire();
+    e.flash = 0.15;
+    return;
+  }
+  // inkscreen and the well ring are one planted breath: the mortars they
+  // call draw the warnings, the body only stands still long enough to throw.
+  bs.state = 'cast';
+  bs.t = 0.4;
+  e.flash = 0.15;
+  choirFire(e, a, cast);
+}
+
+// The two THROWN notes, fired once at the cast. The rings are the mortar
+// system's own warnings and the ground payload is what the circle becomes -
+// the ink lands dark, the ring lands solid, and neither owes the fight a
+// second mechanism.
+function choirFire(e, a, cast) {
+  const bs = e.bs;
+  const ctx = a.ctx;
+  const p = ctx.player;
+  if (cast === 'inkscreen') {
+    // One bloom where the player IS, the rest where they are GOING: the dark
+    // keeps pace with a dodge through it, and a player who holds still is
+    // smothered where they stood.
+    const n = CHOIR_INK_N + (bs.alone ? 1 : 0);
+    const px = p.pos.x + (p.vel ? p.vel.x * 0.5 : 0);
+    const pz = p.pos.z + (p.vel ? p.vel.z * 0.5 : 0);
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const r = i === 0 ? 0 : 2.6 + Math.random() * 1.6;
+      ctx.addMortar(px + Math.cos(ang) * r, pz + Math.sin(ang) * r,
+        CHOIR_INK_R, CHOIR_INK_DELAY, 0,
+        { radius: CHOIR_INK_R, life: CHOIR_INK_LIFE, dps: 0, kind: 'ink' });
+    }
+    return;
+  }
+  // THE WELL RING. Five wedges around the player, exactly one left open -
+  // a room that is closing, not a cell. The bearing is rolled ONCE: the gap
+  // the circles drew and the gap the pillars leave have to be the same gap.
+  const gapAt = (Math.random() * CHOIR_RING_N) | 0;
+  const off = Math.random() * Math.PI * 2;
+  for (let i = 0; i < CHOIR_RING_N; i++) {
+    if (i === gapAt) continue;
+    const ang = off + (i / CHOIR_RING_N) * Math.PI * 2;
+    ctx.addMortar(
+      p.pos.x + Math.cos(ang) * CHOIR_RING_R, p.pos.z + Math.sin(ang) * CHOIR_RING_R,
+      CHOIR_COL_R + 0.5, VENT_LEAD, Math.min(CHOIR_RING_CAP, e.damage * 0.9),
+      { radius: CHOIR_COL_R, life: VENT_LIFE, dps: VENT_DPS, kind: 'scald' }
+    );
   }
 }
 
@@ -1091,31 +1521,34 @@ const TYPES = {
     build: buildHowler, ai: aiHowler, cleanup: releaseHowl,
   },
 
-  // BRINE's boss. THREE BODIES SHARING ONE HEALTH BAR, and only one of them is
-  // worth killing at a time.
+  // BRINE's boss. THREE BODIES SHARING ONE HEALTH BAR, and the one boss that
+  // is never standing where you left it.
   //
-  // One of the three is always SINGING - lit, loud, and marked - and the other
-  // two are silent. Damage on any of them comes off the same pool, so the bar
-  // falls whichever one is shot; what changes is what happens when one DIES.
-  // Kill the singer and the choir simply carries on a body short. Kill a
-  // silent one and the survivors are FREED: faster, and their attacks come
-  // twice as often, for the rest of the fight.
+  // The fight is the whole theme at full scale. The bodies WHEEL around the
+  // player instead of parking in front of them, they sing on staggered
+  // clocks short enough that a telegraph is nearly always up somewhere, and
+  // every note is one of the roster's own mechanics grown up: the gulper's
+  // committed rush down a drawn lane, the barnacle's current with the same
+  // cover rule, the drifter's ink thrown where you are going, the vent's
+  // columns rising as a ring with one gap, and a fan of the angler's homing
+  // bubbles. The singer - lit, maw open, the louder half - alone carries the
+  // howler's scream, the one note that takes the trigger rather than health.
   //
-  // So it is the one boss where the wrong answer is not "too slow" but
-  // "aimed at the nearest one" - and the singer rotates on its own clock, so
-  // the correct target keeps moving and the player has to keep looking.
+  // The strategy is unchanged because it IS the fight: the bar is one pool,
+  // the singing rotates on its own clock, and killing a silent body FREES
+  // the other two. What changed is that nothing in it holds still long
+  // enough to be answered by standing there and shooting - and touching a
+  // body is always a bite, from any state.
   //
-  // Each body carries one of the theme's three mechanics - the drag, the ink
-  // and the column - so the fight is BRINE's own roster with one bar over it.
-  // It ends as a single body, enraged.
+  // Speed is the fastest of any boss's walk: the wheel only works if the
+  // bodies genuinely outflank a player who is watching one of them.
   choir: {
     head: { r: 0.42, y: 2.02 },
-    hp: 3450, speed: 2.6, damage: 24, value: 6000, color: 0x1f8a8a, eye: 0xa8ffe8,
+    hp: 3450, speed: 3.3, damage: 24, value: 6000, color: 0x1f8a8a, eye: 0xa8ffe8,
     scale: 2.5, radius: 1.5, mass: 7, boss: true,
     hitbox: { r: 0.7, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.6, start: 3.0, hit: 3.8, cd: 2.0 },
     build: buildChoir, ai: aiChoir,
     cleanup: releaseMarks,
   },
