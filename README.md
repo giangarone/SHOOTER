@@ -681,13 +681,25 @@ context. The start screen says so, and one click anywhere fixes it.
   impacts; turquoise-tipped reef branches and broad triangular fins identify
   them overhead.
   **THE REEF EMPRESS** is a giant reef crab with ivory pincers, a branching
-  antler crown and a shuttered turquoise pearl. Its four attacks are paired
-  pincer impacts followed by a delayed centre snap, two advancing reef rows,
-  three shifting pearl fans, and a crown of polyps with a wide open exit.
-  Each attack ends with 1.8 seconds of exposed pearl: the valves separate and
-  its 35% damage resistance drops. Below half health, pearl fans grow from
-  five to seven shots, the crown gains two polyps, and stalking pauses shorten.
-  Warning and recovery times remain unchanged, and the crown's exit stays open.
+  antler crown and a shuttered turquoise pearl. Nine attacks, drawn from a
+  shuffled deck so no two rotations of her read the same: the paired pincer
+  impacts with a delayed centre snap, advancing reef rows, drifting pearl
+  fans and the polyp crown with its wide open exit she has always had, plus
+  five more — a circling hunt that rings the spot she caught you on, tightens
+  its marked circle and ends in a cut straight through the middle; a quick
+  pincer lunge that commits to the spot under you; a nautilus arm of polyps
+  that blooms outward one ring at a time, chasing around and out of your old
+  position; a rooted needle star fired on the music's half-beats, each spoke
+  a fifth of a turn from the last while her heart beats along; and a tide of
+  reef wash that rolls across the old spot in ranks with honest gaps between
+  its files. She stalks in a weaving circle instead of a beeline, and
+  touching her costs whatever she is doing. Every attack ends with 1.35
+  seconds of exposed pearl: the valves part and her 35% damage resistance
+  drops. Below half health the pauses shorten, the pearl fans grow from five
+  to seven shots, the crown gains two polyps, the spiral grows a second arm,
+  the tide widens to a fourth file, the star gains a third spoke and the
+  pincer lunge chains a second, freshly captured snap. Warning times stay
+  full length, and every escape route stays open.
 - **JUNGLE: buttress roots, jade canopies and golden pollen.**
   **Vinecats** prowl sideways before a straight, marked pounce that stops at
   cover; sidestep the lane, then punish their recovery. **Quillmonkeys** plant

@@ -1,6 +1,9 @@
 // CORAL's counterplay, run through real browser entities at fixed game ticks.
-// Captured attacks, real escape routes, support counterplay and boss recovery
-// are checked as differences, including exhausted and interrupted warnings.
+// Captured attacks, real escape routes, support counterplay and the Reef
+// Empress' nine-attack rotation - the circling hunt, the chained pincer snap,
+// the nautilus bloom, the beat-locked needle star and the rolling tide among
+// them - are checked as differences, including exhausted and interrupted
+// warnings.
 import { launchBrowser, startServer } from './harness.mjs';
 const PORT = 8257;
 const server = startServer(PORT);
@@ -36,7 +39,14 @@ try {
     };
     const run = (seconds, visit) => {
       for (let i = 0; i < Math.ceil(seconds / DT); i++) {
-        g.time += DT; g._updateEnemies(DT); g._updateProjectiles(DT);
+        g.time += DT;
+        // The Empress' needle star hangs off Music.pulse, and nothing in this
+        // suite runs the frame loop that would advance it - so drive the
+        // half-beat counter by hand, the same trick the candy suite uses for
+        // its spinner. ~4.8 half-beats a second is the game's 144 BPM.
+        g.music._pulse = Math.floor(g.time * 4.8);
+        g.music._pulseWhole = g.music._pulse % 2 === 0;
+        g._updateEnemies(DT); g._updateProjectiles(DT);
         g._updateMortars(DT); g.effects.update(DT, g.camera); visit?.();
       }
     };
@@ -112,54 +122,161 @@ try {
 
     clean(); shots.length = 0; e = put('reefempress', -10, 0); e.speed = 0;
     const attacks = new Set(), windows = new Set();
-    run(34, () => { if (e.bs.attack) attacks.add(e.bs.attack); if (e.bs.weakOpen) windows.add(e.bs.attack); });
-    ok('boss cycles four attacks and exposes its heart after every one', attacks.size === 4 && windows.size === 4, JSON.stringify({ attacks: [...attacks], windows: [...windows] }));
+    run(46, () => { if (e.bs.attack) attacks.add(e.bs.attack); if (e.bs.weakOpen) windows.add(e.bs.attack); });
+    ok('boss shuffles nine attacks and exposes its heart after every one',
+      attacks.size === 9 && windows.size === 9, JSON.stringify({ attacks: [...attacks], windows: [...windows] }));
     ok('boss fires real projectile salvos', shots.filter((s) => s.type === e.type).length >= 15);
     e.bs.weakOpen = false; const closed = ENEMY_TYPES[e.type].armorDefault(e);
     e.bs.weakOpen = true; const open = ENEMY_TYPES[e.type].armorDefault(e);
     ok('heart window removes the closed armour', closed === 0.65 && open === 1);
-    const bossPattern = (attack, rage, escape = false) => {
-      clean(); shots.length = 0; const e = put('reefempress', -10, 0); e.speed = 0;
+    // One forced attack end to end. The boss is pinned at a chosen range and
+    // its attack forced, so every assertion below is about the attack rather
+    // than about which card a shuffled deck happened to deal. `window` is how
+    // many seconds the exposed pearl stayed open, measured from the first
+    // open frame - the price of a faster rotation is a shorter window, and
+    // this is the assertion that keeps the window worth shooting in.
+    const bossPattern = (name, rage = false, escape = false, bx = -10) => {
+      clean(); shots.length = 0; const e = put('reefempress', bx, 0); e.speed = 0;
       if (rage) e.hp = e.maxHp * 0.4;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = attack;
+      e.state = 'stalk'; e.timer = 0; e.bs.force = name;
       run(0.3); const early = HEALTH - p.health, count = e.groundPattern?.length || 0;
       if (escape) p.pos.z = 12;
-      until(() => e.bs.weakOpen, 6); run(DT);
-      const result = { early, count, damage: HEALTH - p.health, shots: shots.length,
-        open: e.bs.weakOpen, gap: Math.abs(e.shutters[0].position.x), marks: marks() };
-      p.pos.set(18, 0, 18); p.health = HEALTH; p.invulnEnd = -1;
-      run(1.5); result.recovery = e.bs.weakOpen;
-      return result;
+      let window = 0;
+      until(() => e.bs.weakOpen, 6);
+      // The window is already closing while it is measured, so the open
+      // shutter state is read the moment the window arrives and the duration
+      // after; reading either at the end would see the window shut. One extra
+      // tick first: the shutters are positioned at the top of her next AI
+      // frame, so they are still travelling on the frame the flag lands.
+      run(DT);
+      const open = e.bs.weakOpen, gap = Math.abs(e.shutters[0].position.x);
+      run(1.4, () => { if (e.bs.weakOpen) window += DT; });
+      return { early, count, damage: HEALTH - p.health, shots: shots.length,
+        open, window: +window.toFixed(2), gap, marks: marks() };
     };
-    const calm = bossPattern(2, false), rage = bossPattern(2, true);
-    ok('enrage widens salvos without shortening recovery', calm.shots === 15 && rage.shots === 21 && calm.recovery && rage.recovery, JSON.stringify({ calm, rage }));
-    const calmCrown = bossPattern(3, false, true), rageCrown = bossPattern(3, true, true);
-    ok('enrage adds crown impacts while preserving an escape and recovery', rageCrown.count > calmCrown.count && rageCrown.damage === 0 && calmCrown.damage === 0 && rageCrown.recovery, JSON.stringify({ calmCrown, rageCrown }));
-    const impact = bossPattern(0, false), escape = bossPattern(0, false, true);
-    ok('boss ground attack warns, hits captured position, and can be escaped', impact.early === 0 && impact.damage > 0 && escape.damage === 0 && impact.marks === 0 && impact.open && impact.gap > 1, JSON.stringify({ impact, escape }));
-
-
-    const reefHit = bossPattern(1, false), reefDodge = bossPattern(1, false, true);
+    const norm = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+    const pearlsCalm = bossPattern('pearls'), pearlsRage = bossPattern('pearls', true);
+    ok('enrage widens pearl fans and keeps the window worth shooting in',
+      pearlsCalm.shots === 15 && pearlsRage.shots === 21 &&
+        pearlsCalm.window >= 1.25 && pearlsRage.window >= 0.9 && pearlsCalm.window < 1.55,
+      JSON.stringify({ pearlsCalm, pearlsRage }));
+    const scissors = bossPattern('scissors'), scissorsEscape = bossPattern('scissors', false, true);
+    ok('pincer slam warns, hits the captured position, and can be escaped',
+      scissors.early === 0 && scissors.damage > 0 && scissorsEscape.damage === 0 &&
+        scissors.marks === 0 && scissors.open && scissors.gap > 1, JSON.stringify({ scissors, scissorsEscape }));
+    const reefHit = bossPattern('reef'), reefDodge = bossPattern('reef', false, true);
     ok('advancing reef rows hit the old centre but leave the flanks open',
-      reefHit.count === 6 && reefHit.damage > 0 && reefDodge.damage === 0 && reefHit.recovery, JSON.stringify({ reefHit, reefDodge }));
+      reefHit.count === 6 && reefHit.damage > 0 && reefDodge.damage === 0 && reefHit.open, JSON.stringify({ reefHit, reefDodge }));
+    const calmCrown = bossPattern('crown', false, true), rageCrown = bossPattern('crown', true, true);
+    ok('enrage adds crown impacts while preserving the open exit',
+      rageCrown.count > calmCrown.count && rageCrown.damage === 0 && calmCrown.damage === 0 && rageCrown.open, JSON.stringify({ calmCrown, rageCrown }));
     for (const enraged of [false, true]) {
       clean(); e = put('reefempress', -10, 0); e.speed = 0;
       if (enraged) e.hp = e.maxHp * 0.4;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = 3; run(0.3);
+      e.state = 'stalk'; e.timer = 0; e.bs.force = 'crown'; run(0.3);
       p.pos.set(4.5, 0, 0); run(2.5);
       ok(`crown has a real forward escape wedge, enrage=${enraged}`, p.health === HEALTH && e.bs.weakOpen);
     }
-
-    for (let attack = 0; attack < 4; attack++) {
+    // ---- the five new attacks ------------------------------------------------
+    const snapHit = bossPattern('snap', false, false, -4), snapDodge = bossPattern('snap', false, true, -4),
+      snapRage = bossPattern('snap', true, false, -4);
+    ok('the pincer snap warns briefly and lands where you stood',
+      snapHit.early === 0 && snapHit.damage > 0 && snapHit.marks === 0 && snapHit.open, JSON.stringify(snapHit));
+    ok('sidestepping the spot escapes the snap', snapDodge.damage === 0, JSON.stringify(snapDodge));
+    ok('below half health the snap chains a second fresh capture',
+      snapRage.damage > snapHit.damage * 1.4 && snapRage.open, JSON.stringify({ snapHit, snapRage }));
+    const bloomHit = bossPattern('bloom'), bloomDodge = bossPattern('bloom', false, true), bloomRage = bossPattern('bloom', true, true);
+    ok('a nautilus arm of nine polyps blooms outward from the old spot',
+      bloomHit.early === 0 && bloomHit.count === 9 && bloomHit.damage > 0 && bloomHit.marks === 0 && bloomHit.open, JSON.stringify(bloomHit));
+    ok('stepping off the spiral disc escapes every polyp', bloomDodge.damage === 0, JSON.stringify(bloomDodge));
+    ok('below half health a second arm blooms and the escape holds',
+      bloomRage.count === 12 && bloomRage.damage === 0 && bloomRage.open, JSON.stringify(bloomRage));
+    const tideRun = (mode, rage = false) => {
+      clean(); const e = put('reefempress', -10, 0); e.speed = 0;
+      if (rage) e.hp = e.maxHp * 0.4;
+      e.state = 'stalk'; e.timer = 0; e.bs.force = 'tide';
+      run(0.3); const early = HEALTH - p.health, count = e.groundPattern?.length || 0;
+      // Calm files sit at z -5.4/0/+5.4 with edges at +-1.9, so z=2.7 is the
+      // middle of a gap; the enraged fourth file moves the gap to the axis.
+      if (mode === 'gap') p.pos.set(0, 0, rage ? 0 : 2.7);
+      if (mode === 'away') p.pos.set(0, 0, 12);
+      until(() => e.bs.weakOpen, 6); const open = e.bs.weakOpen; run(1.4);
+      return { early, count, damage: HEALTH - p.health, open, marks: marks() };
+    };
+    const tideHit = tideRun(), tideGap = tideRun('gap'), tideAway = tideRun('away'), tideRage = tideRun('gap', true);
+    ok('the tide rolls over the spot it captured, three ranks deep',
+      tideHit.early === 0 && tideHit.count === 9 && tideHit.damage > 0 && tideHit.marks === 0 && tideHit.open, JSON.stringify(tideHit));
+    ok('a file gap holds safe ground while the front washes past', tideGap.damage === 0, JSON.stringify(tideGap));
+    ok('stepping clear of the front escapes the whole tide', tideAway.damage === 0, JSON.stringify(tideAway));
+    ok('below half health the tide widens to a fourth file, gaps and all',
+      tideRage.count === 12 && tideRage.damage === 0 && tideRage.open, JSON.stringify(tideRage));
+    const pulseRun = (rage) => {
+      clean(); shots.length = 0; const e = put('reefempress', -10, 0); e.speed = 0;
+      if (rage) e.hp = e.maxHp * 0.4;
+      e.state = 'stalk'; e.timer = 0; e.bs.force = 'pulse';
+      run(0.4); const flare = shots.length;
+      until(() => e.bs.weakOpen, 6);
+      return { flare, shots: shots.map((s) => s.angle), open: e.bs.weakOpen, marks: marks() };
+    };
+    const pulseCalm = pulseRun(false), pulseRage = pulseRun(true);
+    ok('the star fires nothing during its flare, then one pair per half-beat',
+      pulseCalm.flare === 0 && pulseCalm.shots.length === 16 && pulseCalm.open && pulseCalm.marks === 0, JSON.stringify(pulseCalm.shots));
+    ok('the star returns to its first bearing every five pulses, a spoke apart',
+      Math.abs(norm(pulseCalm.shots[10] - pulseCalm.shots[0])) < 0.03 &&
+        Math.abs(Math.abs(norm(pulseCalm.shots[1] - pulseCalm.shots[0])) - Math.PI) < 0.03);
+    ok('below half health the star gains a third spoke and two more pulses',
+      pulseRage.shots.length === 30 && Math.abs(norm(pulseRage.shots[18] - pulseRage.shots[0])) < 0.03 && pulseRage.open);
+    // The hunt is the one attack that only exists while she is moving, so it
+    // is the one driven at real speed: her placement, weaving and cut are the
+    // mechanics under test, and a pinned boss would show none of them.
+    const orbitRun = (escape) => {
+      clean(); const e = put('reefempress', -10, 0);
+      e.state = 'stalk'; e.timer = 0; e.bs.force = 'orbit';
+      const sx = e.pos.x, sz = e.pos.z;
+      run(0.25);
+      if (escape) p.pos.z = 12;
+      run(3);
+      return { damage: HEALTH - p.health, moved: +Math.hypot(e.pos.x - sx, e.pos.z - sz).toFixed(1),
+        open: e.bs.weakOpen, marks: marks() };
+    };
+    const orbitHit = orbitRun(false), orbitMiss = orbitRun(true);
+    ok('the circling hunt crosses the arena and its cut reaches the middle',
+      orbitHit.damage > 0 && orbitHit.moved > 6 && orbitHit.open && orbitHit.marks === 0, JSON.stringify(orbitHit));
+    ok('leaving the ring before the cut escapes the hunt', orbitMiss.damage === 0 && orbitMiss.marks === 0, JSON.stringify(orbitMiss));
+    // ---- touch, weave and tempo ----------------------------------------------
+    clean(); e = put('reefempress', -3, 0); e.speed = 0;
+    p.pos.set(-2, 0, 0); p.health = HEALTH; p.invulnEnd = -1;
+    run(DT);
+    ok('touching the Empress costs immediately', HEALTH - p.health > 0);
+    p.health = HEALTH; p.invulnEnd = -1; run(0.4);
+    ok('the touch holds a short cooldown rather than draining', HEALTH - p.health === 0);
+    p.health = HEALTH; p.invulnEnd = -1; run(1.0);
+    ok('lingering against her pays again after the cooldown', HEALTH - p.health > 0);
+    clean(); e = put('reefempress', -14, 0);
+    e.state = 'stalk'; e.timer = 99;
+    const sx = e.pos.x, sz = e.pos.z;
+    let path = 0, maxSide = 0, lx = sx, lz = sz;
+    run(3, () => {
+      path += Math.hypot(e.pos.x - lx, e.pos.z - lz);
+      maxSide = Math.max(maxSide, Math.abs(e.pos.z - sz));
+      lx = e.pos.x; lz = e.pos.z;
+    });
+    ok('the stalk closes in a weave, not a beeline',
+      e.pos.x - sx > 4 && path > 6.5 && maxSide > 1,
+      JSON.stringify({ closed: +(e.pos.x - sx).toFixed(1), path: +path.toFixed(1), maxSide: +maxSide.toFixed(1) }));
+    clean(); e = put('reefempress', -10, 0); e.speed = 0;
+    let opened = 0, wasOpen = false;
+    run(13.5, () => { const o = !!e.bs.weakOpen; if (o && !wasOpen) opened++; wasOpen = o; });
+    ok('three pearl windows open inside thirteen and a half seconds', opened >= 3, JSON.stringify({ opened }));
+    for (const name of ['scissors', 'reef', 'pearls', 'crown', 'orbit', 'snap', 'bloom', 'pulse', 'tide']) {
       clean(); shots.length = 0; e = put('reefempress', -5, 0); e.speed = 0;
-      e.state = 'stalk'; e.timer = 0; e.bs.turn = attack; run(0.3);
-      const name = e.bs.attack;
+      e.state = 'stalk'; e.timer = 0; e.bs.force = name; run(0.3);
       e.takeDamage(1e9); run(DT); p.health = HEALTH; p.invulnEnd = -1; run(3);
       ok(`boss death cancels ${name} before impact and releases its warnings`, p.health === HEALTH && marks() === 0 && shots.length === 0);
     }
     for (const type of ['razorfin', 'clamguard', 'bloomcoral', 'reefray', 'reefempress']) {
       clean(); e = put(type, -3, 0); e.speed = 0;
-      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.turn = 0; }
+      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.force = 'scissors'; }
       const held = [];
       while (true) { const h = g.effects.markAcquire(); if (h < 0) break; held.push(h); }
       run(0.3); held.forEach((h) => g.effects.markRelease(h));
@@ -168,7 +285,7 @@ try {
     }
     for (const type of ['razorfin', 'clamguard', 'bloomcoral', 'reefray', 'reefempress']) {
       clean(); e = put(type, -3, 0); e.speed = 0;
-      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.turn = 0; }
+      if (e.boss) { e.state = 'stalk'; e.timer = 0; e.bs.force = 'scissors'; }
       until(() => marks() > 0); const before = marks(); e.takeDamage(1e9); run(DT);
       ok(`${type} death returns every owned warning`, before > 0 && marks() === 0, `before=${before} after=${marks()}`);
       p.health = HEALTH; p.invulnEnd = -1; run(3);
