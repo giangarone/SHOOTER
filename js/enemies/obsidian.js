@@ -154,14 +154,33 @@ export const WING_CLIMB = 1.5;
 
 // ---- the boss ----------------------------------------------------------------
 //
-// THE MONOLITH'S EDGE... no - THE SMOKING MIRROR. The theme's boss is the
-// edge taken to boss scale: a slab of obsidian standing on one end, dragging
-// itself about on cracked legs, and everything it does draws a LINE across
-// the room.
+// THE SMOKING MIRROR. The theme's boss is the edge taken to boss scale: a slab
+// of obsidian standing on one end, dragging itself about on cracked legs, and
+// everything it does draws a LINE across the room - EIGHT of them now, dealt
+// from a weighted hand by whichever are ready and in range, so two runs of the
+// fight do not play the same song.
 //
 //   the CRESCENT  it plants, telegraphs a lane, then sweeps a crescent of
 //                 glass along that lane - the clast's lunge at boss scale,
-//                 answered by the same things the clast is
+//                 and baitable into a pillar for the fight's long window
+//   the GUILLOTINE the close read: it SQUARES on you, rears, and brings the
+//                 whole slab down across a lane in front of it - the slab
+//                 stays lodged a beat, which is the window the answer pays
+//   the FAN       three running volleys of five glass shards, RE-AIMED
+//                 between volleys but never within one - the lancet's wall
+//                 asked three times running, and the dodge is to keep
+//                 crossing rather than to pick one side and stand on it
+//   the RING      it winds up SPINNING, then throws a full crown of glass -
+//                 twelve lines out from one body, answered by standing in a
+//                 seam between two spokes, or behind the pillar you kept
+//   the FISSURE   it drags its blade along the floor and the ground SPLITS
+//                 from its feet through where you stood - seven cracks
+//                 erupting one after another down the seam. Run along the
+//                 line and it eats you; step ACROSS it and it is free
+//   the GLIDE     it leans into a long scraping arc AROUND the player,
+//                 cutting inward the whole way - the fight picking up its
+//                 floor and moving it sideways, twenty metres of it at a
+//                 time
 //   the RAIN      it stops, the ceiling above the player lights, and glass
 //                 falls on three circles at once - the widest question the
 //                 boss asks, and the only one that is an area
@@ -175,23 +194,85 @@ export const WING_CLIMB = 1.5;
 //                 FULL damage, where the shut face eats a third of it. The
 //                 last third of the fight is the window the whole fight was
 //                 building to.
+//
+// The slab is never standing STILL, either: between attacks it prowls,
+// flanking around the player rather than walking straight at them, and in
+// every state the body itself costs - touching it deals damage on the spot.
+
+// The heartbeat between attacks. Whatever is ready AND in range is a
+// candidate when it lapses; the pick is weighted, not fixed.
+export const MIRRORBOSS_PAUSE = 0.9;
 
 export const MIRRORBOSS_CRESCENT_TELL = 1.0;
 export const MIRRORBOSS_CRESCENT_SPEED = 13;
 export const MIRRORBOSS_CRESCENT_CAP = 30;
 export const MIRRORBOSS_CRESCENT_REACH = 2.0;
-export const MIRRORBOSS_CRESCENT_CD = 7;
-export const MIRRORBOSS_RAIN_CD = 8;
+export const MIRRORBOSS_CRESCENT_CD = 4.2;
+export const MIRRORBOSS_RAIN_CD = 5.5;
 export const MIRRORBOSS_RAIN_N = 3;
 export const MIRRORBOSS_RAIN_R = 3.2;
 export const MIRRORBOSS_RAIN_DELAY = 1.4;
 export const MIRRORBOSS_RAIN_DMG = 22;
-export const MIRRORBOSS_WALLS_CD = 11;
+export const MIRRORBOSS_WALLS_CD = 8;
 export const MIRRORBOSS_WALL_TELL = 0.9;
 export const MIRRORBOSS_WALL_OFF = 4.4;
 export const MIRRORBOSS_WALL_LIFE = 3.0;
 export const MIRRORBOSS_WALL_R = 1.1;
 export const MIRRORBOSS_WALL_H = 3.6;
+
+// THE FAN: three volleys of five, half a second apart. Each shard leaves on
+// its own line of the arc; between volleys the boss re-centres on wherever
+// the player has gone, so standing still is what the attack eats.
+export const MIRRORBOSS_FAN_TELL = 0.55;
+export const MIRRORBOSS_FAN_N = 5;
+export const MIRRORBOSS_FAN_SPREAD = 0.22;
+export const MIRRORBOSS_FAN_VOLLEYS = 3;
+export const MIRRORBOSS_FAN_GAP = 0.5;
+export const MIRRORBOSS_FAN_CD = 3.8;
+
+// THE RING: a full circle of spokes, thrown slow enough to read at range.
+// Its job is the player who is TOO CLOSE - the gaps between spokes only open
+// out with distance, so hugging the slab is what it punishes.
+export const MIRRORBOSS_RING_TELL = 1.1;
+export const MIRRORBOSS_RING_N = 12;
+export const MIRRORBOSS_RING_N_SPLIT = 16;
+export const MIRRORBOSS_RING_SPEED = 0.66;
+export const MIRRORBOSS_RING_CD = 5.5;
+
+// THE FISSURE: a crack that CHASES. Seven eruptions, spaced evenly down the
+// line the player was standing on when the drag began - each telegraphed by
+// its own filling circle, in sequence, so the line reads as arriving.
+export const MIRRORBOSS_FISSURE_TELL = 0.75;
+export const MIRRORBOSS_FISSURE_N = 7;
+export const MIRRORBOSS_FISSURE_STEP = 2.1;
+export const MIRRORBOSS_FISSURE_FIRST = 3.0;
+export const MIRRORBOSS_FISSURE_GAP = 0.22;
+export const MIRRORBOSS_FISSURE_LEAD = 0.4;
+export const MIRRORBOSS_FISSURE_R = 1.8;
+export const MIRRORBOSS_FISSURE_DMG = 16;
+export const MIRRORBOSS_FISSURE_CD = 6.5;
+
+// THE GLIDE: the boss's own answer to "it stands in a corner". A fast arc
+// around the player, blade out, cutting inward every third of a second.
+export const MIRRORBOSS_GLIDE_TELL = 0.55;
+export const MIRRORBOSS_GLIDE_TIME = 2.6;
+export const MIRRORBOSS_GLIDE_SPEED = 6.4;
+export const MIRRORBOSS_GLIDE_SHOT = 0.34;
+export const MIRRORBOSS_GLIDE_CD = 8.5;
+
+// THE GUILLOTINE: the close line. A lane nine metres long, the whole slab
+// coming down across it, and a beat with the slab LODGED before it lifts -
+// the counterpunch window, matching the wall-slam the crescent offers.
+export const MIRRORBOSS_GUILLOTINE_TELL = 0.85;
+export const MIRRORBOSS_GUILLOTINE_LEN = 9;
+export const MIRRORBOSS_GUILLOTINE_W = 2.3;
+export const MIRRORBOSS_GUILLOTINE_CAP = 30;
+export const MIRRORBOSS_GUILLOTINE_HOLD = 0.75;
+export const MIRRORBOSS_GUILLOTINE_CD = 4.4;
+
+// How long the split itself plays out: the face opens, the crown fires once,
+// and only then is the fight its faster self.
+export const MIRRORBOSS_SPLIT_TELL = 1.0;
 // The enrage: where the face splits, and what it costs and pays.
 export const MIRRORBOSS_SPLIT_FRAC = 0.33;
 export const MIRRORBOSS_SPLIT_ARMOR = 0.33;
@@ -390,14 +471,25 @@ export function buildGlasswing(e, g, s) {
 export function buildMirrorboss(e, g, s) {
   const P = partsFor(e, g, s);
   // THE SLAB. Nearly the whole model: a tall dark plate, cracked down the
-  // centre, standing on end.
-  P('bossPlateL', slab(0.5, 1.7, 0.24), { x: -0.26, y: 1.24, rz: 0.06, mat: OBSIDIAN_SHELL });
-  P('bossPlateR', slab(0.5, 1.7, 0.24), { x: 0.26, y: 1.24, rz: -0.06, mat: OBSIDIAN_SHELL });
+  // centre, standing on end. Handles kept on bs because the split FANS the
+  // two halves apart - the face opening has to be a thing you watch happen.
+  e.bs.plateL = P('bossPlateL', slab(0.5, 1.7, 0.24), { x: -0.26, y: 1.24, rz: 0.06, mat: OBSIDIAN_SHELL });
+  e.bs.plateR = P('bossPlateL', slab(0.5, 1.7, 0.24), { x: 0.26, y: 1.24, rz: -0.06, mat: OBSIDIAN_SHELL });
   // THE SEAM, down the crack between them. Driven by the AI: it widens and
-  // brightens through the fight and BLAZES open when the face splits.
+  // brightens through the fight, BLAZES while any attack is winding up, and
+  // opens outright when the face splits.
   e.bs.seam = P('bossSeam', slab(0.06, 1.55, 0.06), {
     y: 1.26, z: -0.12, mat: OBSIDIAN_SEAM, shadow: false,
   });
+  // THE CROWN. Five sharp spines along the top lip, bristling UP while a
+  // telegraph is out - the body says "something is armed" before any mark on
+  // the floor is read, which is the one promise every attack below keeps.
+  e.bs.crown = [];
+  for (let i = -2; i <= 2; i++) {
+    e.bs.crown.push(P('bossCrown', shardSpike(0.055, 0.42), {
+      x: i * 0.22, y: 2.14, z: -0.02, rz: -i * 0.16, mat: OBSIDIAN_SEAM, shadow: false,
+    }));
+  }
   // THE CRESCENT BLADE, slung under the front lip - what the charge sweeps
   // with. Held on the enemy so the AI can angle it along the coming lunge.
   e.bs.crescent = P('bossCrescent', slab(0.9, 0.1, 0.14), {
@@ -791,50 +883,140 @@ export function aiGlasswing(e, a) {
 
 // ---- the boss ----------------------------------------------------------------
 
+// The crown of spokes, fired on BEARINGS rather than aims: each shard leaves
+// along its own line out of the body, and the answer is the seam between two
+// of them. Shared by the RING and by the split's one opening blast.
+function mirrorbossCrown(e, ctx, n, speedScale) {
+  const p = ctx.player;
+  const base = p ? Math.atan2(p.pos.z - e.pos.z, p.pos.x - e.pos.x) : 0;
+  for (let i = 0; i < n; i++) {
+    ctx.addProjectile(
+      e.pos.x, 1.9, e.pos.z, 'mirrorboss', speedScale * e._projScale(),
+      (i / n) * Math.PI * 2 - base
+    );
+  }
+  _obsidianAt.set(e.pos.x, 1.0, e.pos.z);
+  ctx.effects.shockwave(_obsidianAt, OBSIDIAN_EDGE, 6, 0.5);
+  ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE_BRIGHT, 26, 7, 4, 0.7);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
 export function aiMirrorboss(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
   if (bs.state === undefined) {
     bs.state = 'walk';
     bs.t = 0;
-    bs.crescentCd = 3.5;
-    bs.rainCd = 6;
-    bs.wallsCd = 9;
-    bs.rainT = 0;
-    bs.wallsT = 0;
+    // First beats of the fight: the fan comes fast, the geometry waits a
+    // breath, and the close answers (ring, guillotine) arm early - the player
+    // who has walked up to a boss should be ANSWERED.
+    bs.pause = 1.0;
+    bs.crescentCd = 2.5;
+    bs.rainCd = 4;
+    bs.wallsCd = 6;
+    bs.fanCd = 1.5;
+    bs.ringCd = 3;
+    bs.fissureCd = 4.5;
+    bs.glideCd = 6;
+    bs.guillotineCd = 2;
     bs.mark = -1;
     bs.split = false;
     bs.dirX = 0;
     bs.dirZ = 0;
+    bs.wallX = 0;
+    bs.wallZ = 0;
+    bs.wallAng = 0;
+    bs.hit = false;
+    // The prowl: which side it is flanking on, and how long until it swaps.
+    bs.stalk = 1;
+    bs.stalkFlip = 2.2;
+    // The glide's arc state, and the fan/glide volley clocks.
+    bs.glideSide = 1;
+    bs.volleys = 0;
+    bs.volleyT = 0;
+    bs.sparkT = 0;
+    // What the MODEL is being asked to say: the slab's pitch, the crown's
+    // bristle, and how far the face has fanned open (0 shut, 1 split).
+    bs.tilt = 0;
+    bs.tiltTarget = 0;
+    bs.bloom = 0;
+    bs.open = 0;
   }
   // Held so cleanup() can release a telegraph the boss died on top of.
   bs.fx = ctx.effects;
 
-  // THE SEAM, driven every frame: it brightens through the fight and BLAZES
-  // when the face splits, so the boss's state is on the boss rather than in
-  // anybody's imagination.
+  // Every cooldown runs EVERY frame, through whatever else the boss is
+  // doing. The fight's density is real, and what comes next is decided by
+  // what has finished rather than by a queue - the hand it plays differs
+  // every time the pause lapses.
+  bs.crescentCd -= a.dt;
+  bs.rainCd -= a.dt;
+  bs.wallsCd -= a.dt;
+  bs.fanCd -= a.dt;
+  bs.ringCd -= a.dt;
+  bs.fissureCd -= a.dt;
+  bs.glideCd -= a.dt;
+  bs.guillotineCd -= a.dt;
+
+  // THE BODY TELLS THE STATE. The seam brightens through the fight and
+  // BLAZES while any telegraph is out, and the crown bristles with the same
+  // flag - a Smoking Mirror that is about to cut is visible from across the
+  // room before the mark on the floor is ever read.
+  const armed = bs.mark >= 0;
+  bs.bloom += ((armed ? 1 : 0) - bs.bloom) * Math.min(1, a.dt * 6);
   if (bs.seam) {
     const frac = Math.max(0, e.hp / e.maxHp);
     const heat = bs.split ? 1 : Math.max(0, (1 - frac) * 0.6);
-    const w = bs.split ? 1.8 : 1 + heat * 0.8;
+    const w = (bs.split ? 1.8 : 1 + heat * 0.8) * (1 + bs.bloom * 0.9);
     bs.seam.scale.x = w * e.scale;
     if (bs.split) bs.seam.scale.y = 2.6 * e.scale;
-    bs.seam.material = OBSIDIAN_SEAM;
   }
+  if (bs.crown) {
+    const k = (1 + bs.bloom * 0.7) * e.scale;
+    for (const spine of bs.crown) spine.scale.y = k;
+  }
+  // THE FACE OPENS AS A MOTION, not a flag flip: the two plates fan apart
+  // over about a second once the split has happened, so the armour going is
+  // a thing you watch happen rather than a banner alone.
+  bs.open += ((bs.split ? 1 : 0) - bs.open) * Math.min(1, a.dt * 3);
+  if (bs.plateL) {
+    bs.plateL.rotation.z = 0.06 + bs.open * 0.5;
+    bs.plateR.rotation.z = -0.06 - bs.open * 0.5;
+    bs.plateL.position.x = (-0.26 - bs.open * 0.14) * e.scale;
+    bs.plateR.position.x = (0.26 + bs.open * 0.14) * e.scale;
+  }
+  // The slab's pitch is the wind-up: it rears before the fissure, the
+  // guillotine and the split, and slams forward on the two of them that
+  // strike. rotation.x is the one axis the walk cycle never touches (see
+  // Enemy.update), so it is free for this.
+  bs.tilt += ((bs.tiltTarget || 0) - bs.tilt) * Math.min(1, a.dt * 7);
+  e.group.rotation.x = bs.tilt;
   if (bs.crescent) {
-    bs.crescent.rotation.z += a.dt * 0.5;
+    // The blade mills slowly at rest and SPINS through the glide - the
+    // scrape made visible - and it is dragged down to the floor for the
+    // fissure's tell.
+    bs.crescent.rotation.z += a.dt * (bs.state === 'glide' ? 6 : 0.5);
+    const drag = bs.state === 'fissure-tell'
+      ? 1 - Math.max(0, bs.t) / MIRRORBOSS_FISSURE_TELL : 0;
+    bs.crescent.position.y = (0.5 - drag * 0.34) * e.scale;
   }
 
-  // Standing on it costs, in every state - the shared contract every slow
-  // boss keeps (see bossTouch).
+  // Standing on it costs, in EVERY state - mid-tell, mid-glide, mid-split the
+  // slab is still the boss, and the shared contract every slow boss keeps
+  // (see bossTouch) is what a touch pays.
   bossTouch(e, a);
 
   // ---- the enrage: the face splits ----------------------------------------
   if (!bs.split && e.hp <= e.maxHp * MIRRORBOSS_SPLIT_FRAC) {
     bs.split = true;
-    // The one attack that is NOT a line: the face comes apart and the whole
-    // body opens up. Full damage from here - see the type's armor, which
-    // reads bs.split.
+    // Whatever it was doing is INTERRUPTED - the face opening IS the attack.
+    // A telegraph it was holding is handed back first, or the mark pool pays
+    // for the drama.
+    if (bs.mark >= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+    }
+    e._setEyeAlert(false);
     ctx.bossEvent('enrage', e);
     ctx.effects.addShake(0.35);
     _obsidianAt.set(e.pos.x, 1.4, e.pos.z);
@@ -843,9 +1025,43 @@ export function aiMirrorboss(e, a) {
     // The split face takes full damage AND the boss comes apart in the
     // tempo of its attacks - the window the whole fight builds to.
     e.rate = e.rate * MIRRORBOSS_SPLIT_RATE;
-    bs.crescentCd = Math.min(bs.crescentCd, 2);
-    bs.rainCd = Math.min(bs.rainCd, 2);
-    bs.wallsCd = Math.min(bs.wallsCd, 2);
+    bs.crescentCd = Math.min(bs.crescentCd, 1.5);
+    bs.rainCd = Math.min(bs.rainCd, 1.5);
+    bs.wallsCd = Math.min(bs.wallsCd, 1.5);
+    bs.fanCd = Math.min(bs.fanCd, 1.5);
+    bs.ringCd = Math.min(bs.ringCd, 1.5);
+    bs.fissureCd = Math.min(bs.fissureCd, 1.5);
+    bs.glideCd = Math.min(bs.glideCd, 1.5);
+    bs.guillotineCd = Math.min(bs.guillotineCd, 1.5);
+    // Its own second of theatre, telegraphed like everything else it does:
+    // the disc fills under the body, and when it fills the crown answers.
+    bs.state = 'split-tell';
+    bs.t = MIRRORBOSS_SPLIT_TELL;
+    bs.tiltTarget = 0.18;
+    bs.mark = ctx.effects.markAcquire();
+  }
+
+  // ---- the split's own second: the face opens, and the crown answers -------
+  if (bs.state === 'split-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    ctx.effects.markSet(
+      bs.mark, e.pos.x, e.pos.z, 5.2, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_SPLIT_TELL, 1, 0, 0.45
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      e._setEyeAlert(false);
+      bs.tiltTarget = 0;
+      mirrorbossCrown(e, ctx, MIRRORBOSS_RING_N_SPLIT, MIRRORBOSS_RING_SPEED * 0.9);
+      bs.state = 'walk';
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
+      bs.ringCd = MIRRORBOSS_RING_CD * e.rate;
+    }
+    return;
   }
 
   // ---- the crescent: a committed sweep along a telegraphed lane -------------
@@ -877,6 +1093,9 @@ export function aiMirrorboss(e, a) {
 
   if (bs.state === 'crescent') {
     bs.t -= a.dt;
+    // Leaning INTO the sweep - the whole slab tips forward over the blade
+    // doing the arriving. Released in recover.
+    bs.tiltTarget = -0.12;
     e.stepMul = MIRRORBOSS_CRESCENT_SPEED / Math.max(0.5, a.sp);
     a.vx = bs.dirX * MIRRORBOSS_CRESCENT_SPEED;
     a.vz = bs.dirZ * MIRRORBOSS_CRESCENT_SPEED;
@@ -921,6 +1140,7 @@ export function aiMirrorboss(e, a) {
       e._setEyeAlert(false);
       bs.state = 'walk';
       bs.rainCd = MIRRORBOSS_RAIN_CD * e.rate;
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
     }
     return;
   }
@@ -941,6 +1161,7 @@ export function aiMirrorboss(e, a) {
       e._setEyeAlert(false);
       bs.state = 'walk';
       bs.wallsCd = MIRRORBOSS_WALLS_CD * e.rate;
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
       // The two walls go down either side of where the player STOOD at the
       // moment the tell began - locked like every other telegraph in the
       // game, so the lane between them is the answer that was offered.
@@ -960,12 +1181,327 @@ export function aiMirrorboss(e, a) {
     return;
   }
 
-  // ---- recover / walk: closing and swinging ----------------------------------
+  // ---- the guillotine: squared up, reared, and the whole slab comes down ----
+  if (bs.state === 'guillotine-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    bs.tiltTarget = 0.22;
+    e._setEyeAlert(true);
+    // It COMMITS to the bearing the lane was drawn on: the body squares to
+    // it and stays squared, exactly as the crescent's lane is honoured.
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    ctx.effects.markSet(
+      bs.mark,
+      e.pos.x + bs.dirX * MIRRORBOSS_GUILLOTINE_LEN * 0.5,
+      e.pos.z + bs.dirZ * MIRRORBOSS_GUILLOTINE_LEN * 0.5,
+      MIRRORBOSS_GUILLOTINE_W, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_GUILLOTINE_TELL,
+      MIRRORBOSS_GUILLOTINE_LEN / (2 * MIRRORBOSS_GUILLOTINE_W),
+      Math.atan2(-bs.dirX, -bs.dirZ)
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      e._setEyeAlert(false);
+      bs.state = 'guillotine-slam';
+      bs.t = MIRRORBOSS_GUILLOTINE_HOLD;
+      bs.tiltTarget = -0.5;
+      // THE LANE, PAID. Anyone still inside the slab's rectangle when it
+      // lands takes the blow - a rectangle rather than the circle this
+      // file's other attacks ask, because the slab is one.
+      const p = ctx.player;
+      const relx = p.pos.x - e.pos.x;
+      const relz = p.pos.z - e.pos.z;
+      const along = relx * bs.dirX + relz * bs.dirZ;
+      const across = -relx * bs.dirZ + relz * bs.dirX;
+      if (along > -0.6 && along < MIRRORBOSS_GUILLOTINE_LEN
+        && Math.abs(across) < MIRRORBOSS_GUILLOTINE_W + 0.4
+        && Math.abs(p.pos.y - e.pos.y) < BOSS_REACH_Y) {
+        ctx.onHitPlayer(Math.min(MIRRORBOSS_GUILLOTINE_CAP, e.damage * 1.3), e.pos, e);
+      }
+      // And the floor answers all the way down the lane, so the blow reads
+      // at full length even from the side.
+      for (let i = 0; i < 4; i++) {
+        const d = (i + 0.5) * (MIRRORBOSS_GUILLOTINE_LEN / 4);
+        _obsidianAt.set(e.pos.x + bs.dirX * d, 0.15, e.pos.z + bs.dirZ * d);
+        ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE_BRIGHT, 12, 5, 4, 0.55);
+      }
+      _obsidianAt.set(
+        e.pos.x + bs.dirX * MIRRORBOSS_GUILLOTINE_LEN * 0.5, 0.2,
+        e.pos.z + bs.dirZ * MIRRORBOSS_GUILLOTINE_LEN * 0.5
+      );
+      ctx.effects.shockwave(_obsidianAt, OBSIDIAN_EDGE, MIRRORBOSS_GUILLOTINE_LEN * 0.55, 0.5);
+      ctx.effects.addShake(0.35);
+      if (ctx.sfx) ctx.sfx.impact();
+    }
+    return;
+  }
+
+  if (bs.state === 'guillotine-slam') {
+    // THE SLAB STAYS DOWN. The whole cost of the attack is this beat - the
+    // window the crescent's wall-slam offers, offered at close range.
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.tiltTarget = 0;
+      bs.guillotineCd = MIRRORBOSS_GUILLOTINE_CD * e.rate;
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
+    }
+    return;
+  }
+
+  // ---- the fan: three running volleys of five --------------------------------
+  if (bs.state === 'fan-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    // A corridor of light down the FIRST volley's bearing, drawn the moment
+    // the fan is armed and WIDE enough to hold the arc's core - the outer
+    // shards land past it, and reading that is the fight.
+    ctx.effects.markSet(
+      bs.mark,
+      e.pos.x + bs.dirX * 12, e.pos.z + bs.dirZ * 12,
+      2.2, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_FAN_TELL,
+      5.5, Math.atan2(-bs.dirX, -bs.dirZ)
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      bs.state = 'fan';
+      bs.volleys = MIRRORBOSS_FAN_VOLLEYS;
+      bs.volleyT = 0;
+    }
+    return;
+  }
+
+  if (bs.state === 'fan') {
+    // It keeps CLOSING through the volleys, slowly - the fan is pressure
+    // while it stalks, not a pause in the fight.
+    a.vx = a.px * a.sp * 0.35;
+    a.vz = a.pz * a.sp * 0.35;
+    bs.volleyT -= a.dt;
+    if (bs.volleyT <= 0) {
+      bs.volleyT = MIRRORBOSS_FAN_GAP * Math.max(0.6, e.rate);
+      bs.volleys--;
+      e.flash = 0.12;
+      // One volley, the lancet's own read: a crown of five lines. Every
+      // volley after the first aims at wherever the player has GOT to, so
+      // the dodge is to keep crossing - standing still is what the fan eats.
+      for (let i = 0; i < MIRRORBOSS_FAN_N; i++) {
+        ctx.addProjectile(
+          e.pos.x, 2.1, e.pos.z, 'mirrorboss', e._projScale(),
+          (i - (MIRRORBOSS_FAN_N - 1) / 2) * MIRRORBOSS_FAN_SPREAD
+        );
+      }
+      _obsidianAt.set(e.pos.x, 2.1, e.pos.z);
+      ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE, 8, 3.5, 2, 0.35);
+      if (ctx.sfx) ctx.sfx.meleeSwing();
+    }
+    if (bs.volleys <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'walk';
+      bs.fanCd = MIRRORBOSS_FAN_CD * e.rate;
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
+    }
+    return;
+  }
+
+  // ---- the ring: a full crown out of one body --------------------------------
+  if (bs.state === 'ring-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    // It SPINS, winding the crown open - the radial read is the whole body
+    // turning, and the disc underneath is the timer.
+    e.faceLocked = true;
+    e.group.rotation.y += a.dt * 5.2;
+    ctx.effects.markSet(
+      bs.mark, e.pos.x, e.pos.z, 4.6, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_RING_TELL, 1, 0, 0.45
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      e._setEyeAlert(false);
+      mirrorbossCrown(
+        e, ctx, bs.split ? MIRRORBOSS_RING_N_SPLIT : MIRRORBOSS_RING_N,
+        MIRRORBOSS_RING_SPEED
+      );
+      bs.tiltTarget = 0;
+      bs.state = 'walk';
+      bs.ringCd = MIRRORBOSS_RING_CD * e.rate;
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
+    }
+    return;
+  }
+
+  // ---- the fissure: the floor splits, and the split CHASES -------------------
+  if (bs.state === 'fissure-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    bs.tiltTarget = 0.16;
+    e._setEyeAlert(true);
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    // The WHOLE seam is drawn from the first frame, from its feet to the far
+    // end; the direction is the read, and the cracks themselves draw the
+    // timing as they go off one by one down it.
+    const fLen = MIRRORBOSS_FISSURE_FIRST
+      + (MIRRORBOSS_FISSURE_N - 1) * MIRRORBOSS_FISSURE_STEP + MIRRORBOSS_FISSURE_R;
+    ctx.effects.markSet(
+      bs.mark,
+      e.pos.x + bs.dirX * fLen * 0.5, e.pos.z + bs.dirZ * fLen * 0.5,
+      1.6, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_FISSURE_TELL,
+      fLen / 3.2, Math.atan2(-bs.dirX, -bs.dirZ)
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      e._setEyeAlert(false);
+      bs.tiltTarget = -0.35;
+      // Clamped to the floor a body can stand on: a crack inside the arena's
+      // wall is neither visible nor answerable, and a line that reaches one
+      // stops on it.
+      const B = 19.5;
+      for (let i = 0; i < MIRRORBOSS_FISSURE_N; i++) {
+        const d = MIRRORBOSS_FISSURE_FIRST + i * MIRRORBOSS_FISSURE_STEP;
+        ctx.addMortar(
+          Math.max(-B, Math.min(B, e.pos.x + bs.dirX * d)),
+          Math.max(-B, Math.min(B, e.pos.z + bs.dirZ * d)),
+          MIRRORBOSS_FISSURE_R, MIRRORBOSS_FISSURE_LEAD + i * MIRRORBOSS_FISSURE_GAP,
+          MIRRORBOSS_FISSURE_DMG
+        );
+      }
+      _obsidianAt.set(e.pos.x, 0.4, e.pos.z);
+      _obsidianTo.set(e.pos.x + bs.dirX * fLen, 0.4, e.pos.z + bs.dirZ * fLen);
+      ctx.effects.beam(_obsidianAt, _obsidianTo, OBSIDIAN_EDGE);
+      ctx.effects.addShake(0.22);
+      if (ctx.sfx) ctx.sfx.terrainRise();
+      // The slam is spent and the LINE is the pressure now: planted for a
+      // breath while the first cracks go off, then prowling again.
+      bs.state = 'plant';
+      bs.t = 0.55;
+      bs.fissureCd = MIRRORBOSS_FISSURE_CD * e.rate;
+    }
+    return;
+  }
+
+  // ---- planted: a breath with the blade committed ----------------------------
+  if (bs.state === 'plant') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    bs.tiltTarget = 0;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
+    }
+    return;
+  }
+
+  // ---- the glide: the fight picks up its floor and moves it sideways ---------
+  if (bs.state === 'glide-tell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    // No lane to draw - the marker is a disc around the BODY, because what
+    // is about to move IS the body.
+    ctx.effects.markSet(
+      bs.mark, e.pos.x, e.pos.z, 3.2, OBSIDIAN_EDGE,
+      1 - Math.max(0, bs.t) / MIRRORBOSS_GLIDE_TELL, 1, 0, 0.5
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      bs.state = 'glide';
+      bs.t = MIRRORBOSS_GLIDE_TIME;
+      bs.volleyT = MIRRORBOSS_GLIDE_SHOT;
+      bs.sparkT = 0;
+      // Lift-off owns a clean slate: blockedBy is last frame's evidence, and
+      // a push the WALK took a moment ago is not a crash the glide caused.
+      e.blockedBy = 0;
+      _obsidianAt.set(e.pos.x, 0.2, e.pos.z);
+      ctx.effects.shockwave(_obsidianAt, OBSIDIAN_EDGE, 4, 0.4);
+      if (ctx.sfx) ctx.sfx.meleeSwing();
+    }
+    return;
+  }
+
+  if (bs.state === 'glide') {
+    bs.t -= a.dt;
+    e._setEyeAlert(true);
+    e.stepMul = MIRRORBOSS_GLIDE_SPEED / Math.max(0.5, a.sp);
+    // TANGENT FIRST: it carves AROUND the player rather than at them, with a
+    // weight on the inside of the turn so the arc bites across the room -
+    // and it pulls back out if the player tries to stand inside the turn.
+    const tx = -a.nz * bs.glideSide;
+    const tz = a.nx * bs.glideSide;
+    const close = a.dist > 11 ? 0.3 : a.dist < 6 ? -0.35 : 0;
+    const mx = tx + a.nx * close;
+    const mz = tz + a.nz * close;
+    const ml = Math.hypot(mx, mz) || 1;
+    a.vx = (mx / ml) * MIRRORBOSS_GLIDE_SPEED;
+    a.vz = (mz / ml) * MIRRORBOSS_GLIDE_SPEED;
+    // A cut every third of a second, thrown from a body that is no longer
+    // where it was when it was aimed at - the fan's read, one shard at a
+    // time, from a moving mirror.
+    bs.volleyT -= a.dt;
+    if (bs.volleyT <= 0) {
+      bs.volleyT = MIRRORBOSS_GLIDE_SHOT * Math.max(0.6, e.rate);
+      ctx.addProjectile(e.pos.x, 2.1, e.pos.z, 'mirrorboss', e._projScale(), 0);
+      e.flash = 0.08;
+      _obsidianAt.set(e.pos.x, 2.0, e.pos.z);
+      ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE, 5, 2.5, 1.5, 0.3);
+    }
+    // The scrape itself, thrown as sparks along the floor it is crossing.
+    bs.sparkT -= a.dt;
+    if (bs.sparkT <= 0) {
+      bs.sparkT = 0.12;
+      _obsidianAt.set(e.pos.x, 0.15, e.pos.z);
+      ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE, 3, 2, 1.8, 0.35);
+    }
+    if (bs.t <= 0 || e.blockedBy > 0.05) {
+      const crashed = e.blockedBy > 0.05;
+      e._setEyeAlert(false);
+      e.stepMul = 1.4;
+      bs.glideCd = MIRRORBOSS_GLIDE_CD * e.rate;
+      if (crashed) {
+        // The arc met geometry and is SPENT - the crescent's same bargain in
+        // miniature: it outran its room, and it pays a breath for it.
+        _obsidianAt.set(e.pos.x, 0.2, e.pos.z);
+        ctx.effects.shockwave(_obsidianAt, OBSIDIAN_EDGE, 5, 0.45);
+        ctx.effects.burst(_obsidianAt, OBSIDIAN_EDGE_BRIGHT, 18, 6, 3, 0.6);
+        ctx.effects.addShake(0.2);
+        bs.state = 'plant';
+        bs.t = 1.1;
+        bs.tiltTarget = 0;
+      } else {
+        bs.state = 'walk';
+        bs.tiltTarget = 0;
+        bs.pause = MIRRORBOSS_PAUSE * e.rate;
+      }
+    }
+    return;
+  }
+
+  // ---- recover / walk: the prowl --------------------------------------------
   if (bs.state === 'recover') {
     e.stepMul = 1.4;
     bs.t -= a.dt;
+    bs.tiltTarget = 0;
     if (bs.t <= 0) {
       bs.state = 'walk';
+      bs.pause = MIRRORBOSS_PAUSE * e.rate;
       ctx.bossEvent('recover', e);
     }
     return;
@@ -978,34 +1514,70 @@ export function aiMirrorboss(e, a) {
     return;
   }
 
+  // THE PROWL. It never stands and waits: the melee cycle still answers at
+  // arm's length, and between attacks it closes on a bias rather than head
+  // on - most of its step toward the player, a hard drift across it, the
+  // flank swapping every couple of seconds. Where the next line is drawn
+  // from is moving the whole time.
   e.stepMul = 1.4;
   const m = ENEMY_TYPES.mirrorboss.melee;
   const free = e._meleeCycle(a.dt, a.dist, ctx, m.windup, m.start, m.hit, m.cd);
-  if (free) {
-    a.vx = a.px * a.sp;
-    a.vz = a.pz * a.sp;
-  }
   // Nothing below may interrupt a swing already wound up or live.
   if (!free) return;
-
-  // THE CRESCENT, from mid-range. The heading is locked at the telegraph,
-  // not tracked through it - the whole counter-play, same as Siege's.
-  bs.crescentCd -= a.dt;
-  if (bs.crescentCd <= 0 && a.dist > 6 && a.dist < 30) {
-    bs.state = 'crescent-tell';
-    bs.t = MIRRORBOSS_CRESCENT_TELL;
-    bs.mark = ctx.effects.markAcquire();
-    bs.dirX = a.nx;
-    bs.dirZ = a.nz;
-    return;
+  bs.stalkFlip -= a.dt;
+  if (bs.stalkFlip <= 0) {
+    bs.stalk *= -1;
+    bs.stalkFlip = 1.8 + Math.random() * 1.8;
   }
+  const press = a.dist > 13 ? 1 : 0.55;
+  const drift = a.dist > 6 ? 0.55 : 0.15;
+  a.vx = (a.px * press + -a.pz * bs.stalk * drift) * a.sp;
+  a.vz = (a.pz * press + a.px * bs.stalk * drift) * a.sp;
 
-  // THE RAIN, from anywhere. Three circles around where the player is
-  // standing at the moment it is called - the mortar system telegraphs
-  // every one of them, and the answer is the same as every mortar's: be
-  // elsewhere when they fill.
-  bs.rainCd -= a.dt;
-  if (bs.rainCd <= 0) {
+  // ---- the hand: whatever is ready AND in range ------------------------------
+  // The pause is the only guaranteed rest in the fight, and it runs here
+  // only - so every attack is truly FOLLOWED by it, rather than having been
+  // spent inside the attack itself.
+  bs.pause -= a.dt;
+  if (bs.pause > 0) return;
+  const opts = [];
+  let total = 0;
+  const offer = (name, w, ready) => {
+    if (!ready) return;
+    opts.push(name, w);
+    total += w;
+  };
+  offer('crescent', 3, bs.crescentCd <= 0 && a.dist > 7 && a.dist < 30);
+  offer('guillotine', 3, bs.guillotineCd <= 0 && a.dist > 3 && a.dist < 12);
+  offer('fan', 2.6, bs.fanCd <= 0 && a.dist > 5 && a.dist < 28);
+  offer('rain', 2, bs.rainCd <= 0);
+  offer('fissure', 2.4, bs.fissureCd <= 0 && a.dist > 4 && a.dist < 24);
+  offer('ring', 3, bs.ringCd <= 0 && a.dist < 11);
+  offer('glide', 2.2, bs.glideCd <= 0 && a.dist > 8);
+  offer('walls', 1.6, bs.wallsCd <= 0 && a.dist < 26);
+  if (!total) return;
+  let roll = Math.random() * total;
+  let pick = opts[0];
+  for (let i = 0; i < opts.length; i += 2) {
+    roll -= opts[i + 1];
+    if (roll <= 0) {
+      pick = opts[i];
+      break;
+    }
+  }
+  _mirrorbossStart(bs, pick, e, a);
+}
+
+// The one doorway into every attack: capture what the tell is about to lock
+// in - the heading, or the ground - and arm it. A heading is the one drawn
+// at the moment the offer is made, never tracked through the tell: that is
+// the counter-play the whole theme runs on.
+function _mirrorbossStart(bs, pick, e, a) {
+  const ctx = a.ctx;
+  if (pick === 'rain') {
+    // Three circles around where the player is standing at the moment it is
+    // called - the mortar system telegraphs every one of them, and the
+    // answer is the same as every mortar's: be elsewhere when they fill.
     bs.state = 'rain';
     bs.t = MIRRORBOSS_RAIN_DELAY + 0.3;
     const p = ctx.player;
@@ -1021,10 +1593,7 @@ export function aiMirrorboss(e, a) {
     }
     return;
   }
-
-  // THE WALLS, when the player is standing still enough to be bracketed.
-  bs.wallsCd -= a.dt;
-  if (bs.wallsCd <= 0 && a.dist < 26) {
+  if (pick === 'walls') {
     bs.state = 'walls';
     bs.t = MIRRORBOSS_WALL_TELL;
     bs.mark = ctx.effects.markAcquire();
@@ -1043,6 +1612,42 @@ export function aiMirrorboss(e, a) {
       : Math.atan2(vz, vx);
     return;
   }
+  // The rest all lock a heading: the crescent's charge, the guillotine's
+  // lane, the fan's first volley and the fissure's seam.
+  bs.dirX = a.nx;
+  bs.dirZ = a.nz;
+  bs.mark = ctx.effects.markAcquire();
+  if (pick === 'crescent') {
+    bs.state = 'crescent-tell';
+    bs.t = MIRRORBOSS_CRESCENT_TELL;
+    return;
+  }
+  if (pick === 'guillotine') {
+    bs.state = 'guillotine-tell';
+    bs.t = MIRRORBOSS_GUILLOTINE_TELL;
+    return;
+  }
+  if (pick === 'fan') {
+    bs.state = 'fan-tell';
+    bs.t = MIRRORBOSS_FAN_TELL;
+    return;
+  }
+  if (pick === 'fissure') {
+    bs.state = 'fissure-tell';
+    bs.t = MIRRORBOSS_FISSURE_TELL;
+    return;
+  }
+  if (pick === 'ring') {
+    bs.state = 'ring-tell';
+    bs.t = MIRRORBOSS_RING_TELL;
+    return;
+  }
+  // glide
+  bs.state = 'glide-tell';
+  bs.t = MIRRORBOSS_GLIDE_TELL;
+  // The arc keeps whichever flank the prowl was on - one continuous read,
+  // not a coin flip at the moment of leverage.
+  bs.glideSide = bs.stalk;
 }
 
 const TYPES = {
@@ -1164,30 +1769,54 @@ const TYPES = {
   },
 
   // THE SMOKING MIRROR, OBSIDIAN's boss. A cracked slab of volcanic glass
-  // standing on end, dragging itself about on three heavy legs, and every
-  // attack it has draws a line across the room:
+  // standing on end, PROWLING rather than planted - it flanks around the
+  // player between attacks, its touch costs in every state, and every attack
+  // it owns draws a line across the room:
   //
   //   the CRESCENT  a telegraphed lane, then a committed sweep down it -
   //                 the clast's lunge at boss scale, and baitable into a
   //                 pillar for the same long window Siege offers
   //   the RAIN      three telegraphed circles around the player at once -
   //                 the widest question it asks, and the only area
+  //   the GUILLOTINE the close read: it squares, rears, and brings the whole
+  //                 slab down across a nine-metre lane - then stays lodged a
+  //                 beat, which is the price the answer pays
+  //   the FAN       three running volleys of five shards, re-aimed BETWEEN
+  //                 volleys but never within one - keep crossing, or be read
+  //   the RING      a wind-up spin, then a full crown of glass out of the
+  //                 body - answered by the seam between two spokes, or by
+  //                 the pillar you kept
+  //   the FISSURE   the floor SPLITS from its feet through where you stood,
+  //                 seven cracks erupting one after another down the seam -
+  //                 step ACROSS the line, never along it
+  //   the GLIDE     a long scraping arc around you, cutting inward the whole
+  //                 way - the boss's own answer to standing in a corner
+  //   the RAIN      three telegraphed circles around the player at once -
+  //                 the widest question it asks, and the only area
   //   the WALLS     two solid blades out of the floor, one either side of
   //                 the lane the player is using - the knapper doubled, and
   //                 the lane between them is the answer that was offered
   //
-  // Under a third of the bar the FACE SPLITS: the seam blazes open, every
-  // attack comes twice as often, and the open face takes FULL damage where
-  // the shut face eats a third of it. The last third of the fight is the
-  // window the whole fight was building to.
+  // Under a third of the bar the FACE SPLITS: the seam blazes open, the
+  // crown answers once, every attack comes twice as often, and the open face
+  // takes FULL damage where the shut face ate a third of it. The last third
+  // of the fight is the window the whole fight was building to.
   mirrorboss: {
     head: { r: 0.42, y: 1.6 },
-    hp: 3200, speed: 2.5, damage: 24, value: 6000, color: 0x1c1622, eye: 0xff8a80,
+    // The bar is what it always was: the rework spends pressure and tempo,
+    // not health - there is no new armour and no new pool to grind through.
+    hp: 3200, speed: 3.05, damage: 24, value: 6000, color: 0x1c1622, eye: 0xff8a80,
     scale: 2.7, radius: 1.5, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 1.1 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.6, start: 3.4, hit: 4.2, cd: 1.8 },
+    melee: { windup: 0.55, start: 3.6, hit: 4.4, cd: 1.5 },
+    // The glass the FAN, the RING and the GLIDE throw: one round for all
+    // three, in the seam's own colours, so the volleys read as one material.
+    proj: {
+      core: 0xff8a80, glow: 0xff3b30, scale: 0.72,
+      speed: [17, 0.3, 24], dmg: [8, 0.35, 14],
+    },
     // The shut face is ARMOUR; the split face is the window. Reads bs.split,
     // the same state the seam's blaze and the enrage banner agree on - the
     // three must never disagree, the colossus lesson.

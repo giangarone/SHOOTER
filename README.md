@@ -851,17 +851,31 @@ context. The start screen says so, and one click anywhere fixes it.
   third, each break widening what the attacks throw. Warnings retain their
   full duration as the fight scales; the rests between them get shorter. **THE SMOKING MIRROR**, OBSIDIAN's, is the theme's whole
   argument at boss scale: a cracked slab of volcanic glass standing on end
-  that drags itself about on three heavy legs, and every attack it has draws
-  a LINE across the room. The CRESCENT plants a telegraphed lane and then
-  sweeps down it, committed to the heading - baitable into a pillar for the
-  same long window Siege offers. The RAIN drops three telegraphed circles
-  around you at once, the widest question it asks. The WALLS drive two solid
-  blades out of the floor, one either side of the lane you were using - the
-  knapper's trick doubled, and the strip between them is the answer that was
-  offered. And under a third of the bar the FACE SPLITS: the seam down its
-  middle blazes open, every attack comes twice as often, and the open face
-  takes FULL damage where the shut face ate a third of it - the last third
-  of the fight is the window the whole fight was building to. **THE CARILLON**,
+  that PROWLS rather than plants - it flanks around you between attacks,
+  there is no state in which touching it is free, and every attack it owns
+  draws a LINE across the room, dealt from a weighted hand so two runs of
+  the fight do not play the same song. The CRESCENT plants a telegraphed
+  lane and then sweeps down it, committed to the heading - baitable into a
+  pillar for the same long window Siege offers. The GUILLOTINE is the close
+  read: it squares on you, REARS, and brings the whole slab down across a
+  nine-metre lane - then stays lodged a beat, which is the price the answer
+  pays. The FAN fires three running volleys of five glass shards, re-aimed
+  BETWEEN volleys but never within one: keep crossing, or be read. The RING
+  winds up SPINNING and throws a full crown of twelve out of the body -
+  answered by the seam between two spokes, or by the pillar you kept. The
+  FISSURE drags its blade along the floor and the ground SPLITS from its
+  feet through where you stood, seven cracks erupting one after another
+  down the seam - step ACROSS the line, never along it. The GLIDE is the
+  boss's own answer to standing in a corner: a long scraping arc AROUND you
+  at more than twice its walk, cutting inward the whole way. The RAIN drops
+  three telegraphed circles around you at once, the widest question it
+  asks. And the WALLS drive two solid blades out of the floor, one either
+  side of the lane you were using - the knapper's trick doubled, and the
+  strip between them is the answer that was offered. Under a third of the
+  bar the FACE SPLITS: the plates fan open, one crown of glass answers the
+  opening, every attack comes twice as often, and the open face takes FULL
+  damage where the shut face ate a third of it - the last third of the
+  fight is the window the whole fight was building to. **THE CARILLON**,
   SAPPHIRE's, is a tower of bells that
   compounds every clock its own theme taught the player at once - and it does
   NOT hold a corner and wait for you: the tower walks the whole room between

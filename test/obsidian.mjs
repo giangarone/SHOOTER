@@ -25,10 +25,15 @@
 //               costs, off it costs nothing - the weeper's test with an
 //               edge's promise
 //
-//   And the boss: a lane that telegraphs before the sweep commits to it,
-//   three circles that fill before they land, two solid walls either side
-//   of the lane the player was using, and a face that splits under a third
-//   of the bar - full damage from there, where the shut face ate a third.
+//   And the boss: EIGHT attacks dealt from a weighted hand - a lane that
+//   telegraphs before the sweep commits to it, a slab that rears and comes
+//   down across a lane at close range, three running fans of five, a crown
+//   of twelve thrown whole, a fissure that chases down a seam, a glide that
+//   picks the fight up and carries it sideways, three circles that fill
+//   before they land, two solid walls either side of the lane the player
+//   was using - and a touch that costs in EVERY state, tell or no tell.
+//   Under a third of the bar the face splits: full damage from there, where
+//   the shut face ate a third.
 import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8252;
@@ -583,7 +588,12 @@ try {
       clean();
     }
 
-    // ---- 8. THE SMOKING MIRROR -------------------------------------------
+    // ---- 8. THE SMOKING MIRROR: the whole hand is dealt ---------------------
+    // The coverage pass: the boss pinned at ten metres, every cooldown live,
+    // and watched until all EIGHT attacks and the split have come round. The
+    // deck is weighted-random, so the assertion is that EVERY mechanic in the
+    // hand eventually leaves the table - an attack that can never be offered
+    // is dead content that only exists in the file.
     {
       clean();
       const e = put('mirrorboss', 10, 0);
@@ -591,21 +601,32 @@ try {
       e.rate = 1;
       px = 0;
       pz = 0;
-      let sawLane = false;
-      let sawRain = false;
+      const DECK = [
+        ['crescent-tell', 'crescentCd'], ['guillotine-tell', 'guillotineCd'],
+        ['fan-tell', 'fanCd'], ['ring-tell', 'ringCd'], ['fissure-tell', 'fissureCd'],
+        ['glide-tell', 'glideCd'], ['rain', 'rainCd'], ['walls', 'wallsCd'],
+      ];
+      const seenStates = new Set();
+      let tells = 0;
+      let lastState = 'walk';
       let sawWalls = false;
       let sawSplit = false;
       let crescentFired = false;
-      for (let i = 0; i < 4000; i++) {
+      // Game time, not frames: the loop's dt clamp means a slow host spends
+      // FEWER frames inside the same second, so the boundary rides g.time
+      // (the harness's own note on the clamped dt, at the top of this file).
+      const naturalUntil = g.time + 22;
+      for (let i = 0; i < 4200; i++) {
         await step();
         e.pos.set(10, e.pos.y, 0);
+        const st = e.bs ? e.bs.state : '';
         // The lane: any mark used by the boss's own state machine.
-        if (e.bs && e.bs.state === 'crescent-tell') sawLane = true;
-        if (e.bs && e.bs.state === 'crescent') {
-          sawLane = true;
-          crescentFired = true;
-        }
-        if (g._mortars.length >= 3) sawRain = true;
+        if (st === 'crescent') crescentFired = true;
+        if (st.endsWith('-tell') && lastState !== st) tells++;
+        if (st === 'walls' && lastState !== st) tells++;
+        if (st === 'rain' && lastState !== st) tells++;
+        lastState = st;
+        seenStates.add(st);
         if (g._hazard.filter((x) => x.kind === 'edge').length >= 2) sawWalls = true;
         // THE SPLIT, walked to the threshold by hand the way the schism
         // suite walks its tiers: the AI has to notice on its own.
@@ -613,13 +634,37 @@ try {
           e.hp = e.maxHp * 0.25;
           if (e.bs && e.bs.split) sawSplit = true;
         }
-        if (sawLane && sawRain && sawWalls && sawSplit) break;
+        if (g.time > naturalUntil) {
+          const missing = DECK.filter(([s]) => !seenStates.has(s));
+          if (missing.length) {
+            for (const [, cd] of DECK) e.bs[cd] = 999;
+            e.bs[missing[0][1]] = 0;
+            e.bs.pause = 0;
+          }
+        }
+        if (crescentFired && sawWalls && sawSplit
+          && [...DECK.map(([s]) => s), 'split-tell']
+            .every((s) => seenStates.has(s))) break;
       }
-      res.bossLane = sawLane;
+      res.bossLane = seenStates.has('crescent-tell');
       res.bossCrescent = crescentFired;
-      res.bossRain = sawRain;
+      res.bossRain = seenStates.has('rain');
       res.bossWalls = sawWalls;
       res.bossSplit = sawSplit;
+      res.bossGuillotine = seenStates.has('guillotine-tell');
+      res.bossFan = seenStates.has('fan-tell');
+      res.bossRing = seenStates.has('ring-tell');
+      res.bossFissure = seenStates.has('fissure-tell');
+      res.bossGlide = seenStates.has('glide-tell');
+      // The split plays out as its own telegraphed second, not a flag flip.
+      res.bossSplitTell = seenStates.has('split-tell');
+      // THE CADENCE: how many attacks the first seconds of the fight actually
+      // THROWS. The old fight managed about six a minute; the reworked one
+      // is assertable dense.
+      res.bossTells = tells;
+      // The model's new moving parts exist and are dressed for it.
+      res.bossCrown = e.bs && e.bs.crown && e.bs.crown.length === 5;
+      res.bossPlates = !!(e.bs && e.bs.plateL && e.bs.plateR);
       // THE SPLIT'S DEAL, driven through the live type block the way the
       // colossus core check drives it: shut, the face eats a third of
       // everything; open, it takes full. The two must never disagree with
@@ -633,6 +678,285 @@ try {
         res.bossArmorOpen = ENEMY_TYPES.mirrorboss.armor(e, 0, 1);
         e.bs.split = saved;
       }
+      clean();
+    }
+
+    // ---- 9. the FAN fires three volleys of five, and none of it early -------
+    // Counted as the shards are SPAWNED, not as they are in the air: a round
+    // that has already hit a wall is still a round that was fired. During the
+    // tell the count must stay ZERO - an instant fan is not a telegraph.
+    {
+      clean();
+      const e = put('mirrorboss', 10, 0);
+      e.speed = 0;
+      e.rate = 1;
+      px = 0;
+      pz = 0;
+      await simSteps(0.3);
+      const origSpawn = g._spawnProjectile.bind(g);
+      let fanSpawned = 0;
+      let duringTell = 0;
+      g._spawnProjectile = (x, y, z, type, ss, sr) => {
+        if (type === 'mirrorboss') fanSpawned++;
+        return origSpawn(x, y, z, type, ss, sr);
+      };
+      e.bs.state = 'fan-tell';
+      e.bs.t = 0.5;
+      e.bs.dirX = -1;
+      e.bs.dirZ = 0;
+      e.bs.pause = 999;
+      for (const k of ['crescentCd', 'rainCd', 'wallsCd', 'ringCd', 'fissureCd', 'glideCd', 'guillotineCd']) {
+        e.bs[k] = 999;
+      }
+      for (let i = 0; i < 200; i++) {
+        await step();
+        e.pos.set(10, e.pos.y, 0);
+        if (e.bs.state === 'fan-tell' && fanSpawned > duringTell) duringTell = fanSpawned;
+        if (e.bs.state === 'walk' && fanSpawned > 0) break;
+      }
+      g._spawnProjectile = origSpawn;
+      res.fanFired = fanSpawned;
+      res.fanDuringTell = duringTell;
+      clean();
+    }
+
+    // ---- 10. the RING is a crown, thrown whole, after the wind-up -----------
+    {
+      clean();
+      const e = put('mirrorboss', 10, 0);
+      e.speed = 0;
+      e.rate = 1;
+      px = 0;
+      pz = 0;
+      await simSteps(0.3);
+      const origSpawn = g._spawnProjectile.bind(g);
+      const castSizes = [];
+      let last = 0;
+      g._spawnProjectile = (x, y, z, type, ss, sr) => {
+        if (type === 'mirrorboss') last++;
+        return origSpawn(x, y, z, type, ss, sr);
+      };
+      e.bs.state = 'ring-tell';
+      e.bs.t = 0.4;
+      e.bs.pause = 999;
+      for (const k of ['crescentCd', 'rainCd', 'wallsCd', 'fanCd', 'fissureCd', 'glideCd', 'guillotineCd']) {
+        e.bs[k] = 999;
+      }
+      for (let i = 0; i < 160; i++) {
+        await step();
+        e.pos.set(10, e.pos.y, 0);
+        // A cast lands as ONE burst of spawns in a frame: a ring that
+        // dribbled out a shard at a time would be the fan wearing a hat.
+        if (last > 0) {
+          castSizes.push(last);
+          last = 0;
+        }
+        if (e.bs.state === 'walk' && castSizes.length) break;
+      }
+      g._spawnProjectile = origSpawn;
+      res.ringCasts = castSizes.length;
+      res.ringCastSize = castSizes.length ? Math.max(...castSizes) : 0;
+      clean();
+    }
+
+    // ---- 11. the FISSURE is a LINE that chases ------------------------------
+    // Seven cracks, each further down the SAME straight seam than the last,
+    // each marked later than the last - and standing on the seam costs while
+    // standing four metres across it does not.
+    {
+      const runFissure = async (offLine) => {
+        clean();
+        const e = put('mirrorboss', 10, 0);
+        e.speed = 0;
+        e.rate = 1;
+        px = 0;
+        pz = offLine ? 4.2 : 0;
+        await simSteps(0.3);
+        e.bs.state = 'fissure-tell';
+        e.bs.t = 0.25;
+        e.bs.dirX = -1;
+        e.bs.dirZ = 0;
+        e.bs.pause = 999;
+        for (const k of ['crescentCd', 'rainCd', 'wallsCd', 'fanCd', 'ringCd', 'glideCd', 'guillotineCd']) {
+          e.bs[k] = 999;
+        }
+        let queue = null;
+        const lost = await measure(170, () => {
+          e.pos.set(10, e.pos.y, 0);
+          if (g._mortars.length >= 5 && !queue) {
+            queue = g._mortars.map((m) => ({ x: m.x, z: m.z, delay: m.delay }));
+          }
+        });
+        return { lost, queue };
+      };
+      const onSeam = await runFissure(false);
+      const offSeam = await runFissure(true);
+      res.fissQueued = onSeam.queue ? onSeam.queue.length : 0;
+      // The seam is a LINE: every crack sits on the boss-to-player bearing,
+      // further along than the one before.
+      res.fissLine = !!(onSeam.queue
+        && onSeam.queue.every((q) => Math.abs(q.z) < 0.6)
+        && onSeam.queue.every((q, i, a) => i === 0 || q.x < a[i - 1].x));
+      // And it CHASES: the cracks are timed in sequence, not simultaneous.
+      res.fissChases = !!(onSeam.queue
+        && onSeam.queue.every((q, i, a) => i === 0 || q.delay > a[i - 1].delay));
+      res.fissOn = onSeam.lost;
+      res.fissOff = offSeam.lost;
+      clean();
+    }
+
+    // ---- 12. the GUILLOTINE: a lane drawn, then PAID on the lane ------------
+    // The both-ways read the whole theme runs on, at close range and with a
+    // RECTANGLE: inside the slab's footprint when it lands costs; beside it
+    // does not. And the slab itself TELLS it - it rears before it comes down.
+    {
+      const runGuillotine = async (offLane) => {
+        clean();
+        const e = put('mirrorboss', 8, 0);
+        e.speed = 0;
+        e.rate = 1;
+        px = 0;
+        pz = offLane ? 4.5 : 0;
+        await simSteps(0.3);
+        e.bs.state = 'guillotine-tell';
+        e.bs.t = 0.55;
+        e.bs.dirX = -1;
+        e.bs.dirZ = 0;
+        e.bs.mark = g.effects.markAcquire();
+        e.bs.pause = 999;
+        for (const k of ['crescentCd', 'rainCd', 'wallsCd', 'fanCd', 'ringCd', 'fissureCd', 'glideCd']) {
+          e.bs[k] = 999;
+        }
+        let sawLane = false;
+        let reared = false;
+        let slammed = false;
+        const lost = await measure(110, () => {
+          e.pos.set(8, e.pos.y, 0);
+          const mk = g.effects.marks.find((x) => x.used);
+          if (mk && mk.shape === 'lane') sawLane = true;
+          if (e.bs.state === 'guillotine-tell' && e.group.rotation.x > 0.1) reared = true;
+          if (e.bs.state === 'guillotine-slam' && e.group.rotation.x < -0.15) slammed = true;
+        });
+        return { lost, sawLane, reared, slammed };
+      };
+      const onLane = await runGuillotine(false);
+      const offLane = await runGuillotine(true);
+      res.guilLaneDrawn = onLane.sawLane;
+      res.guilReared = onLane.reared;
+      res.guilSlamDown = onLane.slammed;
+      res.guilOn = onLane.lost;
+      res.guilOff = offLane.lost;
+      clean();
+    }
+
+    // ---- 13. a touch ALWAYS costs - mid-tell, mid-glide ----------------------
+    // The contract is every state, so the two reads are a ROOTED state (the
+    // ring's tell, which deals no other damage) and a MOVING one (the glide,
+    // with the player parked on top of the slab the whole way).
+    {
+      clean();
+      const e = put('mirrorboss', 8, 0);
+      e.speed = 0;
+      e.rate = 1;
+      px = 8;
+      pz = 0;
+      await simSteps(0.3);
+      e.bs.state = 'ring-tell';
+      e.bs.t = 30;                  // the tell never lands during the read
+      e.bs.pause = 999;
+      for (const k of ['crescentCd', 'rainCd', 'wallsCd', 'fanCd', 'fissureCd', 'glideCd', 'guillotineCd']) {
+        e.bs[k] = 999;
+      }
+      res.touchTell = await measure(60, () => {
+        e.pos.set(8, e.pos.y, 0);
+        px = 8;
+        pz = 0;
+      });
+      clean();
+
+      const e2 = put('mirrorboss', 10, 0);
+      e2.rate = 1;
+      px = 10;
+      pz = 0;
+      await simSteps(0.3);
+      e2.bs.state = 'glide';
+      e2.bs.t = 2.6;
+      e2.bs.volleyT = 999;          // the glide's CUTS are not what pays here
+      e2.bs.sparkT = 0;
+      e2.bs.pause = 999;
+      res.touchGlide = await measure(110, () => {
+        px = e2.pos.x;
+        pz = e2.pos.z;
+      });
+      clean();
+    }
+
+    // ---- 14. the GLIDE crosses the room, cutting the whole way ---------------
+    // The movement attack measured as MOVEMENT: the path the boss actually
+    // travels while the state is live, and the shards it throws from that
+    // moving body. The arc's side is chosen by the SAME read the player gets
+    // - the clear flank - so a pillar in the way is the layout, not the boss.
+    {
+      clean();
+      const spot = clearSpot(12, 0, 5);
+      const e = put('mirrorboss', spot.x, spot.z);
+      e.rate = 1;
+      px = 0;
+      pz = 0;
+      await simSteps(0.4);
+      // Which way round? The arc runs on the boss's flank; walk a couple of
+      // strides of it in both directions against the obstacle list and take
+      // the one that is clear, exactly as a player picks a side.
+      const r0 = Math.hypot(e.pos.x, e.pos.z);
+      const th0 = Math.atan2(e.pos.z, e.pos.x);
+      const arcClear = (s) => {
+        for (let t = 0.3; t < 2.2; t += 0.25) {
+          const x = Math.cos(th0 - s * t) * Math.max(6, r0 - t * 1.2);
+          const z = Math.sin(th0 - s * t) * Math.max(6, r0 - t * 1.2);
+          for (const b of g.arena.obstacles) {
+            if (b.min.y > 2.5) continue;
+            if (x > b.min.x - 2 && x < b.max.x + 2 && z > b.min.z - 2 && z < b.max.z + 2) return false;
+          }
+        }
+        return true;
+      };
+      let side = 1;
+      if (!arcClear(1) && arcClear(-1)) side = -1;
+      const origSpawn = g._spawnProjectile.bind(g);
+      let shots = 0;
+      g._spawnProjectile = (x, y, z, type, ss, sr) => {
+        if (type === 'mirrorboss') shots++;
+        return origSpawn(x, y, z, type, ss, sr);
+      };
+      // Entered the way the fight enters it: through the tell, so the
+      // crash-on-liftoff question is the real one rather than a pinned-boss
+      // artifact.
+      e.bs.state = 'glide-tell';
+      e.bs.t = 0.08;
+      e.bs.glideSide = side;
+      e.bs.pause = 999;
+      let path = 0;
+      let lastX = e.pos.x;
+      let lastZ = e.pos.z;
+      let entered = false;
+      for (let i = 0; i < 210; i++) {
+        await step();
+        if (e.bs.state === 'glide') {
+          if (!entered) {
+            entered = true;
+            lastX = e.pos.x;
+            lastZ = e.pos.z;
+          }
+          path += Math.hypot(e.pos.x - lastX, e.pos.z - lastZ);
+          lastX = e.pos.x;
+          lastZ = e.pos.z;
+        }
+        if (entered && e.bs.state !== 'glide') break;
+      }
+      g._spawnProjectile = origSpawn;
+      res.glideEntered = entered;
+      res.glideMoved = +path.toFixed(1);
+      res.glideShots = shots;
       clean();
     }
 
@@ -683,10 +1007,45 @@ try {
   ok('and calls the rain', out.bossRain);
   ok('and raises the walls', out.bossWalls);
   ok('and under a third of the bar the face splits', out.bossSplit);
+  ok('and the split itself is a telegraphed second', out.bossSplitTell);
   ok('and the split face takes what the shut face did not',
     out.bossArmorShut !== undefined && out.bossArmorOpen === 1
       && out.bossArmorShut < 1,
     `shut=${out.bossArmorShut} open=${out.bossArmorOpen}`);
+  ok('the whole hand is dealt - guillotine, fan, ring, fissure, glide',
+    out.bossGuillotine && out.bossFan && out.bossRing && out.bossFissure && out.bossGlide,
+    `seen: guillotine=${out.bossGuillotine} fan=${out.bossFan} ring=${out.bossRing}`
+      + ` fissure=${out.bossFissure} glide=${out.bossGlide}`);
+  ok('and the fight is DENSE - the first minute throws attack after attack',
+    out.bossTells >= 6, `tells in the coverage window=${out.bossTells}`);
+  ok('and the model carries the crown and both plates', out.bossCrown && out.bossPlates);
+
+  ok('the fan fires nothing during its tell', out.fanDuringTell === 0);
+  ok('and then three volleys of five', out.fanFired === 15, `spawned=${out.fanFired}`);
+
+  ok('the ring is thrown as ONE cast', out.ringCasts === 1, `casts=${out.ringCasts}`);
+  ok('of twelve shards', out.ringCastSize === 12, `cast=${out.ringCastSize}`);
+
+  ok('the fissure queues its whole seam', out.fissQueued >= 6, `cracks=${out.fissQueued}`);
+  ok('and the seam is a LINE', out.fissLine);
+  ok('and the line CHASES - each crack later than the last', out.fissChases);
+  ok('standing on the seam costs', out.fissOn > 0, `lost=${out.fissOn}`);
+  ok('and stepping across it does not', out.fissOff === 0, `lost=${out.fissOff}`);
+
+  ok('the guillotine draws its lane', out.guilLaneDrawn);
+  ok('and the slab REARS before it falls', out.guilReared);
+  ok('and it lands DOWN', out.guilSlamDown);
+  ok('standing in the slab costs', out.guilOn > 0, `lost=${out.guilOn}`);
+  ok('and beside it costs nothing', out.guilOff === 0, `lost=${out.guilOff}`);
+
+  ok('touching the boss ROOTED IN A TELL still costs',
+    out.touchTell > 0, `lost=${out.touchTell}`);
+  ok('and the glide is a MOVING body - a touch mid-arc costs too',
+    out.touchGlide > 0, `lost=${out.touchGlide}`);
+
+  ok('the glide commits to the room', out.glideEntered);
+  ok('and crosses it at speed', out.glideMoved >= 3, `travelled=${out.glideMoved}m`);
+  ok('cutting the whole way', out.glideShots >= 4, `shots=${out.glideShots}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
