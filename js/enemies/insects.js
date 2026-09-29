@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ENEMY_TYPES, SHARED_MATS, partsFor, geo, lump, slab, prism, spike, eyes, orbit, landHit, segBlocked, addWarnedMortar, capturedShot, contactReach, snapAim, faceSnap, markGet, markDrop } from './shared.js';
+import { ENEMY_TYPES, SHARED_MATS, partsFor, geo, lump, slab, prism, spike, eyes, orbit, landHit, segBlocked, addWarnedMortar, capturedShot, contactReach, snapAim, faceSnap, markGet, markDrop, bossTouch } from './shared.js';
 
 const COLOR = 0xffd16b;
 const body = { color: 0x557a62, eye: COLOR, scale: 1, radius: 0.5, mass: 1 };
@@ -29,7 +29,7 @@ const TYPES = {
     proj: shot,
     fly: { height: 3.5 }, hitbox: { r: 0.6, y: 0.4 },
     build: buildFlier, ai: aiFlier, cleanup: markDrop },
-  vesperqueen: { ...body, hp: 3200, speed: 1.8, damage: 24, value: 6500,
+  vesperqueen: { ...body, hp: 3200, speed: 2.35, damage: 24, value: 6500,
     head: { r: 0.3, y: 1.65 },
     proj: shot,
     name: 'THE VESPER QUEEN', boss: true, scale: 2.6, radius: 1.7, mass: 9,
@@ -162,8 +162,8 @@ function lane(e, a, length, width, progress) {
   e.fx.markSet(mark, e.pos.x + e.nx * length / 2, e.pos.z + e.nz * length / 2,
     width, COLOR, progress, length / (width * 2), Math.atan2(-e.nx, -e.nz));
 }
-function flutter(e, a) {
-  e.wings.forEach((m, i) => { m.rotation.z = (i < 2 ? -1 : 1) * (0.15 + Math.sin(a.ctx.time * 25) * 0.22); });
+function flutter(e, a, hz = 25) {
+  e.wings.forEach((m, i) => { m.rotation.z = (i < 2 ? -1 : 1) * (0.15 + Math.sin(a.ctx.time * hz) * 0.22); });
 }
 function rest(e, a, seconds = 1.6) {
   if (e.type === 'stagguard' && e.state === 'rush') {
@@ -270,56 +270,235 @@ function aiFlier(e, a) {
   orbit(e, a, { ...ORBIT, dist: 8 });
   if (e.attackCd <= 0 && a.dist < 18) { snapAim(e, a); e.timer = 0.9; e.attackCd = 3.8; e._setEyeAlert(true); }
 }
-function aiBoss(e, a) {
-  const bs = e.bs;
-  if (!e.state) { e.state = 'stalk'; e.timer = 1.4; bs.turn = 0; }
-  bs.enraged = e.hp < e.maxHp * 0.5;
-  flutter(e, a);
-  e.plates.forEach((m, i) => { m.position.x = (i ? 1 : -1) * (bs.weakOpen ? 0.48 : 0.16) * e.scale; });
-  e.blades.forEach((m, i) => { m.rotation.x = e.state === 'tell' ? -1.15 : -0.55;
-    m.rotation.z = (i ? 1 : -1) * (bs.weakOpen ? 0.9 : 0.55); });
-  if (e.status.fear > 0) return;
-  e.timer -= a.dt;
-  if (e.state === 'rush') { rush(e, a, 8, 2.6); return; }
-  if (e.state === 'volley') {
-    faceSnap(e);
-    if (e.timer <= 0) {
-      for (let i = 0; i < 5; i++) capturedShot(e, a, e.aim, (i - 2) * 0.25 + (e.round % 2 ? 0.125 : 0), 2.4);
-      e.round++; e.timer = 0.45;
-      if (e.round >= (bs.enraged ? 4 : 3)) rest(e, a, 1.8);
-    }
-    return;
+// ---- THE VESPER QUEEN ------------------------------------------------------
+// A hunt, not a sentry post. She prowls a wide orbit and scuttles sideways
+// between engagements, and every engagement is one of five insect behaviours,
+// each telegraphed in its own way:
+//
+//   blitz    a mantis strike: a long painted lane, a rush down it, then a live
+//            pivot and another (three when enraged). Sidestep, twice.
+//   pits     an antlion trap: she cages your old position in a ring of
+//            eruptions with one gap left open AWAY from her, centre last.
+//   bloom    her abdomen blooms: planted rotating fans of needles that sweep
+//            a hundred degrees. A body tell only, like every needleflyer.
+//   clutch   she lays egg sacs around herself; each ruptures into an ichor
+//            pool and spits a three-needle fan when it pops.
+//   hunt     she marks you with pheromones - a scent disc that tracks you,
+//            locks, and snaps into a chain of short committed darts.
+//
+// Every attack vents her thorax afterwards (the punish window is the fight's
+// reward, kept), touching her HURTS at all times (a queen is never safe to
+// hug), and at half health the whole hunt quickens with a room-wide alarm.
+// Every floor attack routes through the warned-mark pool: a starved pool
+// aborts the strike rather than landing a hit the player never saw.
+const Q_ORBIT = { dist: 10.5, band: 2.4, out: 1.05, in: -1, strafe: 0.85, flip: 1.3, flipVar: 0.8 };
+const Q_ROTATION = ['blitz', 'pits', 'bloom', 'hunt', 'clutch'];
+const Q_MIN_DIST = { blitz: 6, bloom: 4.5, hunt: 4 };
+const Q_TELLS = { blitz: 1.0, pits: 0.8, bloom: 0.85, hunt: 0.7, clutch: 0.8 };
+// Shared shape for the two CHAINED attacks: an aim phase paints a short lane
+// on a live snap, then the dash commits to it. Blitz is two heavy strides,
+// the hunt three snappy darts - the loop is one, the read is two.
+// Dash times are travel promises, not speeds: at the 13 m/s cap a stride
+// must land inside the lane it painted - 15 for the blitz wind-up, 11 for a
+// pivot, 8 for a dart - so each timer is its lane divided by the cap.
+const Q_COMBOS = {
+  blitz: { aims: 0.42, laneLen: 11, laneW: 2.2, dashT: 0.8, dashT1: 1.1, speed: 13, radius: 2.5, count: 2, enrCount: 3, rest: 1.5 },
+  hunt: { aims: 0.26, laneLen: 8, laneW: 2.0, dashT: 0.6, dashT1: 0.6, speed: 13, radius: 2.3, count: 3, enrCount: 4, rest: 1.25 },
+};
+// The dash law is rush()'s: a late-wave speed multiplier cannot outrun the
+// painted lane, slows still bite, and a long frame only integrates the time
+// left in the dash. Returns true once the stride is spent.
+function queenDash(e, a, speed, radius) {
+  faceSnap(e); e.stepMul = 5;
+  const v = Math.min(e.speed * 4, speed) * Math.min(1, a.sp / Math.max(0.001, e.speed)) *
+    Math.min(1, Math.max(0, e.timer + a.dt) / a.dt);
+  a.vx = e.nx * v; a.vz = e.nz * v;
+  if (!e.bs.hitDone && contactReach(e, a, radius, 1.4, 3.5)) {
+    landHit(e, a.ctx, Math.min(30, e.damage)); e.bs.hitDone = true;
   }
-  if (e.state === 'tell') {
+  return e.timer <= 0 || e.blockedBy > 0.05 || Math.abs(e.pos.x) > 21 || Math.abs(e.pos.z) > 21;
+}
+function queenCombo(e, a) {
+  const bs = e.bs, c = bs.combo;
+  if (bs.sub === 'aim') {
     faceSnap(e);
-    if (bs.attack === 'lance') lane(e, a, 12, 2.6, 1 - e.timer / 1.1);
+    lane(e, a, c.laneLen, c.laneW, 1 - e.timer / c.aims);
     if (e.timer > 0) return;
     const visible = e.mark >= 0; markDrop(e);
-    if (bs.attack === 'lance') {
-      if (!visible) { rest(e, a, 1.8); return; }
-      e.state = 'rush'; e.timer = 1.1; e.hit = false;
-    } else if (bs.attack === 'scissors') {
-      const n = bs.enraged ? 3 : 2;
-      for (const side of [-1, 1]) for (let i = 0; i < n; i++) {
-        addWarnedMortar(a.ctx, e.tx + e.nx * i * 2.7 - e.nz * side * 2.8,
-          e.tz + e.nz * i * 2.7 + e.nx * side * 2.8, 1.6, 0.8 + i * 0.2, Math.min(22, e.damage * 0.7));
-      }
-      addWarnedMortar(a.ctx, e.tx, e.tz, 1.9, 1.7, Math.min(22, e.damage * 0.7));
-      rest(e, a, 1.8);
-    } else { e.state = 'volley'; e.timer = 0; e.round = 0; }
+    if (!visible) { bs.combo = null; rest(e, a, 1.3); return; }
+    bs.sub = 'dash'; e.timer = bs.stage === 1 ? c.dashT1 : c.dashT; bs.hitDone = false;
+    return;
+  }
+  if (!queenDash(e, a, c.speed, c.radius)) return;
+  bs.stage++; bs.left--;
+  if (bs.left > 0) {
+    snapAim(e, a); bs.sub = 'aim';
+    e.timer = c.aims * (bs.enraged ? 0.75 : 1);
+  } else {
+    bs.combo = null; rest(e, a, c.rest);
+  }
+}
+function queenPits(e, a) {
+  // One gap in the ring, centered on the far side of the cage from her: the
+  // escape is moving AWAY. Enraged tightens the ring and adds two pits, so
+  // the gap stays the answer and only gets narrower.
+  const bs = e.bs;
+  const base = Math.atan2(e.tz - e.pos.z, e.tx - e.pos.x);
+  // MAX_MORTARS is 10: 6+1 leaves room for the adds' own warnings, and the
+  // enraged ring grows DENSER (8 smaller arcs, later) rather than wider.
+  const n = bs.enraged ? 8 : 6, R = bs.enraged ? 3.7 : 3.2, delay = bs.enraged ? 1.15 : 0.9;
+  for (let i = 0; i < n; i++) {
+    const theta = base + Math.PI / n + i * Math.PI * 2 / n;
+    addWarnedMortar(a.ctx, e.tx + Math.cos(theta) * R, e.tz + Math.sin(theta) * R,
+      1.6, delay + i * 0.05, Math.min(22, e.damage * 0.7));
+  }
+  addWarnedMortar(a.ctx, e.tx, e.tz, 1.9, delay + n * 0.05 + 0.15, Math.min(24, e.damage * 0.8));
+  rest(e, a, 1.45);
+}
+function queenClutch(e, a) {
+  const bs = e.bs;
+  const n = bs.enraged ? 4 : 3;
+  const base = Math.atan2(a.nz, a.nx) + (Math.PI / n);
+  bs.eggs = bs.eggs || [];
+  for (let i = 0; i < n; i++) {
+    const x = e.pos.x + Math.cos(base + i * Math.PI * 2 / n) * 2.7;
+    const z = e.pos.z + Math.sin(base + i * Math.PI * 2 / n) * 2.7;
+    // addWarnedMortar's reserve-check, plus the ground payload the shared
+    // helper does not carry: an egg that cannot draw its warning is not laid.
+    const h = a.ctx.effects.markAcquire();
+    if (h < 0) continue;
+    a.ctx.effects.markRelease(h);
+    a.ctx.addMortar(x, z, 1.5, 1.5, Math.min(18, e.damage * 0.5),
+      { radius: 2.0, life: 4.5, dps: Math.min(10, e.damage * 0.33), kind: 'pool' });
+    bs.eggs.push({ x, z, at: a.ctx.time + 1.5 });
+  }
+  rest(e, a, 1.5);
+}
+// Egg pops ride on their own clock, not on her state: a sac laid at the end
+// of the clutch ruptures while she is already venting, which is exactly when
+// a player steps in.
+function queenEggs(e, a) {
+  const bs = e.bs;
+  if (!bs.eggs) return;
+  for (let i = bs.eggs.length - 1; i >= 0; i--) {
+    if (a.ctx.time < bs.eggs[i].at) continue;
+    const egg = bs.eggs[i];
+    for (const s of [-0.42, 0, 0.42]) {
+      a.ctx.addProjectile(egg.x, 0.75, egg.z, e.type, e._projScale(), s);
+    }
+    bs.eggs.splice(i, 1);
+  }
+}
+function queenBloom(e, a) {
+  const bs = e.bs;
+  if (bs.bloomLeft === undefined) {
+    bs.bloomLeft = bs.enraged ? 7 : 5;
+    bs.bloomDir = bs.turn % 2 ? -1 : 1;
+  }
+  a.vx = a.vz = 0; faceSnap(e);
+  if (e.timer > 0) return;
+  const i = (bs.enraged ? 7 : 5) - bs.bloomLeft;
+  const heading = bs.bloomAim + bs.bloomDir * i * 0.55;
+  for (let j = 0; j < 5; j++) capturedShot(e, a, heading, (j - 2) * 0.22, 2.3);
+  at.set(e.pos.x, 2, e.pos.z); a.ctx.effects.burst(at, COLOR, 8, 4, 2, 0.3);
+  e.timer = 0.34;
+  if (--bs.bloomLeft <= 0) { bs.bloomLeft = undefined; rest(e, a, 1.45); }
+}
+function queenPose(e, a) {
+  const bs = e.bs;
+  e.plates.forEach((m, i) => { m.position.x = (i ? 1 : -1) * (bs.weakOpen ? 0.48 : 0.16) * e.scale; });
+  let rx = -0.55, rz = bs.weakOpen ? 0.95 : 0.55;
+  if (e.state === 'tell') {
+    if (bs.attack === 'blitz' || bs.attack === 'hunt') rx = -1.25;
+    else if (bs.attack === 'bloom') { rx = -0.15; rz = 1.15; }
+    else rx = -0.95;
+  } else if (e.state === 'combo') {
+    if (bs.sub === 'dash') { rx = -0.05; rz = 0.8; } else rx = -1.25;
+  }
+  e.blades.forEach((m, i) => { m.rotation.x = rx; m.rotation.z = (i ? 1 : -1) * rz; });
+  // Her heart swells through every tell - the body warn on attacks that paint
+  // no lane, and a second read on the ones that do.
+  e.heart.scale.setScalar(e.scale * (e.state === 'tell' ? 1 + 0.16 * Math.sin(a.ctx.time * 16) : 1));
+}
+function aiBoss(e, a) {
+  const bs = e.bs;
+  if (!e.state) {
+    e.state = 'stalk'; e.timer = 1.3;
+    bs.turn = 0; bs.attack = ''; bs.eggs = []; bs.scuttle = 0; bs.scuttleT = 1.2;
+  }
+  const wasEnraged = bs.enraged;
+  bs.enraged = e.hp < e.maxHp * 0.5;
+  if (bs.enraged && !wasEnraged) a.ctx.bossEvent('enrage', e);
+  flutter(e, a, e.state === 'combo' && bs.sub === 'dash' ? 40 : 25);
+  queenPose(e, a);
+  queenEggs(e, a);
+  // The touch rule: a queen is never safe to hug, whatever she is doing.
+  bossTouch(e, a, 0.85);
+  if (e.status.fear > 0) return;
+  e.timer -= a.dt;
+  if (e.state === 'combo') { queenCombo(e, a); return; }
+  if (e.state === 'bloom') { queenBloom(e, a); return; }
+  if (e.state === 'tell') {
+    faceSnap(e);
+    const T = Q_TELLS[bs.attack] * (bs.enraged ? 0.85 : 1);
+    if (bs.attack === 'blitz') lane(e, a, 15, 2.4, 1 - e.timer / T);
+    if (bs.attack === 'hunt' || bs.attack === 'pits') {
+      // The scent disc and the cage marker TRACK the player until they lock -
+      // the attack then commits to where the lock landed, so the dodge is a
+      // change of direction, not a footrace.
+      const m = markGet(e, a.ctx.effects);
+      e.fx.markSet(m, a.ctx.player.pos.x, a.ctx.player.pos.z,
+        bs.attack === 'hunt' ? 2.3 : 3.2, COLOR, 1 - e.timer / T);
+    }
+    if (e.timer > 0) return;
+    const visible = e.mark === undefined ? true : e.mark >= 0; markDrop(e);
+    if (!visible) { rest(e, a, 1.3); return; }
+    // Blitz keeps the heading its lane has shown for the whole wind-up; the
+    // others commit to where the player is the moment the tell snaps shut.
+    if (bs.attack !== 'blitz') snapAim(e, a);
+    if (bs.attack === 'blitz' || bs.attack === 'hunt') {
+      const c = Q_COMBOS[bs.attack];
+      e.state = 'combo'; bs.combo = c; bs.sub = bs.attack === 'blitz' ? 'dash' : 'aim';
+      bs.left = bs.enraged ? c.enrCount : c.count; bs.stage = 1;
+      e.timer = bs.attack === 'blitz' ? c.dashT1
+        : c.aims * (bs.enraged ? 0.75 : 1);
+      bs.hitDone = false;
+    } else if (bs.attack === 'pits') queenPits(e, a);
+    else if (bs.attack === 'clutch') queenClutch(e, a);
+    else { bs.bloomAim = e.aim; bs.bloomLeft = undefined; e.state = 'bloom'; e.timer = 0.15; }
     return;
   }
   if (e.state === 'rest') {
     if (e.timer > 0) return;
     bs.weakOpen = false; a.ctx.bossEvent('vent', e); e.state = 'stalk';
-    e.timer = (bs.enraged ? 0.8 : 1.4) * e.rate;
+    e.timer = (bs.enraged ? 0.45 : 0.7) * e.rate;
   }
-  // Alternating lateral approach makes the queen stalk like a mantis rather
-  // than marching down the same line between every attack.
-  a.vx = (a.px * 0.7 - a.pz * (bs.turn % 2 ? 0.35 : -0.35)) * a.sp;
-  a.vz = (a.pz * 0.7 + a.px * (bs.turn % 2 ? 0.35 : -0.35)) * a.sp;
-  if (e.timer > 0 || a.dist > 28) return;
-  snapAim(e, a); bs.attack = ['lance', 'scissors', 'volley'][bs.turn++ % 3];
-  e.state = 'tell'; e.timer = 1.1; e._setEyeAlert(true);
+  // Prowl: hold a mid-ring on a walking orbit, and break it up with quick
+  // lateral scuttles so she never drifts down one readable line.
+  if (bs.scuttle > 0) {
+    bs.scuttle -= a.dt; e.stepMul = 2.6;
+    a.vx = -a.pz * bs.scuttleSide * a.sp * 2.3;
+    a.vz = a.px * bs.scuttleSide * a.sp * 2.3;
+  } else {
+    e.stepMul = 1.15;
+    orbit(e, a, Q_ORBIT);
+    bs.scuttleT -= a.dt;
+    if (bs.scuttleT <= 0) {
+      bs.scuttle = 0.26;
+      bs.scuttleSide = Math.random() < 0.5 ? -1 : 1;
+      bs.scuttleT = 1.0 + Math.random() * 0.9;
+    }
+  }
+  if (e.timer > 0 || a.dist > 30) return;
+  // Next behaviour off the rotation; a pick that makes no sense at this range
+  // (a charge at arm's length) yields to the next one rather than firing lame.
+  for (let k = 0; k < Q_ROTATION.length; k++) {
+    const name = Q_ROTATION[(bs.turn + k) % Q_ROTATION.length];
+    if (a.dist < (Q_MIN_DIST[name] || 0)) continue;
+    bs.attack = name; bs.turn += k + 1; break;
+  }
+  snapAim(e, a);
+  e.state = 'tell'; e.timer = Q_TELLS[bs.attack] * (bs.enraged ? 0.85 : 1);
+  e._setEyeAlert(true);
   at.set(e.pos.x, 1, e.pos.z); a.ctx.effects.shockwave(at, COLOR, 3, 0.5);
 }

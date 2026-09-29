@@ -658,11 +658,21 @@ context. The start screen says so, and one click anywhere fixes it.
   within five seconds. Cover, range or the moth's death interrupts the link.
   **Lancewasps** lower their stingers from flight, fire along a captured bearing,
   then climb and retreat. **THE VESPER QUEEN** towers on six legs beneath four
-  veined amber wings, a crown of antennae, and two great scythes. She alternates
-  lateral stalking with a marked lance charge, converging scissor eruptions,
-  and interleaved needle fans. Her thorax plates part for 1.8 seconds after
-  every attack, removing 35% damage resistance. At half health, her scissors
-  lengthen and volleys gain another wave, preserving every warning and opening.
+  veined amber wings, a crown of antennae, and two great scythes - and she
+  hunts. She prowls a wide orbit, breaks it with quick sideways scuttles, and
+  her body costs health to touch at any moment, capped like every boss touch.
+  Five attacks rotate. A **scythe blitz**: a long painted lane, a rush down
+  it, then a live pivot into a second stride - three when enraged. An
+  **ambush ring**: antlion pits caging your old position with one gap left
+  open away from her, the centre erupting last - eight pits when enraged. A
+  **needle bloom**: planted fans of five needles, each fan sweeping a fixed
+  step past the last, alternating direction - seven fans when enraged. An
+  **egg clutch**: three warned sacs around her that rupture into ichor pools
+  and each spit a needle fan as they pop - four when enraged. And a **royal
+  hunt**: a scent disc that tracks you, locks, then snaps into three short
+  committed darts, each with its own snap lane - four when enraged. Every
+  attack vents her thorax plates briefly, removing her 35% damage resistance,
+  and the whole hunt quickens at half health under a room-wide alarm.
   All three charging insects stop at cover, hold their committed heading and
   cap speed so late waves cannot carry them beyond their marked lanes.
   Both themes skip floor attacks when the warning pool is exhausted.
