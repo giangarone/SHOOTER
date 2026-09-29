@@ -834,16 +834,22 @@ context. The start screen says so, and one click anywhere fixes it.
   The box itself is the health bar's argument: shut and armoured for most
   of the fight, and under a third the lids go wide for good, the armour
   comes off, and the last stretch is the fastest. **OSSARCH**, BONE's crowned
-  skeleton, cycles through three attacks: a telegraphed radial rib volley
-  with an escape sector, a sequential spine through your captured position,
-  and a jaw charge down a marked lane. The charge commits to its bearing;
-  solid cover stops it. Every attack ends in a 1.6-second recovery with the
-  ribcage open and the marrow fully vulnerable. Outside those windows, two
-  mantle plates reduce damage to 55%, then 75%, then full damage as its bar
-  crosses two thirds and one third. The first break adds two branches to the
-  spine, and the last tightens the rib volley while preserving its escape
-  sector. Warnings retain their full duration as the fight scales; the walk
-  between attacks gets shorter. **THE SMOKING MIRROR**, OBSIDIAN's, is the theme's whole
+  skeleton, spends its own skeleton from a bag of eight attacks: a radial rib
+  volley with an escape sector that later shells re-fire rotated tighter, a
+  sequential spine through your captured position that forks once the plates
+  are gone, a jaw charge down a marked lane that re-aims and snaps twice, a
+  spin-shed fan of ribs in every direction, a femur sweep out to a filling
+  ring that only distance, high ground or a well-timed jump answers, a
+  staggered skullfall of warned mortars onto where you stand, a marrow lance
+  that fills its corridor and then sweeps after you until you break its sight
+  line, and a pounce that hurls the whole cage onto a marked landing circle,
+  teeth ringing the crater once plates have shed. Between attacks it prowls
+  the middle distance rather than planting itself, contact hurts in every
+  state including the exposed-window recovery, and every attack still ends
+  with the ribcage open and the marrow vulnerable. The mantle plates reduce
+  damage to 55%, then 75%, then full as its bar crosses two thirds and one
+  third, each break widening what the attacks throw. Warnings retain their
+  full duration as the fight scales; the rests between them get shorter. **THE SMOKING MIRROR**, OBSIDIAN's, is the theme's whole
   argument at boss scale: a cracked slab of volcanic glass standing on end
   that drags itself about on three heavy legs, and every attack it has draws
   a LINE across the room. The CRESCENT plants a telegraphed lane and then
@@ -3248,8 +3254,10 @@ test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
                     Reliquary opening under a third
 test/bone.mjs       BONE end to end - locked lunges and spine lanes, spent-rib
                     vulnerability, permanent plate shedding, interruptible
-                    healing, airborne tooth trails, all three Ossarch attacks,
-                    armor phases, cover, elevation and telegraph cleanup
+                    healing, airborne tooth trails, all eight Ossarch attacks
+                    with their tells and counterplay, armor phases, contact
+                    danger in every state, cover, elevation and telegraph
+                    cleanup
 test/obsidian.mjs   OBSIDIAN end to end - every mechanic is a LINE, so every
                     assertion is that line measured from both sides: the
                     clast's lunge costing on the lane AND nothing a step off

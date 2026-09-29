@@ -60,6 +60,7 @@ try {
       for (let i = 0; i < Math.ceil(seconds / DT); i++) {
         g.time += DT;
         g._updateEnemies(DT);
+        g._updateMortars(DT);
         g._updateProjectiles(DT);
         g.effects.update(DT, g.camera);
         visit?.();
@@ -225,42 +226,68 @@ try {
     run(2);
     ok('skullwing climbs to recover and its trail expires', e.hoverY === 3.2 && !e.boneTeeth.length && marks() === 0);
 
+    // ---- OSSARCH. Every attack is driven deterministically by loading the
+    // bag with exactly one name, then measured against its counterplay.
+    const arm = (boss, attack) => {
+      boss.bs.state = 'prowl'; boss.bs.t = 0; boss.bs.bag = [attack]; boss.bs.last = '';
+    };
+
     clean();
     e = put('ossarch', -10, 0);
     e.speed = 0;
     shots = [];
-    run(2.5);
-    ok('Ossarch winds up its first volley before firing', shots.length === 0 && e.bs.state === 'ribs');
+    run(DT);
+    arm(e, 'ribs');
     run(0.5);
-    ok('Ossarch launches a gapped radial rib volley', shots.length === 10 && Math.max(...shots.map((s) => s.angle)) < Math.PI * 2 - 0.8, `shots=${shots.length}`);
-    ok('Ossarch opens its marrow after attacking', e.bs.weakOpen && ENEMY_TYPES.ossarch.armor(e) === 1 && ENEMY_TYPES.ossarch.armorDefault(e) === 1);
-    const states = new Set();
-    let peakTeeth = 0;
-    run(15, () => { states.add(e.bs.state); peakTeeth = Math.max(peakTeeth, e.boneTeeth?.length || 0); });
-    ok('Ossarch naturally cycles through spine, jaw tell, charge and recovery', ['spine', 'jawTell', 'charge', 'recover'].every((s) => states.has(s)), [...states].join(','));
-    ok('full-health Ossarch uses the unbranched spine', peakTeeth === 3, `teeth=${peakTeeth}`);
+    ok('OSSARCH winds up its rib volley before firing', shots.length === 0 && e.bs.state === 'ribs', e.bs.state);
+    run(0.5);
+    ok('OSSARCH launches a gapped radial rib volley', shots.length === 10 && Math.max(...shots.map((s) => s.angle)) < Math.PI * 2 - 0.8, `shots=${shots.length}`);
+    ok('OSSARCH opens its marrow after attacking', e.bs.state === 'recover' && e.bs.weakOpen && ENEMY_TYPES.ossarch.armor(e) === 1 && ENEMY_TYPES.ossarch.armorDefault(e) === 1);
     const ladder = [];
     for (const frac of [1, 0.6, 0.3]) {
       e.hp = e.maxHp * frac;
-      e.bs.state = 'walk'; e.bs.t = 99; e.bs.weakOpen = false;
+      e.bs.state = 'prowl'; e.bs.t = 99; e.bs.weakOpen = false;
       run(DT);
       ladder.push(ENEMY_TYPES.ossarch.armor(e));
     }
-    ok('Ossarch armor sheds permanently in two visible stages', ladder[0] < ladder[1] && ladder[1] < ladder[2] && ladder[2] === 1 && e.bonePlates.every((p) => !p.visible), ladder.join('/'));
-    e.bs.t = 0; e.bs.attack = 1;
+    ok('OSSARCH armor sheds permanently in two visible stages', ladder[0] < ladder[1] && ladder[1] < ladder[2] && ladder[2] === 1 && e.bonePlates.every((p) => !p.visible), ladder.join('/'));
+    arm(e, 'spine');
+    run(2 * DT);
+    ok('damaged OSSARCH branches the spine with two extra teeth', e.boneTeeth.length === 5, `teeth=${e.boneTeeth?.length}`);
+    clean();
+    e = put('ossarch', -10, 0);
+    e.speed = 0;
+    e.hp = e.maxHp * 0.3;
     run(DT);
-    ok('damaged Ossarch branches the spine with two extra teeth', e.boneTeeth.length === 5, `teeth=${e.boneTeeth.length}`);
-    run(2.5);
-    e.bs.state = 'walk'; e.bs.t = 0; e.bs.attack = 0;
+    arm(e, 'ribs');
     shots = [];
-    run(1);
-    ok('last shell tightens the volley but retains its escape sector', shots.length === 12, `shots=${shots.length}`);
+    run(2.6);
+    ok('last shell re-fires the rib ring twice more, each rotated tighter', shots.length === 36 &&
+      new Set(shots.map((s) => s.angle.toFixed(3))).size === 36, `shots=${shots.length}`);
 
-    // Pin the charge state by its normal tell, then put a wall on the lane.
+    clean();
+    e = put('ossarch', -8, 0);
+    e.speed = 0;
+    run(DT);
+    arm(e, 'spine');
+    run(2 * DT);
+    ok('full-health OSSARCH runs the unbranched spine', e.boneTeeth.length === 3, `teeth=${e.boneTeeth?.length}`);
+    run(3);
+    ok('spine leaves no warnings behind', marks() === 0 && !e.boneTeeth.length);
+
+    // Touch hurts in every state now, worst of all in the old safe window.
+    clean();
+    e = put('ossarch', 0, -2.4);
+    run(DT);
+    e.bs.state = 'recover'; e.bs.t = 5;
+    run(0.3);
+    ok('standing against the cage costs health even during the exposed window', HEALTH - p.health > 0, `damage=${HEALTH - p.health}`);
+
+    // Pin the jaw charge by its normal tell, then put a wall on the lane.
     clean();
     e = put('ossarch', -8, 0);
     run(DT);
-    e.bs.state = 'walk'; e.bs.t = 0; e.bs.attack = 2;
+    arm(e, 'jaw');
     run(0.5);
     const locked = [e.boneDX, e.boneDZ];
     p.pos.z = 5;
@@ -272,16 +299,157 @@ try {
     clean();
     e = put('ossarch', -8, 0);
     run(DT);
-    e.bs.t = 0; e.bs.attack = 2;
+    arm(e, 'jaw');
     run(0.95);
-    ok('Ossarch jaw charge gives its full warning before damage', p.health === HEALTH);
+    ok('OSSARCH jaw charge gives its full warning before damage', p.health === HEALTH);
     run(1);
-    ok('Ossarch jaw catches a player who stays in its lane once', HEALTH - p.health === 26, `damage=${HEALTH - p.health}`);
+    ok('OSSARCH jaw catches a player who stays in its lane once', HEALTH - p.health === 26, `damage=${HEALTH - p.health}`);
+
+    clean();
+    e = put('ossarch', -8, 0);
+    e.hp = e.maxHp * 0.5;
+    run(DT);
+    arm(e, 'jaw');
+    const jawStates = new Set();
+    run(5, () => jawStates.add(e.bs.state));
+    ok('damaged OSSARCH re-aims and charges a second time', jawStates.has('reTell'), [...jawStates].join(','));
+
+    const sweep = (y, x) => {
+      clean();
+      const b = put('ossarch', 0, 0);
+      b.speed = 0;
+      p.pos.set(x, y, 0);
+      run(DT);
+      arm(b, 'sweep');
+      run(0.5);
+      const early = HEALTH - p.health;
+      const marked = marks();
+      run(0.5);
+      return { early, marked, damage: HEALTH - p.health, left: marks(), state: b.bs.state };
+    };
+    const sweptIn = sweep(0, 5), sweptFar = sweep(0, 12), sweptAir = sweep(1.5, 5);
+    ok('sweep fills its whole ring before the femurs come round', sweptIn.early === 0 && sweptIn.marked === 1, JSON.stringify(sweptIn));
+    ok('the femur sweep catches a player still inside the ring', sweptIn.damage > 10 && sweptIn.damage < 26, `damage=${sweptIn.damage}`);
+    ok('the sweep ring is released as the femurs pass', sweptIn.state === 'sweepFire' && sweptIn.left === 0, `${sweptIn.state} marks=${sweptIn.left}`);
+    ok('leaving the sweep ring is a complete answer', sweptFar.damage === 0, `damage=${sweptFar.damage}`);
+    ok('a jumping player clears the femurs entirely', sweptAir.damage === 0, `damage=${sweptAir.damage}`);
+    clean();
+    e = put('ossarch', 0, 0);
+    e.speed = 0;
+    e.hp = e.maxHp * 0.2;
+    p.pos.set(30, 0, 30);
+    run(DT);
+    arm(e, 'sweep');
+    let swings = 0;
+    let prev = '';
+    run(3, () => { if (e.bs.state === 'sweepFire' && prev !== 'sweepFire') swings++; prev = e.bs.state; });
+    ok('last shell swings its femurs twice', swings === 2, `swings=${swings}`);
+    p.pos.set(0, 0, 0);
+
+    const skullfall = (move) => {
+      clean();
+      const b = put('ossarch', -8, 0);
+      b.speed = 0;
+      p.pos.set(0, 0, 0);
+      run(DT);
+      arm(b, 'skullfall');
+      let peak = 0;
+      run(1.0, () => { peak = Math.max(peak, g._mortars.length); });
+      if (move) p.pos.set(0, 0, 9);
+      run(1.3);
+      return { peak, damage: HEALTH - p.health, marks: marks() };
+    };
+    const rained = skullfall(false), dodged = skullfall(true);
+    ok('OSSARCH rains a staggered volley of warned skulls', rained.peak === 3, `peak=${rained.peak}`);
+    ok('standing in the skullfall costs far more than moving', rained.damage > 20 && dodged.damage < rained.damage, `stay=${rained.damage} move=${dodged.damage}`);
+    ok('skullfall warnings expire with their skulls', rained.marks === 0 && dodged.marks === 0);
+
+    const lance = (blocked) => {
+      clean();
+      const b = put('ossarch', -12, 0);
+      b.speed = 0;
+      p.pos.set(-5, 0, 0);
+      run(DT);
+      arm(b, 'lance');
+      if (blocked) ctx.obstacles = [new THREE.Box3(new THREE.Vector3(-9, 0, -4), new THREE.Vector3(-8, 5, 4))];
+      run(0.75);
+      const early = HEALTH - p.health;
+      const marked = marks();
+      run(1.35);
+      return { early, marked, damage: HEALTH - p.health, state: b.bs.state, left: marks() };
+    };
+    const burned = lance(false), shielded = lance(true);
+    ok('the marrow lance holds its corridor through the tell, then burns down it', burned.early === 0 && burned.marked === 1 && burned.damage >= 9, JSON.stringify(burned));
+    ok('breaking the beam over cover stops it entirely', shielded.damage === 0, `damage=${shielded.damage}`);
+    ok('the lance releases its warning when it gutters', burned.state === 'recover' && burned.left === 0, `${burned.state} marks=${burned.left}`);
+
+    const pounce = (dodge) => {
+      clean();
+      const b = put('ossarch', -10, 0);
+      p.pos.set(0, 0, 0);
+      run(DT);
+      arm(b, 'pounce');
+      run(0.5);
+      const early = HEALTH - p.health;
+      const marked = marks();
+      const startX = b.pos.x;
+      if (dodge) p.pos.z = 7;
+      run(1.8);
+      return { early, marked, damage: HEALTH - p.health, moved: b.pos.x - startX, left: marks(), state: b.bs.state };
+    };
+    const crushed = pounce(false), leapt = pounce(true);
+    ok('pounce marks the landing circle while the cage is still coiled', crushed.early === 0 && crushed.marked === 1, JSON.stringify(crushed));
+    ok('the cage hurls itself onto the mark and crushes what stayed', crushed.damage >= 24 && crushed.moved > 7, JSON.stringify(crushed));
+    ok('clearing the landing circle costs nothing', leapt.damage === 0 && leapt.left === 0, JSON.stringify(leapt));
+    clean();
+    e = put('ossarch', -10, 0);
+    e.hp = e.maxHp * 0.5;
+    p.pos.set(0, 0, 8);
+    run(DT);
+    arm(e, 'pounce');
+    let ringTeeth = 0;
+    run(2.2, () => { ringTeeth = Math.max(ringTeeth, e.boneTeeth?.length || 0); });
+    ok('a cracked shell spits a ring of teeth where it lands', ringTeeth === 6, `teeth=${ringTeeth}`);
+    run(1.2);
+    ok('landing teeth erupt and return their warnings', e.boneTeeth.length === 0 && marks() === 0);
+
+    clean();
+    e = put('ossarch', -8, 0);
+    e.speed = 0;
+    p.pos.set(4, 0, 0);
+    run(DT);
+    shots = [];
+    arm(e, 'spin');
+    run(0.4);
+    ok('the clatter spins its core up before shedding shards', shots.length === 0 && e.bs.state === 'spinTell', e.bs.state);
+    run(2);
+    const spinAngles = new Set(shots.map((s) => s.angle.toFixed(2)));
+    ok('spin sheds a rotating fan of ribs in every direction', shots.length >= 10 && spinAngles.size >= 8, `shots=${shots.length} angles=${spinAngles.size}`);
+
+    // A natural fight: the boss prowls, attacks often, and visits its whole
+    // repertoire without a hand on the bag.
+    clean();
+    e = put('ossarch', -8, 0);
+    p.pos.set(0, 0, 6);
+    run(DT);
+    const visit = new Set();
+    let drawn = 0;
+    let was = '';
+    run(35, () => {
+      const s = e.bs.state;
+      if (/Tell$|^skullfall$/.test(s) || s === 'ribs' || s === 'spine' || s === 'spin') {
+        if (s !== was) drawn++;
+        visit.add(s);
+      }
+      was = s;
+    });
+    ok('OSSARCH attacks relentlessly instead of camping one corner', drawn >= 8, `attacks=${drawn}`);
+    ok('the fight visits most of its eight attacks in half a minute', visit.size >= 6, [...visit].join(','));
 
     for (const type of ['knuckler', 'ossuary', 'skullwing', 'ossarch']) {
       clean();
       e = put(type, -5, 0);
-      if (type === 'ossarch') { run(DT); e.bs.t = 0; e.bs.attack = 2; }
+      if (type === 'ossarch') { run(DT); arm(e, 'spine'); }
       const armed = until(() => marks() > 0);
       e.takeDamage(1e6);
       run(0.1);

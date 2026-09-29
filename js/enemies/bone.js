@@ -2,7 +2,7 @@
 // and exposed marrow is the price of attacking. No borrowed bodies or revivals.
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, aiMelee, bossTouch, eyes, geo, landHit,
+  ENEMY_TYPES, SHARED_MATS, BOSS_TOUCH_CD, addWarnedMortar, aiMelee, bossTouch, capturedShot, eyes, geo, landHit,
   orbit, partsFor, prism, segBlocked, slab, spike,
 } from './shared.js';
 
@@ -134,9 +134,10 @@ export function buildOssarch(e, g, s) {
   cage(P, e, 1.1, 1.8);
   skull(P, e, 1.8, -0.2);
   e.bonePlates = [];
+  e.boneArms = [];
   for (const side of [-1, 1]) {
     e.bonePlates.push(P('ossarchMantle', slab(0.28, 0.9, 0.58), { x: side * 0.58, y: 1.32, rz: side * 0.3 }));
-    P('ossarchArm', slab(0.15, 1.1, 0.17), { x: side * 0.88, y: 0.94, rz: side * 0.22 });
+    e.boneArms.push(P('ossarchArm', slab(0.15, 1.1, 0.17), { x: side * 0.88, y: 0.94, rz: side * 0.22 }));
     for (let i = 0; i < 3; i++) {
       P('ossarchClaw', spike(0.07, 0.65, 4), { x: side * (0.82 + i * 0.13), y: 0.3, z: -0.16, rx: Math.PI });
     }
@@ -225,6 +226,16 @@ function lane(e, a, length, width, fill) {
   if (e.boneLane === undefined) e.boneLane = fx.markAcquire();
   fx.markSet(e.boneLane, e.pos.x + e.boneDX * length / 2, e.pos.z + e.boneDZ * length / 2,
     width, MARROW, fill, length / (width * 2), Math.atan2(-e.boneDX, -e.boneDZ));
+}
+
+// The same single warning slot worn as a circle: the boss's sweep ring and
+// pounce landing are area telegraphs, not corridors. Sharing the lane field
+// keeps cleanupBone exhaustive no matter which one was up when it died.
+function ring(e, a, x, z, radius, fill) {
+  const fx = a.ctx.effects;
+  e.boneFx = fx;
+  if (e.boneLane === undefined) e.boneLane = fx.markAcquire();
+  fx.markSet(e.boneLane, x, z, radius, MARROW, fill);
 }
 
 function releaseLane(e) {
@@ -457,19 +468,132 @@ export function ossarchArmor(e) {
   return e.bs.weakOpen ? 1 : [0.55, 0.75, 1][e.boneShed || 0];
 }
 
+// OSSARCH spends its whole skeleton: ribs fly off as volleys, the spine comes
+// up through the floor beneath you, the jaw charges down lanes, the femurs
+// sweep you off your feet, skulls rain from above, the marrow fires as a
+// sweeping lance, and the whole cage hurls itself at your position. Eight
+// patterns drawn from a shuffled bag - never the same cycle twice, never the
+// same attack twice in a row.
+const OSSARCH_ATTACKS = ['ribs', 'spine', 'jaw', 'sweep', 'skullfall', 'lance', 'pounce', 'spin'];
+
+// The prowling gait between attacks: it stalks the middle distance and keeps
+// drifting sideways, so it never sits still to be shot.
+const ossarchProwl = { dist: 8.5, band: 3, out: 1, in: -0.65, strafe: 0.85, flip: 1.3, flipVar: 1 };
+
+const wrapPi = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+
+function ossarchDraw(bs) {
+  if (!bs.bag.length) {
+    bs.bag = OSSARCH_ATTACKS.slice();
+    for (let i = bs.bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bs.bag[i], bs.bag[j]] = [bs.bag[j], bs.bag[i]];
+    }
+    // A fresh bag must not open with whatever the last bag closed with.
+    if (bs.bag.length > 1 && bs.bag[bs.bag.length - 1] === bs.last) {
+      const last = bs.bag.length - 1;
+      [bs.bag[0], bs.bag[last]] = [bs.bag[last], bs.bag[0]];
+    }
+  }
+  const attack = bs.bag.pop();
+  bs.last = attack;
+  return attack;
+}
+
 function ossarchRest(e, a) {
   releaseLane(e);
   e.bs.state = 'recover';
-  e.bs.t = 1.6;
+  e.bs.t = 1.15 * e.rate * (1 - 0.1 * (e.boneShed || 0));
   e.bs.weakOpen = true;
   e._setEyeAlert(false);
   a.ctx.bossEvent('vent', e);
 }
 
+function ossarchPick(e, a) {
+  const bs = e.bs, ctx = a.ctx;
+  const tier = e.boneShed || 0;
+  const attack = ossarchDraw(bs);
+  e._setEyeAlert(true);
+  if (attack === 'ribs') {
+    bs.state = 'ribs'; bs.t = bs.tMax = 0.8; bs.volleys = 1 + tier; bs.volleysDone = 0;
+  } else if (attack === 'spine') {
+    bs.state = 'spine'; bs.t = bs.tMax = 1.1;
+    spine(e, a, tier > 0);
+  } else if (attack === 'jaw') {
+    bs.state = 'jawTell'; bs.t = bs.tMax = 0.85;
+    bs.charges = tier > 0 ? 2 : 1;
+    e.boneDX = a.nx; e.boneDZ = a.nz;
+    ctx.bossEvent('charge', e);
+  } else if (attack === 'sweep') {
+    bs.state = 'sweepTell'; bs.t = bs.tMax = 0.8;
+    // Later shells swing wider, and the last shell swings twice.
+    bs.sweepR = 6.6 + 0.8 * tier; bs.swings = tier >= 2 ? 2 : 1;
+  } else if (attack === 'skullfall') {
+    bs.state = 'skullfall'; bs.t = bs.tMax = 0.3 + (2 + tier) * 0.26;
+    bs.left = 3 + tier; bs.next = 0.15; bs.fired = 0;
+  } else if (attack === 'lance') {
+    bs.state = 'lanceTell'; bs.t = bs.tMax = 0.8;
+    e.boneDX = a.nx; e.boneDZ = a.nz;
+  } else if (attack === 'pounce') {
+    bs.state = 'pounceTell'; bs.t = bs.tMax = 0.78;
+    // The landing is what the leap can actually cover - the warning and the
+    // impact always agree, so the clamp is geometry, not mercy.
+    const d = Math.min(a.dist, 17);
+    bs.tx = Math.max(-20.5, Math.min(20.5, e.pos.x + a.nx * d));
+    bs.tz = Math.max(-20.5, Math.min(20.5, e.pos.z + a.nz * d));
+  } else {
+    bs.state = 'spinTell'; bs.t = bs.tMax = 0.65;
+  }
+}
+
+function ossarchSweepHit(e, a) {
+  releaseLane(e);
+  const bs = e.bs, ctx = a.ctx, p = ctx.player.pos;
+  const d = Math.hypot(p.x - e.pos.x, p.z - e.pos.z);
+  at.set(e.pos.x, 0.4, e.pos.z);
+  ctx.effects.shockwave(at, IVORY, bs.sweepR, 0.4);
+  ctx.effects.burst(at, IVORY, 18, 5, bs.sweepR * 0.45, 0.5);
+  ctx.effects.addShake(0.18);
+  if (ctx.sfx) ctx.sfx.meleeSwing();
+  // A femur scythes the ring at shin height: clear the circle, stand on
+  // something, or be in the AIR when it passes - jumping is an answer.
+  if (d < bs.sweepR && p.y < 1.2 && !segBlocked(e.pos.x, e.pos.y + 0.6, e.pos.z, p.x, p.y + 0.8, p.z, ctx.obstacles)) {
+    ctx.onHitPlayer(Math.min(28, e.damage) * (1 - 0.3 * d / bs.sweepR), e.pos, e);
+  }
+}
+
+function ossarchPounceLand(e, a) {
+  const bs = e.bs, ctx = a.ctx;
+  releaseLane(e);
+  at.set(bs.tx, 0, bs.tz);
+  ctx.effects.shockwave(at, IVORY, 2.8, 0.4);
+  ctx.effects.burst(at, IVORY, 20, 5, 3, 0.55);
+  ctx.effects.addShake(0.22);
+  if (ctx.sfx) ctx.sfx.impact();
+  // Detonates where the mark said, even when a pillar cut the leap short:
+  // the player was warned about the ground, never the boss's arrival on it.
+  const p = ctx.player.pos;
+  const dp = Math.hypot(p.x - bs.tx, p.z - bs.tz);
+  if (dp < 2.8 && p.y < 2.3) ctx.onHitPlayer(Math.min(28, e.damage) * (1 - 0.4 * dp / 2.8), at, e);
+  // Once plates are gone the landing spits a ring of teeth outward too, so
+  // stepping out of the circle is not yet safe.
+  if ((e.boneShed || 0) > 0) {
+    for (let i = 0; i < 6; i++) {
+      const ta = i * Math.PI / 3 + 0.3;
+      tooth(e, ctx, bs.tx + Math.cos(ta) * 2.4, bs.tz + Math.sin(ta) * 2.4,
+        0.55, 1.3, Math.min(20, e.damage * 0.8));
+    }
+  }
+  ossarchRest(e, a);
+}
+
 export function aiOssarch(e, a) {
   e.stepMul = 1.4;
   const bs = e.bs, ctx = a.ctx;
-  if (bs.state === undefined) { bs.state = 'walk'; bs.t = 2; bs.attack = 0; bs.ventNote = 'MARROW EXPOSED'; }
+  if (bs.state === undefined) {
+    bs.state = 'prowl'; bs.t = 1.2; bs.bag = []; bs.last = '';
+    bs.ventNote = 'MARROW EXPOSED';
+  }
   shed(e, a);
   if (e.status.fear > 0) {
     cleanupBone(e);
@@ -477,46 +601,62 @@ export function aiOssarch(e, a) {
     return;
   }
   tickTeeth(e, a);
+  const tier = e.boneShed || 0;
   bs.t -= a.dt;
+
+  // Contact hurts in EVERY state, exposed window included - the window is
+  // for the gun, not for standing in the cage. The jaw charge is the one
+  // exception in code, and only so its bite can take the hit itself instead
+  // of stacking on top of a touch in the same frame.
+  if (bs.state !== 'charge') bossTouch(e, a);
+
+  // Body language: every state reads differently before anyone reads the
+  // floor. The jaw hangs open for bites and volleys, the arms wind up for
+  // the sweep, the cage crouches to spring, the core spins up to scatter.
+  const jawOpen = bs.state === 'jawTell' || bs.state === 'reTell' || bs.state === 'charge' ||
+    bs.state === 'skullfall' || bs.state === 'pounceTell';
+  e.boneJaw.position.y = (jawOpen ? 1.35 : 1.58) * e.scale;
   e.boneCore.scale.setScalar(e.scale * (bs.weakOpen ? 1.7 : 1));
   e.boneRibs.forEach((r, i) => { r.position.x = (i % 2 ? 1 : -1) * (bs.weakOpen ? 0.22 : 0.08) * e.scale; });
-  e.boneJaw.position.y = (bs.state === 'jawTell' || bs.state === 'charge' ? 1.35 : 1.58) * e.scale;
+  e.group.scale.y = bs.state === 'pounceTell' ? 1 - 0.22 * (1 - Math.max(0, bs.t) / bs.tMax)
+    : bs.state === 'pounceLeap' ? 1.12 : 1;
+  for (let i = 0; i < 2; i++) {
+    const side = i ? 1 : -1;
+    e.boneArms[i].rotation.z = side * (
+      bs.state === 'sweepFire' ? 1.55 :
+      bs.state === 'sweepTell' ? 0.22 + 0.85 * (1 - Math.max(0, bs.t) / bs.tMax) :
+      bs.state === 'pounceLeap' ? 0.9 :
+      0.22);
+  }
 
-  // Contact is suppressed in recovery: the exposed window is safe to use.
-  if (bs.state !== 'recover' && bs.state !== 'charge') bossTouch(e, a);
-  if (bs.state === 'walk') {
-    a.vx = a.px * a.sp;
-    a.vz = a.pz * a.sp;
-    if (bs.t > 0) return;
-    const attack = bs.attack++ % 3;
-    e._setEyeAlert(true);
-    if (attack === 0) { bs.state = 'ribs'; bs.t = 0.85; }
-    else if (attack === 1) {
-      bs.state = 'spine'; bs.t = 1.9;
-      spine(e, a, (e.boneShed || 0) > 0);
-    } else {
-      bs.state = 'jawTell'; bs.t = 0.9;
-      e.boneDX = a.nx; e.boneDZ = a.nz;
-      ctx.bossEvent('charge', e);
-    }
+  if (bs.state === 'prowl') {
+    orbit(e, a, ossarchProwl);
+    if (bs.t <= 0) ossarchPick(e, a);
   } else if (bs.state === 'ribs') {
-    e.boneCore.scale.y = e.scale * (1 + 0.8 * (1 - Math.max(0, bs.t) / 0.85));
+    e.boneCore.scale.y = e.scale * (1 + 0.8 * (1 - Math.max(0, bs.t) / bs.tMax));
     if (bs.t <= 0) {
       // Two missing ribs leave a broad escape sector; all other bearings
-      // carry small, cover-blocked rounds. Later shells tighten the spacing.
-      const n = (e.boneShed || 0) === 2 ? 14 : 12;
-      for (let i = 0; i < n - 2; i++) ctx.addProjectile(e.pos.x, e.pos.y + 1.5, e.pos.z, e.type, e._projScale(), i * Math.PI * 2 / n);
-      ossarchRest(e, a);
+      // carry small, cover-blocked rounds. Later shells re-fire the ring
+      // rotated half a step and tighten the spacing, so the sector is
+      // never twice in the same place.
+      const n = tier === 2 ? 14 : 12;
+      const done = ++bs.volleysDone;
+      const off = (done - 1) * Math.PI * 2 / (n * bs.volleys);
+      for (let i = 0; i < n - 2; i++) ctx.addProjectile(e.pos.x, e.pos.y + 1.5, e.pos.z, e.type, e._projScale(), off + i * Math.PI * 2 / n);
+      if (done >= bs.volleys) ossarchRest(e, a);
+      else { bs.t = bs.tMax = 0.38; }
     }
   } else if (bs.state === 'spine') {
+    // The teeth are already locked; the boss keeps hunting while they fire.
+    orbit(e, a, ossarchProwl);
     if (bs.t <= 0) ossarchRest(e, a);
-  } else if (bs.state === 'jawTell') {
+  } else if (bs.state === 'jawTell' || bs.state === 'reTell') {
     face(e);
-    lane(e, a, 12, 2.7, 1 - Math.max(0, bs.t) / 0.9);
+    lane(e, a, 12, 2.7, 1 - Math.max(0, bs.t) / bs.tMax);
     if (bs.t <= 0) {
       if (e.boneLane < 0) { ossarchRest(e, a); return; }
       releaseLane(e);
-      bs.state = 'charge'; bs.t = 0.9; bs.hit = false;
+      bs.state = 'charge'; bs.t = 0.85; bs.hit = false;
     }
   } else if (bs.state === 'charge') {
     face(e);
@@ -528,12 +668,130 @@ export function aiOssarch(e, a) {
         !segBlocked(e.pos.x, 1.4, e.pos.z, ctx.player.pos.x, ctx.player.pos.y + 0.8, ctx.player.pos.z, ctx.obstacles)) {
       ctx.onHitPlayer(Math.min(32, e.damage), e.pos, e);
       bs.hit = true;
+      // The bite buys out the touch clock as well: one pass costs one hit.
+      // Standing on the cage a second later still hurts - but never in the
+      // same frame the jaw already took.
+      bs.touchCd = BOSS_TOUCH_CD * e.rate;
     }
-    if (bs.t <= 0 || e.blockedBy > 0.05) ossarchRest(e, a);
+    // The charge's victim is found by the jaw alone this frame; anyone else
+    // it crashes into still pays for the touch. bossTouch's own cooldown
+    // keeps a second call in the same frame from spending twice.
+    if (!bs.hit) bossTouch(e, a);
+    if (bs.t <= 0 || e.blockedBy > 0.05) {
+      // Shedding plates teaches the jaw to snap again at wherever you went.
+      bs.charges--;
+      if (bs.charges > 0) {
+        bs.state = 'reTell'; bs.t = bs.tMax = 0.55;
+        e.boneDX = a.nx; e.boneDZ = a.nz;
+        ctx.bossEvent('charge', e);
+      } else ossarchRest(e, a);
+    }
+  } else if (bs.state === 'sweepTell') {
+    ring(e, a, e.pos.x, e.pos.z, bs.sweepR, 1 - Math.max(0, bs.t) / bs.tMax);
+    if (bs.t <= 0) {
+      bs.state = 'sweepFire'; bs.t = bs.tMax = 0.4;
+      bs.spinFrom = e.group.rotation.y; bs.hitDone = false;
+    }
+  } else if (bs.state === 'sweepFire') {
+    // The whole cage whirls once with its arms out level; no head to face
+    // with, the spin IS the facing.
+    e.faceLocked = true;
+    e.group.rotation.y = bs.spinFrom + (1 - Math.max(0, bs.t) / bs.tMax) * Math.PI * 2;
+    if (!bs.hitDone) { bs.hitDone = true; ossarchSweepHit(e, a); }
+    if (bs.t <= 0) {
+      bs.swings--;
+      if (bs.swings > 0) { bs.state = 'sweepTell'; bs.t = bs.tMax = 0.45; }
+      else ossarchRest(e, a);
+    }
+  } else if (bs.state === 'skullfall') {
+    bs.next -= a.dt;
+    if (bs.left > 0 && bs.next <= 0) {
+      bs.left--;
+      bs.fired++;
+      bs.next = 0.26;
+      const p = ctx.player.pos;
+      // The first skull falls where you stand; the rest land wide in an
+      // alternating scatter, so standing still is the losing answer.
+      const r = bs.fired === 1 ? 0 : 1.6 + 0.4 * (bs.fired % 2);
+      const ang = bs.fired * 2.4;
+      addWarnedMortar(ctx,
+        Math.max(-20.8, Math.min(20.8, p.x + Math.cos(ang) * r)),
+        Math.max(-20.8, Math.min(20.8, p.z + Math.sin(ang) * r)),
+        2.1, Math.max(0.75, 1.05 - 0.06 * tier), Math.min(24, e.damage * 0.9));
+      at.set(e.pos.x, e.pos.y + 2.3, e.pos.z);
+      ctx.effects.burst(at, IVORY, 6, 2, 1.6, 0.3);
+    }
+    if (bs.left <= 0 && bs.t <= 0) ossarchRest(e, a);
+  } else if (bs.state === 'lanceTell') {
+    face(e);
+    lane(e, a, 19, 1.7, 1 - Math.max(0, bs.t) / bs.tMax);
+    if (bs.t <= 0) {
+      if (e.boneLane < 0) { ossarchRest(e, a); return; }
+      bs.state = 'lanceFire'; bs.t = 1.05;
+      bs.beamA = Math.atan2(e.boneDZ, e.boneDX);
+      const d = wrapPi(Math.atan2(a.nz, a.nx) - bs.beamA);
+      // The beam chases the side you bolted to, later shells faster - keep
+      // running across it or break its sight line. Standing still is death.
+      bs.beamSpin = (d === 0 ? 1 : Math.sign(d)) * (0.55 + 0.08 * tier);
+      bs.hitCd = 0;
+    }
+  } else if (bs.state === 'lanceFire') {
+    bs.beamA += bs.beamSpin * a.dt;
+    const dx = Math.cos(bs.beamA), dz = Math.sin(bs.beamA);
+    e.boneDX = dx; e.boneDZ = dz; face(e);
+    // The warning lane tracks the live beam: what is drawn is what burns.
+    ctx.effects.markSet(e.boneLane, e.pos.x + dx * 9.5, e.pos.z + dz * 9.5, 0.85, MARROW,
+      0.7 + 0.3 * Math.sin(ctx.time * 20), 19 / 1.7, Math.atan2(-dx, -dz));
+    at.set(e.pos.x + dx * 2, e.pos.y + 1.8, e.pos.z + dz * 2);
+    end.set(e.pos.x + dx * 19, e.pos.y + 1.4, e.pos.z + dz * 19);
+    ctx.effects.beam(at, end, MARROW);
+    bs.hitCd -= a.dt;
+    const pa = wrapPi(Math.atan2(a.nz, a.nx) - bs.beamA);
+    const across = Math.abs(a.dist * Math.sin(pa));
+    const along = a.dist * Math.cos(pa);
+    if (bs.hitCd <= 0 && across < 0.95 && along > 1.2 && along < 20 && ctx.player.pos.y < 2.6 &&
+        !segBlocked(e.pos.x, e.pos.y + 1.8, e.pos.z, ctx.player.pos.x, ctx.player.pos.y + 0.8, ctx.player.pos.z, ctx.obstacles)) {
+      ctx.onHitPlayer(Math.min(10, e.damage * 0.4), e.pos, e);
+      bs.hitCd = 0.3;
+    }
+    if (bs.t <= 0) { releaseLane(e); ossarchRest(e, a); }
+  } else if (bs.state === 'pounceTell') {
+    ring(e, a, bs.tx, bs.tz, 2.8, 1 - Math.max(0, bs.t) / bs.tMax);
+    if (bs.t <= 0) { bs.state = 'pounceLeap'; bs.t = 1.5; }
+  } else if (bs.state === 'pounceLeap') {
+    const dx = bs.tx - e.pos.x, dz = bs.tz - e.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1.1 && bs.t > 0 && e.blockedBy <= 0.05) {
+      e.faceLocked = true;
+      e.group.rotation.y = Math.atan2(-dx / d, -dz / d);
+      e.stepMul = 5;
+      const speed = chargeSpeed(e, a, 5, 13, bs.t);
+      a.vx = dx / d * speed;
+      a.vz = dz / d * speed;
+    } else ossarchPounceLand(e, a);
+  } else if (bs.state === 'spinTell') {
+    e.boneCore.rotation.y += a.dt * (1 - Math.max(0, bs.t) / bs.tMax) * 18;
+    if (bs.t <= 0) {
+      bs.state = 'spinFire'; bs.t = 1.15;
+      bs.spinA = Math.atan2(a.nz, a.nx);
+      bs.emit = 0;
+      bs.arms = 1 + tier;
+    }
+  } else if (bs.state === 'spinFire') {
+    e.boneCore.rotation.y += a.dt * 18;
+    bs.spinA += (2.6 + 0.3 * tier) * a.dt;
+    bs.emit -= a.dt;
+    if (bs.emit <= 0) {
+      bs.emit = 0.1;
+      for (let k = 0; k < bs.arms; k++) capturedShot(e, a, bs.spinA + k * Math.PI * 2 / bs.arms, 0, 1.4);
+    }
+    if (bs.t <= 0) ossarchRest(e, a);
   } else if (bs.t <= 0) {
+    // recover, then straight back to the prowl: the rest is brief, the
+    // window is real, and the next attack is already drawn.
     bs.weakOpen = false;
-    bs.state = 'walk';
-    bs.t = 1.5 * e.rate;
+    bs.state = 'prowl';
+    bs.t = (0.8 + Math.random() * 0.35) * e.rate * (1 - 0.1 * tier);
     ctx.bossEvent('vent', e);
   }
 }
@@ -584,7 +842,7 @@ const TYPES = {
   ossarch: {
     name: 'OSSARCH',
     head: { r: 0.4, y: 1.8 },
-    hp: 3200, speed: 2.2, damage: 26, value: 6000, color: IVORY, eye: MARROW,
+    hp: 3200, speed: 2.9, damage: 26, value: 6000, color: IVORY, eye: MARROW,
     scale: 2.6, radius: 1.7, mass: 8, boss: true,
     hitbox: { r: 0.75, y: 1 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1,
