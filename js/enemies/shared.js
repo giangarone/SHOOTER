@@ -792,7 +792,10 @@ export function bossTouch(e, a, mul = 0.9) {
   bs.touchCd = (bs.touchCd || 0) - a.dt;
   if (bs.touchCd > 0) return false;
   if (a.dist > e.radius + BOSS_TOUCH_PAD || _reachY(a) >= BOSS_REACH_Y) return false;
-  bs.touchCd = BOSS_TOUCH_CD * e.rate;
+  // `rate` is only stamped by _spawnBoss - a boss stood up raw (suites stand
+  // them up by hand all the time) carries undefined, and NaN > 0 is false
+  // forever: the touch would fire EVERY frame.
+  bs.touchCd = BOSS_TOUCH_CD * (e.rate || 1);
   a.ctx.onHitPlayer(Math.min(BOSS_TOUCH_CAP, e.damage * mul), e.pos, e);
   _bossAt.set(e.pos.x, 1.2, e.pos.z);
   a.ctx.effects.burst(_bossAt, ENEMY_TYPES[e.type].eye, 12, 4, 1.6, 0.35);

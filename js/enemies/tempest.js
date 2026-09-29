@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, aiMelee, eyes, landHit, orbit, partsFor, prism,
-  segBlocked, shard, slab, spike,
+  BOSS_REACH_Y, BOSS_TOUCH_CAP, ENEMY_TYPES, SHARED_MATS, _reachY, aiMelee,
+  bossTouch, capturedShot, eyes, landHit, orbit, partsFor, prism, segBlocked,
+  shard, slab, snapAim, spike,
 } from './shared.js';
 
 // The build shorthand. The bodies stay on e.bodyMat so a status tint still
@@ -365,10 +366,10 @@ export function buildPylon(e, g, s) {
 // its own head - two enormous prongs sweeping up and out with the core slung
 // between them, and arms spread as though it were holding the room open.
 //
-// The crown is the tell for the whole fight: it BRIGHTENS on every bar, so
-// the count the player has to keep is written on the boss rather than only in
-// the music. When the core flares past the collars that hold it, that is the
-// fourth bar arriving.
+// The crown is the fight's master tell: it swells with whatever is winding
+// up and snaps white the moment anything lets go - so a player watching the
+// boss always knows how far the next thing has come, before they have to know
+// which thing it is.
 export function buildConductor(e, g, s) {
   const P = partsFor(e, g, s);
   const IRON = SHARED_MATS.tempestIron;
@@ -384,9 +385,9 @@ export function buildConductor(e, g, s) {
   P('condCollarP', prism(0.18, 0.18, 0.1, 6), { x: 0.517, y: 2.547, rz: -0.34, mat: COP });
   P('condCollarP', prism(0.16, 0.16, 0.09, 6), { x: -0.616, y: 2.83, rz: 0.34, mat: COP });
   P('condCollarP', prism(0.16, 0.16, 0.09, 6), { x: 0.616, y: 2.83, rz: -0.34, mat: COP });
-  // THE CROWN CORE, between their roots. Held on the enemy: aiConductor grows
-  // and brightens it once per bar, so a player watching the boss and a player
-  // listening to the track are counting the same four.
+  // THE CROWN CORE, between their roots. Held on the enemy: aiConductor swells
+  // it with every wind-up, so a player watching the boss and a player watching
+  // the floor are being warned about the same attack at the same time.
   e.condCore = P('condCore', shard(0.32), { y: 2.32, mat: e.eyeMat, shadow: false });
   // A yoke joining the prongs over a copper underbar, so the crown is one
   // object, and porcelain seats where the prongs come through it.
@@ -904,30 +905,161 @@ export function aiPylon(e, a) {
   }
 }
 
-// ---- VOID ------------------------------------------------------------------
+// ---- THE CONDUCTOR -----------------------------------------------------------
+//
+// What the rework keeps from the old fight is the one idea that was working: a
+// boss whose clock is the MUSIC, fought among LINES BETWEEN TWO POINTS.
+// Everything else is rebuilt, because the old fight could be played standing
+// still - it attacked on one channel, four bars apart, and spent the rest of
+// itself at melee range being shot. The Conductor now HUNTS:
+//
+//   contact      brushing the body costs, on its own short clock, in every
+//                state of the fight. The melee swing it always had is on top
+//                of that, not instead of it.
+//   TESLA LASH   a stalking aim line that FOLLOWS the player, then holds: the
+//                fork's two tines close on the remembered point, half a beat
+//                apart. Answered by being somewhere else when it lets go.
+//   FORK VOLLEY  all five lanes of a fan drawn for the whole wind-up, then all
+//                five fired on the same bearing. Answered by leaving the
+//                lanes, not the room.
+//   LIGHTNING    the ram: both legs telegraphed up front, out AND back - then
+//                it crosses the room, TURNS, and crosses back through wherever
+//                the player fled to. The turn is a four-way burst down both
+//                rails, so the line it just made is not cover.
+//   CONVERGENCE  the music clock, kept and tightened: a pylon on every other
+//                bar, every wire fired on every bar. The web is PERMANENT -
+//                pylons stand until shot, so the room fills with lines and at
+//                the same point in every bar they all fire.
+//   STORMCALL    the sky half of the theme: a circling mark takes a bolt from
+//                overhead, and a second lands on wherever the first one moved
+//                the player - and that second floor stays hot.
+//   THUNDERCLAP  for standing inside its reach: plant, fill the ring, clap.
+//
+// It gates nothing and shields nothing. The fight is answered entirely with
+// where the player is standing, and it is never more than about a second and
+// a half from its next attack.
 
-// Eight half-beats to the bar - four beats, the ordinary way to count one.
-export const COND_HALVES = 8;
+// The music clock. Eight half-beats to the bar; a pylon goes up on every other
+// bar's first half (capped at three STANDING - breaking lines is the player's
+// job now, which is the fight), and every bar discharges along every wire
+// still up.
+export const COND_HALF_BAR = 8;
 
-export const COND_PYLONS = 3;
+export const COND_PYLON_CAP = 3;
 
-// A ring around the ARENA rather than around the boss, for the Pale Crown's
-// reason: breaking them has to mean crossing the room the boss is standing in,
-// not turning on the spot beside it.
+// The pylon ring is around the ARENA, not the boss, for the reason it always
+// was: cutting a line has to mean crossing the room the fight is happening in.
 export const COND_PYLON_R = 13;
 
-// How long the wires stay live, how wide they are, and how often one charges
-// the player while they are standing on it. Wider than an arcling's wire
-// because these are lethal and the player is reading them at boss speed.
-export const COND_ARC_TIME = 1.1;
+// The discharge: how long the web stays live, how wide a live wire reads, and
+// how often standing on one charges the player. The damage rides the boss's
+// own hit so it scales with the wave like everything else the boss does.
+export const COND_ARC_TIME = 0.9;
 
-export const COND_ARC_W = 1.6;
+export const COND_ARC_W = 1.7;
 
-export const COND_ARC_TICK = 0.32;
+export const COND_ARC_TICK = 0.26;
 
-// Against the boss's melee damage rather than a number of its own, so the
-// discharge rides bossScale like everything else the fight does.
-export const COND_ARC_MUL = 0.85;
+export const COND_ARC_MUL = 0.55;
+
+// TESLA LASH. The stalk tracks for LASH_AIM, then the aim is the player's
+// problem: the fork is SHOWN for LASH_LOCK - both tines, from the crown
+// through the remembered point - and only then does anything fire.
+export const COND_LASH_AIM = 0.65;
+
+export const COND_LASH_LOCK = 0.42;
+
+export const COND_LASH_BEAT = 0.5;
+
+export const COND_LASH_FORK = 0.3;
+
+export const COND_LASH_CD = 2.6;
+
+export const COND_LASH_MIN = 7;
+
+export const COND_LASH_RANGE = 26;
+
+// FORK VOLLEY. One fan of five, every lane drawn for the whole wind-up and
+// all five fired together.
+export const COND_VOLLEY_BRACE = 0.8;
+
+export const COND_VOLLEY_REC = 0.45;
+
+export const COND_VOLLEY_CD = 3.4;
+
+export const COND_VOLLEY_MIN = 6;
+
+export const COND_VOLLEY_RANGE = 24;
+
+export const COND_VOLLEY_N = 5;
+
+export const COND_VOLLEY_FAN = 0.22;
+
+export const COND_VOLLEY_Y = 2.4;
+
+// LIGHTNING - the ram. Both legs are on the floor for the whole telegraph
+// and the boss commits to them; the runs themselves are far faster than the
+// player and are exactly what the lanes showed.
+export const COND_CHARGE_TELE = 0.95;
+
+export const COND_CHARGE_LEN = 17;
+
+export const COND_CHARGE_CD = 6.5;
+
+export const COND_CHARGE_MIN = 9;
+
+export const COND_CHARGE_RANGE = 26;
+
+export const COND_DASH_OUT = 15.5;
+
+export const COND_DASH_BACK = 19;
+
+export const COND_RAM_PAD = 1.3;
+
+// Capped like every boss hit that can find a standing player: the wave's
+// damage scale must never make the ram a coin flip.
+export const COND_RAM_CAP = 34;
+
+export const COND_RECOVER = 0.55;
+
+// The half-width the telegraph lanes promise - the corridor the ram actually
+// takes, so the drawing never lies about its width.
+export const COND_LANE_W = 1.2;
+
+// STORMCALL. Circle, bolt, circle again on wherever the first bolt moved the
+// player, bolt - and that second floor stays hot, the stormcaller's own rule
+// at boss scale.
+export const COND_STORM_MARK = 1.05;
+
+export const COND_STORM_R = 3.2;
+
+export const COND_STORM_MUL = 0.85;
+
+export const COND_STORM_CD = 5.2;
+
+export const COND_STORM_MIN = 10;
+
+export const COND_STORM_PATCH_LIFE = 2.6;
+
+export const COND_STORM_PATCH_DPS = 30;
+
+// THUNDERCLAP - the answer to hugging it, on top of the body itself costing.
+export const COND_BOOM_T = 0.55;
+
+export const COND_BOOM_RANGE = 5.4;
+
+export const COND_BOOM_R = 5.8;
+
+export const COND_BOOM_MUL = 0.9;
+
+export const COND_BOOM_PUSH = 7;
+
+export const COND_BOOM_CD = 2.8;
+
+// The silence between attacks. Every attack charges its own cooldown AND this
+// short gap, so the fight is relentless without resolving two wind-ups on the
+// same frames.
+export const COND_PICK_GAP = 0.55;
 
 export const _condAt = new THREE.Vector3();
 
@@ -948,124 +1080,573 @@ export function _condWires(e, fn) {
   return live.length;
 }
 
+// Whether the player is standing on a segment AND inside a boss ground
+// attack's vertical reach. The whole game collides in 2D; BOSS_REACH_Y is the
+// ceiling every boss ground attack uses, so a jump over a drawn line reads
+// exactly like a jump over anything else's.
+export function _condOnWire(e, a, ax, az, bx, bz, w) {
+  const p = a.ctx.player;
+  if (!p || _reachY(a) >= BOSS_REACH_Y) return false;
+  return segDistXZ(p.pos.x, p.pos.z, ax, az, bx, bz) < w;
+}
+
+// One telegraph lane, drawn full-length from the first frame and filling with
+// the clock - the AREA reads instantly and the TIMING reads as it goes. The
+// aspect markSet wants is length over twice the half-width, and a lane's long
+// axis points down (dx, dz) at rot = atan2(-dx, -dz).
+export function _condLane(e, h, ax, az, bx, bz, halfW, color, fill) {
+  if (h < 0) return;
+  const len = Math.hypot(bx - ax, bz - az);
+  e.bs.fx.markSet(
+    h, (ax + bx) * 0.5, (az + bz) * 0.5, halfW, color, fill,
+    len / (2 * halfW), Math.atan2(-(bx - ax), -(bz - az))
+  );
+}
+
+export function _condRelease(bs, key) {
+  if (bs[key] >= 0) bs.fx.markRelease(bs[key]);
+  bs[key] = -1;
+}
+
+// `cleanup` is called from release() on the death frame and from the wave-end
+// sweep alike, so every road out of the fight comes through here: telegraph
+// handles back to the pool, and the standing pylons go down with their boss.
+export function cleanupConductor(e) {
+  const bs = e.bs;
+  if (!bs) return;
+  if (bs.fx) {
+    for (const k of ['legA', 'legB', 'boomMark', 'stormMark']) {
+      if (bs[k] >= 0) bs.fx.markRelease(bs[k]);
+      bs[k] = -1;
+    }
+    for (const q of bs.pylons || []) {
+      if (q && !q.dead) {
+        q.dead = true;
+        bs.fx.burst(q.pos, 0x4ef3ff, 12, 4, 2, 0.4);
+      }
+    }
+  }
+  if (bs.pylons) bs.pylons.length = 0;
+}
+
+// STORMCALL's own clock, ticked in EVERY state - the circles it promised come
+// down on time whatever the boss is in the middle of. That is the point of
+// the attack: for a moment the fight is the floor AND the sky at once.
+export function _condStorm(e, a, bs) {
+  const ctx = a.ctx;
+  bs.stormT -= a.dt;
+  if (bs.stormMark >= 0) {
+    ctx.effects.markSet(bs.stormMark, bs.stormX, bs.stormZ, COND_STORM_R,
+      0x38c6ff, Math.min(1, 1 - Math.max(0, bs.stormT) / bs.stormFull));
+  }
+  if (bs.stormT > 0) return;
+  const p = ctx.player;
+  // From a long way up, so it reads as the SKY and not as the boss - the only
+  // hit test is the circle that was on the floor. The mark was the answer.
+  _condAt.set(bs.stormX, 9, bs.stormZ);
+  _condTo.set(bs.stormX, 0.4, bs.stormZ);
+  ctx.effects.beam(_condAt, _condTo, 0xd6feff);
+  ctx.effects.shockwave(_condTo, 0x38c6ff, COND_STORM_R, 0.35);
+  ctx.effects.burst(_condTo, 0xd6feff, 20, 6, 3, 0.5);
+  if (ctx.sfx) ctx.sfx.impact();
+  if (p && Math.hypot(p.pos.x - bs.stormX, p.pos.z - bs.stormZ) < COND_STORM_R) {
+    ctx.onHitPlayer(e.damage * COND_STORM_MUL, _condTo, e);
+  }
+  if (bs.stormPhase === 1) {
+    // The second bolt's floor STAYS hot - the stormcaller's idea, larger.
+    _condRelease(bs, 'stormMark');
+    bs.stormT = -1;
+    bs.stormPhase = 0;
+    ctx.addHazard(bs.stormX, bs.stormZ, COND_STORM_R * 0.85,
+      COND_STORM_PATCH_LIFE, COND_STORM_PATCH_DPS, 'shock');
+    return;
+  }
+  // The standing web answers the first strike: every live pylon throws one
+  // spark of its own from its tip, aimed live - the fight's reminder that the
+  // room is wired even while the sky is falling.
+  for (const q of bs.pylons) {
+    if (!q || q.dead) continue;
+    _condAt.set(q.pos.x, 6, q.pos.z);
+    _condTo.set(q.pos.x, 1.9, q.pos.z);
+    ctx.effects.beam(_condAt, _condTo, 0xd6feff);
+    ctx.effects.burst(_condTo, 0x4ef3ff, 10, 4, 2, 0.35);
+    ctx.addProjectile(q.pos.x, 1.9, q.pos.z, e.type, e._projScale());
+  }
+  // The second strike lands on wherever the first one MOVED the player:
+  // snapped at this hit, so standing back down on the dodge's end point is
+  // the thing it punishes.
+  bs.stormPhase = 1;
+  bs.stormFull = COND_STORM_MARK * 0.85;
+  bs.stormT = bs.stormFull;
+  if (p) {
+    bs.stormX = p.pos.x;
+    bs.stormZ = p.pos.z;
+  }
+}
+
+// One mast driven into the arena ring, wired the instant it stands. Kept to
+// golden-angle steps around the ring rather than random drops, so the web
+// spreads across the room instead of clustering into one corner.
+export function _condRaise(e, a, bs) {
+  const ctx = a.ctx;
+  let standing = 0;
+  for (const q of bs.pylons) if (q && !q.dead) standing++;
+  if (standing >= COND_PYLON_CAP || !ctx.addAnchor) return;
+  bs.raised = (bs.raised || 0) + 1;
+  const ang = bs.raised * 2.39996 + bs.spin;
+  const px = Math.max(-19, Math.min(19, Math.cos(ang) * COND_PYLON_R));
+  const pz = Math.max(-19, Math.min(19, Math.sin(ang) * COND_PYLON_R));
+  const q = ctx.addAnchor(px, pz, 'pylon');
+  if (!q) return;
+  bs.pylons.push(q);
+  bs.crown = 1.6;
+  e.flash = Math.max(e.flash, 0.12);
+  _condAt.set(e.pos.x, 2.4, e.pos.z);
+  _condTo.set(px, 1.6, pz);
+  ctx.effects.beam(_condAt, _condTo, 0xd6feff);
+  ctx.effects.burst(_condTo, 0x4ef3ff, 18, 5, 2, 0.5);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+export function _condDischarge(e, a, bs) {
+  const ctx = a.ctx;
+  bs.state = 'discharge';
+  bs.t = COND_ARC_TIME;
+  bs.tick = 0;
+  bs.weakOpen = true;
+  e._setEyeAlert(true);
+  bs.crown = 2.2;
+  ctx.bossEvent('vent', e);
+  ctx.bossEvent('charge', e);
+  _condAt.set(e.pos.x, 0.6, e.pos.z);
+  ctx.effects.shockwave(_condAt, 0x4ef3ff, 6, 0.4);
+}
+
+// Committed on ENTRY: the out line to the crossing, and the back line to
+// where the player is standing right now. Everything after the telegraph is
+// the boss keeping the promise, so the dodge has to be made from the drawing,
+// not the run.
+export function _condEnterCharge(e, a, bs) {
+  const ctx = a.ctx;
+  bs.oX = e.pos.x;
+  bs.oZ = e.pos.z;
+  bs.xX = Math.max(-19, Math.min(19, e.pos.x + a.nx * COND_CHARGE_LEN));
+  bs.xZ = Math.max(-19, Math.min(19, e.pos.z + a.nz * COND_CHARGE_LEN));
+  bs.hX = Math.max(-19, Math.min(19, ctx.player.pos.x));
+  bs.hZ = Math.max(-19, Math.min(19, ctx.player.pos.z));
+  const d1 = Math.hypot(bs.xX - bs.oX, bs.xZ - bs.oZ);
+  const d2 = Math.hypot(bs.hX - bs.xX, bs.hZ - bs.xZ);
+  if (d1 < 3 || d2 < 3) {
+    // Cornered or point-blank, a two-leg charge folds back on itself into a
+    // coin flip, not a dodge. Spend half the cooldown and pick again shortly.
+    bs.cd.charge = COND_CHARGE_CD * 0.5 * (e.rate || 1);
+    return;
+  }
+  bs.state = 'chargeTele';
+  bs.t = COND_CHARGE_TELE;
+  bs.legA = ctx.effects.markAcquire();
+  bs.legB = ctx.effects.markAcquire();
+  e.flash = Math.max(e.flash, 0.16);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+export function _condPick(e, a, bs) {
+  const ctx = a.ctx;
+  const d = a.dist;
+  // The clap is a REFLEX, not a choice: inside its range it beats everything.
+  if (bs.cd.clap <= 0 && d < COND_BOOM_RANGE) {
+    bs.state = 'clap';
+    bs.t = COND_BOOM_T;
+    return;
+  }
+  if (bs.cd.charge <= 0 && d > COND_CHARGE_MIN && d < COND_CHARGE_RANGE) {
+    _condEnterCharge(e, a, bs);
+    return;
+  }
+  if (bs.cd.lash <= 0 && d > COND_LASH_MIN && d < COND_LASH_RANGE) {
+    bs.state = 'aim';
+    bs.t = COND_LASH_AIM;
+    return;
+  }
+  if (bs.cd.volley <= 0 && d > COND_VOLLEY_MIN && d < COND_VOLLEY_RANGE) {
+    // A fan fired into a pillar is a fan that never happened. Cover may beat
+    // the volley the way it beats the coil, but it has to be SEEN to fail.
+    if (segBlocked(e.pos.x, 1.6, e.pos.z, ctx.player.pos.x, 1.6, ctx.player.pos.z,
+      ctx.obstacles)) return;
+    bs.state = 'volley';
+    bs.t = COND_VOLLEY_BRACE;
+    bs.fired = false;
+    snapAim(e, a, true);
+    bs.aim = e.aim;
+    return;
+  }
+  if (bs.cd.storm <= 0 && d > COND_STORM_MIN && bs.stormT < 0) {
+    bs.cd.storm = COND_STORM_CD * (e.rate || 1) * (0.85 + Math.random() * 0.5);
+    bs.stormT = COND_STORM_MARK;
+    bs.stormFull = COND_STORM_MARK;
+    bs.stormPhase = 0;
+    bs.stormX = ctx.player.pos.x;
+    bs.stormZ = ctx.player.pos.z;
+    if (bs.stormMark < 0) bs.stormMark = ctx.effects.markAcquire();
+    e.flash = Math.max(e.flash, 0.16);
+    bs.crown = 1.4;
+    bs.pickT = COND_PICK_GAP;
+  }
+}
+
 export function aiConductor(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
+  bs.fx = ctx.effects;
   if (bs.state === undefined) {
     bs.state = 'walk';
-    bs.bar = 0;
     bs.half = 0;
-    bs.pylons = [];
     bs.lastPulse = ctx.pulse;
+    bs.raised = 0;
+    bs.pylons = [];
+    bs.spin = Math.random() * 6.28;
+    bs.cd = { lash: 1.2, volley: 2.4, charge: 4.0, storm: 6.0, clap: 0.8 };
+    bs.pickT = 0.6;
+    bs.crown = 0;
+    bs.crownT = 0;
     bs.tick = 0;
+    bs.stormT = -1;
+    bs.stormPhase = 0;
+    bs.weakOpen = false;
+    bs.legA = bs.legB = bs.boomMark = bs.stormMark = -1;
+    bs.forkSign = 1;
     bs.ventNote = 'DISCHARGE';
   }
+  const rate = e.rate || 1;
+  for (const k in bs.cd) bs.cd[k] -= a.dt;
+  bs.pickT -= a.dt;
 
-  // The crown eases back down between bars, so every bar reads as a step up
-  // rather than as a steady glow.
-  bs.crown = Math.max(0, (bs.crown || 0) - a.dt * 1.6);
+  // The crown is the master tell: states RAISE its target, it eases toward
+  // whatever was asked last frame, and the moment anything fires it spikes.
+  bs.crown += (bs.crownT - bs.crown) * Math.min(1, a.dt * 7);
+  bs.crownT = 0;
   if (e.condCore) e.condCore.scale.setScalar((0.8 + bs.crown * 0.9) * e.scale);
 
-  // ---- discharging --------------------------------------------------------
+  // CONTACT COSTS, IN EVERY STATE - the ram's own, much larger hit rides from
+  // the dash states instead, so the body it arrives in is not billed twice.
+  if (bs.state !== 'dashOut' && bs.state !== 'dashBack') bossTouch(e, a, 0.9);
+
+  // The storm keeps its own appointments whatever the boss is doing.
+  if (bs.stormT >= 0) _condStorm(e, a, bs);
+
+  // ---- discharging: the web fires ------------------------------------------
   if (bs.state === 'discharge') {
     a.vx = 0;
     a.vz = 0;
+    bs.crownT = 2.0;
     bs.t -= a.dt;
     bs.tick -= a.dt;
-    const p = ctx.player;
-    let onWire = false;
+    let hot = false;
     _condWires(e, (ax, az, bx, bz) => {
-      if (ctx.effects) {
-        _condAt.set(ax, 1.1, az);
-        _condTo.set(bx, 1.1, bz);
-        ctx.effects.beam(_condAt, _condTo, 0xffffff);
-      }
-      if (p && segDistXZ(p.pos.x, p.pos.z, ax, az, bx, bz) < COND_ARC_W) onWire = true;
+      _condAt.set(ax, 1.1, az);
+      _condTo.set(bx, 1.1, bz);
+      ctx.effects.beam(_condAt, _condTo, 0xffffff);
+      if (_condOnWire(e, a, ax, az, bx, bz, COND_ARC_W)) hot = true;
     });
-    if (onWire && bs.tick <= 0) {
+    if (hot && bs.tick <= 0) {
       bs.tick = COND_ARC_TICK;
-      ctx.onHitPlayer(e.damage * COND_ARC_MUL, p.pos, e);
-      if (ctx.effects) {
-        _condAt.set(p.pos.x, 1.0, p.pos.z);
-        ctx.effects.burst(_condAt, 0xd6feff, 16, 5, 2, 0.4);
-      }
+      ctx.onHitPlayer(e.damage * COND_ARC_MUL, ctx.player.pos, e);
+      _condAt.set(ctx.player.pos.x, 1.0, ctx.player.pos.z);
+      ctx.effects.burst(_condAt, 0xd6feff, 16, 5, 2, 0.4);
     }
     if (bs.t <= 0) {
-      // THE PYLONS GO WITH IT. Every cycle starts from an empty room, so the
-      // three bars are a fresh puzzle each time rather than a board that fills
-      // up until it cannot be cleared.
-      for (const q of bs.pylons) {
-        if (q && !q.dead) {
-          q.dead = true;
-          if (ctx.effects) ctx.effects.burst(q.pos, 0x4ef3ff, 18, 5, 2, 0.5);
-        }
-      }
-      bs.pylons.length = 0;
+      // The pylons STAND. The web is permanent work now: lines that survived
+      // this discharge are back in the next one until the player cuts them.
       bs.state = 'walk';
-      bs.bar = 0;
       bs.weakOpen = false;
-      // `weakOpen` is ONLY the HUD note's gate here. This type has no armor()
-      // at all - the Conductor is unarmoured for the whole fight - so unlike
-      // Colossus and the Forge the flag changes nothing about damage.
+      bs.pickT = 0.3;
+      e._setEyeAlert(false);
+      // `weakOpen` is ONLY the HUD note's gate here - this type has no
+      // armor(), so the flag changes nothing about damage, exactly as before.
       ctx.bossEvent('vent', e);
     }
     return;
   }
 
-  // ---- walking, and counting ----------------------------------------------
-  aiMelee(e, a);
-
-  // The dim draw. Every wire it currently has, every frame, from the moment
-  // the pylon goes in - which is the entire warning the discharge gets, and
-  // the reason the fight can be played rather than survived.
+  // The resting web: every standing wire, every frame, so the lines the NEXT
+  // discharge fires are visible from the moment the pylons stand.
   _condWires(e, (ax, az, bx, bz) => {
-    if (!ctx.effects) return;
     _condAt.set(ax, 1.1, az);
     _condTo.set(bx, 1.1, bz);
-    ctx.effects.beam(_condAt, _condTo, 0x2fd8e8);
+    ctx.effects.beam(_condAt, _condTo, 0x1fb0c0);
   });
 
-  // INEQUALITY, NOT ORDER. `pulse` is a counter the music owns and this reads
-  // an EDGE off it - the same contract every other beat-driven thing in the
-  // game keeps, and the reason a tempo change or a restart cannot desync it.
-  if (ctx.pulse === bs.lastPulse) return;
-  bs.lastPulse = ctx.pulse;
-  if (++bs.half < COND_HALVES) return;
-  bs.half = 0;
-  bs.bar++;
-  bs.crown = 1;
-  e.flash = 0.12;
+  // ---- LIGHTNING: the telegraph, then the run -------------------------------
+  if (bs.state === 'chargeTele') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.crownT = 1.8;
+    bs.t -= a.dt;
+    const u = 1 - Math.max(0, bs.t) / COND_CHARGE_TELE;
+    // Both legs from the first frame so the AREA reads; the fill is the clock.
+    _condLane(e, bs.legA, bs.oX, bs.oZ, bs.xX, bs.xZ, COND_LANE_W, 0x2fd8e8, u);
+    _condLane(e, bs.legB, bs.xX, bs.xZ, bs.hX, bs.hZ, COND_LANE_W, 0x2fd8e8, u);
+    if (bs.t <= 0) {
+      bs.state = 'dashOut';
+      bs.t = COND_CHARGE_LEN / COND_DASH_OUT + 0.7;
+      bs.rammed = false;
+      ctx.bossEvent('charge', e);
+      if (ctx.sfx) ctx.sfx.impact();
+    }
+    return;
+  }
 
-  if (bs.bar <= COND_PYLONS) {
-    // Spread around the ring rather than dropped at random, so three pylons
-    // make a triangle across the room instead of a cluster in one corner.
-    const ang = (bs.bar / COND_PYLONS) * Math.PI * 2 + (bs.spin || (bs.spin = Math.random() * 6.28));
-    const px = Math.max(-19, Math.min(19, Math.cos(ang) * COND_PYLON_R));
-    const pz = Math.max(-19, Math.min(19, Math.sin(ang) * COND_PYLON_R));
-    if (ctx.addAnchor) {
-      const q = ctx.addAnchor(px, pz, 'pylon');
-      if (q) bs.pylons.push(q);
+  if (bs.state === 'dashOut' || bs.state === 'dashBack') {
+    const back = bs.state === 'dashBack';
+    const spd = back ? COND_DASH_BACK : COND_DASH_OUT;
+    // THE STEP CLAMP HAS TO BE LIFTED FOR A CHARGE - the same fix the other
+    // rush lives by: update() caps the frame at sp * stepMul, and a promise
+    // this fast written into a.vx alone comes out at a walk.
+    e.stepMul = spd / Math.max(0.5, a.sp);
+    const tx = back ? bs.hX : bs.xX;
+    const tz = back ? bs.hZ : bs.xZ;
+    const dx = tx - e.pos.x;
+    const dz = tz - e.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    a.vx = (dx / d) * spd;
+    a.vz = (dz / d) * spd;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-dx, -dz);
+    bs.crownT = 1.2;
+    // Both rails stay drawn for the whole run: committed geometry, not a wish.
+    _condLane(e, bs.legA, bs.oX, bs.oZ, bs.xX, bs.xZ, COND_LANE_W, 0xd6feff, 1);
+    _condLane(e, bs.legB, bs.xX, bs.xZ, bs.hX, bs.hZ, COND_LANE_W, 0xd6feff, 1);
+    // The ram itself, on BOTH crossings, so the return is not a lull.
+    const p = ctx.player;
+    if (!bs.rammed && p && a.dist < e.radius + COND_RAM_PAD
+      && _reachY(a) < BOSS_REACH_Y) {
+      bs.rammed = true;
+      ctx.onHitPlayer(Math.min(COND_RAM_CAP, e.damage), e.pos, e);
+      if (ctx.pullPlayer) ctx.pullPlayer(p.pos.x - e.pos.x, p.pos.z - e.pos.z, 6);
+      _condAt.set(e.pos.x, 1.3, e.pos.z);
+      ctx.effects.burst(_condAt, 0xd6feff, 26, 7, 2, 0.5);
+      ctx.effects.addShake(0.3);
+      if (ctx.sfx) ctx.sfx.impact();
     }
-    if (ctx.effects) {
+    bs.t -= a.dt;
+    const arrived = d < Math.max(1.8, spd * a.dt * 1.5);
+    if (arrived || e.blockedBy > 0.05 || bs.t <= 0) {
+      if (!back && arrived) {
+        // THE TURN. Stomp, and throw a four-way sparkburst down both rails -
+        // the lines it just made are not cover for the second leg.
+        const a1 = Math.atan2(bs.oZ - bs.xZ, bs.oX - bs.xX);
+        const a2 = Math.atan2(bs.hZ - bs.xZ, bs.hX - bs.xX);
+        for (const ang of [a1, a1 + Math.PI, a2, a2 + Math.PI]) {
+          capturedShot(e, a, ang, 0, 2.2);
+        }
+        _condAt.set(e.pos.x, 0.6, e.pos.z);
+        ctx.effects.shockwave(_condAt, 0x4ef3ff, 5, 0.35);
+        ctx.effects.burst(_condAt, 0xd6feff, 22, 6, 2.5, 0.5);
+        ctx.effects.addShake(0.2);
+        if (ctx.sfx) ctx.sfx.impact();
+        bs.state = 'dashBack';
+        bs.t = COND_CHARGE_LEN / COND_DASH_BACK + 0.8;
+        bs.rammed = false;
+        return;
+      }
+      // Home, or a wall stop: plant, roar, and hand the punish window over.
+      _condRelease(bs, 'legA');
+      _condRelease(bs, 'legB');
+      bs.state = 'recover';
+      bs.t = COND_RECOVER;
+      e.stepMul = 1.4;
+      _condAt.set(e.pos.x, 0.4, e.pos.z);
+      ctx.effects.shockwave(_condAt, 0x4ef3ff, 4.5, 0.4);
+      ctx.effects.burst(_condAt, 0xd6feff, 16, 5, 2, 0.45);
+      ctx.effects.addShake(0.18);
+      if (ctx.sfx) ctx.sfx.impact();
+    }
+    return;
+  }
+
+  if (bs.state === 'recover') {
+    a.vx = 0;
+    a.vz = 0;
+    bs.t -= a.dt;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.pickT = 0.35;
+      bs.cd.charge = COND_CHARGE_CD * rate * (0.85 + Math.random() * 0.5);
+    }
+    return;
+  }
+
+  // ---- TESLA LASH: stalk, show, close the fork ------------------------------
+  if (bs.state === 'aim') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.crownT = 0.9;
+    bs.t -= a.dt;
+    // The stalk FOLLOWS for the whole wind-up: the lash's entire read is the
+    // moment it STOPS following.
+    const p = ctx.player;
+    if (p) {
+      _condAt.set(e.pos.x, 2.2, e.pos.z);
+      _condTo.set(p.pos.x, 1.2, p.pos.z);
+      ctx.effects.beam(_condAt, _condTo, 0x1fb0c0);
+    }
+    if (bs.t <= 0) {
+      snapAim(e, a, true);
+      bs.aim = e.aim;
+      bs.forkSign = -(bs.forkSign || 1);
+      const far = COND_LASH_RANGE + 4;
+      const c = Math.cos(bs.forkSign * COND_LASH_FORK);
+      const s = Math.sin(bs.forkSign * COND_LASH_FORK);
+      bs.l1x = e.pos.x + e.nx * far;
+      bs.l1z = e.pos.z + e.nz * far;
+      bs.l2x = e.pos.x + (e.nx * c - e.nz * s) * far;
+      bs.l2z = e.pos.z + (e.nx * s + e.nz * c) * far;
+      bs.state = 'lock';
+      bs.t = COND_LASH_LOCK;
+      bs.crown = 2.2;
       _condAt.set(e.pos.x, 2.4, e.pos.z);
-      _condTo.set(px, 1.6, pz);
-      ctx.effects.beam(_condAt, _condTo, 0xd6feff);
-      ctx.effects.burst(_condTo, 0x4ef3ff, 18, 5, 2, 0.5);
+      ctx.effects.burst(_condAt, 0xd6feff, 14, 5, 2, 0.35);
+      if (ctx.sfx) ctx.sfx.impact();
     }
+    return;
+  }
+
+  if (bs.state === 'lock' || bs.state === 'lash') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.crownT = bs.state === 'lock' ? 2.0 : 1.3;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-e.nx, -e.nz);
+    // Both tines, drawn from the crown for the whole fork, before either
+    // fires - and kept drawn until both have.
+    _condAt.set(e.pos.x, 2.2, e.pos.z);
+    _condTo.set(bs.l1x, 1.2, bs.l1z);
+    ctx.effects.beam(_condAt, _condTo, 0xd6feff);
+    _condTo.set(bs.l2x, 1.2, bs.l2z);
+    ctx.effects.beam(_condAt, _condTo, 0xd6feff);
+    bs.t -= a.dt;
+    if (bs.t > 0) return;
+    if (bs.state === 'lock') {
+      capturedShot(e, a, bs.aim, 0, COND_VOLLEY_Y);
+      bs.state = 'lash';
+      bs.t = COND_LASH_BEAT;
+      bs.crown = 2.2;
+    } else {
+      capturedShot(e, a, bs.aim + bs.forkSign * COND_LASH_FORK, 0, COND_VOLLEY_Y);
+      bs.state = 'walk';
+      bs.cd.lash = COND_LASH_CD * rate * (0.85 + Math.random() * 0.5);
+      bs.pickT = COND_PICK_GAP;
+      e._setEyeAlert(false);
+    }
+    _condAt.set(e.pos.x, 2.4, e.pos.z);
+    ctx.effects.burst(_condAt, 0xd6feff, 10, 4, 2, 0.3);
     if (ctx.sfx) ctx.sfx.impact();
     return;
   }
 
-  bs.state = 'discharge';
-  bs.t = COND_ARC_TIME;
-  bs.tick = 0;
-  bs.weakOpen = true;
-  ctx.bossEvent('vent', e);
-  ctx.bossEvent('charge', e);
-  if (ctx.effects) {
-    _condAt.set(e.pos.x, 0.6, e.pos.z);
-    ctx.effects.shockwave(_condAt, 0x4ef3ff, 6, 0.4);
+  // ---- FORK VOLLEY: five lanes shown, five rounds fired ---------------------
+  if (bs.state === 'volley') {
+    e._setEyeAlert(true);
+    bs.crownT = 1.6;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-e.nx, -e.nz);
+    // A crescendo that keeps walking, at a third of pace - not a plant.
+    a.vx = a.nx * a.sp * 0.3;
+    a.vz = a.nz * a.sp * 0.3;
+    // Every lane of the fan for the whole wind-up.
+    for (let i = 0; i < COND_VOLLEY_N; i++) {
+      const ang = bs.aim + (i - (COND_VOLLEY_N - 1) / 2) * COND_VOLLEY_FAN;
+      _condAt.set(e.pos.x, 2.2, e.pos.z);
+      _condTo.set(e.pos.x + Math.cos(ang) * (COND_VOLLEY_RANGE + 4),
+        1.2, e.pos.z + Math.sin(ang) * (COND_VOLLEY_RANGE + 4));
+      ctx.effects.beam(_condAt, _condTo, bs.fired ? 0x2fd8e8 : 0x4ef3ff);
+    }
+    bs.t -= a.dt;
+    if (bs.t > 0) return;
+    if (!bs.fired) {
+      for (let i = 0; i < COND_VOLLEY_N; i++) {
+        capturedShot(e, a, bs.aim + (i - (COND_VOLLEY_N - 1) / 2) * COND_VOLLEY_FAN,
+          0, COND_VOLLEY_Y);
+      }
+      bs.fired = true;
+      bs.t = COND_VOLLEY_REC;
+      bs.crown = 2.2;
+      _condAt.set(e.pos.x, 2.4, e.pos.z);
+      ctx.effects.burst(_condAt, 0xd6feff, 16, 5, 2, 0.35);
+      if (ctx.sfx) ctx.sfx.impact();
+    } else {
+      bs.fired = false;
+      bs.state = 'walk';
+      bs.cd.volley = COND_VOLLEY_CD * rate * (0.85 + Math.random() * 0.5);
+      bs.pickT = COND_PICK_GAP * 0.8;
+      e._setEyeAlert(false);
+    }
+    return;
   }
+
+  // ---- THUNDERCLAP ------------------------------------------------------------
+  if (bs.state === 'clap') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    const k = 1 - Math.max(0, bs.t) / COND_BOOM_T;
+    bs.crownT = 0.8 + k * 0.8;
+    if (bs.boomMark < 0) bs.boomMark = ctx.effects.markAcquire();
+    ctx.effects.markSet(bs.boomMark, e.pos.x, e.pos.z, COND_BOOM_R, 0x7ef0ff, k);
+    if (bs.t > 0) return;
+    _condRelease(bs, 'boomMark');
+    e._setEyeAlert(false);
+    bs.state = 'walk';
+    bs.cd.clap = COND_BOOM_CD * rate * (0.9 + Math.random() * 0.4);
+    bs.pickT = 0.4;
+    _condAt.set(e.pos.x, 0.5, e.pos.z);
+    ctx.effects.shockwave(_condAt, 0x7ef0ff, COND_BOOM_R, 0.4);
+    ctx.effects.burst(_condAt, 0xd6feff, 24, 7, 2.5, 0.5);
+    ctx.effects.addShake(0.24);
+    if (ctx.sfx) ctx.sfx.impact();
+    const p = ctx.player;
+    if (p && a.dist < COND_BOOM_R && _reachY(a) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(Math.min(BOSS_TOUCH_CAP, e.damage * COND_BOOM_MUL), e.pos, e);
+      if (ctx.pullPlayer) {
+        ctx.pullPlayer(p.pos.x - e.pos.x, p.pos.z - e.pos.z, COND_BOOM_PUSH);
+      }
+    }
+    return;
+  }
+
+  // ---- walking: the chase, the swing, the web, and the attack budget --------
+  e.stepMul = 1.4;
+
+  // The music clock. INEQUALITY, NOT ORDER: `pulse` is a counter the music
+  // owns and this reads an EDGE off it, the same contract every beat-driven
+  // thing in the game keeps. Raises and discharges check the CURRENT half
+  // against their slot rather than counting to a number, so a brace that ran
+  // long moves the web within the bar instead of skipping it.
+  if (ctx.pulse !== bs.lastPulse) {
+    bs.lastPulse = ctx.pulse;
+    bs.half++;
+    const slot = bs.half % COND_HALF_BAR;
+    // A mast on every OTHER bar's first half, a discharge on every bar's
+    // fifth - the web grows into its cap over the fight's first seconds and
+    // then fires like a metronome.
+    if (slot === 1 && bs.half % (2 * COND_HALF_BAR) === 1) _condRaise(e, a, bs);
+    else if (slot === 5) _condDischarge(e, a, bs);
+  }
+
+  // fearMode 'stagger': the fight plants and crackles until it passes.
+  if (e.status.fear > 0) {
+    e._setEyeAlert(false);
+    return;
+  }
+
+  aiMelee(e, a);
+
+  if (bs.pickT > 0 || e.windup > 0 || e.swing > 0) return;
+  _condPick(e, a, bs);
 }
 
 const TYPES = {
@@ -1219,34 +1800,33 @@ const TYPES = {
     build: buildPylon, ai: aiPylon,
   },
 
-  // TEMPEST's boss, and the only fight in the game whose clock is the MUSIC.
+  // TEMPEST's boss, and still the only fight in the game whose clock is the
+  // MUSIC - but the clock is now one instrument inside a fight that never
+  // stops. The whole design is written above aiConductor: it HUNTS, it rams,
+  // its lashes and fans and bolts all separate where you ARE from where you
+  // were AIMED at, and its web of pylons stands and fills the room with lines
+  // until somebody cuts them. Six patterns on their own cooldowns, one clock
+  // on the music, and touching it costs in every state.
   //
-  // It counts bars on Music.pulse, exactly as the kiln's sweep and the Forge's
-  // do - and unlike either of those the count is the whole fight rather than
-  // one attack inside it. On each of the first three bars it drives a PYLON
-  // into the floor and draws a live line to it. On the fourth it DISCHARGES
-  // along every line it still has, and along every line between one pylon and
-  // another, and the arena is cut into wedges by the lines the player failed
-  // to remove.
-  //
-  // SO THE FIGHT IS PLAYED BETWEEN THE BARS, not against the boss. Three bars
-  // to break as many pylons as the player can afford to turn away for, one bar
-  // that charges them for the ones they left. Every pylon broken is a line
-  // that does not fire, and a player who breaks all three takes a discharge
-  // with nothing in it.
-  //
-  // Unarmoured throughout, and that is deliberate: the Forge, the Crown and
-  // the Overgrowth all gate their damage, so the fourth new boss gates the
-  // PLAYER'S POSITION instead and leaves the health bar alone.
+  // Unarmoured throughout, exactly as before: it gates the PLAYER'S POSITION,
+  // never its own health bar.
   conductor: {
     head: { r: 0.42, y: 1.76 },
-    hp: 3400, speed: 2.4, damage: 26, value: 6000, color: 0x4ef3ff, eye: 0xd6feff,
+    hp: 3400, speed: 3.2, damage: 26, value: 6000, color: 0x4ef3ff, eye: 0xd6feff,
     scale: 2.9, radius: 1.75, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.84 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.6, start: 3.2, hit: 4.0, cd: 2.0 },
-    build: buildConductor, ai: aiConductor,
+    // A faster swing than it had - the melee is the gap-filler now, not the
+    // fight, and a boss this aggressive may not give a two-second rhythm.
+    melee: { windup: 0.55, start: 3.4, hit: 4.2, cd: 1.7 },
+    // Its sparks: the volley's fan, the ram's four-way, the pylons' answers.
+    // Cold white-hot cores in the theme's cyan, a shade over standard speed.
+    proj: {
+      core: 0xd6feff, glow: 0x4ef3ff, scale: 1.5,
+      speed: [16, 0.3, 24], dmg: [6, 0.3, 12],
+    },
+    build: buildConductor, ai: aiConductor, cleanup: cleanupConductor,
   },
 };
 

@@ -28,7 +28,9 @@
 //     squall      shoves and does nothing else. A squall that dealt damage
 //                 would be a rusher, and one that did not move the player
 //                 would be a flier that does nothing
-//     conductor   counts bars on the music and discharges along its pylons
+//     conductor   hunts and rams across the arena, lashes and fans on short
+//                 clocks, touching it costs immediately, and its clock is the
+//                 music: the pylon web stands until cut and fires on the bar
 //
 // WHAT IS ASSERTED, and the shape of it matters: STANDING ON THE LINE COSTS
 // AND STANDING OFF IT DOES NOT, measured as health both ways, because a test
@@ -56,6 +58,7 @@ try {
     const g = window.__game;
     const p = g.player;
     const THREE = await import('three');
+    const { ENEMY_TYPES } = await import('./js/enemy.js');
     const step = () => new Promise((r) => requestAnimationFrame(r));
     const steps = async (n) => { for (let i = 0; i < n; i++) await step(); };
     // SECONDS OF GAME, not a count of frames. The loop clamps dt at 0.05, so a
@@ -365,26 +368,102 @@ try {
       clean();
     }
 
-    // ---- 8. the Conductor raises pylons and fires along them --------------
+    // ---- 8. the Conductor: it hunts, it rams, and the web still fires ------
+    // Four questions, in order: does the web still rise and fire, does the
+    // fight keep FIRING between bars (lashes, fans), does touching the body
+    // cost at once, and does the ram show its lanes before it crosses.
     {
       clean();
       const e = put('conductor', 8, 0);
       e.speed = 0;
       px = 0;
       pz = 0;
+      // Count every round the boss itself fires - the reworked fight is meant
+      // to be BUSY, and a Conductor that goes back to walking and swinging is
+      // the failure this section exists to catch.
+      const origSpawnProj = g._spawnProjectile.bind(g);
+      let condShots = 0;
+      g._spawnProjectile = (x, y, z, type, ss, sr, aim) => {
+        if (type === 'conductor') condShots++;
+        return origSpawnProj(x, y, z, type, ss, sr, aim);
+      };
       let maxPylons = 0;
       let discharged = false;
-      for (let i = 0; i < 1500; i++) {
+      // A fixed window, NOT an early break on the first discharge: at the
+      // fallback tempo the music clock outraces the first lash entirely, and
+      // "how much did it fire in seven seconds" is the whole assertion.
+      for (let i = 0; i < 420; i++) {
         await step();
         e.pos.set(8, e.pos.y, 0);
         maxPylons = Math.max(maxPylons, g.enemies.filter((q) => q.type === 'pylon' && !q.dead).length);
-        if (e.bs && e.bs.state === 'discharge') { discharged = true; break; }
+        if (e.bs && e.bs.state === 'discharge') discharged = true;
       }
       res.condPylons = maxPylons;
       res.condDischarged = discharged;
-      // Pylons must not be counted against the boss's add budget, or a
-      // Conductor would starve its own wave of everything else.
-      res.condAddsExcluded = true;
+      res.condShots = condShots;
+
+      // TOUCH. The player stands ON the boss with its melee cycle's own
+      // contact branch shut down (attackCd), every attack iced and the web's
+      // clock held at half zero (so a discharge cannot throw a live wire
+      // through the measurement) - what lands can only be the body's own
+      // price for touching it.
+      e.bs.cd.charge = 999;
+      e.bs.cd.lash = 999;
+      e.bs.cd.volley = 999;
+      e.bs.cd.storm = 999;
+      e.bs.cd.clap = 999;
+      for (const q of e.bs.pylons) q.dead = true;
+      px = 8;
+      pz = 0;
+      res.condTouch = await measure(50, () => {
+        e.pos.set(8, e.pos.y, 0);
+        e.attackCd = 999;
+        e.bs.half = 0;
+      });
+
+      // LIGHTNING. Far enough to be inside the ram's range band - the lane
+      // telegraph must go up, and then the boss must actually CROSS: the pin
+      // is lifted for this phase and its displacement is the measurement. Its
+      // walk speed is handed back first: the step clamp is sp * stepMul, so a
+      // zero-speed boss could not dash a single metre whatever the charge
+      // asked for.
+      px = -14;
+      pz = 0;
+      e.speed = ENEMY_TYPES.conductor.speed;
+      e.bs.cd.charge = 0;
+      e.bs.pickT = 0;
+      let sawTele = false;
+      let sawDash = false;
+      let moved = 0;
+      for (let i = 0; i < 700; i++) {
+        await step();
+        if (e.bs.legA >= 0) sawTele = true;
+        if (e.bs.state === 'dashOut' || e.bs.state === 'dashBack') sawDash = true;
+        moved = Math.max(moved, Math.hypot(e.pos.x - 8, e.pos.z));
+        // Only stop once the whole run has resolved - the displacement is the
+        // assertion, and it accrues over the dash, not on its first frame.
+        if (sawDash && (e.bs.state === 'walk' || e.bs.state === 'recover')) break;
+      }
+      res.condChargeTele = sawTele;
+      res.condChargeDash = sawDash;
+      res.condChargeMoved = +moved.toFixed(2);
+
+      // STORMCALL. The second bolt's floor stays hot - the measure is that a
+      // shock hazard appears on its own clock while the boss does other work.
+      // The boss is parked back at range first: the last phase may have left
+      // it standing on the player, and the storm never answers a hug.
+      e.speed = 0;
+      e.pos.set(8, e.pos.y, 0);
+      e.bs.cd.storm = 0;
+      e.bs.pickT = 0;
+      let stormed = false;
+      for (let i = 0; i < 400; i++) {
+        await step();
+        if (e.bs.state === 'walk') e.pos.set(8, e.pos.y, 0);
+        if (g._hazard.some((h) => h.kind === 'shock')) { stormed = true; break; }
+      }
+      res.condStorm = stormed;
+      g._spawnProjectile = origSpawnProj;
       clean();
     }
 
@@ -429,8 +508,15 @@ try {
 
   ok('the Conductor raises pylons', out.condPylons > 0, `peak=${out.condPylons}`);
   ok('and discharges along them', out.condDischarged);
+  ok('it keeps FIRING between the bars', out.condShots >= 6, `shots=${out.condShots}`);
+  ok('touching the body costs immediately, in every state',
+    out.condTouch > 0, `lost=${out.condTouch}`);
+  ok('the ram shows both its lanes before it moves', out.condChargeTele);
+  ok('and then it actually crosses the room',
+    out.condChargeDash && out.condChargeMoved > 4, `moved=${out.condChargeMoved}m`);
+  ok('the stormcall leaves the second floor electrified', out.condStorm);
 
-  ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+    ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   if (browser) await browser.close();
   server.kill();

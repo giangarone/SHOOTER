@@ -801,11 +801,21 @@ context. The start screen says so, and one click anywhere fixes it.
   silent one and the survivors are FREED - faster, and attacking twice as often
   - for the rest of the fight. The singer rotates on its own clock, so the
   correct target keeps moving. **THE CONDUCTOR**, TEMPEST's, is the only fight in the game whose
-  clock is the music: it counts bars on the beat, drives a pylon into the floor
-  on each of the first three and DISCHARGES along every line it has on the
-  fourth - boss to pylon and pylon to pylon, so three pylons is six live wires
-  cutting the room into wedges. The fight is played between the bars, and a
-  player who clears all three takes a discharge with nothing in it.
+  clock is the music - and the music is now the quietest thing it does. The
+  pylon web is still on the beat, and it is PERMANENT: a mast goes up every
+  other bar (until three stand), and every bar every wire still standing fires
+  at once, so the room fills with lines unless you cross it and cut them.
+  Around that clock it HUNTS. A stalking aim line that follows you and holds -
+  the fork it showed you snapping shut on the point you were standing on, half
+  a beat apart; five fan lanes drawn on the floor for the whole wind-up and
+  fired together; a ram that telegraphs BOTH legs up front, crosses the arena,
+  turns, and crosses back through wherever you fled to, throwing a four-way
+  burst down both rails as it turns; a sky strike that lands a second time on
+  wherever the first one moved you, and leaves that floor electrified; a clap
+  for standing inside its reach. Brushing the body costs at any moment, bar or
+  no bar. It walks faster than it did, it never gates its damage behind
+  anything, and it is never more than about a second and a half from its next
+  attack.
   **THE OVERGROWTH**, VERDANT's, is the only
   thing in the game that never takes a step: rooted where it grew, so the
   player can always walk away and the pressure has to come from the arena
