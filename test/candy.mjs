@@ -1,5 +1,6 @@
 // CANDY: two-stage pops, shootable sweets, permanent shell loss, musical
-// recovery boosts and the Confectioner's gaps. Fixed ticks in a real browser.
+// recovery boosts and the Confectioner's five-pattern fight. Fixed ticks in
+// a real browser.
 import { launchBrowser, startServer } from './harness.mjs';
 const PORT = 8256;
 const server = startServer(PORT);
@@ -131,31 +132,183 @@ try {
     p.pos.set(dropped?.x || 0,0,dropped?.z || 0); run(1.3);
     ok('its dropped sweet lands as real damage', p.health<HEALTH && !e.candyPops.length);
 
+    // ---- the Confectioner --------------------------------------------------
+    // DECK mirrors ATTACK_DECK in js/enemies/candy.js: the deal's order is
+    // part of the fight's design, and this is where it is pinned from. A
+    // reorder there breaks a pin here, loudly - which is the point.
+    const DECK = ['carousel','bloom','rush','fan','twirl','bloom','carousel','fan','twirl','rush'];
+    const pin = (name, x = -12) => {
+      clean();
+      const e = put('confectioner', x, 0);
+      p.vel.set(0, 0, 0);
+      run(0.1);                        // the AI's first-frame init lands here
+      e.bs.turn = DECK.indexOf(name); // then the pattern is pinned by slot
+      e.candyT = 0;
+      // The boss keeps its real speed: the dash is clamped by the engine to
+      // speed x stepMul like every enemy velocity, and a parked boss cannot
+      // stampede. The one stalk tick before the pick drifts it a few
+      // centimetres, which nothing below measures across.
+      return e;
+    };
+
     clean(); e = put('confectioner', -10, 0);
-    const attacks=new Set(), windows=new Set();
-    run(25,()=>{if(e.bs.attack)attacks.add(e.bs.attack);if(e.bs.weakOpen)windows.add(e.bs.attack);});
-    ok('Confectioner uses all three attacks and exposes its heart after each', attacks.size===3 && windows.size===3, JSON.stringify([...attacks]));
+    const played = new Set(), paid = new Set();
+    let tells = 0, last = '';
+    run(50, () => {
+      if (e.bs.attack) { played.add(e.bs.attack); if (e.bs.weakOpen) paid.add(e.bs.attack); }
+      if (e.candyState === 'tell' && last === 'stalk') tells++;
+      last = e.candyState;
+    });
+    ok('Confectioner plays all five patterns, each paying a heart window',
+      played.size === 5 && paid.size === 5, JSON.stringify([...played]));
+    ok('and they come fast: a fresh wind-up every few seconds', tells >= 8, `tells=${tells}`);
+
+    clean(); e = put('confectioner', -10, 0); e.speed = 0; e.status.fear = 99;
+    run(0.1); p.pos.copy(e.pos); p.invulnEnd = -1;
+    run(0.35);
+    ok('touching the cake hurts immediately, in any state', HEALTH - p.health > 20, `dmg=${HEALTH - p.health}`);
+    p.pos.set(-4, 0, 0); p.health = HEALTH; p.invulnEnd = -1;
+    run(2);
+    ok('standing clear of it costs nothing', p.health === HEALTH, `dmg=${HEALTH - p.health}`);
+
+    // SUGAR RUSH. The lane is the whole warning, so the assertions hold it
+    // to exactly that: drawn before a step, honest about the trample, and
+    // beatable by leaving it.
+    e = pin('rush', -14); p.invulnEnd = -1;
+    run(0.35);                         // the tell is up, the lane on the floor
+    const laneAt = marks(), rushFrom = e.pos.x;
+    const lane = g.effects.marks.find(m => m.used);
+    run(0.05);
+    ok('the stampede warns with a floor lane before it moves a step',
+      laneAt === 1 && Math.abs(e.pos.x - rushFrom) < 0.01 && g.projectiles.length === 0,
+      `marks=${laneAt}`);
+    ok('the lane is drawn down the charge and over the ground it threatens',
+      Math.abs(-(e.candyX - e.bs.dashOX) * e.bs.dashZ + (e.candyZ - e.bs.dashOZ) * e.bs.dashX) < 0.01
+      && (e.candyX - e.bs.dashOX) * e.bs.dashX + (e.candyZ - e.bs.dashOZ) * e.bs.dashZ > 10
+      && Math.abs(lane.group.rotation.z - Math.atan2(-e.bs.dashX, -e.bs.dashZ)) < 0.01,
+      `cx=${lane.group.position.x.toFixed(1)} rot=${lane.group.rotation.z.toFixed(2)}`);
+    p.pos.set(0, 0, 4); p.health = HEALTH;
+    run(1.3);
+    ok('sidestepping the lane defeats the stampede, and it crosses the arena anyway',
+      p.health === HEALTH && !e.bs.dashHit && e.pos.x - rushFrom > 12,
+      `dmg=${HEALTH - p.health} crossed=${(e.pos.x - rushFrom).toFixed(1)}`);
+    e = pin('rush', -14); p.invulnEnd = -1; p.health = HEALTH;
+    run(0.35); p.pos.set(3, 0, 0);
+    run(1.3);
+    ok('standing in the lane is trampled for the full hit', HEALTH - p.health >= 25,
+      `trampled=${HEALTH - p.health}`);
+
+    // TAFFY TWIRL. A turning lane anchored to the cake: bitten in its arc,
+    // broken by cover, and unable to reach the far side of the room.
+    e = pin('twirl', -6); p.invulnEnd = -1;
+    run(0.85);
+    const armA = g.effects.marks.find(m => m.used)?.group.rotation.z;
+    run(0.25);
+    const armB = g.effects.marks.find(m => m.used)?.group.rotation.z;
+    ok('the twirl sweeps a lane that turns around the cake',
+      marks() === 1 && e.candyState === 'twirl' && armA !== armB, `a=${armA} b=${armB}`);
+    e = pin('twirl', -6); p.invulnEnd = -1; p.health = HEALTH;
+    run(2.4);
+    ok('the lash bites anyone standing in its arc', HEALTH - p.health >= 15,
+      `lashed=${HEALTH - p.health}`);
+    e = pin('twirl', -6); p.pos.set(-1, 0, 0); p.invulnEnd = -1; p.health = HEALTH;
+    ctx.obstacles = [new THREE.Box3(new THREE.Vector3(-3, 0, -0.3), new THREE.Vector3(-2.8, 5, 0.3))];
+    run(3.3);
+    ok('a pillar between the cake and the player breaks the lash',
+      p.health === HEALTH, `dmg=${HEALTH - p.health}`);
+    e = pin('twirl', -6); p.pos.set(-6, 0, 11); p.invulnEnd = -1; p.health = HEALTH;
+    run(3.3);
+    ok('beyond the lash\'s reach the sweep cannot touch you', p.health === HEALTH,
+      `dmg=${HEALTH - p.health}`);
+
+    // PEPPERMINT CAROUSEL. Nothing leaves during the wind-up; the volleys
+    // ride the half-beat, keep a wedge, and walk around as they fire.
+    e = pin('carousel', -12);
+    run(0.5);
+    ok('nothing leaves during the crown\'s wind-up', g.projectiles.length === 0);
+    const seen = [];
+    run(2.0, () => { for (const q of g.projectiles) if (q.type === 'confectioner' && !seen.includes(q)) seen.push(q); });
+    const ang = (q) => Math.atan2(q.vel.z, q.vel.x);
+    ok('the carousel deals five three-arm volleys', seen.length === 15, `fired=${seen.length}`);
+    const wedge = [ang(seen[12]), ang(seen[13]), ang(seen[14])].sort((x, y) => x - y);
+    const gaps = [wedge[1] - wedge[0], wedge[2] - wedge[1], wedge[0] + Math.PI * 2 - wedge[2]];
+    ok('every volley keeps a safe wedge between its arms',
+      Math.max(...gaps) > 2 && Math.min(...gaps) > 1.8, `gaps=${gaps.map((n) => n.toFixed(2))}`);
+    ok('and the arms walk around as they fire',
+      Math.abs(ang(seen[12]) - ang(seen[0])) > 0.5,
+      `walk=${Math.abs(ang(seen[12]) - ang(seen[0])).toFixed(2)}`);
+    e = pin('carousel', -12); e.hp = e.maxHp * 0.3;
+    const shelled = [];
+    run(3.0, () => { for (const q of g.projectiles) if (q.type === 'confectioner' && !shelled.includes(q)) shelled.push(q); });
+    ok('a cracked cake spins more arms and more volleys', shelled.length === 35,
+      `fired=${shelled.length}`);
+
+    // GUMDROP BLOOM. The centre is the question, the ring is drawn with its
+    // own way out, and the drawn gap really is the safe line.
+    e = pin('bloom', -12); p.invulnEnd = -1;
+    run(0.75);
+    const bloomPops = (e.candyPops || []).slice();
+    ok('the bloom plants a centre sweet and a warned ring',
+      bloomPops.length === 4 && bloomPops.every(q => q.double) && marks() === 4, `n=${bloomPops.length}`);
+    const c = bloomPops[0];
+    const angs = bloomPops.slice(1).map(q => Math.atan2(q.z - c.z, q.x - c.x)).sort((x, y) => x - y);
+    let best = 0, gi = 0;
+    for (let i = 0; i < angs.length; i++) {
+      const gap = (i === angs.length - 1 ? angs[0] + Math.PI * 2 : angs[i + 1]) - angs[i];
+      if (gap > best) { best = gap; gi = i; }
+    }
+    ok('the ring always leaves a readable way out', best > 1.75, `gap=${best.toFixed(2)}`);
+    const bis = angs[gi] + best / 2;
+    p.pos.set(c.x + Math.cos(bis) * 7, 0, c.z + Math.sin(bis) * 7); p.health = HEALTH;
+    run(2.6);
+    ok('escaping through the drawn gap beats the bloom',
+      p.health === HEALTH && !e.candyPops.length, `dmg=${HEALTH - p.health}`);
+    e = pin('bloom', -12); p.invulnEnd = -1; p.health = HEALTH;
+    run(0.75); run(1.3);
+    ok('the centre sweet punishes standing still', HEALTH - p.health >= 11,
+      `dmg=${HEALTH - p.health}`);
+
+    // BONBON FAN. The gunner's own sweet, thrown in a spread: bouncing,
+    // shootable, and more of them as the shells come off.
+    e = pin('fan', -12);
+    run(0.65);
+    const sweets = g.projectiles.filter(q => q.type === 'bonbon');
+    ok('the fan throws bouncing, shootable wrapped sweets',
+      sweets.length === 3 && sweets.every(q => q.bounces === 1 && q.shootable),
+      `n=${sweets.length}`);
+    const thrown = sweets[0];
+    g.camera.position.copy(p.eyeInto(new THREE.Vector3()));
+    g.camera.lookAt(thrown.pos); g.camera.updateMatrixWorld();
+    thrown.mesh.updateMatrixWorld(true);
+    g._firePellet(g.camera.position.clone(), [thrown.mesh], 0, p.weapon, 1, false);
+    run(0.3);
+    ok('shooting a thrown sweet takes it out of the air', !g.projectiles.includes(thrown));
+    e = pin('fan', -12); e.hp = e.maxHp * 0.3;
+    run(0.65);
+    ok('a cracked cake throws a wider fan',
+      g.projectiles.filter(q => q.type === 'bonbon').length === 5);
+
+    // Killed mid-pattern, the lanes come home with the sweets.
+    for (const [name, t] of [['rush', 1.1], ['twirl', 0.9]]) {
+      const q = pin(name, -12);
+      run(t);
+      const held = marks();
+      q.takeDamage(1e9); run(DT);
+      ok(`${name} death mid-pattern returns its lane handle`,
+        held === 1 && marks() === 0, `held=${held}`);
+    }
+
+    // The shutters are the window's face; what the armour says and what the
+    // player sees must never disagree on the frame it opens.
+    e = pin('fan', -12);
+    run(0.7);
+    ok('heart window and visible shutters agree on the transition frame',
+      e.bs.weakOpen && e.candyDoors[0].position.x === -0.5 * e.scale
+      && e.candyDoors[1].position.x === 0.5 * e.scale);
     const layers=[];
     for(const frac of [1,0.6,0.3]) { e.bs.weakOpen=false; e.hp=e.maxHp*frac; run(DT); e.bs.weakOpen=false;layers.push(ENEMY_TYPES.confectioner.armorDefault(e)); }
     e.bs.weakOpen=true;
     ok('boss layers weaken permanently and an open heart always takes full damage', layers.join()==='0.6,0.75,0.9' && ENEMY_TYPES.confectioner.armorDefault(e)===1, JSON.stringify(layers));
-    const ribbons=(escape)=>{
-      clean();const e=put('confectioner',-10,0);e.speed=0;e.candyState='walk';e.candyT=0;e.bs.turn=0;
-      run(1.1); const warnings=marks(); if(escape)p.pos.set(4,0,4);
-      run(2);return {damage:HEALTH-p.health,warnings,open:e.bs.weakOpen,doors:e.candyDoors.map(m=>m.position.x/e.scale)};
-    };
-    const pressed=ribbons(false),escaped=ribbons(true);
-    ok('crossing taffy strips both warn; diagonal escape avoids them', pressed.warnings===2 && pressed.damage>0 && escaped.damage===0 && escaped.open, JSON.stringify({pressed,escaped}));
-    ok('heart window and visible shutters agree on the transition frame', escaped.doors[0]===-0.5 && escaped.doors[1]===0.5);
-    const carousel=(tier)=>{
-      clean();const e=put('confectioner',-10,0);e.speed=0;e.candyState='walk';e.candyT=0;e.bs.turn=1;
-      if(tier)e.hp=e.maxHp*0.3;
-      const fired=new Set();run(1.1,()=>g.projectiles.forEach(p=>fired.add(p)));
-      const angles=[...fired].map(p=>Math.atan2(p.vel.z,p.vel.x));run(1);
-      return {n:fired.size,safe:angles.every(a=>Math.abs(a)>=Math.PI/4-0.01),damage:HEALTH-p.health};
-    };
-    const carousel1=carousel(0),carousel3=carousel(2);
-    ok('carousel grows as layers crack but preserves its safe wedge',carousel3.n>carousel1.n && carousel1.n>0 && carousel1.safe && carousel3.safe && carousel1.damage===0,JSON.stringify({carousel1,carousel3}));
 
     for(const type of ['taffy','poprock','cottonkite','confectioner']) {
       clean();e=put(type,type==='taffy'?-4:-8,0);

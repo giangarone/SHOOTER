@@ -740,14 +740,28 @@ context. The start screen says so, and one click anywhere fixes it.
   shorten a wind-up. **Cottonkites** fly a committed pass and drop a warned
   sweet where the pass ends, then retreat while it counts down.
   **THE CONFECTIONER** is a tiered cake golem with peppermint hands, an icing
-  crown and a hidden sugar heart. Crossing taffy strips ask for a diagonal
-  escape; its radial candy carousel leaves a quarter-turn safe sector; its
-  poprock clusters ask you to stay clear through both bursts. Each attack
-  ends in a 1.6-second heart window: the icing shutters part and full damage
-  gets through. At two-thirds and one-third health its shoulders crumble,
-  resistance falls, pauses shorten and the ranged patterns grow. Telegraphs
-  and heart windows retain their full duration. Killing a caster cancels
-  its unspent floor sweets and returns their warning handles.
+  crown and a hidden sugar heart, and it never holds still: it circles at
+  throwing range, and every pattern it deals ends with the icing shutters
+  parting and the sugar heart taking full damage. Touching the cake hurts at
+  any time, in any state. Five patterns, each with its own tell and its own
+  answer, dealt in a fixed order a returning player can read. The
+  **peppermint carousel** spins the crown up and deals rotating volleys of
+  candy rounds on the music's half-beat, the arms walking around as they
+  fire - the wedge between them is your channel. The **gumdrop bloom** plants
+  a ring of double-popping sweets around where you were going, always drawn
+  with two adjacent sectors clear: the way out is part of the pattern, not
+  luck, and the centre sweet asks you to leave. The **bonbon fan** throws the
+  gunner's own wrapped sweets in a spread - each skips once off an arena wall
+  and can be shot out of the air. The **taffy twirl** plants the cake and
+  sweeps a marked taffy lash around itself: outrun it inside five metres,
+  step outside its nine, or put a pillar in its way. The **sugar rush** draws
+  a lane through you and crosses the arena down it; sidestep the lane, and
+  bait it into a pillar and it lands dazed, its heart open longer than a
+  clean stop, with frosting crumbs burst around wherever it stopped. At
+  two-thirds and one-third health its shoulders crumble, resistance falls,
+  pauses shorten and every pattern grows - more arms, more sweets, wider
+  sweeps. Telegraphs and heart windows keep their full duration. Killing a
+  caster cancels its unspent floor sweets and returns their warning handles.
 - **Every enemy is its own silhouette.** Types used to share one capsule body
   and differ only by colour, which falls apart exactly when it matters - a
   frozen or poisoned enemy is wearing the status tint, not its own colour. Each
@@ -3262,7 +3276,9 @@ test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
                     the hoarfrost's field, and the Pale Crown's anchors
-test/candy.mjs      CANDY counterplay, musical support, shell loss and candy cleanup
+test/candy.mjs      CANDY counterplay, musical support, shell loss and the
+                    Confectioner's five-pattern fight: lanes returned on death,
+                    every dodge answered, every tell held honest
 test/fungal.mjs     FUNGAL growth patterns, bounded healing, boss openings and warning exhaustion
 test/insects.mjs    INSECTS committed charges, pheromone links, boss patterns and warning cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
