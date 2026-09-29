@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, GAS_DPS, SHARED_MATS, _blinkAt, aiMelee, eyes, landHit, lump,
-  orbit, partsFor, prism, releaseMarks, shard, slab, spike,
+  ARENA_HALF, BOSS_REACH_Y, ENEMY_TYPES, GAS_DPS, SHARED_MATS, _blinkAt,
+  _reachY, addWarnedMortar, aiMelee, bossTouch, eyes, faceSnap, landHit, lump,
+  orbit, partsFor, prism, releaseMarks, shard, slab, snapAim, spike,
 } from './shared.js';
 
 // What the Overgrowth's shut canopy takes off a hit. Up here with the other
@@ -272,17 +273,20 @@ export function buildMothcap(e, g, s) {
   eyes(P, { y: -0.28, x: 0.09, z: -0.16, r: 0.8, mat: e.eyeMat });
 }
 
-// VERDANT's boss: a tree that has taken the room. The heartwood's language at
-// boss scale - root ball, tapering trunk, layered canopy - with the one thing
-// no ordinary VERDANT enemy has, a canopy that OPENS.
+// VERDANT's boss: a tree that has taken the room and WALKS it. The heartwood's
+// language at boss scale - root ball, tapering trunk, layered canopy - with
+// the one thing no ordinary VERDANT enemy has, a canopy that OPENS.
 //
-// It never moves, so unlike every other boss it is not read by its motion and
-// has to be unmistakable standing still. That is what the canopy is for: it is
-// most of the silhouette, and the fight's only state change is written on it.
+// What changed in the rework is that the tree gets up. The canopy still has to
+// carry the window standing still - the fight's one state that is the player's
+// to choose - but the silhouette now has to survive being read IN MOTION, so
+// the boughs and the seed pods are held on the enemy: they are the tells the
+// attacks are announced with.
 export function buildOvergrowth(e, g, s) {
   const P = partsFor(e, g, s);
   // A vast root ball spread across the floor. Wide and low, so it reads as
-  // something that grew here rather than something that walked in.
+  // something that grew here rather than something that walked in - and drags
+  // rather than strides when it moves.
   P('ogRoots', lump(0.9), { y: 0.26, sy: 0.42 });
   const rootGeo = spike(0.16, 0.9, 4);
   for (let i = 0; i < 7; i++) {
@@ -303,7 +307,7 @@ export function buildOvergrowth(e, g, s) {
     y: 1.2, z: -0.2, mat: SHARED_MATS.blightSac, shadow: false,
   });
 
-  // THE CANOPY, and the fight. Four heavy caps that draw APART and lift when
+  // THE CANOPY, and the window. Four heavy caps that draw APART and lift when
   // the player comes inside the window - held on the enemy so aiOvergrowth can
   // slide them, the way the Forge's shutters are.
   e.canopy = [];
@@ -324,9 +328,27 @@ export function buildOvergrowth(e, g, s) {
       rz: Math.cos(a) * -0.5, rx: Math.sin(a) * 0.5,
     });
   }
-  // Two heavy boughs it swings with, low and reaching.
-  P('ogBough', slab(0.26, 1.0, 0.26), { x: -0.78, y: 1.1, rz: 0.5 });
-  P('ogBough', slab(0.26, 1.0, 0.26), { x: 0.78, y: 1.1, rz: -0.5 });
+  // SEED PODS under the canopy's rim - where the volley is visibly grown. They
+  // swell for the beat before a seedfall the same way a sporegun's sac does,
+  // so the read the roster teaches is the read the boss keeps.
+  e.ogPods = [];
+  const podGeo = lump(0.13);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.9;
+    const pod = P('ogPod', podGeo, {
+      x: Math.cos(a) * 0.62, y: 1.82, z: Math.sin(a) * 0.62,
+      sy: 1.3, mat: SHARED_MATS.blightSac, shadow: false,
+    });
+    pod.userData.s = s;
+    e.ogPods.push(pod);
+  }
+  // Two heavy boughs it swings with AND sows with - held on the enemy, because
+  // every ground attack is announced by these rising first. A tree's wind-up
+  // IS its branches.
+  e.ogBough = [
+    P('ogBough', slab(0.26, 1.0, 0.26), { x: -0.78, y: 1.1, rz: 0.5 }),
+    P('ogBough', slab(0.26, 1.0, 0.26), { x: 0.78, y: 1.1, rz: -0.5 }),
+  ];
   eyes(P, { y: 1.5, x: 0.15, z: -0.4, r: 1.5, mat: e.eyeMat });
 }
 
@@ -497,126 +519,581 @@ export function aiMothcap(e, a) {
 }
 
 // ---- the Overgrowth ---------------------------------------------------------
-// Inside this, the canopy is open and the boss takes full damage. Doubled from
-// eight, where the only positions that opened it sat in the ring's thorn band
-// or the swing's reach - the shield was priced at point-blank, on the one boss
-// whose answer to close players is mortars. The ring bites to just under nine
-// metres (OG_RING_R plus a thorn radius), so the doubled window opens a band
-// beyond both where the boss takes full damage and cannot answer - that band
-// is the nerf.
+// The window is UNCHANGED: inside this range the canopy is open and the boss
+// takes full damage, decided by the player's own position and nothing else -
+// the one window in the game with no clock on it. What the rework changes is
+// who owns the distance. The old tree never took a step, and a boss the player
+// could simply walk away from turned out to be a boss whose whole threat fit
+// in the ground under it: this one walks the room it has taken, and sows it
+// as it goes.
 export const OG_WINDOW = 16;
 
-// The ring it lays when the player is inside the window. Gapped, like every
-// other ring in the game, because a closed one around a player who has chosen
-// to be there is a tax rather than a decision.
-export const OG_RING_R = 6.5;
+// Inside this it swings rather than sows - the same boughs, the same melee
+// block. The five attacks below are for everything OUTSIDE arm's length.
+export const OG_SWING = 6;
 
-export const OG_RING_N = 7;
+// THE RHYTHM OF THE FIGHT. The old tree fired every four or five seconds on
+// two isolated clocks; this one commits to something every second and a half
+// at wave one, faster as the waves climb (e.rate) and faster again enraged.
+// Every commitment roots it for a wind-up first - those planted beats are the
+// player's turns, and the swing between hunting and planting is the fight.
+export const OG_GCD = 1.5;
 
-export const OG_RING_GAP = 2;
-
-export const OG_RING_CD = 4.5;
-
-// The creeper: a LINE of thorns marching outward toward wherever the player is
-// standing, each one sprouting a little later than the last. It is what
-// answers standing at range and doing nothing, which a rooted boss would
-// otherwise have no reply to at all.
-export const OG_CREEP_CD = 5.5;
-
-export const OG_CREEP_N = 5;
-
-export const OG_CREEP_STEP = 3.6;
-
-export const OG_CREEP_LEAD = 0.55;
-
+// Every thorn eruption below shares the radius and the hit the ring and the
+// creeper always had - the rework is cadence and movement, not lethality.
 export const OG_THORN_R = 2.4;
-
-export const OG_THORN_DELAY = 1.3;
-
 export const OG_THORN_DMG = 20;
 
+// Stalking. It hangs a ring's width off the player and reseats on a fresh
+// bearing every couple of seconds; at a longer remove it simply closes. The
+// point is that its five attacks arrive from a DIFFERENT part of the room
+// each time - the fight is never the same angle twice, and the arena never
+// gets to settle around either of you.
+export const OG_STALK_T = 2.2;
+
+export const OG_STALK_RING = 5.5;
+
+export const OG_STALK_FAR = 15;
+
+// SEEDFALL - the sporegun's trick at canopy scale. The pods swell, then a
+// ripple of seeds arches out, each arc solved at the player's position AT ITS
+// OWN THROW MOMENT rather than the moment the canopy parted: a player holding
+// a line eats the middle of the volley, a player who turns spreads it. And
+// every one of them is a sporegun seed - harmless in the air, harmless lying
+// there, a filling circle when it sprouts.
+export const OG_SEED_CD = 3.2;
+
+export const OG_SEED_WIND = 0.55;
+
+export const OG_SEED_N = 4;
+
+export const OG_SEED_RAGE = 6;
+
+export const OG_SEED_STEP = 0.18;
+
+// ROOT SUNDER - the old creeper sharpened from a nudge into an attack. Both
+// boughs rear up and come down, and a fissure races outward along the bearing
+// locked at the start of the wind-up, each burst of thorns filling a beat
+// later than the last: the ground visibly CHASES the line it drew.
+export const OG_SUNDER_CD = 4.6;
+
+export const OG_SUNDER_WIND = 0.7;
+
+export const OG_SUNDER_N = 7;
+
+export const OG_SUNDER_STEP = 3.1;
+
+export const OG_SUNDER_STAGGER = 0.13;
+
+export const OG_SUNDER_FILL = 0.85;
+
+// BRAMBLE TRAMPLE - the thornling's contract at boss scale. Plant, draw the
+// lane, commit, rush down it without steering. It ends where the lane does -
+// or the moment the player is in the way - in a burst of thorns. The contact
+// hit is capped for the Colossus's reason: a wave-scaled boss hit is a
+// one-shot, and the rush is meant to be survived by stepping OFF the line.
+export const OG_TRAMPLE_CD = 5.4;
+
+export const OG_TRAMPLE_WIND = 0.8;
+
+export const OG_TRAMPLE_LEN = 15;
+
+export const OG_TRAMPLE_MIN = 6;
+
+export const OG_TRAMPLE_W = 2.2;
+
+export const OG_TRAMPLE_SPEED = 13;
+
+export const OG_TRAMPLE_CAP = 34;
+
+// The burst the rush lands in. Gapped, like every other ring in the game -
+// a closed one around a body that has just arrived on top of you is a tax.
+export const OG_ERUPT_N = 5;
+
+export const OG_ERUPT_R = 3.4;
+
+export const OG_ERUPT_FILL = 0.95;
+
+// SPORE BLOOM - the mothcap's cloud, rung around the trunk. Four circles fill
+// in the band just outside its swing and burst into lingering clouds, so the
+// answer to camping the open canopy is ground that stays hostile after the
+// burst. Four because that IS the gas pool's cap: a bloom that asked for a
+// fifth cloud would evict its own first one.
+export const OG_BLOOM_CD = 5.8;
+
+export const OG_BLOOM_WIND = 0.8;
+
+export const OG_BLOOM_N = 4;
+
+export const OG_BLOOM_R = 5.6;
+
+export const OG_BLOOM_FILL = 1.05;
+
+export const OG_BLOOM_STAGGER = 0.11;
+
+export const OG_BLOOM_DMG = 12;
+
+// The ground each burst becomes - the mothcap's payload, outliving the throw.
+export const OG_BLOOM_GAS = { radius: 2.4, life: 4.5, dps: GAS_DPS, kind: 'gas' };
+
+// GRASPING THICKET - the old ring, inverted and thrown at the PLAYER. A ring
+// of thorns sprouts around wherever they were standing, two seats left empty:
+// the gap is the door, and while they are choosing it the tree is still
+// walking in. It is what answers plinking from across the arena.
+export const OG_NOOSE_CD = 5.0;
+
+export const OG_NOOSE_WIND = 0.35;
+
+export const OG_NOOSE_N = 7;
+
+export const OG_NOOSE_GAP = 2;
+
+export const OG_NOOSE_R = 4.6;
+
+export const OG_NOOSE_FILL = 1.3;
+
+// The back half of the bar. Every clock shortens by the same multiplier, the
+// volley grows by two seeds, and the trample wheels around and comes BACK -
+// escalation by more of the same, because the player has spent the first half
+// of the fight learning exactly these five shapes.
+export const OG_ENRAGE_AT = 0.5;
+
+export const OG_ENRAGE_MUL = 0.7;
+
+// How far out a pattern may place a circle's CENTRE and still have the whole
+// of it land on floor the player can read.
+export const OG_PATTERN_BOUND = ARENA_HALF - 1.2;
+
 export const _ogAt = new THREE.Vector3();
+
+// Arms a trample. Returns false when the CLAMPED lane is not one worth
+// telegraphing - a player hugging the wall behind them leaves it no corridor
+// past the arena's edge, and a half-length lane sells the rush short.
+function _ogTrampleStart(e, a) {
+  const bs = e.bs;
+  const n0 = Math.max(OG_TRAMPLE_MIN, Math.min(OG_TRAMPLE_LEN, a.dist + 5));
+  // The end is clamped to the floor BEFORE the wind-up starts, and the run is
+  // measured against it - so the lane the rectangle draws is the lane the
+  // rush follows, wall or no wall. A locked lane has to be the truth.
+  const ex = Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.x + a.nx * n0));
+  const ez = Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.z + a.nz * n0));
+  const len = Math.hypot(ex - e.pos.x, ez - e.pos.z);
+  if (len < OG_TRAMPLE_MIN) return false;
+  snapAim(e, a, true);
+  bs.dirX = a.nx;
+  bs.dirZ = a.nz;
+  bs.len = len;
+  bs.state = 'trample';
+  bs.t = OG_TRAMPLE_WIND;
+  // The cooldown is armed HERE, in the helper, and nowhere in the dispatch -
+  // the enraged wheel-around calls this directly, and both paths have to pay
+  // the same clock or the second rush would arrive free.
+  bs.trampleCd = OG_TRAMPLE_CD * e.rate * (e.bs.enraged ? OG_ENRAGE_MUL : 1);
+  bs.mark = a.ctx.effects.markAcquire();
+  return true;
+}
+
+// The rush's landing: a ring of thorns where it stops. Everything through
+// addWarnedMortar, which RESERVES the telegraph slot before committing - an
+// exhausted pool drops the burst's tail rather than letting one land
+// unannounced, and both pools here are shared with the rest of the fight.
+function _ogErupt(e, a) {
+  const ctx = a.ctx;
+  const gapAt = (Math.random() * OG_ERUPT_N) | 0;
+  const off = Math.random() * Math.PI * 2;
+  for (let i = 0; i < OG_ERUPT_N; i++) {
+    if (i === gapAt) continue;
+    const ang = off + (i / OG_ERUPT_N) * Math.PI * 2;
+    addWarnedMortar(ctx,
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.x + Math.cos(ang) * OG_ERUPT_R)),
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.z + Math.sin(ang) * OG_ERUPT_R)),
+      OG_THORN_R, OG_ERUPT_FILL, OG_THORN_DMG);
+  }
+  _ogAt.set(e.pos.x, 0.8, e.pos.z);
+  ctx.effects.shockwave(_ogAt, 0x7ea63c, OG_ERUPT_R + 1, 0.45);
+  ctx.effects.burst(_ogAt, 0xa8c93a, 16, 6, 2.5, 0.55);
+  ctx.effects.addShake(0.22);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+// The fissure. Bearing locked by snapAim when the wind-up STARTED, so the
+// line the player was shown is the line the ground runs down - this fight's
+// whole grammar is "what you were shown is what you are charged for".
+function _ogSunder(e, a) {
+  const ctx = a.ctx;
+  const n = e.bs.enraged ? OG_SUNDER_N + 2 : OG_SUNDER_N;
+  for (let i = 0; i < n; i++) {
+    const d = e.radius + 0.6 + i * OG_SUNDER_STEP;
+    const x = e.pos.x + e.nx * d;
+    const z = e.pos.z + e.nz * d;
+    if (Math.abs(x) > OG_PATTERN_BOUND || Math.abs(z) > OG_PATTERN_BOUND) break;
+    if (!addWarnedMortar(ctx, x, z, OG_THORN_R,
+      OG_SUNDER_FILL + i * OG_SUNDER_STAGGER, OG_THORN_DMG)) break;
+  }
+  _ogAt.set(e.pos.x, 0.6, e.pos.z);
+  ctx.effects.shockwave(_ogAt, 0x7ea63c, 3.5, 0.4);
+  ctx.effects.burst(_ogAt, 0x7ea63c, 14, 5, 2, 0.5);
+  if (ctx.sfx) ctx.sfx.impact();
+  ctx.bossEvent('charge', e);
+}
+
+// The bloom. Ringed around the TRUNK and deliberately gapless: it is not a
+// ring to dodge through, it is a band to NOT BE IN when it goes off, and the
+// staggered fill draws the band's shape as much as its timing. The clouds it
+// leaves outlast the recovery, which is the mothcap's bargain at boss scale.
+function _ogBloom(e, a) {
+  const ctx = a.ctx;
+  const off = Math.random() * Math.PI * 2;
+  for (let i = 0; i < OG_BLOOM_N; i++) {
+    const ang = off + (i / OG_BLOOM_N) * Math.PI * 2;
+    addWarnedMortar(ctx,
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.x + Math.cos(ang) * OG_BLOOM_R)),
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.pos.z + Math.sin(ang) * OG_BLOOM_R)),
+      OG_THORN_R - 0.4, OG_BLOOM_FILL + i * OG_BLOOM_STAGGER, OG_BLOOM_DMG, OG_BLOOM_GAS);
+  }
+  _ogAt.set(e.pos.x, 0.9, e.pos.z);
+  ctx.effects.shockwave(_ogAt, 0xa8c93a, OG_BLOOM_R, 0.45);
+  ctx.effects.burst(_ogAt, 0xa8c93a, 18, 5, 3, 0.6);
+  if (ctx.sfx) ctx.sfx.impact();
+  ctx.bossEvent('charge', e);
+}
+
+// The noose. Ringed around where the player was when the canopy dipped, with
+// the house's two-seat gap: a ring with no door is a tax, and this one exists
+// to make far ground cost something to HOLD, not to spend the player.
+function _ogNoose(e, a) {
+  const ctx = a.ctx;
+  const N = OG_NOOSE_N;
+  const gapAt = (Math.random() * N) | 0;
+  const off = Math.random() * Math.PI * 2;
+  for (let i = 0; i < N; i++) {
+    if (((i - gapAt + N) % N) < OG_NOOSE_GAP) continue;
+    const ang = off + (i / N) * Math.PI * 2;
+    addWarnedMortar(ctx,
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.tx + Math.cos(ang) * OG_NOOSE_R)),
+      Math.max(-OG_PATTERN_BOUND, Math.min(OG_PATTERN_BOUND, e.tz + Math.sin(ang) * OG_NOOSE_R)),
+      OG_THORN_R, OG_NOOSE_FILL, OG_THORN_DMG);
+  }
+  _ogAt.set(e.tx, 0.15, e.tz);
+  ctx.effects.shockwave(_ogAt, 0x7ea63c, OG_NOOSE_R, 0.4);
+  if (ctx.sfx) ctx.sfx.impact();
+  ctx.bossEvent('charge', e);
+}
+
+// The body's share of the telling. THREE eases, each carrying one meaning:
+// openT is the window (the canopy drawing apart), lift is the boughs winding
+// a slam or a charge, swell is the pods fattening with seeds. A model whose
+// parts say exactly one thing each stays readable through everything else.
+function _ogDress(e, bs, dt) {
+  bs.lift += ((bs.raise || 0) - bs.lift) * Math.min(1, dt * 6);
+  bs.swell += ((bs.sow || 0) - bs.swell) * Math.min(1, dt * 5);
+  if (e.canopy) {
+    for (let i = 0; i < e.canopy.length; i++) {
+      const c = e.canopy[i];
+      const ang = (i / e.canopy.length) * Math.PI * 2 + 0.4;
+      // Out and up with the window, a touch wider while a volley is growing -
+      // the caps visibly straining is the volley's first half-second of tell.
+      const r = (0.42 + bs.openT * 0.5 + bs.swell * 0.3) * e.scale;
+      c.position.set(Math.cos(ang) * r,
+        (2.05 + bs.openT * 0.34 - bs.lift * 0.14) * e.scale, Math.sin(ang) * r);
+      c.rotation.z = bs.openT * (Math.cos(ang) * 0.5);
+      c.rotation.x = bs.openT * (Math.sin(ang) * 0.5);
+    }
+  }
+  if (e.ogCore) e.ogCore.scale.setScalar((0.8 + bs.openT * 0.75 + bs.swell * 0.4) * e.scale);
+  if (e.ogBough) {
+    // Up and out. A tree's wind-up is its branches, and the same two boughs
+    // raise for the fissure, the charge and the bloom - one shape, learned
+    // once, spent by whichever attack follows it.
+    e.ogBough[0].rotation.z = 0.5 + bs.lift * 1.15;
+    e.ogBough[1].rotation.z = -0.5 - bs.lift * 1.15;
+  }
+  if (e.ogPods) {
+    for (const p of e.ogPods) {
+      const k = p.userData.s * (1 + bs.swell * 0.45);
+      p.scale.set(k, k * 1.3, k);
+    }
+  }
+}
 
 export function aiOvergrowth(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
   if (bs.state === undefined) {
-    bs.ringCd = OG_RING_CD * 0.6;
-    bs.creepCd = OG_CREEP_CD * 0.5;
+    bs.state = 'stalk';
+    bs.t = 0;
+    // A beat of grace at the top of the fight, and the clocks staggered so
+    // the first minute teaches rather than overlapping: the volley arrives
+    // first, the fissure behind it, and the trample - the fastest tell in
+    // the set - last.
+    bs.atk = 1.4;
+    bs.volleyCd = 0.6;
+    bs.sunderCd = 2.4;
+    bs.trampleCd = 3.4;
+    bs.bloomCd = 2.0;
+    bs.nooseCd = 1.6;
     bs.openT = 0;
-    bs.state = 'rooted';
+    bs.wt = 0;
+    bs.wx = e.pos.x;
+    bs.wz = e.pos.z;
+    bs.mark = -1;
+    bs.enraged = false;
+    bs.lift = 0;
+    bs.swell = 0;
   }
+  bs.fx = ctx.effects;
+  const P = ctx.player.pos;
 
-  // IT NEVER MOVES. Not a state, not a condition - there is no branch in this
-  // function that writes a velocity, and `speed` is zero on the type as well
-  // so nothing else can either.
-  a.vx = 0;
-  a.vz = 0;
+  // The back half of the bar. One threshold, once, through the same enrage
+  // event every boss uses - the fight's whole second act is its clocks
+  // shortening and its two set-piece attacks growing a head.
+  if (!bs.enraged && e.hp <= e.maxHp * OG_ENRAGE_AT) {
+    bs.enraged = true;
+    ctx.bossEvent('enrage', e);
+  }
+  const rage = bs.enraged ? OG_ENRAGE_MUL : 1;
 
-  // The window is a pure function of range, recomputed every frame, so the
-  // armour and the model can never disagree about whether it is open.
+  // THE WINDOW, untouched by the rework: a pure function of range recomputed
+  // every frame, so the armour and the model can never disagree about it. The
+  // boss moving under it changes nothing about whose choice it is.
   bs.open = a.dist < OG_WINDOW;
   bs.openT += ((bs.open ? 1 : 0) - bs.openT) * Math.min(1, a.dt * 5);
-  if (e.canopy) {
-    for (let i = 0; i < e.canopy.length; i++) {
-      const c = e.canopy[i];
-      const ang = (i / e.canopy.length) * Math.PI * 2 + 0.4;
-      // Out and up: the caps part and lift, so the cleft and the core inside
-      // it come into view from the front rather than only from above.
-      const r = (0.42 + bs.openT * 0.5) * e.scale;
-      c.position.set(Math.cos(ang) * r, (2.05 + bs.openT * 0.34) * e.scale, Math.sin(ang) * r);
-      c.rotation.z = bs.openT * (Math.cos(ang) * 0.5);
-      c.rotation.x = bs.openT * (Math.sin(ang) * 0.5);
-    }
-  }
-  if (e.ogCore) e.ogCore.scale.setScalar((0.8 + bs.openT * 0.75) * e.scale);
-  e._setEyeAlert(bs.open);
 
-  // It still swings at anything that comes to it. The window has to cost
-  // something even when the thorns are not up.
-  if (a.dist < 6) aiMelee(e, a);
+  bs.atk -= a.dt;
+  bs.volleyCd -= a.dt;
+  bs.sunderCd -= a.dt;
+  bs.trampleCd -= a.dt;
+  bs.bloomCd -= a.dt;
+  bs.nooseCd -= a.dt;
 
-  // ---- the ring -----------------------------------------------------------
-  // Only while the player is inside the window. This is the price of the
-  // damage they are choosing to do.
-  bs.ringCd -= a.dt;
-  if (bs.open && bs.ringCd <= 0) {
-    bs.ringCd = OG_RING_CD * e.rate;
-    const gapAt = (Math.random() * OG_RING_N) | 0;
-    const off = Math.random() * Math.PI * 2;
-    for (let i = 0; i < OG_RING_N; i++) {
-      if (((i - gapAt + OG_RING_N) % OG_RING_N) < OG_RING_GAP) continue;
-      const ang = off + (i / OG_RING_N) * Math.PI * 2;
-      ctx.addMortar(
-        e.pos.x + Math.cos(ang) * OG_RING_R, e.pos.z + Math.sin(ang) * OG_RING_R,
-        OG_THORN_R, OG_THORN_DELAY, OG_THORN_DMG
-      );
-    }
-    e.flash = 0.18;
-    if (ctx.effects) {
-      _ogAt.set(e.pos.x, 0.8, e.pos.z);
-      ctx.effects.shockwave(_ogAt, 0x7ea63c, OG_RING_R, 0.4);
-    }
-    ctx.bossEvent('charge', e);
+  // TOUCHING IT COSTS, immediately and in EVERY state but the rush - which
+  // lands its own far larger hit and must not also bill for the body it
+  // arrived in. The Colossus's rule, unchanged.
+  if (bs.state !== 'rush') bossTouch(e, a, 0.9);
+
+  // Planted unless a state below writes a velocity, and at the walking clamp
+  // unless the rush lifts it - reset HERE rather than at the rush's end, so a
+  // rush interrupted by a status cannot leak the wide stepMul into the stalk.
+  a.vx = 0;
+  a.vz = 0;
+  e.stepMul = 1.4;
+  bs.raise = 0;
+  bs.sow = 0;
+
+  // fearMode 'stagger': shocked rigid, not turned around - it holds, does not
+  // attack, and keeps its eyes from promising a tell that is not coming.
+  if (e.status.fear > 0) {
+    e._setEyeAlert(false);
+    _ogDress(e, bs, a.dt);
+    return;
   }
 
-  // ---- the creeper --------------------------------------------------------
-  // The answer to standing at range. A line of thorns walking outward along
-  // the player's own bearing, each sprouting later than the last - so it
-  // arrives as a thing coming TOWARD them rather than as a hit.
-  bs.creepCd -= a.dt;
-  if (!bs.open && bs.creepCd <= 0 && a.dist < 30) {
-    bs.creepCd = OG_CREEP_CD * e.rate;
-    for (let i = 1; i <= OG_CREEP_N; i++) {
-      const d = i * OG_CREEP_STEP;
-      ctx.addMortar(
-        e.pos.x + a.nx * d, e.pos.z + a.nz * d,
-        OG_THORN_R, OG_THORN_DELAY + i * OG_CREEP_LEAD, OG_THORN_DMG
-      );
+  if (bs.state === 'rush') {
+    e._setEyeAlert(true);
+    // The step clamp is lifted for the run itself - a boss walks at walking
+    // step by default, so the rush has to take its own ceiling with it, the
+    // same repair the Colossus's charge carries.
+    e.stepMul = OG_TRAMPLE_SPEED / Math.max(0.5, a.sp);
+    a.vx = bs.dirX * OG_TRAMPLE_SPEED;
+    a.vz = bs.dirZ * OG_TRAMPLE_SPEED;
+    e.nx = bs.dirX;
+    e.nz = bs.dirZ;
+    faceSnap(e);
+    bs.run -= OG_TRAMPLE_SPEED * a.dt;
+    // Meeting the player on the way down the lane is the whole point of it.
+    if (!bs.hit && a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
+      bs.hit = true;
+      bs.run = 0;
+      ctx.onHitPlayer(Math.min(OG_TRAMPLE_CAP, e.damage), e.pos, e);
+      ctx.effects.addShake(0.2);
+      _ogAt.set(e.pos.x, 1.2, e.pos.z);
+      ctx.effects.burst(_ogAt, 0xd6ff8a, 20, 6, 2, 0.5);
     }
-    e.flash = 0.15;
-    ctx.bossEvent('charge', e);
+    // WHAT ENDS IT: decided by forward progress along the lane, not by
+    // `blockedBy` alone. A kiss on a crate's corner slides a fast body
+    // sideways half a step - that is NOT a slam, and a rush that dies to a
+    // brush reads as the boss tripping over its own feet, which is exactly
+    // how the first cut of this died inside a frame. A real wall eats nearly
+    // the whole step; being wedged eats the PROGRESS for a fifth of a second.
+    const adv = (e.pos.x - bs.lastX) * bs.dirX + (e.pos.z - bs.lastZ) * bs.dirZ;
+    bs.lastX = e.pos.x;
+    bs.lastZ = e.pos.z;
+    const want = OG_TRAMPLE_SPEED * a.dt;
+    bs.stall = adv < want * 0.25 ? bs.stall + a.dt : 0;
+    if (bs.run <= 0 || bs.stall > 0.2 || e.blockedBy > want * 0.85) {
+      _ogErupt(e, a);
+      if (bs.enraged && !bs.redoubled) {
+        // It wheels on the spot and comes BACK DOWN the room, re-aimed at
+        // wherever the player is now - the enrage's one wholly new read.
+        bs.redoubled = true;
+        if (_ogTrampleStart(e, a)) return _ogDress(e, bs, a.dt);
+      }
+      bs.redoubled = false;
+      bs.state = 'recover';
+      bs.t = 0.55;
+      e._setEyeAlert(false);
+    }
+  } else if (bs.state === 'trample') {
+    e._setEyeAlert(true);
+    bs.raise = 1;
+    bs.t -= a.dt;
+    faceSnap(e);
+    // The lane at full length from the first frame - the AREA reads first and
+    // the disc filling reads the time. The Colossus's rectangle, same facts.
+    ctx.effects.markSet(
+      bs.mark,
+      e.pos.x + bs.dirX * bs.len * 0.5, e.pos.z + bs.dirZ * bs.len * 0.5,
+      OG_TRAMPLE_W, 0xff5533, 1 - bs.t / OG_TRAMPLE_WIND,
+      bs.len / (OG_TRAMPLE_W * 2), Math.atan2(-bs.dirX, -bs.dirZ)
+    );
+    if (bs.t <= 0) {
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      // The rectangle has said its piece: from here the BOSS is the telegraph.
+      bs.state = 'rush';
+      bs.run = bs.len;
+      bs.hit = false;
+      bs.stall = 0;
+      bs.lastX = e.pos.x;
+      bs.lastZ = e.pos.z;
+      ctx.bossEvent('charge', e);
+    }
+  } else if (bs.state === 'volley') {
+    e._setEyeAlert(true);
+    bs.sow = 1;
+    if (bs.t > 0) {
+      // The canopy parts a beat before the first seed leaves it.
+      bs.t -= a.dt;
+    } else {
+      bs.stepT -= a.dt;
+      if (bs.stepT <= 0) {
+        bs.stepT = OG_SEED_STEP;
+        // Each seed leaves from the NEXT pod around the rim - the volley
+        // visibly walks around the canopy rather than streaming from a point.
+        const ang = (bs.left % 3) * (Math.PI * 2 / 3) + 0.9;
+        ctx.addSpit(
+          e.pos.x + Math.cos(ang) * 1.9, 4.6, e.pos.z + Math.sin(ang) * 1.9, 'seed'
+        );
+        _ogAt.set(e.pos.x + Math.cos(ang) * 1.9, 4.6, e.pos.z + Math.sin(ang) * 1.9);
+        ctx.effects.burst(_ogAt, 0xa8c93a, 5, 2, 1, 0.35);
+        if (--bs.left <= 0) {
+          bs.state = 'recover';
+          bs.t = 0.4;
+          e._setEyeAlert(false);
+        }
+      }
+    }
+  } else if (bs.state === 'sunder') {
+    e._setEyeAlert(true);
+    bs.raise = 1;
+    bs.t -= a.dt;
+    faceSnap(e);
+    if (bs.t <= 0) {
+      _ogSunder(e, a);
+      bs.state = 'recover';
+      bs.t = 0.45;
+      e._setEyeAlert(false);
+    }
+  } else if (bs.state === 'bloom') {
+    e._setEyeAlert(true);
+    bs.sow = 1;
+    bs.t -= a.dt;
+    if (bs.t <= 0) {
+      _ogBloom(e, a);
+      bs.state = 'recover';
+      bs.t = 0.45;
+      e._setEyeAlert(false);
+    }
+  } else if (bs.state === 'noose') {
+    bs.sow = 1;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    if (bs.t <= 0) {
+      _ogNoose(e, a);
+      bs.state = 'recover';
+      bs.t = 0.35;
+      e._setEyeAlert(false);
+    }
+  } else if (bs.state === 'recover') {
+    bs.t -= a.dt;
+    if (bs.t <= 0) bs.state = 'stalk';
+  } else {
+    // ---- stalk: the hunt ---------------------------------------------------
+    const B = ARENA_HALF - e.radius - 0.8;
+    bs.wt -= a.dt;
+    let dw = Math.hypot(bs.wx - e.pos.x, bs.wz - e.pos.z);
+    if (bs.wt <= 0 || dw < 1.4 || e.blockedBy > 0.3) {
+      bs.wt = OG_STALK_T * (0.7 + Math.random() * 0.6);
+      if (a.dist > OG_STALK_FAR) {
+        bs.wx = Math.max(-B, Math.min(B, P.x));
+        bs.wz = Math.max(-B, Math.min(B, P.z));
+      } else {
+        bs.wa = (bs.wa === undefined ? Math.random() * Math.PI * 2 : bs.wa) + 1.1;
+        bs.wx = Math.max(-B, Math.min(B, P.x + Math.cos(bs.wa) * OG_STALK_RING));
+        bs.wz = Math.max(-B, Math.min(B, P.z + Math.sin(bs.wa) * OG_STALK_RING));
+      }
+      dw = Math.hypot(bs.wx - e.pos.x, bs.wz - e.pos.z);
+    }
+
+    if (a.dist < OG_SWING) {
+      // At arm's length the boughs swing rather than sow - aiMelee drives the
+      // blow, and contact is bossTouch's business above either way.
+      aiMelee(e, a);
+    } else if (dw > 1.2) {
+      a.vx = ((bs.wx - e.pos.x) / dw) * a.sp;
+      a.vz = ((bs.wz - e.pos.z) / dw) * a.sp;
+    }
+
+    // THE DISPATCH. One commitment per global beat, ranged by which band the
+    // player is standing in and gated by each attack's own clock as well -
+    // the cadence is high precisely because the calls are cheap to read.
+    if (bs.atk <= 0) {
+      let pick = null;
+      if (a.dist < 7.5) {
+        // Bloom is the price of camping the open canopy; the trample through
+        // the player is the price of lingering at all.
+        pick = bs.bloomCd <= 0 ? 'bloom' : (bs.trampleCd <= 0 ? 'trample' : null);
+      } else if (a.dist > OG_WINDOW + 2) {
+        pick = bs.nooseCd <= 0 ? 'noose' : (bs.volleyCd <= 0 ? 'volley' : (bs.sunderCd <= 0 ? 'sunder' : null));
+      } else {
+        pick = bs.trampleCd <= 0 ? 'trample'
+          : (bs.volleyCd <= 0 ? 'volley'
+          : (bs.sunderCd <= 0 ? 'sunder' : (bs.nooseCd <= 0 ? 'noose' : null)));
+      }
+      if (pick === 'trample' && !_ogTrampleStart(e, a)) pick = null;
+      if (pick === 'volley') {
+        bs.state = 'volley';
+        bs.t = OG_SEED_WIND;
+        bs.stepT = 0;
+        bs.left = bs.enraged ? OG_SEED_RAGE : OG_SEED_N;
+        bs.volleyCd = OG_SEED_CD * e.rate * rage;
+      } else if (pick === 'sunder') {
+        bs.state = 'sunder';
+        bs.t = OG_SUNDER_WIND;
+        snapAim(e, a, true);
+        bs.sunderCd = OG_SUNDER_CD * e.rate * rage;
+      } else if (pick === 'bloom') {
+        bs.state = 'bloom';
+        bs.t = OG_BLOOM_WIND;
+        bs.bloomCd = OG_BLOOM_CD * e.rate * rage;
+      } else if (pick === 'noose') {
+        bs.state = 'noose';
+        bs.t = OG_NOOSE_WIND;
+        snapAim(e, a);
+        bs.nooseCd = OG_NOOSE_CD * e.rate * rage;
+      }
+      if (pick) {
+        bs.atk = OG_GCD * e.rate * rage;
+        e.flash = 0.15;
+      } else {
+        // Nothing in the band was ready: the beat passes, and the next one is
+        // soon - a re-poll, not a silence.
+        bs.atk = 0.35 * e.rate * rage;
+      }
+    }
   }
+
+  _ogDress(e, bs, a.dt);
 }
 
 // ---- the Conductor ----------------------------------------------------------
@@ -749,33 +1226,36 @@ const TYPES = {
     build: buildMothcap, ai: aiMothcap,
   },
 
-  // VERDANT's boss, and the only thing in the game that never takes a step.
+  // VERDANT's boss. The old Overgrowth never took a step, and a boss the
+  // player could simply walk away from turned out to be a boss whose entire
+  // threat fit under it: this one WALKS.
   //
-  // IT IS ROOTED. That single decision is the fight: the player can always
-  // walk away from it, so the pressure cannot come from the boss chasing and
-  // has to come from the ARENA closing in instead. It grows creepers - lines
-  // of thorns marching outward along the ground toward wherever the player is
-  // standing - and rings itself with them when they come near.
+  // It stalks the arena on its root ball, reseating around the player every
+  // couple of seconds, and it commits to something every second and a half -
+  // SEEDFALL from the canopy, ROOT SUNDER down a locked bearing, the BRAMBLE
+  // TRAMPLE down a drawn lane, a SPORE BLOOM rung around itself, and the
+  // GRASPING THICKET underfoot wherever the player ran to. Every one is one
+  // of the theme's own ideas grown to scale, and every one is announced with
+  // a full tell: a lane, a ring of filling circles, the boughs winding.
+  // Touching it costs immediately, in any state, and under half its bar it
+  // stops pacing itself.
   //
-  // AND THE PLAYER CHOOSES THE WINDOW. Its canopy is shut and armoured at any
-  // distance, and OPENS when they come inside sixteen metres. There is no clock
-  // on it at all: unlike the Forge, which decides when it is vulnerable, and
-  // the Pale Crown, whose anchors decide, this one is decided entirely by
-  // where the player stands. The rings bite to just under nine metres and the
-  // swing to just past four, so the outer band of the window - roughly nine to
-  // sixteen - is full damage from beyond both: the trade that used to be the
-  // price of admission is now one the player can decline.
+  // AND THE PLAYER STILL CHOOSES THE WINDOW - the one thing the rework kept:
+  // its canopy is shut and armoured at any distance and OPENS within sixteen
+  // metres, decided entirely by where the player stands. Except now the boss
+  // spends the whole fight trying to take the range it wants BY MOVING, and
+  // the swing, the bloom's band and the trample make sure the player's answer
+  // is never free either.
   overgrowth: {
     head: { r: 0.42, y: 1.5 },
-    hp: 3500, speed: 0, damage: 26, value: 6500, color: 0x7ea63c, eye: 0xd6ff8a,
+    hp: 3500, speed: 2.4, damage: 26, value: 6500, color: 0x7ea63c, eye: 0xd6ff8a,
     scale: 3.1, radius: 2.0, mass: 10, boss: true,
     hitbox: { r: 0.76, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    // It cannot chase, so it swings at anything that comes to it. The swing's
-    // reach sits in the innermost part of the window - aiOvergrowth gates it
-    // at six - so standing that deep costs the melee even when the thorns
-    // are not up.
+    // The boughs, unchanged. It plants to attack rather than walking through
+    // one, so the swing lives in the stalk state between the five - and with
+    // bossTouch on top, there is no frame of the fight where contact is free.
     melee: { windup: 0.7, start: 3.4, hit: 4.2, cd: 2.2 },
     // Open when the player is near. NOT a state it sets itself - `bs.open` is
     // recomputed from range every frame in aiOvergrowth, so the armour and the

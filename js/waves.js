@@ -87,7 +87,7 @@ export function bossScale(n) {
 const ADD_PRESSURE = {
   schism: 3,
   choir: 3,
-  overgrowth: 3,   // it cannot move, so its adds ARE its reach
+  overgrowth: 3,   // its own seeds, fissures and clouds already take up the floor
   broodmother: 3,  // the brood already takes up the floor
   mirrorboss: 4,   // its walls already take up the floor
   carillon: 3,     // the tolls already take up the floor, and they spread

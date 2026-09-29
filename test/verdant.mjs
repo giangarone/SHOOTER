@@ -22,8 +22,11 @@
 //     heartwood   the only enemy that gives health back, which is the one
 //                 effect a player cannot see happening to them
 //     mothcap     the only LOW flier, trailing a cloud that outlives it
-//     overgrowth  a boss that never moves, whose damage window is opened by
-//                 the PLAYER's position rather than by any clock of its own
+//     overgrowth  a boss that WALKS the room and sows it as it goes: five
+//                 attacks on a short rhythm, each one of the theme's own
+//                 ideas grown to boss scale - and whose damage window is
+//                 still opened by the PLAYER's position rather than by any
+//                 clock of its own
 //
 // WHAT IS ASSERTED
 //   1. All six build and survive their AI.
@@ -32,9 +35,11 @@
 //   4. Standing next to a bramblehide costs health without it swinging.
 //   5. A heartwood heals a hurt neighbour, and stops when it dies.
 //   6. A mothcap flies low and leaves a cloud that outlives it.
-//   7. The Overgrowth never moves, opens when the player is close - and now
-//      from beyond its thorn band, which pins the doubled window - and
-//      answers range with a creeper.
+//   7. The Overgrowth: it walks between attack commitments, the window is
+//      still the player's, contact costs immediately, and each of the five
+//      attacks - seedfall, root sunder, bramble trample, spore bloom,
+//      grasping thicket - fires from its real place in the fight. An enrage
+//      under half the bar shortens every clock the fight runs on.
 import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8224;
@@ -70,8 +75,6 @@ try {
       while (g.time < until) await step();
     };
     const res = {};
-    // What a creeper is supposed to lay, mirrored from OG_CREEP_N in enemy.js.
-    const OG_CREEP_N_EXPECTED = 5;
 
     g.autoTest = false;
     g.input.shoot = false;
@@ -341,74 +344,323 @@ try {
       clean();
     }
 
-    // ---- 7. the Overgrowth ----------------------------------------------
+    // ---- 7. the Overgrowth ------------------------------------------------
+    // The rework made the tree walk: it stalks between attack commitments and
+    // sows the arena as it goes. Each mechanic is isolated by bankrupting the
+    // REST of its schedule - the fight's clocks all live on bs, so that is
+    // the honest way in rather than poking at internals mid-flight.
     {
-      clean();
-      g.setTheme('verdant');
-      const e = put('overgrowth', 20, 0);
-      const startX = e.pos.x;
-      const startZ = e.pos.z;
-      const armorNow = () => TYPES.overgrowth.armor(e);
-
-      // Far away: shut, armoured, and it answers with a creeper.
-      px = 0;
-      pz = 0;
-      e.pos.set(20, e.pos.y, 0);
-      await simSteps(1);
-      res.ogShutFar = !e.bs.open;
-      res.ogArmorFar = armorNow();
-      // THE PEAK, not the count at some instant. A creeper's five thorns are
-      // laid in ONE frame and then expire on five different clocks, so a
-      // sample taken a moment later sees however many happen to be left - the
-      // first version of this read one and called the mechanic broken.
-      let peak = 0;
-      let snapshot = [];
-      for (let i = 0; i < 900; i++) {
-        await step();
-        if (g._mortars.length > peak) {
-          peak = g._mortars.length;
-          snapshot = g._mortars.map((m) => ({ x: m.x, z: m.z, delay: m.delay }));
+      const results = res;
+      // ---- 7a. IT WALKS. ---------------------------------------------------
+      // With every attack bankrupted there is nothing left but the stalk: if
+      // the tree does not cover ground in three seconds, it is not hunting.
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 16, 8);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 1e6;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd']) e.bs[k] = 1e6;
+        // PATH LENGTH, not net displacement: with attacks bankrupted the boss
+        // hangs a ring off the player and reseats around them, so an honest
+        // walk can end near where it started. A rooted tree walks ZERO path;
+        // a hunting one covers metres of it. That is the whole rework claim.
+        let path = 0;
+        let lx = e.pos.x;
+        let lz = e.pos.z;
+        const until = g.time + 3;
+        while (g.time < until) {
+          await step();
+          path += Math.hypot(e.pos.x - lx, e.pos.z - lz);
+          lx = e.pos.x;
+          lz = e.pos.z;
         }
-        if (peak >= OG_CREEP_N_EXPECTED) break;
-      }
-      res.ogCreeper = peak;
-      // A creeper is a LINE marching outward, so its thorns are at increasing
-      // distances from the boss and sprout at increasing times.
-      if (snapshot.length > 1) {
-        const ds = snapshot.map((m) => Math.hypot(m.x - e.pos.x, m.z - e.pos.z));
-        const ts = snapshot.map((m) => m.delay);
-        let ordered = true;
-        const idx = ds.map((d, i) => i).sort((a, b) => ds[a] - ds[b]);
-        for (let i = 1; i < idx.length; i++) {
-          if (ts[idx[i]] < ts[idx[i - 1]]) ordered = false;
-        }
-        res.ogCreeperOrdered = ordered;
+        results.ogMoved = +path.toFixed(2);
+        results.ogInArena = Math.abs(e.pos.x) <= 21.2 && Math.abs(e.pos.z) <= 21.2;
+        clean();
       }
 
-      // Mid range, in the band the doubled window bought. Twelve metres is
-      // outside the swing (six) and the ring's thorn band (out to nine), and
-      // under the old eight-metre window this position was shut and armoured.
-      // This is the assertion that pins the doubling: a revert of OG_WINDOW
-      // fails HERE, while the 4m check below would pass either way.
-      px = e.pos.x - 12;
-      pz = 0;
-      await simSteps(1);
-      res.ogOpenMid = e.bs.open;
-      res.ogArmorMid = armorNow();
+      // ---- 7b. the window is still the player's. ---------------------------
+      // THE PEAK armour and canopy asserts survive the rework word for word:
+      // shut and armoured at range, open and full-damage within sixteen, and
+      // the canopy visibly apart when it is. The boss walking under the
+      // window changes whose problem the range is, never whose CHOICE it is.
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 20, 0);
+        await simSteps(0.2);
+        e.bs.atk = 1e6;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd']) e.bs[k] = 1e6;
+        const armorNow = () => TYPES.overgrowth.armor(e);
+        px = 0;
+        pz = 0;
+        await simSteps(0.6);
+        results.ogShutFar = !e.bs.open;
+        results.ogArmorFar = armorNow();
+        px = e.pos.x - 12;
+        pz = e.pos.z;
+        await simSteps(0.6);
+        results.ogOpenMid = e.bs.open;
+        results.ogArmorMid = armorNow();
+        px = e.pos.x - 4;
+        pz = e.pos.z;
+        await simSteps(0.8);
+        results.ogOpenNear = e.bs.open;
+        results.ogArmorNear = armorNow();
+        results.ogCanopyMoved = e.canopy && e.canopy[0].position.y > 2.05 * e.scale;
+        clean();
+      }
 
-      // Close in: the canopy opens and it takes full damage.
-      px = e.pos.x - 4;
-      pz = 0;
-      await simSteps(1);
-      res.ogOpenNear = e.bs.open;
-      res.ogArmorNear = armorNow();
-      res.ogCanopyMoved = e.canopy && e.canopy[0].position.y > 2.05 * e.scale;
+      // ---- 7c. TOUCHING IT COSTS, NOW. --------------------------------------
+      // Melee held at sixty seconds and every attack bankrupted: whoever
+      // hurts the player ON the body can only be the touch. Half a second of
+      // contact is the window - the first frame of it is already too late.
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 0, 12);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 1e6;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd']) e.bs[k] = 1e6;
+        e.attackCd = 60;
+        e.bs.touchCd = 0;
+        god = false;
+        p.health = p.maxHealth;
+        const before = p.health;
+        px = e.pos.x - (e.radius + 0.5);
+        pz = e.pos.z;
+        await simSteps(0.4);
+        // Sixty seconds of melee clock decays by at most a frame of dt across
+        // this window, so nothing but the touch can land in it.
+        results.ogTouchLoss = +(before - p.health).toFixed(2);
+        god = true;
+        p.health = p.maxHealth;
+        clean();
+      }
 
-      // AND IT NEVER MOVED. Not once, through either phase.
-      res.ogMoved = +Math.hypot(e.pos.x - startX, e.pos.z - startZ).toFixed(2);
-      clean();
-      g.setTheme(null);
+      // ---- 7d. seedfall: a real volley, and every seed a delayed mortar. ---
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 13, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 0.2;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'volleyCd' ? 0 : 1e6;
+        // Counted as THROWN, not airborne at once: the ripple lands its first
+        // seed within the same beat its last one leaves the canopy, so a
+        // concurrency peak under-reads the volley by construction.
+        let thrown = 0;
+        let inFlight = 0;
+        let mortarPeak = 0;
+        let hazPeak = 0;
+        for (let i = 0; i < 1200; i++) {
+          await step();
+          const now = g.projectiles.filter((pr) => pr.kind === 'seed').length;
+          if (now > inFlight) thrown += now - inFlight;
+          inFlight = now;
+          mortarPeak = Math.max(mortarPeak, g._mortars.length);
+          hazPeak = Math.max(hazPeak, g._hazard.length);
+          if (thrown >= 4 && mortarPeak >= 4) break;
+        }
+        results.ogSeeds = thrown;
+        results.ogSeedMortars = mortarPeak;
+        results.ogSeedHazards = hazPeak;
+        clean();
+      }
+
+      // ---- 7e. root sunder: a fissure down a locked line. ------------------
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 10, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 0.2;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'sunderCd' ? 0 : 1e6;
+        // THE PEAK, not the count at some instant: the thorns are laid in one
+        // frame and expire on as many clocks.
+        let peak = 0;
+        let snapshot = [];
+        for (let i = 0; i < 600; i++) {
+          await step();
+          if (g._mortars.length > peak) {
+            peak = g._mortars.length;
+            snapshot = g._mortars.map((m) => ({
+              x: m.x, z: m.z, delay: m.delay,
+              sx: e.pos.x, sz: e.pos.z,
+            }));
+          }
+          if (peak >= 5) break;
+        }
+        results.ogSunderN = peak;
+        if (peak === 0) {
+          results.ogSunderDbg = JSON.stringify({
+            state: e.bs.state, dist: +Math.hypot(e.pos.x - px, e.pos.z - pz).toFixed(2),
+            atk: +e.bs.atk.toFixed(2),
+            marks: g.effects.marks.filter((m) => m.used).length,
+          });
+        }
+        if (snapshot.length > 2) {
+          const ds = snapshot.map((m) => Math.hypot(m.x - m.sx, m.z - m.sz));
+          const ts = snapshot.map((m) => m.delay);
+          let ordered = true;
+          const idx = ds.map((d, i) => i).sort((a, b) => ds[a] - ds[b]);
+          for (let i = 1; i < idx.length; i++) {
+            if (ts[idx[i]] < ts[idx[i - 1]]) ordered = false;
+          }
+          results.ogSunderOrdered = ordered;
+          results.ogSunderSpan = +(Math.max(...ds) - Math.min(...ds)).toFixed(2);
+        }
+        clean();
+      }
+
+      // ---- 7f. the bramble trample: lane, rush, landing ring. --------------
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 11, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        // The boss hunts between beats, so the dispatch's read of range is
+        // pinned instead: the player stands nine metres down a clear axis at
+        // the moment the clock fires, and the FIRST rush is the one measured -
+        // a later one could honestly start from arm's length and cross less
+        // ground, which proves nothing about the mechanic.
+        px = e.pos.x - 9;
+        pz = e.pos.z;
+        e.bs.atk = 0;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'trampleCd' ? 0 : 1e6;
+        let sawLane = false;
+        let sawRush = false;
+        let rushFrom = null;
+        let rushMoved = 0;
+        let eruptRing = 0;
+        let ringWindow = -1;
+        for (let i = 0; i < 1200; i++) {
+          await step();
+          if (e.bs.state === 'trample') {
+            sawLane = sawLane || g.effects.marks.some((m) => m.used && m.lane.visible);
+          }
+          if (e.bs.state === 'rush') {
+            sawRush = true;
+            if (!rushFrom) rushFrom = { x: e.pos.x, z: e.pos.z };
+            rushMoved = Math.max(rushMoved, Math.hypot(e.pos.x - rushFrom.x, e.pos.z - rushFrom.z));
+          }
+          if (sawRush && e.bs.state !== 'rush') {
+            if (ringWindow < 0) ringWindow = i;
+            eruptRing = Math.max(eruptRing, g._mortars.length);
+            if (i > ringWindow + 120) break;
+          }
+        }
+        results.ogLaneDrawn = sawLane;
+        results.ogRush = sawRush;
+        results.ogRushMoved = +rushMoved.toFixed(2);
+        results.ogEruptRing = eruptRing;
+        clean();
+      }
+
+      // ---- 7g. the spore bloom: a burst that becomes ground. ---------------
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 5, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 0.2;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'bloomCd' ? 0 : 1e6;
+        for (let i = 0; i < 600 && kinds('gas').length < 3; i++) await step();
+        results.ogBloomClouds = kinds('gas').length;
+        clean();
+      }
+
+      // ---- 7h. the grasping thicket, rung around the PLAYER. ---------------
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 20, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        e.bs.atk = 0.2;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'nooseCd' ? 0 : 1e6;
+        let peak = 0;
+        let snapshot = [];
+        for (let i = 0; i < 600; i++) {
+          await step();
+          if (g._mortars.length > peak) {
+            peak = g._mortars.length;
+            snapshot = g._mortars.map((m) => ({ x: m.x, z: m.z, bx: e.pos.x, bz: e.pos.z }));
+          }
+          if (peak >= 5) break;
+        }
+        results.ogNooseN = peak;
+        if (snapshot.length >= 5) {
+          // The noose is thrown at the player's feet (the origin, where they
+          // are pinned), NOT rung around the boss - opposite shapes.
+          const dp = snapshot.map((m) => Math.hypot(m.x, m.z));
+          const db = snapshot.map((m) => Math.hypot(m.x - m.bx, m.z - m.bz));
+          results.ogNooseOnPlayer =
+            dp.every((d) => d > 2.5 && d < 6.8) && Math.min(...db) > 10;
+          // ...and it has a door: one angular gap visibly wider than the rest.
+          const angs = snapshot.map((m) => Math.atan2(m.z, m.x)).sort((a, b) => a - b);
+          angs.push(angs[0] + Math.PI * 2);
+          let maxGap = 0;
+          for (let i = 1; i < angs.length; i++) maxGap = Math.max(maxGap, angs[i] - angs[i - 1]);
+          results.ogNooseMaxGap = +maxGap.toFixed(2);
+          results.ogNooseGap = maxGap >= 2.0;
+        }
+        clean();
+      }
+
+      // ---- 7i. under half the bar it stops pacing itself. ------------------
+      {
+        clean();
+        g.setTheme('verdant');
+        const e = put('overgrowth', 12, 0);
+        px = 0;
+        pz = 0;
+        await simSteps(0.2);
+        results.ogCalmFirst = e.bs.enraged !== true;
+        e.hp = e.maxHp * 0.45;
+        await simSteps(0.4);
+        results.ogEnraged = e.bs.enraged === true;
+        // ...and growth with it: the enraged volley is two seeds longer.
+        // Counted as THROWN, not airborne at once: the first seed lands within
+        // the same beat the sixth leaves the canopy, so a concurrency peak
+        // under-reads by construction.
+        e.bs.atk = 0.2;
+        for (const k of ['volleyCd', 'sunderCd', 'trampleCd', 'bloomCd', 'nooseCd'])
+          e.bs[k] = k === 'volleyCd' ? 0 : 1e6;
+        let thrown = 0;
+        let inFlight = 0;
+        for (let i = 0; i < 900; i++) {
+          await step();
+          const now = g.projectiles.filter((pr) => pr.kind === 'seed').length;
+          if (now > inFlight) thrown += now - inFlight;
+          inFlight = now;
+          if (thrown >= 6 && i > 300) break;
+        }
+        results.ogRageSeeds = thrown;
+        clean();
+        g.setTheme(null);
+      }
     }
+
 
     await steps(30);
     return res;
@@ -444,15 +696,36 @@ try {
     out.mothCloud > 0 && out.mothLow, `n=${out.mothCloud}`);
   ok('and the cloud outlives it', out.mothCloudOutlives);
 
-  ok('the Overgrowth is shut and armoured at range',
+  ok('the Overgrowth walks the arena between its commitments',
+    out.ogMoved >= 3.5 && out.ogInArena, `moved=${out.ogMoved}m in 3s`);
+  ok('and the window is still the player\'s: shut and armoured at range',
     out.ogShutFar && out.ogArmorFar > 0 && out.ogArmorFar < 1, `armor=${out.ogArmorFar}`);
-  ok('it answers range with a creeper', out.ogCreeper > 1, `thorns=${out.ogCreeper}`);
-  ok('and the creeper marches outward', out.ogCreeperOrdered);
-  ok('the window opens from outside the thorn band',
+  ok('open and full-damage within it',
     out.ogOpenMid && out.ogArmorMid === 1, `armor=${out.ogArmorMid} at 12m`);
-  ok('coming close opens the canopy',
+  ok('the canopy visibly parting in the close band',
     out.ogOpenNear && out.ogArmorNear === 1 && out.ogCanopyMoved, `armor=${out.ogArmorNear}`);
-  ok('and it never takes a step', out.ogMoved < 0.01, `moved=${out.ogMoved}m`);
+  ok('touching it costs immediately, attack or no attack',
+    out.ogTouchLoss > 0, `-${out.ogTouchLoss}hp in 0.4s of contact`);
+  ok('seedfall: a volley of seeds arches out of the canopy',
+    out.ogSeeds >= 4, `peak=${out.ogSeeds}`);
+  ok('each seed sprouting a telegraphed mortar and growing no ground',
+    out.ogSeedMortars >= 4 && out.ogSeedHazards === 0,
+    `mortars=${out.ogSeedMortars} hazards=${out.ogSeedHazards}`);
+  ok('root sunder lays a fissure down a locked line',
+    out.ogSunderN >= 5 && out.ogSunderOrdered && out.ogSunderSpan > 9,
+    `thorns=${out.ogSunderN} span=${out.ogSunderSpan}m ${out.ogSunderDbg || ''}`);
+  ok('the bramble trample draws its lane and then comes down it',
+    out.ogLaneDrawn && out.ogRush && out.ogRushMoved >= 5,
+    `lane=${out.ogLaneDrawn} rush=${out.ogRush} moved=${out.ogRushMoved}m`);
+  ok('and lands in a ring of thorns', out.ogEruptRing >= 3, `ring=${out.ogEruptRing}`);
+  ok('the spore bloom leaves lingering clouds around the trunk',
+    out.ogBloomClouds >= 3, `clouds=${out.ogBloomClouds}`);
+  ok('the grasping thicket rings the PLAYER, with a door out',
+    out.ogNooseN >= 5 && out.ogNooseOnPlayer && out.ogNooseGap,
+    `thorns=${out.ogNooseN} maxGap=${out.ogNooseMaxGap}rad`);
+  ok('under half the bar it stops pacing itself',
+    out.ogEnraged && out.ogRageSeeds >= 6,
+    `calmFirst=${out.ogCalmFirst} seeds=${out.ogRageSeeds}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

@@ -532,10 +532,11 @@ try {
         // leak. What is being asserted is that the pool comes BACK, not that
         // it comes back within one frame.
         //
-        // It only started failing when this loop began walking the player into
-        // the Overgrowth's canopy: before that the one rooted boss never got
-        // to lay a ring at all, so it never had a telegraph outstanding when
-        // it died.
+        // The Overgrowth's canopy opens only for a player standing in it, and
+        // this is the one damage gate the loop cannot open with a flag. A
+        // boss chipped from outside the window also never had the chance to
+        // hold a telegraph at death - and a leaked mark is the leak this
+        // harness exists to catch.
         await sleep(900);
         seen.after = await page.evaluate(() => ({
           marks: window.__game.effects.marks.filter((m) => m.used).length,

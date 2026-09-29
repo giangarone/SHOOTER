@@ -904,8 +904,9 @@ export function markDrop(e) {
 // The mortar API owns its mark once spawned. Reserve-check synchronously so
 // an exhausted warning pool cannot turn a patterned eruption into a blind hit.
 // `ground` is forwarded to _addMortar untouched - a warned impact that lands
-// as burning floor (see the HERALD's brands) is the same reservation.
-export function addWarnedMortar(ctx, x, z, radius, delay, damage, ground) {
+// as burning floor (the HERALD's brands) or as a lingering cloud (the
+// Overgrowth's bloom) is the same reservation.
+export function addWarnedMortar(ctx, x, z, radius, delay, damage, ground = null) {
   const h = ctx.effects.markAcquire();
   if (h < 0) return false;
   ctx.effects.markRelease(h);

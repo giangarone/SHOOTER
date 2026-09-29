@@ -816,15 +816,19 @@ context. The start screen says so, and one click anywhere fixes it.
   no bar. It walks faster than it did, it never gates its damage behind
   anything, and it is never more than about a second and a half from its next
   attack.
-  **THE OVERGROWTH**, VERDANT's, is the only
-  thing in the game that never takes a step: rooted where it grew, so the
-  player can always walk away and the pressure has to come from the arena
-  closing in instead - creepers of thorns marching outward along the ground
-  toward wherever they are standing. And the player chooses its damage window,
-  which no other boss allows: its canopy is shut and armoured at any range and
-  OPENS when they come inside sixteen metres - its rings bite to nine and its
-  swing to four, so the band beyond nine is full damage from outside everything
-  it can do. There is no clock on it at all. **THE PALE CROWN**, RIME's, is the one fight in
+  **THE OVERGROWTH**, VERDANT's, walks the
+  room it has taken: it stalks a ring's width off the player, reseating every
+  couple of seconds, and commits to one of five attacks about every second and
+  a half - seeds that arch out of the canopy and sprout two seconds later on
+  where you WERE heading, a fissure of thorns racing down the line the boughs
+  wound up on, a trample down a corridor it draws across the floor first, a
+  bloom of lingering spore clouds rung around its trunk, and a gapped ring of
+  thorns thrown underfoot wherever you ran to. Touching it costs at any
+  moment, and under half the bar every clock shortens and the charge comes
+  back for a second pass. And the one thing carried over untouched: you still
+  choose its damage window - its canopy is shut and armoured at any range and
+  OPENS when you come inside sixteen metres, no clock on it at all, so the
+  whole fight is the two of you arguing about the distance. **THE PALE CROWN**, RIME's, is the one fight in
   the rotation that is not about the boss: it spends most of itself inside a
   shell that takes NOTHING at all, and the way in is never the boss - three
   anchors go into the floor with the shell, and breaking all three is what
@@ -3308,7 +3312,9 @@ test/jungle.mjs     JUNGLE ambushes, pollen, boss attacks and warning ownership
 test/verdant.mjs    VERDANT end to end - the thornling's committed charge, the
                     seed that is safe until it is not, the thorn band outside
                     the swing, the heartwood's mending, and the Overgrowth's
-                    player-chosen window
+                    walking pattern-fight: all five attacks from their real
+                    bands, contact costing touch, and the window still the
+                    player's own distance to choose
 test/strata.mjs     STRATA end to end - the scree's carom, the slinger's single
                     bounce, the geode firing at where you have been, and the
                     gargoyle's perch
