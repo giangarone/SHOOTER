@@ -13,8 +13,8 @@
 import * as THREE from 'three';
 import {
   ENEMY_TYPES, GAS_DPS, SHARED_MATS, SPLITTER_BODY, SPLITTER_EYE, _blinkAt,
-  _bossAt, aiMelee, eyes, geo, lump, orbit, partsFor, prism, shard, slab,
-  spike,
+  _bossAt, aiMelee, bossTouch, eyes, geo, lump, orbit, partsFor, prism,
+  releaseMarks, segBlocked, shard, slab, snapAim, faceSnap, spike,
 } from './shared.js';
 
 // A husk's burst. Wider and shorter-lived than a thrown cloud: it is a body
@@ -197,14 +197,13 @@ export function buildBloatfly(e, g, s) {
   eyes(P, { y: 0.9, x: 0.1, z: -0.46, r: 0.7, mat: e.eyeMat });
 }
 
-// ---- SOLAR -----------------------------------------------------------------
-// The theme's language: A NARROW CORE CARRYING ONE BIG FLAT PANEL. A mask, a
-// shield, a lens, a ring - always a single broad plate held clear of a thin
-// body, and always the widest thing in the outline. Where PLAGUE is splitting
-// and BRINE hangs, SOLAR is a thing HOLDING A MIRROR UP.
-
-// Two crystals side by side with a lit gap between them. The whole model is
-// the mechanic: it is already two, and it is going to be four.
+// ---- the PLAGUE boss -------------------------------------------------------
+// The theme's language carries over whole: A BLOATED MASS, BURST OPEN. Two
+// split halves with a wound of light between them, a keel it slides on, and -
+// the rework's addition - a pair of SOFT SACS slung in the seam. The sacs are
+// the tell: they swell before anything the fight is about to do with its rot
+// (the nova, the rain), which is the same read the husk and the bloatfly
+// already taught.
 export function buildSchism(e, g, s) {
   const P = partsFor(e, g, s);
   // Held far enough apart that the gap survives a three-quarter view - at
@@ -217,6 +216,12 @@ export function buildSchism(e, g, s) {
   const b = P('schismGlow', shard(0.22), {
     y: 1.02, mat: SHARED_MATS.splitterCore, shadow: false,
   });
+  // THE SACS. In the family's own gas green, out past the body between the
+  // halves: the reservoir the nova and the spore rain visibly draw on.
+  e.sacs = [
+    P('schismSac', lump(0.15), { x: -0.24, y: 1.24, z: -0.14, mat: SHARED_MATS.huskSac, shadow: false }),
+    P('schismSac', lump(0.15), { x: 0.24, y: 1.24, z: -0.14, mat: SHARED_MATS.huskSac, shadow: false }),
+  ];
   e.coreMesh = a;
   e.ringMesh = b;
   eyes(P, { y: 1.3, x: 0.24, z: -0.24, r: 1.2, mat: e.eyeMat });
@@ -367,8 +372,6 @@ export function aiBloatfly(e, a) {
     ctx.effects.shockwave(_plagueAt, 0xcc3d8a, BLOAT_CLOUD_R, 0.5);
   }
 }
-
-// ---- SOLAR -----------------------------------------------------------------
 
 export function aiVitriol(e, a) {
   orbit(e, a, ENEMY_TYPES.vitriol.orbit);
