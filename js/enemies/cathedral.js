@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, _bossAt, _blinkAt, aiMelee, bossTouch, eyes, geo,
-  landHit, lump, orbit, partsFor, prism, slab, shard, spike,
+  ARENA_HALF, BOSS_REACH_Y, ENEMY_TYPES, SHARED_MATS, _blinkAt, _bossAt,
+  _reachY, aiMelee, bossTouch, eyes, geo, landHit, lump, orbit, partsFor,
+  prism, slab, shard, spike,
 } from './shared.js';
 
 // ---- the theme --------------------------------------------------------------
@@ -941,46 +942,66 @@ export function buildVigil(e, g, s) {
 // THE RELIQUARY. A shrine that walks: a reliquary box carried under a great
 // buttressed arch on four claw-legs, with a crown of candles along the
 // spanner and a gable cresting it, a bell hung at the yoke's crown, and the
-// theme's lantern flaring at the centre. The box is the health bar's
-// argument - shut and armoured until the last third, then the lids go wide
-// and the glow pours out.
+// theme's lantern flaring at the centre. Under the last third of the bar
+// the lids go wide for good and the glow pours out - the fight's ESCALATION,
+// not its armour; there is none of that anywhere on this body.
+//
+// THE STONE AND THE BRASS ARE THIS INSTANCE'S OWN. The head region of this
+// boss - the arch, the span, the crown of candles - is nearly all accent
+// material, and a headshot that lit nothing read as a hit the game refused:
+// the whole silhouette has to flash as ONE hittable body. So the two theme
+// materials are cloned per instance, registered on `flashMats` (they join the
+// hit flash and nothing else - statuses still cannot tint them, so a frozen
+// shrine still carries its own lit brass), and freed through _extraMats like
+// every per-instance material a build allocates. The theme's six other
+// bodies keep the shared pair untouched.
 export function buildReliquary(e, g, s) {
   const P = partsFor(e, g, s);
+  const stone = SHARED_MATS.cathStone.clone();
+  const gilt = SHARED_MATS.cathGilt.clone();
+  e._extraMats.push(stone, gilt);
+  e.flashMats = [stone, gilt].map((m) => ({
+    mat: m, hex: m.emissive.getHex(), i: m.emissiveIntensity,
+  }));
   // THE ARCH, at boss scale: two great uprights on capitals, a spanner and
   // its gable, carrying the whole silhouette. The boss is a doorway, and it
   // is walking through itself.
-  P('relUpL', slab(0.16, 1.9, 0.18), { x: -0.66, y: 1.7, rz: 0.06, mat: SHARED_MATS.cathStone });
-  P('relUpR', slab(0.16, 1.9, 0.18), { x: 0.66, y: 1.7, rz: -0.06, mat: SHARED_MATS.cathStone });
-  P('relCapL', slab(0.26, 0.12, 0.28), { x: -0.69, y: 2.56, mat: SHARED_MATS.cathStone });
-  P('relCapR', slab(0.26, 0.12, 0.28), { x: 0.69, y: 2.56, mat: SHARED_MATS.cathStone });
-  P('relSpan', slab(1.6, 0.14, 0.2), { y: 2.7, mat: SHARED_MATS.cathStone });
-  P('relGable', spike(0.22, 0.4, 4), { y: 2.95, z: 0.22, mat: SHARED_MATS.cathStone });
+  P('relUpL', slab(0.16, 1.9, 0.18), { x: -0.66, y: 1.7, rz: 0.06, mat: stone });
+  P('relUpR', slab(0.16, 1.9, 0.18), { x: 0.66, y: 1.7, rz: -0.06, mat: stone });
+  P('relCapL', slab(0.26, 0.12, 0.28), { x: -0.69, y: 2.56, mat: stone });
+  P('relCapR', slab(0.26, 0.12, 0.28), { x: 0.69, y: 2.56, mat: stone });
+  P('relSpan', slab(1.6, 0.14, 0.2), { y: 2.7, mat: stone });
+  P('relGable', spike(0.22, 0.4, 4), { y: 2.95, z: 0.22, mat: stone });
   // A CROWN OF CANDLES along the spanner, the sacristan's lit brass at boss
-  // scale - the skyline that says CATHEDRAL from anywhere in the room.
+  // scale - the skyline that says CATHEDRAL from anywhere in the room. Kept
+  // as a list on the enemy: the CANDLES rite lights them one at a time, and
+  // a tell the player is meant to read has to be on the model, not in prose.
+  e.relCandles = [];
   for (let i = 0; i < 5; i++) {
-    P('relCandle', spike(0.05, 0.26 + (i % 2) * 0.1, 4), {
-      x: -0.56 + i * 0.28, y: 2.9, mat: SHARED_MATS.cathGilt, shadow: false,
-    });
+    e.relCandles.push(P('relCandle', spike(0.05, 0.26 + (i % 2) * 0.1, 4), {
+      x: -0.56 + i * 0.28, y: 2.9, mat: gilt, shadow: false,
+    }));
   }
   // THE BELL, hung from the spanner's centre. It swings with each toll and
   // eases back upright between them - the fight's clock is on the model.
   e.relBell = new THREE.Mesh(
     geo('relBell', () => new THREE.CylinderGeometry(0.2, 0.34, 0.44, 6, 1, true)),
-    SHARED_MATS.cathGilt
+    gilt
   );
   e.relBell.position.set(0, 2.34 * s, 0);
   e.relBell.scale.setScalar(s);
   g.add(e.relBell);
   // THE RELIQUARY BOX, slung under the arch between the uprights: two lids
-  // that part as the fight goes on and come off for good at the opening.
-  // Shut, it is the armoured read - a reliquary is a box you cannot open.
+  // that part as the fight goes on and come off for good at the opening -
+  // the lid going wide is the light pouring out, and never armour coming off,
+  // because none was ever on.
   e.relLidL = P('relLidL', slab(0.5, 0.14, 1.1), { x: -0.3, y: 1.44, rz: 0.5 });
   e.relLidR = P('relLidR', slab(0.5, 0.14, 1.1), { x: 0.3, y: 1.44, rz: -0.5 });
   // A gilt finial on each lid's outer edge, as a CHILD of its lid - the
   // opening rotates the lids, and a finial anywhere else would be left
   // hanging where the lid was.
   for (const [lid, sx] of [[e.relLidL, -1], [e.relLidR, 1]]) {
-    const fin = new THREE.Mesh(geo('relFinial', spike(0.05, 0.16, 4)), SHARED_MATS.cathGilt);
+    const fin = new THREE.Mesh(geo('relFinial', spike(0.05, 0.16, 4)), gilt);
     fin.position.set(sx * 0.2, 0.14, 0);
     fin.castShadow = false;
     lid.add(fin);
@@ -988,7 +1009,7 @@ export function buildReliquary(e, g, s) {
   // THE LANTERN at the box's centre, inside the arch - the theme's own
   // lamp, at the scale of the thing carrying it. It flares for the volley.
   e.relLamp = P('relLamp', lump(0.24), {
-    y: 1.44, mat: SHARED_MATS.cathGilt, shadow: false,
+    y: 1.44, mat: gilt, shadow: false,
   });
   P('relChest', slab(0.6, 0.8, 1.0), { y: 1.1, rx: 0.04 });
   // THE CLAW-LEGS. Four, long and reaching, carrying the arch high over the
@@ -999,11 +1020,11 @@ export function buildReliquary(e, g, s) {
     const fore = i < 2 ? -1 : 1;
     P('relLeg', slab(0.14, 1.5, 0.14), {
       x: side * 0.7, y: 0.78, z: fore * 0.5, rz: side * 0.42, rx: fore * 0.3,
-      mat: SHARED_MATS.cathStone,
+      mat: stone,
     });
     P('relClaw', spike(0.11, 0.44, 4), {
       x: side * 0.98, y: 0.04, z: fore * 0.78, rx: Math.PI, rz: side * 0.34,
-      mat: SHARED_MATS.cathStone,
+      mat: stone,
     });
   }
   eyes(P, { y: 1.86, x: 0.16, z: -0.3, r: 1.0, mat: e.eyeMat });
@@ -1011,47 +1032,185 @@ export function buildReliquary(e, g, s) {
 
 // ---- the boss ----------------------------------------------------------------
 //
-// THE RELIQUARY, and the fight is the FLOOR. A shrine that walks, claiming
-// the ground around itself in gapped rings of consecration that stay where
-// it stood - over a fight the room fills with pockets of hallow exactly
-// where the boss has been, and the floor the player was kiting on goes away
-// a piece at a time.
+// THE RELIQUARY, and the fight is THE OFFICE: a liturgy the boss says over the
+// room, six rites on their own clocks, every one telegraphed on the MODEL and
+// on the floor, and every one the theme's single question - WHERE ARE YOU
+// STANDING WHEN IT LOOKS AT YOU - asked a different way:
 //
-//   the CLAIM    it stops, the floor around it pulses for a beat, and a
-//   (the ring)   gapped ring of consecration is laid where it stands. It
-//                walks on and the ring stays behind.
-//   the VOLLEY   a slow processional fan of three off the lantern, telegraphed
-//                by the lantern flaring - the curate's own attack at boss
-//                scale, which the player already knows how to read.
-//   the TOLL     under two thirds of the bar the bell tolls on its own: a
-//                chill that reaches wherever the player is, the sacristan's
-//                price collected by the sanctuary itself.
-//   the OPENING  under a third of the bar the reliquary opens for good - the
-//                lids go wide, the armour comes off, and the last third of
-//                the fight is the fastest.
+//   the VOLLEY    a fan of five off the lantern, flaring through the tell -
+//   (the fan)     the curate's processional at boss scale, fired often enough
+//                 to be the fight's metronome. Open, it throws twice.
+//   the PEAL      the bell swings, and a full RING of rounds goes out with
+//   (the ring)    ONE gap in it - and the lantern's beam has been showing the
+//                 gap for the whole of the tell. Stand in the light, or read
+//                 the ring. Open, the bell rings twice and the gap turns.
+//   the CANDLES   the crown of candles lights one at a time, and each flame
+//   (your trail)  FIXES the ground the player was standing on the moment it
+//                 lit. They land in the order they were taken - the fight
+//                 charging the player for their own footsteps.
+//   the PROCESSION the arch dips, a lane is painted THROUGH the player and out
+//   (the aisle)   the far side, and the shrine strides down it without
+//                 stopping - through pillars, an aisle does not detour -
+//                 consecrating the ground it walks and laying a claim ring
+//                 where it arrives. The room is crossed often now, and the
+//                 floor it has walked is the floor the player loses.
+//   the RISE      it KNEELS - the penitent's contract at boss scale, the whole
+//   (the nova)    shrine visibly folding in prayer while the floor around it
+//                 swells - and the rise is the hit. The answer to a praying
+//                 sanctuary is to not be in the circle when the prayer ends.
+//   the WATCH      the vigil's own rite at boss scale: the lantern gathers
+//   (the lance)    its light low, a beam is thrown down a bearing LOCKED at
+//                 the start of the tell, and the light itself SLOWS whoever
+//                 it is on - then one fast lance goes down the line. Step
+//                 off the locked beam; the slow is what makes the lance
+//                 land, and the lance goes where the light was, not where
+//                 the player is.
+//
+// And the old ground rule still stands: hallow stays behind wherever the
+// shrine has been, so the room still fills with consecrated ground - but it
+// is filled by where the boss HAS CHOSEN TO GO rather than by where the
+// player refused to fight it. Under two thirds of the bar the bell tolls on
+// its own, the chill that reaches wherever the player is standing - the
+// sacristan's price, collected by the sanctuary itself. Under a third the
+// reliquary OPENS for good: the lids go wide, the light pours out, and every
+// rite's clock shortens - the last third of the fight is the fastest, and
+// nothing about it is armoured.
+//
+// Standing on the shrine costs AT ALL TIMES, in every state - a reliquary
+// does not like being touched, and a fight this loud about its rites can
+// afford to be simple about its body.
 
-// The ring: how long it stands still to call one, how wide, how many patches,
-// and what each one costs to cross.
-export const REL_RING_TELL = 0.85;
+// The volley: cooldown, tell, and the fan across the middle - the middle
+// round is true, the rest walk off one step a side.
+export const REL_VOLLEY_CD = 2.4;
 
-export const REL_RING_R = 6.2;
+export const REL_VOLLEY_TELL = 0.5;
 
-export const REL_RING_N = 10;
+export const REL_VOLLEY_N = 5;
 
-export const REL_RING_PATCH_R = 2.1;
+export const REL_VOLLEY_FAN = 0.17;
 
-export const REL_RING_LIFE = 7.5;
+// The second throw, this long after the first, once the box is open.
+export const REL_VOLLEY2 = 0.38;
 
-export const REL_RING_DPS = 13;
+// The peal: the bell's ring of rounds, one gap wide, the beam on the gap for
+// the whole tell. REL_PEAL_GAP counts ROUNDS, not radians - two missing of
+// fourteen is the aisle the player is being shown, and it is wide because
+// the rounds are slow and the answer is meant to be walked, not squeezed.
+export const REL_PEAL_CD = 4.6;
 
-export const REL_RING_CD = 8;
+export const REL_PEAL_TELL = 0.85;
 
-// The volley: cooldown, tell, and the fan between the arms.
-export const REL_VOLLEY_CD = 3.2;
+export const REL_PEAL_N = 14;
 
-export const REL_VOLLEY_TELL = 0.55;
+export const REL_PEAL_GAP = 2;
 
-export const REL_VOLLEY_FAN = 0.18;
+// The second ring, once open: this long after the first, with the gap turned
+// this far - the light moves, and what was the safe answer is not any more.
+export const REL_PEAL2 = 0.55;
+
+export const REL_PEAL2_TURN = 2.0;
+
+// The candles: one lights every pace, and each FIXES the floor under the
+// player at that moment - the trail they walked, read back as the price of
+// it. The raise is the grace before the first light: the candles go out one
+// by one and the first mark is already filling, so a player paying attention
+// is never asked to have started moving before they could have known.
+export const REL_CANDLE_CD = 6.0;
+
+export const REL_CANDLE_RAISE = 0.55;
+
+export const REL_CANDLE_PACE = 0.38;
+
+export const REL_CANDLE_N = 5;
+
+export const REL_CANDLE_FILL = 1.1;
+
+export const REL_CANDLE_R = 2.3;
+
+export const REL_CANDLE_MUL = 0.7;
+
+// Capped per candle rather than left to scale, for the colossus slam's
+// reason: a late-wave multiplier on five tracked charges is a one-shot.
+export const REL_CANDLE_CAP = 22;
+
+// The procession: the lane it paints through the player and past them, the
+// stride it takes down it, and what the wake it leaves costs to stand in.
+// The stride is a STEP, not a sprint - an arch does not run, it advances.
+export const REL_PROC_CD = 7.5;
+
+export const REL_PROC_TELL = 0.9;
+
+export const REL_PROC_LEN = 16;
+
+export const REL_PROC_SPEED = 11;
+
+// The lane's half-width on the floor, drawn a shade wider than the arch's
+// shoulders - a warning is allowed to over-say, never to under-say.
+export const REL_PROC_R = 1.5;
+
+export const REL_PROC_SLAM_R = 3.6;
+
+export const REL_PROC_CAP = 30;
+
+export const REL_WAKE_EVERY = 0.26;
+
+export const REL_WAKE_R = 2.0;
+
+export const REL_WAKE_LIFE = 6.5;
+
+export const REL_WAKE_DPS = 12;
+
+// The claim at the waystation: the old stopped ring's terms, gapped the same
+// way, laid where the procession ARRIVES rather than where it was standing.
+export const REL_CLAIM_N = 6;
+
+export const REL_CLAIM_R = 4.7;
+
+export const REL_CLAIM_PATCH_R = 2.1;
+
+export const REL_CLAIM_LIFE = 7.5;
+
+export const REL_CLAIM_DPS = 13;
+
+// The watch: the vigil's lance at boss scale. The bearing locks when the
+// rite begins and the light is drawn down it for the whole tell - the
+// player's answer is the line, not the shooter, and the slow on the line is
+// what makes the single round a threat rather than a plink.
+export const REL_WATCH_CD = 6.5;
+
+export const REL_WATCH_TELL = 0.9;
+
+// The beam's reach, and its half-width as a slow.
+export const REL_WATCH_RANGE = 26;
+
+export const REL_WATCH_R = 1.2;
+
+// The slow refreshes every frame it is on somebody, with its own duration
+// as the tail, so it lapses the moment they step off the line - the bellows'
+// contract for a support the player cannot shoot.
+export const REL_WATCH_SLOW = 1.2;
+
+// The lance is the one FAST round the shrine throws - the lantern round's
+// speed scaled up, a quarter again as fast as the processional fan.
+export const REL_WATCH_SPEED = 1.5;
+
+// The rise: how close the fight has to be for the kneel, the kneel's length,
+// and what the circle costs when the prayer ends. The disc is drawn at
+// exactly the radius the rise answers - the hoarfrost's contract, kept: a
+// mechanic the player cannot see the edge of is a tax they cannot answer.
+export const REL_RISE_CD = 5.2;
+
+export const REL_RISE_RANGE = 8.5;
+
+export const REL_KNEEL = 0.95;
+
+export const REL_RISE_R = 5.6;
+
+export const REL_RISE_CAP = 28;
+
+// Both big poses straighten back up over this long.
+export const REL_RISE_RECOVER = 0.55;
 
 // The toll: when it starts on the bar, how often, and how long the chill.
 export const REL_TOLL_AT = 0.62;
@@ -1060,162 +1219,590 @@ export const REL_TOLL_CD = 3.4;
 
 export const REL_TOLL_CHILL = 2.0;
 
-// The opening, and what it is worth.
+// THE OPENING, and what it is worth. Under a third of the bar the reliquary
+// opens for keeps: the lids go wide and every rite's clock shortens by this
+// much. It is an escalation, not an armour coming off - there is none on the
+// box, and there never will be: the fight this boss replaced was a corner
+// and a pool of ammunition, and the opening is faster, not tougher.
 export const REL_OPEN_AT = 0.3;
 
-export const REL_OPEN_ARMOR = 0.3;
+export const REL_OPEN_RATE = 0.62;
+
+// The shared beat between rites. Something is ALWAYS being said now - the
+// liturgy's whole point is that the room is never quiet for eight seconds
+// the way the old ring's cooldown made it.
+export const REL_REST = 1.1;
 
 // How much the lantern flares on the volley tell.
 export const REL_LANTERN_FLARE = 1.9;
 
-// Scratch, module-level and reused: the ring-laying and every burst run more
-// than once a second across a whole fight.
+// The walk between rites: the band the shrine circles the nave at, rather
+// than a corner to be parked in - near enough that the melee and the rise
+// are real, far enough that the peal and the candles have a lane to work in.
+export const REL_ORBIT = {
+  dist: 9.5, band: 2.5, out: 0.85, in: -0.5, strafe: 0.55, flip: 2.0, flipVar: 2.2,
+};
+
+// Scratch, module-level and reused: the claims and every burst run more than
+// once a second across a whole fight.
 export const _cathAt = new THREE.Vector3();
+
+// The end of a rite: back to the walk for one short beat, posture cleared.
+// group.rotation.x is this type's own pose channel - the dance owns
+// rotation.z (see Enemy.update) and nothing but these rites may write x.
+function _relRest(e, bs, rate) {
+  bs.state = 'walk';
+  bs.rest = REL_REST * rate;
+  e.group.rotation.x = 0;
+  e._setEyeAlert(false);
+}
+
+// The one fan, off the LANTERN at its real height: the flare on it is the
+// tell, and the rounds should leave from where the tell was. The middle
+// round is true; the rest walk off one step a side.
+function _reliquaryFan(e, a, ctx) {
+  const y = 1.44 * e.scale;
+  for (let i = 0; i < REL_VOLLEY_N; i++) {
+    ctx.addProjectile(e.pos.x, y, e.pos.z, 'reliquary', e._projScale(),
+      (i - (REL_VOLLEY_N - 1) / 2) * REL_VOLLEY_FAN);
+  }
+  _cathAt.set(e.pos.x, y, e.pos.z);
+  ctx.effects.burst(_cathAt, 0xe8d9a8, 14, 5, 2, 0.4);
+}
+
+// One ring of the bell: REL_PEAL_N bearings with the REL_PEAL_GAP nearest
+// the lit aisle skipped. The gap's bearing was marked by the beam through
+// the whole tell - the answer was on the floor the entire time.
+function _reliquaryPeal(e, a, ctx, gap) {
+  const y = 1.44 * e.scale;
+  const base = Math.atan2(ctx.player.pos.z - e.pos.z, ctx.player.pos.x - e.pos.x);
+  const step = (Math.PI * 2) / REL_PEAL_N;
+  for (let k = REL_PEAL_GAP / 2; k < REL_PEAL_N - REL_PEAL_GAP / 2; k++) {
+    // A half-step off the rounds, so the aisle is CENTRED on the light and
+    // the ring's near edge is exactly one round wide of it on either side.
+    const th = gap + (k + 0.5) * step;
+    ctx.addProjectile(e.pos.x, y, e.pos.z, 'reliquary', e._projScale(), th - base);
+  }
+  if (e.relBell) e.relBell.rotation.x = 0.55;
+  _cathAt.set(e.pos.x, y, e.pos.z);
+  ctx.effects.shockwave(_cathAt, 0xc0a860, 4.5, 0.4);
+  ctx.effects.burst(_cathAt, 0xe8d9a8, 16, 5, 2, 0.4);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+// One candle lights: it fixes the ground the player is standing on in that
+// moment - a mark is taken on the spot and the flame goes up on the crown -
+// and the two ends of the tell say the same thing: THIS light is THAT circle.
+function _reliquaryCandle(e, a, ctx, bs) {
+  bs.candles.push({
+    x: ctx.player.pos.x, z: ctx.player.pos.z,
+    t: REL_CANDLE_FILL,
+    mark: ctx.effects.markAcquire(),
+  });
+  const mesh = e.relCandles && e.relCandles[bs.lit];
+  if (mesh) {
+    mesh.getWorldPosition(_cathAt);
+    ctx.effects.burst(_cathAt, 0xe8d9a8, 8, 2.5, 1.8, 0.45);
+  }
+  bs.lit++;
+}
+
+// Every lit candle fills on the floor where it was taken and lands in the
+// order it was lit - walking your own backtrail is the price, because that
+// is where they all are.
+function _reliquaryCandlesTick(e, a, ctx, bs) {
+  for (let i = bs.candles.length - 1; i >= 0; i--) {
+    const c = bs.candles[i];
+    c.t -= a.dt;
+    if (c.t > 0) {
+      ctx.effects.markSet(c.mark, c.x, c.z, REL_CANDLE_R, 0xc0a860,
+        1 - c.t / REL_CANDLE_FILL);
+      continue;
+    }
+    ctx.effects.markRelease(c.mark);
+    bs.candles.splice(i, 1);
+    // A candle leaves hallow whether or not the player was still on the mark
+    // - the footsteps were taken, and the consecrated ground remembers them.
+    ctx.addHazard(c.x, c.z, REL_CANDLE_R, REL_CLAIM_LIFE * 0.6, REL_WAKE_DPS, 'hallow');
+    _cathAt.set(c.x, 0, c.z);
+    ctx.effects.shockwave(_cathAt, 0xc0a860, REL_CANDLE_R, 0.4);
+    ctx.effects.burst(_cathAt, 0xe8d9a8, 14, 4.5, 2.2, 0.5);
+    const d = Math.hypot(ctx.player.pos.x - c.x, ctx.player.pos.z - c.z);
+    if (d < REL_CANDLE_R && Math.abs(ctx.player.pos.y) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(
+        Math.min(REL_CANDLE_CAP, e.damage * REL_CANDLE_MUL) * (1 - 0.35 * d / REL_CANDLE_R),
+        _cathAt, e);
+    }
+  }
+}
+
+// The waystation. The stride ends in a slam; where the procession ARRIVES a
+// claim ring is laid, gapped the old way - a closed ring with the boss
+// inside it would wall the player's own kite lane off.
+function _reliquarySlam(e, a, ctx, bs) {
+  bs.state = 'recover';
+  bs.t = REL_RISE_RECOVER;
+  e.stepMul = 1.4;
+  a.vx = 0;
+  a.vz = 0;
+  if (a.dist < REL_PROC_SLAM_R && _reachY(a) < BOSS_REACH_Y) {
+    landHit(e, ctx, Math.min(REL_PROC_CAP, e.damage));
+  }
+  const off = Math.random() * Math.PI * 2;
+  const gapAt = (Math.random() * REL_CLAIM_N) | 0;
+  for (let i = 0; i < REL_CLAIM_N; i++) {
+    if (i === gapAt || i === (gapAt + 1) % REL_CLAIM_N) continue;
+    const ang = off + (i / REL_CLAIM_N) * Math.PI * 2;
+    ctx.addHazard(
+      e.pos.x + Math.cos(ang) * REL_CLAIM_R,
+      e.pos.z + Math.sin(ang) * REL_CLAIM_R,
+      REL_CLAIM_PATCH_R, REL_CLAIM_LIFE, REL_CLAIM_DPS, 'hallow'
+    );
+  }
+  _cathAt.set(e.pos.x, 0.1, e.pos.z);
+  ctx.effects.shockwave(_cathAt, 0xc0a860, REL_CLAIM_R + 1.5, 0.45);
+  ctx.effects.burst(_cathAt, 0xe8d9a8, 22, 6, 2.4, 0.6);
+  ctx.effects.addShake(0.3);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+// Death mid-rite is still holding shared marks - the lane, the swell, the
+// candles left filling - and the pool they come from is sixteen deep, so a
+// boss that never gives them back is every later fight losing warnings.
+export function releaseReliquary(e) {
+  const bs = e.bs;
+  if (!bs || !bs.fx) return;
+  if (bs.mark >= 0) bs.fx.markRelease(bs.mark);
+  bs.mark = -1;
+  if (bs.candles) {
+    for (const c of bs.candles) bs.fx.markRelease(c.mark);
+    bs.candles = null;
+  }
+}
 
 export function aiReliquary(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
   if (bs.state === undefined) {
     bs.state = 'walk';
-    bs.ringCd = 4;
-    bs.ringTell = 0;
+    bs.rest = 0.8;
     bs.volleyCd = 2.6;
-    bs.volleyTell = 0;
+    bs.pealCd = 5.0;
+    bs.candlesCd = 7.0;
+    bs.riseCd = 4.0;
+    bs.procCd = 6.0;
+    bs.watchCd = 8.0;
     bs.tollCd = 0;
+    bs.t = 0;
+    bs.throws = 0;
+    bs.gap = 0;
+    bs.aim = 0;
+    bs.dirX = 0;
+    bs.dirZ = 1;
+    bs.len = 0;
+    bs.gone = 0;
+    bs.wakeT = 0;
     bs.opened = false;
-    // Read by main.js's 'vent' bossEvent for the HUD note. The reliquary's
+    bs.mark = -1;
+    bs.fx = ctx.effects;
+    bs.candles = null;
+    bs.lit = 0;
+    // Read by main.js's 'vent' bossEvent for the HUD note - the reliquary's
     // own word for its open state, rather than the colossus's.
     bs.ventNote = 'RELIQUARY OPEN';
   }
+  bs.fx = ctx.effects;
+  const feared = e.status.fear > 0;
+  const rate = e.rate * (bs.opened ? REL_OPEN_RATE : 1);
 
-  // Standing on it costs, in every state - the broodmother's contract for a
-  // slow boss: hugging the shrine is not a plan.
+  // STANDING ON IT COSTS, AT ALL TIMES AND IN EVERY STATE, the moment it
+  // happens - the rite in progress is the player's problem, not a pause in
+  // the toll for touching the shrine.
   bossTouch(e, a);
 
-  // THE LANTERN, driven every frame: it flares through a volley's tell and
-  // burns steady otherwise, so the fight's ranged state is on the boss's own
-  // yoke rather than in anybody's imagination.
-  if (e.relLamp) {
-    const flare = bs.volleyTell > 0 ? REL_LANTERN_FLARE : 1;
-    e.relLamp.scale.setScalar(flare * e.scale);
-    e.relLamp.rotation.y += a.dt * 0.9;
-  }
-
-  // THE OPENING, once and for keeps. Under a third of the bar the reliquary
-  // opens: the lids go wide, the armour comes off, and the last third of the
-  // fight is the fastest. Crossing the threshold interrupts nothing - it is
-  // read before the states, exactly as the pale crown's shells are.
+  // THE OPENING, once and for keeps: the lids go wide and every rite's clock
+  // shortens - the light pours out and the fight gets FASTER, never tankier.
+  // It was an armoured box once, and what made that boss a corner fight is
+  // exactly what this one is not.
   if (!bs.opened && e.hp <= e.maxHp * REL_OPEN_AT) {
     bs.opened = true;
-    // Rotation only, on parts P() already sized: the lids were built hinged
-    // at half a radian and the opening takes them the rest of the way.
+    // The note's latch: bossEvent reads weakOpen, the colossus's word for an
+    // exposed core, and here it only means "the lids went wide" - there is no
+    // armour left in the fight for a note to disagree with.
+    bs.weakOpen = true;
     if (e.relLidL) e.relLidL.rotation.z = 1.25;
     if (e.relLidR) e.relLidR.rotation.z = -1.25;
-    bs.weakOpen = true;
     ctx.bossEvent('vent', e);
+    _cathAt.set(e.pos.x, 1.2, e.pos.z);
     if (ctx.effects) {
-      _cathAt.set(e.pos.x, 1.2, e.pos.z);
       ctx.effects.shockwave(_cathAt, 0xe8d9a8, 8, 0.5);
       ctx.effects.burst(_cathAt, 0xe8d9a8, 34, 7, 2.5, 0.8);
     }
     if (ctx.sfx) ctx.sfx.wave();
   }
 
-  // ---- the ring -----------------------------------------------------------
-  // A claim on the floor where it is standing: a beat of warning, a pulse at
-  // the radius, then a gapped ring of consecration laid in one frame. It
-  // walks on and the ring stays behind, so the room fills with pockets of
-  // consecrated ground exactly where it has been.
-  if (bs.ringTell > 0) {
-    bs.ringTell -= a.dt;
-    a.vx = 0;
-    a.vz = 0;
-    e._setEyeAlert(true);
-    if (ctx.effects) {
-      _cathAt.set(e.pos.x, 0.12, e.pos.z);
-      ctx.effects.shockwave(_cathAt, 0xc0a860, REL_RING_R, 0.16);
-    }
-    if (bs.ringTell <= 0) {
-      e._setEyeAlert(false);
-      bs.ringCd = REL_RING_CD * e.rate;
-      const off = Math.random() * Math.PI * 2;
-      // A GAP IN THE RING, rotated at random: a closed ring with the boss
-      // inside it would wall the player's own kite lane off, and the gap is
-      // what makes the ring a question rather than a jail.
-      const gapAt = (Math.random() * REL_RING_N) | 0;
-      for (let i = 0; i < REL_RING_N; i++) {
-        if (i === gapAt || i === (gapAt + 1) % REL_RING_N) continue;
-        const ang = off + (i / REL_RING_N) * Math.PI * 2;
-        ctx.addHazard(
-          e.pos.x + Math.cos(ang) * REL_RING_R,
-          e.pos.z + Math.sin(ang) * REL_RING_R,
-          REL_RING_PATCH_R, REL_RING_LIFE, REL_RING_DPS, 'hallow'
-        );
-      }
-      _cathAt.set(e.pos.x, 0.1, e.pos.z);
-      ctx.effects.shockwave(_cathAt, 0xc0a860, REL_RING_R + 2, 0.4);
-      ctx.effects.addShake(0.2);
-      if (ctx.sfx) ctx.sfx.impact();
-    }
-    return;
+  // THE MODEL IS THE TELEGRAPH, driven off the state every frame: the
+  // lantern flares through the volley, GATHERS LOW through the watch - the
+  // curate's dim, the one tell in the theme the player already knows - the
+  // candles stay lit until their marks have landed, and the bell swings
+  // with every toll and peal.
+  if (e.relLamp) {
+    const flare = bs.state === 'volley' ? REL_LANTERN_FLARE
+      : bs.state === 'watch' ? 0.45 : 1;
+    e.relLamp.scale.setScalar(flare * e.scale);
+    e.relLamp.rotation.y += a.dt * 0.9;
   }
-
-  // ---- the volley ---------------------------------------------------------
-  // The processional fan, off the lantern. Slow rounds, few of them, and the
-  // tell is the lantern flaring - the curate's own attack at boss scale.
-  if (bs.volleyTell > 0) {
-    bs.volleyTell -= a.dt;
-    if (bs.volleyTell <= 0) {
-      const y = 1.4 * (e.group.scale.y || 1);
-      for (let i = -1; i <= 1; i++) {
-        ctx.addProjectile(e.pos.x, y, e.pos.z, 'reliquary', 1, i * REL_VOLLEY_FAN);
-      }
-      _cathAt.set(e.pos.x, y, e.pos.z);
-      ctx.effects.burst(_cathAt, 0xe8d9a8, 14, 5, 2, 0.4);
+  if (e.relCandles) {
+    for (let i = 0; i < e.relCandles.length; i++) {
+      e.relCandles[i].scale.setScalar((bs.lit > i ? 1.65 : 1) * e.scale);
     }
-  } else {
-    bs.volleyCd -= a.dt;
-    if (bs.volleyCd <= 0 && a.dist < 26) {
-      bs.volleyCd = REL_VOLLEY_CD * e.rate;
-      bs.volleyTell = REL_VOLLEY_TELL;
-      e.flash = 0.15;
-    }
+  }
+  if (e.relBell) {
+    e.relBell.rotation.x += (0 - e.relBell.rotation.x) * Math.min(1, a.dt * 4);
   }
 
   // ---- the toll -----------------------------------------------------------
-  // Under two thirds of the bar the bell begins to toll on its own: a chill
-  // that reaches the player wherever they are, the price of the sanctuary
+  // Under two thirds of the bar the bell tolls on its own: a chill that
+  // reaches the player wherever they are, the price of the sanctuary
   // collected by the sanctuary itself. It does not stack - slowness refreshes
   // rather than adding, the rule every status in the game keeps.
   if (e.hp <= e.maxHp * REL_TOLL_AT) {
     bs.tollCd -= a.dt;
     if (bs.tollCd <= 0) {
-      bs.tollCd = REL_TOLL_CD * e.rate;
+      bs.tollCd = REL_TOLL_CD * rate;
       if (ctx.applyPlayerStatus) ctx.applyPlayerStatus('slowness', REL_TOLL_CHILL);
-      if (e.relBell) {
-        // The boss's own bell swings once, visibly, with each toll.
-        e.relBell.rotation.x = 0.5;
-      }
+      if (e.relBell) e.relBell.rotation.x = 0.55;
       _cathAt.set(e.pos.x, 2.2, e.pos.z);
       if (ctx.effects) {
-        ctx.effects.shockwave(_cathAt, 0xc0a860, REL_RING_R * 0.8, 0.5);
+        ctx.effects.shockwave(_cathAt, 0xc0a860, 5.2, 0.5);
         ctx.effects.burst(_cathAt, 0xe8d9a8, 12, 4, 2, 0.4);
       }
       if (ctx.sfx) ctx.sfx.impact();
     }
   }
-  // The bell eases back upright between tolls.
-  if (e.relBell) {
-    e.relBell.rotation.x += (0 - e.relBell.rotation.x) * Math.min(1, a.dt * 4);
+
+  // ---- the rites ----------------------------------------------------------
+
+  if (bs.state === 'volley') {
+    // THE TELL IS THE LANTERN FLARING, and the throw is planted for: a
+    // processional does not walk and throw in the same breath.
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    if (bs.t > 0) return;
+    bs.throws--;
+    _reliquaryFan(e, a, ctx);
+    e.flash = 0.15;
+    if (bs.throws > 0) {
+      // Open, the fan is thrown twice, and the second is aimed at the moment
+      // it leaves - the pair is two questions, not one wide answer.
+      bs.t = REL_VOLLEY2;
+      return;
+    }
+    bs.volleyCd = REL_VOLLEY_CD * rate;
+    _relRest(e, bs, rate);
+    return;
   }
 
-  // ---- walking, and the ring's call ---------------------------------------
-  aiMelee(e, a);
-  bs.ringCd -= a.dt;
-  if (bs.ringCd <= 0 && a.dist > 5) {
-    bs.ringTell = REL_RING_TELL;
-    e.flash = 0.18;
+  if (bs.state === 'peal') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    if (bs.t > 0) {
+      bs.t -= a.dt;
+      // THE LIT AISLE. The beam runs from the lantern down the gap's bearing
+      // for the whole tell - the way out is drawn in light before the ring
+      // exists, so the player has the whole of the warning to use it.
+      if (ctx.effects) {
+        _cathAt.set(e.pos.x, 2.0, e.pos.z);
+        _vigilTo.set(
+          e.pos.x + Math.cos(bs.gap) * 24, 0.3,
+          e.pos.z + Math.sin(bs.gap) * 24
+        );
+        ctx.effects.beam(_cathAt, _vigilTo, 0xe8d9a8);
+      }
+      if (bs.t > 0) return;
+    }
+    _reliquaryPeal(e, a, ctx, bs.gap);
+    bs.throws--;
+    if (bs.throws > 0) {
+      // The second ring's gap has TURNED - the light moves, and the safe
+      // answer of a moment ago is the wrong one now.
+      bs.gap += REL_PEAL2_TURN;
+      bs.t = REL_PEAL2;
+      return;
+    }
+    bs.pealCd = REL_PEAL_CD * rate;
+    _relRest(e, bs, rate);
+    return;
   }
+
+  if (bs.state === 'watch') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    // THE LOCKED BEAM, drawn for the whole tell along the bearing taken when
+    // the rite began - what the light shows is where the lance goes, which is
+    // the vigil's contract arrived at from the shrine itself.
+    if (ctx.effects) {
+      _cathAt.set(e.pos.x, 2.0, e.pos.z);
+      _vigilTo.set(
+        e.pos.x + Math.cos(bs.aim) * REL_WATCH_RANGE, 0.3,
+        e.pos.z + Math.sin(bs.aim) * REL_WATCH_RANGE
+      );
+      ctx.effects.beam(_cathAt, _vigilTo, 0xbfa76a);
+    }
+    // SEEN. The light slows whoever it is on, refreshed with its own duration
+    // as the tail so it lapses the moment they step off the line - standing
+    // in the beam is what loads the lance.
+    const wx = ctx.player.pos.x - e.pos.x;
+    const wz = ctx.player.pos.z - e.pos.z;
+    const along = wx * Math.cos(bs.aim) + wz * Math.sin(bs.aim);
+    if (along > 0 && along < REL_WATCH_RANGE
+        && Math.abs(wx * Math.sin(bs.aim) - wz * Math.cos(bs.aim)) < REL_WATCH_R) {
+      if (ctx.applyPlayerStatus) ctx.applyPlayerStatus('slowness', REL_WATCH_SLOW);
+    }
+    if (bs.t > 0) return;
+    // THE LANCE, down the locked bearing and nowhere else - a sidestep off
+    // the light cannot drag it onto whoever took it. Slowed with the boss
+    // like every round in the game, so a frozen shrine throws a slower one.
+    const live = Math.atan2(ctx.player.pos.z - e.pos.z, ctx.player.pos.x - e.pos.x);
+    ctx.addProjectile(e.pos.x, 1.44 * e.scale, e.pos.z, 'reliquary',
+      REL_WATCH_SPEED * e._projScale(), bs.aim - live);
+    _cathAt.set(e.pos.x, 1.44 * e.scale, e.pos.z);
+    ctx.effects.burst(_cathAt, 0xe8d9a8, 12, 5, 2, 0.35);
+    if (ctx.sfx) ctx.sfx.impact();
+    bs.watchCd = REL_WATCH_CD * rate;
+    _relRest(e, bs, rate);
+    return;
+  }
+
+  if (bs.state === 'candles') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    if (bs.t <= 0 && bs.lit < REL_CANDLE_N) {
+      bs.t = REL_CANDLE_PACE;
+      _reliquaryCandle(e, a, ctx, bs);
+    }
+    _reliquaryCandlesTick(e, a, ctx, bs);
+    if (bs.lit >= REL_CANDLE_N && !bs.candles.length) {
+      // The crown goes out with the last landing: the lights were the tell,
+      // and a tell that stays lit after its rite is a promise with no
+      // attack behind it.
+      bs.candles = null;
+      bs.lit = 0;
+      bs.candlesCd = REL_CANDLE_CD * rate;
+      _relRest(e, bs, rate);
+    }
+    return;
+  }
+
+  if (bs.state === 'procTell') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    // The shrine FACES the aisle and dips, and the lane fills down it - the
+    // area from the first frame and the timing as it fills, the pallbearer's
+    // contract at the scale of the thing carrying the grave.
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    e.group.rotation.x = 0.1;
+    bs.t -= a.dt;
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markSet(bs.mark,
+        e.pos.x + bs.dirX * bs.len * 0.5, e.pos.z + bs.dirZ * bs.len * 0.5,
+        REL_PROC_R, 0xc0a860, 1 - Math.max(0, bs.t) / REL_PROC_TELL,
+        bs.len / (REL_PROC_R * 2), Math.atan2(-bs.dirX, -bs.dirZ));
+    }
+    if (bs.t > 0) return;
+    if (bs.mark >= 0 && bs.fx) { bs.fx.markRelease(bs.mark); bs.mark = -1; }
+    bs.state = 'proc';
+    bs.gone = 0;
+    bs.wakeT = 0;
+    // The stride's own clock, with half a second of slack. The waystation is
+    // normally reached by DISTANCE - the stride phases, so no pillar can cut
+    // it short - and this clock is the backstop for the rare stride that
+    // somehow never arrives: the slam still lands wherever it is.
+    bs.t = bs.len / REL_PROC_SPEED + 0.5;
+    return;
+  }
+
+  if (bs.state === 'proc') {
+    bs.t -= a.dt;
+    // THE STEP CLAMP HAS TO BE LIFTED for the stride, the colossus's reason:
+    // update() caps a frame's movement at sp * stepMul, and 11 m/s written
+    // into a.vx alone would come out at a walk. Set every frame rather than
+    // once, so a slow landing mid-stride cannot drop the speed underneath it.
+    e.stepMul = REL_PROC_SPEED / Math.max(0.5, a.sp);
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    // THE AISLE DOES NOT DETOUR. Phasing for the length of the stride - the
+    // monolith's flag, kept - so the procession walks the lane it painted
+    // door to door instead of grinding itself short on the first pillar:
+    // the curate is already the one gunner in the game cover cannot answer,
+    // and its boss keeps the same promise. The wall clamp still holds, and
+    // the lane was shown at full length for the whole tell.
+    e.phase = true;
+    a.vx = bs.dirX * REL_PROC_SPEED;
+    a.vz = bs.dirZ * REL_PROC_SPEED;
+    bs.gone += REL_PROC_SPEED * a.dt;
+    // CONSECRATED WHERE IT HAS WALKED. The old ring claim said the room fills
+    // where the boss has been; the wake is where that went - the procession
+    // itself is what lays the floor away now.
+    bs.wakeT -= a.dt;
+    if (bs.wakeT <= 0) {
+      bs.wakeT = REL_WAKE_EVERY;
+      ctx.addHazard(e.pos.x, e.pos.z, REL_WAKE_R, REL_WAKE_LIFE, REL_WAKE_DPS, 'hallow');
+    }
+    if (bs.gone >= bs.len || bs.t <= 0 || e.blockedBy > 0.05) {
+      _reliquarySlam(e, a, ctx, bs);
+      bs.procCd = REL_PROC_CD * rate;
+    }
+    return;
+  }
+
+  if (bs.state === 'kneel') {
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    bs.t -= a.dt;
+    // THE SHRINE KNEELS. The whole silhouette folds forward on the free axis
+    // while the floor it is about to answer swells on the same clock - the
+    // pose and the circle are the one tell read two ways.
+    const k = 1 - Math.max(0, bs.t) / REL_KNEEL;
+    e.group.rotation.x = -0.16 * k;
+    if (bs.mark >= 0 && bs.fx) {
+      bs.fx.markSet(bs.mark, e.pos.x, e.pos.z, REL_RISE_R, 0xc0a860, k);
+    }
+    if (bs.t > 0) return;
+    if (bs.mark >= 0 && bs.fx) { bs.fx.markRelease(bs.mark); bs.mark = -1; }
+    // THE RISE. The prayer ends and the circle answers - whoever is still
+    // standing in it was told for the whole of the kneel.
+    e.group.rotation.x = 0.12;
+    if (a.dist < REL_RISE_R && _reachY(a) < BOSS_REACH_Y) {
+      landHit(e, ctx, Math.min(REL_RISE_CAP, e.damage));
+    }
+    _cathAt.set(e.pos.x, 0.5, e.pos.z);
+    if (ctx.effects) {
+      ctx.effects.shockwave(_cathAt, 0xc0a860, REL_RISE_R + 1.2, 0.5);
+      ctx.effects.burst(_cathAt, 0xe8d9a8, 26, 7, 3, 0.6);
+      ctx.effects.addShake(0.25);
+    }
+    if (ctx.sfx) ctx.sfx.impact();
+    bs.state = 'recover';
+    bs.t = REL_RISE_RECOVER;
+    bs.riseCd = REL_RISE_CD * rate;
+    return;
+  }
+
+  if (bs.state === 'recover') {
+    a.vx = 0;
+    a.vz = 0;
+    bs.t -= a.dt;
+    // Straightening back up: the pose eases off on the same clock the state
+    // runs out on, so the model and the fight agree the beat is over.
+    e.group.rotation.x *= Math.max(0, bs.t) / REL_RISE_RECOVER;
+    if (bs.t > 0) return;
+    _relRest(e, bs, rate);
+    return;
+  }
+
+  // ---- walk, and the picking of the next rite ------------------------------
+  // Terror does not send a boss running - it just stops it doing anything,
+  // which is what fearMode 'stagger' declares on the type.
+  if (feared) {
+    e._setEyeAlert(false);
+    return;
+  }
+
+  bs.rest -= a.dt;
+  bs.volleyCd -= a.dt;
+  bs.pealCd -= a.dt;
+  bs.candlesCd -= a.dt;
+  bs.riseCd -= a.dt;
+  bs.procCd -= a.dt;
+  bs.watchCd -= a.dt;
+
+  if (bs.rest <= 0) {
+    // The rise is armed by PROXIMITY rather than by damage - the penitent's
+    // rule at boss scale: it kneels AT the player, and the rise is the hit.
+    if (bs.riseCd <= 0 && a.dist < REL_RISE_RANGE) {
+      bs.state = 'kneel';
+      bs.t = REL_KNEEL;
+      bs.mark = ctx.effects.markAcquire();
+      e.flash = 0.18;
+      return;
+    }
+    if (bs.procCd <= 0 && a.dist > 4.5 && a.dist < 26) {
+      // THROUGH the player and out the far side: the lane is the bearing to
+      // them at this moment, walked well past them - clamped to the room,
+      // because an arch does not process through a wall.
+      const B = ARENA_HALF - e.radius - 0.4;
+      const want = Math.min(REL_PROC_LEN, a.dist + 10);
+      const tx = Math.max(-B, Math.min(B, e.pos.x + a.nx * want));
+      const tz = Math.max(-B, Math.min(B, e.pos.z + a.nz * want));
+      const len = Math.hypot(tx - e.pos.x, tz - e.pos.z);
+      if (len >= 6) {
+        bs.state = 'procTell';
+        bs.t = REL_PROC_TELL;
+        bs.dirX = a.nx;
+        bs.dirZ = a.nz;
+        bs.len = len;
+        bs.mark = ctx.effects.markAcquire();
+        e.flash = 0.18;
+        return;
+      }
+      bs.procCd = 0.6 * rate;   // backed up against the room - try again shortly
+    }
+    if (bs.watchCd <= 0 && a.dist > 8 && a.dist < REL_WATCH_RANGE) {
+      bs.state = 'watch';
+      bs.t = REL_WATCH_TELL;
+      // Locked AT THE PICK, before any of the tell: the beam is drawn where
+      // the lance is going rather than where the player is looking, which is
+      // the whole counter-play.
+      bs.aim = Math.atan2(a.nz, a.nx);
+      e.flash = 0.18;
+      return;
+    }
+    if (bs.pealCd <= 0 && a.dist > 4 && a.dist < 22) {
+      bs.state = 'peal';
+      bs.t = REL_PEAL_TELL;
+      bs.throws = bs.opened ? 2 : 1;
+      // The gap opens TOWARD the player: the sanctuary receives them where
+      // they stand - and where they stood two rings ago is the second ring's
+      // business, not the first's.
+      bs.gap = Math.atan2(a.nz, a.nx);
+      e.flash = 0.18;
+      return;
+    }
+    if (bs.candlesCd <= 0 && a.dist < 26) {
+      bs.state = 'candles';
+      bs.t = REL_CANDLE_RAISE;
+      bs.lit = 0;
+      bs.candles = [];
+      e.flash = 0.18;
+      return;
+    }
+    if (bs.volleyCd <= 0 && a.dist < 26) {
+      bs.state = 'volley';
+      bs.t = REL_VOLLEY_TELL;
+      bs.throws = bs.opened ? 2 : 1;
+      e.flash = 0.15;
+      return;
+    }
+  }
+
+  // The walk between rites: the melee cycle first, for whoever came to arm's
+  // length - and while it answers, it owns the step.
+  aiMelee(e, a);
+  if (e.windup > 0 || e.swing > 0) return;
+  // ...and otherwise the shrine CIRCLES THE NAVE. The procession is half of
+  // why the old corner fight is gone; the orbit's drift is the other half.
+  orbit(e, a, REL_ORBIT);
 }
 
 const TYPES = {
@@ -1322,33 +1909,30 @@ const TYPES = {
     build: buildVigil, ai: aiVigil,
   },
 
-  // THE RELIQUARY. Slow, armoured, and the fight is the FLOOR: it claims the
-  // ground around itself in gapped rings of consecration that stay where it
-  // stood, throws a slow processional fan off its own lantern, and under two
-  // thirds of the bar its bell tolls on its own - a chill that reaches
-  // wherever the player is. Under a third the reliquary opens for good and
-  // the last stretch is the fastest. The room is the boss's health bar, and
-  // it is shrinking.
+  // THE RELIQUARY. The fight is THE OFFICE now - five rites on short clocks
+  // (see the boss block above) and a shrine that CIRCLES the room between
+  // them instead of a corner it sits in. Unarmoured from the first second
+  // and never armoured again: what the bar used to buy with armour the fight
+  // now buys with threat. The hit sphere is the shrine's box and the head
+  // sphere is centred on its FACE - the old pair left the lamps and the eyes
+  // hanging a metre over both, and a round placed squarely on the face went
+  // through air where a boss's head plainly was.
   reliquary: {
-    head: { r: 0.44, y: 1.5 },
-    hp: 3300, speed: 2.1, damage: 26, value: 6000, color: 0x8a7c52, eye: 0xe8d9a8,
+    head: { r: 0.5, y: 1.86 },
+    hp: 3300, speed: 2.8, damage: 26, value: 6000, color: 0x8a7c52, eye: 0xe8d9a8,
     scale: 2.8, radius: 1.7, mass: 8, boss: true,
-    hitbox: { r: 0.72, y: 0.8 },
+    hitbox: { r: 0.8, y: 0.92 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.7, start: 3.4, hit: 4.2, cd: 2.2 },
-    // ARMOUR AS A STATE, and the state is the reliquary's own doors. Shut,
-    // it takes less than a third of what lands; opened, the doors go wide
-    // for the rest of the fight. Both rows read the same flag - the pale
-    // crown's lesson, learned once: a constant here made the boss immune to
-    // every directionless source in the game for the whole fight.
-    armor: (e) => ((e.bs && e.bs.opened) ? 1 : REL_OPEN_ARMOR),
-    armorDefault: (e) => ((e.bs && e.bs.opened) ? 1 : REL_OPEN_ARMOR),
+    melee: { windup: 0.6, start: 3.4, hit: 4.2, cd: 1.8 },
+    // NO ARMOUR - no `armor` row at all, so every source in the game lands
+    // in full from the first second, and the armoured-box fight this boss
+    // used to be cannot quietly come back by either of the two gates.
     proj: {
       core: 0xe8d9a8, glow: 0xc0a860, scale: 0.85,
       speed: [12, 0.22, 18], dmg: [9, 0.4, 18],
     },
-    build: buildReliquary, ai: aiReliquary,
+    build: buildReliquary, ai: aiReliquary, cleanup: releaseReliquary,
   },
 };
 

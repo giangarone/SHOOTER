@@ -836,18 +836,41 @@ context. The start screen says so, and one click anywhere fixes it.
   quarter of the bar she EATS her own brood for a burst of speed - the only
   enrage in the game that costs the boss something the player can watch it
   pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. **THE RELIQUARY**, CATHEDRAL's, is a shrine that walks -
-  and the fight is the FLOOR: every so often it stops, the ground around it
-  pulses, and a gapped ring of CONSECRATED GROUND is laid where it stands.
-  It walks on and the ring stays behind, so over a fight the room fills with
-  pockets of hallow exactly where the boss has been, and the floor the
-  player was kiting on goes away a piece at a time. Off its lantern it
-  throws the slow processional fan the curates already taught you - the
-  tell is the lantern flaring - and under two thirds of the bar its bell
-  tolls on its own, a chill that reaches wherever the player is standing.
-  The box itself is the health bar's argument: shut and armoured for most
-  of the fight, and under a third the lids go wide for good, the armour
-  comes off, and the last stretch is the fastest. **OSSARCH**, BONE's crowned
+  but the speed. **THE RELIQUARY**, CATHEDRAL's, was rebuilt as THE OFFICE:
+  a liturgy of six rites said over the room, every one telegraphed on the
+  model and on the floor, and the shrine CIRCLES the nave between them
+  instead of holding a corner. The VOLLEY is the curate's processional fan
+  at boss scale - five rounds off the lantern, which flares before it
+  throws, and often enough to be the fight's metronome; opened, it throws
+  twice. The PEAL is the bell's answer: a full ring of slow rounds with ONE
+  gap in it, and the lantern's beam shows the gap for the whole of the
+  tell - stand in the light and the ring parts around you, misread it and
+  walk the ring; opened, the bell rings twice and the gap turns between
+  rings. The CANDLES light one at a time along the crown, and each flame
+  FIXES the ground you were standing on the moment it lit - they land in
+  the order they were taken, so the rite charges you for your own
+  footsteps and the answer is to keep moving and never retrace. The
+  PROCESSION paints a lane THROUGH you and out the far side, and the shrine
+  strides down it without stopping - and neither pillars nor crates turn
+  it, because the theme's whole argument is that cover does not answer
+  CATHEDRAL: the lane is the warning and the floor it walks is consecrated
+  as it goes, with the old claim ring laid where it arrives; the room is
+  crossed often and the ground you were kiting on goes away under the
+  fight itself. The WATCH is the vigil's rite at boss scale: the lantern
+  gathers its light low, a beam locks onto the bearing you were standing
+  on when it began - the light itself SLOWS whoever it is on - and one
+  fast lance goes down the locked line when the tell ends, so step off the
+  light and the lance misses by however far you stepped. The RISE is the
+  penitent's contract at boss scale: the whole shrine visibly folds into
+  a kneel while the floor around it swells, and the rise is the hit - be
+  out of the circle when the prayer ends. Under two thirds of the bar the
+  bell tolls on its own, the sacristan's chill reaching you wherever you
+  are. Under a third the reliquary OPENS for good - and this opening
+  takes no armour off, because none was ever on: the fight is unarmoured
+  from its first second and never a pool of ammunition, and what the
+  opening buys is PACE - every rite's clock shortens, the fan doubles,
+  the peal rings twice, and the last third of the fight is its fastest.
+  Touching the shrine costs at all times, in every state. **OSSARCH**, BONE's crowned
   skeleton, spends its own skeleton from a bag of eight attacks: a radial rib
   volley with an escape sector that later shells re-fire rotated tighter, a
   sequential spine through your captured position that forks once the plates
@@ -3279,7 +3302,16 @@ test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
                     costing no health at all, the toll chilling for a death
                     inside the ring AND not outside it, the vigil's lance
                     costing on the locked beam AND nothing off it, and the
-                    Reliquary opening under a third
+                    Reliquary as THE OFFICE: the five-round fan, the peal's
+                    gapped ring, the watch's locked lance, the candles
+                    fixing the player's trail, the procession crossing the
+                    room, the kneel's rise costing whoever stayed in the
+                    circle, touch costing immediately, and no armour left
+                    anywhere on the box - plus a pellet on the boss's face
+                    landing as the headshot it always should have been, with
+                    the whole shrine flashing white to show it - the accent
+                    head included, and the theme's shared materials
+                    untouched by it
 test/bone.mjs       BONE end to end - locked lunges and spine lanes, spent-rib
                     vulnerability, permanent plate shedding, interruptible
                     healing, airborne tooth trails, all eight Ossarch attacks

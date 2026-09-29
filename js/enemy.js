@@ -419,6 +419,17 @@ export class Enemy {
     // dispose(). The body and eye materials are handled separately because
     // every enemy has exactly one of each.
     this._extraMats = [];
+    // ACCENTS THAT FLASH, for a body whose hittable silhouette is mostly NOT
+    // bodyMat - the Reliquary's head is an arch, a span and a crown of
+    // candles, all in the theme's own stone and brass, and a headshot that
+    // landed without any of it turning white read as the game refusing a hit
+    // it had just paid for. A build() fills this with { mat, hex, i } - the
+    // material, and the emissive colour and intensity to restore when the
+    // flash ends - and pushes the materials themselves onto _extraMats so
+    // the normal disposal owns them. The accents join the FLASH and nothing
+    // else: statuses still cannot tint them, so a frozen shrine is still
+    // recognisably carrying its own lit brass.
+    this.flashMats = null;
 
     this.group = new THREE.Group();
     // YXZ so the dance's roll (rotation.z, in update) composes INSIDE the
@@ -533,6 +544,9 @@ export class Enemy {
       : this._dominantTint();
     if (want === this._look) return;
     this._look = want;
+    // The accents ride the same TRANSITION the body does, so they cost a
+    // write exactly when bodyMat does and never per frame.
+    this._flashAccents(want === 'flash');
     if (want === 'flash') {
       this.bodyMat.color.setHex(this.colorHex);
       this.bodyMat.emissive.setHex(BODY_FLASH_HEX);
@@ -571,6 +585,22 @@ export class Enemy {
       if (this.status[k] > 0) return STATUS_TINT[k];
     }
     return this.colorHex;
+  }
+
+  // THE FLASH, ON THE PARTS THAT KEEP THEIR OWN COLOUR. Materials a build()
+  // registered on `flashMats` go white for the flash and back to their own
+  // emissive for every other state - ward, plate and status included, which
+  // is deliberate: those three are about the BODY, and the theme's whole
+  // read depends on its lit brass staying lit through a freeze. Only the
+  // flash is about being HIT, and on a boss whose head is the theme's own
+  // stone the hit has to show where it landed.
+  _flashAccents(on) {
+    const list = this.flashMats;
+    if (!list) return;
+    for (const f of list) {
+      f.mat.emissive.setHex(on ? BODY_FLASH_HEX : f.hex);
+      f.mat.emissiveIntensity = on ? BODY_FLASH_INTENSITY : f.i;
+    }
   }
 
   /**

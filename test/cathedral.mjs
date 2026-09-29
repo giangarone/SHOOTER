@@ -107,6 +107,13 @@ try {
       p.mods.dodgeChance = 0;
       px = 0;
       pz = 0;
+      // A player who dies inside a god=false window parks the WHOLE GAME in
+      // 'gameover' - the loop stops updating, and every section after reads a
+      // frozen arena while failing for reasons that have nothing to do with
+      // what they assert. The cost windows below are ALLOWED to be lethal on
+      // a starting bar, so the state goes back the way every section needs
+      // it, exactly the way `waveState` above does.
+      g.state = 'playing';
     };
     const put = (type, x, z) => {
       g.spawnEnemy(type);
@@ -501,59 +508,263 @@ try {
     }
 
     // ---- 9. THE RELIQUARY -----------------------------------------------
-    // The fight is the FLOOR: rings of hallow laid where the boss stood, the
-    // processional fan off the lantern, the toll under two thirds, and the
-    // opening under a third - the lids go wide and the armour comes off.
+    // THE OFFICE, end to end. The boss is five rites on their own clocks,
+    // and the shrine MOVES: the fan off the lantern (five rounds in one
+    // breath), the peal's ring with its one gap (a dozen rounds at once and
+    // the beam on the way out), the candles fixing the player's trail, the
+    // procession's painted lane crossed at a stride, and the kneel whose
+    // rise is the hit. The toll and the opening stay, the armour does not.
     {
       clean();
-      const e = put('reliquary', 10, 0);
-      e.speed = 0;
+      const e = put('reliquary', 12, 0);
       e.rate = 1;
       px = 0;
       pz = 0;
-      let sawRing = false;
-      let sawVolley = false;
+      // PER-TICK SALVO BOOKKEEPING. A fan is five rounds in one tick and a
+      // peal's ring is twelve - the two are told apart by the count alone,
+      // which is the difference between them that matters. An in-flight
+      // count would miss rounds that already died on a wall.
+      const origSpawn = g._spawnProjectile.bind(g);
+      let lastTick = -1;
+      let tickShots = 0;
+      let fanSalvo = 0;
+      let ringSalvo = 0;
+      let lanceSpeed = 0;
+      const flushTick = () => {
+        if (tickShots >= 4 && tickShots <= 7) fanSalvo = Math.max(fanSalvo, tickShots);
+        if (tickShots >= 10) ringSalvo = Math.max(ringSalvo, tickShots);
+        tickShots = 0;
+      };
+      g._spawnProjectile = (x, y, z, type, ss, sr) => {
+        const out = origSpawn(x, y, z, type, ss, sr);
+        if (type === 'reliquary') {
+          if (g.time !== lastTick) { flushTick(); lastTick = g.time; }
+          tickShots++;
+          lanceSpeed = Math.max(lanceSpeed, ss);
+        }
+        return out;
+      };
+      const seen = { volley: 0, peal: 0, watch: 0, candles: 0, kneel: 0, proc: 0, lane: false };
       let sawToll = false;
       let sawOpen = false;
-      let ringCount = 0;
-      for (let i = 0; i < 3200; i++) {
+      let litMax = 0;
+      let hallowMax = 0;
+      let travel = 0;
+      let lastX = e.pos.x;
+      let lastZ = e.pos.z;
+      let minX = 99, maxX = -99, minZ = 99, maxZ = -99;
+      const t0 = g.time;
+      // The player circles the room at mid range, so all five rites get
+      // their launch conditions met - pinned in one spot, the procession
+      // could never show its lane and the fight would be the old corner one.
+      while (g.time - t0 < 45) {
         await step();
-        e.pos.set(10, e.pos.y, 0);
-        const hal = g._hazard.filter((x) => x.kind === 'hallow').length;
-        if (hal > ringCount) { sawRing = true; ringCount = hal; }
-        if (g.projectiles.some((q) => q.type === 'reliquary')) sawVolley = true;
-        // THE TOLL: the chill arrives from across the room, and the player
-        // is pinned nowhere near the boss. Watched as a chill that appears
-        // with no other source in the arena.
+        const ang = g.time * 0.5;
+        px = 10 * Math.cos(ang);
+        pz = 10 * Math.sin(ang);
+        if (e.dead) break;
+        const bs = e.bs;
+        if (!bs) continue;
+        if (bs.state === 'volley') seen.volley++;
+        if (bs.state === 'peal') seen.peal++;
+        if (bs.state === 'watch') seen.watch++;
+        if (bs.state === 'candles') { seen.candles++; litMax = Math.max(litMax, bs.lit); }
+        if (bs.state === 'kneel') seen.kneel++;
+        if (bs.state === 'proc') seen.proc++;
+        if (bs.state === 'procTell' && bs.mark >= 0) seen.lane = true;
+        // THE TOLL: the chill arrives from across the room, with no other
+        // source of cold in the arena.
         if (!sawToll && e.hp <= e.maxHp * 0.62 && p.status.slowness > 0
             && !g._hazard.some((x) => x.kind === 'frost' || x.kind === 'hail')) {
           sawToll = true;
         }
-        // THE OPENING: under a third the lids go wide and the armour comes
-        // off - measured as the same blow before and after.
+        // THE OPENING is forced early, so the whole loop below is read in
+        // the fight's fastest phase - everything it must survive, it does.
         if (!sawOpen) {
-          e.hp = e.maxHp * 0.29;
-          await step();
-          if (e.bs && e.bs.opened) sawOpen = true;
+          e.hp = Math.min(e.hp, e.maxHp * 0.29);
+          if (e.bs.opened) sawOpen = true;
         }
-        // Not finished until the room itself has been claimed at least once
-        // and the toll has rung - the two things the fight is made of.
-        if (sawRing && sawVolley && sawToll && sawOpen) break;
+        hallowMax = Math.max(hallowMax, g._hazard.filter((x) => x.kind === 'hallow').length);
+        travel += Math.hypot(e.pos.x - lastX, e.pos.z - lastZ);
+        lastX = e.pos.x;
+        lastZ = e.pos.z;
+        minX = Math.min(minX, e.pos.x);
+        maxX = Math.max(maxX, e.pos.x);
+        minZ = Math.min(minZ, e.pos.z);
+        maxZ = Math.max(maxZ, e.pos.z);
+        // TRAVEL IS PART OF THE BREAK: the loop keeps going until the shrine
+        // has genuinely crossed ground, not merely until every state has
+        // been touched for one frame - a procession seen for its first
+        // frame proves the lane, not the crossing. The LANCE is part of it
+        // for the same reason: the watch's tell outlasts a break that only
+        // asked whether the rite had begun.
+        if (seen.volley > 0 && seen.peal > 0 && litMax >= 5 && seen.kneel > 0
+          && seen.proc > 0 && sawToll && sawOpen && fanSalvo >= 4
+          && ringSalvo >= 10 && lanceSpeed >= 1.5 && travel > 45) break;
       }
-      res.relRing = sawRing;
-      res.relRingCount = ringCount;
-      res.relVolley = sawVolley;
+      flushTick();
+      g._spawnProjectile = origSpawn;
+      res.relVolley = seen.volley > 0;
+      res.relFan = fanSalvo;
+      res.relPeal = seen.peal > 0;
+      res.relRingSalvo = ringSalvo;
+      res.relWatch = seen.watch > 0;
+      res.relLance = lanceSpeed;
+      res.relCandles = seen.candles > 0;
+      res.relCandleLitMax = litMax;
+      res.relProc = seen.proc > 0 && seen.lane;
       res.relToll = sawToll;
       res.relOpen = sawOpen;
-      // THE OPENING IS WORTH SOMETHING: the same armour call, after it. The
-      // boss is already opened at this point in the walk, so what is being
-      // asserted is that the state the lids are showing is the state the
-      // armour is taking - the three-way agreement the colossus core check
-      // in boss.mjs exists for.
+      res.relHallow = hallowMax;
+      res.relTravel = +travel.toFixed(1);
+      res.relRoamX = +(maxX - minX).toFixed(1);
+      res.relRoamZ = +(maxZ - minZ).toFixed(1);
+      // NO ARMOUR, EVER: the row is gone from the type, and the same blow
+      // lands in full before the opening and after it.
       const { ENEMY_TYPES: TYPES } = await import('./js/enemy.js');
-      res.relArmorOpen = +TYPES.reliquary.armor(e).toFixed(2);
-      // The boss's own bell exists and swings.
-      res.relBell = !!e.relBell;
+      res.relArmorless = TYPES.reliquary.armor === undefined;
+      clean();
+    }
+
+    // ---- 10. touching the shrine costs immediately ------------------------
+    {
+      clean();
+      put('reliquary', 0, 0);
+      px = 0;
+      pz = 0;
+      res.relTouch = await measure(24);
+      clean();
+    }
+
+    // ---- 11. the rise, and the candles, cost whoever stands still --------
+    // THE BOTH-WAYS SHAPE the suite uses: a pinned player through each rite.
+    // The rise is measured kneel-to-hit; the candles land their whole trail
+    // on a player who never moved.
+    {
+      clean();
+      // THE BAR IS RAISED FOR THIS WINDOW, the way test/boss.mjs raises it.
+      // A rise landing on a pinned player is more than a starting bar holds,
+      // and a player who dies mid-measure stops the whole game - every later
+      // section would read a frozen arena and fail for reasons that have
+      // nothing to do with what they assert.
+      const keepMax = p.maxHealth;
+      p.maxHealth = 100000;
+      p.health = 100000;
+      const e = put('reliquary', 5.5, 0);
+      e.rate = 1;
+      // bs is born on the first ai() call - the cd override must come after
+      // a step, or the init pass writes right over it.
+      await steps(2);
+      e.bs.riseCd = 0;
+      px = 0;
+      pz = 0;
+      let sawKneel = false;
+      let sawRise = false;
+      const lost = await measure(320, () => {
+        if (e.bs.state === 'kneel') sawKneel = true;
+        if (sawKneel && e.bs.state === 'recover') sawRise = true;
+      });
+      res.relRisePose = sawKneel && sawRise;
+      res.relRiseCost = lost;
+      clean();
+      const e2 = put('reliquary', 14, 0);
+      e2.rate = 1;
+      await steps(2);
+      e2.bs.candlesCd = 0;
+      e2.bs.volleyCd = 999;
+      e2.bs.procCd = 999;
+      e2.bs.pealCd = 999;
+      e2.bs.riseCd = 999;
+      e2.bs.watchCd = 999;
+      px = 0;
+      pz = 0;
+      let lit = 0;
+      const lost2 = await measure(420, () => {
+        if (e2.bs.state === 'candles') lit = Math.max(lit, e2.bs.lit);
+      });
+      res.relCandleLit = lit;
+      res.relCandleCost = lost2;
+      clean();
+      // The bar goes back to what the run brought in, so nothing downstream
+      // measures against a player who was never meant to have one.
+      p.maxHealth = keepMax;
+      p.health = keepMax;
+    }
+
+    // ---- 12. the head is hittable -----------------------------------------
+    // THE BUG THIS EXISTS FOR: the reliquary's head sphere used to hang
+    // under both its lamps and its eyes, so a round placed squarely on the
+    // face passed over both spheres and MISSED - A boss with no hittable
+    // head. The pellet is driven straight down the barrel at each sphere,
+    // so what is measured is geometry, not luck.
+    {
+      clean();
+      const e = put('reliquary', 0, -8);
+      e.hp = 1e6;
+      e.maxHp = 1e6;
+      px = 0;
+      pz = 0;
+      await steps(2);
+      e.group.position.copy(e.pos);
+      e.group.updateMatrixWorld(true);
+      const { Vector3 } = await import('three');
+      const shootAt = (mesh) => {
+        const at = new Vector3();
+        mesh.getWorldPosition(at);
+        g.camera.position.set(0, at.y, 0);
+        g.camera.lookAt(at);
+        g.camera.updateMatrixWorld(true);
+        const targets = [];
+        for (const en of g.enemies) { targets.push(en.hitbox); targets.push(en.head); }
+        const before = e.hp;
+        g._beginShot();
+        g._firePellet(new Vector3(0, at.y, 0), targets, 0, g.player.weapon, 1, false);
+        return { dealt: +(before - e.hp).toFixed(2), head: g._shotWasHead };
+      };
+      const headUp = shootAt(e.head);
+      const bodyHit = shootAt(e.hitbox);
+      res.relHeadShot = headUp.dealt;
+      res.relWasHead = headUp.head;
+      res.relBodyShot = bodyHit.dealt;
+
+      // ---- 12b. the whole shrine flashes, head included --------------------
+      // THE BUG THIS EXISTS FOR: the boss's head region is an arch, a span
+      // and a crown of candles - all accent material - so a headshot landed
+      // damage while nothing at the head turned white. The accents are the
+      // instance's own clones now: they join the flash, restore when it
+      // ends, and the SHARED pair the theme's other six bodies wear is
+      // never written, so no other cathedral enemy can flash in sympathy.
+      //
+      // The flash lands on the first UPDATE after the blow, so one step is
+      // taken before reading it - and the rites are silenced for the window,
+      // because a volley fired mid-read re-arms the flash and fakes the
+      // restore.
+      e.bs.rest = 999;
+      const { SHARED_MATS } = await import('./js/enemies/shared.js');
+      const sharedGiltBefore = SHARED_MATS.cathGilt.emissive.getHex();
+      const acc = e.flashMats;
+      const accentAt = () => acc.map(
+        (f) => [f.mat.emissive.getHex(), +f.mat.emissiveIntensity.toFixed(2)]);
+      await step();
+      const during = accentAt();
+      await steps(20);
+      const after = accentAt();
+      res.relAccentFlash = during;
+      res.relAccentRestored = after;
+      res.relAccentBase = acc.map((f) => [f.hex, f.i]);
+
+      // And a PENITENT hit through its own body leaves the shared pair
+      // alone - the boss's clones must not have leaked the flash onto the
+      // rest of the roster's materials.
+      const pe = put('penitent', 4, 0);
+      pe.takeDamage(5);
+      await step();
+      res.relSharedAfterHit = [
+        SHARED_MATS.cathGilt.emissive.getHex(),
+        SHARED_MATS.cathStone.emissive.getHex(),
+      ];
+      res.relSharedUntouched = res.relSharedAfterHit[0] === sharedGiltBefore
+        && res.relSharedAfterHit[1] === 0x000000;
       clean();
     }
 
@@ -620,14 +831,44 @@ try {
     out.vigOff === 0, `lost=${out.vigOff}`);
   ok('and the beam itself slows whoever it watches', out.vigSlowed);
 
-  ok('the Reliquary claims the floor in rings of hallow', out.relRing,
-    `patches=${out.relRingCount}`);
-  ok('and throws the processional fan', out.relVolley);
+  ok('the Reliquary throws the fan, FIVE rounds off the lantern',
+    out.relVolley && out.relFan >= 5, `volley=${out.relVolley} fan=${out.relFan}`);
+  ok('and the bell rings a RING with a gap, not another fan',
+    out.relPeal && out.relRingSalvo >= 10, `peal=${out.relPeal} ring=${out.relRingSalvo}`);
+  ok('the watch locks its beam and throws the one fast lance',
+    out.relWatch && out.relLance >= 1.5, `watch=${out.relWatch} lanceSpeed=${out.relLance}`);
+  ok('the candles light one at a time',
+    out.relCandles && out.relCandleLitMax >= 5, `lit=${out.relCandleLitMax}`);
+  ok('the procession paints a lane and takes the fight ACROSS the room',
+    out.relProc && out.relTravel >= 40,
+    `lane=${out.relProc} roamX=${out.relRoamX} roamZ=${out.relRoamZ} travel=${out.relTravel}`);
+  ok('the room is still consecrated where the shrine has walked',
+    out.relHallow > 0, `patches=${out.relHallow}`);
   ok('and under two thirds the bell tolls on its own', out.relToll);
   ok('and under a third the reliquary opens', out.relOpen);
-  ok('and opened, it takes full damage',
-    out.relArmorOpen === 1, `armor=${out.relArmorOpen}`);
-  ok('and the bell on it swings', out.relBell);
+  ok('and there is NO armour left on it, in either state',
+    out.relArmorless, `armorless=${out.relArmorless}`);
+
+  ok('touching the shrine costs immediately', out.relTouch > 0, `lost=${out.relTouch}`);
+  ok('the kneel is seen, and the rise costs whoever stayed in the circle',
+    out.relRisePose && out.relRiseCost > 0, `pose=${out.relRisePose} lost=${out.relRiseCost}`);
+  ok('and the candles cost whoever stands still',
+    out.relCandleLit >= 5 && out.relCandleCost > 0, `lit=${out.relCandleLit} lost=${out.relCandleCost}`);
+
+  ok('a round on the reliquary\'s FACE lands as a headshot',
+    out.relWasHead && out.relHeadShot > 0, `head=${out.relHeadShot} registered=${out.relWasHead}`);
+  ok('and is worth exactly double a body shot',
+    out.relBodyShot > 0 && Math.abs(out.relHeadShot / out.relBodyShot - 2) < 0.02,
+    `head=${out.relHeadShot} body=${out.relBodyShot}`);
+
+  ok('the whole shrine flashes white, the accent head included',
+    out.relAccentFlash && out.relAccentFlash.every((f) => f[0] === 0xffffff && f[1] === 0.9),
+    `flash=${JSON.stringify(out.relAccentFlash)}`);
+  ok('and the accents come back to their own colours when it ends',
+    JSON.stringify(out.relAccentRestored) === JSON.stringify(out.relAccentBase),
+    `now=${JSON.stringify(out.relAccentRestored)} base=${JSON.stringify(out.relAccentBase)}`);
+  ok('and the theme\'s shared materials are never written by it',
+    out.relSharedUntouched, `gilt/stone=${JSON.stringify(out.relSharedAfterHit)}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
