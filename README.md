@@ -892,7 +892,18 @@ context. The start screen says so, and one click anywhere fixes it.
   ring that stands its freshly fallen adds back up while the ring is up, and
   bursts point-blank into a ring of bile if you try to hug it - and it still
   splits three times over, two halves, then four, then eight, every piece
-  keeping all of it), **Maw** (drags you in and rolls rings you have to jump) and the
+  keeping all of it), **Maw** (VOID's whole argument at boss scale: it drags you in
+  for the entire fight, closes to arm's length and never holds a corner, and
+  takes the room away a piece at a time - rifts open in the air around YOU and
+  the bolts come out of them, so cover answers nothing; a point on the floor is
+  marked, you are dragged into it, and it detonates; lanes tear outward from
+  under it along the ground, jumped like the pressure rings it still rolls in
+  pairs; every so often it folds out of space entirely and lands on a marked
+  ring wherever you were standing; and hugging it is a tax it collects twice,
+  because the body bites on contact and the crush nova punishes anyone who
+  lingers at its feet. Every attack is telegraphed - the marks, the hanging
+  rifts and the landing ring ARE the fight - and under the last half of its
+  health the whole cycle quickens while the telegraphs never shorten) and the
   **Herald** - the sun come down to witness, SOLAR's whole argument rehearsed
   at boss scale as six ceremonies in a fixed order you can learn: it leaps down
   onto a marked circle where you were standing and scorches a cross into the

@@ -27,6 +27,20 @@
 //   3. A monolith walks through a solid obstacle instead of round it.
 //   4. ...and nothing else does, which is what makes it the mechanic.
 //   5. A well drags the player toward it and costs no health at all.
+//   6. The MAW bites the instant the player touches it.
+//   7. Its ambient drag still moves a player who is doing nothing.
+//   8. Its pressure rings come in PAIRS, and are drawn before they hurt.
+//   9. The collapse marks the floor under the player and detonates only
+//      after the fill - telegraph first, damage second.
+//  10. The rift fan hangs its rifts around the PLAYER and fires only after
+//      the hang - cover-ignoring bolts, warned in advance.
+//  11. The void step marks the landing ring BEFORE the body leaves, lands
+//      where the ring said, and bites whoever stood inside it.
+//  12. The tear lays all three lanes at once and hurts only once they have
+//      filled - the centre lane is aimed through where the player stands.
+//  13. The whole scheduler: majors fire several times inside seven seconds
+//      and the boss covers ground doing it - the fight is frequent and it
+//      MOVES, which is the whole point of the rework.
 import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8225;
@@ -306,6 +320,266 @@ try {
       clean();
     }
 
+    // ---- 6. the maw bites on contact, immediately --------------------------
+    // Touch is the one boss requirement with no telegraph to lean on: the
+    // frame the player is inside the body's pad, health moves.
+    {
+      clean();
+      const e = put('maw', 1.6, 0);
+      god = false;
+      p.health = p.maxHealth;
+      const hp0 = p.health;
+      await simSteps(0.5);
+      res.mawTouch = +(hp0 - p.health).toFixed(1);
+      god = true;
+      clean();
+    }
+
+    // ---- 7. the ambient drag still moves a player who does nothing --------
+    {
+      clean();
+      pinned = false;
+      god = true;
+      p.pos.set(0, 0, 0);
+      put('maw', 12, 0);
+      await simSteps(1.2);
+      res.mawDragged = +p.pos.x.toFixed(2);
+      pinned = true;
+      clean();
+    }
+
+    // ---- 8. the pressure rings come in pairs, and are drawn first ---------
+    // Measured as mark-seen to damage-landed, because that interval IS the
+    // dodge the rings exist to offer.
+    {
+      clean();
+      const e = put('maw', 9, 0);
+      await simSteps(0.3);
+      e.bs.ringCd = 0;
+      god = false;
+      p.health = p.maxHealth;
+      const hp0 = p.health;
+      let seenRing = -1;
+      let hurtAt = -1;
+      let maxRings = 0;
+      for (let i = 0; i < 400 && hurtAt < 0; i++) {
+        await step();
+        if (seenRing < 0 && e.bs.rings.length > 0) seenRing = g.time;
+        maxRings = Math.max(maxRings, e.bs.rings.length);
+        if (hp0 - p.health > 0) hurtAt = g.time;
+      }
+      res.ringSeen = seenRing >= 0;
+      res.ringWarned = hurtAt >= 0 && seenRing >= 0 ? +(hurtAt - seenRing).toFixed(2) : -1;
+      res.ringPaired = maxRings >= 2;
+      god = true;
+      clean();
+    }
+
+    // ---- 9. the collapse marks under the player, then detonates ----------
+    {
+      clean();
+      const e = put('maw', 14, 0);
+      await simSteps(0.3);
+      e.bs.collapseCd = 0;
+      god = false;
+      p.health = p.maxHealth;
+      const hp0 = p.health;
+      let markSeen = -1;
+      let hurtAt = -1;
+      let onPlayer = -1;
+      for (let i = 0; i < 500; i++) {
+        await step();
+        const im = e.bs.implosions[0];
+        if (markSeen < 0 && im) {
+          markSeen = g.time;
+          onPlayer = +Math.hypot(im.x, im.z).toFixed(1);
+        }
+        if (hurtAt < 0 && hp0 - p.health > 0) hurtAt = g.time;
+        if (markSeen >= 0 && hurtAt >= 0) break;
+      }
+      res.colMark = markSeen >= 0;
+      res.colOnPlayer = onPlayer;
+      res.colWarned = hurtAt >= 0 && markSeen >= 0 ? +(hurtAt - markSeen).toFixed(2) : -1;
+      god = true;
+      clean();
+    }
+
+    // ---- 10. the rift fan hangs around the player, then fires ------------
+    // Counted at SPAWN like boss.mjs counts Schism's volley, and timed from
+    // the first frame the fan phase is live - an instant burst would be an
+    // undodgeable one, which is the thing the hang exists to prevent.
+    {
+      clean();
+      const e = put('maw', 0, 12);
+      await simSteps(0.3);
+      const bs = e.bs;
+      bs.ringCd = 99; bs.collapseCd = 99; bs.stepCd = 99; bs.fissureCd = 99; bs.novaCd = 99;
+      bs.fanCd = 0;
+      const orig = g._spawnProjectile.bind(g);
+      const bolts = [];
+      let fanSeen = -1;
+      g._spawnProjectile = (x, y, z, t, ss, sr) => {
+        if (t === 'maw') bolts.push({ x, z, at: g.time });
+        return orig(x, y, z, t, ss, sr);
+      };
+      for (let i = 0; i < 400; i++) {
+        await step();
+        if (fanSeen < 0 && bs.phase === 'fan') fanSeen = g.time;
+        if (bolts.length >= 4 && bs.phase !== 'fan') break;
+      }
+      g._spawnProjectile = orig;
+      res.fanCast = fanSeen >= 0;
+      res.fanBolts = bolts.length;
+      res.fanTele = bolts.length && fanSeen >= 0 ? +(bolts[0].at - fanSeen).toFixed(2) : -1;
+      // Every bolt leaves from ~6.5m off the PLAYER, not off the boss - that
+      // gap is the whole cover-ignoring point of the attack.
+      res.fanFromRift = bolts.length
+        ? +Math.max(...bolts.map((b) => Math.abs(Math.hypot(b.x, b.z) - 6.5))).toFixed(1)
+        : -1;
+      clean();
+    }
+
+    // ---- 11. the void step marks the landing before it leaves ------------
+    // The player is then stood inside the marked ring on purpose: what is
+    // being measured is that the landing bite is the ring's promise kept.
+    // Spawned at 18 rather than 14 - the maw closes ~1m during the init walk
+    // and the step gate is 13m, so a 14m spawn is one wave's speed scaling
+    // away from never casting.
+    {
+      clean();
+      const e = put('maw', 18, 0);
+      await simSteps(0.3);
+      const bs = e.bs;
+      bs.ringCd = 99; bs.collapseCd = 99; bs.fanCd = 99; bs.fissureCd = 99; bs.novaCd = 99;
+      bs.stepCd = 0;
+      god = false;
+      p.health = p.maxHealth;
+      const hp0 = p.health;
+      let markSeen = -1;
+      let bossAtMark = 0;
+      let landX = 0;
+      let landZ = 0;
+      let stepBit = false;
+      for (let i = 0; i < 200; i++) {
+        await step();
+        if (markSeen < 0 && bs.phase === 'fold') {
+          markSeen = g.time;
+          // How far the boss was from the player when the ring appeared: it
+          // has to still be across the room, or the mark came after the move.
+          bossAtMark = Math.hypot(e.pos.x - px, e.pos.z - pz);
+          landX = bs.landX;
+          landZ = bs.landZ;
+          // Inside the landing ring (3.6m) but outside the body's own touch
+          // pad (2.7m), so the bite measured is the LANDING's, not contact's.
+          px = landX + 3.0;
+          pz = landZ;
+        }
+        if (markSeen >= 0 && bs.phase === 'form') {
+          stepBit = hp0 - p.health > 0;
+          break;
+        }
+      }
+      res.stepMarked = markSeen >= 0 && bossAtMark > 8;
+      res.stepLanded = markSeen >= 0
+        ? +Math.hypot(e.pos.x - landX, e.pos.z - landZ).toFixed(1) : -1;
+      res.stepLandNear = markSeen >= 0 ? +Math.hypot(landX, landZ).toFixed(1) : -1;
+      res.stepBites = stepBit;
+      res.stepDbg = {
+        phase: bs.phase,
+        stepCd: +bs.stepCd.toFixed(2),
+        dist: +Math.hypot(e.pos.x - px, e.pos.z - pz).toFixed(1),
+        marksUsed: g.effects.marks.filter((m) => m.used).length,
+      };
+      god = true;
+      clean();
+    }
+
+    // ---- 12. the tear lays all three lanes, then runs them ---------------
+    // The player is parked dead ahead of the maw, on the centre lane's
+    // bearing at cast: the assertion is that the lane is AIMED THROUGH them
+    // and that the hurt waits out the fill.
+    {
+      clean();
+      px = 7.5; pz = 0;
+      const e = put('maw', -8, 0);
+      await simSteps(0.3);
+      const bs = e.bs;
+      bs.ringCd = 99; bs.collapseCd = 99; bs.fanCd = 99; bs.stepCd = 99; bs.novaCd = 99;
+      bs.fissureCd = 0;
+      god = false;
+      p.health = p.maxHealth;
+      const hp0 = p.health;
+      let lanesSeen = -1;
+      let nLanes = 0;
+      let hurtAt = -1;
+      for (let i = 0; i < 300; i++) {
+        await step();
+        if (lanesSeen < 0 && bs.lanes.length) {
+          lanesSeen = g.time;
+          nLanes = bs.lanes.length;
+        }
+        if (hurtAt < 0 && hp0 - p.health > 0) hurtAt = g.time;
+        if (lanesSeen >= 0 && hurtAt >= 0) break;
+      }
+      res.tearLanes = lanesSeen >= 0 && nLanes === 3;
+      res.tearWarned = hurtAt >= 0 && lanesSeen >= 0 ? +(hurtAt - lanesSeen).toFixed(2) : -1;
+      god = true;
+      clean();
+    }
+
+    // ---- 13. the scheduler: frequent majors, and a boss that MOVES -------
+    // MAJORS ONLY are counted (a phase entered from free, or a collapse
+    // thrown) because rings were the old fight's entire repertoire - three
+    // majors inside eight seconds is the rework's cadence claim, and the path
+    // length is its movement claim.
+    //
+    // THE PINNED PLAYER IS WALKED BACKWARDS, because the maw is a stalker: it
+    // closes to its seven-and-a-half metre orbit and stays there, and the
+    // step and the collapse only exist past their range gates. Holding ~14m
+    // is the fight as a runner meets it - the boss following, and attacking
+    // the following - and without it two of the four majors can never fire.
+    {
+      clean();
+      px = 0; pz = 10;
+      const e = put('maw', -10, 0);
+      await simSteps(0.3);
+      let majors = 0;
+      let path = 0;
+      let lx = e.pos.x;
+      let lz = e.pos.z;
+      let prevPhase = e.bs.phase;
+      let prevImp = 0;
+      const t0 = g.time;
+      while (g.time < t0 + 8) {
+        await step();
+        const mdx = e.pos.x - px;
+        const mdz = e.pos.z - pz;
+        const md = Math.hypot(mdx, mdz);
+        if (md < 14) {
+          let nx = px - (mdx / md) * (14 - md);
+          let nz = pz - (mdz / md) * (14 - md);
+          // Slide along the wall rather than through it, so the runner never
+          // runs out of arena and hands the distance back.
+          const rr = Math.hypot(nx, nz);
+          if (rr > 18) { nx *= 18 / rr; nz *= 18 / rr; }
+          px = nx;
+          pz = nz;
+        }
+        path += Math.hypot(e.pos.x - lx, e.pos.z - lz);
+        lx = e.pos.x;
+        lz = e.pos.z;
+        if (e.bs.phase !== prevPhase) {
+          if (prevPhase === '') majors++;
+          prevPhase = e.bs.phase;
+        }
+        if (e.bs.implosions.length > prevImp) majors++;
+        prevImp = e.bs.implosions.length;
+      }
+      res.majors = majors;
+      res.bossPath = +path.toFixed(1);
+      clean();
+    }
+
     await steps(30);
     return res;
   }, VOID_TYPES);
@@ -332,6 +606,37 @@ try {
   ok('a well is laid on the floor', out.wellPlaced > 0);
   ok('it drags the player toward it', out.wellPulledIn, `closed ${out.wellMoved}m`);
   ok('and costs no health at all', out.wellCost === 0, `lost=${out.wellCost}`);
+
+  ok('the maw bites the instant the player touches it',
+    out.mawTouch > 0, `lost=${out.mawTouch}`);
+  ok('its ambient drag moves a player who is doing nothing',
+    out.mawDragged > 0.5, `drifted ${out.mawDragged}m`);
+  ok('its pressure rings are drawn before they can hurt',
+    out.ringSeen && out.ringWarned >= 0.4, `warned ${out.ringWarned}s`);
+  ok('and they come in pairs', out.ringPaired);
+  ok('the collapse marks the floor under the player',
+    out.colMark && out.colOnPlayer < 1.5, `mark ${out.colOnPlayer}m off the player`);
+  ok('and detonates only after the fill',
+    out.colWarned >= 0.9, `waited ${out.colWarned}s`);
+  ok('the rift fan casts around the player, not around the boss',
+    out.fanCast && out.fanBolts === 4 && out.fanFromRift <= 1.5,
+    `${out.fanBolts} bolts, worst rift offset ${out.fanFromRift}m`);
+  ok('and nothing leaves during the hang',
+    out.fanTele >= 0.7, `first bolt ${out.fanTele}s after the cast`);
+  ok('the void step marks its landing while the boss is still far away',
+    out.stepMarked, JSON.stringify(out.stepDbg));
+  ok('lands where the ring said it would',
+    out.stepLanded >= 0 && out.stepLanded <= 0.6,
+    `off by ${out.stepLanded}m, ring ${out.stepLandNear}m from the player`);
+  ok('and bites whoever stood inside the ring', out.stepBites);
+  ok('the tear lays three lanes at once', out.tearLanes);
+  ok('and hurts only once they have filled',
+    out.tearWarned >= 1.2, `waited ${out.tearWarned}s`);
+
+  ok('the reworked scheduler keeps throwing majors',
+    out.majors >= 3, `${out.majors} majors in 8s`);
+  ok('and the boss covers ground doing it',
+    out.bossPath >= 8, `${out.bossPath}m walked`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

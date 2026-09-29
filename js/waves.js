@@ -92,7 +92,7 @@ const ADD_PRESSURE = {
   mirrorboss: 4,   // its walls already take up the floor
   carillon: 3,     // the tolls already take up the floor, and they spread
   colossus: 4,
-  maw: 4,
+  maw: 3,     // its rings, lanes and rifts already take up the floor
   palecrown: 4,
   forge: 4,
   conductor: 4,    // its pylons already take up the floor

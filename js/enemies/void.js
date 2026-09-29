@@ -16,8 +16,8 @@ import {
 } from '../utils.js';
 import {
   BOSS_REACH_Y, ENEMY_TYPES, SHARED_MATS, _blinkAt, _blinkFrom, _blinkFwd,
-  _bossAt, _hexFrom, _hexTo, _reachY, aiMelee, aiShrike, eyes, geo, orbit,
-  partsFor, prism, releaseMarks, shard, slab, spike,
+  _bossAt, _hexFrom, _hexTo, _reachY, aiMelee, aiShrike, bossTouch, eyes, geo,
+  orbit, partsFor, prism, shard, slab, spike,
 } from './shared.js';
 
 // VOID's three. Every number here is about SPACE - how long a hole in the air
@@ -304,7 +304,13 @@ export function buildMaw(e, g, s) {
       rx: Math.PI - Math.sin(ang) * 0.4, rz: Math.cos(ang) * 0.4,
     });
   }
-  P('mawVoid', shard(0.44), { y: 0.95, mat: SHARED_MATS.sniperScope, shadow: false });
+  // THE THROAT IS THE EYE. The maw has no eyes for _setEyeAlert to light, so
+  // the throat carries the eye material instead - it is the one bright thing
+  // on the body, it is what every attack comes out of, and the alert flash
+  // therefore reads as the maw itself lighting up to bite. The handle is kept:
+  // the nova swells it while it charges, so that wind-up inflates the mouth.
+  e.throat = P('mawVoid', shard(0.44), { y: 0.95, mat: e.eyeMat, shadow: false });
+  e.throatBase = e.throat.scale.x;
   const maw = new THREE.Mesh(
     geo('mawRing', () => new THREE.TorusGeometry(0.8, 0.13, 8, 16)),
     SHARED_MATS.conduitRing
@@ -615,72 +621,617 @@ export function aiHexer(e, a) {
   }
 }
 
-// MAW. Two pressures at once: a constant drag inward, and rings rolling out
-// along the floor that have to be jumped. Neither is survivable by standing
-// still, which is the whole design.
-export const MAW_RING_CAP = 40;
+// ---- MAW -------------------------------------------------------------------
+// THE VOID BOSS, and the whole theme applied to one fight. A maw does not
+// stand in a corner and soak ammunition - it takes the SPACE the player was
+// going to use. Every attack removes a different kind of room, and every one
+// is a mechanic the roster already taught, at the scale a boss gets to teach
+// it back:
+//
+//   the rings    the old pressure rings, now fired in PAIRS - the jump is a
+//                rhythm, not an event
+//   the drag     the constant pull toward the body. The one attack with no
+//                telegraph, because it is the weather - and the reason every
+//                other attack is one you ESCAPE rather than tank
+//   the fan      rifts open AROUND THE PLAYER and the bolts come out of them;
+//                the warp's trick at boss scale, so cover answers none of it
+//   the collapse a point on the floor is marked, the player is dragged INTO
+//                it, then it detonates - the singularity with the safety off
+//   the step     the maw folds out of space and lands where the player stands,
+//                under a ring that marks the landing - the wraith's blink with
+//                the whole boss inside it, and what keeps the fight MOVING:
+//                it does not hold a corner, the corner comes to you
+//   the tear     lanes split out of the floor at its feet and a rupture races
+//                down each - jumped like the rings, and why the open middle
+//                is not free either
+//   the nova     standing next to it is the mistake it charges for: it drags
+//                the hugger in and bursts. With the body biting on contact,
+//                hugging it is not a strategy
+//
+// One pipeline owns all of it: nothing damages the player that a floor mark,
+// a hanging rift or a folding body did not announce first. Under 45% health
+// it is HUNGRY - the telegraph times never change, they are the fairness, but
+// every cooldown shortens, and the end of the fight is the arena attacking
+// three ways at once.
 
-export const MAW_TOUCH_CAP = 30;
+// The rings. Cheaper than the old single cast because they come in pairs now,
+// and slightly faster, so the second one is genuinely a second decision.
+export const MAW_RING_CAP = 34;
+
+export const MAW_RING_MUL = 1.3;
+
+export const MAW_RING_CD = 3.2;
+
+export const MAW_RING_SPEED = 10;
+
+export const MAW_RING_LIFE = 2.6;
+
+export const MAW_RING_MAX = 3;
+
+// The second ring of the pair lands this long after the first, from wherever
+// the maw has walked to in between - it trails the body, which is exactly
+// what makes the pair a chase rather than a wider ring.
+export const MAW_RING_PAIR = 0.5;
+
+// THE FAN. Four rifts (six on later cycles) hang in an arc around the PLAYER,
+// each beamed back to the maw like the warp's while it hangs, then fire in a
+// fast stagger. Positions locked at cast: sidestepping the arc beats it, and
+// nothing ever comes out of a hole that was not already hanging there.
+export const MAW_FAN_CD = 6;
+
+export const MAW_FAN_N = 4;
+
+// How far from the player a rift hangs - inside the bolt's travel time, so
+// the lead punishes a straight line and the dodge is a change of bearing.
+export const MAW_FAN_R = 6.5;
+
+export const MAW_FAN_HANG = 0.9;
+
+export const MAW_FAN_STAGGER = 0.1;
+
+// THE COLLAPSE. The point owns the drag for its whole fill, and the ambient
+// pull toward the body is suspended while it runs: two pulls at once is a
+// pin, and a pin is the one thing the theme's drag is never allowed to be.
+export const MAW_COL_CD = 8;
+
+export const MAW_COL_R = 4.4;
+
+export const MAW_COL_FILL = 1.2;
+
+export const MAW_COL_PULL = 5.2;
+
+export const MAW_COL_PULLR = 11;
+
+export const MAW_COL_MUL = 1.55;
+
+export const MAW_COL_CAP = 40;
+
+// THE STEP. Fold is the maw leaving, form is it arriving; the landing ring is
+// marked from the first frame of the fold so the destination is as warned as
+// the wraith's ever was. The impact is the ring's promise kept; the unfold
+// afterwards is the player's window, and it is the longer half on purpose.
+export const MAW_STEP_CD = 7.5;
+
+export const MAW_STEP_R = 3.6;
+
+export const MAW_STEP_FOLD = 0.4;
+
+export const MAW_STEP_FORM = 0.5;
+
+export const MAW_STEP_MUL = 1.45;
+
+export const MAW_STEP_CAP = 38;
+
+// How far away it will bother. Nearer than this the step is a second melee;
+// it exists to close ground, and a hungry one closes sooner.
+export const MAW_STEP_MIN = 13;
+
+// THE TEAR. Three lanes (four on later cycles) split from under the maw and a
+// rupture races down each. Ground-level and jumped like the rings - the whole
+// family of VOID floor attacks clears the same way.
+export const MAW_TEAR_CD = 9;
+
+export const MAW_TEAR_FILL = 0.95;
+
+export const MAW_TEAR_LEN = 19;
+
+export const MAW_TEAR_HALF = 1.3;
+
+export const MAW_TEAR_SPEED = 26;
+
+export const MAW_TEAR_MUL = 1.0;
+
+export const MAW_TEAR_CAP = 26;
+
+// THE NOVA. The greed tax: a fast ring at its own feet, a pull exactly its
+// radius wide, then the burst. Weaker than the collapse's drag - the player
+// being punished here is the one already standing in the blast.
+export const MAW_NOVA_CD = 7;
+
+export const MAW_NOVA_R = 6;
+
+export const MAW_NOVA_FILL = 0.9;
+
+export const MAW_NOVA_PULL = 3.2;
+
+export const MAW_NOVA_MUL = 1.7;
+
+export const MAW_NOVA_CAP = 46;
+
+export const MAW_NOVA_REST = 0.55;
+
+// HUNGER. Under the last forty-five percent of the bar the telegraphs stay
+// exactly as long as they were and the cooldowns compress by a third. The
+// escalation is the maw getting frantic, which is the one ramp a gravity well
+// can readably have.
+export const MAW_HUNGER_AT = 0.45;
+
+export const MAW_HUNGER = 0.7;
+
+// Frees every telegraph handle the fight can die holding. The shared
+// releaseMarks knows bs.mark and bs.rings; the maw holds four more kinds, so
+// its cleanup lives here - and it puts the body back together if it died
+// mid-fold, or the corpse pool would be thrown a disc.
+export function releaseMaw(e) {
+  const bs = e.bs;
+  if (!bs || !bs.fx) return;
+  for (const r of bs.rings) bs.fx.markRelease(r.mark);
+  bs.rings.length = 0;
+  for (const im of bs.implosions) bs.fx.markRelease(im.mark);
+  bs.implosions.length = 0;
+  for (const ln of bs.lanes) bs.fx.markRelease(ln.mark);
+  bs.lanes.length = 0;
+  if (bs.landMark >= 0) { bs.fx.markRelease(bs.landMark); bs.landMark = -1; }
+  if (bs.novaMark >= 0) { bs.fx.markRelease(bs.novaMark); bs.novaMark = -1; }
+  if (bs.phase === 'fold' || bs.phase === 'form') _wraithEnd(e);
+}
+
+// One pressure ring, cast from wherever the maw is standing THIS frame. No
+// mark, no ring: a ring the player was never shown is the one failure a
+// telegraph must never have, so a dry pool skips the cast outright.
+function _mawRing(e, ctx, bs) {
+  if (bs.rings.length >= MAW_RING_MAX) return;
+  const mk = ctx.effects.markAcquire();
+  if (mk < 0) return;
+  bs.rings.push({ ox: e.pos.x, oz: e.pos.z, r: 1.5, life: MAW_RING_LIFE, hit: false, mark: mk });
+  _bossAt.set(e.pos.x, 0, e.pos.z);
+  ctx.effects.burst(_bossAt, 0x7c4dff, 16, 4, 1.5, 0.5);
+}
 
 export function aiMaw(e, a) {
   const bs = e.bs;
-  if (!bs.rings) {
+  const ctx = a.ctx;
+  if (bs.phase === undefined) {
+    bs.phase = '';
+    bs.t = 0;
     bs.rings = [];
-    bs.ringCd = 2;
+    bs.ringCd = 1.4;
+    bs.ringEcho = 0;
+    bs.implosions = [];
+    bs.collapseCd = 4.5;
+    bs.rifts = [];
+    bs.fanCd = 2.4;
+    bs.lanes = [];
+    bs.fissureCd = 7.5;
+    bs.novaMark = -1;
+    bs.novaCd = 6;
+    bs.landMark = -1;
+    bs.stepCd = 5.5;
     bs.touchCd = 0;
-    bs.mark = -1;
   }
-  bs.fx = a.ctx.effects;
+  bs.fx = ctx.effects;
+  const p = ctx.player;
+  const hunger = e.hp < e.maxHp * MAW_HUNGER_AT ? MAW_HUNGER : 1;
 
-  e.ringA.rotation.z += a.dt * 2.2;
+  // The ring works harder while anything is being wound: one silent read on
+  // "the maw is doing something", underneath the telegraphs themselves.
+  e.ringA.rotation.z += a.dt * (bs.phase !== '' || bs.implosions.length ? 7.5 : 2.2);
 
-  // The drag, every frame, falling off with distance. Capped in main.js well
-  // under the player's own speed: running out has to stay possible.
-  if (a.dist < 22 && e.status.fear <= 0) {
-    a.ctx.pullPlayer(-a.nx, -a.nz, 4.2 * (1 - a.dist / 22) * (e.damage / 26));
+  // CONTACT, in every state, the frame it happens - including mid-fold: a
+  // maw on its way out of space is still there until it is not.
+  bossTouch(e, a, 1.0);
+
+  // THE WEATHER. Suspended while a collapse owns the drag (two pulls is a
+  // pin), while the nova runs its own, and while the body is between spaces -
+  // being dragged toward a floor with nothing on it is the one unfair frame
+  // this fight must never show.
+  if (!bs.implosions.length && bs.phase !== 'fold' && bs.phase !== 'form' &&
+      bs.phase !== 'nova' && e.status.fear <= 0 && a.dist < 22) {
+    ctx.pullPlayer(-a.nx, -a.nz, 4.2 * (1 - a.dist / 22) * (e.damage / 26));
   }
 
-  // Rings roll outward and damage anyone standing on the ground as they pass.
+  // ---- rings in flight -----------------------------------------------------
+  // Anchored where they were CAST, not re-centred on the boss: the old maw
+  // never moved so nobody ever saw the difference, and this one never stops.
   for (let i = bs.rings.length - 1; i >= 0; i--) {
     const r = bs.rings[i];
-    r.r += 9 * a.dt;
+    r.r += MAW_RING_SPEED * a.dt;
     r.life -= a.dt;
-    // Low fill so it reads as a travelling RING rather than a filled disc -
-    // the edge is the part that hurts.
-    a.ctx.effects.markSet(r.mark, e.pos.x, e.pos.z, r.r, 0x7c4dff, 0.15);
-    const pd = Math.hypot(a.ctx.player.pos.x - e.pos.x, a.ctx.player.pos.z - e.pos.z);
-    // Only catches a player on the ground: the jump gives about 0.8s of air
-    // against a ring moving 9 m/s, which clears it comfortably if it is timed.
-    if (!r.hit && Math.abs(pd - r.r) < 0.7 && a.ctx.player.pos.y < 0.6) {
+    ctx.effects.markSet(r.mark, r.ox, r.oz, r.r, 0x7c4dff, 0.15);
+    const pd = Math.hypot(p.pos.x - r.ox, p.pos.z - r.oz);
+    // Ground only: the jump gives about 0.8s of air against a band 0.7m deep.
+    if (!r.hit && Math.abs(pd - r.r) < 0.7 && p.pos.y < 0.6) {
       r.hit = true;
-      a.ctx.onHitPlayer(Math.min(MAW_RING_CAP, e.damage * 1.54), a.ctx.player.pos, e);
+      ctx.onHitPlayer(Math.min(MAW_RING_CAP, e.damage * MAW_RING_MUL), p.pos, e);
     }
     if (r.life <= 0 || r.r > 24) {
-      a.ctx.effects.markRelease(r.mark);
+      ctx.effects.markRelease(r.mark);
       bs.rings.splice(i, 1);
     }
   }
+  if (bs.ringEcho > 0) {
+    bs.ringEcho -= a.dt;
+    if (bs.ringEcho <= 0) _mawRing(e, ctx, bs);
+  }
+
+  // ---- the collapse, in flight --------------------------------------------
+  // Its drag is STRONG, unlike the ambient: owning the point is the whole
+  // payload. Falling off to nothing at the edge is what keeps the answer
+  // "sprint out NOW" rather than "you were never getting out".
+  for (let i = bs.implosions.length - 1; i >= 0; i--) {
+    const im = bs.implosions[i];
+    im.t += a.dt;
+    ctx.effects.markSet(im.mark, im.x, im.z, MAW_COL_R, 0x8b7bff,
+      Math.min(1, im.t / MAW_COL_FILL));
+    const dx = im.x - p.pos.x;
+    const dz = im.z - p.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < MAW_COL_PULLR) ctx.pullPlayer(dx, dz, MAW_COL_PULL * (1 - d / MAW_COL_PULLR));
+    if (im.t < MAW_COL_FILL) continue;
+    ctx.effects.markRelease(im.mark);
+    bs.implosions.splice(i, 1);
+    _voidAt.set(im.x, 0.3, im.z);
+    ctx.effects.shockwave(_voidAt, 0x8b7bff, MAW_COL_R, 0.4);
+    ctx.effects.burst(_voidAt, 0xd0c4ff, 26, 7, 3, 0.6);
+    ctx.effects.addShake(0.3);
+    if (d < MAW_COL_R) {
+      ctx.onHitPlayer(
+        Math.min(MAW_COL_CAP, e.damage * MAW_COL_MUL) * (1 - 0.55 * d / MAW_COL_R),
+        _voidAt, e
+      );
+    }
+  }
+
+  // ---- committed attacks ---------------------------------------------------
+  // Each runs out no matter what, feared included, like Siege's charge: a
+  // staggered boss stops STARTING things; it does not un-throw what is already
+  // in the air.
+
+  // THE FAN. Drifting at half speed rather than rooted - a caster that plants
+  // itself stops reading as the thing that walks you down.
+  if (bs.phase === 'fan') {
+    e._setEyeAlert(true);
+    let live = false;
+    for (const rf of bs.rifts) {
+      rf.t -= a.dt;
+      if (rf.t > 0) {
+        live = true;
+        _voidAt.set(rf.x, 1.35, rf.z);
+        ctx.effects.burst(_voidAt, 0x8b7bff, 2, 1.2, 0, 0.35);
+        // The beam back to the body is the ownership line - WHO opened this
+        // hole is never in doubt, the warp's own contract.
+        _bossAt.set(e.pos.x, 1.8, e.pos.z);
+        ctx.effects.beam(_bossAt, _voidAt, 0x6f5bff);
+        continue;
+      }
+      if (!rf.fired) {
+        rf.fired = true;
+        ctx.addProjectile(rf.x, 1.35, rf.z, 'maw', e._projScale(), rf.spread);
+        _voidAt.set(rf.x, 1.35, rf.z);
+        ctx.effects.burst(_voidAt, 0xd0c4ff, 12, 4, 2, 0.4);
+      }
+    }
+    orbit(e, a, ENEMY_TYPES.maw.orbit);
+    a.vx *= 0.45;
+    a.vz *= 0.45;
+    if (!live) {
+      bs.phase = '';
+      e._setEyeAlert(false);
+    }
+    return;
+  }
+
+  // THE STEP, leaving. The landing ring is already down and filling - the
+  // destination was locked at cast, so this squash is the window to be
+  // somewhere else when it fills.
+  if (bs.phase === 'fold') {
+    bs.t -= a.dt;
+    bs.stepT += a.dt;
+    e._setEyeAlert(true);
+    _wraithForm(e, Math.max(0, bs.t / MAW_STEP_FOLD));
+    ctx.effects.markSet(bs.landMark, bs.landX, bs.landZ, MAW_STEP_R, 0x8b7bff,
+      Math.min(1, bs.stepT / (MAW_STEP_FOLD + MAW_STEP_FORM)));
+    if (bs.t > 0) return;
+    // Out. The burst where it stood is the other half of the move's line.
+    _voidAt.set(e.pos.x, 0.9, e.pos.z);
+    ctx.effects.burst(_voidAt, ENEMY_TYPES.maw.eye, 18, 6, 2.5, 0.45);
+    bs.fromX = e.pos.x;
+    bs.fromZ = e.pos.z;
+    e.pos.x = bs.landX;
+    e.pos.z = bs.landZ;
+    resolveCircle(e.pos, e.radius, ctx.obstacles, e.collideH);
+    _voidAt.set(e.pos.x, 0.5, e.pos.z);
+    ctx.effects.burst(_voidAt, ENEMY_TYPES.maw.eye, 22, 6, 2.5, 0.5);
+    ctx.effects.shockwave(_voidAt, ENEMY_TYPES.maw.color, MAW_STEP_R, 0.4);
+    ctx.effects.addShake(0.3);
+    // The impact is the ring's promise kept: inside it, on the ground, when
+    // it fills.
+    const dLand = Math.hypot(p.pos.x - bs.landX, p.pos.z - bs.landZ);
+    if (dLand < MAW_STEP_R && _reachY(a) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(
+        Math.min(MAW_STEP_CAP, e.damage * MAW_STEP_MUL) * (1 - 0.5 * dLand / MAW_STEP_R),
+        e.pos, e
+      );
+    }
+    bs.phase = 'form';
+    bs.t = MAW_STEP_FORM;
+    return;
+  }
+
+  // THE STEP, arriving. Helpless, unfolding, the line of the move drawn
+  // behind it - the wraith's contract at boss size: the arrival is the long
+  // half, and it is where the shots you were owed go in.
+  if (bs.phase === 'form') {
+    bs.t -= a.dt;
+    bs.stepT += a.dt;
+    _wraithForm(e, 1 - Math.max(0, bs.t / MAW_STEP_FORM));
+    ctx.effects.markSet(bs.landMark, bs.landX, bs.landZ, MAW_STEP_R, 0x8b7bff,
+      Math.min(1, bs.stepT / (MAW_STEP_FOLD + MAW_STEP_FORM)));
+    _blinkFrom.set(bs.fromX, 0, bs.fromZ);
+    _blinkAt.set(e.pos.x, 0, e.pos.z);
+    ctx.effects.beam(_blinkFrom, _blinkAt, ENEMY_TYPES.maw.eye);
+    if (bs.t > 0) return;
+    ctx.effects.markRelease(bs.landMark);
+    bs.landMark = -1;
+    _wraithEnd(e);
+    bs.phase = 'rest';
+    bs.t = 0.45;
+    return;
+  }
+
+  // THE TEAR, filling. All lanes drawn from the first frame; the bearings were
+  // locked at cast, so the gaps between them are where the player goes.
+  if (bs.phase === 'tearfill') {
+    bs.t -= a.dt;
+    e._setEyeAlert(true);
+    const fill = 1 - bs.t / MAW_TEAR_FILL;
+    for (const ln of bs.lanes) {
+      ctx.effects.markSet(ln.mark,
+        e.pos.x + ln.dx * MAW_TEAR_LEN * 0.5, e.pos.z + ln.dz * MAW_TEAR_LEN * 0.5,
+        MAW_TEAR_HALF, 0x8b7bff, fill,
+        MAW_TEAR_LEN / (MAW_TEAR_HALF * 2), Math.atan2(-ln.dx, -ln.dz));
+    }
+    if (bs.t > 0) return;
+    bs.phase = 'tear';
+    bs.t = MAW_TEAR_LEN / MAW_TEAR_SPEED;
+    _voidAt.set(e.pos.x, 0.2, e.pos.z);
+    ctx.effects.shockwave(_voidAt, 0x8b7bff, 4, 0.3);
+    ctx.effects.addShake(0.2);
+    return;
+  }
+
+  // THE TEAR, running. A rupture front races down each lane - floor-only, one
+  // hit per lane - and the mark drains behind the front so what stays lit is
+  // where it can still hurt. Jump the front or stand between the lanes.
+  if (bs.phase === 'tear') {
+    bs.t -= a.dt;
+    let live = false;
+    for (const ln of bs.lanes) {
+      if (ln.done) continue;
+      ln.front += MAW_TEAR_SPEED * a.dt;
+      if (ln.front > MAW_TEAR_LEN) {
+        ln.done = true;
+        ctx.effects.markRelease(ln.mark);
+        ln.mark = -1;
+        continue;
+      }
+      live = true;
+      _voidAt.set(e.pos.x + ln.dx * ln.front, 0.5, e.pos.z + ln.dz * ln.front);
+      ctx.effects.burst(_voidAt, 0x8b7bff, 3, 2.2, 1.6, 0.3);
+      ctx.effects.markSet(ln.mark,
+        e.pos.x + ln.dx * MAW_TEAR_LEN * 0.5, e.pos.z + ln.dz * MAW_TEAR_LEN * 0.5,
+        MAW_TEAR_HALF, 0x8b7bff, 0.45 * (1 - ln.front / MAW_TEAR_LEN),
+        MAW_TEAR_LEN / (MAW_TEAR_HALF * 2), Math.atan2(-ln.dx, -ln.dz));
+      const rx = p.pos.x - e.pos.x;
+      const rz = p.pos.z - e.pos.z;
+      const along = rx * ln.dx + rz * ln.dz;
+      const perp = Math.abs(rx * ln.dz - rz * ln.dx);
+      // Same answer as the rings: the hurt is where the floor IS, and the
+      // jump is the way off it.
+      if (!ln.hit && along > 0 && along < MAW_TEAR_LEN + 0.5 &&
+          perp < MAW_TEAR_HALF + 0.35 && Math.abs(along - ln.front) < 1.1 &&
+          p.pos.y < 0.6) {
+        ln.hit = true;
+        ctx.onHitPlayer(Math.min(MAW_TEAR_CAP, e.damage * MAW_TEAR_MUL), p.pos, e);
+      }
+    }
+    if (live) return;
+    bs.phase = '';
+    e._setEyeAlert(false);
+    return;
+  }
+
+  // THE NOVA. The throat swells as it charges - the mouth opening is this
+  // telegraph's other half.
+  if (bs.phase === 'nova') {
+    bs.t -= a.dt;
+    e._setEyeAlert(true);
+    const fill = 1 - bs.t / MAW_NOVA_FILL;
+    ctx.effects.markSet(bs.novaMark, e.pos.x, e.pos.z, MAW_NOVA_R, 0xd0c4ff, fill);
+    e.throat.scale.setScalar(e.throatBase * (1 + fill * 0.7));
+    if (a.dist < 11) ctx.pullPlayer(-a.nx, -a.nz, MAW_NOVA_PULL * (1 - a.dist / 11));
+    if (bs.t > 0) return;
+    ctx.effects.markRelease(bs.novaMark);
+    bs.novaMark = -1;
+    e.throat.scale.setScalar(e.throatBase);
+    _voidAt.set(e.pos.x, 0.4, e.pos.z);
+    ctx.effects.shockwave(_voidAt, 0x7c4dff, MAW_NOVA_R, 0.5);
+    ctx.effects.burst(_voidAt, 0xd0c4ff, 34, 8, 3.5, 0.7);
+    ctx.effects.addShake(0.45);
+    ctx.sfx.impact();
+    if (a.dist < MAW_NOVA_R && _reachY(a) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(
+        Math.min(MAW_NOVA_CAP, e.damage * MAW_NOVA_MUL) * (1 - 0.5 * a.dist / MAW_NOVA_R),
+        e.pos, e
+      );
+    }
+    bs.phase = 'rest';
+    bs.t = MAW_NOVA_REST;
+    return;
+  }
+
+  // Winded. It stands there and does nothing, on purpose: it just arrived or
+  // just burst, and this is the part of the fight the player is paid with.
+  if (bs.phase === 'rest') {
+    e._setEyeAlert(false);
+    bs.t -= a.dt;
+    if (bs.t <= 0) bs.phase = '';
+    return;
+  }
+
+  // ---- free: stalk and schedule ---------------------------------------------
+  // The walk is an orbit closed to arm's length - it circles at seven and a
+  // half metres like water round a drain, and this alone is more movement than
+  // the old fight had in its whole script.
+  if (e.status.fear > 0) {
+    e._setEyeAlert(false);
+    return;
+  }
+  orbit(e, a, ENEMY_TYPES.maw.orbit);
+  e._setEyeAlert(false);
 
   bs.ringCd -= a.dt;
-  if (bs.ringCd <= 0 && bs.rings.length < 3 && e.status.fear <= 0) {
-    bs.ringCd = 3.2 * e.rate;
-    const mk = a.ctx.effects.markAcquire();
-    if (mk >= 0) bs.rings.push({ r: 1.5, life: 2.6, hit: false, mark: mk });
-    _bossAt.set(e.pos.x, 0, e.pos.z);
-    a.ctx.effects.burst(_bossAt, 0x7c4dff, 18, 4, 1.5, 0.6);
+  if (bs.ringCd <= 0) {
+    bs.ringCd = MAW_RING_CD * e.rate * hunger;
+    _mawRing(e, ctx, bs);
+    bs.ringEcho = MAW_RING_PAIR;
   }
 
-  // Slow, and it barely chases - the pull is what closes the distance. Touch
-  // damage exists only so it cannot be hugged while the rings pass overhead.
-  bs.touchCd -= a.dt;
-  if (a.dist < 4 && _reachY(a) < BOSS_REACH_Y && bs.touchCd <= 0) {
-    bs.touchCd = 1.4 * e.rate;
-    a.ctx.onHitPlayer(Math.min(MAW_TOUCH_CAP, e.damage * 0.77), e.pos, e);
-    a.ctx.effects.addShake(0.15);
+  bs.fanCd -= a.dt;
+  bs.collapseCd -= a.dt;
+  bs.stepCd -= a.dt;
+  bs.fissureCd -= a.dt;
+  bs.novaCd -= a.dt;
+  // Majors wait out a live collapse - its drag is already the room's pull -
+  // and the phase mutex covers one another.
+  if (bs.implosions.length > 0) return;
+
+  // The nova first: a player standing next to it is paying for it right now.
+  if (bs.novaCd <= 0 && a.dist < (hunger < 1 ? 9 : 5.8)) {
+    const mk = ctx.effects.markAcquire();
+    if (mk < 0) { bs.novaCd = 0.4; return; }
+    bs.novaCd = MAW_NOVA_CD * e.rate * hunger;
+    bs.novaMark = mk;
+    bs.phase = 'nova';
+    bs.t = MAW_NOVA_FILL;
+    e.flash = 0.14;
+    return;
   }
-  if (e.status.fear > 0) return;
-  a.vx = a.px * a.sp;
-  a.vz = a.pz * a.sp;
+
+  // The step. Its own movement - it never asks to be chased across the room.
+  if (bs.stepCd <= 0 && a.dist > (hunger < 1 ? 9 : MAW_STEP_MIN)) {
+    const B = 21.6 - (e.radius - 0.5);
+    let tx = 0;
+    let tz = 0;
+    let found = false;
+    for (let tries = 0; tries < 4 && !found; tries++) {
+      const ab = Math.random() * Math.PI * 2;
+      const rr = 3.2 + Math.random() * 1.8;
+      tx = Math.max(-B, Math.min(B, p.pos.x + Math.cos(ab) * rr));
+      tz = Math.max(-B, Math.min(B, p.pos.z + Math.sin(ab) * rr));
+      _voidAt.set(tx, 0.5, tz);
+      // Never INTO geometry - the wraith's own rule: a body arriving inside a
+      // pillar is a collision question with no honest answer.
+      found = !pointInObstacle(_voidAt, ctx.obstacles);
+    }
+    if (!found) { bs.stepCd = 0.6; return; }
+    const mk = ctx.effects.markAcquire();
+    if (mk < 0) { bs.stepCd = 0.4; return; }
+    bs.stepCd = MAW_STEP_CD * e.rate * hunger;
+    bs.landMark = mk;
+    bs.landX = tx;
+    bs.landZ = tz;
+    bs.stepT = 0;
+    if (e.blinkScale === undefined) e.blinkScale = e.group.scale.x || 1;
+    bs.phase = 'fold';
+    bs.t = MAW_STEP_FOLD;
+    e.flash = 0.14;
+    return;
+  }
+
+  // The collapse - the point under the player, a step of lead, locked at
+  // cast. Moving NOW beats it; staying put never does.
+  if (bs.collapseCd <= 0 && a.dist > 7) {
+    const mk = ctx.effects.markAcquire();
+    if (mk < 0) { bs.collapseCd = 0.4; return; }
+    bs.collapseCd = MAW_COL_CD * e.rate * hunger;
+    bs.implosions.push({
+      x: Math.max(-19, Math.min(19, p.pos.x + p.vel.x * 0.35)),
+      z: Math.max(-19, Math.min(19, p.pos.z + p.vel.z * 0.35)),
+      t: 0, mark: mk,
+    });
+    e.flash = 0.14;
+    return;
+  }
+
+  // The tear. All-or-nothing on the marks: half a fan of lanes is a different
+  // attack than the one that was cast.
+  if (bs.fissureCd <= 0 && a.dist < 26) {
+    const n = 3 + Math.min(1, e.cycle);
+    const marks = [];
+    for (let i = 0; i < n; i++) {
+      const mk = ctx.effects.markAcquire();
+      if (mk < 0) break;
+      marks.push(mk);
+    }
+    if (marks.length < n) {
+      for (const mk of marks) ctx.effects.markRelease(mk);
+      bs.fissureCd = 0.4;
+      return;
+    }
+    bs.fissureCd = MAW_TEAR_CD * e.rate * hunger;
+    bs.lanes.length = 0;
+    const ab = Math.atan2(p.pos.z - e.pos.z, p.pos.x - e.pos.x);
+    for (let i = 0; i < n; i++) {
+      // The centre lane runs THROUGH the player: the answer is a step to the
+      // side, into the gap - the whole reason there are three.
+      const ang = ab + (i - (n - 1) / 2) * 0.5;
+      bs.lanes.push({
+        mark: marks[i], dx: Math.cos(ang), dz: Math.sin(ang),
+        front: 0, hit: false, done: false,
+      });
+    }
+    bs.phase = 'tearfill';
+    bs.t = MAW_TEAR_FILL;
+    e.flash = 0.14;
+    return;
+  }
+
+  // The fan - the one attack with full reach, so it is last in line and the
+  // room is never quiet at range either.
+  if (bs.fanCd <= 0 && a.dist < 30) {
+    bs.fanCd = MAW_FAN_CD * e.rate * hunger;
+    bs.rifts.length = 0;
+    const n = MAW_FAN_N + Math.min(2, e.cycle);
+    const pa = Math.atan2(p.pos.z - e.pos.z, p.pos.x - e.pos.x);
+    for (let i = 0; i < n; i++) {
+      const ang = pa + (i - (n - 1) / 2) * (1.7 / n);
+      // Planted AROUND THE PLAYER, like the warp's exit rifts: what is read is
+      // the holes in the air, never a bearing off the body - which is the
+      // entire reason cover does not help against this boss.
+      bs.rifts.push({
+        x: Math.max(-20, Math.min(20, p.pos.x + Math.cos(ang) * MAW_FAN_R)),
+        z: Math.max(-20, Math.min(20, p.pos.z + Math.sin(ang) * MAW_FAN_R)),
+        t: MAW_FAN_HANG + i * MAW_FAN_STAGGER,
+        fired: false,
+        // The stagger fans the bolts too, so a wide sideways step beats the
+        // rifts in turn rather than dodging one volley-shaped blob.
+        spread: (i - (n - 1) / 2) * 0.055,
+      });
+    }
+    bs.phase = 'fan';
+    e.flash = 0.14;
+  }
 }
 
 const TYPES = {
@@ -813,17 +1364,26 @@ const TYPES = {
     build: buildShade, ai: aiShrike,
   },
 
-  // A gravity well that will not let the player leave. It drags them in
-  // continuously and rolls rings outward along the floor that have to be
-  // JUMPED - the one boss that asks for a control the game has barely used.
+  // A gravity well that HUNTS. Where the old fight was a drain you circled at
+  // your own pace, this one closes to arm's length and stays there - the body
+  // itself bites on contact, and every few seconds it takes a different piece
+  // of the room away: rifts opening around YOU, a point on the floor
+  // collapsing inward, lanes tearing out of the ground at its feet, and the
+  // maw itself folding out of space onto the one spot you were standing on.
+  // Nothing in the fight is answered by standing still; the health bar is the
+  // only thing about it that is just a health bar.
   maw: {
-    hp: 3300, speed: 1.2, damage: 26, value: 7000, color: 0x311b92, eye: 0x7c4dff,
+    hp: 3300, speed: 2.3, damage: 26, value: 7000, color: 0x311b92, eye: 0x7c4dff,
     scale: 3.0, radius: 1.8, mass: 10, boss: true,
     hitbox: { r: 0.75, y: 0.8 },
+    orbit: { dist: 7.5, band: 2, out: 1.05, in: -0.5, strafe: 0.7, flip: 1.8, flipVar: 1.4 },
+    proj: { core: 0xd0c4ff, glow: 0x7c4dff, scale: 0.85, speed: [16, 0.3, 26], dmg: [9, 0.4, 16] },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
     build: buildMaw, ai: aiMaw,
-    cleanup: releaseMarks,
+    // bs holds five kinds of telegraph handle, two more than the shared
+    // releaseMarks knows about - so the cleanup is the theme's own.
+    cleanup: releaseMaw,
   },
 };
 
