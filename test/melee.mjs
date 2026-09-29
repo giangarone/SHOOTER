@@ -32,10 +32,12 @@ const ok = (name, cond, extra = '') => {
 };
 
 // Every type whose ai routes through _meleeCycle, with its own cooldown - the
-// ceiling on how often it may ever land a blow.
+// ceiling on how often it may ever land a blow. Schism used to be in this
+// table; its wind-up swing is gone and its contact is the always-on boss
+// touch clock instead, measured in test/boss.mjs's schism section.
 const MELEE = {
   chaser: 1.1, splitter: 1.0, tank: 3.0, wraith: 0.9,
-  bulwark: 2.2, magma: 1.3, schism: 1.6,
+  bulwark: 2.2, magma: 1.3,
 };
 const STAND_SECONDS = 6;
 // The player's BASE_SPEED (player.js), in metres a SECOND. The body is driven
@@ -58,9 +60,9 @@ try {
     const step = () => new Promise((r) => requestAnimationFrame(r));
 
     // MELEE BLOWS ONLY. _meleeCycle passes the enemy as `source`; projectiles
-    // come through the projectile ctx with no source, and counting a schism's
-    // burst volley would make it look like it was beating its melee cooldown
-    // when it was simply also shooting.
+    // come through the projectile ctx with no source, and counting a boss's
+    // volley would make it look like it was beating its melee cooldown when
+    // it was simply also shooting.
     // ONLY THE SUBJECT'S BLOWS. `source` alone was not specific enough: the
     // wave spawner keeps running underneath these trials, so anything it put
     // on the floor was landing its own hits and being counted against the one

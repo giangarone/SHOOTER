@@ -804,10 +804,15 @@ context. The start screen says so, and one click anywhere fixes it.
   cold against a wall, and turrets it throws at the ground near you - they arc
   in under a landing ring, bolt themselves down and start shooting, three on
   the floor at most, and each one is a few rounds to destroy), **Siege**
-  (telegraphed mortar barrages and a charge of its own), **Schism** (fires eight
-  rounds at once in every direction after a wind-up, and splits three times
-  over - two halves, then four, then eight, so it gets more dangerous as it
-  comes apart), **Maw** (drags you in and rolls rings you have to jump) and the
+  (telegraphed mortar barrages and a charge of its own), **Schism** (PLAGUE's
+  splitting mass - touching it hurts at all times, and between its kept
+  eight-way volley it plants and rips three rotting corridors through your
+  bearing, lobs a four-glob gas barrage re-led at your feet, pounces down a
+  marked lane in chained hops that burst into gas where it lands, tolls a
+  ring that stands its freshly fallen adds back up while the ring is up, and
+  bursts point-blank into a ring of bile if you try to hug it - and it still
+  splits three times over, two halves, then four, then eight, every piece
+  keeping all of it), **Maw** (drags you in and rolls rings you have to jump) and the
   **Herald** (blinks, volleys, and enrages under 30%). **THE BROODMOTHER**,
   HIVE's, is a nursery: she is slow and nearly harmless in herself - a melee
   swing, a bite, nothing more - and everything dangerous in the room is

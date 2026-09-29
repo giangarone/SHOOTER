@@ -120,18 +120,27 @@ try {
     if (checks.some(([, ok]) => !ok)) console.log('     ! ' + JSON.stringify(rows));
   }
 
-  // ---- schism: the splits and the volley ------------------------------------
-  // Both of Schism's mechanics are invisible to the loop below, which chips
-  // every boss down as fast as it can and so never lets the health bar rest on
-  // a threshold. Driven by hand here instead:
+  // ---- schism: the reworked fight -------------------------------------------
+  // Schism's mechanics are invisible to the loop below, which chips every boss
+  // down as fast as it can and so never lets the health bar rest anywhere.
+  // Driven by hand here instead. The order matters: the five ATTACK probes run
+  // while the fight is one tier-0 part (the toll only tolls on big bodies),
+  // then the same split ladder and volley checks as always:
   //
-  //   three tiers    2 parts, then 4, then 8 - the fight gets MORE dangerous
-  //                  as it comes apart, which is the whole design
-  //   the volley     eight rounds, every bearing, after a wind-up. Fired by
-  //                  every part, so it has to survive the splits.
+  //   touch         standing next to it pays, on a cadence - not a machine-gun
+  //   nova          a marked tell, then a burst, then a ring of bile
+  //   rupture       corridors marked first, then they blow, then the rot stays
+  //   spore rain    four globs in under a second, and they land as clouds
+  //   brood lunge   the part crosses the room and leaves gas where it lands
+  //   last rites    while the ring is up, a fresh corpse stands back up
+  //   three tiers   2 parts, then 4, then 8 - the fight gets MORE dangerous
+  //                 as it comes apart, which is the whole design
+  //   the volley    eight rounds, every bearing, after a wind-up. Fired by
+  //                 every part, so it has to survive the splits.
   {
     const r = await page.evaluate(async () => {
       const g = window.__game;
+      const { ENEMY_TYPES } = await import('./js/enemy.js');
       // Schism is PLAGUE's boss. Wave 15 used to BE Schism; it is now whatever
       // the deck dealt, so the theme is what has to be asked for.
       g.setTheme('plague');
@@ -153,8 +162,8 @@ try {
       // wait on real time, which really meant waiting on the frame loop - and
       // a headless Chrome sharing a machine with another suite gets starved of
       // frames. The volley then fired nothing at all and the checks failed on
-      // the harness rather than on the boss. Both mechanics are written in
-      // game time (a.dt), so game time is what drives them here.
+      // the harness rather than on the boss. The mechanics are written in game
+      // time (a.dt), so game time is what drives them here.
       const DT = 1 / 60;
       let clock = 0;
       const run = (seconds) => {
@@ -164,6 +173,200 @@ try {
           g._updateEnemies(DT);
         }
       };
+      // One tick of every part's ai before anything is forced, so the bs
+      // blocks below are written on INITIALISED state - the ai owns the shape.
+      run(0.3);
+
+      // THE PROBE RIG. An unkillable player pinned to a spot, the add trickle
+      // silenced, hits counted by SOURCE - the boss's body charges the probes
+      // directly; its volley rounds and its rotten ground carry no source and
+      // never pollute a contact count.
+      g.autoTest = false;
+      g.input.shoot = false;
+      g.input.shootFresh = false;
+      const P = g.player;
+      P.invulnEnd = -1;
+      const origUpdate = P.update.bind(P);
+      let px = 0;
+      let pz = 0;
+      P.update = (...args) => {
+        origUpdate(...args);
+        P.pos.set(px, 0, pz);
+        P.health = P.maxHealth;
+      };
+      // The pin applies NOW as well as per frame: run() steps read the
+      // position directly and would otherwise see last probe's spot.
+      const pinAt = (x, z) => { px = x; pz = z; g.player.pos.set(x, 0, z); };
+      // The boss always stands near an arena edge; the safe line for a probe
+      // is the one toward the middle of the room.
+      const inDir = (part) => (Math.abs(part.pos.x) > Math.abs(part.pos.z)
+        ? [-Math.sign(part.pos.x) || -1, 0] : [0, -Math.sign(part.pos.z) || -1]);
+      const origHurt = g._hurtPlayer.bind(g);
+      const hits = [];
+      g._hurtPlayer = (d, pos, src) => {
+        hits.push({ src, at: g.time });
+        origHurt(d, pos, src);
+      };
+      const hitsOn = (part) => hits.filter((h) => h.src === part);
+      const bileCount = () => g._hazard.filter((h) => h.kind === 'bile').length;
+      const gasCount = () => g._hazard.filter((h) => h.kind === 'gas').length;
+      const marksUsed = () => g.effects.marks.filter((m) => m.used).length;
+      // One clean slate per probe: no adds, no leftover ground, and every part
+      // parked with every attack on cooldown so only the probed one can fire.
+      const silence = () => {
+        g.bossFight.addTimer = 9999;
+        g.bossFight.addInterval = 9999;
+        for (const e of g.enemies) {
+          if (g.bossFight.parts.includes(e)) continue;
+          if (e.dead) continue;
+          e.dead = true;
+        }
+        for (const p of g.bossFight.parts) {
+          // Through the type's own cleanup, not a spell-it-out here: the test
+          // then proves the telegraph pool genuinely comes back with the boss.
+          const cl = ENEMY_TYPES.schism.cleanup;
+          if (cl) cl(p);
+          p.bs.state = 'prowl';
+          p.bs.t = p.bs.tMax = 99;
+          p.bs.cdNova = p.bs.cdRain = p.bs.cdRupture = p.bs.cdLunge = p.bs.cdToll = 999;
+          p.bs.tell = 0;
+          p.bs.burstCd = 999;
+        }
+        g._clearHazards();
+        run(DT * 2);
+      };
+      const res = {};
+      const part0 = g.bossFight.parts[0];
+
+      // ---- TOUCH. Next to it, on the clock, never faster ---------------
+      {
+        silence();
+        hits.length = 0;
+        // Prowl backs the boss off an adjacent player by design, so the probe
+        // re-pins the player next to it every chunk - the question is what
+        // sustained CONTACT costs, not what standing in one spot does.
+        for (let i = 0; i < 16; i++) {
+          const [ix, iz] = inDir(part0);
+          pinAt(part0.pos.x + ix * 1.8, part0.pos.z + iz * 1.8);
+          run(0.2);
+        }
+        const mine = hitsOn(part0);
+        res.touchHits = mine.length;
+        let gap = Infinity;
+        for (let i = 1; i < mine.length; i++) gap = Math.min(gap, mine[i].at - mine[i - 1].at);
+        res.touchMinGap = gap === Infinity ? -1 : +gap.toFixed(2);
+      }
+
+      // ---- LAST RITES. A body that falls inside the toll stands back up --
+      {
+        silence();
+        const [ix, iz] = inDir(part0);
+        // The toll does not need the player close; park them away from it.
+        pinAt(part0.pos.x + ix * 14, part0.pos.z + iz * 14);
+        // spawnEnemy returns nothing - the new body is the tail of the list.
+        g.spawnEnemy('chaser');
+        const victim = g.enemies[g.enemies.length - 1];
+        victim.pos.set(part0.pos.x + ix * 4, 0, part0.pos.z + iz * 4);
+        part0.bs.cdToll = 0;
+        part0.bs.t = 0;
+        run(0.6);
+        res.tollState = part0.bs.state;
+        res.tollRing = marksUsed() > 0;
+        // The body falls DURING the toll - that timing is the whole attack.
+        victim.dead = true;
+        run(2.2);
+        const rev = g.enemies.find((x) => x.revenant && !x.dead);
+        res.tollRaised = !!rev;
+        res.tollMarkedVictim = !!victim.raised;
+        // At a fraction of the bar, like the carrion's own raising - a body
+        // that came back whole would be the boss doubling its wave.
+        res.tollFrac = rev ? +(rev.maxHp / victim.maxHp).toFixed(2) : -1;
+        hits.length = 0;
+      }
+
+      // ---- NOVA. The hug answer -------------------------------------------
+      {
+        silence();
+        const [ix, iz] = inDir(part0);
+        pinAt(part0.pos.x + ix * 3.2, part0.pos.z + iz * 3.2);
+        const bile0 = bileCount();
+        const marks0 = marksUsed();
+        part0.bs.cdNova = 0;
+        part0.bs.t = 0;
+        hits.length = 0;
+        run(0.25);
+        res.novaTelled = part0.bs.state === 'novaTell';
+        res.novaMarked = marksUsed() > marks0;
+        run(0.9);
+        res.novaHit = hitsOn(part0).length > 0;
+        res.novaBile = bileCount() - bile0;
+      }
+
+      // ---- RUPTURE. Corridors painted first, blown second ------------------
+      {
+        silence();
+        const [ix, iz] = inDir(part0);
+        pinAt(part0.pos.x + ix * 4.5, part0.pos.z + iz * 4.5);
+        const bile0 = bileCount();
+        const marks0 = marksUsed();
+        part0.bs.cdRupture = 0;
+        part0.bs.t = 0;
+        hits.length = 0;
+        run(0.3);
+        res.ruptureTelled = part0.bs.state === 'ruptureTell';
+        res.ruptureMarked = marksUsed() > marks0;
+        run(0.8);
+        res.ruptureHit = hitsOn(part0).length > 0;
+        res.ruptureBile = bileCount() - bile0;
+      }
+
+      // ---- SPORE RAIN. Four globs, then clouds -----------------------------
+      {
+        silence();
+        const [ix, iz] = inDir(part0);
+        pinAt(part0.pos.x + ix * 12.5, part0.pos.z + iz * 12.5);
+        const gas0 = gasCount();
+        const origSpit = g._spawnSpit.bind(g);
+        let spits = 0;
+        g._spawnSpit = (...a) => { spits++; return origSpit(...a); };
+        part0.bs.cdRain = 0;
+        part0.bs.t = 0;
+        run(1.8);
+        g._spawnSpit = origSpit;
+        res.rainSpits = spits;
+        // The globs' flight is projectile code, and on a busy runner the
+        // frame loop is NOT a clock - dt clamps at 50ms and a second of wall
+        // time may be a quarter second of game. Fly them in game time, the
+        // same reason the whole section is dt-driven.
+        for (let i = 0; i < 150; i++) {
+          g.time += DT;
+          g._updateEnemies(DT);
+          g._updateProjectiles(DT);
+        }
+        res.rainGas = gasCount() - gas0;
+      }
+
+      // ---- BROOD LUNGE. The fight MOVES, and where it lands costs ---------
+      {
+        silence();
+        const [ix, iz] = inDir(part0);
+        pinAt(part0.pos.x + ix * 9, part0.pos.z + iz * 9);
+        const gas0 = gasCount();
+        const sx = part0.pos.x;
+        const sz = part0.pos.z;
+        part0.bs.cdLunge = 0;
+        part0.bs.t = 0;
+        hits.length = 0;
+        let moved = 0;
+        for (let i = 0; i < 24; i++) {
+          run(0.15);
+          moved = Math.max(moved, Math.hypot(part0.pos.x - sx, part0.pos.z - sz));
+          if (part0.bs.state === 'recover') break;
+        }
+        res.lungeMoved = +moved.toFixed(1);
+        res.lungeGas = gasCount() - gas0;
+        res.lungeHits = hitsOn(part0).length;
+      }
 
       // Walk every part just under the next threshold in turn and let the AI
       // notice. Each pass doubles the part count.
@@ -185,7 +388,7 @@ try {
       // be standing near the part under test rather than wherever the fight
       // happened to leave them - otherwise the burst never comes and the
       // count is zero for a reason that has nothing to do with the volley.
-      g.player.pos.set(part.pos.x + 3, 0, part.pos.z);
+      pinAt(part.pos.x + 3, 0, part.pos.z);
       const orig = g._spawnProjectile.bind(g);
       let fired = 0;
       let firedAt = -1;
@@ -194,23 +397,55 @@ try {
         return orig(x, y, z, type, ss, sr);
       };
       // Only this part is armed; the others are pushed well out so their own
-      // cooldowns cannot land inside the window and inflate the count.
-      for (const p of g.bossFight.parts) { p.bs.burstCd = 999; p.bs.tell = 0; }
+      // cooldowns cannot land inside the window and inflate the count - and
+      // every OTHER channel on every part is parked, so nothing louder can
+      // take the floor from under the measurement (a volley tell never starts
+      // over a nova's or a lunge's, by design - see aiSchism).
+      for (const p of g.bossFight.parts) {
+        p.bs.burstCd = 999;
+        p.bs.tell = 0;
+        p.bs.state = 'prowl';
+        p.bs.t = p.bs.tMax = 99;
+        p.bs.cdNova = p.bs.cdRain = p.bs.cdRupture = p.bs.cdLunge = p.bs.cdToll = 999;
+      }
       clock = 0;
       part.bs.burstCd = 0;
       run(0.1);
       const duringTell = fired;
       run(1.4);
       g._spawnProjectile = orig;
+      g._hurtPlayer = origHurt;
+      P.update = origUpdate;
+      g.autoTest = true;
       // Reported in ms so the assertion and the failure line below read the
       // same as they always have - it is game time now, not wall time.
-      return { parts, duringTell, fired, delay: firedAt >= 0 ? firedAt * 1000 : -1 };
+      return { ...res, parts, duringTell, fired, delay: firedAt >= 0 ? firedAt * 1000 : -1 };
     });
     const step = (n, want) => {
       const ok = r.parts[n] === want;
       if (!ok) bad++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} schism: tier ${n} is ${want} parts  got=${r.parts[n]}`);
     };
+    const check = (name, cond, extra = '') => {
+      if (!cond) bad++;
+      console.log(`${cond ? 'ok  ' : 'FAIL'} schism: ${name}${extra ? '  ' + extra : ''}`);
+    };
+    check('touching it pays, in every state, on a real cooldown',
+      r.touchHits >= 1 && r.touchMinGap >= 0.85, `hits=${r.touchHits} minGap=${r.touchMinGap}s`);
+    check('the nova marks, tells, detonates and leaves the ring',
+      r.novaTelled && r.novaMarked && r.novaHit && r.novaBile >= 3,
+      `telled=${r.novaTelled} marked=${r.novaMarked} hit=${r.novaHit} bile+${r.novaBile}`);
+    check('the rupture paints its corridors before they blow',
+      r.ruptureTelled && r.ruptureMarked && r.ruptureHit && r.ruptureBile >= 5,
+      `marked=${r.ruptureMarked} hit=${r.ruptureHit} bile+${r.ruptureBile}`);
+    check('the spore rain is four globs and the globs become clouds',
+      r.rainSpits >= 3 && r.rainGas >= 1, `spits=${r.rainSpits} gas+${r.rainGas}`);
+    check('the brood lunge crosses the room and lands as gas',
+      r.lungeMoved >= 5 && r.lungeGas >= 1,
+      `moved=${r.lungeMoved}m gas+${r.lungeGas} hits=${r.lungeHits}`);
+    check('the last rites stands a body that fell inside the ring back up, cut down and marked',
+      r.tollRaised && r.tollMarkedVictim && r.tollFrac > 0.2 && r.tollFrac < 0.5,
+      `state=${r.tollState} ring=${r.tollRing} frac=${r.tollFrac}`);
     step(0, 1); step(1, 2); step(2, 4); step(3, 8);
     const volleyOk = r.fired === 8;
     if (!volleyOk) bad++;
