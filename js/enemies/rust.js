@@ -16,8 +16,8 @@ import {
 } from '../utils.js';
 import {
   BOSS_REACH_Y, ENEMY_TYPES, SHARED_MATS, _blinkAt, _bossAt, _reachY,
-  aiMelee, bossTouch, eyes, geo, lump, orbit, partsFor, prism, releaseMarks,
-  shard, slab, spike,
+  aiMelee, bossTouch, capturedShot, eyes, geo, lump, orbit, partsFor, prism,
+  releaseMarks, shard, slab, spike,
 } from './shared.js';
 
 // Conduit's aura, read in takeDamage and _effSpeed. Kept modest: the point of
@@ -365,6 +365,66 @@ export function buildColossus(e, g, s) {
   P('colossusPlate', slab(0.8, 0.18, 0.14), { y: 0.96, z: 0.36, mat: SHARED_MATS.tankPlate });
   eyes(P, { y: 1.18, x: 0.1, z: -0.31, r: 1.1, mat: e.eyeMat });
 
+  // TREAD SKIRTS, flanking the walker legs. The boss is a tracked engine that
+  // got given legs instead of wheels: the grinder rush's sparks come off
+  // THESE. No animation - the rush throws sparks at their base, which reads
+  // better than any texture could at this scale.
+  P('colossusTread', slab(0.2, 0.5, 1.3), { x: -0.62, y: 0.32, mat: SHARED_MATS.tankPlate });
+  P('colossusTread', slab(0.2, 0.5, 1.3), { x: 0.62, y: 0.32, mat: SHARED_MATS.tankPlate });
+
+  // THE RIVET DUCTS. Two three-barrel clusters on the pauldrons, muzzles down
+  // the -z face., so the fan the boss sweeps reads off its shoulders. The glow
+  // strips under the barrels are per-instance: a duct that brightens through
+  // the windup IS the fan's telegraph (with the eyes), and a SHARED material
+  // would light the whole roster's furnaces with it.
+  const ductMat = new THREE.MeshStandardMaterial({
+    color: 0x2a1608, emissive: 0xffb300, emissiveIntensity: 0.25,
+    roughness: 0.4, metalness: 0.6,
+  });
+  e._extraMats.push(ductMat);
+  e.bs.ductMat = ductMat;
+  for (const sign of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      P('colossusDuct', prism(0.045, 0.06, 0.36, 5), {
+        x: sign * 0.52 + (i - 1) * 0.1, y: 1.42, z: -0.14,
+        rx: -Math.PI / 2, mat: SHARED_MATS.gunmetal,
+      });
+    }
+    P('colossusDuctGlow', slab(0.34, 0.06, 0.18), {
+      x: sign * 0.52, y: 1.36, z: -0.08, mat: ductMat, shadow: false,
+    });
+  }
+
+  // THE WRECKING ARM. A crane's worth of scrap hung off the model's right
+  // pauldron (-x side: the model fronts -z), in its OWN group pivoted at the
+  // shoulder so aiColossus can wind it back and sweep it across the front -
+  // the swing is the one tell on this boss big enough to read from the far
+  // wall. Children are authored in unit space under the group's own scale,
+  // the same convention as the core mesh below.
+  const arm = new THREE.Group();
+  arm.position.set(-0.62 * s, 1.26 * s, -0.02 * s);
+  arm.scale.setScalar(s);
+  const armPart = (key, make, mat, x, y, z, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo(key, make), mat);
+    m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
+    m.castShadow = true;
+    arm.add(m);
+    return m;
+  };
+  // Hangs a touch outboard and forward at rest, so its rest silhouette is a
+  // second weapon and not a smudge against the torso.
+  armPart('colArmUpper', slab(0.18, 0.56, 0.22), e.bodyMat, -0.04, -0.36, -0.04);
+  armPart('colArmFore', slab(0.14, 0.6, 0.18), e.bodyMat, -0.06, -0.88, -0.12);
+  // The crusher: a battered block of scrap with feeder teeth, on the same
+  // dark plate as the treads so the business end reads before the arm does.
+  armPart('colArmCrusher', slab(0.34, 0.4, 0.36), SHARED_MATS.tankPlate, -0.08, -1.3, -0.18);
+  armPart('colArmTooth', spike(0.07, 0.22, 4), SHARED_MATS.gunmetal, -0.2, -1.56, -0.18);
+  armPart('colArmTooth', spike(0.07, 0.22, 4), SHARED_MATS.gunmetal, -0.02, -1.56, -0.28);
+  armPart('colArmTooth', spike(0.07, 0.22, 4), SHARED_MATS.gunmetal, -0.02, -1.56, -0.08);
+  g.add(arm);
+  e.bs.arm = arm;
+
   // THE WEAK POINT. Sunk into the chest, on the -z face every model in the
   // roster fronts with, so it is square-on to the player for the whole fight.
   // Its material is per-instance because it burns brighter as the shutters
@@ -574,46 +634,193 @@ export function releaseTurret(e) {
   e.tMark = -1;
 }
 
+// ---- COLOSSUS'S SIX LINES OF ATTACK ------------------------------------
+//
+// Damage is capped per attack rather than left to scale, because the wave-55
+// multiplier on a 34 point hit would be a one-shot. Cooldowns multiply by
+// e.rate (waves.js speeds up late bosses) and the longer ones by the phase
+// multiplier as well, so the fight quickens as the bar falls instead of
+// merely lasting longer.
+
+// THE RUSH, rebuilt as a grinder charge. What changed: it tracks. The lane
+// is still drawn a full second early and tells the truth about where it
+// STARTS - but at fixed fractions of the run the treads bite and the whole
+// rush bends up to RUSH_TURN radians toward wherever the player actually is,
+// so sidestepping once is no longer an answer. The reward survives: a wall
+// or a pillar still knocks it cold, and the bend is capped low enough that
+// standing tight against cover is exactly what beats it.
 export const COLOSSUS_CHARGE_CAP = 52;
 
 export const COLOSSUS_SLAM_CAP = 44;
 
-export const COLOSSUS_CHARGE_SPEED = 14;
+export const COLOSSUS_RUSH_SPEED = 12.5;
 
-// How far the charge lane reaches. Used twice - by the telegraph that draws
-// the rectangle and by the creep that burns it - so the warning and the
-// consequence cannot drift apart.
+// How far the telegraphed lane reaches. Used twice - by the telegraph that
+// draws the rectangle and by nothing else: the rush now burns the ground it
+// ACTUALLY covered (see TREAD below), so the lane's only job is the warning.
 export const COLOSSUS_LANE_LEN = 22;
 
-// The charge burns THE RECTANGLE, not the boss's footprints. Laid down as one
-// row of patches over the whole telegraphed lane the instant the charge
-// launches, which is the only version that means anything: the rectangle was
-// already the clearest warning in the fight and, until the boss physically
-// arrived, the safest place in it - the player stepped aside, the boss went
-// past, and the lane meant nothing a second later. Burning what was ADVERTISED
-// makes the telegraph a claim on ground rather than a dodge prompt, and it
-// covers the whole 22 metres even when the charge is cut short a third of the
-// way down it by a pillar.
-//
-// Patches are placed by the LANE, so they land wherever the rectangle was -
-// including the part of it the boss never reached.
-export const COLOSSUS_CREEP_RADIUS = 2.4;
+export const COLOSSUS_RUSH_TELE = 1.0;
 
-// Spaced under a radius apart, so the row overlaps into a continuous strip
-// instead of reading as stepping stones down the middle of the attack. Nine
-// patches covers the lane; the count is kept low on purpose, because creep
-// runs on a thirty-slot pool shared with blight pools and ash and a finer
-// strip would let one charge take every slot in it.
-export const COLOSSUS_CREEP_STEP = 2.6;
+export const COLOSSUS_RUSH_TIME = 2.1;
 
-export const COLOSSUS_CREEP_LIFE = 5;
+// Course corrections, as fractions of the run. The first is always there;
+// the second is the overdrive phase's escalation - one bend is a charge with
+// a steering box, two is the thing hunting.
+export const COLOSSUS_RUSH_CORRECTS = [0.45, 0.75];
 
-export const COLOSSUS_CREEP_DPS = 14;
+export const COLOSSUS_RUSH_TURN = 0.62;
 
-// Nothing is laid outside the arena. A lane aimed at a near wall runs most of
-// its length through solid geometry, and a patch out there would burn a pool
-// slot on ground no one can stand on.
-export const COLOSSUS_CREEP_BOUND = 21.6;
+// A failed rush or a run that found nobody ends in a brake-squall rather
+// than a dead stop: the machine skids half a second on its treads, throwing
+// sparks, while it hauls itself round. Movement, and a moment the player can
+// read, where the old fight just stood down.
+export const COLOSSUS_SKID = 0.55;
+
+// SCORCHED TREADS. The rush burns the ground the boss actually covered, a
+// patch every TREAD_STEP, so chasing after its tail or cutting back across
+// its line costs. Lava caps at 24 patches shared with the nova's ring below;
+// the spacing and the two-second life keep the rush's own share under ten.
+export const COLOSSUS_TREAD_STEP = 2.8;
+
+export const COLOSSUS_TREAD_LIFE = 2.2;
+
+export const COLOSSUS_TREAD_DPS = 12;
+
+export const COLOSSUS_TREAD_RADIUS = 1.7;
+
+// Nothing is laid outside the arena. A rush ending at the far wall runs its
+// last metres along solid geometry, and a patch out there would burn a pool
+// slot on ground no one can stand on. Shared by every patch this boss lays.
+export const COLOSSUS_GROUND_BOUND = 21.2;
+
+// THE WRECKING ARM. A sweeping blow across the whole front of the boss, the
+// close-range answer to circling it: the disc on the floor and the arm
+// winding out to the side say get OUT of front. Damage capped like the slam,
+// and the swing throws sparks (three rivet rounds downrange) so standing off
+// just past arm's length is punished too.
+export const COLOSSUS_ARC_CAP = 40;
+
+export const COLOSSUS_ARC_RANGE = 6.4;
+
+// Half-angle of the swept sector, as a cos: |bearing from the boss's swing
+// line| under ~72 degrees on either side is inside it.
+export const COLOSSUS_ARC_HALF_COS = Math.cos(1.25);
+
+export const COLOSSUS_ARC_WIND = 0.8;
+
+// The swing line tracks the player at this rate during the windup. Slow
+// enough to outwalk at the disc's edge on purpose - the track is what makes
+// the windup READ, and the cap is what makes sidestepping-and-sprinting the
+// honest answer rather than a reaction test.
+export const COLOSSUS_ARC_TRACK = 2.6;
+
+export const COLOSSUS_ARC_SWING_T = 0.22;
+
+export const COLOSSUS_ARC_RECOVER = 0.35;
+
+// Where the arm group sits, in radians of yaw: wound out to the model's
+// right at windup, through the front and past centre at the end of the
+// sweep. Rotation about the shoulder pivot, which hangs the crusher LOW.
+export const COLOSSUS_ARC_ARM_BACK = 1.35;
+
+export const COLOSSUS_ARC_ARM_THROUGH = -1.0;
+
+export const COLOSSUS_ARC_MARK_R = 5.2;
+
+export const COLOSSUS_ARC_CD = 5.5;
+
+// THE RIVET FAN. The shoulder ducts wind up glowing, then the boss sweeps a
+// burst of rivets across the player's position - FAN_SHOTS over FAN_SWEEP
+// radians, re-acquired between bursts, while it keeps drifting at a third of
+// walking pace. The sweep means a player already moving keeps moving; the
+// re-acquire means one dodge direction is not free for the whole attack.
+export const COLOSSUS_FAN_WIND = 0.55;
+
+export const COLOSSUS_FAN_SHOTS = 5;
+
+export const COLOSSUS_FAN_GAP = 0.12;
+
+export const COLOSSUS_FAN_SWEEP = 0.5;
+
+// Re-acquire and re-glow pause between bursts.
+export const COLOSSUS_FAN_BETWEEN = 0.55;
+
+export const COLOSSUS_FAN_MOVE = 0.35;
+
+export const COLOSSUS_FAN_CD = 3.5;
+
+// THE SLAG NOVA. Used when crowded: the boss plants itself, the furnace
+// climbs for NOVA_TIME seconds behind a filling disc, and then a RING of
+// molten slag sheets off it in every direction. No hit on the detonation
+// itself - the patches ARE the attack, and the telegraph is the claim: stand
+// within six metres of it when it blows and the floor under you is on fire.
+export const COLOSSUS_NOVA_TIME = 1.0;
+
+export const COLOSSUS_NOVA_RING = 4.2;
+
+// Ring spacing is picked so adjacent patches overlap into a closed band -
+// there is no safe gap in the ring, the safe place is outside it.
+export const COLOSSUS_NOVA_N = 8;
+
+export const COLOSSUS_NOVA_PATCH = 1.9;
+
+export const COLOSSUS_NOVA_LIFE = 5;
+
+export const COLOSSUS_NOVA_DPS = 14;
+
+export const COLOSSUS_NOVA_CD = 8;
+
+// THE SHELL BARRAGE. Thrown on the move, because it is the one attack that
+// does not root the boss: a cross of five mortars - one on the player and
+// four out on the diagonals, staggered around the cross so the pattern
+// WALKS. The mortar rings themselves are the telegraph, filled for well over
+// a second each.
+export const COLOSSUS_SHELL_CD = 6.5;
+
+export const COLOSSUS_SHELL_DELAY = 1.35;
+
+export const COLOSSUS_SHELL_SPREAD = 3.7;
+
+export const COLOSSUS_SHELL_CAP = 36;
+
+// THE SCHEDULER. One clock between attacks while the fight is in its walking
+// state; the per-attack cooldowns above gate how soon any one of them may
+// come BACK. Tuned busy on purpose - the rework's whole brief is that
+// standing still and shooting is the one thing this fight no longer permits.
+export const COLOSSUS_CD_RUSH = 1.6;
+
+export const COLOSSUS_CD_FAN = 1.2;
+
+export const COLOSSUS_CD_ARC = 1.1;
+
+export const COLOSSUS_CD_NOVA = 1.4;
+
+export const COLOSSUS_RUSH_CD = 4;
+
+// Health fractions the phases turn on: the slag nova unlocks and everything
+// quickens, then the overdrive - an ENRAGED banner, a second course
+// correction in the rush, a third rivet burst, and the eyes burning the
+// whole time it hunts.
+export const COLOSSUS_PHASE2 = 0.62;
+
+export const COLOSSUS_PHASE3 = 0.32;
+
+// The walking middle band. Past 13m it bears straight down the nav heading;
+// inside 6.5m it presses in. Between the two it CIRCLES while it fires -
+// the one thing the old fight never did was move.
+export const COLOSSUS_ORBIT = {
+  dist: 8.5, band: 2.5, out: 0.55, in: -0.5, strafe: 0.85, flip: 1.5, flipVar: 1.8,
+};
+
+export const COLOSSUS_FAN_DRIFT = {
+  dist: 9, band: 3, out: 0.3, in: -0.25, strafe: 0.5, flip: 2, flipVar: 2,
+};
+
+// How hard it walks off the perimeter. A boss this size stopped at the wall
+// is a corner guard again - the drift is small, but it never lets the far
+// lane be its home.
+export const COLOSSUS_WALL_AVOID = 0.5;
 
 // THE TURRETS COLOSSUS THROWS. See the `turret` type for what one does once it
 // lands; these are the numbers for putting it there.
@@ -653,7 +860,7 @@ export const _turretSpot = { x: 0, z: 0 };
 export function _pickTurretSpot(e, a) {
   const p = a.ctx.player;
   const off = Math.max(TURRET_DROP_MIN, Math.min(TURRET_DROP_MAX, 3 + a.dist * 0.25));
-  const B = COLOSSUS_CREEP_BOUND - 1;
+  const B = COLOSSUS_GROUND_BOUND - 1;
   for (let i = 0; i < 10; i++) {
     const ang = Math.random() * Math.PI * 2;
     const r = off * (0.85 + Math.random() * 0.45);
@@ -673,22 +880,66 @@ export function _pickTurretSpot(e, a) {
   return false;
 }
 
-// Burns the whole telegraphed rectangle, once, at the moment the charge is
-// released. `dirX/dirZ` is the lane's direction and the boss's position is its
-// near end - the same two numbers markSet drew the rectangle from.
-export function _colossusBurnLane(e, ctx) {
-  const bs = e.bs;
-  for (let d = COLOSSUS_CREEP_STEP * 0.5; d < COLOSSUS_LANE_LEN; d += COLOSSUS_CREEP_STEP) {
-    const x = e.pos.x + bs.dirX * d;
-    const z = e.pos.z + bs.dirZ * d;
-    if (Math.abs(x) > COLOSSUS_CREEP_BOUND || Math.abs(z) > COLOSSUS_CREEP_BOUND) continue;
-    ctx.addHazard(x, z, COLOSSUS_CREEP_RADIUS, COLOSSUS_CREEP_LIFE, COLOSSUS_CREEP_DPS, 'lava');
+// Turns the body toward (dx, dz) at `rate` radians a second and holds the
+// facing lock for this frame. The windups that TRACK - the arm's sweep line,
+// the fan's aim - use the slow end of it, because the turn being visible IS
+// the telegraph; the charge uses the fast end to square onto its lane.
+export function _colTurn(e, dx, dz, dt, rate) {
+  const want = Math.atan2(-dx, -dz);
+  let d = want - e.group.rotation.y;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const m = rate * dt;
+  e.group.rotation.y += Math.abs(d) < m ? d : Math.sign(d) * m;
+  e.faceLocked = true;
+}
+
+// The lane telegraph is bs.mark, released by releaseMarks on an early death.
+// The nova and the arc need a SECOND handle of their own; both are kept in
+// bs.rings, which releaseMarks also owns, so every path out - natural,
+// stagger or killed mid-windup - hands the pool its slots back.
+export function _colTake(bs) {
+  const h = bs.fx.markAcquire();
+  if (h >= 0) bs.rings.push({ mark: h });
+  return h;
+}
+
+export function _colDrop(bs, h) {
+  if (h < 0) return;
+  const i = bs.rings.findIndex((r) => r.mark === h);
+  if (i >= 0) bs.rings.splice(i, 1);
+  bs.fx.markRelease(h);
+}
+
+// THE SHELL BARRAGE, lobbed over the back stacks and dropped as a walking
+// cross around wherever the player is standing when it's thrown: one shell
+// dead centre and four out on the diagonals, staggered around the pattern so
+// it CHASES a fixed direction of escape instead of going off at once. The
+// mortars draw their own filling rings - the boss never stops moving for it,
+// which is the whole point: something is always landing somewhere.
+export function _colossusBarrage(e, a, ctx) {
+  const p = ctx.player.pos;
+  const dmg = Math.min(COLOSSUS_SHELL_CAP, e.damage * 0.85);
+  const D = COLOSSUS_SHELL_DELAY;
+  const B = COLOSSUS_GROUND_BOUND;
+  const clamp = (v) => Math.max(-B, Math.min(B, v));
+  ctx.addMortar(clamp(p.x), clamp(p.z), 2.7, D, dmg);
+  for (let i = 0; i < 4; i++) {
+    const ang = Math.PI * 0.5 * i + Math.PI * 0.25;
+    ctx.addMortar(
+      clamp(p.x + Math.cos(ang) * COLOSSUS_SHELL_SPREAD),
+      clamp(p.z + Math.sin(ang) * COLOSSUS_SHELL_SPREAD),
+      2.4, D + 0.18 * (i + 1), dmg
+    );
   }
-  // One splash at the boss's feet rather than one per patch: nine shockwaves
-  // on the same frame is a strobe, and the lane igniting reads as a single
-  // event because it is one.
-  _bossAt.set(e.pos.x, 0.1, e.pos.z);
-  ctx.effects.burst(_bossAt, 0xff5533, 20, 6, 1.6, 0.6);
+  // The repeat-wave drink: from the second pass through the deck the cross
+  // walks back over its own centre, so standing where the first shell fell is
+  // not the answer either.
+  if (e.cycle > 0) ctx.addMortar(clamp(p.x), clamp(p.z), 2.7, D + 0.9, dmg);
+  e.flash = 0.1;
+  _bossAt.set(e.pos.x, 1.35 * e.bs.mScale, e.pos.z);
+  ctx.effects.burst(_bossAt, 0xff7043, 16, 5, 2, 0.4);
+  ctx.effects.addShake(0.12);
 }
 
 // Drives the shutters and the core glow toward `open`. Eased rather than
@@ -706,27 +957,97 @@ export function _colossusVent(bs, dt, open) {
     (COLOSSUS_CORE_SHUT + (COLOSSUS_CORE_OPEN - COLOSSUS_CORE_SHUT) * bs.vent) * pulse;
 }
 
+// COLOSSUS, REBUILT AS THE WALKING SCRAPYARD.
+//
+// The old fight was a lane and a metronome: it walked straight at you, and
+// the only two verbs it owned were the charge and the slam. The CHEST CORE
+// stays the damage gate - the rhythm is the identity - and everything around
+// it is rebuilt: six lines of attack (the rush, the rivet fan, the wrecking
+// arm, the slag nova, the shell barrage and the slam), a scheduler that opens
+// one every couple of seconds, a boss that CIRCLES at range instead of
+// leaning on a wall, and a bar that is the clock - at 62% the slag nova
+// unlocks and everything quickens, at 32% it OVERHEATS and quickens again.
+// No shield, no extra health: the fight is harder because it is busier.
+//
+// The standing rule of the roster holds throughout: every attack is SEEN
+// before it lands - a lane, a disc, a glowing duct or a drawn-back arm - and
+// every one of them is answered by moving, not by tanking.
 export function aiColossus(e, a) {
   const bs = e.bs;
   if (bs.state === undefined) {
     bs.state = 'walk';
     bs.t = 0;
-    bs.cd = 4;
+    bs.cd = 1.6;
     bs.slamCd = 2;
     bs.slamT = 0;
     bs.dirX = 0;
     bs.dirZ = 1;
     bs.mark = -1;
+    // The nova's and the wrecking arm's telegraph handles live here, so
+    // releaseMarks (the type's cleanup) hands the pool its slots back on any
+    // death, mid-windup or not.
+    bs.rings = [];
+    bs.arcMark = -1;
+    bs.novaMark = -1;
     bs.shotCd = COLOSSUS_VENT_SHOT_CD;
-    // Not zero: the fight opens on the charge and the slam, and the first
+    // Not zero: the fight opens on the rush and the slam, and the first
     // turret arrives once the player has had a chance to learn those.
     bs.lobCd = COLOSSUS_LOB_CD * 0.7;
+    // Half its usual clock to open: the barrage is the fight's background
+    // radiation, and the player should be reading mortar rings within seconds
+    // of the boss landing.
+    bs.shellCd = COLOSSUS_SHELL_CD * 0.55;
+    bs.rushCd = 0;
+    bs.fanCd = 0;
+    bs.arcCd = 1.5;
+    bs.novaCd = 4;
+    bs.phase = 1;
+    bs.enraged = false;
+    bs.last = '';
+    bs.correctIdx = 0;
+    bs.trailD = 0;
+    bs.fxT = 0;
+    bs.ductGlow = 0;
+    bs.ductWant = 0;
+    bs.arcB = 0;
+    bs.arcHit = false;
+    bs.arcMode = '';
+    bs.aimB = 0;
+    bs.fanMode = '';
+    bs.fanLeft = 0;
+    bs.fanShot = 0;
+    bs.fanShots = COLOSSUS_FAN_SHOTS;
+    bs.fanGap = 0;
+    bs.skidX = 0;
+    bs.skidZ = 0;
+    // Walk detection for the orbit: seconds spent pressed against geometry
+    // instead of circling.
+    bs.stuckT = 0;
   }
   const ctx = a.ctx;
   bs.fx = ctx.effects;
   const feared = e.status.fear > 0;
 
-  // Standing on it costs, in every state but the charge - which lands its own,
+  // THE BAR IS THE CLOCK. Two thresholds, both announced by the furnace
+  // flaring off the chest and the second by the room going red under the
+  // ENRAGED banner. What quickens is every clock below, not the size of the
+  // health bar.
+  const frac = e.hp / e.maxHp;
+  const phase = frac < COLOSSUS_PHASE3 ? 3 : frac < COLOSSUS_PHASE2 ? 2 : 1;
+  if (phase !== bs.phase) {
+    bs.phase = phase;
+    _bossAt.set(e.pos.x, 0.9 * bs.mScale, e.pos.z);
+    ctx.effects.burst(_bossAt, 0xff5a00, 22, 6, 2.5, 0.6);
+    ctx.effects.burst(_bossAt, 0xffb300, 14, 4, 2, 0.5);
+    ctx.effects.addShake(0.2);
+    if (phase === 3 && !bs.enraged) {
+      bs.enraged = true;
+      ctx.bossEvent('enrage', e);
+    }
+  }
+  const schedMul = phase === 3 ? 0.62 : phase === 2 ? 0.8 : 1;
+
+  // Standing on it costs, in every state but the rush - which lands its own,
   // much larger, hit and must not also bill for the body it arrived in.
   if (bs.state !== 'dash') bossTouch(e, a);
 
@@ -755,6 +1076,17 @@ export function aiColossus(e, a) {
     _colossusVent(bs, a.dt, bs.weakOpen);
   }
 
+  // The duct glow eases toward whatever the current state asked for LAST
+  // frame - one frame of lag is nothing, and it means a windup cut short
+  // settles dark instead of freezing lit. The arm eases home the same way in
+  // every state except the swing that owns it.
+  bs.ductGlow += (bs.ductWant - bs.ductGlow) * Math.min(1, a.dt * 8);
+  bs.ductMat.emissiveIntensity = 0.25 + 1.5 * bs.ductGlow;
+  bs.ductWant = 0;
+  if (bs.state !== 'arc') {
+    bs.arm.rotation.y += (0 - bs.arm.rotation.y) * Math.min(1, a.dt * 6);
+  }
+
   if (bs.state === 'stagger') {
     // Handed straight back after a charge, so the crowd shove that is added
     // after ai() is clamped at walking pace again the moment the rush is over.
@@ -762,7 +1094,9 @@ export function aiColossus(e, a) {
     bs.t -= a.dt;
     if (bs.t <= 0) {
       bs.state = 'walk';
-      bs.cd = 6 * e.rate;
+      // Shorter than the old six seconds: the knockdown IS the player's
+      // window, and a long nap after it was the old fight's dead time.
+      bs.cd = 1.8 * e.rate * schedMul;
       // Handed back to the vent clock mid-cycle rather than reset, so the
       // rhythm the player has been counting survives the knockdown.
       ctx.bossEvent('recover', e);
@@ -773,24 +1107,30 @@ export function aiColossus(e, a) {
   if (bs.state === 'tele') {
     bs.t -= a.dt;
     e._setEyeAlert(true);
+    // Squared onto the lane it committed to: the head and the shoulders stop
+    // following the player once the rectangle is down, which is what makes
+    // the rectangle honest.
+    _colTurn(e, bs.dirX, bs.dirZ, a.dt, 8);
     // The lane is drawn at full length from the first frame so the AREA reads
     // instantly, and fills so the TIMING reads as it goes.
     const len = COLOSSUS_LANE_LEN;
     ctx.effects.markSet(
       bs.mark,
       e.pos.x + bs.dirX * len * 0.5, e.pos.z + bs.dirZ * len * 0.5,
-      1.9, 0xff5533, 1 - bs.t / 1.1,
+      1.9, 0xff5533, 1 - bs.t / COLOSSUS_RUSH_TELE,
       len / 3.8, Math.atan2(-bs.dirX, -bs.dirZ)
     );
     if (bs.t <= 0) {
       ctx.effects.markRelease(bs.mark);
       bs.mark = -1;
-      // The rectangle the player was just shown catches fire as the boss
-      // leaves the blocks, so the warning and the burnt ground are one shape.
-      _colossusBurnLane(e, ctx);
       bs.state = 'dash';
-      bs.t = 2.2;
-      e._setEyeAlert(false);
+      bs.t = COLOSSUS_RUSH_TIME;
+      bs.correctIdx = 0;
+      bs.trailD = 0;
+      bs.fxT = 0;
+      _bossAt.set(e.pos.x, 0.3, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xffb300, 18, 6, 2, 0.5);
+      ctx.effects.addShake(0.18);
       ctx.bossEvent('charge', e);
     }
     return;
@@ -817,45 +1157,292 @@ export function aiColossus(e, a) {
 
   if (bs.state === 'dash') {
     bs.t -= a.dt;
-    // THE STEP CLAMP HAS TO BE LIFTED FOR THE CHARGE. update() caps the frame's
-    // movement at `sp * stepMul`, and a boss walks at 2 m/s - so a 14 m/s charge
-    // written into a.vx alone came out at 2.8 and the rush read as the boss
-    // continuing to walk after a telegraph promising otherwise. Set here rather
-    // than once at the state change so a charge is still fast after a freeze or
-    // a slow has moved `sp` underneath it; put back in `walk` below.
-    e.stepMul = COLOSSUS_CHARGE_SPEED / Math.max(0.5, a.sp);
-    a.vx = bs.dirX * COLOSSUS_CHARGE_SPEED;
-    a.vz = bs.dirZ * COLOSSUS_CHARGE_SPEED;
+    // THE STEP CLAMP HAS TO BE LIFTED FOR THE RUSH. update() caps the frame's
+    // movement at `sp * stepMul`, and a boss walks at 2.5 m/s - so a 12.5 m/s
+    // rush written into a.vx alone came out at a fast walk and read as the
+    // boss continuing to stroll after a telegraph promising otherwise. Set
+    // here rather than once at the state change so a rush is still fast after
+    // a freeze or a slow has moved `sp` underneath it; put back in `walk`.
+    e.stepMul = COLOSSUS_RUSH_SPEED / Math.max(0.5, a.sp);
+    a.vx = bs.dirX * COLOSSUS_RUSH_SPEED;
+    a.vz = bs.dirZ * COLOSSUS_RUSH_SPEED;
+    _colTurn(e, bs.dirX, bs.dirZ, a.dt, 12);
+    // It hunts with its eyes open: the furnace-white glare stays up for the
+    // whole run, so the rush reads as aimed, not as a runaway.
+    e._setEyeAlert(true);
+    // COURSE CORRECTIONS. At fixed fractions of the run the treads bite and
+    // the whole rush bends toward wherever the player actually is - capped
+    // per correction, so tight cover still beats it, but stepping out of the
+    // lane once and coasting does not.
+    const u = 1 - Math.max(0, bs.t) / COLOSSUS_RUSH_TIME;
+    const nCor = bs.phase >= 3 ? COLOSSUS_RUSH_CORRECTS.length : 1;
+    if (bs.correctIdx < nCor && u >= COLOSSUS_RUSH_CORRECTS[bs.correctIdx]) {
+      bs.correctIdx++;
+      let d = Math.atan2(a.nz, a.nx) - Math.atan2(bs.dirZ, bs.dirX);
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      d = Math.max(-COLOSSUS_RUSH_TURN, Math.min(COLOSSUS_RUSH_TURN, d));
+      const cur = Math.atan2(bs.dirZ, bs.dirX) + d;
+      bs.dirX = Math.cos(cur);
+      bs.dirZ = Math.sin(cur);
+      // The skid-bite that sells the bend: sparks off the treads and a lurch,
+      // so a correction is SEEN and not just felt.
+      _bossAt.set(e.pos.x, 0.25, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xffb300, 12, 5, 1.5, 0.4);
+      ctx.effects.addShake(0.12);
+    }
+    // SCORCHED TREADS. Burns the ground actually covered, a patch every step:
+    // chasing after its tail used to be the answer to the old charge, and
+    // that is exactly the position this closes.
+    bs.trailD += COLOSSUS_RUSH_SPEED * a.dt;
+    if (bs.trailD >= COLOSSUS_TREAD_STEP) {
+      bs.trailD -= COLOSSUS_TREAD_STEP;
+      if (Math.abs(e.pos.x) <= COLOSSUS_GROUND_BOUND
+        && Math.abs(e.pos.z) <= COLOSSUS_GROUND_BOUND) {
+        ctx.addHazard(e.pos.x, e.pos.z,
+          COLOSSUS_TREAD_RADIUS, COLOSSUS_TREAD_LIFE, COLOSSUS_TREAD_DPS, 'lava');
+      }
+    }
+    bs.fxT += a.dt;
+    if (bs.fxT > 0.1) {
+      bs.fxT = 0;
+      _bossAt.set(e.pos.x, 0.15, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xffb300, 5, 3.5, 1, 0.3);
+    }
     if (a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
       ctx.onHitPlayer(Math.min(COLOSSUS_CHARGE_CAP, e.damage), e.pos, e);
       ctx.effects.addShake(0.3);
       _bossAt.set(e.pos.x, 1.2, e.pos.z);
       ctx.effects.burst(_bossAt, 0xffb300, 24, 7, 2, 0.6);
+      e._setEyeAlert(false);
       bs.state = 'stagger';
       bs.t = 1.2;
       return;
     }
-    // Ran into a wall, a pillar or a crate. This is the reward for baiting the
-    // charge: a long open window on a body that is otherwise 78% armoured.
+    // Ran into a wall, a pillar or a crate. This is the reward for baiting
+    // the rush: a long open window on a body that is otherwise 78% armoured.
     if (e.blockedBy > 0.05 || bs.t <= 0) {
       const slammed = e.blockedBy > 0.05;
-      bs.state = 'stagger';
-      bs.t = slammed ? 2.5 : 0.8;
+      e._setEyeAlert(false);
       if (slammed) {
+        bs.state = 'stagger';
+        bs.t = 2.5;
         _bossAt.set(e.pos.x, 0, e.pos.z);
         ctx.effects.shockwave(_bossAt, 0xffb300, 7, 0.5);
         ctx.effects.burst(_bossAt, 0xffb300, 34, 8, 3, 0.8);
         ctx.effects.addShake(0.35);
         ctx.bossEvent('stagger', e);
+      } else {
+        // Found nobody and nothing: it brakes on the treads in a shower of
+        // sparks instead of stopping dead - the miss is a moment the player
+        // can see, and the boss is still moving while it spends it.
+        bs.state = 'skid';
+        bs.t = COLOSSUS_SKID;
+        bs.skidX = bs.dirX;
+        bs.skidZ = bs.dirZ;
+      }
+      return;
+    }
+    return;
+  }
+
+  if (bs.state === 'skid') {
+    bs.t -= a.dt;
+    const k = Math.max(0, bs.t / COLOSSUS_SKID);
+    e.stepMul = COLOSSUS_RUSH_SPEED / Math.max(0.5, a.sp);
+    a.vx = bs.skidX * COLOSSUS_RUSH_SPEED * k;
+    a.vz = bs.skidZ * COLOSSUS_RUSH_SPEED * k;
+    _colTurn(e, bs.skidX, bs.skidZ, a.dt, 8);
+    bs.fxT += a.dt;
+    if (bs.fxT > 0.08) {
+      bs.fxT = 0;
+      _bossAt.set(e.pos.x, 0.15, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xffb300, 6, 4, 1, 0.3);
+    }
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.cd = 1.1 * e.rate * schedMul;
+    }
+    return;
+  }
+
+  if (bs.state === 'fan') {
+    // The firing platform DRIFTS. A rivet fan from a rooted boss would be a
+    // turret; from one that keeps sliding it is something the player has to
+    // keep crossing, which is what this fight is for.
+    bs.ductWant = 1;
+    e._setEyeAlert(true);
+    orbit(e, a, COLOSSUS_FAN_DRIFT);
+    a.vx *= COLOSSUS_FAN_MOVE;
+    a.vz *= COLOSSUS_FAN_MOVE;
+    if (bs.fanMode === 'wind') {
+      bs.t -= a.dt;
+      // The slow track toward the player IS the windup - the ducts climbing
+      // to full glow and the head coming round say the burst is loaded.
+      _colTurn(e, a.nx, a.nz, a.dt, 3.4);
+      if (bs.t <= 0) {
+        bs.fanMode = 'burst';
+        bs.fanShot = 0;
+        bs.fanGap = 0;
+        // Aim snaps here, once per burst, then the burst sweeps across it.
+        bs.aimB = Math.atan2(a.nz, a.nx);
+      }
+      return;
+    }
+    bs.fanGap -= a.dt;
+    if (bs.fanGap > 0) return;
+    bs.fanGap = COLOSSUS_FAN_GAP;
+    const n = bs.fanShots;
+    const off = (bs.fanShot / (n - 1) - 0.5) * COLOSSUS_FAN_SWEEP
+      + (Math.random() - 0.5) * 0.02;
+    capturedShot(e, a, bs.aimB, off, 1.05 * bs.mScale);
+    e.flash = 0.08;
+    // Muzzle flash off the leading duct, which is where the barrels are.
+    _bossAt.set(e.pos.x + Math.cos(bs.aimB) * 1.7, 1.1 * bs.mScale,
+      e.pos.z + Math.sin(bs.aimB) * 1.7);
+    ctx.effects.burst(_bossAt, 0xffc27a, 6, 4, 1, 0.25);
+    bs.fanShot++;
+    if (bs.fanShot >= n) {
+      bs.fanLeft--;
+      if (bs.fanLeft > 0) {
+        // Between bursts it re-acquires, so one dodge direction is not free
+        // for the whole attack.
+        bs.fanMode = 'wind';
+        bs.t = COLOSSUS_FAN_BETWEEN;
+      } else {
+        bs.state = 'walk';
+        e._setEyeAlert(false);
       }
     }
     return;
   }
 
-  // walk
+  if (bs.state === 'arc') {
+    if (bs.arcMode === 'wind') {
+      bs.t -= a.dt;
+      e._setEyeAlert(true);
+      // The sweep line tracks the player at a capped rate. Visible, and
+      // capped: stepping out of the disc's edge beats it, standing still
+      // inside it does not.
+      const want = Math.atan2(a.nz, a.nx);
+      let d = want - bs.arcB;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const m = COLOSSUS_ARC_TRACK * a.dt;
+      bs.arcB += Math.abs(d) < m ? d : Math.sign(d) * m;
+      e.faceLocked = true;
+      e.group.rotation.y = Math.atan2(-Math.cos(bs.arcB), -Math.sin(bs.arcB));
+      const w = 1 - Math.max(0, bs.t) / COLOSSUS_ARC_WIND;
+      // Winds back to the model's right, ease-in: the further out the arm
+      // gets, the closer the blow is.
+      bs.arm.rotation.y = COLOSSUS_ARC_ARM_BACK * w * w;
+      ctx.effects.markSet(
+        bs.arcMark,
+        e.pos.x + Math.cos(bs.arcB) * 3.1, e.pos.z + Math.sin(bs.arcB) * 3.1,
+        COLOSSUS_ARC_MARK_R, 0xff5533, w
+      );
+      if (bs.t <= 0) {
+        bs.arcMode = 'swing';
+        bs.t = COLOSSUS_ARC_SWING_T;
+        bs.arcHit = false;
+        _colDrop(bs, bs.arcMark);
+        bs.arcMark = -1;
+        ctx.effects.addShake(0.16);
+      }
+      return;
+    }
+    bs.t -= a.dt;
+    if (bs.arcMode === 'swing') {
+      const u = 1 - Math.max(0, bs.t) / COLOSSUS_ARC_SWING_T;
+      bs.arm.rotation.y = COLOSSUS_ARC_ARM_BACK
+        - (COLOSSUS_ARC_ARM_BACK - COLOSSUS_ARC_ARM_THROUGH) * u;
+      // Live for the whole sweep and tested every frame, like every swing in
+      // the roster: connect once, at any point of it.
+      if (!bs.arcHit && a.dist < COLOSSUS_ARC_RANGE && _reachY(a) < BOSS_REACH_Y) {
+        const bP = Math.atan2(
+          ctx.player.pos.z - e.pos.z, ctx.player.pos.x - e.pos.x);
+        if (Math.cos(bP - bs.arcB) > COLOSSUS_ARC_HALF_COS) {
+          bs.arcHit = true;
+          ctx.onHitPlayer(Math.min(COLOSSUS_ARC_CAP, e.damage * 1.1), e.pos, e);
+          ctx.effects.addShake(0.22);
+        }
+      }
+      if (bs.t <= 0) {
+        // Sparks ride the sweep line out, hit or miss: standing a step PAST
+        // the disc is cover from the arm, not from what the arm throws off.
+        for (const s of [-0.7, 0, 0.7]) capturedShot(e, a, bs.arcB, s, bs.mScale);
+        _bossAt.set(e.pos.x + Math.cos(bs.arcB) * 2.6, 0.6,
+          e.pos.z + Math.sin(bs.arcB) * 2.6);
+        ctx.effects.burst(_bossAt, 0xffb300, 14, 6, 2, 0.4);
+        bs.arcMode = 'home';
+        bs.t = COLOSSUS_ARC_RECOVER;
+        e._setEyeAlert(false);
+      }
+      return;
+    }
+    // home: the arm eases back to its hook over RECOVER seconds. The shared
+    // ease above takes over the frame it lands back in walk.
+    if (bs.t <= 0) bs.state = 'walk';
+    return;
+  }
+
+  if (bs.state === 'nova') {
+    // Planted. The one attack that roots it completely, because the boss IS
+    // the bomb: the furnace climbs, the disc fills, and the ring sheets off
+    // in every direction at once.
+    bs.t -= a.dt;
+    bs.ductWant = 1;
+    e._setEyeAlert(true);
+    const w = 1 - Math.max(0, bs.t) / COLOSSUS_NOVA_TIME;
+    ctx.effects.markSet(bs.novaMark, e.pos.x, e.pos.z,
+      COLOSSUS_NOVA_RING + COLOSSUS_NOVA_PATCH, 0xff5a00, w);
+    bs.fxT += a.dt;
+    if (bs.fxT > 0.22) {
+      // It shudders as the pressure climbs.
+      bs.fxT = 0;
+      _bossAt.set(e.pos.x, 0.5, e.pos.z);
+      ctx.effects.burst(_bossAt, 0xff7043, 5, 3, 1.5, 0.3);
+      ctx.effects.addShake(0.05);
+    }
+    if (bs.t > 0) return;
+    _colDrop(bs, bs.novaMark);
+    bs.novaMark = -1;
+    const base = Math.random() * Math.PI * 2;
+    for (let i = 0; i < COLOSSUS_NOVA_N; i++) {
+      const ang = base + (i / COLOSSUS_NOVA_N) * Math.PI * 2;
+      const x = e.pos.x + Math.cos(ang) * COLOSSUS_NOVA_RING;
+      const z = e.pos.z + Math.sin(ang) * COLOSSUS_NOVA_RING;
+      if (Math.abs(x) > COLOSSUS_GROUND_BOUND || Math.abs(z) > COLOSSUS_GROUND_BOUND) continue;
+      ctx.addHazard(x, z, COLOSSUS_NOVA_PATCH, COLOSSUS_NOVA_LIFE, COLOSSUS_NOVA_DPS, 'lava');
+    }
+    _bossAt.set(e.pos.x, 0, e.pos.z);
+    ctx.effects.shockwave(_bossAt, 0xff5a00,
+      COLOSSUS_NOVA_RING + COLOSSUS_NOVA_PATCH, 0.5);
+    ctx.effects.burst(_bossAt, 0xff7043, 30, 8, 3, 0.7);
+    ctx.effects.addShake(0.28);
+    e._setEyeAlert(false);
+    bs.state = 'walk';
+    return;
+  }
+
+  // walk - the state the fight lives in between its lines of attack.
+  // stepMul stays at 1.4 even in overdrive, deliberately: the traversal jump
+  // in update() only fires at clamped walking pace, and a boss that can no
+  // longer hop a tread onto a deck the moment its bar runs low would be a
+  // downgrade, not an enrage. Phase 3's speed is in its clocks, not its legs.
   e.stepMul = 1.4;
+  // The clocks run while it WALKS, not while a wind-up is burning - so a
+  // state ending is not a free head start on the next one.
   bs.cd -= a.dt;
   bs.slamCd -= a.dt;
+  bs.lobCd -= a.dt;
+  bs.shellCd -= a.dt;
+  bs.rushCd -= a.dt;
+  bs.fanCd -= a.dt;
+  bs.arcCd -= a.dt;
+  bs.novaCd -= a.dt;
+  // Overdrive never stops staring at you.
+  e._setEyeAlert(bs.phase >= 3);
   // Terror does not send a boss running - it just stops it doing anything,
   // which is what fearMode 'stagger' declares on the type.
   if (feared) {
@@ -865,7 +1452,7 @@ export function aiColossus(e, a) {
 
   // VENT FIRE. Only while the core is actually open, and only from `walk` -
   // NOT from `stagger`, which also holds the core open. The stagger is the
-  // reward for baiting the charge into a pillar, and it is the one piece of
+  // reward for baiting the rush into a wall, and it is the one piece of
   // counter-play the fight has; shooting through it would take that back.
   // Gated on range too, so a boss at the far wall is not plinking at someone
   // who has already disengaged.
@@ -882,17 +1469,17 @@ export function aiColossus(e, a) {
     }
   }
 
-  // Close enough to flatten: a slow, loud, radial slam that punishes standing
-  // underneath it rather than circling. Written out rather than run through
-  // _meleeCycle because the slam and the charge carry DIFFERENT damage caps,
-  // and _meleeCycle can only ever deal e.damage.
+  // Close enough to flatten: a loud, radial, rooted slam that punishes
+  // standing underneath it rather than circling. Written out rather than run
+  // through _meleeCycle because the slam and the rush carry DIFFERENT damage
+  // caps, and _meleeCycle can only ever deal e.damage.
   if (bs.slamT > 0) {
     bs.slamT -= a.dt;
     e._setEyeAlert(true);
     if (bs.slamT <= 0) {
       e._setEyeAlert(false);
       bs.slamCd = 3.2 * e.rate;
-      if (a.dist < 5.5 && _reachY(a) < BOSS_REACH_Y) {
+      if (a.dist < 6 && _reachY(a) < BOSS_REACH_Y) {
         ctx.onHitPlayer(Math.min(COLOSSUS_SLAM_CAP, e.damage * 0.82), e.pos, e);
       }
       _bossAt.set(e.pos.x, 0, e.pos.z);
@@ -903,25 +1490,66 @@ export function aiColossus(e, a) {
     return;
   }
   if (a.dist < 5 && bs.slamCd <= 0) {
-    bs.slamT = 0.9;
+    bs.slamT = 0.75;
     return;
   }
 
-  if (bs.cd <= 0 && a.dist > 8 && a.dist < 26) {
-    bs.mark = ctx.effects.markAcquire();
-    bs.state = 'tele';
-    bs.t = 1.1;
-    bs.dirX = a.nx;
-    bs.dirZ = a.nz;
-    return;
+  // THE SCHEDULER. One clock between attacks; what it picks is read off where
+  // the player IS, so the boss's answer to range is a different line of work
+  // rather than the same attack thrown farther. Whatever it just did is
+  // struck off the short list - the fight does not say the same sentence
+  // twice in a row when it has a choice.
+  if (bs.cd <= 0) {
+    const opts = [];
+    if (bs.arcCd <= 0 && a.dist < 9.5) opts.push('arc');
+    if (bs.novaCd <= 0 && bs.phase >= 2 && a.dist < 11) opts.push('nova');
+    if (bs.rushCd <= 0 && a.dist > 7 && a.dist < 26) opts.push('rush');
+    if (bs.fanCd <= 0 && a.dist > 4.5 && a.dist < 22) opts.push('fan');
+    if (opts.length) {
+      let pick = opts[Math.floor(Math.random() * opts.length)];
+      if (opts.length > 1 && pick === bs.last) {
+        pick = opts[(opts.indexOf(pick) + 1) % opts.length];
+      }
+      bs.last = pick;
+      if (pick === 'rush') {
+        bs.cd = COLOSSUS_CD_RUSH * e.rate * schedMul;
+        bs.rushCd = COLOSSUS_RUSH_CD * e.rate;
+        bs.state = 'tele';
+        bs.t = COLOSSUS_RUSH_TELE;
+        bs.dirX = a.nx;
+        bs.dirZ = a.nz;
+        bs.mark = ctx.effects.markAcquire();
+      } else if (pick === 'fan') {
+        bs.cd = COLOSSUS_CD_FAN * e.rate * schedMul;
+        bs.fanCd = COLOSSUS_FAN_CD * e.rate;
+        bs.state = 'fan';
+        bs.fanMode = 'wind';
+        bs.t = COLOSSUS_FAN_WIND;
+        bs.fanLeft = bs.phase >= 3 ? 3 : 2;
+        bs.fanShots = COLOSSUS_FAN_SHOTS + (e.cycle > 0 ? 1 : 0);
+      } else if (pick === 'arc') {
+        bs.cd = COLOSSUS_CD_ARC * e.rate * schedMul;
+        bs.arcCd = COLOSSUS_ARC_CD * e.rate;
+        bs.state = 'arc';
+        bs.arcMode = 'wind';
+        bs.t = COLOSSUS_ARC_WIND;
+        bs.arcB = Math.atan2(a.nz, a.nx);
+        bs.arcMark = _colTake(bs);
+      } else {
+        bs.cd = COLOSSUS_CD_NOVA * e.rate * schedMul;
+        bs.novaCd = COLOSSUS_NOVA_CD * e.rate;
+        bs.state = 'nova';
+        bs.t = COLOSSUS_NOVA_TIME;
+        bs.fxT = 0;
+        bs.novaMark = _colTake(bs);
+      }
+      return;
+    }
   }
 
-  // THE TURRET THROW. Last of the walk-state options, so it never takes a
-  // moment the charge or the slam wanted - those two are the fight, and this
-  // is what fills the space between them. Only from range: a turret lobbed
-  // from arm's length would land in the player's lap, which is the one thing
-  // it must never do.
-  bs.lobCd -= a.dt;
+  // THE TURRET THROW. Below the scheduler, so it never takes a moment one of
+  // the attacks wanted. Only from range: a turret lobbed from arm's length
+  // would land in the player's lap, which is the one thing it must never do.
   if (bs.lobCd <= 0 && a.dist > 9 && _turretCount(ctx) < COLOSSUS_MAX_TURRETS
     && _pickTurretSpot(e, a)) {
     bs.state = 'lob';
@@ -934,8 +1562,35 @@ export function aiColossus(e, a) {
     return;
   }
 
-  a.vx = a.px * a.sp;
-  a.vz = a.pz * a.sp;
+  // THE SHELL BARRAGE. Cast on the move and on its own clock, so something is
+  // always landing somewhere even between the scheduler's sentences. Never at
+  // melee range - that is what the slam and the arm are for.
+  if (bs.shellCd <= 0 && a.dist > 6 && a.dist < 28) {
+    bs.shellCd = COLOSSUS_SHELL_CD * e.rate * schedMul;
+    _colossusBarrage(e, a, ctx);
+  }
+
+  // ...and it MOVES. Bears down past thirteen metres, presses inside six and
+  // a half, circles while it fires between the two - and never camps a wall.
+  // The orbit is a FIGHTING STANCE, not a pathfinding strategy: if the room
+  // itself is in the way it stops strafing and takes the route - it grinds
+  // against geometry (blockedBy) or the nav grid offers it a hop (a.jump),
+  // and either one means forward velocity is what the moment wants.
+  if (e.blockedBy > 0.02) bs.stuckT += a.dt;
+  else bs.stuckT = Math.max(0, bs.stuckT - a.dt * 2);
+  if (a.dist > 13 || (a.dist > 6.5 && (bs.stuckT > 0.4 || a.jump))) {
+    a.vx = a.px * a.sp;
+    a.vz = a.pz * a.sp;
+  } else if (a.dist < 6.5) {
+    a.vx = a.px * a.sp * 0.9;
+    a.vz = a.pz * a.sp * 0.9;
+  } else {
+    orbit(e, a, COLOSSUS_ORBIT);
+  }
+  if (e.pos.x > 17) a.vx -= a.sp * COLOSSUS_WALL_AVOID;
+  else if (e.pos.x < -17) a.vx += a.sp * COLOSSUS_WALL_AVOID;
+  if (e.pos.z > 17) a.vz -= a.sp * COLOSSUS_WALL_AVOID;
+  else if (e.pos.z < -17) a.vz += a.sp * COLOSSUS_WALL_AVOID;
 }
 
 const TYPES = {
@@ -1062,16 +1717,18 @@ const TYPES = {
   // `hp` here is the BASE. waves.js multiplies it by a curve that reaches
   // roughly 5.9x by wave 55.
 
-  // The teaching boss. Armoured everywhere except a red core in its chest,
-  // behind shutters that draw back on a fixed rhythm - so damage is a question
-  // of WHEN the player is firing rather than how long they hold the trigger.
-  // The core used to travel around the body instead, and half of every cycle
-  // it sat behind three metres of armour with no way to reach it: a mechanic
-  // the player could only wait out reads as the fight being broken. On the
-  // chest it is always in front of them, and the only question is the timing.
-  // Its charge is telegraphed a full second ahead and, if the player puts a
-  // pillar or a wall behind themselves, it knocks itself down and hands over a
-  // free window.
+  // The teaching boss, rebuilt as a scrapyard that walks. Armoured everywhere
+  // except the red core in its chest, behind shutters that draw back on a
+  // fixed rhythm the player can learn and count - and while the core stands
+  // open it FIRES, so the window to hurt it is the window it hurts you. Around
+  // that rhythm the fight is busy: a grinder rush that bends toward you
+  // mid-charge and knocks itself cold on a wall if you bait one, a rivet fan
+  // swept across your position in bursts, a wrecking arm that takes the whole
+  // front of it away, a ring of molten slag it vents when crowded, shells
+  // lobbed at wherever you are standing while it walks - and it walks a lot,
+  // circling between the bands where it bears down or presses in. The last
+  // third of the bar it overheats and everything comes faster. Touching it is
+  // never free.
   // COLOSSUS'S TURRETS. Not a wave spawn - nothing rolls one, and pickAddType
   // will never return it. The boss throws them (see aiColossus), they arc in,
   // they bolt themselves to the floor where they land and then they shoot.
@@ -1108,7 +1765,9 @@ const TYPES = {
 
   colossus: {
     head: { r: 0.42, y: 1.18 },
-    hp: 3600, speed: 2.0, damage: 34, value: 4000, color: 0x8c5a2b, eye: 0xffb300,
+    // A touch faster than the 2.0 it shipped with: the rework says the boss
+    // moves, so the block has to back that up. Same health, same armour.
+    hp: 3600, speed: 2.45, damage: 34, value: 4000, color: 0x8c5a2b, eye: 0xffb300,
     scale: 3.2, radius: 2.0, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,

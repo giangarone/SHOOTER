@@ -171,6 +171,11 @@ function headSeam(hb, hd) {
 // in this file exist to avoid.
 const _a = {
   dt: 0, ctx: null, dist: 0, nx: 0, nz: 0, px: 0, pz: 0, sp: 0, vx: 0, vz: 0,
+  // Whether the nav grid is offering a traversal jump this frame. Read by
+  // behaviours whose stance would otherwise crowd it out - a circling boss
+  // strafes laterally and would never build the forward velocity the jump
+  // gate asks for, so "the way forward is a hop" must override the stance.
+  jump: false,
 };
 
 export class Enemy {
@@ -1124,6 +1129,7 @@ export class Enemy {
       _a.sp = sp;
       _a.vx = 0;
       _a.vz = 0;
+      _a.jump = navJump;
       const def = ENEMY_TYPES[this.type];
       if (def.ai) def.ai(this, _a);
       vx = _a.vx;

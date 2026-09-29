@@ -868,11 +868,21 @@ context. The start screen says so, and one click anywhere fixes it.
   boss's own decision rather than a metronome, and it is not free: while it is
   open it radiates fire outward in a growing ring, so the player has to be
   close enough to shoot and far enough not to burn, and the ring is growing the
-  whole time. Then the **Colossus** (armoured but for a red core in
-  its chest that opens on a rhythm, a telegraphed charge that knocks it out
-  cold against a wall, and turrets it throws at the ground near you - they arc
-  in under a landing ring, bolt themselves down and start shooting, three on
-  the floor at most, and each one is a few rounds to destroy), **Siege**
+  whole time. Then RUST's **Colossus**, the walking
+  scrapyard and the busiest fight in the early rotation: armoured everywhere
+  but a red core in its chest that opens on a rhythm and vent-fires while it
+  stands open. It never holds still - it circles while it shoots, bears down
+  from range and presses in close, and touching it is never free. Every
+  attack is telegraphed and every one is scrapyard work: a grinder rush that
+  BENDS toward you mid-charge, grinds a burning tread trail into the floor it
+  covered, and still knocks itself cold on a wall if you bait one; a wrecking
+  arm that sweeps its whole front away; a rivet fan it walks across your
+  position in re-acquiring bursts; a ring of molten slag it vents when you
+  crowd it; and a cross of shell strikes lobbed at wherever you're standing
+  without breaking stride. It still throws turrets - arc in under a landing
+  ring, bolt down, shoot; three at most, a few rounds each to kill - and the
+  last third of the bar it OVERHEATS: everything quicker, the rush bending
+  twice. Then **Siege**
   (a walking quarry, and the theme's whole argument at boss scale -
   the floor fights you. FIVE telegraphed attacks, one per surface the theme
   teaches: a planted SLAB-STOMP that fills under its feet and shoves you

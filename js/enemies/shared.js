@@ -750,11 +750,12 @@ export function segBlocked(ax, ay, az, bx, by, bz, boxes) {
   return false;
 }
 
-// COLOSSUS. Four states, and the whole fight is the player reading which one
-// it is in: walking (keep to the glowing side), telegraphing (get something
-// solid behind you), charging (be elsewhere), knocked down (everything you
-// have). Damage is capped per attack rather than left to scale, because the
-// wave-55 multiplier on a 34 point hit would be a one-shot.
+// ---- bosses: the shared reach and touch numbers ----------------------------
+// A boss's ground attacks reach this far above itself; bossTouch charges for
+// standing in the body. COLOSSUS's own six lines of attack are in rust.js -
+// what lives here is only what more than one boss asks for. Damage is capped
+// per attack rather than left to scale, because the wave-55 multiplier on a
+// 34 point hit would be a one-shot.
 // How far above itself a boss's ground attacks reach. Bosses stand 4-6m tall
 // so this is far more generous than MELEE_REACH_Y, and it clears a player
 // jumping from the tallest platform (1.6 + a 1.84 apex = 3.44). It stops short

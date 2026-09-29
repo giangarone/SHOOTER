@@ -39,6 +39,7 @@
     "test:lasers": "node test/lasers.mjs",
     "test:ember": "node test/ember.mjs",
     "test:rime": "node test/rime.mjs",
+    "test:rust": "node test/rust.mjs",
     "test:verdant": "node test/verdant.mjs",
     "test:strata": "node test/strata.mjs",
     "test:void": "node test/void.mjs",
