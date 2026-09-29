@@ -21,6 +21,10 @@
 //   4. A geode fires at where the player HAS BEEN, not where they are.
 //   5. A gargoyle holds its perch, is armoured there, comes down only when
 //      walked under, and is unarmoured once it has.
+//   6. The SIEGE fight: contact always costs, every attack telegraphs before
+//      it hurts, the fault is an ordered crack and not a blob, the slide is
+//      far faster than the walk, rubble it lays keeps costing, and over a
+//      long window it never stops asking questions.
 import { bootPage, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8233;
@@ -289,6 +293,254 @@ try {
       clean();
     }
 
+    // ---- 6. SIEGE: the reworked boss -------------------------------------
+    // The suite that owns the fight. What is asserted, per attack, is the
+    // DIFFERENCE - a windup that costs nothing against a landing that does,
+    // the crack's ordered circles against a blob, the slide's speed against
+    // the walk's, rubble against clear floor. Each attack is forced open on
+    // its own cooldown so it is the only thing firing.
+    {
+      clean();
+      g.arena.obstacles.length = 0;
+      g.arena.ground.length = 0;
+      const mortarLog = [];
+      const origMortar = g._addMortar.bind(g);
+      g._addMortar = (x, z, r, delay, dmg, ground) => {
+        mortarLog.push({
+          x: +x.toFixed(2), z: +z.toFixed(2), r, delay,
+          dmg: +dmg.toFixed(1), ground: !!ground,
+        });
+        origMortar(x, z, r, delay, dmg, ground);
+      };
+      // Pins one attack's clock at zero and every other far away, so the
+      // answer measured below belongs to the attack and not to the kit.
+      const freezeOthers = (boss, open) => {
+        for (const k of ['stompCd', 'faultCd', 'slideCd', 'salvoCd', 'rubbleCd']) {
+          boss.bs[k] = k === open ? 0 : 999;
+        }
+        boss.bs.chain = 0;
+      };
+      res.touchLost = 0;
+      res.stompEntered = false;
+      res.stompMarked = false;
+      res.stompFillCost = 0;
+      res.stompPlanted = false;
+      res.stompHit = 0;
+      res.faultN = 0;
+      res.faultOrdered = false;
+      res.laneMarked = false;
+      res.lanePlanted = false;
+      res.slideSeen = false;
+      res.slideSpeed = 0;
+      res.laneWall = false;
+      res.laneWallRecover = 0;
+      res.slideShells = 0;
+      res.salvoFired = false;
+      res.salvoN = 0;
+      res.salvoNear = false;
+      res.rubbleLaid = false;
+      res.rubbleShelled = false;
+      res.rubbleCost = 0;
+      res.attacksIn20 = 0;
+      res.attackKinds = 0;
+      res.attackDetail = {};
+      res.bossPace = 0;
+
+      // A. TOUCH: standing against the body costs, immediately, no windup.
+      {
+        const boss = put('siege', 0, 0);
+        await steps(2);
+        res.bossBuilt = !!(boss.group && boss.bs && boss.bs.state === 'walk');
+        freezeOthers(boss, 'none');
+        boss.bs.chain = 999;
+        px = boss.pos.x + 1.9;
+        pz = boss.pos.z;
+        res.touchLost = await measure(1.6);
+        clean();
+      }
+
+      // B. STOMP: telegraphed on a held mark, the fill costs nothing, the
+      // boss plants to do it, and the landing is real.
+      {
+        const boss = put('siege', 0, 0);
+        await steps(2);
+        freezeOthers(boss, 'stompCd');
+        px = 5.6;
+        pz = 0;
+        for (let i = 0; i < 500 && !res.stompEntered; i++) {
+          await step();
+          res.stompEntered = boss.bs.state === 'stomp';
+        }
+        if (res.stompEntered) {
+          res.stompMarked = boss.bs.mark >= 0;
+          const plantX = boss.pos.x;
+          res.stompFillCost = await measure(0.4);
+          res.stompPlanted = Math.abs(boss.pos.x - plantX) < 0.3;
+          res.stompHit = await measure(1.4);
+        }
+        clean();
+      }
+
+      // C. FAULT LINE: a crack racing from its feet toward where the player
+      // stood - several circles, ordered along the bearing, staggered in time.
+      {
+        const boss = put('siege', -2, 0);
+        await steps(2);
+        freezeOthers(boss, 'faultCd');
+        px = 14;
+        pz = 0;
+        const m0 = mortarLog.length;
+        for (let i = 0; i < 500 && mortarLog.length - m0 < 4; i++) await step();
+        const crack = mortarLog.slice(m0, m0 + 8);
+        res.faultN = crack.length;
+        res.faultOrdered = crack.length >= 4
+          && crack.every((m) => Math.abs(m.z) < 2)
+          && crack.every((m, i) => i === 0 || m.x - crack[i - 1].x > 2.5)
+          && crack[crack.length - 1].x - crack[0].x > 8
+          && crack.every((m, i) => i === 0 || m.delay > crack[i - 1].delay);
+        clean();
+      }
+
+      // D. LANDSLIDE: the lane is drawn and held before it moves, then the
+      // boss crosses far faster than it walks - and the wall pays the slam
+      // back with a fan of shells and no stagger window.
+      {
+        const boss = put('siege', 2, 0);
+        await steps(2);
+        freezeOthers(boss, 'slideCd');
+        px = 12;
+        pz = 6.5;
+        const m0 = mortarLog.length;
+        let laneX = null;
+        let laneZ = null;
+        let sx = 0, sz = 0, st0 = 0, dodged = false;
+        res.laneMark0 = -2;
+        res.laneDrift = 0;
+        for (let i = 0; i < 900; i++) {
+          await step();
+          const st = boss.bs.state;
+          if (st === 'lane') {
+            // The dodge: the lane locks at the telegraph, so the pinned
+            // player steps off it the moment it locks.
+            if (!dodged) { dodged = true; pz = -9; }
+            if (res.laneMark0 === -2) res.laneMark0 = boss.bs.mark;
+            if (boss.bs.mark >= 0) res.laneMarked = true;
+            if (laneX !== null) {
+              res.laneDrift = Math.max(res.laneDrift,
+                Math.hypot(boss.pos.x - laneX, boss.pos.z - laneZ));
+            }
+            laneX = boss.pos.x;
+            laneZ = boss.pos.z;
+          }
+          if (st === 'slide') {
+            res.slideSeen = true;
+            if (st0 > 0 && g.time > st0 + 0.04) {
+              res.slideSpeed = Math.max(res.slideSpeed,
+                Math.hypot(boss.pos.x - sx, boss.pos.z - sz) / (g.time - st0));
+            }
+            sx = boss.pos.x;
+            sz = boss.pos.z;
+            st0 = g.time;
+          }
+          if (st === 'recover') {
+            res.laneWallRecover = boss.bs.t;
+            res.laneWall = Math.abs(boss.pos.x) > 18 || Math.abs(boss.pos.z) > 18;
+            break;
+          }
+          if (boss.dead) break;
+        }
+        res.lanePlanted = res.laneDrift < 0.05;
+        res.slideSpeed = +res.slideSpeed.toFixed(1);
+        res.slideShells = mortarLog.length - m0;
+        clean();
+      }
+
+      // E. QUARRY SALVO: a volley is several shells at once, all of them
+      // around where the player was standing.
+      {
+        const boss = put('siege', 0, 0);
+        await steps(2);
+        freezeOthers(boss, 'salvoCd');
+        px = 13;
+        pz = 0;
+        const m0 = mortarLog.length;
+        for (let i = 0; i < 400 && !res.salvoFired; i++) {
+          await step();
+          res.salvoFired = mortarLog.length - m0 >= 4;
+        }
+        res.salvoN = mortarLog.length - m0;
+        res.salvoNear = res.salvoN > 0 &&
+          mortarLog.slice(m0).every((m) => Math.hypot(m.x - px, m.z - pz) < 12.5);
+        clean();
+      }
+
+      // F. OVERBURDEN: what lands becomes rubble, and rubble costs for as
+      // long as it lies there - measured with the boss parked out of reach.
+      {
+        const boss = put('siege', 0, 0);
+        await steps(2);
+        freezeOthers(boss, 'rubbleCd');
+        px = 12;
+        pz = 0;
+        const m0 = mortarLog.length;
+        for (let i = 0; i < 600 && !res.rubbleLaid; i++) {
+          await step();
+          res.rubbleLaid = g._hazard.some((h) => h.kind === 'rubble');
+        }
+        res.rubbleShelled = mortarLog.slice(m0).some((m) => m.ground);
+        if (res.rubbleLaid) {
+          const patch = g._hazard.find((h) => h.kind === 'rubble');
+          boss.pos.set(-14, 0, -14);
+          boss.speed = 0;
+          px = patch.x;
+          pz = patch.z;
+          res.rubbleCost = await measure(1.4);
+        }
+        clean();
+      }
+
+      // G. PACE: on its own clocks it never stops asking, and the pursuit is
+      // faster than the old walk - measured over straight open floor, where
+      // 2.9 speed is all the old boss had and the weave is the only tax.
+      {
+        const boss = put('siege', 0, -20);
+        await steps(2);
+        const t0 = g.time;
+        let prev = 'walk';
+        let flip = 0;
+        px = 12;
+        pz = 12;
+        while (g.time - t0 < 20) {
+          await step();
+          const st = boss.bs.state;
+          if (st !== 'walk' && st !== prev) {
+            res.attacksIn20++;
+            res.attackDetail[st] = (res.attackDetail[st] || 0) + 1;
+          }
+          prev = st;
+          if (++flip % 240 === 0) { px = -px; pz = -pz; }
+        }
+        res.attackKinds = Object.keys(res.attackDetail).length;
+        clean();
+      }
+      {
+        const boss = put('siege', 0, -18);
+        await steps(2);
+        freezeOthers(boss, 'none');
+        boss.bs.chain = 999;
+        px = 0;
+        pz = 0;
+        await simSteps(0.6);
+        const sx = boss.pos.x;
+        const sz = boss.pos.z;
+        const t0 = g.time;
+        await simSteps(2.5);
+        res.bossPace = +((Math.hypot(boss.pos.x - sx, boss.pos.z - sz) / (g.time - t0)).toFixed(2));
+        clean();
+      }
+      g._addMortar = origMortar;
+    }
+
     await steps(30);
     return res;
   }, STRATA_TYPES);
@@ -325,6 +577,35 @@ try {
   ok('it drops where it perched rather than chasing', out.gargDropDrift < 4,
     `drift=${out.gargDropDrift}m`);
   ok('and on the floor it is unarmoured', out.gargArmorDown === 1, `armor=${out.gargArmorDown}`);
+
+  ok('siege builds its boss model and state', out.bossBuilt);
+  ok('siege: touching the body costs immediately', out.touchLost > 5,
+    `lost=${out.touchLost}`);
+  ok('siege: the stomp telegraphs on a held mark', out.stompEntered && out.stompMarked);
+  ok('and the fill costs nothing until it lands', out.stompFillCost === 0,
+    `cost=${out.stompFillCost}`);
+  ok('and it plants to do it', out.stompPlanted);
+  ok('and the landing is real', out.stompHit > 10, `lost=${out.stompHit}`);
+  ok('siege: the fault is a crack, not a blob', out.faultN >= 4 && out.faultOrdered,
+    `n=${out.faultN}`);
+  ok('siege: the landslide draws its lane before it moves',
+    out.laneMarked && out.lanePlanted,
+    `mark0=${out.laneMark0} drift=${out.laneDrift}`);
+  ok('and it crosses at far more than walking pace',
+    out.slideSeen && out.slideSpeed >= 12, `peak=${out.slideSpeed}m/s`);
+  ok('and the wall pays the slam back, without a stagger',
+    out.laneWall && out.laneWallRecover > 0.95 && out.slideShells >= 3,
+    `recover=${out.laneWallRecover} shells=${out.slideShells}`);
+  ok('siege: the salvo is several circles around the player',
+    out.salvoFired && out.salvoN >= 4 && out.salvoNear, `n=${out.salvoN}`);
+  ok('siege: the overburden leaves rubble that bites',
+    out.rubbleLaid && out.rubbleShelled && out.rubbleCost > 6,
+    `cost=${out.rubbleCost}`);
+  ok('siege: it never stops asking questions',
+    out.attacksIn20 >= 6 && out.attackKinds >= 3,
+    `entries=${out.attacksIn20} kinds=${JSON.stringify(out.attackDetail)}`);
+  ok('siege: its pursuit beats the old planted pace', out.bossPace > 3.3,
+    `pace=${out.bossPace}m/s`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

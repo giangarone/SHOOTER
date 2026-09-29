@@ -845,7 +845,18 @@ context. The start screen says so, and one click anywhere fixes it.
   cold against a wall, and turrets it throws at the ground near you - they arc
   in under a landing ring, bolt themselves down and start shooting, three on
   the floor at most, and each one is a few rounds to destroy), **Siege**
-  (telegraphed mortar barrages and a charge of its own), **Schism** (PLAGUE's
+  (a walking quarry, and the theme's whole argument at boss scale -
+  the floor fights you. FIVE telegraphed attacks, one per surface the theme
+  teaches: a planted SLAB-STOMP that fills under its feet and shoves you
+  off, a FAULT LINE of spikes that races from its feet toward where you
+  STOOD, a LANDSLIDE down a marked lane that tears the lane up behind it and
+  makes the wall answer the slam, quarry SALVOS in rotation - a bracket
+  rung around you, a row led along where you are running, a cross planted
+  on you - and an OVERBURDEN that drops the ceiling and leaves the floor it
+  hit as rubble that keeps cutting. It prowls and weaves the whole fight
+  instead of parking, touching the body always costs, and the last third of
+  the bar arms the stomp's outer ring, so the fight's cleanest answer,
+  retreating outward, is the one it taxes), **Schism** (PLAGUE's
   splitting mass - touching it hurts at all times, and between its kept
   eight-way volley it plants and rips three rotting corridors through your
   bearing, lobs a four-glob gas barrage re-led at your feet, pounces down a

@@ -723,6 +723,12 @@ const MAX_EDGE = 6;
 // share the queue without one evicting the other's whole mechanic. Ten is two
 // seeds' worth in flight plus a ring, the scald's argument at a slower pace.
 const MAX_CRYSTAL = 10;
+// STRATA's rubble - Siege's overburden: ground the ceiling dropped on. No
+// status and no tail, the shock's bargain in stone: it bites only while the
+// player stands in it, so giving the floor up is a complete answer. Eight is
+// four casts' worth in flight - the fight is meant to spend the room, not
+// delete it.
+const MAX_RUBBLE = 8;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -811,6 +817,12 @@ const CREEP_EDGE = 0xff3b30;
 // the player can tell spreading glass from either in the half-second they have
 // to step off one of them.
 const CREEP_CRYSTAL = 0x5bd0ff;
+// STRATA's rubble. No status, so it wears the theme's quarried grey rather
+// than a status colour - the shock's rule, for the shock's reason: the patch
+// says WHOSE floor this was, and the shape family already says it costs.
+// Greyer than the hail and dimmer than the crystal, because it is dead stone
+// and those two are weather and light.
+const CREEP_RUBBLE = 0x9aa5b1;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -1002,6 +1014,14 @@ const HAZARD_KINDS = {
   crystal: {
     color: CREEP_CRYSTAL, cap: MAX_CRYSTAL,
     spread: 0.76, spreadSecs: 2.0,
+  },
+  // STRATA's rubble - where the overburden landed. NO status and NO carve,
+  // the shock's rule at a slower clock: everything it does it does while the
+  // player is standing in it, and the instant they are off it stops. The
+  // mortar that laid it filled its own circle first, so the ground being
+  // asked about was always the ground it became.
+  rubble: {
+    color: CREEP_RUBBLE, cap: MAX_RUBBLE,
   },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY
