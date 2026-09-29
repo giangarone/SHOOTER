@@ -12,11 +12,12 @@
 
 import * as THREE from 'three';
 import {
-  resolveCircle, pointInObstacle,
+  pointInObstacle,
 } from '../utils.js';
 import {
-  ENEMY_TYPES, SHARED_MATS, _bossAt, aiMelee, aiShrike, bossTouch, eyes, geo,
-  orbit, partsFor, prism, shard, slab, spike,
+  ENEMY_TYPES, SHARED_MATS, _bossAt, addWarnedMortar, aiMelee, aiShrike,
+  bossTouch, capturedShot, eyes, faceSnap, geo, markDrop, markGet, orbit,
+  partsFor, prism, releaseMarks, segBlocked, shard, slab, snapAim, spike,
 } from './shared.js';
 
 // The only tripod in the game, and the tallest thin thing in it. Read: it is
@@ -228,7 +229,9 @@ export function buildHerald(e, g, s) {
   P('heraldTorso', prism(0.24, 0.32, 0.56, 6), { y: 1.14 });
   P('heraldShoulder', slab(0.26, 0.14, 0.3), { x: -0.3, y: 1.34, rz: 0.4 });
   P('heraldShoulder', slab(0.26, 0.14, 0.3), { x: 0.3, y: 1.34, rz: -0.4 });
-  P('heraldHead', shard(0.19), { y: 1.58 });
+  // Kept on the enemy: the head swells during every ceremony, which is the
+  // close-range tell that pairs with the floor telegraphs at distance.
+  e.headMesh = P('heraldHead', shard(0.19), { y: 1.58 });
   const crownGeo = spike(0.09, 0.5, 4);
   for (let i = 0; i < 5; i++) {
     const ang = (i / 5) * Math.PI * 2;
@@ -425,88 +428,590 @@ export function aiHalo(e, a) {
   e._setEyeAlert(inside);
 }
 
-// ---- BRINE -----------------------------------------------------------------
+// ---- HERALD ----------------------------------------------------------------
+// THE SUN, COME DOWN TO WITNESS. The old fight was a glowing pillar that
+// blinked around you and threw health at you; the rework is the theme's own
+// argument rehearsed at boss scale as six ceremonies, none of which let the
+// player stand still:
+//
+//   spears   the crown throws fanned volleys WHILE THE BOSS KEEPS WALKING -
+//            the fight's metronome, there is no lull in it
+//   lance    a telegraphed lane, then a sunbeam that sweeps a hundred and
+//            thirty degrees of the room. Beat it by circling, or by putting
+//            a pillar between yourself and the light - it is light; cover works
+//   corona   the halo is let go: gold rings rolling outward off the body,
+//            jumped the way the ring's own edge says
+//   flare    it rises and takes SIGHT - a white-out scaled by how close you
+//            were standing. The zealot's lesson, given a wind-up
+//   brands   an impact-marked ring of searing circles with ONE GAP in it,
+//            each landing as burning ground - the lens's line, taught as a
+//            place rather than a path
+//   leap     the sun descends: a marked circle on the player, an arc through
+//            the rig, a slam that scorches a cross into the floor where it
+//            lands - and the boss has RELOCATED, which is what the fight is
+//            mostly about
+//
+// Between ceremonies it does not pause, it PROCESSIONS: a fast walk in, or a
+// wide fast circuit - and touching the body at any moment burns, because
+// hugging the sun was never going to be free.
 
-// HERALD. Blink, volley, pools, and a one-way enrage under 30% that shortens
-// every cooldown at once.
-export const HERALD_POOL_CAP = 20;
+const HERALD_GOLD = 0xffd54f;
+const HERALD_PALE = 0xfff3c4;
+
+// The order it rehearses them in, so a player can LEARN the fight - the same
+// loop every time - while the targets stay live, so learning the order is
+// worth nothing without moving. Spears recur between every two ceremonies:
+// that recurrence is the pressure.
+const HERALD_ROUTINE = ['leap', 'spears', 'corona', 'lance', 'spears', 'brands', 'leap', 'flare'];
+
+// The walk between ceremonies. Kept deliberately thin - the ceremonies are
+// loud, so the silence between them is where the fight would go slack.
+const HERALD_BREATH = 0.45;
+
+// The procession: closer than the old orbit, tighter on the band, and far
+// more sideways so the boss is never crossing the player's screen head-on.
+const HERALD_ORBIT = { dist: 10, band: 2.2, out: 0.95, in: -0.9, strafe: 0.85, flip: 1.1, flipVar: 0.9 };
+
+// SPEARS. Three pulses of three, fanned off a bearing snapped when the crown
+// lit, the aim WALKING a little between pulses - a player who picked one
+// direction and kept it has already dodged it; a player who froze inside the
+// fan has not.
+const SPEAR_TELL = 0.55;
+const SPEAR_PULSES = 3;
+const SPEAR_GAP = 0.26;
+const SPEAR_FAN = 3;
+const SPEAR_SPREAD = 0.14;
+const SPEAR_STEP = 0.15;
+
+// DAWN LANCE. Long enough to cross the room, wide enough to be a corridor
+// rather than a thread, slow enough to read. The damage is a fast tick while
+// you stand in the light, so brushing through the beam is cheap and walking
+// along inside it is not.
+const LANCE_LEN = 30;
+const LANCE_TELL = 1.1;
+const LANCE_TIME = 2.6;
+const LANCE_SPAN = 2.3;
+const LANCE_HALF = 1.15;
+const LANCE_TICK = 0.22;
+
+// CORONA. Ring speed, pad and jump height all rhyme with Maw's, on purpose:
+// the player has already been taught what a rolling ring asks for, and the
+// boss of the light theme should pay debts in the coin they know.
+const CORONA_TELL = 0.75;
+const CORONA_RINGS = 2;
+const CORONA_GAP = 0.6;
+const CORONA_SPEED = 9.6;
+const CORONA_PAD = 0.85;
+const CORONA_JUMP_Y = 0.6;
+
+// ZENITH FLARE. The radius is generous and the white is short even at arm's
+// length - it takes the ROOM away for a moment, never the player's hp, which
+// is what keeps it a SOLAR effect rather than a health one.
+const FLARE_TELL = 1.25;
+const FLARE_R = 15;
+const FLARE_BLIND = 0.85;
+
+// BRANDS. Six marks around the player, one slot always left dark. The delay
+// is the whole telegraph: walk out through the gap, or be standing in burning
+// ground with the boss already walking at you.
+const BRAND_TELL = 0.85;
+const BRAND_N = 6;
+const BRAND_R = 4.6;
+const BRAND_HIT_R = 1.75;
+const BRAND_DELAY = 1.05;
+
+// ZENITH LEAP. The slam is small - it is a relocation that happens to land
+// like a hammer, not a bomb. The burn cross it leaves is the real cost of
+// standing where it came down.
+const LEAP_TELL = 0.5;
+const LEAP_SLAM_R = 3.6;
+const LEAP_LIFT = 5.4;
+
+// Scratch for the lance corridor and the leap.
+const _lanceTo = new THREE.Vector3();
+
+// What the halo is doing, per state - and, in a wind-up, per ceremony being
+// wound. The halo is the fight's own instrument panel: it lowers to charge
+// the lance, keeps low to loose the corona, swells and rises for the flare,
+// gathers for the leap - the player reads WHICH ceremony is coming off the
+// crown before the floor marks answer WHERE.
+const HERALD_HALO = {
+  stalk: { y: 1.98, s: 1.0, spin: 2.0 },
+  recover: { y: 1.98, s: 1.0, spin: 2.0 },
+  spears: { y: 2.06, s: 1.18, spin: 7.0 },
+  lance: { y: 1.86, s: 0.72, spin: 10.0 },
+  corona: { y: 1.3, s: 1.28, spin: 9.0 },
+  flare: { y: 2.35, s: 1.6, spin: 3.0 },
+  brands: { y: 2.2, s: 1.1, spin: 5.0 },
+  leap: { y: 1.6, s: 0.75, spin: 5.0 },
+  leapAir: { y: 1.98, s: 0.95, spin: 6.0 },
+};
 
 export function aiHerald(e, a) {
   const bs = e.bs;
-  if (bs.volleyCd === undefined) {
-    bs.volleyCd = 2;
-    bs.blinkCd = 4;
-    bs.poolCd = 3;
+  const ctx = a.ctx;
+  const p = ctx.player;
+  if (bs.state === undefined) {
+    bs.state = 'stalk';
+    bs.t = 0.9;
+    bs.turn = 0;
+    bs.rings = [];
     bs.enraged = false;
+    // A hand the suites can deal: set bs.next to force the next ceremony.
+    // Nothing in the game writes it.
+    bs.next = null;
+    bs.haloY = 1.98 * e.scale;
+    bs.haloS = e.scale;
   }
-  orbit(e, a, ENEMY_TYPES.herald.orbit);
-  e.ringA.rotation.z += a.dt * (bs.enraged ? 4 : 1.8);
-  // It has no melee of its own - it keeps its distance and shoots - so this is
-  // the whole answer to a player who simply walks into it and stands there.
+  bs.fx = ctx.effects;
+
+  // THE HALO, eased toward whatever the current beat says, never snapped. In
+  // a wind-up it is already dressed for the ceremony it is about to perform.
+  {
+    const look = HERALD_HALO[bs.state === 'windup' ? bs.attack : bs.state] || HERALD_HALO.stalk;
+    const k = Math.min(1, a.dt * 8);
+    bs.haloY += (look.y * e.scale - bs.haloY) * k;
+    bs.haloS += (look.s * e.scale - bs.haloS) * k;
+    e.ringA.position.y = bs.haloY;
+    e.ringA.scale.setScalar(bs.haloS);
+    e.ringA.rotation.z += a.dt * look.spin * (bs.enraged ? 1.6 : 1);
+    // The head swells while a ceremony is being wound up - the close-range
+    // tell, matched by the floor marks at distance.
+    const swell = bs.state === 'windup' ? 1 + 0.22 * Math.sin(ctx.time * 12) : 1;
+    e.headMesh.scale.setScalar(e.scale * swell);
+  }
+
+  // CORONA rings stay physical in every state, fear and wind-ups included -
+  // they were let go, and what was let go obeys the room, not the boss.
+  for (let i = bs.rings.length - 1; i >= 0; i--) {
+    const r = bs.rings[i];
+    r.r += CORONA_SPEED * a.dt;
+    r.life -= a.dt;
+    if (r.mark >= 0) ctx.effects.markSet(r.mark, r.x, r.z, r.r, HERALD_GOLD, 0.15);
+    const pd = Math.hypot(p.pos.x - r.x, p.pos.z - r.z);
+    if (!r.hit && Math.abs(pd - r.r) < CORONA_PAD && p.pos.y < CORONA_JUMP_Y) {
+      r.hit = true;
+      ctx.onHitPlayer(Math.min(24, e.damage * 1.05), p.pos, e);
+    }
+    if (r.life <= 0 || r.r > 25) {
+      ctx.effects.markRelease(r.mark);
+      bs.rings.splice(i, 1);
+    }
+  }
+
+  // Hugging the sun burns, in ANY state, mid-ceremony or not: the one answer
+  // to standing inside the body is paid at once, every time.
   bossTouch(e, a);
+
   if (e.status.fear > 0) return;
 
-  // One way, once. The fight should get harder as it ends, not easier.
+  // One way, once: under a third, every pause shortens and the sun walks
+  // faster. The ceremonies are unchanged - the player learned them all fight;
+  // they arrive closer together now, that is the whole difference.
   if (!bs.enraged && e.hp <= e.maxHp * 0.3) {
     bs.enraged = true;
     e.rate *= 0.6;
-    e.speed *= 1.25;
-    e.bodyMat.emissiveIntensity = 0.8;
-    a.ctx.bossEvent('enrage', e);
-    _bossAt.set(e.pos.x, 1.4, e.pos.z);
-    a.ctx.effects.burst(_bossAt, 0xffd54f, 40, 8, 3, 0.9);
-    a.ctx.effects.addShake(0.35);
+    e.speed *= 1.22;
+    ctx.bossEvent('enrage', e);
+    _bossAt.set(e.pos.x, 2.4, e.pos.z);
+    ctx.effects.burst(_bossAt, HERALD_GOLD, 40, 8, 3, 0.9);
+    ctx.effects.addShake(0.35);
+  }
+  const T = (s) => s * e.rate;
+
+  // The wind-up is shared: a countdown, a facing, and each ceremony's own
+  // telegraph drawn every frame it holds. What happens when it ENDS is per
+  // ceremony and lives with that ceremony's exec below.
+  if (bs.state === 'windup') {
+    bs.t -= a.dt;
+    const fill = 1 - Math.max(0, bs.t) / bs.windup;
+    if (bs.attack === 'spears') {
+      // The volley's tell is taken on the WALK, like the volley itself.
+      faceSnap(e);
+      orbit(e, a, HERALD_ORBIT);
+    } else if (bs.attack === 'lance') {
+      faceSnap(e);
+      // The lane is drawn at FULL LENGTH from the first frame - the fill
+      // says when, the corridor says where, and the sweep direction is the
+      // crown's rotation once it fires.
+      _heraldLanceMark(e, bs, fill, ctx.effects);
+    } else if (bs.attack === 'flare') {
+      // A circle around the BOSS at exactly the radius the white will reach:
+      // the question the flare asks is "how close were you standing", so the
+      // floor itself draws the tape measure.
+      const mark = markGet(e, ctx.effects);
+      e.fx.markSet(mark, e.pos.x, e.pos.z, FLARE_R, HERALD_PALE, fill * 0.85);
+    } else if (bs.attack === 'leap') {
+      const mark = markGet(e, ctx.effects);
+      e.fx.markSet(mark, bs.tx, bs.tz, LEAP_SLAM_R, HERALD_GOLD, fill * 0.9);
+    }
+    if (bs.t <= 0) {
+      if (bs.attack === 'spears') {
+        bs.state = 'spears';
+        bs.spears = (bs.enraged ? 4 : SPEAR_PULSES);
+        bs.spearT = 0;
+      } else if (bs.attack === 'lance') {
+        bs.state = 'lance';
+        bs.t = LANCE_TIME * (bs.enraged ? 0.8 : 1);
+        bs.lanceTick = 0;
+        markDrop(e);
+      } else if (bs.attack === 'corona') {
+        bs.state = 'corona';
+        bs.coronaLeft = (bs.enraged ? 3 : CORONA_RINGS) - 1;
+        bs.coronaT = CORONA_GAP;
+        _heraldCoronaRing(e, a);
+        ctx.sfx.impact();
+      } else if (bs.attack === 'flare') {
+        _heraldFlare(e, a);
+        markDrop(e);
+        _heraldRest(e, bs, T(0.35));
+      } else if (bs.attack === 'brands') {
+        _heraldBrands(e, a);
+        _heraldRest(e, bs, T(0.7));
+      } else if (bs.attack === 'leap') {
+        // A long arc over dense geometry may have no clearance; shorten the
+        // approach along the same bearing before giving the beat to the
+        // metronome. The sun comes down SOMEWHERE near them, or it keeps
+        // throwing light instead.
+        let threwInstead = true;
+        for (const f of [1, 0.6, 0.35]) {
+          const jx = e.pos.x + (bs.tx - e.pos.x) * f;
+          const jz = e.pos.z + (bs.tz - e.pos.z) * f;
+          if (!e._startJump(jx, 0, jz, LEAP_LIFT, ctx)) continue;
+          threwInstead = false;
+          // The mark must land where the boss lands: redraw it on the accepted
+          // spot, full, the instant the arc is committed.
+          bs.tx = jx;
+          bs.tz = jz;
+          const mark = markGet(e, ctx.effects);
+          e.fx.markSet(mark, bs.tx, bs.tz, LEAP_SLAM_R, HERALD_GOLD, 1);
+          bs.state = 'leapAir';
+          _bossAt.set(e.pos.x, 1.4, e.pos.z);
+          ctx.effects.burst(_bossAt, HERALD_PALE, 26, 6, 3, 0.6);
+          ctx.effects.shockwave(_bossAt, HERALD_GOLD, 2.2, 0.4);
+          break;
+        }
+        if (threwInstead) {
+          markDrop(e);
+          snapAim(e, a, true);
+          bs.state = 'spears';
+          bs.spears = SPEAR_PULSES;
+          bs.spearT = 0;
+        }
+      }
+    }
+    return;
   }
 
-  bs.blinkCd -= a.dt;
-  if (bs.blinkCd <= 0) {
-    bs.blinkCd = 5 * e.rate;
-    // Re-placed on a ring around the player rather than anywhere: it should
-    // keep changing the angle of the fight without ever landing on top of them.
-    for (let tries = 0; tries < 8; tries++) {
-      const ang = Math.random() * Math.PI * 2;
-      const rad = 10 + Math.random() * 4;
-      const tx = a.ctx.player.pos.x + Math.cos(ang) * rad;
-      const tz = a.ctx.player.pos.z + Math.sin(ang) * rad;
-      const B = 21.6 - (e.radius - 0.5);
-      _bossAt.set(tx, 0.5, tz);
-      if (Math.abs(tx) > B || Math.abs(tz) > B) continue;
-      if (pointInObstacle(_bossAt, a.ctx.obstacles)) continue;
-      _bossAt.set(e.pos.x, 1.2, e.pos.z);
-      a.ctx.effects.burst(_bossAt, 0xffd54f, 24, 6, 2, 0.6);
-      e.pos.x = tx;
-      e.pos.z = tz;
-      resolveCircle(e.pos, e.radius, a.ctx.obstacles, e.collideH);
-      _bossAt.set(e.pos.x, 1.2, e.pos.z);
-      a.ctx.effects.burst(_bossAt, 0xffd54f, 24, 6, 2, 0.6);
-      break;
+  // SPEARS: the moving volley. The only ceremony performed on the WALK -
+  // the boss keeps its circuit and the crown throws, so there is no frame of
+  // the fight in which relocating is safe and free.
+  if (bs.state === 'spears') {
+    faceSnap(e);
+    orbit(e, a, HERALD_ORBIT);
+    bs.spearT -= a.dt;
+    if (bs.spearT <= 0) {
+      bs.spearT = SPEAR_GAP;
+      const k = SPEAR_PULSES - bs.spears;
+      // The aim WALKED between pulses: the fan swings a touch across the
+      // snapped bearing, so standing stock still in the dodge line is caught
+      // by the next pulse - keep strafing, the way the fan was thrown to say.
+      const heading = e.aim + (k - 1) * SPEAR_STEP * e.strafe;
+      for (let f = 0; f < SPEAR_FAN; f++) {
+        capturedShot(e, a, heading, (f - (SPEAR_FAN - 1) / 2) * SPEAR_SPREAD, 2.6);
+      }
+      _bossAt.set(e.pos.x, 2.6, e.pos.z);
+      ctx.effects.burst(_bossAt, HERALD_PALE, 6, 3, 1.5, 0.3);
+      if (--bs.spears <= 0) {
+        e._setEyeAlert(false);
+        _heraldRest(e, bs, T(0.9));
+      }
     }
+    return;
   }
 
-  bs.volleyCd -= a.dt;
-  if (bs.volleyCd <= 0 && a.dist < 26) {
-    bs.volleyCd = 3 * e.rate;
-    e.flash = 0.15;
-    // Five of the forty enemy projectile slots; the other eight in the pool are
-    // reserved for the player's own shards and can never be taken here.
-    const shots = bs.enraged ? 7 : 5;
-    for (let i = 0; i < shots; i++) {
-      a.ctx.addProjectile(e.pos.x, 1.6, e.pos.z, 'shooter', e._projScale());
+  // DAWN LANCE: rooted, face locked to the live bearing, the beam redrawn
+  // every frame and the floor mark travelling with it - the warning never
+  // lags the light.
+  if (bs.state === 'lance') {
+    bs.t -= a.dt;
+    const prog = 1 - Math.max(0, bs.t) / (LANCE_TIME * (bs.enraged ? 0.8 : 1));
+    bs.bearing = bs.from + bs.dir * LANCE_SPAN * prog;
+    e.nx = Math.cos(bs.bearing);
+    e.nz = Math.sin(bs.bearing);
+    faceSnap(e);
+    _heraldLanceMark(e, bs, 0.9, ctx.effects);
+    const bx = e.nx;
+    const bz = e.nz;
+    _bossAt.set(e.pos.x, 3.4, e.pos.z);
+    _lanceTo.set(e.pos.x + bx * LANCE_LEN, 1.0, e.pos.z + bz * LANCE_LEN);
+    ctx.effects.beam(_bossAt, _lanceTo, HERALD_PALE);
+    bs.sparkT = (bs.sparkT || 0) - a.dt;
+    if (bs.sparkT <= 0) {
+      bs.sparkT = 0.2;
+      ctx.effects.burst(_lanceTo, HERALD_GOLD, 4, 2, 1.5, 0.3);
     }
+    // The corridor test, in plan view. Cover answers it: a pillar between the
+    // crown and the player is a pillar between them and the SUN, and a beam
+    // that ignored it would not be light.
+    bs.lanceTick -= a.dt;
+    if (bs.lanceTick <= 0) {
+      const rx = p.pos.x - e.pos.x;
+      const rz = p.pos.z - e.pos.z;
+      const along = rx * bx + rz * bz;
+      const perp = Math.abs(rx * -bz + rz * bx);
+      if (along > 0.5 && along < LANCE_LEN && perp < LANCE_HALF + 0.4 &&
+          Math.abs(p.pos.y) < 2.2 &&
+          !segBlocked(e.pos.x, 3.4, e.pos.z, p.pos.x, p.pos.y + 0.8, p.pos.z, ctx.obstacles)) {
+        bs.lanceTick = LANCE_TICK;
+        ctx.onHitPlayer(Math.min(12, e.damage * 0.55), e.pos, e);
+      }
+    }
+    if (bs.t <= 0) {
+      markDrop(e);
+      e._setEyeAlert(false);
+      _heraldRest(e, bs, T(0.8));
+    }
+    return;
   }
 
-  bs.poolCd -= a.dt;
-  if (bs.poolCd <= 0 && a.dist < 24) {
-    bs.poolCd = 4.5 * e.rate;
-    const p = a.ctx.player;
-    for (let i = 0; i < 2; i++) {
-      a.ctx.addHazard(
-        p.pos.x + (Math.random() - 0.5) * 4,
-        p.pos.z + (Math.random() - 0.5) * 4,
-        3.0, 5, Math.min(HERALD_POOL_CAP, e.damage * 0.6)
-      );
+  // CORONA: after the first ring, the boss is already walking - the rings it
+  // let go belong to the room now. Getting distance from the place it stood
+  // is part of the read.
+  if (bs.state === 'corona') {
+    orbit(e, a, HERALD_ORBIT);
+    if (bs.coronaLeft > 0) {
+      bs.coronaT -= a.dt;
+      if (bs.coronaT <= 0) {
+        bs.coronaT = CORONA_GAP;
+        bs.coronaLeft--;
+        _heraldCoronaRing(e, a);
+      }
+    } else {
+      e._setEyeAlert(false);
+      _heraldRest(e, bs, T(0.5));
+    }
+    return;
+  }
+
+  // The walk between ceremonies: IN if the player has run, around them if
+  // they have not. Faster than the old drift, and never backward.
+  if (bs.state === 'stalk') {
+    if (a.dist > 13) {
+      a.vx = a.px * a.sp;
+      a.vz = a.pz * a.sp;
+    } else {
+      orbit(e, a, HERALD_ORBIT);
+    }
+    bs.t -= a.dt;
+    if (bs.t > 0) return;
+    const name = bs.next || HERALD_ROUTINE[bs.turn++ % HERALD_ROUTINE.length];
+    bs.next = null;
+    bs.attack = name;
+    bs.state = 'windup';
+    e._setEyeAlert(true);
+    if (name === 'spears') {
+      snapAim(e, a, true);
+      // The spears' tell is the crown and the eyes alone - the volley is quick
+      // and constant, so its warning rides on the body rather than the floor.
+      bs.windup = T(SPEAR_TELL);
+      bs.t = bs.windup;
+      return;
+    }
+    if (name === 'lance') {
+      snapAim(e, a);
+      // The sweep begins just BESIDE the player's bearing and swings through
+      // them: marginal at the edges, hottest across the middle, and always
+      // the same about cover.
+      bs.dir = Math.random() < 0.5 ? 1 : -1;
+      bs.from = e.aim - bs.dir * LANCE_SPAN * 0.45;
+      bs.bearing = bs.from;
+      bs.windup = T(LANCE_TELL);
+      bs.t = bs.windup;
+      e.nx = Math.cos(bs.from);
+      e.nz = Math.sin(bs.from);
+      return;
+    }
+    if (name === 'leap') {
+      // The sun does not descend on its own feet: under seven metres the
+      // relocation the leap exists FOR is already delivered, and the arc
+      // would be an in-place hop clipped by whatever hangs overhead. The
+      // metronome answers instead.
+      if (a.dist < 7) {
+        snapAim(e, a, true);
+        bs.attack = 'spears';
+        bs.windup = T(SPEAR_TELL);
+        bs.t = bs.windup;
+        return;
+      }
+      // Committed at the TELL, not at the landing: the player's position plus
+      // a single stride of lead, so the mark is where they were going and
+      // a change of direction is the whole dodge.
+      const B = 21.6 - (e.radius - 0.5) - 0.4;
+      // Probed as a disc the SHAPE OF THE BOSS, not as a point: a landing
+      // whose centre is clear but whose shoulders clip a crate aborts the arc
+      // a body-length short of its own telegraph, which is the one thing a
+      // telegraph is not allowed to do.
+      const clearSpot = (x, z) => {
+        for (const [ox, oz] of [[0, 0], [1.8, 0], [-1.8, 0], [0, 1.8], [0, -1.8]]) {
+          _lanceTo.set(x + ox, 0.5, z + oz);
+          if (pointInObstacle(_lanceTo, ctx.obstacles)) return false;
+        }
+        return true;
+      };
+      let okSpot = false;
+      for (let tries = 0; tries < 8 && !okSpot; tries++) {
+        const lead = tries === 0 ? 1 : 0.4;
+        bs.tx = Math.max(-B, Math.min(B,
+          p.pos.x + p.vel.x * 0.35 * lead + (tries ? (Math.random() - 0.5) * 3 : 0)));
+        bs.tz = Math.max(-B, Math.min(B,
+          p.pos.z + p.vel.z * 0.35 * lead + (tries ? (Math.random() - 0.5) * 3 : 0)));
+        okSpot = clearSpot(bs.tx, bs.tz);
+      }
+      if (!okSpot) {
+        // Nowhere clean to come down - spend the beat on the metronome.
+        snapAim(e, a, true);
+        bs.attack = 'spears';
+        bs.windup = T(SPEAR_TELL);
+        bs.t = bs.windup;
+        return;
+      }
+      e.nx = (bs.tx - e.pos.x) / Math.max(0.01, a.dist);
+      e.nz = (bs.tz - e.pos.z) / Math.max(0.01, a.dist);
+      bs.windup = T(LEAP_TELL);
+      bs.t = bs.windup;
+      return;
+    }
+    // corona, flare and brands share the bare ceremony: root, glow, count.
+    bs.windup = T(name === 'corona' ? CORONA_TELL : name === 'flare' ? FLARE_TELL : BRAND_TELL);
+    bs.t = bs.windup;
+    return;
+  }
+
+  // ZENITH LEAP's landing. ai() is not called while the arc is in the air -
+  // the jump machinery owns those frames - so this state only ever runs on
+  // the frame the sun has actually come down.
+  if (bs.state === 'leapAir') {
+    markDrop(e);
+    _bossAt.set(e.pos.x, 0.1, e.pos.z);
+    ctx.effects.shockwave(_bossAt, HERALD_PALE, LEAP_SLAM_R, 0.45);
+    ctx.effects.burst(_bossAt, HERALD_GOLD, 34, 8, 3, 0.7);
+    ctx.effects.addShake(0.3);
+    ctx.sfx.impact();
+    if (a.dist < LEAP_SLAM_R && p.pos.y < 2.4) {
+      ctx.onHitPlayer(
+        Math.min(28, e.damage * 1.25) * (1 - 0.4 * a.dist / LEAP_SLAM_R), e.pos, e);
+    }
+    // The cross it burns into the floor as it lands. Ground the player was
+    // going to stand on, taken - the brands' lesson, paid by the landing
+    // rather than thrown.
+    for (let k = 0; k < 4; k++) {
+      const ang = k * Math.PI / 2 + Math.PI / 4;
+      ctx.addHazard(
+        e.pos.x + Math.cos(ang) * 3.1, e.pos.z + Math.sin(ang) * 3.1,
+        1.5, 2.6, 12, 'glare');
+    }
+    _heraldRest(e, bs, T(0.75));
+    return;
+  }
+
+  if (bs.state === 'recover') {
+    orbit(e, a, HERALD_ORBIT);
+    bs.t -= a.dt;
+    if (bs.t <= 0) {
+      bs.state = 'stalk';
+      bs.t = T(HERALD_BREATH) * (bs.enraged ? 0.6 : 1);
     }
   }
+}
+
+function _heraldRest(e, bs, secs) {
+  bs.state = 'recover';
+  bs.t = secs;
+  e._setEyeAlert(false);
+}
+
+// The lance's floor corridor, from the crown out. Lane-shaped rather than a
+// disc: markSet's own long shape, used for exactly what it was drawn for.
+// Takes the effects pool as an argument because e.fx is only ever populated
+// BY markGet - the first ceremony of a fight may well be the lance.
+function _heraldLanceMark(e, bs, fill, fx) {
+  const mark = markGet(e, fx);
+  const bx = Math.cos(bs.bearing);
+  const bz = Math.sin(bs.bearing);
+  fx.markSet(
+    mark,
+    e.pos.x + bx * (LANCE_LEN / 2), e.pos.z + bz * (LANCE_LEN / 2),
+    LANCE_HALF, HERALD_GOLD, fill,
+    (LANCE_LEN / 2) / LANCE_HALF,
+    Math.atan2(-bx, -bz)
+  );
+}
+
+// One ring let go from wherever the boss was standing at that INSTANT. Marks
+// drawn by the ring belong to bs.rings, so releaseMarks takes them all back
+// whenever the fight ends early.
+function _heraldCoronaRing(e, a) {
+  const mark = a.ctx.effects.markAcquire();
+  _bossAt.set(e.pos.x, 0.2, e.pos.z);
+  a.ctx.effects.burst(_bossAt, HERALD_GOLD, 22, 5, 1.8, 0.55);
+  a.ctx.effects.shockwave(_bossAt, HERALD_PALE, 2.6, 0.4);
+  a.ctx.effects.addShake(0.12);
+  if (mark < 0) return;
+  e.bs.rings.push({
+    x: e.pos.x, z: e.pos.z, r: 1.8, life: 26 / CORONA_SPEED, hit: false, mark,
+  });
+}
+
+// The white. Scaled by closeness and refused by cover - it is light, and
+// light does not bend around a pillar.
+function _heraldFlare(e, a) {
+  const ctx = a.ctx;
+  const p = ctx.player;
+  _bossAt.set(e.pos.x, 2.6, e.pos.z);
+  ctx.effects.shockwave(_bossAt, HERALD_PALE, FLARE_R, 0.5);
+  ctx.effects.burst(_bossAt, 0xffffff, 46, 10, 4, 0.8);
+  ctx.effects.addShake(0.3);
+  ctx.sfx.impact();
+  const d = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
+  if (d >= FLARE_R) return;
+  if (segBlocked(e.pos.x, 4.2, e.pos.z, p.pos.x, p.pos.y + 0.8, p.pos.z, ctx.obstacles)) return;
+  const s = FLARE_BLIND * (1 - d / FLARE_R) * (e.bs.enraged ? 1.15 : 1);
+  if (s > 0.12 && ctx.blind) ctx.blind(s);
+}
+
+// The ring of judgement: BRAND_N marks around the player, one dark - the gap
+// is the exit, and it is drawn into the pattern rather than found. Delays
+// ripple around the circle so the detonation reads as a closing fan, not a
+// single snapshot.
+function _heraldBrands(e, a) {
+  const ctx = a.ctx;
+  const p = ctx.player;
+  const dmg = Math.min(20, e.damage * 0.9);
+  const gap = (Math.random() * BRAND_N) | 0;
+  // Searing ground where each lands: the lens's own glare, so the colour of
+  // the patch is one the player has already been taught to step out of.
+  const ground = { kind: 'glare', radius: BRAND_HIT_R, life: 3.2, dps: 13 };
+  let laid = 0;
+  for (let i = 0; i < BRAND_N; i++) {
+    if (i === gap) continue;
+    const ang = (i / BRAND_N) * Math.PI * 2;
+    if (addWarnedMortar(
+      ctx, p.pos.x + Math.cos(ang) * BRAND_R, p.pos.z + Math.sin(ang) * BRAND_R,
+      BRAND_HIT_R, BRAND_DELAY + laid * 0.09, dmg, ground)) laid++;
+  }
+  // Enraged, the middle burns too - the gap in the RING stays, always: more
+  // heat, never a closed trap.
+  if (e.bs.enraged) {
+    addWarnedMortar(ctx, p.pos.x, p.pos.z, BRAND_HIT_R, BRAND_DELAY * 1.35, dmg, ground);
+  }
+  _bossAt.set(e.pos.x, 2.6, e.pos.z);
+  ctx.effects.burst(_bossAt, HERALD_GOLD, 20, 5, 2.5, 0.5);
+}
+
+export function heraldCleanup(e) {
+  markDrop(e);
+  releaseMarks(e);
 }
 
 const TYPES = {
@@ -655,19 +1160,28 @@ const TYPES = {
     build: buildShrike, ai: aiShrike,
   },
 
-  // The capstone. Blinks, volleys and leaves pools - the three things the
-  // earlier fights taught, arriving together - and drops its cooldowns when it
-  // is nearly dead, so the last third is the hardest part of the fight rather
-  // than the easiest.
+  // The capstone: the sun come down to witness. Six ceremonies in a fixed
+  // order - a leap that relocates it onto the player, volleys thrown on the
+  // walk, a jumpable corona, a sweeping sunbeam that only cover answers, a
+  // sight-taking flare, and a ring of burning brands - with the walk between
+  // them kept deliberately short, and the last third of the bar arriving
+  // closer together rather than harder to read.
+  //
+  // The `proj` block is the spears'. It is on the type for the same reason
+  // every gunner's is: the projectile system reads the look and the curve
+  // from here, and a ceremony is no place for a special case.
   herald: {
     head: { r: 0.42, y: 1.52 },
-    hp: 3400, speed: 2.8, damage: 20, value: 9000, color: 0xffd54f, eye: 0xfff8e1,
+    hp: 3400, speed: 3.6, damage: 20, value: 9000, color: 0xffd54f, eye: 0xfff8e1,
     scale: 2.6, radius: 1.5, mass: 6, boss: true,
     hitbox: { r: 0.72, y: 0.85 },
     statusMul: 0.25, freezeSlow: true, slowFactor: 0.8, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    orbit: { dist: 13, band: 2.5, out: 0.7, in: -0.8, strafe: 0.5, flip: 1.5, flipVar: 1.5 },
-    build: buildHerald, ai: aiHerald,
+    proj: {
+      core: 0xfff3c4, glow: 0xffd54f, scale: 0.62,
+      speed: [25, 0.35, 32], dmg: [10, 0.45, 18],
+    },
+    build: buildHerald, ai: aiHerald, cleanup: heraldCleanup,
   },
 };
 

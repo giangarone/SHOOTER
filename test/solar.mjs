@@ -61,12 +61,13 @@ try {
     g.input.shootFresh = false;
     let px = 0;
     let pz = 0;
+    let py = 0;
     let pinned = true;
     let god = true;
     const origUpdate = p.update.bind(p);
     p.update = (...args) => {
       origUpdate(...args);
-      if (pinned) p.pos.set(px, 0, pz);
+      if (pinned) p.pos.set(px, py, pz);
       if (god) p.health = p.maxHealth;
     };
 
@@ -98,6 +99,7 @@ try {
       g.rig._blindT = 0;
       px = 0;
       pz = 0;
+      py = 0;
     };
     const put = (type, x, z) => {
       g.spawnEnemy(type);
@@ -379,6 +381,339 @@ try {
       clean();
     }
 
+    // ---- 6. HERALD: the sun, rehearsed -------------------------------------
+    // The boss keeps the theme's promise at boss scale: every ceremony is
+    // ANNOUNCED (a lane, a filling circle, a rolling ring), every one is
+    // dodgeable by the answer it names, and the fight never stands still.
+    // Each block below pins one ceremony by dealing bs.next - nothing in the
+    // game writes that field - and the assertions are all PAIRED: the hit is
+    // measured against the dodge, never against nothing happening.
+    {
+      const { segBlocked } = await import('./js/enemies/shared.js');
+      // A freshly spawned boss, with bs initialised and its first stalk beat
+      // still unspent, so the pinned ceremony is the FIRST thing it does.
+      const spawnBoss = async (x, z) => {
+        const e = put('herald', x, z);
+        await simSteps(0.3);
+        return e;
+      };
+      const waitState = async (e, want, capSecs = 8) => {
+        const until = g.time + capSecs;
+        while (g.time < until) {
+          await step();
+          if (e.bs && e.bs.state === want) return true;
+        }
+        return false;
+      };
+      // A bearing from the boss that has clear line of sight at radius r -
+      // the lance and the flare both ask LIGHT to reach the player, and a
+      // pillar in the way is a legitimate answer in the game, so a test that
+      // wants the hit has to pick a lane the sun can actually travel down.
+      const clearBearing = (bx, bz, r) => {
+        for (let i = 0; i < 16; i++) {
+          const ang = (i / 16) * Math.PI * 2;
+          const tx = bx + Math.cos(ang) * r;
+          const tz = bz + Math.sin(ang) * r;
+          if (Math.abs(tx) > 20 || Math.abs(tz) > 20) continue;
+          if (!segBlocked(bx, 3.4, bz, tx, 0.9, tz, g.arena.obstacles)) return ang;
+        }
+        return null;
+      };
+
+      // -- cadence, variety, travel -----------------------------------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        const seen = new Set();
+        let last = '';
+        let attacks = 0;
+        let travelled = 0;
+        let lx = b.pos.x;
+        let lz = b.pos.z;
+        const t0 = g.time;
+        // Well over one full pass through the routine, so every ceremony has
+        // been armed at least once, and the walk between them is measured too.
+        while (g.time - t0 < 28 && !b.dead) {
+          if (b.bs.state !== last) {
+            if (last === 'windup') { attacks++; seen.add(b.bs.attack); }
+            last = b.bs.state;
+          }
+          travelled += Math.hypot(b.pos.x - lx, b.pos.z - lz);
+          lx = b.pos.x; lz = b.pos.z;
+          await step();
+        }
+        res.heraldAttacks = attacks;
+        res.heraldKindCount = seen.size;
+        res.heraldKinds = [...seen].sort().join(',');
+        res.heraldTravelled = +travelled.toFixed(1);
+        clean();
+      }
+
+      // -- touching the sun burns, whatever it is doing ----------------------
+      // Fear holds the boss in its stagger, so the ONLY way it can hurt a
+      // player pinned against it in this window is the contact rule itself.
+      {
+        clean();
+        await spawnBoss(0, 0);
+        px = 1.6; pz = 0;
+        // Sixty frames, not a hundred and thirty: a frame is worth up to 0.05s
+        // of game on a slow host, and thirty more frames here is the
+        // difference between "burned twice" and "dead mid-measure".
+        res.heraldTouch = await measure(60, () => {
+          const b = g.enemies[g.enemies.length - 1];
+          b.status.fear = 5;
+        });
+        clean(); px = 0; pz = 0;
+      }
+
+      // -- the spears are nine rounds, thrown without stopping ---------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'spears';
+        const seenP = new Set();
+        let fired = 0;
+        const until = g.time + 6;
+        while (g.time < until && fired < 9) {
+          await step();
+          for (const pr of g.projectiles) {
+            if (pr.type === 'herald' && !seenP.has(pr)) { seenP.add(pr); fired++; }
+          }
+        }
+        res.heraldSpears = fired;
+        clean();
+      }
+
+      // -- the corona: grounded is caught, airborne is not -------------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'corona';
+        await waitState(b, 'windup');
+        // A ring-riding window, in the suite's own measure() pattern: the loss
+        // is read BEFORE god mode goes back on, or the hit is restored away
+        // before it is ever counted.
+        const runRings = async (boss, airborne) => {
+          god = false; p.invulnEnd = -1; p.health = p.maxHealth;
+          const h0 = p.health;
+          const until = g.time + 1.8;
+          while (g.time < until) {
+            if (boss.bs.rings.length) { px = boss.bs.rings[0].x + 7; pz = boss.bs.rings[0].z; }
+            py = airborne ? 0.8 : 0;
+            await step();
+          }
+          py = 0;
+          const lost = +(h0 - p.health).toFixed(2);
+          god = true; p.health = p.maxHealth;
+          return lost;
+        };
+        px = b.pos.x + 7; pz = b.pos.z;
+        res.heraldRingGround = await runRings(b, false);
+        clean();
+        const b2 = await spawnBoss(0, -12);
+        px = b2.pos.x + 7; pz = b2.pos.z;
+        b2.bs.next = 'corona';
+        await waitState(b2, 'windup');
+        res.heraldRingAir = await runRings(b2, true);
+        clean();
+      }
+
+      // -- the lance: in the beam burns, off the corridor does not ------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'lance';
+        await waitState(b, 'windup');
+        const ang = clearBearing(b.pos.x, b.pos.z, 8);
+        res.heraldLanceLane = ang !== null;
+        if (ang !== null) {
+          // Aim the sweep through the clear lane: with dir held at +1 the beam
+          // starts at `from` and crosses `ang` about half a second in.
+          b.bs.dir = 1;
+          b.bs.from = ang - 0.3;
+          b.bs.bearing = b.bs.from;
+          px = b.pos.x + Math.cos(ang) * 8;
+          pz = b.pos.z + Math.sin(ang) * 8;
+          god = false; p.invulnEnd = -1; p.health = p.maxHealth;
+          const h0 = p.health;
+          await waitState(b, 'lance');
+          await simSteps(2.0);
+          res.heraldLanceHit = +(h0 - p.health).toFixed(2);
+          god = true; p.health = p.maxHealth;
+        }
+        clean();
+        const b2 = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b2.bs.next = 'lance';
+        await waitState(b2, 'windup');
+        const ang2 = clearBearing(b2.pos.x, b2.pos.z, 8);
+        if (ang2 !== null) {
+          b2.bs.dir = 1;
+          b2.bs.from = ang2 - 0.3;
+          b2.bs.bearing = b2.bs.from;
+          // BEHIND the beam's start edge: the sweep never visits this bearing.
+          px = b2.pos.x + Math.cos(ang2 - 1.2) * 8;
+          pz = b2.pos.z + Math.sin(ang2 - 1.2) * 8;
+          god = false; p.invulnEnd = -1; p.health = p.maxHealth;
+          const h0 = p.health;
+          await waitState(b2, 'lance');
+          await simSteps(2.9);
+          res.heraldLanceMiss = +(h0 - p.health).toFixed(2);
+          god = true; p.health = p.maxHealth;
+        } else {
+          res.heraldLanceMiss = 0;
+        }
+        clean();
+      }
+
+      // -- the leap: it comes down where you stood, and leaving is the dodge --
+      {
+        // Nothing within r metres of (x,z) that a body could trip over. The
+        // pin must sit on floor the boss can actually land on - a crate's
+        // corner is a legitimate no-landing zone in the game, so the same
+        // rule applies to the test.
+        const clearDisc = (x, z, r) => {
+          for (const box of g.arena.obstacles) {
+            if (box.min.y > 0.9) continue;
+            const nx = Math.max(box.min.x, Math.min(x, box.max.x));
+            const nz = Math.max(box.min.z, Math.min(z, box.max.z));
+            if (Math.hypot(x - nx, z - nz) < r) return false;
+          }
+          return true;
+        };
+        const openSpot = (cx, cz, awayFrom) => {
+          for (const r of [0, 3, 6, 9, 12, 15, 18]) {
+            for (let i = 0; i < 12; i++) {
+              const sx = cx + Math.cos((i / 12) * Math.PI * 2) * r;
+              const sz = cz + Math.sin((i / 12) * Math.PI * 2) * r;
+              if (Math.abs(sx) > 17 || Math.abs(sz) > 17) continue;
+              if (awayFrom && Math.hypot(sx - awayFrom[0], sz - awayFrom[1]) < 9) continue;
+              if (clearDisc(sx, sz, 4)) return [sx, sz];
+            }
+          }
+          return null;
+        };
+        clean();
+        const spot = openSpot(0, 0, null);
+        res.heraldLeapSpot = !!spot;
+        if (spot) {
+          // Settle BEFORE the sun rises: the leap leads the player's velocity,
+          // and a freshly-teleported pin carries a phantom stride. With no
+          // boss in the room there is nothing to wait out but that.
+          px = spot[0]; pz = spot[1];
+          await simSteps(1.2);
+          const b = await spawnBoss(0, -12);
+          // Arm the ceremony NOW, not when the stalk timer happens to empty -
+          // the arming is the moment the target is snapped, and waiting on a
+          // load-dependent timer was measuring the pin's velocity, not the leap.
+          b.bs.next = 'leap';
+          if (b.bs.state === 'stalk') b.bs.t = 0;
+          god = false; p.invulnEnd = -1; p.health = p.maxHealth;
+          const h0 = p.health;
+          await waitState(b, 'leapAir', 10);
+          await waitState(b, 'recover', 10);
+          res.heraldLeapHit = +(h0 - p.health).toFixed(2);
+          res.heraldLeapDist = +Math.hypot(b.pos.x - spot[0], b.pos.z - spot[1]).toFixed(2);
+          god = true; p.health = p.maxHealth;
+          // Re-stage, and properly: after the first descent the boss is
+          // standing ON the mark it just made, and the leap rightly refuses
+          // to arm at arm's length. Put it back across the room the way a
+          // spawned one arrives, then deal it the same ceremony.
+          const off = openSpot(spot[0] > 0 ? -8 : 8, spot[1], spot);
+          const far = openSpot(-spot[0] || 8, -spot[1] || -8, spot);
+          if (far) {
+            b.pos.set(far[0], 0, far[1]);
+            b.jumpTime = 0;
+            b.bs.state = 'stalk';
+            b.bs.t = 0.3;
+          }
+          b.bs.next = 'leap';
+          await waitState(b, 'windup', 10);
+          if (off) { px = off[0]; pz = off[1]; }
+          god = false; p.invulnEnd = -1; p.health = p.maxHealth;
+          const h1 = p.health;
+          await waitState(b, 'recover', 10);
+          res.heraldLeapDodged = +(h1 - p.health).toFixed(2);
+          god = true; p.health = p.maxHealth;
+        }
+        clean(); px = 0; pz = 0;
+      }
+
+      // -- the flare: sight, priced by proximity ------------------------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'flare';
+        await waitState(b, 'windup');
+        const ang = clearBearing(b.pos.x, b.pos.z, 5);
+        res.heraldFlareLane = ang !== null;
+        if (ang !== null) {
+          px = b.pos.x + Math.cos(ang) * 5;
+          pz = b.pos.z + Math.sin(ang) * 5;
+        }
+        await waitState(b, 'recover', 4);
+        let peak = 0;
+        for (let i = 0; i < 12; i++) { await step(); peak = Math.max(peak, g.rig._blindT); }
+        res.heraldFlareClose = +peak.toFixed(2);
+        clean();
+        const b2 = await spawnBoss(0, -12);
+        px = 0; pz = 12;   // twenty-four metres - well past the sun's reach
+        b2.bs.next = 'flare';
+        await waitState(b2, 'recover', 4);
+        let peak2 = 0;
+        for (let i = 0; i < 12; i++) { await step(); peak2 = Math.max(peak2, g.rig._blindT); }
+        res.heraldFlareFar = +peak2.toFixed(2);
+        clean(); px = 0; pz = 0;
+      }
+
+      // -- the brands draw a ring and leave it burning ------------------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'brands';
+        let marks = 0;
+        const until = g.time + 4;
+        while (g.time < until) {
+          await step();
+          marks = Math.max(marks, g._mortars.length);
+        }
+        res.heraldBrands = marks;
+        // ...and what they leave is the lens's own glare.
+        let glare = 0;
+        const until2 = g.time + 1.5;
+        while (g.time < until2) {
+          await step();
+          glare = Math.max(glare, g._hazard.filter((h) => h.kind === 'glare').length);
+        }
+        res.heraldBrandGlare = glare;
+        clean();
+      }
+
+      // -- and every telegraph handle comes back ------------------------------
+      {
+        clean();
+        const b = await spawnBoss(0, -12);
+        px = 0; pz = 0;
+        b.bs.next = 'lance';
+        await waitState(b, 'lance');
+        // Killed mid-beam, with a corona also in the air: the ring marks and
+        // the state mark all have to come home.
+        b.bs.next = 'corona';
+        b.takeDamage(1e6);
+        await simSteps(1.2);
+        clean();
+        await simSteps(2.5);
+        res.heraldMarks = g.effects.marks.filter((m) => m.used).length;
+        clean();
+      }
+    }
+
     document.body.classList.remove('hudblind');
     await steps(30);
     return res;
@@ -415,6 +750,40 @@ try {
   ok('and walking out of the field gives it back', out.haloReleases);
   ok('and so does killing it', out.haloDeathReleases);
   ok('and it costs no health at all', out.haloCost === 0, `lost=${out.haloCost}`);
+
+  ok('the herald attacks without pausing', out.heraldAttacks >= 9,
+    `${out.heraldAttacks} ceremonies in 28s`);
+  ok('...and varies them, five of six distinct kinds in one pass',
+    out.heraldKindCount >= 5, `[${out.heraldKinds}]`);
+  ok('the herald keeps moving between and during ceremonies',
+    out.heraldTravelled > 40, `${out.heraldTravelled}m travelled`);
+  ok('touching the herald burns, no attack needed', out.heraldTouch > 0,
+    `lost=${out.heraldTouch}`);
+  ok('the spears are nine fanned rounds', out.heraldSpears === 9,
+    `got=${out.heraldSpears}`);
+  ok('a corona ring catches a grounded player', out.heraldRingGround > 0,
+    `lost=${out.heraldRingGround}`);
+  ok('...and jumping it is the whole answer', out.heraldRingAir === 0,
+    `lost=${out.heraldRingAir}`);
+  ok('the lance burns whoever stands in the beam', out.heraldLanceHit > 0,
+    `lost=${out.heraldLanceHit} lane=${out.heraldLanceLane}`);
+  ok('...and not whoever stands off the corridor', out.heraldLanceMiss === 0,
+    `lost=${out.heraldLanceMiss}`);
+  ok('the leap lands where the player stood, and on them',
+    out.heraldLeapDist < 6 && out.heraldLeapHit > 0,
+    `dist=${out.heraldLeapDist} lost=${out.heraldLeapHit}`);
+  ok('...and stepping off the mark dodges it whole', out.heraldLeapDodged === 0,
+    `lost=${out.heraldLeapDodged}`);
+  ok('the flare takes sight up close', out.heraldFlareClose > 0.2,
+    `t=${out.heraldFlareClose} lane=${out.heraldFlareLane}`);
+  ok('...and does not reach across the room', out.heraldFlareFar === 0,
+    `t=${out.heraldFlareFar}`);
+  ok('the brands arrive as a marked ring', out.heraldBrands >= 4,
+    `${out.heraldBrands} mortars`);
+  ok('...and leave burning ground behind them', out.heraldBrandGlare >= 4,
+    `${out.heraldBrandGlare} glare patches`);
+  ok('every telegraph handle comes home', out.heraldMarks === 0,
+    `held=${out.heraldMarks}`);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

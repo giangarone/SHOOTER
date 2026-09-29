@@ -813,7 +813,16 @@ context. The start screen says so, and one click anywhere fixes it.
   bursts point-blank into a ring of bile if you try to hug it - and it still
   splits three times over, two halves, then four, then eight, every piece
   keeping all of it), **Maw** (drags you in and rolls rings you have to jump) and the
-  **Herald** (blinks, volleys, and enrages under 30%). **THE BROODMOTHER**,
+  **Herald** - the sun come down to witness, SOLAR's whole argument rehearsed
+  at boss scale as six ceremonies in a fixed order you can learn: it leaps down
+  onto a marked circle where you were standing and scorches a cross into the
+  floor, throws fanned spear volleys without ever breaking stride, lets its
+  halo go as gold rings you jump, sweeps a sunbeam through a hundred and
+  thirty degrees of the room (get a pillar between you and it - it is light,
+  and light does not bend), takes your sight outright with a proximity flare,
+  and rings you in burning brands with exactly one slot left dark. It walks
+  the room through all of it, the pause between ceremonies is half a second,
+  and under a third of the bar even that goes away. **THE BROODMOTHER**,
   HIVE's, is a nursery: she is slow and nearly harmless in herself - a melee
   swing, a bite, nothing more - and everything dangerous in the room is
   something she made. Grubs arc in on a timer, land under a filling circle

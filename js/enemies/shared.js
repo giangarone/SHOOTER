@@ -900,10 +900,12 @@ export function markDrop(e) {
 
 // The mortar API owns its mark once spawned. Reserve-check synchronously so
 // an exhausted warning pool cannot turn a patterned eruption into a blind hit.
-export function addWarnedMortar(ctx, x, z, radius, delay, damage) {
+// `ground` is forwarded to _addMortar untouched - a warned impact that lands
+// as burning floor (see the HERALD's brands) is the same reservation.
+export function addWarnedMortar(ctx, x, z, radius, delay, damage, ground) {
   const h = ctx.effects.markAcquire();
   if (h < 0) return false;
   ctx.effects.markRelease(h);
-  ctx.addMortar(x, z, radius, delay, damage);
+  ctx.addMortar(x, z, radius, delay, damage, ground);
   return true;
 }
