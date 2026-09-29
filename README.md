@@ -792,14 +792,19 @@ context. The start screen says so, and one click anywhere fixes it.
   is paid in a longer window rather than the same window later. Three shells,
   each with the arena a little more frozen than the last. The **FORGE-TYRANT**,
   EMBER's, is the mirror of
-  the Colossus: it HEATS UP as it fights, gaining an attack at each third of
-  the bar - a sweeping bar of flame on the beat, then a wall of fire at a fixed
-  radius with one gap in it - and when the bar fills it has to stop and VENT,
-  which is when its chest opens and it takes full damage. The window is the
-  boss's own decision rather than a metronome, and it is not free: while it is
-  open it radiates fire outward in a growing ring, so the player has to be
-  close enough to shoot and far enough not to burn, and the ring is growing the
-  whole time. Then the **Colossus** (armoured but for a red core in
+  the Colossus: it HEATS UP as it fights - unlocking its fire ring and its
+  forked fissures as the bar climbs - and when the bar fills it has to stop
+  and VENT, which is when its chest opens, it takes full damage, and it still
+  lumbers after you with fire radiating off it. Nothing else about the fight
+  stands still either: the forge prowls and circles rather than holding a
+  corner, attacks every couple of seconds, and standing on it costs, always.
+  Its book of answers runs a telegraphed lane charge that drags a burning
+  strip across the arena (bank it into a pillar and it arrives parked), mortar
+  shells off its shoulder stacks that crater the ground you are running to, a
+  chest fan of burning shot on a frozen bearing, three stamped fissure lanes
+  through your heading, and a radial flare-up for anyone crowding it - and it
+  keeps the kiln's bar sweep and the gapped wall of fire as its heat tiers
+  unlock, in order, the first time each arrives. Then the **Colossus** (armoured but for a red core in
   its chest that opens on a rhythm, a telegraphed charge that knocks it out
   cold against a wall, and turrets it throws at the ground near you - they arc
   in under a landing ring, bolt themselves down and start shooting, three on
@@ -3174,7 +3179,10 @@ test/lasers.mjs     the laser bank's placement law: it rakes the ceiling, and
                     plays a single pattern
 test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     bellows lighting the crowd, the ashwing's line, and the
-                    Forge-Tyrant heating up and venting
+                    Forge-Tyrant: the heat-to-vent cycle, and that the reworked
+                    fight actually uses everything between the vents (the rush,
+                    the shells, the fan, the fissures, the flare-up), moves,
+                    and charges for being touched in any state
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
                     the hoarfrost's field, and the Pale Crown's anchors
