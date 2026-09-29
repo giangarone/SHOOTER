@@ -380,6 +380,121 @@ try {
       g.setTheme(null);
     }
 
+    // ---- 9. the reworked Forge-Tyrant -----------------------------------
+    // The rework's promises, each in a shape the fight can fail: the five new
+    // attacks actually FIRE, the rush covers ground, the bombardment's shells
+    // reach the air, crowding earns the flare-up AND its rim of coals, and
+    // standing on the boss pays on the TOUCH clock - not the swing's, which
+    // is a different field - in any state, mid-special included.
+    //
+    // The drive loop holds the duel mid-heat so the vent cannot interrupt the
+    // coverage run, hurries the pick clock when the fight idles, and - for any
+    // attack the round-robin has not got to yet - queues it through the
+    // tier-introduction channel itself: bs.next is the designed "this attack
+    // next" mechanism, so asking it for the missing one IS testing the same
+    // door the sweep and ring walk through.
+    {
+      clean();
+      g.setTheme('ember');
+      const f = put('forge', 12, 0);
+      const bs = f.bs;
+      await steps(10);
+      const seen = {};
+      let mortarsSeen = 0;
+      let rushTravel = 0;
+      let rushFrom = null;
+      let touchClock = 0;
+      let novaBefore = 0;
+      let novaGain = 0;
+      let wasNova = false;
+      const near6 = () => kinds('ember').filter(
+        (h) => Math.hypot(h.x - f.pos.x, h.z - f.pos.z) < 6).length;
+      const drive = async (frames, stopWhen, pin) => {
+        for (let i = 0; i < frames; i++) {
+          if (pin) pin();
+          await step();
+          seen[bs.state] = (seen[bs.state] || 0) + 1;
+          if (bs.touchCd > touchClock) touchClock = bs.touchCd;
+          if (bs.state === 'rush') {
+            if (!rushFrom) rushFrom = { x: f.pos.x, z: f.pos.z };
+            rushTravel = Math.max(rushTravel,
+              Math.hypot(f.pos.x - rushFrom.x, f.pos.z - rushFrom.z));
+          } else {
+            rushFrom = null;
+          }
+          mortarsSeen = Math.max(mortarsSeen, g._mortars.length);
+          // The flare-up's rim is measured across the frame the tell ends:
+          // the tell lays nothing, the detonation lays the ring, and inside
+          // 6m of the body neither the sweep's bar (7m out) nor the wall of
+          // the ring (9m) can donate.
+          if (bs.state === 'nova') {
+            wasNova = true;
+            novaBefore = Math.max(novaBefore, near6());
+          } else if (wasNova) {
+            novaGain = Math.max(novaGain, near6() - novaBefore);
+            wasNova = false;
+            novaBefore = 0;
+          }
+          if (bs.heat > 0.8) bs.heat = 0.8;
+          if (bs.heat < 0.75) bs.heat = 0.75;
+          if (bs.state === 'walk' && bs.cd > 0.5) bs.cd = 0.5;
+          if (stopWhen()) break;
+        }
+      };
+      // Mid-field: close enough for the fan, far enough that a rush ends with
+      // the shells and the next rush both on the table.
+      px = 16;
+      pz = -6;
+      await drive(4200,
+        () => seen.rush && seen.fan && seen.fissure && seen.sweep && seen.nova && seen.bombard);
+      // Whatever the wheel has not served yet, queued at the range it
+      // answers - and waited until it has actually FIRED, not just entered
+      // its tell, so the shells are in the air before they are counted.
+      for (const want of ['bombard', 'nova', 'rush', 'fan', 'fissure']) {
+        const done = () => seen[want] && (want !== 'bombard' || mortarsSeen > 0);
+        for (let i = 0; i < 900 && !done(); i++) {
+          await drive(1, () => false,
+            want === 'nova'
+              ? () => { px = f.pos.x + 4; pz = f.pos.z; }
+              : () => { px = f.pos.x; pz = f.pos.z + 21; });
+          if (bs.state === 'walk' && (!bs.next || bs.next === want)) {
+            bs.next = want;
+            if (bs.cd > 0.3) bs.cd = 0.3;
+          }
+        }
+      }
+      res.rushSeen = !!seen.rush;
+      res.fanSeen = !!seen.fan;
+      res.bombSeen = !!seen.bombard;
+      res.fissSeen = !!seen.fissure;
+      res.sweepSeen2 = !!seen.sweep;
+      res.novaSeen = !!seen.nova;
+      res.rushTravel = +rushTravel.toFixed(1);
+      res.mortarsSeen = mortarsSeen;
+      res.novaPatches = novaGain;
+
+      // The touch rule, isolated: pinned ON the body, whatever it is doing,
+      // contact has to bill on the touch clock and health has to follow.
+      const hp0 = p.health;
+      await drive(240, () => touchClock > 0 && p.health < hp0,
+        () => { px = f.pos.x; pz = f.pos.z; });
+      res.touchClock = +touchClock.toFixed(2);
+      res.touchHpDrop = +(hp0 - p.health).toFixed(1);
+
+      // And no pooled telegraph may still be out. Every tell above acquires
+      // one; between casts they must ALL be back in the pool - this is the
+      // leak boss.mjs counts after a death, caught here at the source.
+      await drive(300, () => bs.state === 'walk' && g.effects.marks.every((mk) => !mk.used),
+        () => {
+          px = f.pos.x + 14;
+          pz = f.pos.z;
+          if (bs.state === 'walk') bs.cd = 5;
+        });
+      res.marksOut = g.effects.marks.filter((mk) => mk.used).length;
+      clean();
+      g.setTheme(null);
+    }
+
     await steps(30);
     res.hazardsDrained = g._hazard.length;
     return res;
@@ -421,6 +536,22 @@ try {
   ok('the vent ends and the fight resets',
     out.forgeVentEnded && out.forgeHeatReset && out.forgeArmorBack < 1,
     `heat=${out.forgeHeatReset} armor=${out.forgeArmorBack}`);
+  ok('the reworked fight fires all five new attacks plus the sweep',
+    out.rushSeen && out.fanSeen && out.bombSeen && out.fissSeen && out.novaSeen
+      && out.sweepSeen2,
+    `rush=${!!out.rushSeen} fan=${!!out.fanSeen} bombard=${!!out.bombSeen} ` +
+    `fissure=${!!out.fissSeen} nova=${!!out.novaSeen} sweep=${!!out.sweepSeen2}`);
+  ok('the rush actually relocates the boss', out.rushTravel > 3,
+    `travel=${out.rushTravel}m`);
+  ok('the bombardment puts shells in the air', out.mortarsSeen >= 3,
+    `peak=${out.mortarsSeen}`);
+  ok('the flare-up leaves its rim of coals', out.novaPatches > 0,
+    `patches=${out.novaPatches}`);
+  ok('touching it pays in any state, on the touch clock',
+    out.touchClock > 0 && out.touchHpDrop > 0,
+    `touchCd=${out.touchClock} hp=${out.touchHpDrop}`);
+  ok('no telegraph handle is left outstanding', out.marksOut === 0,
+    `held=${out.marksOut}`);
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   if (browser) await browser.close();

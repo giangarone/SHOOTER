@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, _ashAt, _blinkAt, aiMelee, eyes, lump, orbit,
-  partsFor, prism, rock, shard, slab, spike,
+  ENEMY_TYPES, SHARED_MATS, _ashAt, _blinkAt, _reachY, aiMelee, BOSS_REACH_Y,
+  bossTouch, capturedShot, eyes, faceSnap, lump, orbit, partsFor, prism,
+  releaseMarks, rock, shard, slab, snapAim, spike,
 } from './shared.js';
 
 // EMBER's other four. Every number that decides how much FLOOR one of them
@@ -667,7 +668,12 @@ export const FORGE_RING_N = 18;
 
 export const FORGE_RING_GAP = 3;      // consecutive slots left open
 
-export const FORGE_SPECIAL_CD = 6.5;
+// TWO-POINT-TWO SECONDS between specials, not six and a half. The old fight's
+// problem was never that its attacks were weak - it was that it so rarely used
+// them. The melee swing and the touch rule fill the gaps between these, so the
+// fight is asking something of the player about once a second for the whole
+// heat cycle rather than twice a minute.
+export const FORGE_SPECIAL_CD = 2.2;
 
 // What it takes off the clock when it CLOSES the core, as opposed to after an
 // ordinary special. Much shorter than FORGE_SPECIAL_CD: the boss has just spent
@@ -681,6 +687,110 @@ export const FORGE_PATCH_RADIUS = 1.8;
 export const FORGE_PATCH_LIFE = 3.2;
 
 export const FORGE_PATCH_DPS = 14;
+
+// ---- the rework's five new attacks -----------------------------------------
+//
+// Every one is the theme restated at boss scale - heat that takes GROUND, and
+// ground the player can see being taken - and every one is telegraphed by the
+// means the game already has: a pooled lane or disc mark, the eyes, the flash.
+
+// THE PROWL is not an attack, it is what replaced planting: between specials
+// the forge circles the player at a mid band instead of walking to a corner
+// and stopping. `in` is strong - it gives ground when crowded, because
+// crowding is what the flare-up is for.
+export const FORGE_PROWL = { dist: 8.5, band: 3.5, out: 1, in: -0.85, strafe: 0.7, flip: 1.7, flipVar: 1.1 };
+
+// THE RUSH. A lane telegraph with the bearing frozen at the START of the tell,
+// then a committed charge down it that drags a burning strip behind it - the
+// magma's trail at boss stride, and the fight's main relocation engine.
+export const FORGE_RUSH_TELL = 0.95;
+
+export const FORGE_RUSH_LEN = 20;
+
+export const FORGE_RUSH_HALF = 1.6;      // the lane's half-width
+
+export const FORGE_RUSH_SPEED = 12.5;
+
+export const FORGE_RUSH_TIME = 2.4;      // belt for the lane-length check
+
+export const FORGE_RUSH_CAP = 46;        // what contact mid-charge costs, at most
+
+// A patch every 0.16s at 12.5 m/s is one every two metres - a continuous strip
+// behind it that stays under MAX_EMBER even at full lane length.
+export const FORGE_RUSH_TRAIL = 0.16;
+
+export const FORGE_RUSH_PATCH_R = 1.7;
+
+// The beat it needs to gather itself after a pillar stops the rush. This is
+// the counterplay's payoff: stand your ground behind geometry and the furnace
+// arrives as a parked target instead of as a wall of fire.
+export const FORGE_RUSH_RECOVER = 0.6;
+
+// THE BOMBARDMENT. The stacks on its shoulders are chimneys, and this is the
+// attack that fires them: three shells, one where the player stands and two
+// thrown further along their own heading, each leaving a burning crater.
+export const FORGE_BOMB_WINDUP = 0.75;
+
+export const FORGE_BOMB_N = 3;
+
+export const FORGE_BOMB_LEAD = 0.45;     // seconds of player heading per shell
+
+export const FORGE_BOMB_SPREAD = 2.6;    // lateral jitter on the thrown pair
+
+export const FORGE_BOMB_DELAY = 1.15;    // the mortar's own telegraph
+
+export const FORGE_BOMB_R = 2.6;
+
+export const FORGE_BOMB_CAP = 26;
+
+export const FORGE_BOMB_CRATER_R = 1.5;
+
+export const FORGE_BOMB_CRATER_LIFE = 3.0;
+
+// THE FAN. The reflex attack where the rush and the shells are reads: a
+// fraction of a second of the chest flaring on a frozen bearing, then five
+// burning roundshot down it. Snapshot aim, exactly as the ashwing freezes its
+// run - strafing through the tell is the whole answer.
+export const FORGE_FAN_WINDUP = 0.45;
+
+export const FORGE_FAN_N = 5;
+
+export const FORGE_FAN_SPREAD = 0.21;    // radians between the fan's arms
+
+export const FORGE_FAN_Y = 2.4;          // muzzle height: the chest, at scale
+
+// THE FISSURES. It stamps three lanes of split ground open through the
+// player's bearing - the kiln's wedge, forked. The lanes draw first and erupt
+// on the timer, so what the player is shown and what they get are the same
+// three lines.
+export const FORGE_FISS_TELL = 0.9;
+
+export const FORGE_FISS_LEN = 9;
+
+export const FORGE_FISS_HALF = 1.2;      // the lane's half-width
+
+export const FORGE_FISS_ARC = 0.55;      // radians between the three lanes
+
+export const FORGE_FISS_PATCH_R = 1.6;
+
+export const FORGE_FISS_PATCH_LIFE = 2.8;
+
+// THE FLARE-UP. The answer to crowding: a disc swells at its feet, then it
+// goes off radially and leaves a ring of fresh coals where the rim was, so
+// the player who walked out now has to walk back IN over ground it took.
+export const FORGE_NOVA_TELL = 0.8;
+
+export const FORGE_NOVA_R = 5.2;
+
+export const FORGE_NOVA_CAP = 40;
+
+export const FORGE_NOVA_RANGE = 6.5;     // what counts as crowding it
+
+export const FORGE_NOVA_RING_N = 7;
+
+export const FORGE_NOVA_PATCH_R = 1.3;
+
+export const FORGE_NOVA_PATCH_LIFE = 2.4;
 
 export const _forgeAt = new THREE.Vector3();
 
@@ -710,26 +820,58 @@ export function aiForge(e, a) {
     bs.state = 'walk';
     bs.heat = 0;
     bs.t = 0;
-    bs.cd = FORGE_SPECIAL_CD * 0.5;
+    // A short leash: the fight starts swinging quickly. Six and a half seconds
+    // of warm-up was the old fight's problem made literal.
+    bs.cd = 1.1;
     bs.doorT = 0;
     bs.angle = Math.random() * Math.PI * 2;
     bs.dir = Math.random() < 0.5 ? -1 : 1;
     bs.lastPulse = ctx.pulse;
     bs.venting = false;
+    // The picker's bookkeeping. `next` is a queued tier introduction, `last`
+    // stops one attack answering twice running, and `pick` walks the eligible
+    // set round-robin so coverage never depends on the dice.
+    bs.next = '';
+    bs.last = '';
+    bs.pick = 0;
+    bs.touchCd = 0;
+    // The pooled telegraph handle for the rush lane and the flare-up disc
+    // (only one is ever live), and the three fissure lanes beside it. Both
+    // shapes are exactly what releaseMarks frees, which is the type's
+    // `cleanup` for the death-mid-tell path.
+    bs.mark = -1;
+    bs.rings = [];
+    bs.fiss = null;
+    // Tier introductions owed this heat cycle: the first sweep and the first
+    // ring arrive the moment their tier unlocks, so the fight's escalation is
+    // SHOWN in order before the table is opened to chance.
+    bs.introSweep = false;
+    bs.introRing = false;
     // Read by main.js's 'vent' bossEvent for the HUD note. Colossus says CORE
     // EXPOSED because a shutter opened on a clock; this one is the boss
     // choosing to stop, which is a different thing and should say so.
     bs.ventNote = 'VENTING';
   }
+  bs.fx = ctx.effects;
   bs.t -= a.dt;
 
+  // STANDING ON IT COSTS, immediately and in every state but the rush - which
+  // lands its own, much larger, hit and must not also bill for the body it
+  // arrived in. This is the rule the whole fight is priced around: there is
+  // no safe hug, no free reload against its shins, ever.
+  if (bs.state !== 'rush') bossTouch(e, a);
+
   // ---- venting ------------------------------------------------------------
-  // Stationary, plates open, full damage - and radiating. The player wants to
-  // be inside the ring's growth for as long as they dare and out of it before
-  // it reaches them, which is the one decision this fight is built to ask.
+  // Plates open, full damage - and it LUMBERS. The open furnace still drifts
+  // after the player at under half speed while the ring grows out of it, so
+  // the window is something held while backing away rather than something
+  // handed over: a boss that stopped dead for four seconds was the old
+  // fight's idea of a reward, and the player was done reading it by the
+  // second one. The drift is the ONE movement the vent keeps; everything
+  // else about the state stays honest, or it stops being a window at all.
   if (bs.state === 'vent') {
-    a.vx = 0;
-    a.vz = 0;
+    a.vx = a.px * a.sp * 0.45;
+    a.vz = a.pz * a.sp * 0.45;
     _forgeDoors(e, true, a.dt);
     const k = 1 - Math.max(0, bs.t) / FORGE_VENT_TIME;
     const r = FORGE_VENT_R0 + (FORGE_VENT_R1 - FORGE_VENT_R0) * k;
@@ -758,6 +900,10 @@ export function aiForge(e, a) {
       bs.venting = false;
       bs.heat = 0;
       bs.cd = FORGE_VENT_CD;
+      // A new heat cycle re-earns its introductions: the first sweep and ring
+      // after a vent arrive at their tiers, in order, again.
+      bs.introSweep = false;
+      bs.introRing = false;
       e.weakOpen = false;
       ctx.bossEvent('vent', e);
     }
@@ -771,6 +917,13 @@ export function aiForge(e, a) {
   _forgeDoors(e, false, a.dt);
 
   if (bs.heat >= 1) {
+    // A vent CAN interrupt a special - the boss gets no say once the bar is
+    // full. Whatever warning it was holding dies with the state that drew it,
+    // or the telegraph pool leaks a handle per interrupted cast.
+    releaseMarks(e);
+    bs.fiss = null;
+    e._setEyeAlert(false);
+    e.stepMul = 1.4;
     bs.state = 'vent';
     bs.venting = true;
     bs.t = FORGE_VENT_TIME;
@@ -783,6 +936,276 @@ export function aiForge(e, a) {
     return;
   }
   bs.weakOpen = false;
+
+  // ---- the rush, and its lane ----------------------------------------------
+  // THE BEARING IS FROZEN AT THE START OF THE TELL, so the lane the mark draws
+  // is the whole promise: step out of the rectangle and it misses. A rush that
+  // tracked would be an unavoidable hit with a wind-up in front of it. Where
+  // the sweep and the ring ground the fight, this one MOVES it: the lane is
+  // twenty metres the boss is somewhere else across, and the fire it drags
+  // closes the route it took.
+  if (bs.state === 'rushTell') {
+    a.vx = 0;
+    a.vz = 0;
+    // Squared up to the frozen bearing for the whole tell: the body turning
+    // to face the lane is half the warning.
+    faceSnap(e);
+    if (bs.mark >= 0) {
+      // The lane is drawn at full length from the first frame so the AREA
+      // reads instantly; the fill says when.
+      ctx.effects.markSet(
+        bs.mark,
+        e.pos.x + bs.dirX * FORGE_RUSH_LEN * 0.5,
+        e.pos.z + bs.dirZ * FORGE_RUSH_LEN * 0.5,
+        FORGE_RUSH_HALF, 0xff6a1f, 1 - Math.max(0, bs.t) / FORGE_RUSH_TELL,
+        FORGE_RUSH_LEN / (FORGE_RUSH_HALF * 2), Math.atan2(-bs.dirX, -bs.dirZ)
+      );
+    }
+    if (bs.t <= 0) {
+      if (bs.mark >= 0) {
+        ctx.effects.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      bs.state = 'rush';
+      bs.t = FORGE_RUSH_TIME;
+      bs.left = FORGE_RUSH_LEN;
+      bs.trail = 0;
+      e._setEyeAlert(false);
+      e.flash = 0.12;
+      ctx.bossEvent('charge', e);
+    }
+    return;
+  }
+
+  if (bs.state === 'rush') {
+    // THE STEP CLAMP HAS TO COME OFF FOR THE CHARGE: update() caps a frame at
+    // sp * stepMul and a boss walks at a fraction of what a rush is. Set every
+    // frame so a slow that lands mid-charge is honoured, and put back at every
+    // exit so the crowd shove after the rush is clamped at walking pace again.
+    e.stepMul = FORGE_RUSH_SPEED / Math.max(0.5, a.sp);
+    a.vx = bs.dirX * FORGE_RUSH_SPEED;
+    a.vz = bs.dirZ * FORGE_RUSH_SPEED;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    e.faceLocked = true;
+    // The trail it drags: what a magma leaves, at boss stride. This is the
+    // rush's second claim - the ground it crossed stays burning, so dodging
+    // the body done early still leaves the player one side of a hot strip.
+    bs.trail -= a.dt;
+    if (bs.trail <= 0) {
+      bs.trail = FORGE_RUSH_TRAIL;
+      ctx.addHazard(
+        e.pos.x, e.pos.z,
+        FORGE_RUSH_PATCH_R, FORGE_PATCH_LIFE, FORGE_PATCH_DPS, 'ember'
+      );
+      if (ctx.effects) {
+        _forgeAt.set(e.pos.x, 0.5, e.pos.z);
+        ctx.effects.burst(_forgeAt, 0xff7a18, 4, 2.4, 2, 0.4);
+      }
+    }
+    // Contact IS the attack the lane was warning about: whoever is still on
+    // the strip when the furnace arrives takes the big one.
+    if (a.dist < e.radius + 0.9 && _reachY(a) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(Math.min(FORGE_RUSH_CAP, e.damage * 1.2), e.pos, e);
+      _forgeAt.set(e.pos.x, 1.2, e.pos.z);
+      ctx.effects.burst(_forgeAt, 0xff8c1a, 24, 7, 2, 0.6);
+      ctx.effects.addShake(0.3);
+      e.stepMul = 1.4;
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+      return;
+    }
+    bs.left -= FORGE_RUSH_SPEED * a.dt;
+    // A PILLAR IS THE COUNTERPLAY. Geometry on the line stops the rush early
+    // and the furnace takes a beat to gather itself - that open moment is the
+    // reward for having read the lane instead of just fleeing it.
+    if (e.blockedBy > 0.05) {
+      e.stepMul = 1.4;
+      _forgeAt.set(e.pos.x, 0.4, e.pos.z);
+      ctx.effects.shockwave(_forgeAt, 0xff8c1a, 4.5, 0.4);
+      ctx.effects.burst(_forgeAt, 0xff8c1a, 22, 7, 3, 0.6);
+      ctx.effects.addShake(0.25);
+      if (ctx.sfx) ctx.sfx.impact();
+      bs.state = 'recover';
+      bs.t = FORGE_RUSH_RECOVER;
+      return;
+    }
+    if (bs.left <= 0 || bs.t <= 0) {
+      e.stepMul = 1.4;
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
+  if (bs.state === 'recover') {
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
+  // ---- the bombardment ------------------------------------------------------
+  // The shoulder stacks are chimneys, and this is the one attack that fires
+  // them: three shells - one where the player IS, two thrown along their own
+  // heading - so the dodge is the change of direction the whole theme keeps
+  // teaching, and the craters are burning ground the route can no longer use.
+  if (bs.state === 'bombard') {
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      const p = ctx.player;
+      const dmg = Math.min(FORGE_BOMB_CAP, e.damage * 0.85);
+      for (let i = 0; i < FORGE_BOMB_N; i++) {
+        const lead = i * FORGE_BOMB_LEAD;
+        const x = Math.max(-20, Math.min(20,
+          p.pos.x + p.vel.x * lead + (i ? (Math.random() - 0.5) * FORGE_BOMB_SPREAD : 0)));
+        const z = Math.max(-20, Math.min(20,
+          p.pos.z + p.vel.z * lead + (i ? (Math.random() - 0.5) * FORGE_BOMB_SPREAD : 0)));
+        // The warning ring IS the crater it is about to leave, filled in as
+        // it cooks - the mortar's ground payload does both, so the telegraph
+        // cannot lie about the ground it is claiming.
+        ctx.addMortar(x, z, FORGE_BOMB_R, FORGE_BOMB_DELAY, dmg, {
+          radius: FORGE_BOMB_CRATER_R, life: FORGE_BOMB_CRATER_LIFE,
+          dps: FORGE_PATCH_DPS, kind: 'ember',
+        });
+      }
+      if (ctx.effects) {
+        _forgeAt.set(e.pos.x, e.scale, e.pos.z);
+        ctx.effects.burst(_forgeAt, 0xffb347, 18, 5, 3, 0.5);
+        ctx.effects.addShake(0.16);
+      }
+      if (ctx.sfx) ctx.sfx.impact();
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
+  // ---- the chest fan ---------------------------------------------------------
+  // The reflex attack, where the rush and the shells are reads: a fraction of
+  // a second of the chest flaring on a frozen bearing, then five burning
+  // roundshot down it. Snapshot aim, exactly as the ashwing freezes its run -
+  // strafing THROUGH the flash is the whole answer, and backpedalling is none.
+  if (bs.state === 'fan') {
+    a.vx = 0;
+    a.vz = 0;
+    faceSnap(e);
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      for (let i = 0; i < FORGE_FAN_N; i++) {
+        capturedShot(e, a, e.aim, (i - (FORGE_FAN_N - 1) / 2) * FORGE_FAN_SPREAD, FORGE_FAN_Y);
+      }
+      if (ctx.effects) {
+        _forgeAt.set(e.pos.x + e.nx * 1.6, FORGE_FAN_Y + 0.4, e.pos.z + e.nz * 1.6);
+        ctx.effects.burst(_forgeAt, 0xffb347, 14, 5, 2, 0.4);
+      }
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
+  // ---- the fissures -----------------------------------------------------------
+  // It stamps three lanes of SPLIT GROUND open through the player's bearing -
+  // the kiln's wedge, forked. The lanes draw first and erupt on the timer, so
+  // what the player is shown and what they get are the same three lines.
+  if (bs.state === 'fissure') {
+    a.vx = 0;
+    a.vz = 0;
+    faceSnap(e);
+    for (let i = 0; i < bs.rings.length; i++) {
+      const dx = Math.cos(bs.fiss[i]);
+      const dz = Math.sin(bs.fiss[i]);
+      if (bs.rings[i].mark >= 0) {
+        ctx.effects.markSet(
+          bs.rings[i].mark,
+          e.pos.x + dx * FORGE_FISS_LEN * 0.5, e.pos.z + dz * FORGE_FISS_LEN * 0.5,
+          FORGE_FISS_HALF, 0xff6a1f, 1 - Math.max(0, bs.t) / FORGE_FISS_TELL,
+          FORGE_FISS_LEN / (FORGE_FISS_HALF * 2), Math.atan2(-dx, -dz)
+        );
+      }
+    }
+    if (bs.t <= 0) {
+      releaseMarks(e);
+      e._setEyeAlert(false);
+      for (const ang of bs.fiss) {
+        const dx = Math.cos(ang);
+        const dz = Math.sin(ang);
+        // Three coals to a lane, spaced to overlap: a broken stripe would read
+        // as holes in the attack rather than as the ground it took.
+        for (const d of [1.8, 4.4, 7.0]) {
+          const x = e.pos.x + dx * d;
+          const z = e.pos.z + dz * d;
+          if (Math.abs(x) > 20.5 || Math.abs(z) > 20.5) continue;
+          ctx.addHazard(x, z, FORGE_FISS_PATCH_R, FORGE_FISS_PATCH_LIFE, FORGE_PATCH_DPS, 'ember');
+        }
+      }
+      if (ctx.effects) {
+        _forgeAt.set(e.pos.x, 0.4, e.pos.z);
+        ctx.effects.shockwave(_forgeAt, 0xff5a1f, FORGE_FISS_LEN * 0.6, 0.35);
+        ctx.effects.burst(_forgeAt, 0xffb347, 18, 6, 2.4, 0.5);
+      }
+      if (ctx.sfx) ctx.sfx.impact();
+      bs.fiss = null;
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
+  // ---- the flare-up ------------------------------------------------------------
+  // The answer to crowding. The disc swells at its feet for most of a second
+  // and then it goes off: radial damage falling off with distance, and a ring
+  // of fresh coals where the rim was, so the player who walked OUT on the tell
+  // now has ground between them and the window they were farming. Priced to be
+  // survived once with a read, and to teach rather than tax.
+  if (bs.state === 'nova') {
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.mark >= 0) {
+      ctx.effects.markSet(
+        bs.mark, e.pos.x, e.pos.z,
+        FORGE_NOVA_R, 0xff5a1f, 1 - Math.max(0, bs.t) / FORGE_NOVA_TELL
+      );
+    }
+    if (bs.t <= 0) {
+      if (bs.mark >= 0) {
+        ctx.effects.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      e._setEyeAlert(false);
+      if (a.dist < FORGE_NOVA_R && _reachY(a) < BOSS_REACH_Y) {
+        ctx.onHitPlayer(
+          Math.min(FORGE_NOVA_CAP, e.damage) * (1 - 0.45 * a.dist / FORGE_NOVA_R),
+          e.pos, e
+        );
+      }
+      const off = Math.random() * Math.PI * 2;
+      for (let i = 0; i < FORGE_NOVA_RING_N; i++) {
+        const ang = off + (i / FORGE_NOVA_RING_N) * Math.PI * 2;
+        ctx.addHazard(
+          e.pos.x + Math.cos(ang) * (FORGE_NOVA_R - 0.8),
+          e.pos.z + Math.sin(ang) * (FORGE_NOVA_R - 0.8),
+          FORGE_NOVA_PATCH_R, FORGE_NOVA_PATCH_LIFE, FORGE_PATCH_DPS, 'ember'
+        );
+      }
+      if (ctx.effects) {
+        _forgeAt.set(e.pos.x, 0.6, e.pos.z);
+        ctx.effects.shockwave(_forgeAt, 0xff5a1f, FORGE_NOVA_R, 0.4);
+        ctx.effects.burst(_forgeAt, 0xff8c1a, 26, 7, 3, 0.6);
+        ctx.effects.addShake(0.3);
+      }
+      if (ctx.sfx) ctx.sfx.impact();
+      bs.state = 'walk';
+      bs.cd = FORGE_SPECIAL_CD * e.rate;
+    }
+    return;
+  }
+
 
   // ---- the sweep ----------------------------------------------------------
   if (bs.state === 'sweep') {
@@ -854,25 +1277,137 @@ export function aiForge(e, a) {
     return;
   }
 
-  // ---- walking, and picking the next special ------------------------------
-  aiMelee(e, a);
+  // ---- walking: the prowl, the swing, and the next attack -------------------
+  // IT NEVER PARKS. Between specials it circles the player at a mid band,
+  // faster than the old fight ever walked - the pressure is the furnace
+  // always being on its way to somewhere, and the specials below are the
+  // destinations. The melee cycle owns contact and the close swing; the orbit
+  // owns every other step.
+  const feared = e.status.fear > 0;
+  if (feared) {
+    // Terror does not send a boss running - fearMode 'stagger' - so it holds
+    // position and stops attacking until it passes. The heat keeps its own
+    // clock; fear pauses the fight, not the furnace.
+    a.vx = 0;
+    a.vz = 0;
+    e.stepMul = 1.4;
+    e._setEyeAlert(false);
+    return;
+  }
+  const m = ENEMY_TYPES.forge.melee;
+  if (e._meleeCycle(a.dt, a.dist, ctx, m.windup, m.start, m.hit, m.cd)) {
+    orbit(e, a, FORGE_PROWL);
+  }
+  e.stepMul = 1.4;
   bs.cd -= a.dt;
-  if (bs.cd > 0 || a.dist > 26) return;
 
-  // Escalating: what it is allowed to reach for is a function of how hot it
-  // is, so the fight visibly climbs toward the vent instead of arriving there.
-  const canRing = bs.heat >= FORGE_RING_AT;
-  const canSweep = bs.heat >= FORGE_SWEEP_AT;
-  if (canRing && (Math.random() < 0.5 || !canSweep)) {
+  // Tier introductions: the first sweep and the first ring of a heat cycle
+  // arrive the MOMENT their tier unlocks, ahead of the table, so the
+  // escalation toward the vent is shown in order rather than rolled for.
+  // Cutting the cooldown short is what makes the tier crossing legible - the
+  // bar visibly buying something, rather than something happening a while
+  // after the bar moved.
+  if (!bs.introSweep && bs.heat >= FORGE_SWEEP_AT) {
+    bs.introSweep = true;
+    if (!bs.next) bs.next = 'sweep';
+    bs.cd = Math.min(bs.cd, 0.35);
+  }
+  if (!bs.introRing && bs.heat >= FORGE_RING_AT) {
+    bs.introRing = true;
+    if (!bs.next) bs.next = 'ring';
+    bs.cd = Math.min(bs.cd, 0.35);
+  }
+  if (bs.cd > 0 || a.dist > 30) return;
+
+  // THE PICK. A queued introduction first; then crowding is answered with the
+  // flare-up outright; then the round-robin over what the distance and the
+  // heat entitle it to, with `last` barring an immediate repeat. Escalation
+  // is still the frame the whole thing hangs on: the top of the table is
+  // locked until the bar says so.
+  let pick = bs.next;
+  bs.next = '';
+  if (!pick) {
+    if (a.dist < FORGE_NOVA_RANGE && bs.last !== 'nova') {
+      pick = 'nova';
+    } else {
+      const opts = [];
+      if (a.dist > 3.5 && a.dist < 19 && bs.last !== 'fan') opts.push('fan');
+      if (a.dist > 8 && bs.last !== 'rush') opts.push('rush');
+      if (a.dist > 9 && bs.last !== 'bombard') opts.push('bombard');
+      if (bs.heat >= FORGE_SWEEP_AT && bs.last !== 'sweep') opts.push('sweep');
+      if (bs.heat >= FORGE_RING_AT && bs.last !== 'ring') opts.push('ring');
+      if (bs.heat >= FORGE_RING_AT && bs.last !== 'fissure') opts.push('fissure');
+      // Nothing it is allowed to reach for: keep prowling and ask again
+      // shortly, rather than burning the whole cooldown point blank - a far
+      // player has the rush and the shells to answer, so an empty table means
+      // the player is IN its face and the flare-up is off cooldown only.
+      if (!opts.length) {
+        bs.cd = 0.45;
+        return;
+      }
+      pick = opts[(bs.pick++) % opts.length];
+    }
+  }
+  bs.last = pick;
+  e.flash = 0.15;
+
+  if (pick === 'sweep') {
+    // The bar starts pointed AT the player and steps away on the beat, so the
+    // opening moment is itself the telegraph: the fire is where you are.
+    bs.state = 'sweep';
+    bs.t = FORGE_SWEEP_TIME;
+    bs.dir = Math.random() < 0.5 ? -1 : 1;
+    bs.angle = Math.atan2(a.nz, a.nx);
+    bs.lastPulse = ctx.pulse;
+    return;
+  }
+  if (pick === 'ring') {
     bs.state = 'ring';
     // The wind-up IS the telegraph, and the only warning the ring gets.
     bs.t = 0.85;
     e.flash = 0.2;
     ctx.bossEvent('charge', e);
-  } else if (canSweep) {
-    bs.state = 'sweep';
-    bs.t = FORGE_SWEEP_TIME;
-    bs.dir = Math.random() < 0.5 ? -1 : 1;
+    return;
+  }
+  if (pick === 'nova') {
+    bs.state = 'nova';
+    bs.t = FORGE_NOVA_TELL;
+    bs.mark = ctx.effects.markAcquire();
+    e._setEyeAlert(true);
+    return;
+  }
+  if (pick === 'fan') {
+    bs.state = 'fan';
+    bs.t = FORGE_FAN_WINDUP;
+    snapAim(e, a, true);
+    faceSnap(e);
+    return;
+  }
+  if (pick === 'bombard') {
+    bs.state = 'bombard';
+    bs.t = FORGE_BOMB_WINDUP;
+    e._setEyeAlert(true);
+    return;
+  }
+  if (pick === 'rush') {
+    bs.state = 'rushTell';
+    bs.t = FORGE_RUSH_TELL;
+    snapAim(e, a, true);
+    faceSnap(e);
+    bs.dirX = e.nx;
+    bs.dirZ = e.nz;
+    bs.mark = ctx.effects.markAcquire();
+    return;
+  }
+  // 'fissure'
+  bs.state = 'fissure';
+  bs.t = FORGE_FISS_TELL;
+  snapAim(e, a, true);
+  faceSnap(e);
+  bs.fiss = [];
+  for (const off of [-FORGE_FISS_ARC, 0, FORGE_FISS_ARC]) {
+    bs.fiss.push(e.aim + off);
+    bs.rings.push({ mark: ctx.effects.markAcquire() });
   }
 }
 
@@ -1048,24 +1583,33 @@ const TYPES = {
     build: buildCinder, ai: aiMelee,
   },
 
-  // EMBER's boss, and the mirror of the Colossus.
+  // EMBER's boss, reworked - the Colossus INVERSION kept, the siege engine
+  // the inversion always wanted added.
   //
-  // A Colossus is armoured except for a core on a fixed rhythm, so the fight
-  // is a question of WHEN you are firing and the boss has no say in it. This
-  // one HEATS UP as it fights - it gains attacks as the bar fills, and when it
-  // fills completely it has to stop and VENT, which is when its plates come
-  // apart and it takes full damage.
+  // The kept half: it HEATS UP as it fights - attacks unlock with the bar -
+  // and when it fills completely it has to stop and VENT, which is when its
+  // plates come apart and it takes full damage. The damage window stays the
+  // boss's own decision rather than a metronome.
   //
-  // So the damage window is the boss's own decision rather than a metronome,
-  // and the player's job is to survive long enough to earn one. That inversion
-  // is the whole fight, and it is why the vent is not simply a free five
-  // seconds: while it is open it is radiating fire outward, so the window is
-  // real and it is INSIDE something. Close enough to shoot, far enough not to
-  // burn, and the ring is growing the whole time.
+  // The window stays earned, and it now MOVES: while it is open it radiates
+  // fire outward and lumbers after the player at under half speed, so the
+  // reward is something held while backing away, not something handed over.
   //
-  // WHAT THE HEAT BUYS IT. One attack per third of the bar, so the fight
-  // visibly escalates toward the vent rather than arriving at it:
-  //   below a third   it closes and swings, and that is all
+  // The new half is everything between the vents. It HUNTS instead of
+  // holding a corner: a prowl that never parks it, faster than it ever
+  // walked; a telegraphed RUSH that drags a burning strip across the arena;
+  // mortar shells off the shoulder stacks that crater the ground the player
+  // is running to; a chest FAN of burning shot on a frozen bearing for the
+  // reflex check; stamped FISSURES that fork the kiln's wedge into three
+  // lanes; and a radial FLARE-UP for anyone crowding it. Touching it costs,
+  // immediately, in any state.
+  //
+  // WHAT THE HEAT BUYS IT, unchanged - the fight still escalates toward the
+  // vent in the same order. What the table below the first tier now holds is
+  // the rework: new specials at every distance, picked every couple of
+  // seconds, with the tier introductions queued ahead of the table:
+  //   below a third   it prowls and swings, and the rush, fan, shells and
+  //                   flare-up answer the distance
   //   a third         the SWEEP - it plants and turns a bar of fire around
   //                   itself, on the beat, exactly as its kilns do
   //   two thirds      the RING - a wall of fire at a fixed radius with one gap
@@ -1073,18 +1617,27 @@ const TYPES = {
   //   full            it must vent, and the fight resets to the top
   forge: {
     head: { r: 0.42, y: 1.76 },
-    hp: 3400, speed: 2.3, damage: 30, value: 5500, color: 0xff5a1f, eye: 0xffd166,
+    // 2.9, not 2.3: the fight is mobile now, and a prowl that cannot keep up
+    // with a sprinting player is a walk with extra steps.
+    hp: 3400, speed: 2.9, damage: 30, value: 5500, color: 0xff5a1f, eye: 0xffd166,
     scale: 3.0, radius: 1.8, mass: 8, boss: true,
     hitbox: { r: 0.74, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    // Reach scaled off a 1.8m body, like Siege's.
-    melee: { windup: 0.7, start: 3.2, hit: 4.0, cd: 2.0 },
+    // Reach scaled off a 1.8m body, like Siege's. Quicker on the draw than the
+    // old fight, because the swing is one beat in a bar rather than the song.
+    melee: { windup: 0.55, start: 3.2, hit: 4.0, cd: 1.7 },
+    // The chest fan's roundshot - burning shot on its own modest curve; the
+    // fan is the reflex tax between telegraphs, not the bill.
+    proj: { core: 0xffd08a, glow: 0xff5a1f, scale: 1.5, speed: [15, 0.2, 22], dmg: [10, 0.4, 22] },
     // Full damage only while it is venting. armorDefault matches the shut
     // value for Colossus's reason: a damage source arriving with no direction
     // must not be able to bypass the mechanic by accident.
     armor: (e) => (e.bs.venting ? 1 : 0.34),
     armorDefault: 0.34,
+    // The rush lane, the fissure lanes and the flare-up disc are pooled
+    // telegraph handles: a death mid-tell has to hand them back.
+    cleanup: releaseMarks,
     build: buildForge, ai: aiForge,
   },
 };
