@@ -857,18 +857,28 @@ context. The start screen says so, and one click anywhere fixes it.
   takes FULL damage where the shut face ate a third of it - the last third
   of the fight is the window the whole fight was building to. **THE CARILLON**,
   SAPPHIRE's, is a tower of bells that
-  compounds every clock its own theme taught the player at once: the PEAL is
-  a spoke volley that starts with gaps to walk through and is one round wider
-  every time it fires, on a cooldown that shortens as the bar falls; the TOLL
-  lays a gapped ring of crystal where it stands, and the ring SPREADS
-  outward after it lands, so the room the fight started in is a different
-  room by the end of it; and the SWAY walks the whole tower in a slow arc
-  around the player, so the tolls ring from different bearings and the glass
-  is laid along a path the player can read and route around rather than in
-  one spot they have to give up. Under a third of the bar the RISING takes
-  the caps off - the peal comes faster and wider, the tolls double up, and
-  the fight's last movement is its loudest, which is the whole theme's
-  argument arrived at by the boss. Regular enemies keep
+  compounds every clock its own theme taught the player at once - and it does
+  NOT hold a corner and wait for you: the tower walks the whole room between
+  ringing posts, and standing ON it costs in every state. The PEAL is a spoke
+  volley that starts with gaps to walk through and is one round wider every
+  time it fires, fired on the move on a cooldown that shortens as the bar
+  falls. The GLISS lights a lane down the bearing you were caught on, and the
+  whole tower comes down it at a dead run, ending in a slam that sets the
+  lane's end as spreading glass - bait it into a pillar and the beat it
+  spends getting up is yours. The ECHO reads your own last three footsteps
+  out loud, one note at a time, then rings each one back as a detonation in
+  the order you took them: the safe ground is the ground you have NOT stood
+  on. The CASCADE pours a chasing rain of chimes down the line you are
+  escaping along, re-read at every pour, and the tower keeps walking while it
+  pours. The BOUND marks a circle across the arena, and the tower crosses to
+  it in one stride, landing in a ring of crystal. And the TOLL still lays a
+  gapped ring of spreading crystal where it stands. Every attack it finishes
+  winds the RESONANCE one notch - worn on the bells, for anyone to read - and
+  at the cap the FULL RING spends it all: a nine-metre toll that detonates
+  with a spoke wall inside it and sets the ground it covered as glass. Under
+  a third of the bar the RISING drops the caps - the peal doubles up, the
+  rings come faster, and the fight's last movement is its loudest, which is
+  the whole theme's argument arrived at by the boss. Regular enemies keep
   arriving throughout; killing the boss ends the wave and pays out. It does NOT
   refill your health or ammo - the payout is large and the stations are right
   there, so coming out of a boss in trouble is a real state to be in and what
@@ -3259,8 +3269,13 @@ test/sapphire.mjs   SAPPHIRE end to end - the theme of accruing resonance, so
                     reading burn bare, the lapidary's crystal small on
                     landing AND grown two seconds later, the attuner stacking
                     the wave AND un-stacking it on death, the comet landing a
-                    pass AND quickening, and the Carillon ringing all three
-                    of its clocks at once
+                    pass AND quickening, and the Carillon ringing its whole
+                    rotation: the peal widening, the toll laid, the gliss
+                    RUNG down its own lane and onto a player who never moved,
+                    the cascade poured, the bound crossing the room, the echo
+                    drawn on their footsteps AND hitting the one who stood
+                    still, the full ring spending what the fight wound up -
+                    and bare contact costing in every state
 test/newpool.mjs    per-hit crit resolution, the range and hit-taken passive
                     items, the two companions, the lure - and all of it in 2P
 test/thirdpool.mjs  the twenty-seven picks that read where the player is

@@ -12,9 +12,10 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, FLY_RATE_DEFAULT, MELEE_REACH_Y, SHARED_MATS, _bossAt, _blinkAt,
-  aiMelee, bossTouch, eyes, geo, landHit, orbit, partsFor, prism, releaseMarks,
-  rock, shard, slab, spike,
+  ARENA_HALF, BOSS_REACH_Y, ENEMY_TYPES, FLY_RATE_DEFAULT, MELEE_REACH_Y,
+  SHARED_MATS, _blinkAt, _bossAt, _reachY, aiMelee, bossTouch, eyes, faceSnap,
+  geo, landHit, orbit, partsFor, prism, releaseMarks, rock, shard, slab,
+  snapAim, spike,
 } from './shared.js';
 
 // ---- the theme ------------------------------------------------------------
@@ -183,37 +184,60 @@ export const COMET_HIT_RANGE = 1.9;
 
 // ---- the boss ----------------------------------------------------------------
 //
-// THE CARILLON. A tower of bells that rings the whole mechanic of its own
-// theme at once: the longer the fight runs, the more of the room is involved.
+// THE CARILLON, REBUILT. The theme's whole mechanic - ACCRUING RESONANCE -
+// rung at fight scale, and kept MOVING: the old tower held a corner and let
+// two clocks do the fighting; this one walks the room, and the fight is where
+// it is. Six attacks plus the payoff, every one announced in the game's own
+// telegraph language, every one a question about SPACE rather than ammo:
 //
-//   the PEAL      the volley - a ring of rounds that is one round wider every
-//                 time it fires, on a cooldown that SHORTENS as the bar falls,
-//                 so the last third of the fight is a spoke every beat
-//   the TOLL      the claim - it stops, the floor where it stands fills with
-//                 a ring of crystal that SPREADS outward, and the room it has
-//                 been fought in is a different room thirty seconds later
-//   the SWAY      the drift - it walks a slow arc around the player, so the
-//                 tolls ring from different bearings and the crystal is laid
-//                 along a path rather than in one spot
-//   the RISING    under a third of the bar, everything at once: the peal's
-//   (once)        cap comes off, the toll doubles, and the bells flare - the
-//                 fight's last movement is its loudest
+//   the PEAL      the volley (kept) - a ring of spokes, one round wider every
+//                 time it fires, on a cooldown that SHORTENS as the bar falls.
+//                 Fired ON THE MOVE, because the tower does not stop to ring.
+//   the GLISS     the lane - the bells lean back, a corridor lights down the
+//                 bearing the player was caught on, and the whole tower COMES
+//                 DOWN IT at a dead run. It ends in a slam that sets the
+//                 lane's end as spreading glass, and the beat it spends
+//                 getting back up is the player's to spend.
+//   the ECHO      the trail - it plants and reads the player's own last three
+//                 footsteps OUT LOUD, one note at a time, then rings each one
+//                 back as a detonation in the order they were taken. The safe
+//                 ground is the ground you have NOT stood on.
+//   the CASCADE   the rain - the top bell keeps time over half a dozen pours,
+//                 and a chime lands where the player is GOING at every one of
+//                 them, walking the explosions down their own line of escape.
+//   the BOUND     the step - it marks a circle across the room, crouches, and
+//                 CROSSES the arena to it, landing in a ring of crystal. A
+//                 carillon was never meant to stay where you put it.
+//   the TOLL      the claim (kept) - it plants, and the floor where it stands
+//                 rings out as a gapped circle of crystal that SPREADS.
+//   the FULL RING the accrual's bill - every attack it finishes winds the
+//                 tower one notch (worn on the bells, so the clock is READ,
+//                 not felt), and at the cap it rings everything at once: a
+//                 nine-metre toll that detonates with a spoke wall inside it
+//                 and sets the ground it covered as glass.
 //
-// The health argument is the accrual itself: a player who outdamages the
-// clocks never meets the third peal's wall, and a player who does not is
-// fighting in a room that has filled with glass.
+//   the RISING    under a third of the bar, everything at once (kept): the
+//   (once)        peal doubles up, the resonance cap drops to four, and the
+//                 last movement of the fight is its loudest.
+//
+// And standing ON it costs, in every state - the tower is always live.
 
 // The peal: how wide the spoke gaps are, how much wider each volley, the cap,
-// the base cooldown and the tell.
+// the base cooldown and the tell. The cooldown is HALF what the old fight ran
+// - the volley is the fight's metronome now, not its chorus.
 export const PEAL_N = 10;
 
 export const PEAL_N_GAIN = 1;
 
 export const PEAL_N_CAP = 18;
 
-export const PEAL_CD = 3.6;
+export const PEAL_CD = 2.4;
 
-export const PEAL_TELL = 0.5;
+export const PEAL_TELL = 0.45;
+
+// The second ring, offset half a step, that the rising ALWAYS adds and a
+// fully-wound tower adds on its last notch - the nova never arrives cold.
+export const PEAL_ECHO_T = 0.34;
 
 // The toll: the tell, the inner radius, the patch count and what each one is.
 export const TOLL_TELL = 0.85;
@@ -230,8 +254,155 @@ export const TOLL_LIFE = 7.5;
 
 export const TOLL_DPS = 12;
 
+export const TOLL_CD = 7.5;
+
 // Where on the bar the rising fires, and what it takes off.
 export const RISING_FRAC = 0.34;
+
+// ---- the rounds ---------------------------------------------------------------
+// The tower no longer sways around the player; it WALKS between ringing
+// posts, a loose circle of standpoints held at reading range of the player,
+// re-picked before the current one goes stale. That, the gliss and the bound
+// are the answer to the old fight's one failing - the corner it never left.
+export const CAR_POST_MIN = 7;
+
+export const CAR_POST_MAX = 12;
+
+export const CAR_POST_T = 2.4;
+
+// The scheduler's two gaps: how long after NOTHING was ready it asks again,
+// and how long after an attack ENDS the next one begins. The second is the
+// whole tempo argument of the fight - just long enough to breathe, never long
+// enough to settle.
+export const CAR_GAP = 0.5;
+
+export const CAR_NEXT = 1.15;
+
+// The attack rotation. The peal is NOT in it - the volley runs on its own
+// clock and fires on the move; this is the order the committed attacks cycle
+// through, each with its own cooldown as a second gate, so the fight is
+// learnable and never a loop you can set your watch by.
+export const CAR_ROT = ['gliss', 'cascade', 'bound', 'toll', 'echo'];
+
+// ---- the gliss ---------------------------------------------------------------
+// The lane: tell, length, half-width, the pace of the run itself, and the two
+// bills - what getting rung THROUGH costs and what the slam at the end costs.
+// GLISS_SPEED beats the player's sprint (15): the dodge is a STEP OFF THE
+// LANE, taken inside the tell, and a lane that tracked would be an
+// unavoidable hit wearing a warning.
+export const GLISS_TELL = 0.85;
+
+export const GLISS_LEN = 16;
+
+export const GLISS_HALF = 1.5;
+
+export const GLISS_SPEED = 13.5;
+
+export const GLISS_TIME = 1.7;
+
+export const GLISS_CD = 6.5;
+
+export const GLISS_CAP = 30;
+
+// The slam the run lands in, and the glass the lane's end sets as. Shared by
+// the BOUND's landing, which is the same arrival at a different speed.
+export const SLAM_R = 4.4;
+
+export const SLAM_CAP = 24;
+
+export const SLAM_PATCH_R = 2.6;
+
+export const SLAM_PATCH_LIFE = 6;
+
+// ---- the echo -----------------------------------------------------------------
+// The trail. Three samples, ECHO_STEP apart, taken of where the player IS at
+// that instant; each rings back ECHO_FUSE after it was taken, in the order
+// they were taken. A player who keeps moving is missed by their own shadow;
+// a player who doubles back walks into it; a player who STANDS is hit by all
+// three at once, which is the lesson.
+export const ECHO_TELL = 1.0;
+
+export const ECHO_STEP = 0.35;
+
+export const ECHO_FUSE = 0.85;
+
+export const ECHO_R = 3.1;
+
+export const ECHO_CAP = 24;
+
+export const ECHO_CD = 6.5;
+
+// ---- the cascade ---------------------------------------------------------------
+// The rain. CASCADE_N pours, CASCADE_STEP apart, each re-reading the player's
+// POSITION AND FLIGHT at the moment it is poured - the rain walks with them,
+// and the loan they took for a straight line of escape is called in along
+// the whole length of it. Each circle fills CASCADE_DELAY before it lands,
+// which is the game's mortar contract from end to end.
+export const CASCADE_TELL = 0.55;
+
+export const CASCADE_N = 6;
+
+export const CASCADE_STEP = 0.17;
+
+export const CASCADE_DELAY = 0.6;
+
+export const CASCADE_LEAD = 0.3;
+
+export const CASCADE_R = 2.1;
+
+export const CASCADE_DMG = 12;
+
+export const CASCADE_CD = 5;
+
+// ---- the bound -----------------------------------------------------------------
+// The relocation. A circle is marked across the room, the tower crouches, and
+// then it CROSSES there - over the fight this walks the arena itself, so the
+// glass is never laid along one kiting path and the player is never fighting
+// the same room twice. The landing is the slam, at its own radius.
+export const BOUND_TELL = 0.7;
+
+export const BOUND_MIN = 7;
+
+export const BOUND_MAX = 15;
+
+export const BOUND_RING = 10;
+
+export const BOUND_SPEED = 11;
+
+export const BOUND_CAP = 24;
+
+export const BOUND_SLAM_R = 3.6;
+
+export const BOUND_CD = 6.5;
+
+export const BOUND_PATCH_R = 3.2;
+
+export const BOUND_PATCH_LIFE = 6.5;
+
+// ---- the full ring ---------------------------------------------------------------
+// The accrual's payoff. RES_CAP finished attacks wind the tower full (fewer
+// under the rising), and then it plants, fills a nine-metre toll for anyone
+// to read, and rings EVERYTHING: the blast, a spoke wall over the peal's own
+// count, and the ground it covered setting as glass.
+export const RES_CAP = 7;
+
+export const RES_CAP_RISING = 4;
+
+export const FULL_TELL = 1.35;
+
+export const FULL_R = 9.5;
+
+export const FULL_CAP = 38;
+
+export const FULL_DMG_MUL = 1.25;
+
+export const FULL_SPOKES = 6;
+
+export const FULL_PATCHES = 4;
+
+export const FULL_PATCH_R = 2.2;
+
+export const FULL_PATCH_LIFE = 6;
 
 // Scratch, module-level and reused: the toll's laying and every burst run
 // more than once a second across a whole wave.
@@ -442,9 +613,12 @@ export function buildCarillon(e, g, s) {
   // does - a boss that sways rather than walks, and the sway is in the AI.
   P('carSkirt', prism(0.5, 0.72, 0.9, 6), { y: 0.44 });
   // Two long arms hung low, ending in stone hands - a carillon is played,
-  // and it should look like the thing that plays it.
-  P('carArm', slab(0.1, 1.1, 0.1), { x: -0.62, y: 1.2, rz: 0.3 });
-  P('carArm', slab(0.1, 1.1, 0.1), { x: 0.62, y: 1.2, rz: -0.3 });
+  // and it should look like the thing that plays it. Kept on bs so the AI
+  // can raise them: the tower's tells are PLAYED, not just lit.
+  e.bs.arms = [
+    P('carArm', slab(0.1, 1.1, 0.1), { x: -0.62, y: 1.2, rz: 0.3 }),
+    P('carArm', slab(0.1, 1.1, 0.1), { x: 0.62, y: 1.2, rz: -0.3 }),
+  ];
   P('carHand', rock(0.16), { x: -0.78, y: 0.62 });
   P('carHand', rock(0.16), { x: 0.78, y: 0.62 });
 }
@@ -848,53 +1022,594 @@ function _cometClimb(e) {
 
 // ---- the boss ----------------------------------------------------------------
 
+// One fired peal: a ring of spokes, `off` rotating the whole volley - the
+// echo volley fires half a step on, so its spokes sit in the first ring's
+// gaps and the wall closes exactly where the eye just found the hole.
+function _carillonPealFire(e, ctx, n, off) {
+  const y = 1.4 * (e.group.scale.y || 1);
+  for (let i = 0; i < n; i++) {
+    ctx.addProjectile(e.pos.x, y, e.pos.z, 'carillon', 1, off + (i / n) * Math.PI * 2);
+  }
+  _bossAt.set(e.pos.x, y, e.pos.z);
+  ctx.effects.burst(_bossAt, 0x9ee8ff, 18, 6, 1.5, 0.4);
+  if (ctx.sfx) ctx.sfx.tone({ f: 587, f2: 880, t: 0.22, type: 'sine', v: 0.32 });
+}
+
+// The ring a committed body lands in: one shockwave, one falloff hit out to
+// `r`, and the ground it struck setting as spreading crystal - where the
+// tower has been, the floor keeps ringing. Shared by the GLISS's arrival and
+// the BOUND's landing, which are the same arrival at two different speeds.
+function _carillonSlam(e, a, r, cap, patchR, patchLife) {
+  const ctx = a.ctx;
+  _bossAt.set(e.pos.x, 0, e.pos.z);
+  ctx.effects.shockwave(_bossAt, 0x5bd0ff, r + 0.9, 0.4);
+  ctx.effects.burst(_bossAt, 0x9ee8ff, 26, 7, 2.5, 0.6);
+  ctx.effects.addShake(0.24);
+  if (ctx.sfx) ctx.sfx.impact();
+  if (a.dist < r && _reachY(a) < BOSS_REACH_Y) {
+    ctx.onHitPlayer(Math.min(cap, e.damage * 0.85), e.pos, e);
+  }
+  ctx.addHazard(e.pos.x, e.pos.z, patchR, patchLife, TOLL_DPS, 'crystal');
+}
+
+// Back to the walk after a committed attack. CAR_NEXT is the tempo of the
+// whole fight: just long enough to breathe, never long enough to settle.
+function _carillonDone(bs, e) {
+  bs.state = 'walk';
+  bs.atkCd = (bs.risingAt ? 0.75 : CAR_NEXT) * e.rate;
+}
+
+// The next ringing post: a loose circle of standpoints held at reading range
+// of the player, the bearing ADVANCING with every pick, so over a fight the
+// tower walks the arena instead of holding its old corner.
+function _carillonPost(e, a) {
+  const bs = e.bs;
+  const p = a.ctx.player;
+  bs.postAng += 0.9 + Math.random() * 0.8;
+  for (let i = 0; i < 8; i++) {
+    const ang = bs.postAng + (i - 3.5) * 0.5;
+    const r = CAR_POST_MIN + Math.random() * (CAR_POST_MAX - CAR_POST_MIN);
+    const x = p.pos.x + Math.cos(ang) * r;
+    const z = p.pos.z + Math.sin(ang) * r;
+    if (Math.abs(x) > 18.5 || Math.abs(z) > 18.5) continue;
+    _sapAt.set(x, 0.4, z);
+    if (a.ctx.obstacles && _obstacleAt(_sapAt, a.ctx.obstacles)) continue;
+    bs.postX = x;
+    bs.postZ = z;
+    bs.postT = CAR_POST_T;
+    return;
+  }
+  // Every candidate failed - hold this one for less long and ask again.
+  bs.postT = CAR_POST_T * 0.5;
+}
+
+// Walk toward the current post, at `mul` of the tower's pace. The shared
+// steering of every state that is free to move.
+function _carillonSteer(e, a, mul) {
+  const bs = e.bs;
+  const dx = bs.postX - e.pos.x;
+  const dz = bs.postZ - e.pos.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1.2) { a.vx = 0; a.vz = 0; return; }
+  a.vx = (dx / d) * a.sp * mul;
+  a.vz = (dz / d) * a.sp * mul;
+}
+
+// Enter one of the rotation's attacks. A mark the pool cannot give means the
+// attack is CALLED OFF, not run blind - a warning that failed to draw is the
+// one thing a telegraphed attack must never become.
+function _carillonStart(e, a, key) {
+  const bs = e.bs;
+  const ctx = a.ctx;
+  bs.el = 0;
+  if (key === 'gliss') {
+    const m = ctx.effects.markAcquire();
+    if (m < 0) { bs.atkCd = CAR_GAP; return; }
+    bs.mark = m;
+    snapAim(e, a, true);
+    bs.dirX = e.nx;
+    bs.dirZ = e.nz;
+    bs.state = 'glissTell';
+    bs.t = GLISS_TELL;
+    e.flash = 0.15;
+    if (ctx.sfx) ctx.sfx.tone({ f: 196, f2: 392, t: GLISS_TELL, type: 'sine', v: 0.4 });
+    return;
+  }
+  if (key === 'echo') {
+    bs.state = 'echo';
+    bs.t = ECHO_TELL;
+    bs.echoI = 0;
+    bs.echoDoneAt = ECHO_TELL + ECHO_FUSE + 0.3;
+    e.flash = 0.15;
+    if (ctx.sfx) ctx.sfx.tone({ f: 262, t: 0.3, type: 'sine', v: 0.3 });
+    return;
+  }
+  if (key === 'cascade') {
+    bs.state = 'cascade';
+    bs.t = CASCADE_TELL;
+    bs.cascN = CASCADE_N;
+    bs.pourT = 0;
+    snapAim(e, a, true);
+    e.flash = 0.15;
+    if (ctx.sfx) ctx.sfx.tone({ f: 880, t: 0.18, type: 'sine', v: 0.28 });
+    return;
+  }
+  if (key === 'bound') {
+    // The landing is marked AROUND THE PLAYER, not on them: the step
+    // relocates the fight to a new post in their orbit rather than dropping
+    // the tower on their head - that is what the gliss is for.
+    const p = ctx.player;
+    const baseAng = Math.atan2(e.pos.z - p.pos.z, e.pos.x - p.pos.x);
+    for (let i = 0; i < 8; i++) {
+      const ang = baseAng + Math.PI * (0.35 + (i >> 1) * 0.29) * (i % 2 ? 1 : -1);
+      const r = BOUND_RING + (i % 3) - 1;
+      const x = p.pos.x + Math.cos(ang) * r;
+      const z = p.pos.z + Math.sin(ang) * r;
+      const d = Math.hypot(x - e.pos.x, z - e.pos.z);
+      if (d < BOUND_MIN || d > BOUND_MAX) continue;
+      if (Math.abs(x) > 18.5 || Math.abs(z) > 18.5) continue;
+      _sapAt.set(x, 0.4, z);
+      if (ctx.obstacles && _obstacleAt(_sapAt, ctx.obstacles)) continue;
+      const m = ctx.effects.markAcquire();
+      if (m < 0) break;
+      bs.mark = m;
+      bs.destX = x;
+      bs.destZ = z;
+      bs.state = 'boundTell';
+      bs.t = BOUND_TELL;
+      bs.boundDur = d / BOUND_SPEED;
+      e.flash = 0.15;
+      if (ctx.sfx) ctx.sfx.tone({ f: 330, f2: 440, t: BOUND_TELL, type: 'sine', v: 0.3 });
+      return;
+    }
+    bs.atkCd = CAR_GAP;
+    return;
+  }
+  // toll
+  bs.state = 'toll';
+  bs.t = TOLL_TELL;
+  e.flash = 0.18;
+}
+
+// The rotation's pick: the first ready attack, walking on from the last one
+// fired so nothing repeats twice in a row, each with a gate on WHERE the
+// player is so the attack it throws is never the wrong question. If nothing
+// is ready the tower simply keeps walking - for half a second.
+function _carillonPick(e, a) {
+  const bs = e.bs;
+  for (let k = 0; k < CAR_ROT.length; k++) {
+    const key = CAR_ROT[(bs.rotI + k) % CAR_ROT.length];
+    if (bs[key + 'Cd'] > 0) continue;
+    if (key === 'gliss' && (a.dist < 6.5 || a.dist > 25)) continue;
+    if (key === 'cascade' && (a.dist < 4 || a.dist > 26)) continue;
+    if (key === 'toll' && a.dist <= 4.5) continue;
+    bs.rotI = (bs.rotI + k + 1) % CAR_ROT.length;
+    _carillonStart(e, a, key);
+    return;
+  }
+  bs.atkCd = CAR_GAP;
+}
+
+// THE BELLS, driven every frame by whatever the fight is doing. The tower
+// WEARS its accrual: the bells stand taller and turn faster for every notch
+// of resonance on them, so the count to the full ring is read off the boss
+// and not out of anybody's imagination. Three flags are the whole vocabulary
+// the states get: flare (a volley leaving), seq (one bell rung of three),
+// duck (the crouch before a bound, or the spent droop after a slam).
+function _carillonBells(e, a) {
+  const bs = e.bs;
+  const rising = !!bs.risingAt;
+  const resK = Math.min(1, bs.resonance / RES_CAP);
+  const spin = 1 + resK * 0.9 + (rising ? 0.4 : 0);
+  for (let i = 0; i < bs.bells.length; i++) {
+    const b = bs.bells[i];
+    b.rotation.y += a.dt * (0.6 + i * 0.25) * spin;
+    let s = 0.9 + resK * 0.35 + (rising ? 0.2 : 0);
+    if (bs.bellFlare > 0) s = 1.5 + i * 0.1;
+    // The echo rings bottom bell to top; bs.bellSeq counts the SAMPLES.
+    if (bs.bellSeq >= 0) s = i === 2 - bs.bellSeq ? 1.75 : 0.85;
+    if (bs.bellDuck > 0) s *= 1 - bs.bellDuck * 0.32;
+    b.scale.setScalar(Math.max(0.4, s) * e.scale);
+    // THE BELLS SWING, the tower itself does not - rotation.z on the group is
+    // the dance's own channel and would be overwritten by the weight shift
+    // every frame.
+    b.rotation.z = Math.sin(a.ctx.time * 1.4) * 0.3 * (1 - i * 0.25);
+  }
+  // And the hands play what the bells say: raised for a volley, spread for
+  // the echo, pulled in for the crouch.
+  if (bs.arms) {
+    const spread = 0.3 + bs.bellFlare * 0.45 + (bs.bellSeq >= 0 ? 0.5 : 0) - bs.bellDuck * 0.2;
+    bs.arms[0].rotation.z = spread;
+    bs.arms[1].rotation.z = -spread;
+  }
+}
+
 export function aiCarillon(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
   if (bs.state === undefined) {
     bs.state = 'walk';
-    bs.pealCd = 2.2;
-    bs.pealTell = 0;
+    bs.fx = ctx.effects;
+    bs.mark = -1;
+    bs.rings = [];
     bs.pealN = PEAL_N;
-    bs.tollCd = 5;
-    bs.tollTell = 0;
+    bs.pealCd = 1.8;
+    bs.pealTell = 0;
+    bs.pealEcho = 0;
+    bs.pealEchoN = 0;
+    bs.resonance = 0;
     bs.risingAt = false;
-    bs.swayAng = Math.random() * Math.PI * 2;
+    bs.atkCd = 2.4;
+    bs.rotI = 0;
+    bs.tollCd = 4.5;
+    bs.glissCd = 2;
+    bs.cascadeCd = 3;
+    bs.boundCd = 5;
+    bs.echoCd = 6.5;
+    bs.postAng = Math.random() * Math.PI * 2;
+    bs.postX = e.pos.x;
+    bs.postZ = e.pos.z;
+    bs.postT = 0;
+    bs.t = 0;
+    bs.el = 0;
+    bs.dirX = 0;
+    bs.dirZ = 1;
+    bs.destX = e.pos.x;
+    bs.destZ = e.pos.z;
+    bs.boundDur = 0;
+    bs.cascN = 0;
+    bs.pourT = 0;
+    bs.echoI = 0;
+    bs.echoDoneAt = 0;
+    bs.dashHit = false;
+    bs.dashTrail = 0;
+    bs.bellFlare = 0;
+    bs.bellSeq = -1;
+    bs.bellDuck = 0;
   }
-
-  // Standing on it costs, in every state - the same contract every slow boss
-  // keeps, so hugging the tower is never the fight.
-  bossTouch(e, a);
-
-  // THE BELLS, driven every frame: they turn on the column and flare for a
-  // peal's tell, so the fight's clock is on the boss rather than in anybody's
-  // imagination.
+  bs.fx = ctx.effects;
+  const p = ctx.player;
+  const feared = e.status.fear > 0;
   const rising = !!bs.risingAt;
-  for (let i = 0; i < bs.bells.length; i++) {
-    const b = bs.bells[i];
-    b.rotation.y += a.dt * (0.6 + i * 0.25);
-    if (bs.pealTell > 0) b.scale.setScalar((1.5 + i * 0.1) * e.scale);
-    else b.scale.setScalar((0.9 + (rising ? 0.3 : 0)) * e.scale);
+
+  // Standing on it costs, in EVERY state but the dash - which lands its own,
+  // much larger, hit and must not also bill for the body arriving in it. The
+  // tower is always live, and hugging it is never the fight.
+  if (bs.state !== 'dash') bossTouch(e, a);
+
+  // ---- the rising (one way, once, kept) -------------------------------------
+  // Under a third of the bar the caps come OFF: the peal doubles up, the
+  // resonance cap drops, the tower quickens. The fight should get louder as
+  // it ends, not quieter - the whole theme's argument, arrived at by the boss.
+  if (!bs.risingAt && e.hp <= e.maxHp * RISING_FRAC) {
+    bs.risingAt = true;
+    e.rate *= 0.78;
+    e.speed *= 1.18;
+    e.bodyMat.emissiveIntensity = 0.8;
+    ctx.bossEvent('enrage', e);
+    _bossAt.set(e.pos.x, 1.8, e.pos.z);
+    ctx.effects.burst(_bossAt, 0x9ee8ff, 40, 8, 3, 0.9);
+    ctx.effects.addShake(0.35);
+    if (ctx.sfx) ctx.sfx.tone({ f: 220, f2: 440, t: 0.7, type: 'sine', v: 0.5 });
   }
 
-  // ---- the toll -----------------------------------------------------------
-  // A claim on the floor where it stands: a beat of warning, a pulse at the
-  // radius, then a gapped ring of crystal that SPREADS outward from where it
-  // was laid. The boss walks on and the ring keeps growing behind it, so over
-  // a fight the room fills with glass along the path the player was kiting
-  // the boss down.
-  if (bs.tollTell > 0) {
-    bs.tollTell -= a.dt;
-    a.vx = 0;
-    a.vz = 0;
-    e._setEyeAlert(true);
-    if (ctx.effects) {
+  // The bells' state flags are this frame's slate: the peal clock and the
+  // state machine both write them, and the drive at the bottom reads once.
+  bs.bellFlare = 0;
+  bs.bellSeq = -1;
+  bs.bellDuck = 0;
+
+  // ---- the peal: the fight's metronome --------------------------------------
+  // Its OWN clock, independent of the rotation, and it fires ON THE MOVE -
+  // the tower does not stop to ring. One round wider every volley, and on a
+  // cooldown that shortens as the bar falls, exactly as it always did; what
+  // changed is that it is no longer the only voice.
+  if (bs.pealEcho > 0) {
+    bs.pealEcho -= a.dt;
+    if (bs.pealEcho <= 0) _carillonPealFire(e, ctx, bs.pealEchoN, Math.PI / bs.pealEchoN);
+  }
+  if (bs.pealTell > 0) {
+    bs.pealTell -= a.dt;
+    bs.bellFlare = 1;
+    if (bs.pealTell <= 0) {
+      const n = Math.min(PEAL_N_CAP, bs.pealN);
+      _carillonPealFire(e, ctx, n, 0);
+      bs.pealN += PEAL_N_GAIN;
+      bs.resonance++;
+      bs.pealCd = Math.max(1.0, (rising ? PEAL_CD * 0.6 : PEAL_CD) * e.rate
+        - Math.min(1.4, (1 - e.hp / e.maxHp) * 1.4));
+      // The DOUBLE peal - the second ring half a step on - is the tower
+      // saying what is coming: always under the rising, and on the last notch
+      // before the full ring, so the nova never arrives cold.
+      if (rising || bs.resonance >= RES_CAP - 1) {
+        bs.pealEcho = PEAL_ECHO_T;
+        bs.pealEchoN = n;
+      }
+      if (bs.state === 'walk' || bs.state === 'toll') e._setEyeAlert(false);
+    }
+  } else {
+    bs.pealCd -= a.dt;
+    // Suppressed where its bell-flare would muddy a bigger tell - the dash,
+    // the nova and the recover are the tower's own loudest beats.
+    const quiet = bs.state === 'glissTell' || bs.state === 'dash'
+      || bs.state === 'fullring' || bs.state === 'recover';
+    if (bs.pealCd <= 0 && !quiet && a.dist < 28) {
+      bs.pealTell = PEAL_TELL;
+      e.flash = 0.15;
+      e._setEyeAlert(true);
+      if (ctx.sfx) ctx.sfx.tone({ f: 660, f2: 990, t: 0.24, type: 'sine', v: 0.22 });
+    }
+  }
+
+  // The rotation's clocks tick in EVERY state, so a long tell never delays
+  // what comes after it.
+  bs.tollCd -= a.dt;
+  bs.glissCd -= a.dt;
+  bs.cascadeCd -= a.dt;
+  bs.boundCd -= a.dt;
+  bs.echoCd -= a.dt;
+
+  switch (bs.state) {
+
+    // ---- the gliss: the tell, then the run -------------------------------
+    case 'glissTell': {
+      a.vx = 0;
+      a.vz = 0;
+      e._setEyeAlert(true);
+      faceSnap(e);
+      bs.t -= a.dt;
+      bs.el += a.dt;
+      // THE LANE, full length from the first frame so the AREA reads
+      // instantly and fills so the TIMING reads as it goes.
+      ctx.effects.markSet(bs.mark,
+        e.pos.x + bs.dirX * GLISS_LEN * 0.5, e.pos.z + bs.dirZ * GLISS_LEN * 0.5,
+        GLISS_HALF, 0x9ee8ff, Math.min(1, bs.el / GLISS_TELL),
+        GLISS_LEN / (GLISS_HALF * 2), Math.atan2(-bs.dirX, -bs.dirZ));
+      if (bs.t > 0) break;
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      bs.state = 'dash';
+      bs.t = GLISS_TIME;
+      bs.dashHit = false;
+      bs.dashTrail = 0;
+      e._setEyeAlert(false);
+      ctx.bossEvent('charge', e);
+      _bossAt.set(e.pos.x, 1.4, e.pos.z);
+      ctx.effects.burst(_bossAt, 0x9ee8ff, 20, 6, 2, 0.5);
+      ctx.effects.addShake(0.16);
+      if (ctx.sfx) ctx.sfx.tone({ f: 392, f2: 98, t: 0.5, type: 'sine', v: 0.5 });
+      break;
+    }
+
+    case 'dash': {
+      bs.t -= a.dt;
+      // THE STEP CLAMP HAS TO BE LIFTED, as on every charger: update() caps
+      // the frame's movement at sp*stepMul, and the tower walks at three. Set
+      // each frame, so a slow landing mid-run cannot quietly halve it.
+      e.stepMul = GLISS_SPEED / Math.max(0.5, a.sp);
+      a.vx = bs.dirX * GLISS_SPEED;
+      a.vz = bs.dirZ * GLISS_SPEED;
+      faceSnap(e);
+      bs.dashTrail -= a.dt;
+      if (bs.dashTrail <= 0) {
+        bs.dashTrail = 0.05;
+        _sapAt.set(e.pos.x, 0.6, e.pos.z);
+        ctx.effects.burst(_sapAt, 0x5bd0ff, 3, 2.4, 0.6, 0.3);
+      }
+      // Caught on the lane: the tower itself is the hit, and it rings where
+      // it caught you.
+      if (!bs.dashHit && a.dist < e.radius + 1.0 && _reachY(a) < BOSS_REACH_Y) {
+        bs.dashHit = true;
+        ctx.onHitPlayer(Math.min(GLISS_CAP, e.damage), e.pos, e);
+        ctx.effects.addShake(0.26);
+        _carillonSlam(e, a, SLAM_R, SLAM_CAP, SLAM_PATCH_R, SLAM_PATCH_LIFE);
+        bs.resonance++;
+        bs.glissCd = GLISS_CD * e.rate * (rising ? 0.7 : 1);
+        bs.state = 'recover';
+        bs.t = 0.55;
+        break;
+      }
+      if (bs.t <= 0 || e.blockedBy > 0.05) {
+        // The lane is spent - on its mark, or on whatever stood in the way.
+        // A stopped run is the LONGER beat: that is the player's window, and
+        // it is the bait the lane was there to be.
+        _carillonSlam(e, a, SLAM_R, SLAM_CAP, SLAM_PATCH_R, SLAM_PATCH_LIFE);
+        bs.resonance++;
+        bs.glissCd = GLISS_CD * e.rate * (rising ? 0.7 : 1);
+        bs.state = 'recover';
+        bs.t = e.blockedBy > 0.05 ? 0.95 : 0.55;
+      }
+      break;
+    }
+
+    case 'recover': {
+      // The beat after a committed lane: bells droop, nothing attacks. Short
+      // enough that it is a breath, not a pause - the whole point of the
+      // rebuild is that the breathing ROOM is small.
+      e.stepMul = 1.4;
+      a.vx = 0;
+      a.vz = 0;
+      bs.bellDuck = 0.8;
+      bs.t -= a.dt;
+      if (bs.t <= 0) _carillonDone(bs, e);
+      break;
+    }
+
+    // ---- the echo: their own footsteps, rung back ---------------------------
+    case 'echo': {
+      bs.el += a.dt;
+      bs.t -= a.dt;
+      // THE SAMPLES, three beats apart, each one the player's position of
+      // that instant. A sample the mark pool cannot draw is DROPPED, never
+      // rung blind: the echo you saw is the echo that lands.
+      while (bs.echoI < 3 && bs.el >= 0.1 + bs.echoI * ECHO_STEP) {
+        const i = bs.echoI++;
+        const m = ctx.effects.markAcquire();
+        if (m >= 0) {
+          bs.rings.push({
+            mark: m, x: p.pos.x, z: p.pos.z, r: ECHO_R,
+            sampleAt: bs.el, ringAt: bs.el + ECHO_FUSE, fired: false,
+          });
+        }
+        _bossAt.set(e.pos.x, e.pos.y + 4, e.pos.z);
+        _sapAt.set(p.pos.x, 0.4, p.pos.z);
+        ctx.effects.beam(_bossAt, _sapAt, 0x9ee8ff);
+        ctx.effects.burst(_sapAt, 0x9ee8ff, 6, 2, 1, 0.3);
+        if (ctx.sfx) ctx.sfx.tone({ f: 392 * Math.pow(1.26, i), t: 0.22, type: 'sine', v: 0.3 });
+      }
+      // Planted while it reads; free once the last sample is down - the
+      // detonations belong to the floor by then, not to the tower.
+      if (bs.t > 0) {
+        a.vx = 0;
+        a.vz = 0;
+        e._setEyeAlert(true);
+        bs.bellSeq = Math.max(0, bs.echoI - 1);
+      } else {
+        e._setEyeAlert(false);
+        _carillonSteer(e, a, 0.6);
+      }
+      let ringing = false;
+      for (let i = 0; i < bs.rings.length; i++) {
+        const R = bs.rings[i];
+        if (R.fired) continue;
+        ringing = true;
+        ctx.effects.markSet(R.mark, R.x, R.z, R.r, 0x9ee8ff,
+          Math.min(1, (bs.el - R.sampleAt) / (R.ringAt - R.sampleAt)));
+        if (bs.el < R.ringAt) continue;
+        R.fired = true;
+        ctx.effects.markRelease(R.mark);
+        _sapAt.set(R.x, 0, R.z);
+        ctx.effects.shockwave(_sapAt, 0x5bd0ff, R.r + 0.6, 0.35);
+        ctx.effects.burst(_sapAt, 0x9ee8ff, 20, 6, 2.2, 0.5);
+        ctx.effects.addShake(0.14);
+        if (ctx.sfx) ctx.sfx.tone({ f: 392 * Math.pow(1.26, i) * 0.5, t: 0.4, type: 'sine', v: 0.4 });
+        const ddx = p.pos.x - R.x;
+        const ddz = p.pos.z - R.z;
+        if (Math.hypot(ddx, ddz) < R.r && Math.abs(p.pos.y) < 2.2) {
+          ctx.onHitPlayer(Math.min(ECHO_CAP, e.damage), _sapAt, e);
+        }
+      }
+      if (ringing || bs.el < bs.echoDoneAt) break;
+      bs.rings.length = 0;
+      bs.resonance++;
+      bs.echoCd = ECHO_CD * e.rate * (rising ? 0.7 : 1);
+      e._setEyeAlert(false);
+      _carillonDone(bs, e);
+      break;
+    }
+
+
+    // ---- the cascade: the rain that walks with them -------------------------
+    case 'cascade': {
+      bs.el += a.dt;
+      if (bs.t > 0) {
+        bs.t -= a.dt;
+        a.vx = 0;
+        a.vz = 0;
+        e._setEyeAlert(true);
+        faceSnap(e);
+        if (bs.t <= 0) e._setEyeAlert(false);
+        break;
+      }
+      // POURING - and the tower keeps WALKING while it pours. The rain is one
+      // of the two answers the fight gives to "it used to stand still".
+      _carillonSteer(e, a, 0.55);
+      bs.pourT -= a.dt;
+      if (bs.cascN > 0 && bs.pourT <= 0) {
+        bs.pourT = CASCADE_STEP;
+        bs.cascN--;
+        // THE LEAD, re-read at every pour: it chases where the player IS
+        // GOING, not where they were. The circles are the game's own mortar
+        // warning - the red fill IS the contract - so the cascade does not
+        // dress them up in the theme's own colour.
+        const lead = CASCADE_LEAD + (CASCADE_N - bs.cascN) * 0.04;
+        const tx = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, p.pos.x + p.vel.x * lead));
+        const tz = Math.max(-ARENA_HALF + 2, Math.min(ARENA_HALF - 2, p.pos.z + p.vel.z * lead));
+        ctx.addMortar(tx, tz, CASCADE_R, CASCADE_DELAY, CASCADE_DMG);
+        _bossAt.set(e.pos.x, e.pos.y + 4, e.pos.z);
+        _sapAt.set(tx, 0.4, tz);
+        ctx.effects.beam(_bossAt, _sapAt, 0x9ee8ff);
+        if (ctx.sfx) ctx.sfx.tone({ f: 660 * Math.pow(0.94, CASCADE_N - bs.cascN), t: 0.16, type: 'sine', v: 0.24 });
+      }
+      if (bs.cascN > 0 || bs.pourT > 0) break;
+      bs.resonance++;
+      bs.cascadeCd = CASCADE_CD * e.rate * (rising ? 0.7 : 1);
+      _carillonDone(bs, e);
+      break;
+    }
+
+
+    // ---- the bound: the step across the room -------------------------------
+    case 'boundTell': {
+      a.vx = 0;
+      a.vz = 0;
+      e._setEyeAlert(true);
+      bs.t -= a.dt;
+      bs.el += a.dt;
+      bs.bellDuck = Math.min(1, bs.el / BOUND_TELL);
+      // The landing circle fills across tell AND flight alike, so the clock
+      // the player reads is the whole of it, not a beat of it.
+      ctx.effects.markSet(bs.mark, bs.destX, bs.destZ, BOUND_SLAM_R, 0x9ee8ff,
+        Math.min(1, bs.el / (BOUND_TELL + bs.boundDur)) * 0.85);
+      if (bs.t > 0) break;
+      bs.state = 'bound';
+      bs.t = bs.boundDur * 1.6 + 0.6;
+      bs.dashTrail = 0;
+      e._setEyeAlert(false);
+      if (ctx.sfx) ctx.sfx.tone({ f: 220, f2: 440, t: 0.4, type: 'sine', v: 0.4 });
+      break;
+    }
+
+    case 'bound': {
+      bs.t -= a.dt;
+      bs.el += a.dt;
+      const dx = bs.destX - e.pos.x;
+      const dz = bs.destZ - e.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      e.stepMul = BOUND_SPEED / Math.max(0.5, a.sp);
+      a.vx = (dx / d) * BOUND_SPEED;
+      a.vz = (dz / d) * BOUND_SPEED;
+      // It faces the TRAVEL here, like a thing thrown - the one state where
+      // the tower looks where it is going instead of at you.
+      e.nx = dx / d;
+      e.nz = dz / d;
+      faceSnap(e);
+      bs.bellFlare = 1;
+      ctx.effects.markSet(bs.mark, bs.destX, bs.destZ, BOUND_SLAM_R, 0x9ee8ff,
+        Math.min(1, bs.el / (BOUND_TELL + bs.boundDur)));
+      bs.dashTrail -= a.dt;
+      if (bs.dashTrail <= 0) {
+        bs.dashTrail = 0.06;
+        _sapAt.set(e.pos.x, 0.5, e.pos.z);
+        ctx.effects.burst(_sapAt, 0x5bd0ff, 3, 2, 0.6, 0.3);
+      }
+      if (d > 1.1 && bs.t > 0 && e.blockedBy <= 0.05) break;
+      // LANDING. Wherever it actually stopped - the marked circle, or the
+      // cover that said no - the ring lands there, honest to the last frame.
+      a.vx = 0;
+      a.vz = 0;
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      _carillonSlam(e, a, BOUND_SLAM_R, BOUND_CAP, BOUND_PATCH_R, BOUND_PATCH_LIFE);
+      bs.resonance++;
+      bs.boundCd = BOUND_CD * e.rate * (rising ? 0.7 : 1);
+      bs.state = 'recover';
+      bs.t = 0.6;
+      break;
+    }
+
+
+    // ---- the toll (kept): the claim on the floor where it stands ----------
+    case 'toll': {
+      a.vx = 0;
+      a.vz = 0;
+      e._setEyeAlert(true);
+      bs.t -= a.dt;
       _sapAt.set(e.pos.x, 0.12, e.pos.z);
       ctx.effects.shockwave(_sapAt, 0x5bd0ff, TOLL_R, 0.16);
-    }
-    if (bs.tollTell <= 0) {
+      if (bs.t > 0) break;
       e._setEyeAlert(false);
-      bs.tollCd = (rising ? 6.5 : 9) * e.rate;
+      bs.tollCd = (rising ? 5.5 : TOLL_CD) * e.rate;
       const off = Math.random() * Math.PI * 2;
       // A GAP IN THE RING, rotated at random - the broodmother's rule: a
       // closed ring with the player outside it would be a wall with no side
@@ -913,82 +1628,101 @@ export function aiCarillon(e, a) {
       ctx.effects.shockwave(_sapAt, 0x5bd0ff, TOLL_R + 2, 0.4);
       ctx.effects.addShake(0.2);
       if (ctx.sfx) ctx.sfx.impact();
+      bs.resonance++;
+      _carillonDone(bs, e);
+      break;
     }
-    return;
-  }
 
-  // ---- the peal -----------------------------------------------------------
-  if (bs.pealTell > 0) {
-    bs.pealTell -= a.dt;
-    if (bs.pealTell <= 0) {
-      // THE SPOKES: a ring of rounds, one round wider every time it fires.
-      // The first peal is ten spokes with gaps to walk through; the ninth is
-      // eighteen with none, and the whole fight's arc is that transition.
-      const y = 1.4 * (e.group.scale.y || 1);
-      const n = Math.min(PEAL_N_CAP, bs.pealN);
-      for (let i = 0; i < n; i++) {
-        ctx.addProjectile(
-          e.pos.x, y, e.pos.z, 'carillon', 1, (i / n) * Math.PI * 2
+    // ---- the full ring: the accrual's bill ----------------------------------
+    case 'fullring': {
+      a.vx = 0;
+      a.vz = 0;
+      e._setEyeAlert(true);
+      bs.t -= a.dt;
+      bs.el += a.dt;
+      const k = Math.min(1, bs.el / FULL_TELL);
+      bs.bellFlare = 1;
+      // THE TOLL OF TOLLS, drawn at its full nine metres - with the fill
+      // pulled back by `weight`, because a disc that big at full strength is
+      // a wash over half the fight, and the EDGE is the message.
+      ctx.effects.markSet(bs.mark, e.pos.x, e.pos.z, FULL_R, 0x9ee8ff, k, 1, 0, 0.45);
+      if (bs.t > 0) break;
+      // RING EVERYTHING AT ONCE.
+      ctx.effects.markRelease(bs.mark);
+      bs.mark = -1;
+      e._setEyeAlert(false);
+      _bossAt.set(e.pos.x, 0, e.pos.z);
+      ctx.effects.shockwave(_bossAt, 0x5bd0ff, FULL_R + 1, 0.5);
+      ctx.effects.burst(_bossAt, 0x9ee8ff, 44, 9, 3, 0.9);
+      ctx.effects.addShake(0.45);
+      if (ctx.sfx) {
+        ctx.sfx.wave();
+        ctx.sfx.tone({ f: 131, f2: 65, t: 0.8, type: 'sine', v: 0.55 });
+      }
+      if (a.dist < FULL_R && _reachY(a) < BOSS_REACH_Y) {
+        ctx.onHitPlayer(
+          Math.min(FULL_CAP, e.damage * FULL_DMG_MUL) * (1 - 0.45 * a.dist / FULL_R),
+          e.pos, e
         );
       }
-      bs.pealN += PEAL_N_GAIN;
-      bs.pealCd = (rising ? PEAL_CD * 0.6 : PEAL_CD) * e.rate
-        - Math.min(1.6, (1 - e.hp / e.maxHp) * 1.6);
-      bs.pealCd = Math.max(1.2, bs.pealCd);
-      _bossAt.set(e.pos.x, y, e.pos.z);
-      ctx.effects.burst(_bossAt, 0x9ee8ff, 18, 6, 1.5, 0.4);
+      const n = Math.min(PEAL_N_CAP, bs.pealN) + FULL_SPOKES;
+      const off = Math.random() * Math.PI * 2;
+      const y = 1.4 * (e.group.scale.y || 1);
+      for (let i = 0; i < n; i++) {
+        ctx.addProjectile(e.pos.x, y, e.pos.z, 'carillon', 0.9, off + (i / n) * Math.PI * 2);
+      }
+      // ...and the ground it rang OVER sets as glass - the room the fight
+      // started in is gone, which was the tower's argument from the start.
+      for (let i = 0; i < FULL_PATCHES; i++) {
+        const ang = off + (i / FULL_PATCHES) * Math.PI * 2 + 0.7;
+        const x = e.pos.x + Math.cos(ang) * 5.2;
+        const z = e.pos.z + Math.sin(ang) * 5.2;
+        _sapAt.set(x, 0.4, z);
+        if (ctx.obstacles && _obstacleAt(_sapAt, ctx.obstacles)) continue;
+        ctx.addHazard(x, z, FULL_PATCH_R, FULL_PATCH_LIFE, TOLL_DPS, 'crystal');
+      }
+      bs.resonance = 0;
+      _carillonDone(bs, e);
+      break;
     }
-  } else {
-    bs.pealCd -= a.dt;
-    if (bs.pealCd <= 0 && a.dist < 26) {
-      bs.pealTell = PEAL_TELL;
-      e.flash = 0.15;
-      e._setEyeAlert(true);
+
+    // ---- the walk: the rounds, and the pick ---------------------------------
+    default: {
+      e.stepMul = 1.4;
+      if (!feared) {
+        bs.atkCd -= a.dt;
+        if (bs.atkCd <= 0) {
+          // The accrual's bill comes FIRST, ahead of the whole rotation -
+          // when the tower is wound full, the next thing it does is spend it.
+          if (bs.resonance >= (rising ? RES_CAP_RISING : RES_CAP)) {
+            const m = ctx.effects.markAcquire();
+            if (m >= 0) {
+              bs.mark = m;
+              bs.state = 'fullring';
+              bs.t = FULL_TELL;
+              bs.el = 0;
+              e.flash = 0.2;
+              if (ctx.sfx) ctx.sfx.tone({ f: 131, f2: 262, t: FULL_TELL, type: 'sine', v: 0.45 });
+            } else {
+              bs.atkCd = CAR_GAP;
+            }
+            break;
+          }
+          _carillonPick(e, a);
+        }
+      }
+      // A pick may have consumed the frame; the walk is only the walk.
+      if (bs.state !== 'walk') break;
+      bs.postT -= a.dt;
+      const pdx = bs.postX - e.pos.x;
+      const pdz = bs.postZ - e.pos.z;
+      if (bs.postT <= 0 || Math.hypot(pdx, pdz) < 1.4) _carillonPost(e, a);
+      _carillonSteer(e, a, 1);
+      break;
     }
   }
 
-  // ---- the rising -----------------------------------------------------------
-  // One way, once: under a third of the bar the cap comes off the peal and
-  // the toll doubles up. The fight should get louder as it ends, not quieter -
-  // the whole theme's argument, arrived at by the boss.
-  if (!bs.risingAt && e.hp <= e.maxHp * RISING_FRAC) {
-    bs.risingAt = true;
-    e.rate *= 0.75;
-    e.speed *= 1.2;
-    e.bodyMat.emissiveIntensity = 0.8;
-    ctx.bossEvent('enrage', e);
-    _bossAt.set(e.pos.x, 1.8, e.pos.z);
-    ctx.effects.burst(_bossAt, 0x9ee8ff, 40, 8, 3, 0.9);
-    ctx.effects.addShake(0.35);
-  }
-
-  // ---- the sway, and the walk ----------------------------------------------
-  // A slow arc around the player rather than a straight push: the tolls ring
-  // from different bearings, so the glass is laid along a PATH the player can
-  // read and route around rather than in one spot they have to give up.
-  bs.swayAng += a.dt * 0.22;
-  const p = ctx.player;
-  const tx = p.pos.x + Math.cos(bs.swayAng) * 11;
-  const tz = p.pos.z + Math.sin(bs.swayAng) * 11;
-  const dx = tx - e.pos.x;
-  const dz = tz - e.pos.z;
-  const d = Math.hypot(dx, dz) || 1;
-  a.vx = (dx / d) * a.sp * 0.8;
-  a.vz = (dz / d) * a.sp * 0.8;
-  // THE BELLS SWING, the tower itself does not - rotation.z on the group is
-  // the dance's own channel and would be overwritten by the weight shift
-  // every frame. The bells rock on their own turns instead, which reads as
-  // the thing being played from inside rather than as the whole body lurching.
-  const rock2 = Math.sin(ctx.time * 1.4) * 0.3;
-  for (let i = 0; i < bs.bells.length; i++) {
-    bs.bells[i].rotation.z = rock2 * (1 - i * 0.25);
-  }
-
-  bs.tollCd -= a.dt;
-  if (bs.tollCd <= 0 && a.dist > 5) {
-    bs.tollTell = TOLL_TELL;
-    e.flash = 0.18;
-  }
+  _carillonBells(e, a);
 }
 
 const TYPES = {
@@ -1089,18 +1823,21 @@ const TYPES = {
     build: buildComet, ai: aiComet,
   },
 
-  // THE CARILLON. Slow, and everything dangerous in the room is a clock it
-  // started: the peal widens every time it fires and comes faster as the bar
-  // falls, the toll lays a gapped ring of spreading crystal where it stands,
-  // and the sway walks the whole thing in a slow arc so the glass is laid
-  // along a path. Under a third of the bar the RISING takes the caps off -
-  // the fight's last movement is its loudest, which is the whole theme's
-  // argument arrived at by the boss. No melee block on purpose: it keeps the
-  // Herald's distance and fights with the room, and bossTouch is the whole
-  // answer to a player who walks into it.
+  // THE CARILLON. The theme's whole clock at fight scale, and CONSTANTLY IN
+  // MOTION: it walks between ringing posts, throws itself down a lit lane
+  // (the GLISS), rings the player's own last three steps back at them (the
+  // ECHO), pours a chasing rain down their line of escape (the CASCADE),
+  // crosses the room in one bound onto a marked circle (the BOUND), and still
+  // lays the gapped crystal ring where it stands (the TOLL) - while the spoke
+  // volley (the PEAL) widens on every fire, on its own clock. Everything it
+  // finishes winds the RESONANCE one notch, worn on the bells, and at the cap
+  // the FULL RING spends it all at once. Under a third of the bar the RISING
+  // drops the caps. No melee block on purpose: it keeps its distance and
+  // fights with the room, and bossTouch runs in EVERY state, so hugging the
+  // tower is never the fight.
   carillon: {
     head: { r: 0.44, y: 1.72 },
-    hp: 3400, speed: 2.2, damage: 26, value: 6000, color: 0x1d5d7a, eye: 0x9ee8ff,
+    hp: 3400, speed: 2.9, damage: 26, value: 6000, color: 0x1d5d7a, eye: 0x9ee8ff,
     scale: 2.9, radius: 1.8, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
