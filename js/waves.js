@@ -96,6 +96,7 @@ const ADD_PRESSURE = {
   palecrown: 4,
   forge: 4,
   conductor: 4,    // its pylons already take up the floor
+  miresovereign: 3,  // its wake and rings already take up the floor, and it closes its own distance
   siege: 3,   // its trail, rubble and rings already take up the floor
   herald: 5,
   reliquary: 5,  // its rings already take up the floor

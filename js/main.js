@@ -734,6 +734,12 @@ const MAX_RUBBLE = 8;
 // the number: six is half a volley plus a charge's wake alive at once, and
 // the fight never shares the arena with another theme's clouds.
 const MAX_SPORE = 6;
+// SWAMP's mire shallows - the Sovereign's wake, its dive craters and the
+// undertow's puddles. Sized against the lava and frost trails it shares the
+// thirty creep slots with: the wake drops one every third of a second and the
+// dive adds a crater on top, so this has to absorb a whole crossing without
+// evicting another theme's pools out of the middle of their own shapes.
+const MAX_MIRE = 12;
 // Ground-patch colours. THE FIRST QUESTION a patch of floor has to answer is
 // whose it is, and the shape family answers it first (see creepRadius in
 // effects.js), the PULSE second - hostile patches breathe, the player's are
@@ -834,6 +840,13 @@ const CREEP_RUBBLE = 0x9aa5b1;
 // thing you can SEE hanging in the air, and a second poison-green cloud would
 // read as a vitriol's from across the arena.
 const CREEP_SPORE = 0xa4f0c8;
+// SWAMP's mire. It applies a status, but it wears the theme's own murky olive
+// rather than the slow's cold blue: the frost's ice colour would read as RIME
+// leaking into a swamp, and the whole question this patch answers is WHOSE
+// lake the floor just became. Darker and browner than the blight's acid green
+// and the vitriol's gas green both - standing bog water, not something that
+// was thrown at you.
+const CREEP_MIRE = 0x6a7433;
 // How long the player keeps burning after stepping OUT of lava. Short: the
 // tail is meant to be the last thing that catches someone who cut a corner,
 // not a second pool that follows them around the arena. It is refreshed every
@@ -874,6 +887,10 @@ const SPIT_CONFIG = {
   well: SPIT_WELL,
 };
 const FROST_CHILL_SECONDS = 3;
+// The mire's tail. Under the frost's: bog water grips while you are in it and
+// lets go quick when you are out, which keeps a whole crossed arena from
+// being one permanent slow.
+const MIRE_SOAK_SECONDS = 1.6;
 
 // WHAT EACH KIND OF BAD GROUND IS. One row per kind, read by _addHazard and
 // _updateHazard, so a new hazard is a row here rather than a branch in both.
@@ -1042,6 +1059,15 @@ const HAZARD_KINDS = {
   // to stand in, and they have to read from across the arena.
   spore: {
     color: CREEP_SPORE, cap: MAX_SPORE, cloud: true,
+  },
+  // SWAMP's mire shallows. NOTHING but the water's grip: the slow is the
+  // whole payload, the frost's argument in the swamp's own colour - a patch
+  // that also bled the player would be a worse pool, and what it costs is the
+  // ability to answer everything else the Sovereign is doing. The tail is
+  // shorter than the frost's: marsh water shakes off, ice does not.
+  mire: {
+    color: CREEP_MIRE, cap: MAX_MIRE,
+    status: 'slowness', secs: MIRE_SOAK_SECONDS,
   },
 };
 // THINGS THE PLAYER HAS LEFT IN THE ARENA, all kinds together. FALLING SKY

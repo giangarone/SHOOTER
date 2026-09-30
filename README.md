@@ -616,14 +616,27 @@ context. The start screen says so, and one click anywhere fixes it.
   their high orbit, hover visibly before a paired dart shot, then climb and
   retreat. Their four amber wings and long tails distinguish them overhead.
   **THE MIRE SOVEREIGN** carries a drowned cypress grove on a vast crocodilian
-  back. It stalks between three attacks: a straight jaw rush down a marked
-  lane, a horseshoe of staggered bog eruptions around a captured position,
-  and a broad reed-dart fan. Every attack has a wind-up and ends with 1.8
-  seconds of exposed throat: the jaw drops, the amber throat swells, and its
-  35% damage resistance comes off. At half health the ranged patterns widen
-  and stalking pauses shorten; warnings and recovery stay full length.
-  Rushes stop at cover and their speed is capped so later waves cannot outrun
-  the warning. The bog's open side and the fan's gaps remain escape routes.
+  back, and it does not hold a corner: it wades the arena, and the floor it
+  crosses stays mire behind it - bog water that grips your stride without
+  drawing blood. Touching the body hurts at all times, on a cooldown of its
+  own. Five casts, each with a plain telegraph, each answered by movement
+  rather than ammunition: the **MUD CRUSH** (it rears onto splayed claws and
+  slams a jumpable amber ring around itself, then spits a fan of bog light
+  down the bearing you fled on), the **REED BURST** (a ring of amber buds
+  rises around where you were and fires as staggered nails, closing from the
+  far side of its one gap - enraged, the gap closes instead), the **BOG DIVE**
+  (it sinks and the mire itself slides at you as a lit wake, committed to a
+  heading per leg and re-read between them, then erupts - cross the wake,
+  don't run with it), the **UNDERTOW** (it plants, breathes in, and two rings
+  drag you toward the jaw - the pull ramps and a hop slips it - then it snaps
+  at whatever the inner ring still holds), and the **GULP OF LIGHT** (the
+  throat pods fill and it swallows the marsh lights back out as a dart fan on
+  your old bearing, then gulps again aimed at where you actually went). Every
+  cast ends with the throat exposed and its 35% damage resistance off - the
+  dive's is the longest window, the undertow's the shortest. At half health
+  the fight enrages: cooldowns tighten, the reed gap closes and every fan
+  widens. No shield, no bigger bar - the pressure is ground and frequency,
+  and the answer is to keep moving.
 - **FUNGAL: wine-coloured caps, luminous mint gills and woody mycelium.**
   **Buttonlings** raise their caps before a short radial spore clap; leave
   the marked circle before it closes. **Gillspitters** alternate a two-spore
