@@ -7,11 +7,11 @@ export default definePassiveItem(({ GOOD, BAD, NOTE, step, pctUp, pctDown, secs 
     max: 3,
     theme: 0xffab40,
     effects: (n) => [
-      [step(n, pctUp(10)) + ' OF SHOTS', GOOD],
+      [step(n, pctUp(30)) + ' OF SHOTS', GOOD],
       ['DRAW FROM THE RESERVE', NOTE],
       ['SO YOU RELOAD LESS', NOTE],
     ],
-    apply: (mods, n) => { mods.beltFeed = 0.1 * n; },
+    apply: (mods, n) => { mods.beltFeed = 0.3 * n; },
 }));
 
 export const icon = [
