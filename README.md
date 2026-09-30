@@ -937,20 +937,19 @@ context. The start screen says so, and one click anywhere fixes it.
   and rings you in burning brands with exactly one slot left dark. It walks
   the room through all of it, the pause between ceremonies is half a second,
   and under a third of the bar even that goes away. **THE BROODMOTHER**,
-  HIVE's, is a nursery: she is slow and nearly harmless in herself - a melee
-  swing, a bite, nothing more - and everything dangerous in the room is
-  something she made. Grubs arc in on a timer, land under a filling circle
-  and fight as ordinary rushers once they are down, three at most, refilled
-  for as long as she lives. Her back bulbs swell toward the next refill and
-  FLARE before she throws the volley - the spitter's own fan at boss scale,
-  so the player already knows how to read it. And every so often she stops,
-  the floor around her pulses, and a gapped ring of honey is laid where she
-  stands: she walks on and the ring stays behind, so over a fight the room
-  fills with pockets of burning honey exactly where she has been. Under a
-  quarter of the bar she EATS her own brood for a burst of speed - the only
-  enrage in the game that costs the boss something the player can watch it
-  pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. **THE RELIQUARY**, CATHEDRAL's, was rebuilt as THE OFFICE:
+  HIVE's, is the nursery turned predator: she is never still, stalking a ring
+  around the player with sudden sideways skitters, and her touch costs from
+  the first second to the last. The brood trickles out as always - grubs arc
+  in under filling circles - but now she also throws the BURST, three of them
+  at once in a ring around you; the BOMBARD, a walking line of honey mortars
+  that land as burning ground; the SWEEP, a planted fan that turns through an
+  arc between casts; and the RUSH, a telegraphed lane she charges down at
+  full pelt with her abdomen smearing honey the whole way. Stand on her too
+  long and the NOVA answers: a disc fills at her feet, the slam lands on
+  everything grounded inside it, and a gapped ring of honey pens in whoever
+  stayed. Under a quarter of the bar she EATS her own brood for speed - the
+  only enrage in the game that costs the boss something the player can watch
+  it pay. **THE RELIQUARY**, CATHEDRAL's, was rebuilt as THE OFFICE:
   a liturgy of six rites said over the room, every one telegraphed on the
   model and on the floor, and the shrine CIRCLES the nave between them
   instead of holding a corner. The VOLLEY is the curate's processional fan
@@ -3410,8 +3409,10 @@ test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
                     half plated AND its back half not, killed slow AND killed
                     fast, the carapace cheaper through AND still stacked
                     after the nurse is dead, the weeper's arc costing on the
-                    line AND nothing off it, and the Broodmother eating her
-                    own brood to panic
+                    line AND nothing off it, and the Broodmother moving -
+                    a rush that crosses its own telegraphed lane, a nova that
+                    hits the grounded and spares whoever is outside it, and
+                    the brood eaten to panic under a quarter of the bar
 test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
                     the assertions are about thresholds: the penitent visibly
                     kneeling and taking 30% less damage there, the curate's
