@@ -295,7 +295,7 @@ export const CARRION_HP = 0.4;
 // What it will raise. Bosses and the inert helper types are excluded for the
 // conduit's reason - an extra boss nobody can see the source of - and so is
 // anything already raised once, which is what `revenant` is for.
-export const CARRION_SKIP = new Set(['carrion', 'anchor', 'pylon', 'turret']);
+export const CARRION_SKIP = new Set(['carrion', 'pylon', 'turret']);
 
 export function aiCarrion(e, a) {
   const ctx = a.ctx;

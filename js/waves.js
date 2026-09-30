@@ -93,7 +93,7 @@ const ADD_PRESSURE = {
   carillon: 3,     // the tolls already take up the floor, and they spread
   colossus: 4,
   maw: 3,     // its rings, lanes and rifts already take up the floor
-  palecrown: 4,
+  palecrown: 3,   // its telegraphs already take up the floor, and it chases
   forge: 4,
   conductor: 4,    // its pylons already take up the floor
   miresovereign: 3,  // its wake and rings already take up the floor, and it closes its own distance

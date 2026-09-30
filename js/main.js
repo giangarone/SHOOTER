@@ -1890,11 +1890,11 @@ class Game {
       // Colossus throwing one of its turrets. It is a real enemy, spawned
       // mid-air with its flight already set - see _spawnTurret.
       addTurret: (fx, fy, fz, tx, tz) => this._spawnTurret(fx, fy, fz, tx, tz),
-      // The Pale Crown driving one of its anchors into the floor. Also a real
-      // enemy, and unlike every other spawn hook this one RETURNS it: the boss
-      // has to hold references to its three, because the shell comes down when
-      // all three are dead and a count of live anchors in the arena would be
-      // wrong the moment two shells overlapped.
+      // A boss driving one of its own objects into the floor: the Conductor's
+      // pylons, the Broodmother's brood. Also a real enemy, and unlike every
+      // other spawn hook this one RETURNS it, because the boss has to hold
+      // references to what it placed - a count of live pylons in the arena
+      // would be wrong the moment two casts overlapped.
       addAnchor: (x, z, type) => this._spawnAnchor(x, z, type),
       // PLAGUE's carrion putting a body back on its feet. A separate hook from
       // addAnchor because what it makes is a REAL ENEMY of a real type, scaled
@@ -5398,19 +5398,18 @@ class Game {
     bf.addTimer -= dt;
     if (bf.addTimer > 0) return;
     bf.addTimer = bf.addInterval;
-    // Turrets, anchors, pylons and grubs are the boss's own attack, not
-    // adds, and must not eat the trickle budget: three of them standing
-    // would otherwise stop the wave sending anything else at all. It matters
-    // more for the Pale Crown's anchors than it ever did for Colossus's
-    // turrets - the anchors are up for most of that fight, so counting them
-    // would mean the Crown's shell phases were also its quiet phases, which
-    // is the opposite of the intent. A grub is here for the same reason: a
+    // Turrets, pylons and grubs are the boss's own attack, not adds, and must
+    // not eat the trickle budget: three of them standing would otherwise stop
+    // the wave sending anything else at all. It matters more for the
+    // Conductor's pylons than it ever did for Colossus's turrets - the pylons
+    // are up for most of that fight, so counting them would mean the
+    // Conductor's wired phases were also its quiet phases, which is the
+    // opposite of the intent. A grub is here for the same reason: a
     // Broodmother refilling her brood should never silence the wave's own
     // trickle, and neither should an oviger's eggs.
     let adds = this.enemies.length - bf.parts.length;
     for (const e of this.enemies) {
-      if (e.type === 'turret' || e.type === 'anchor' || e.type === 'pylon'
-        || e.type === 'grub') adds--;
+      if (e.type === 'turret' || e.type === 'pylon' || e.type === 'grub') adds--;
     }
     if (adds >= bf.maxAdds) return;
     this.spawnEnemy(pickAddType(this.wave, this._themeSeed, HAVE_TYPE, this._forcedTheme));
@@ -5522,15 +5521,14 @@ class Game {
     this.enemies.push(e);
   }
 
-  // One of the Pale Crown's anchors, driven in where the boss asked rather than
-  // at a spawn point - the whole mechanic is that they are spread around the
-  // ARENA and have to be crossed to. Returns it so the boss can hold it.
-  // TAKES THE TYPE, because two bosses now drive things into the floor and
-  // they are not the same object: the Pale Crown's anchor is a lock on its
-  // shell and the Conductor's pylon is one end of a wire. Both are inert, both
-  // are spawned by their boss and both are excluded from the add budget, which
-  // is the whole reason they share a hook - the type is what they differ by.
-  _spawnAnchor(x, z, type = 'anchor') {
+  // One of a boss's planted objects, driven in where the boss asked rather
+  // than at a spawn point. Returns it so the boss can hold it.
+  // TAKES THE TYPE, because two families drive things into the floor and they
+  // are not the same object: the Conductor's pylon is one end of a wire and a
+  // Broodmother's grub is hers to call home. Both are inert, both are spawned
+  // by their boss and both are excluded from the add budget, which is the
+  // whole reason they share a hook - the type is what they differ by.
+  _spawnAnchor(x, z, type) {
     const at = new THREE.Vector3(x, 0, z);
     // Scaled by health only. An anchor never moves and never hits, so speed
     // and damage scaling would be multiplying zero.

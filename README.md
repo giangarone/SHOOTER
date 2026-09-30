@@ -864,15 +864,23 @@ context. The start screen says so, and one click anywhere fixes it.
   moment, and under half the bar every clock shortens and the charge comes
   back for a second pass. And the one thing carried over untouched: you still
   choose its damage window - its canopy is shut and armoured at any range and
-  OPENS when you come inside sixteen metres, no clock on it at all, so the
-  whole fight is the two of you arguing about the distance. **THE PALE CROWN**, RIME's, is the one fight in
-  the rotation that is not about the boss: it spends most of itself inside a
-  shell that takes NOTHING at all, and the way in is never the boss - three
-  anchors go into the floor with the shell, and breaking all three is what
-  brings it down. So the fight alternates between two completely different
-  jobs, and the shell has no clock on it: a player who finds the anchors fast
-  is paid in a longer window rather than the same window later. Three shells,
-  each with the arena a little more frozen than the last. The **FORGE-TYRANT**,
+  OPENS when they come inside sixteen metres, no clock on it at all, so the
+  whole fight is the two of you arguing about the distance. **THE PALE CROWN**, RIME's, is the rotation's
+  fastest fight and the purest statement of the theme: RIME spends the PLAYER
+  rather than the floor, so everything the Crown does either lays cold ground
+  or punishes you for standing on it. Five telegraphed attacks off a shuffled
+  bag, never the same one twice in a row, resting about a second between them:
+  an aimed lance fan fired twice with a re-aim between the volleys - five
+  lances wide instead of three whenever you are CHILLED, because the theme's
+  cold is what loads its gun; a glacier rush down a lane it draws to the far
+  wall, crossing the whole arena and freezing the corridor behind it, and below
+  half the bar it stops only to re-aim and come down the lane again; a nova
+  that answers hugging, chilling whatever it catches and freezing the rim it
+  opens; a gapped ring of icicles snapped shut around wherever you are
+  standing; and a rain of strikes that lands where you were and then where you
+  WENT. No shell, no damage gate anywhere in it - the floor is the Crown's
+  defence, and body contact always costs. The **FORGE-TYRANT**,
+
   EMBER's, is the mirror of
   the Colossus: it HEATS UP as it fights, gaining an attack at each third of
   the bar - a sweeping bar of flame on the beat, then a wall of fire at a fixed
@@ -3357,12 +3365,14 @@ test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     Forge-Tyrant heating up and venting
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
-                    the hoarfrost's field, and the Pale Crown's anchors
+                    the hoarfrost's field, and the Pale Crown's five
+                    telegraphed attacks, touch and clock
 test/candy.mjs      CANDY counterplay, musical support, shell loss and the
                     Confectioner's five-pattern fight: lanes returned on death,
                     every dodge answered, every tell held honest
 test/fungal.mjs     FUNGAL growth patterns, bounded healing, the Spore Regent's
                     six-attack deck, contact rule and warning exhaustion
+
 test/insects.mjs    INSECTS committed charges, pheromone links, boss patterns and warning cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/coral.mjs      CORAL captured patterns, healing, boss openings and warning ownership

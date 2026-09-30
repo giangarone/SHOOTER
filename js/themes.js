@@ -120,7 +120,8 @@ export const THEMES = {
     },
   },
 
-  // Brittle cold. Everything here has a shell, and the shell is the mechanic.
+  // Brittle cold. Everything here has a crust, and the crust is the mechanic -
+  // the boss is the one thing that sheds it and never stops moving.
   rime: {
     name: 'RIME',
     color: 0x63b3ff,

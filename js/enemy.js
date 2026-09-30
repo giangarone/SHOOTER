@@ -1425,9 +1425,9 @@ export class Enemy {
       // STATE rather than a facing it has to be. A constant is right for the
       // Bulwark, whose plate is a direction - there is no sensible facing for
       // a poison tick, so the type picks a number and lives with it. It is
-      // wrong for armour that turns on and off: the Pale Crown's shell reads
-      // zero, and as a constant that made the boss immune to fire, poison and
-      // every blast in the game for the whole fight, shell up or not. The
+      // wrong for armour that turns on and off: Ossarch's plates thin as they
+      // shed, and as a constant that made the boss immune to fire, poison and
+      // every blast in the game for the whole fight - window open or not. The
       // glacier had the mirror of it - its crust went on halving damage over
       // time long after the crust had shattered.
       d *= (dirX || dirZ || point)
