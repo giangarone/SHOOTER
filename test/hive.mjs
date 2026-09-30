@@ -380,44 +380,173 @@ try {
     }
 
     // ---- 7. the Broodmother ----------------------------------------------
+    // The fight now MOVES: she stalks a band, crosses the room on a rush,
+    // and runs five committed attacks. Measured the suite's own way - the
+    // thing with the mechanic against the thing without it: the nova on a
+    // grounded target against one outside it, the rush's travel against the
+    // tell that committed it, the burst's three eggs against the trickle's
+    // one.
     {
       clean();
-      const e = put('broodmother', 10, 0);
-      e.speed = 0;
+      // The lane has to be honest ground for the rush assertions below.
+      g._enemyCtx.obstacles = [];
+      const { BROOD_TOTAL_MAX } = await import('./js/enemies/hive.js');
+      const e = put('broodmother', 12, 0);
       e.rate = 1;
       px = 0;
       pz = 0;
+      // Phase A: free-roam watch. Nothing forced - whatever she does is the
+      // fight doing it. The assertions are on VOLUME OF BEHAVIOUR: the walk
+      // band keeps her circling, the book opens more than once, the fan and
+      // the rings still ride underneath, and the brood spends but is capped.
       let maxGrubs = 0;
       let sawRing = false;
       let sawVolley = false;
-      let panicked = false;
-      for (let i = 0; i < 2600; i++) {
+      const states = new Set();
+      let lastX = e.pos.x;
+      let lastZ = e.pos.z;
+      let travel = 0;
+      for (let i = 0; i < 900; i++) {
         await step();
-        e.pos.set(10, e.pos.y, 0);
+        states.add(e.bs.state);
+        travel += Math.hypot(e.pos.x - lastX, e.pos.z - lastZ);
+        lastX = e.pos.x;
+        lastZ = e.pos.z;
         maxGrubs = Math.max(maxGrubs, g.enemies.filter((q) => q.type === 'grub' && !q.dead).length);
-        if (g._hazard.some((h) => h.kind === 'hiveblood')) sawRing = true;
+        // ringTell is the ring's own clock; slick honey from a rush must not
+        // stand in for the ring she PLANTS.
+        if (e.bs.ringTell > 0) sawRing = true;
         if (g.projectiles.some((q) => q.type === 'broodmother')) sawVolley = true;
-        // THE PANIC. Walked to the threshold by hand, the way the schism
-        // suite walks its splits: the AI has to notice on its own, and the
-        // brood it eats has to be real brood, so the grubs are left alive
-        // until the moment the threshold is crossed.
-        if (!panicked) {
-          e.hp = e.maxHp * 0.2;
-          if (e.bs.panicAt && e.bs.brood.length === 0 && maxGrubs > 0) panicked = true;
-        }
-        // Not finished until the brood has REFILLED after the meal - a
-        // peak of one grub proves a first throw and nothing about the
-        // nursery, and the cap is only observable once it has been
-        // reached for.
-        if (panicked && sawRing && sawVolley && maxGrubs >= 2) break;
+        if (sawRing && sawVolley && maxGrubs >= 3) break;
       }
+      res.bmStates = [...states];
+      res.bmTravel = +travel.toFixed(1);
       res.bmGrubs = maxGrubs;
       res.bmRing = sawRing;
       res.bmVolley = sawVolley;
+      res.bmGrubCap = maxGrubs <= BROOD_TOTAL_MAX;
+
+      // Phase B: the rush, armed by hand. dist > 8 gates it onto the book.
+      clean();
+      g._enemyCtx.obstacles = [];
+      const r = put('broodmother', 12, 0);
+      r.rate = 1;
+      px = 0;
+      pz = 0;
+      await steps(3);
+      r.bs.state = 'walk';
+      r.bs.t = 0;
+      r.bs.attack = r.bs.attacks.indexOf('rush');
+      let sawTell = false;
+      let warned = false;
+      let rushFrom = null;
+      let rushTravel = 0;
+      let slickBefore = 0;
+      let slickAfter = 0;
+      for (let i = 0; i < 600; i++) {
+        await step();
+        if (r.bs.state === 'rushTell') {
+          sawTell = true;
+          if (r.bs.mark >= 0) warned = true;
+        }
+        if (r.bs.state === 'rush') {
+          if (rushFrom === null) {
+            rushFrom = r.pos.x;
+            slickBefore = g._hazard.length;
+          }
+          rushTravel = Math.max(rushTravel, Math.abs(r.pos.x - rushFrom));
+        }
+        if (sawRushTravelDone()) break;
+      }
+      function sawRushTravelDone() { return sawTell && (r.bs.state === 'walk' || r.bs.state === 'recover'); }
+      slickAfter = g._hazard.length;
+      res.bmRushTell = sawTell && warned;
+      res.bmRushTravel = +rushTravel.toFixed(1);
+      res.bmRushSlick = slickAfter > slickBefore;
+
+      // Phase C: the burst. Brood emptied first so the book opens on it.
+      clean();
+      g._enemyCtx.obstacles = [];
+      const b = put('broodmother', 12, 0);
+      b.rate = 1;
+      px = 0;
+      pz = 0;
+      await steps(3);
+      b.bs.state = 'walk';
+      b.bs.t = 0;
+      b.bs.attack = b.bs.attacks.indexOf('burst');
+      let peakFlight = 0;
+      for (let i = 0; i < 400; i++) {
+        await step();
+        peakFlight = Math.max(peakFlight,
+          g.enemies.filter((q) => q.type === 'grub' && !q.dead && q.eggT !== undefined).length);
+        if (peakFlight >= 3) break;
+      }
+      res.bmBurst = peakFlight;
+
+      // Phase D: the nova, both ways. Pinned near enough that the disc fills
+      // with the player inside it vs. outside it. Measured on the boss's own
+      // frames only: the loop ends the frame the slam lands, before the walk
+      // band can put anything else in the air.
+      const novaRun = async (playerX) => {
+        clean();
+        g._enemyCtx.obstacles = [];
+        const n = put('broodmother', 2, 0);
+        n.rate = 1;
+        px = playerX;
+        pz = 0;
+        n.pos.set(2, n.pos.y, 0);
+        await steps(3);
+        n.bs.state = 'walk';
+        n.bs.t = 0;
+        n.bs.attack = n.bs.attacks.indexOf('nova');
+        let sawN = false;
+        let lost = 0;
+        {
+          god = false;
+          p.health = p.maxHealth;
+          p.invulnEnd = -1;
+          const h0 = p.health;
+          for (let i = 0; i < 240; i++) {
+            await step();
+            n.pos.set(2, n.pos.y, 0);
+            if (n.bs.state === 'novaTell') sawN = true;
+            else if (sawN) break;
+          }
+          lost = +(h0 - p.health).toFixed(2);
+          god = true;
+          p.health = p.maxHealth;
+        }
+        return { lost, sawN };
+      };
+      const onNova = await novaRun(6);
+      const offNova = await novaRun(9.5);
+      res.bmNovaTell = onNova.sawN && offNova.sawN;
+      res.bmNovaOn = onNova.lost;
+      res.bmNovaOff = offNova.lost;
+
+      // Phase E: the panic, as before - walked to the threshold by hand,
+      // brood left alive until the moment the bar crosses.
+      clean();
+      g._enemyCtx.obstacles = [];
+      const q0 = put('broodmother', 12, 0);
+      q0.rate = 1;
+      px = 0;
+      pz = 0;
+      q0.pos.set(12, q0.pos.y, 0);
+      let panicked = false;
+      let hadGrubs = 0;
+      for (let i = 0; i < 1200; i++) {
+        await step();
+        q0.pos.set(12, q0.pos.y, 0);
+        hadGrubs = Math.max(hadGrubs, q0.bs.brood.length);
+        if (!panicked) {
+          q0.hp = q0.maxHp * 0.2;
+          if (q0.bs.panicAt && q0.bs.brood.length === 0 && hadGrubs > 0) panicked = true;
+        }
+        if (panicked) break;
+      }
       res.bmPanic = panicked;
-      // THE PANIC ATE THE BROOD: the enrage cost her something. Grubs
-      // consumed by it are paid nothing, so the payout cannot be farmed by
-      // leaving the brood alive on purpose.
       res.bmGrubValue = g.enemies.filter((q) => q.type === 'grub')
         .reduce((m, q) => Math.max(m, q.value), 0);
       clean();
@@ -464,10 +593,16 @@ try {
   ok('and standing off the arc costs nothing',
     out.weepOff === 0, `lost=${out.weepOff}`);
 
-  ok('the Broodmother keeps a brood', out.bmGrubs > 0, `peak=${out.bmGrubs}`);
-  ok('and the brood is capped', out.bmGrubs <= 3, `peak=${out.bmGrubs}`);
-  ok('and she calls rings of honey', out.bmRing);
-  ok('and she throws the volley', out.bmVolley);
+  ok('the Broodmother still keeps and caps her brood', out.bmGrubs > 0 && out.bmGrubCap, `peak=${out.bmGrubs}`);
+  ok('she stalks instead of standing in a corner', out.bmTravel > 20, `travel=${out.bmTravel}m states=${out.bmStates.join(',')}`);
+  ok('and runs more than one kind of attack', out.bmStates.length >= 3, out.bmStates.join(','));
+  ok('and she still throws the fan and calls rings', out.bmVolley && out.bmRing);
+  ok('the rush warns with a lane before it goes', out.bmRushTell);
+  ok('and the rush crosses the lane it drew', out.bmRushTravel > 6, `travel=${out.bmRushTravel}m`);
+  ok('and the lane it crossed is left burning', out.bmRushSlick);
+  ok('the burst throws a ring of grubs in one breath', out.bmBurst >= 3, `eggs=${out.bmBurst}`);
+  ok('the nova visits the grounded', out.bmNovaOn > 0, `lost=${out.bmNovaOn}`);
+  ok('and spares whoever is outside it', out.bmNovaTell && out.bmNovaOff === 0, `lost=${out.bmNovaOff}`);
   ok('and under a quarter bar she eats the brood and panics', out.bmPanic);
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));

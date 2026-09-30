@@ -12,8 +12,10 @@
 
 import * as THREE from 'three';
 import {
-  ENEMY_TYPES, SHARED_MATS, _blinkAt, aiMelee, eyes, geo, lump, orbit,
-  partsFor, prism, releaseMarks, shard, slab, spike,
+  ARENA_HALF, BOSS_REACH_Y, BOSS_TOUCH_CAP, BOSS_TOUCH_CD, ENEMY_TYPES,
+  SHARED_MATS, _blinkAt, aiMelee, bossTouch, capturedShot, eyes, faceSnap,
+  geo, lump, orbit, partsFor, prism, releaseMarks, segBlocked, shard, slab,
+  snapAim, spike,
 } from './shared.js';
 
 // What a glacier's ice takes off a hit while the crust is still on. Up here
@@ -289,38 +291,10 @@ export function buildSleet(e, g, s) {
   eyes(P, { y: 0.08, x: 0.11, z: -0.44, r: 0.85, mat: e.eyeMat });
 }
 
-// A squat bolted-down box with one barrel. It must not read as anything else
-// in the roster: nothing else in the game is a machine sitting on the floor,
-// and the silhouette is low and wide on purpose so a live one is obvious from
-// across the arena and a dead one leaves nothing to trip over.
-// A spike of ice driven into the floor. It has to read as SCENERY THAT MATTERS
-// from across the arena - the player is looking for three of these in a room
-// that is actively freezing - so it is tall, bright, and shaped like nothing
-// else in the game.
-export function buildAnchor(e, g, s) {
-  const P = partsFor(e, g, s);
-  // Tall and narrow, driven in at a slight cant so it does not read as a
-  // pillar the terrain generator put there.
-  P('anchorSpire', spike(0.3, 1.9, 5), { y: 0.95, rz: 0.09, mat: SHARED_MATS.rimeIce });
-  P('anchorBase', prism(0.44, 0.56, 0.22, 6), { y: 0.11 });
-  // Smaller spurs around the foot, angled out - the splash where it went in.
-  const spurGeo = spike(0.13, 0.6, 4);
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + 0.4;
-    P('anchorSpur', spurGeo, {
-      x: Math.cos(a) * 0.34, y: 0.3, z: Math.sin(a) * 0.34,
-      rz: Math.cos(a) * -0.6, rx: Math.sin(a) * 0.6, mat: SHARED_MATS.rimeIce,
-    });
-  }
-  // THE LIGHT INSIDE IT, and the only part that is not ice: it is what tells
-  // the player this is a target and not a rock, and it dies with the anchor.
-  P('anchorHeart', shard(0.2), { y: 0.86, mat: e.eyeMat, shadow: false });
-}
-
-// RIME's boss: the theme's crust language at boss scale, plus the one thing no
-// ordinary RIME enemy has - a shell that closes over the WHOLE body. Held on
-// the enemy so aiPaleCrown can raise and drop it, the same way the Forge's
-// shutters are held.
+// RIME's boss: the theme's crust language at boss scale. The plates that once
+// made its invulnerability are now its BODY LANGUAGE - they say a nova is
+// being charged, never that the boss cannot be hurt, because nothing about
+// this fight gates damage any more.
 export function buildPaleCrown(e, g, s) {
   const P = partsFor(e, g, s);
   // A tall narrow core: it should look like something that has been ENCASED
@@ -329,8 +303,13 @@ export function buildPaleCrown(e, g, s) {
   P('crownBody', prism(0.4, 0.52, 1.2, 5), { y: 0.72 });
   P('crownChest', shard(0.34), { y: 1.24, z: -0.16 });
   P('crownHead', spike(0.24, 0.5, 5), { y: 1.72 });
-  P('crownArm', slab(0.2, 0.86, 0.2), { x: -0.62, y: 1.0, rz: 0.26 });
-  P('crownArm', slab(0.2, 0.86, 0.2), { x: 0.62, y: 1.0, rz: -0.26 });
+  // The arms are kept so the ai can raise them: arms up means something is
+  // coming DOWN - its rain or its ring - the one posture that reads from
+  // anywhere in the arena without looking at the floor.
+  e.crownArms = [
+    P('crownArm', slab(0.2, 0.86, 0.2), { x: -0.62, y: 1.0, rz: 0.26 }),
+    P('crownArm', slab(0.2, 0.86, 0.2), { x: 0.62, y: 1.0, rz: -0.26 }),
+  ];
   P('crownLeg', slab(0.2, 0.5, 0.2), { x: -0.26, y: 0.24 });
   P('crownLeg', slab(0.2, 0.5, 0.2), { x: 0.26, y: 0.24 });
 
@@ -345,12 +324,17 @@ export function buildPaleCrown(e, g, s) {
     });
   }
 
-  // THE SHELL. Big plates closing over everything, hidden until it raises one.
-  // Collected so the ai can show and hide the whole set in a frame - like the
-  // glacier's crust, and for the same reason: the moment it goes is an event
-  // and must not be a fade.
+  // THE PLATES. Big pale plates closing over the body, hidden except for the
+  // half-second the nova is charging - the Crown visibly OPENING them is the
+  // tell. Kept on the enemy so the ai can raise and drop the whole set in a
+  // frame, and the resting height of each is remembered here because the ai
+  // lifts them by an offset, never to an absolute.
   e.shellParts = [];
-  const plate = (key, geo, o) => e.shellParts.push(P(key, geo, { ...o, mat: SHARED_MATS.rimeIce }));
+  const plate = (key, geo, o) => {
+    const m = P(key, geo, { ...o, mat: SHARED_MATS.rimeIce });
+    m.userData.oy = m.position.y;
+    e.shellParts.push(m);
+  };
   plate('crownShellA', shard(0.78), { y: 1.06, sz: 0.8 });
   plate('crownShellB', shard(0.6), { y: 1.62, sz: 0.8, ry: 0.7 });
   plate('crownShellC', shard(0.56), { y: 0.5, sz: 0.85, ry: 1.3 });
@@ -532,160 +516,500 @@ export function aiSleet(e, a) {
 }
 
 // ---- the Pale Crown ---------------------------------------------------------
-// Three shells, at the top of the bar and at two thirds and a third. Each one
-// puts three anchors in the floor and takes nothing at all until they are
-// broken - so the shell has no clock on it, and a player who finds them fast
-// is paid in a longer window rather than the same window later.
-export const CROWN_SHELLS = [1.0, 0.67, 0.34];
+// RIME's boss is the whole theme condensed to one body, and it is SHARP. The
+// theme spends the player rather than the floor - its ground chills you, and
+// a chilled player is a marked one - so everything the Crown does either lays
+// cold ground or punishes you for standing on it. There is no shell and no
+// pause: it is always the player's turn to dodge, never the boss's turn to be
+// a wall. Nothing here gates damage.
+//
+// Five attacks off a shuffled bag, never the same one twice in a row, on a
+// rest of about a second between them - the fastest clock of any boss in the
+// game, because pressure is what the Crown has INSTEAD of a health gate:
+//
+//   fan     the shard's thesis at boss scale: an aimed volley on a short
+//           tell, fired TWICE with a re-aim between - and wider and denser
+//           whenever the player is chilled, because letting the theme land
+//           its cold on you is how the Crown loads its own gun
+//   rush    a lane is drawn to the far wall, the Crown squats into it, and
+//           the glacier COMES DOWN IT - twenty metres across the arena with a
+//           frozen wake behind it, and past the crest of the fight it stops
+//           only to re-aim and come again
+//   nova    the hug answer. The plates open, a disc fills at its feet for
+//           most of a second, and then the room where you were standing is
+//           no longer yours - a chilling blast, and frozen ground at the rim
+//   prison  the hailer's sentence at boss scale: a GAPPED ring of icicle
+//           strikes around where you stand, landing all at once - read the
+//           gap and be in it when it snaps
+//   rain    a walking barrage: strikes placed on you, then a second wave
+//           placed where you WENT, so standing still anywhere is being eaten
+//
+// Contact pays at all times through bossTouch, as on every reworked boss -
+// the rush is the one code exception, and only so the pass itself is the hit
+// instead of stacking on a touch in the same frame.
 
-export const CROWN_ANCHORS = 3;
-
-// Where they go: a ring around the ARENA rather than around the boss, so
-// breaking them means crossing the room it is freezing rather than standing
-// still and turning on the spot.
-export const CROWN_ANCHOR_R = 14;
-
-// The volley it throws while the shell is up. It is not helpless in there and
-// it must not be - a shell the player can simply walk away from would make the
-// anchors optional.
-export const CROWN_VOLLEY_CD = 3.2;
-
-export const CROWN_VOLLEY_N = 5;
-
-export const CROWN_VOLLEY_SPREAD = 0.17;
-
-// How hard the room freezes while it is shelled, per shell. The floor filling
-// up is the pressure that stops the anchor hunt from being a stroll.
-export const CROWN_FROST_CD = 1.5;
-
-export const CROWN_FROST_R = 12;
+export const CROWN_ICE = 0x8fd4ff;
 
 export const _crownAt = new THREE.Vector3();
 
-// An anchor does nothing at all. It stands there and it is shot, and the only
-// thing it needs to do is BE FOUND - so it pulses on the beat, which makes it
-// catch the eye across a room without needing a marker over it.
-export function aiAnchor(e, a) {
-  a.vx = 0;
-  a.vz = 0;
-  if (a.ctx.pulse !== e._lastPulse) {
-    e._lastPulse = a.ctx.pulse;
-    e.flash = Math.max(e.flash, 0.12);
+// The gait between attacks: it circles the middle distance and keeps sliding
+// - the room never gets to shoot a statue.
+export const CROWN_PROWL = { dist: 10, band: 3, out: 1.1, in: -0.7, strafe: 0.7, flip: 1.4, flipVar: 1.0 };
+
+// THE FAN. Three lances, five at a chilled target; the second volley re-aims,
+// so the dodge is to keep moving THROUGH the attack, not to step once.
+export const CROWN_FAN_TELL = 0.5;
+
+export const CROWN_FAN_GAP = 0.32;
+
+export const CROWN_FAN_N = 3;
+
+export const CROWN_FAN_CHILL_N = 5;
+
+export const CROWN_FAN_SPREAD = 0.15;
+
+export const CROWN_FAN_CHILL_SPREAD = 0.11;
+
+// THE RUSH. A lane as wide as the Crown's shoulders and as long as the room.
+// The wake interval is what keeps the trail inside the shared frost cap when
+// a rime add is trailing its own line at the same time.
+export const CROWN_RUSH_TELL = 0.85;
+
+export const CROWN_RUSH_RETELL = 0.55;
+
+export const CROWN_RUSH_W = 1.6;
+
+export const CROWN_RUSH_LEN = 20;
+
+export const CROWN_RUSH_MUL = 4.6;
+
+export const CROWN_RUSH_CAP = 12.5;
+
+export const CROWN_RUSH_WAKE = 0.14;
+
+// Below this bar the rush calves twice: stop, re-aim, come again.
+export const CROWN_CREST_AT = 0.55;
+
+// THE NOVA. Six and a half metres the player has most of a second to be out
+// of - wide enough that hugging is never safe, slow enough that it is always
+// a decision rather than a tax.
+export const CROWN_NOVA_TELL = 0.8;
+
+export const CROWN_NOVA_R = 6.4;
+
+export const CROWN_NOVA_DMG = 32;
+
+// The blast chills what it catches - the escape from it loads the next volley.
+export const CROWN_NOVA_CHILL = 2.4;
+
+export const CROWN_NOVA_RING = 9;
+
+// THE PRISON. Ten slots around the player, two gone to the gap, all landing
+// together after one long fill. The gap is what separates a cage from a
+// coincidence of damage circles.
+export const CROWN_PRISON_R = 4.4;
+
+export const CROWN_PRISON_N = 10;
+
+export const CROWN_PRISON_GAP = 2;
+
+export const CROWN_PRISON_HIT_R = 2.1;
+
+export const CROWN_PRISON_DELAY = 1.25;
+
+// THE RAIN. Three strikes on and beside you, then a second wave re-placed on
+// the player half a second later - a walk, not a wall: it herds rather than
+// surrounds.
+export const CROWN_RAIN_T = 1.05;
+
+export const CROWN_RAIN_WAVE2 = 0.55;
+
+export const CROWN_RAIN_R = 2.2;
+
+export const CROWN_RAIN_DELAY = 0.85;
+
+// THE WARNINGS. Both kinds of telegraph the Crown owns route through the two
+// slots releaseMarks knows how to drain: one held mark in bs.mark - the lane
+// or the disc, never both at once - on the -1 convention, and every icicle
+// strike currently falling in bs.rings. A strike's own circle IS its
+// countdown, filled as it falls.
+const crownMarkGet = (bs) => { if (!(bs.mark >= 0)) bs.mark = bs.fx.markAcquire(); return bs.mark; };
+const crownMarkDrop = (bs) => { if (bs.mark >= 0) bs.fx.markRelease(bs.mark); bs.mark = -1; };
+
+// One salvo, all-or-nothing: every circle drawn is a circle that lands, so if
+// the pool cannot warn for ALL of them the attack simply does not happen this
+// cycle rather than landing one nobody saw.
+function crownScatter(e, ctx, points) {
+  const bs = e.bs;
+  const made = [];
+  for (const p of points) {
+    const mark = ctx.effects.markAcquire();
+    if (mark < 0) {
+      for (const m of made) ctx.effects.markRelease(m);
+      return false;
+    }
+    made.push(mark);
+    bs.rings.push({ ...p, t: 0, mark });
+  }
+  return true;
+}
+
+function crownTickSalvos(e, a) {
+  const bs = e.bs, ctx = a.ctx;
+  for (let i = bs.rings.length - 1; i >= 0; i--) {
+    const s = bs.rings[i];
+    s.t += a.dt;
+    if (s.t < s.delay) {
+      bs.fx.markSet(s.mark, s.x, s.z, s.r, CROWN_ICE, s.t / s.delay);
+      continue;
+    }
+    bs.fx.markRelease(s.mark);
+    bs.rings.splice(i, 1);
+    _crownAt.set(s.x, 0, s.z);
+    ctx.effects.shockwave(_crownAt, CROWN_ICE, s.r, 0.4);
+    ctx.effects.burst(_crownAt, 0xd8f0ff, 14, s.r * 1.9, 2, 0.5);
+    ctx.effects.addShake(0.1);
+    if (ctx.sfx) ctx.sfx.impact();
+    // An eruption you were SHOWN: the answer is to be out of the circle, or
+    // above it - and the circle, not the boss, is what blocks are measured
+    // against.
+    const p = ctx.player.pos;
+    const d = Math.hypot(p.x - s.x, p.z - s.z);
+    if (d < s.r && p.y < 2.4 &&
+        !segBlocked(s.x, 0.5, s.z, p.x, p.y + 0.8, p.z, ctx.obstacles)) {
+      ctx.onHitPlayer(s.dmg * (1 - 0.4 * d / s.r), _crownAt, e);
+    }
+    // Where it struck stays cold: every strike feeds the theme the ground it
+    // spends.
+    ctx.addHazard(s.x, s.z, s.leaveR, s.leaveLife, 0, 'hail');
+  }
+}
+
+// THE BAG. A shuffle with range gates: every attack comes off it, the same
+// one never lands twice in a row, and one the range forbids is skipped down
+// the bag until something legal turns up - so the clock stays fast without
+// the Crown ever spending its best attack on a player it cannot reach.
+export const CROWN_ATTACKS = ['fan', 'rush', 'nova', 'prison', 'rain'];
+
+function crownDraw(e, a) {
+  const bs = e.bs;
+  if (!bs.bag.length) {
+    bs.bag = CROWN_ATTACKS.slice();
+    for (let i = bs.bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bs.bag[i], bs.bag[j]] = [bs.bag[j], bs.bag[i]];
+    }
+    // A fresh bag must not open with whatever the last bag closed with.
+    if (bs.bag.length > 1 && bs.bag[bs.bag.length - 1] === bs.last) {
+      const last = bs.bag.length - 1;
+      [bs.bag[0], bs.bag[last]] = [bs.bag[last], bs.bag[0]];
+    }
+  }
+  const gated = {
+    nova: a.dist < 10.5,    // the hug answer, not a long-range hope
+    rush: a.dist > 5.5,     // at arm's length a lane is a free hit
+    fan: a.dist < 26,       // past that the lances are skywriting
+    prison: true,           // drawn around the PLAYER, so any range is right
+    rain: true,
+  };
+  let i = bs.bag.length - 1;
+  while (i > 0 && !gated[bs.bag[i]]) i--;
+  bs.last = bs.bag[i];
+  return bs.bag.splice(i, 1)[0];
+}
+
+// The breath between attacks, and the escalation: the deeper into the bar the
+// fight gets, the shorter the breath - first to three quarters of it, then
+// under half. No shell, so the pressure curve is the whole difficulty curve.
+function crownRest(e, extra = 1) {
+  const bs = e.bs;
+  bs.state = 'roam';
+  const haste = e.hp < e.maxHp * 0.25 ? 0.55 : bs.enraged ? 0.72 : 1;
+  bs.t = bs.tMax = (0.55 + Math.random() * 0.45) * e.rate * haste * extra;
+  e._setEyeAlert(false);
+}
+
+// One volley on the bearing the tell locked. THE CHILL RULE, and the theme's
+// whole thesis at boss scale: three lances at a player on warm ground, five
+// at one the fight has already slowed - the Crown reads the player's own
+// status for exactly the reason the shard does.
+function crownFanFire(e, a) {
+  const ctx = a.ctx;
+  const chilled = ctx.player && ctx.player.hasStatus && ctx.player.hasStatus('slowness');
+  const n = chilled ? CROWN_FAN_CHILL_N : CROWN_FAN_N;
+  const spread = chilled ? CROWN_FAN_CHILL_SPREAD : CROWN_FAN_SPREAD;
+  for (let i = 0; i < n; i++) capturedShot(e, a, e.aim, (i - (n - 1) / 2) * spread, 1.7);
+  e.flash = Math.max(e.flash, 0.12);
+  if (ctx.sfx) ctx.sfx.meleeSwing();
+}
+
+// One rain wave: a strike ON the player and one on either shoulder, so every
+// wave forbids holding the lane and both ways out of it for the length of a
+// fill. The second wave is re-placed on the player half a second later and
+// turned a third of a circle - the barrage WALKS, and standing still is what
+// it punishes.
+function crownRainWave(e, a, seed) {
+  const ctx = a.ctx, p = ctx.player.pos;
+  const pts = [{
+    x: p.x, z: p.z, r: CROWN_RAIN_R, delay: CROWN_RAIN_DELAY,
+    dmg: Math.min(20, e.damage * 0.8), leaveR: 1.5, leaveLife: 3.4,
+  }];
+  for (let k = 1; k <= 2; k++) {
+    const ang = seed + k * 2.1;
+    pts.push({
+      x: Math.max(-20.8, Math.min(20.8, p.x + Math.cos(ang) * 2.6)),
+      z: Math.max(-20.8, Math.min(20.8, p.z + Math.sin(ang) * 2.6)),
+      r: CROWN_RAIN_R, delay: CROWN_RAIN_DELAY + k * 0.22,
+      dmg: Math.min(20, e.damage * 0.8), leaveR: 1.5, leaveLife: 3.4,
+    });
+  }
+  crownScatter(e, ctx, pts);
+}
+
+function crownPick(e, a) {
+  const bs = e.bs, ctx = a.ctx;
+  bs.fx = ctx.effects;
+  const attack = crownDraw(e, a);
+  e._setEyeAlert(true);
+  if (attack === 'fan') {
+    snapAim(e, a, true);
+    bs.state = 'fanTell'; bs.t = bs.tMax = CROWN_FAN_TELL;
+    if (ctx.sfx) ctx.sfx.tone({ f: 340, f2: 170, t: 0.35, type: 'triangle', v: 0.3 });
+  } else if (attack === 'rush') {
+    snapAim(e, a, true);
+    bs.state = 'rushTell'; bs.t = bs.tMax = CROWN_RUSH_TELL;
+    bs.rushes = 0; bs.rushHit = false; bs.wakeT = 0;
+    // No fanfare: the lane on the floor and the squat are the announcement.
+    ctx.bossEvent('charge', e);
+  } else if (attack === 'nova') {
+    bs.state = 'novaTell'; bs.t = bs.tMax = CROWN_NOVA_TELL;
+    if (ctx.sfx) ctx.sfx.tone({ f: 150, f2: 320, t: 0.5, type: 'triangle', v: 0.35 });
+  } else if (attack === 'prison') {
+    bs.state = 'prisonCast'; bs.t = bs.tMax = 0.55;
+    // Ten slots around WHERE THE PLAYER STANDS, two of them gone to the gap,
+    // all landing together. Placed once and never again: a cage that tracked
+    // would be an unavoidable hit with art on it.
+    const p = ctx.player.pos;
+    const gap = Math.floor(Math.random() * CROWN_PRISON_N);
+    const pts = [];
+    for (let i = 0; i < CROWN_PRISON_N; i++) {
+      if (((i - gap + CROWN_PRISON_N) % CROWN_PRISON_N) < CROWN_PRISON_GAP) continue;
+      const ang = (i / CROWN_PRISON_N) * Math.PI * 2;
+      pts.push({
+        x: Math.max(-20.8, Math.min(20.8, p.x + Math.cos(ang) * CROWN_PRISON_R)),
+        z: Math.max(-20.8, Math.min(20.8, p.z + Math.sin(ang) * CROWN_PRISON_R)),
+        r: CROWN_PRISON_HIT_R, delay: CROWN_PRISON_DELAY,
+        dmg: Math.min(24, e.damage * 0.95), leaveR: 1.6, leaveLife: 4.2,
+      });
+    }
+    crownScatter(e, ctx, pts);
+    if (ctx.sfx) ctx.sfx.tone({ f: 520, f2: 760, t: 0.5, type: 'triangle', v: 0.3 });
+  } else {
+    bs.state = 'rainCast'; bs.t = bs.tMax = CROWN_RAIN_T;
+    bs.wave2 = CROWN_RAIN_WAVE2;
+    bs.rainSeed = Math.random() * Math.PI * 2;
+    crownRainWave(e, a, bs.rainSeed);
+    if (ctx.sfx) ctx.sfx.tone({ f: 620, f2: 280, t: 0.4, type: 'triangle', v: 0.3 });
   }
 }
 
 export function aiPaleCrown(e, a) {
-  const bs = e.bs;
-  const ctx = a.ctx;
+  e.stepMul = 1.4;
+  const bs = e.bs, ctx = a.ctx;
   if (bs.state === undefined) {
-    bs.state = 'open';
-    bs.tier = 0;
-    bs.shelled = false;
-    bs.anchors = [];
-    bs.volleyCd = CROWN_VOLLEY_CD;
-    bs.frostCd = CROWN_FROST_CD;
-    bs.ventNote = 'SHELLED';
+    bs.state = 'roam'; bs.t = bs.tMax = 0.9;
+    bs.bag = []; bs.last = '';
+    bs.fx = ctx.effects; bs.mark = -1; bs.rings = [];
+    bs.enraged = false; bs.armK = 0; bs.rushHit = false; bs.rushes = 0; bs.wakeT = 0;
+  }
+  bs.t -= a.dt;
+  // The weather outlives the state that cast it: an icicle already falling
+  // does not care what the Crown does next.
+  crownTickSalvos(e, a);
+
+  // THE TOUCH, in every state but the one whose own contact is already the
+  // attack. Nothing about this boss is safe to stand against.
+  if (bs.state !== 'rush') bossTouch(e, a);
+
+  if (e.status.fear > 0) {
+    // A staggered Crown holds position and drops every tell it was holding -
+    // an attack that is not happening must take its warning with it, or the
+    // player is hit by circles that are not drawn any more.
+    releaseMarks(e);
+    e._setEyeAlert(false);
+    bs.state = 'roam'; bs.t = bs.tMax = 0.8;
+    return;
   }
 
-  // ---- raising a shell ----------------------------------------------------
-  // Checked before anything else: crossing a threshold interrupts whatever it
-  // was doing, which is what makes the fight alternate rather than blend.
-  if (!bs.shelled && bs.tier < CROWN_SHELLS.length
-      && e.hp <= e.maxHp * CROWN_SHELLS[bs.tier]) {
-    bs.tier++;
-    bs.shelled = true;
-    bs.anchors.length = 0;
-    if (e.shellParts) {
-      for (const m of e.shellParts) m.visible = true;
+  // THE SECOND HALF OF THE BAR, once and loudly: no new attacks, no thicker
+  // ice - the room turns to alarm and the clock simply tightens.
+  if (!bs.enraged && e.hp < e.maxHp * 0.5) {
+    bs.enraged = true;
+    ctx.bossEvent('enrage', e);
+    _crownAt.set(e.pos.x, 1.4, e.pos.z);
+    ctx.effects.shockwave(_crownAt, CROWN_ICE, 8, 0.6);
+    ctx.effects.burst(_crownAt, 0xe8f7ff, 30, 8, 3, 0.9);
+    ctx.effects.addShake(0.3);
+  }
+
+  if (bs.state === 'roam') {
+    orbit(e, a, CROWN_PROWL);
+    if (bs.t <= 0) crownPick(e, a);
+
+  } else if (bs.state === 'fanTell') {
+    faceSnap(e);
+    if (bs.t <= 0) {
+      // State flips BEFORE the volley leaves: the tell is over the moment
+      // anything is in the air, or the warning and the hit overlap.
+      bs.state = 'fan2'; bs.t = bs.tMax = CROWN_FAN_GAP;
+      crownFanFire(e, a);
     }
-    // The anchors go in around the ARENA, spun off a random bearing so the
-    // same three corners are not the answer every time.
-    const off = Math.random() * Math.PI * 2;
-    for (let i = 0; i < CROWN_ANCHORS; i++) {
-      const ang = off + (i / CROWN_ANCHORS) * Math.PI * 2;
-      const ax = Math.max(-19, Math.min(19, Math.cos(ang) * CROWN_ANCHOR_R));
-      const az = Math.max(-19, Math.min(19, Math.sin(ang) * CROWN_ANCHOR_R));
-      const spawned = ctx.addAnchor && ctx.addAnchor(ax, az);
-      if (spawned) bs.anchors.push(spawned);
+  } else if (bs.state === 'fan2') {
+    faceSnap(e);
+    if (bs.t <= 0) {
+      // The second volley re-reads where the player went. Standing still
+      // through the gap between them is the mistake this attack is for.
+      snapAim(e, a);
+      faceSnap(e);
+      crownRest(e);
+      crownFanFire(e, a);
     }
-    // A shell with no anchors under it would be a wall with no door. Should
-    // the spawn ever fail - the enemy cap, most likely - it comes straight
-    // back down rather than locking the fight.
-    if (!bs.anchors.length) bs.shelled = false;
-    e.weakOpen = false;
-    bs.weakOpen = bs.shelled;
-    if (ctx.effects) {
+
+  } else if (bs.state === 'rushTell') {
+    faceSnap(e);
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    // The lane runs from the Crown through where the player was when it
+    // squared up, on to the far wall: the warning covers the whole corridor,
+    // not just the part near the boss.
+    const B = ARENA_HALF - (e.radius - 0.5);
+    const tx = e.nx > 1e-4 ? (B - e.pos.x) / e.nx : e.nx < -1e-4 ? (-B - e.pos.x) / e.nx : 1e9;
+    const tz = e.nz > 1e-4 ? (B - e.pos.z) / e.nz : e.nz < -1e-4 ? (-B - e.pos.z) / e.nz : 1e9;
+    bs.rushLen = Math.max(7, Math.min(CROWN_RUSH_LEN, Math.min(tx, tz)));
+    crownMarkGet(bs);
+    ctx.effects.markSet(bs.mark, e.pos.x + e.nx * bs.rushLen / 2, e.pos.z + e.nz * bs.rushLen / 2,
+      CROWN_RUSH_W, CROWN_ICE, fill, bs.rushLen / (CROWN_RUSH_W * 2),
+      Math.atan2(-e.nx, -e.nz));
+    if (bs.t <= 0) {
+      // A rush that never drew is a rush that never happens.
+      if (bs.mark < 0) { crownRest(e); return; }
+      crownMarkDrop(bs);
+      bs.rushV = Math.min(CROWN_RUSH_CAP, e.speed * CROWN_RUSH_MUL);
+      bs.state = 'rush'; bs.t = bs.tMax = Math.min(2.1, bs.rushLen / bs.rushV);
+      if (ctx.sfx) ctx.sfx.meleeSwing();
+    }
+  } else if (bs.state === 'rush') {
+    faceSnap(e);
+    e.stepMul = 5;
+    // The stride is capped BEFORE slows, and the slow pierces the cap: a
+    // chilled glacier crosses its own lane slower, which is exactly what the
+    // theme would say back.
+    const slow = Math.min(1, a.sp / Math.max(0.001, e.speed));
+    a.vx = e.nx * bs.rushV * slow;
+    a.vz = e.nz * bs.rushV * slow;
+    // The wake: whatever the rush did not hit, it still took the floor from.
+    bs.wakeT -= a.dt;
+    if (bs.wakeT <= 0) {
+      bs.wakeT = CROWN_RUSH_WAKE;
+      ctx.addHazard(e.pos.x, e.pos.z, 1.5, 3.8, 0, 'frost');
+    }
+    // The pass itself is the hit - the boss's whole body, in a straight line,
+    // at three times anything else's pace.
+    if (!bs.rushHit && a.dist < 2.9 && a.nx * e.nx + a.nz * e.nz > 0 &&
+        ctx.player.pos.y < BOSS_REACH_Y &&
+        !segBlocked(e.pos.x, 1.4, e.pos.z,
+          ctx.player.pos.x, ctx.player.pos.y + 0.8, ctx.player.pos.z, ctx.obstacles)) {
+      ctx.onHitPlayer(Math.min(BOSS_TOUCH_CAP, e.damage), e.pos, e);
+      bs.rushHit = true;
+      // One pass costs one hit, never a hit AND a touch in the same frame.
+      bs.touchCd = BOSS_TOUCH_CD * e.rate;
+    }
+    if (!bs.rushHit) bossTouch(e, a);
+    if (bs.t <= 0 || e.blockedBy > 0.05) {
+      // Calving: the stop is an event, and past the crest of the fight it is
+      // not a stop at all - the Crown re-aims and comes down the lane again.
       _crownAt.set(e.pos.x, 1.2, e.pos.z);
-      ctx.effects.shockwave(_crownAt, 0x8fd4ff, 6, 0.4);
-    }
-    if (ctx.sfx) ctx.sfx.impact();
-    ctx.bossEvent('vent', e);
-  }
-
-  // ---- shelled ------------------------------------------------------------
-  if (bs.shelled) {
-    // Down the moment the last anchor goes. Checked every frame rather than on
-    // a kill hook, so it cannot be missed if two die in the same frame.
-    let alive = 0;
-    for (const an of bs.anchors) {
-      if (an && !an.dead) alive++;
-    }
-    if (alive === 0) {
-      bs.shelled = false;
-      bs.weakOpen = false;
-      if (e.shellParts) {
-        for (const m of e.shellParts) m.visible = false;
-      }
-      // The shell coming off is the reward and it is loud about it.
-      if (ctx.effects) {
-        _crownAt.set(e.pos.x, 1.2, e.pos.z);
-        ctx.effects.shockwave(_crownAt, 0xe8f7ff, 9, 0.5);
-        ctx.effects.burst(_crownAt, 0xe8f7ff, 34, 7, 2, 0.8);
-      }
+      ctx.effects.shockwave(_crownAt, CROWN_ICE, 4.6, 0.4);
+      ctx.effects.burst(_crownAt, 0xd8f0ff, 22, 6, 2, 0.6);
+      ctx.effects.addShake(0.18);
       if (ctx.sfx) ctx.sfx.impact();
-      ctx.bossEvent('vent', e);
-    } else {
-      // It keeps walking and keeps swinging. A shell is not a cutscene.
-      aiMelee(e, a);
-      bs.volleyCd -= a.dt;
-      if (bs.volleyCd <= 0 && a.dist < 30) {
-        bs.volleyCd = CROWN_VOLLEY_CD * e.rate;
-        for (let i = 0; i < CROWN_VOLLEY_N; i++) {
-          ctx.addProjectile(
-            e.pos.x, 1.7, e.pos.z, 'shard', 1,
-            (i - (CROWN_VOLLEY_N - 1) / 2) * CROWN_VOLLEY_SPREAD
-          );
-        }
+      bs.rushes++;
+      bs.rushHit = false;
+      if (bs.rushes < 2 && e.hp < e.maxHp * CROWN_CREST_AT) {
+        snapAim(e, a, true);
+        bs.state = 'rushTell'; bs.t = bs.tMax = CROWN_RUSH_RETELL;
+        ctx.bossEvent('charge', e);
+      } else crownRest(e);
+    }
+
+  } else if (bs.state === 'novaTell') {
+    // Rooted: where the disc is drawn is where it lands, and a Crown creeping
+    // after the player would make the warning a lie.
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    crownMarkGet(bs);
+    ctx.effects.markSet(bs.mark, e.pos.x, e.pos.z, CROWN_NOVA_R, CROWN_ICE, fill);
+    if (bs.t <= 0) {
+      if (bs.mark < 0) { crownRest(e); return; }
+      crownMarkDrop(bs);
+      _crownAt.set(e.pos.x, 0.5, e.pos.z);
+      ctx.effects.shockwave(_crownAt, 0xe8f7ff, CROWN_NOVA_R, 0.5);
+      ctx.effects.burst(_crownAt, 0xe8f7ff, 30, CROWN_NOVA_R * 0.9, 2, 0.8);
+      ctx.effects.addShake(0.3);
+      if (ctx.sfx) ctx.sfx.impact();
+      const p = ctx.player.pos;
+      if (a.dist < CROWN_NOVA_R && p.y < 2.4 &&
+          !segBlocked(e.pos.x, e.pos.y + 0.6, e.pos.z,
+            p.x, p.y + 0.8, p.z, ctx.obstacles)) {
+        ctx.onHitPlayer(Math.min(CROWN_NOVA_DMG, e.damage * 1.25) * (1 - 0.45 * a.dist / CROWN_NOVA_R), e.pos, e);
+        // The blast CHILLS what it catches: the escape from it is already
+        // loading the next volley.
+        if (ctx.applyPlayerStatus) ctx.applyPlayerStatus('slowness', CROWN_NOVA_CHILL);
       }
-      // And the room ices over underneath it, harder with each shell - so the
-      // anchor hunt gets more expensive the deeper into the fight it happens.
-      bs.frostCd -= a.dt;
-      if (bs.frostCd <= 0) {
-        bs.frostCd = CROWN_FROST_CD / bs.tier;
-        const ang = Math.random() * Math.PI * 2;
-        const rr = Math.sqrt(Math.random()) * CROWN_FROST_R;
+      // The rim it opened stays frozen - the nova takes the ground too.
+      for (let i = 0; i < CROWN_NOVA_RING; i++) {
+        const ang = (i / CROWN_NOVA_RING) * Math.PI * 2;
         ctx.addHazard(
-          e.pos.x + Math.cos(ang) * rr, e.pos.z + Math.sin(ang) * rr,
-          SLEET_PATCH_RADIUS, SLEET_PATCH_LIFE * 1.6, 0, 'hail'
+          Math.max(-20.8, Math.min(20.8, e.pos.x + Math.cos(ang) * CROWN_NOVA_R * 0.62)),
+          Math.max(-20.8, Math.min(20.8, e.pos.z + Math.sin(ang) * CROWN_NOVA_R * 0.62)),
+          RIME_PATCH_RADIUS, RIME_PATCH_LIFE + 0.6, 0, 'hail'
         );
       }
-      return;
+      crownRest(e, 0.8);
     }
+
+  } else if (bs.state === 'prisonCast') {
+    // The cage was placed whole and does not chase; the cast itself is raised
+    // arms and a slow drift.
+    a.vx = a.nx * a.sp * 0.3;
+    a.vz = a.nz * a.sp * 0.3;
+    if (bs.t <= 0) crownRest(e);
+  } else if (bs.state === 'rainCast') {
+    // It walks its own storm forward.
+    a.vx = a.nx * a.sp * 0.55;
+    a.vz = a.nz * a.sp * 0.55;
+    if (bs.wave2 > 0) {
+      bs.wave2 -= a.dt;
+      if (bs.wave2 <= 0) crownRainWave(e, a, bs.rainSeed + 2.1);
+    }
+    if (bs.t <= 0) crownRest(e);
   }
 
-  // ---- open ---------------------------------------------------------------
-  // Ordinary boss behaviour, and the only time it can be hurt. It closes and
-  // swings and throws the same volley, so the window is a fight rather than a
-  // free damage phase.
-  aiMelee(e, a);
-  bs.volleyCd -= a.dt;
-  if (bs.volleyCd <= 0 && a.dist < 30) {
-    bs.volleyCd = CROWN_VOLLEY_CD * 1.3 * e.rate;
-    for (let i = 0; i < CROWN_VOLLEY_N; i++) {
-      ctx.addProjectile(
-        e.pos.x, 1.7, e.pos.z, 'shard', 1,
-        (i - (CROWN_VOLLEY_N - 1) / 2) * CROWN_VOLLEY_SPREAD
-      );
+  // BODY LANGUAGE, so every state reads before the floor does: the squat is
+  // the rush, raised arms are something coming DOWN, and the plates - the
+  // old shell - now open over the body for the nova and for nothing else.
+  e.group.scale.y = bs.state === 'rushTell' ? 1 - 0.24 * (1 - Math.max(0, bs.t) / bs.tMax) : 1;
+  const casting = bs.state === 'prisonCast' || bs.state === 'rainCast';
+  bs.armK += ((casting ? 1 : 0) - bs.armK) * Math.min(1, a.dt * 7);
+  e.crownArms[0].rotation.z = 0.26 + bs.armK * 0.95;
+  e.crownArms[1].rotation.z = -0.26 - bs.armK * 0.95;
+  if (e.shellParts) {
+    const f = bs.state === 'novaTell' ? 1 - Math.max(0, bs.t) / bs.tMax : 0;
+    for (let i = 0; i < e.shellParts.length; i++) {
+      const m = e.shellParts[i];
+      m.visible = f > 0;
+      if (f > 0) {
+        m.position.y = m.userData.oy + f * 0.22 * e.scale;
+        m.rotation.y += a.dt * (1 + i * 0.3);
+      }
     }
   }
 }
@@ -828,62 +1152,30 @@ const TYPES = {
     build: buildSleet, ai: aiSleet,
   },
 
-  // THE PALE CROWN'S ANCHORS. Not a wave spawn - nothing rolls one and
-  // pickAddType will never return it, exactly like Colossus's turret.
+  // RIME's boss: the whole theme at boss scale, and the rotation's fastest
+  // fight. Five telegraphed attacks on a shuffled bag that never repeats
+  // itself, resting about a second between them - a fan of lances that swells
+  // against a chilled player, a glacier rush down a drawn lane that freezes
+  // the corridor behind it, a nova that answers hugging, a gapped ring of
+  // icicles snapped shut around wherever you stand, and a rain of strikes
+  // that re-leads you as you run. Touching it always costs.
   //
-  // WHAT IT IS FOR. The Crown spends most of its fight inside a shell that
-  // nothing can touch, and these are the way in: three of them go into the
-  // floor when the shell goes up, and breaking all three is what brings it
-  // down. So the boss is never a damage sponge with a timer on it - the shell
-  // lasts exactly as long as it takes the player to find and break three
-  // things, which is a fight about the ROOM rather than about the boss.
-  //
-  // Deliberately soft, like the turret, and for the opposite reason: a turret
-  // is a thing you may choose to ignore, and an anchor is the only thing worth
-  // shooting while it stands. Neither should be a second boss.
-  anchor: {
-    hp: 150, speed: 0, damage: 0, value: 90, color: 0x8fd4ff, eye: 0xe8f7ff,
-    scale: 1.2, radius: 0.5, mass: 6,
-    hitbox: { r: 0.6, y: 0.8 },
-    // It is a spike of ice driven into the floor: nothing knocks it over,
-    // nothing frightens it, and slowing or freezing something that never moves
-    // means nothing.
-    statusMul: 0.5, fearMode: 'stagger', entropyExempt: true,
-    build: buildAnchor, ai: aiAnchor,
-  },
-
-  // RIME's boss, and the one fight in the rotation that is not about the boss.
-  //
-  // It spends most of itself inside a SHELL that takes nothing at all, and the
-  // way in is never the boss: three anchors go into the floor with the shell,
-  // and breaking all three is what brings it down. So the fight alternates
-  // between two completely different jobs - clear the room, then burn the
-  // window - and the shell has no timer on it, which means a player who finds
-  // the anchors fast is rewarded with a longer window rather than the same one
-  // later.
-  //
-  // Three shells, at the top of the bar and at two thirds and a third of it,
-  // each with the arena a little more frozen than the last. While shelled it
-  // still walks and still swings, so hiding from it is not a plan.
+  // What it has instead of defence is all of that. There is no shell, no
+  // armour and no extra bar: the difficulty curve of the fight is the clock
+  // tightening - the rests shorten at half the bar and again at a quarter -
+  // and the floor slowly becoming the theme's ground.
   palecrown: {
     head: { r: 0.42, y: 1.74 },
-    hp: 3300, speed: 2.5, damage: 24, value: 6000, color: 0x8fd4ff, eye: 0xe8f7ff,
+    hp: 3300, speed: 3.0, damage: 24, value: 6000, color: 0x8fd4ff, eye: 0xe8f7ff,
     scale: 2.8, radius: 1.7, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.82 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.65, start: 3.0, hit: 3.8, cd: 1.9 },
-    // NOTHING gets through the shell. Unlike every other armour in the game
-    // this is a hard zero rather than a fraction, and it has to be: the whole
-    // fight is built on the player looking somewhere else while it is up, and
-    // a shell that leaked even a little would make chipping the boss the
-    // correct play and the anchors optional scenery.
-    armor: (e) => (e.bs.shelled ? 0 : 1),
-    // THE SAME FUNCTION, not the shelled constant. As a plain 0 this made the
-    // Crown immune to fire, poison and every blast in the game for the entire
-    // fight - shell up or down - because damage with no direction never
-    // consults armor() at all. The shell is a state, so both have to read it.
-    armorDefault: (e) => (e.bs.shelled ? 0 : 1),
+    // Its lances are its own - a shard's made heavier. Speed has to stay
+    // inside what a moving player can cross under.
+    proj: { core: 0xe8f7ff, glow: 0x63b3ff, scale: 0.85, speed: [19, 0.35, 30], dmg: [8, 0.5, 18] },
+    // NO melee block: the body IS the melee, through bossTouch in every state
+    // - contact costs immediately rather than on a swing.
     build: buildPaleCrown, ai: aiPaleCrown,
     cleanup: releaseMarks,
   },

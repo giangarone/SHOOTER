@@ -1,7 +1,8 @@
 // SWAMP: wet peat, reed crowns and amber marsh lights.
 import * as THREE from 'three';
 import { ENEMY_TYPES, SHARED_MATS, partsFor, lump, slab, prism, spike, eyes,
-  aiMelee, orbit, landHit, segBlocked } from './shared.js';
+  addWarnedMortar, aiMelee, bossTouch, capturedShot, faceSnap, landHit, orbit,
+  releaseMarks, segBlocked, snapAim } from './shared.js';
 
 const ORBIT = { dist: 11, band: 2, out: 0.8, in: -0.7, strafe: 0.45, flip: 2, flipVar: 1 };
 const shot = (speed, damage) => ({ core: 0xffe6a0, glow: 0xc6a444, scale: 0.55,
@@ -27,14 +28,20 @@ const TYPES = {
   marshwing: { ...body, hp: 50, speed: 3.8, damage: 8, value: 300,
     fly: { height: 3.5 }, hitbox: { r: 0.55, y: 0.4 }, head: { r: 0.28, y: 0.55 },
     proj: shot(15, 6), build: buildMarshwing, ai: aiMarshwing },
-  miresovereign: { ...body, name: 'MIRE SOVEREIGN', hp: 3200, speed: 1.8,
+  // THE BOSS OF THE DROWNED GROVE. Same bar as it always had and NO shield:
+  // the rework's menace is frequency and ground - it wades faster than it
+  // used to, the floor it crosses stays bog, and five casts answer wherever
+  // the player is standing. There is no `melee` row: the wind-up swing is
+  // gone, and contact is the always-on boss touch clock (bossTouch). The
+  // throat window after every cast is unchanged: 65% scales shut, flat open.
+  miresovereign: { ...body, name: 'MIRE SOVEREIGN', hp: 3200, speed: 2.6,
     damage: 24, value: 6500, scale: 2.7, radius: 1.8, mass: 9, boss: true,
     head: { r: 0.42, y: 1.0 }, hitbox: { r: 0.9, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1,
     entropyExempt: true, fearMode: 'stagger', proj: shot(13, 7),
     armor: (e) => e.bs.weakOpen ? 1 : 0.65,
     armorDefault: (e) => e.bs.weakOpen ? 1 : 0.65,
-    build: buildMireSovereign, ai: aiMireSovereign, cleanup: swampCleanup },
+    build: buildMireSovereign, ai: aiMireSovereign, cleanup: mireCleanup },
 };
 Object.assign(ENEMY_TYPES, TYPES);
 
@@ -125,6 +132,15 @@ function buildMireSovereign(e, g, s) {
   }
   P('swKingTail', spike(0.38, 1.8, 5), { y: 0.45, z: 1.35, rx: Math.PI / 2 });
   feet(P, 0.78, 0.32);
+  // THE CLAWS, on the front feet. Amber like the teeth, and the crush's tell
+  // is them fanning out - `rx0` is the resting angle the pose reset returns
+  // them to.
+  e.swClaws = [];
+  for (const x of [-0.78, 0.78]) for (const z of [-0.5, -0.24]) {
+    const c = P('swKingClaw', spike(0.07, 0.34, 4), { x, y: 0.14, z, rx: 2.6, mat: SHARED_MATS.swampAmber });
+    c.userData.rx0 = c.rotation.x;
+    e.swClaws.push(c);
+  }
   // A drowned grove breaks the skyline; the jaws remain clear below it.
   for (const x of [-0.48, 0, 0.48]) {
     const y = x === 0 ? 1.9 : 1.6;
@@ -132,7 +148,28 @@ function buildMireSovereign(e, g, s) {
     for (const side of [-1, 1]) P('swCypressBough', spike(0.09, 0.7, 4),
       { x: x + side * 0.16, y: y + 0.3, z: 0.35, rz: side * 0.9 });
   }
+  // THE REED BED, named apart from the scatter of reeds() below: the burst's
+  // tell is the whole bed standing on end at once, which needs a handle on
+  // every stem. Built plain (no sx/sy/sz) so the pose reset is one setScalar.
+  e.swReeds = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const bx = Math.cos(a) * 0.55, bz = 0.3 + Math.sin(a) * 0.42;
+    e.swReeds.push(P('swKingReed', spike(0.05, 0.55, 4),
+      { x: bx, y: 1.35, z: bz, rz: -bx * 0.5, mat: SHARED_MATS.swampPeat }));
+    P('swKingSeed', lump(0.06), { x: bx, y: 1.64, z: bz, mat: SHARED_MATS.swampAmber });
+  }
   reeds(P, 1.4, 10, 0.75);
+  // THE THROAT PODS. Three marsh lights down the front of the chest - the
+  // fenlantern's lamp made into a reservoir. The gulp and the undertow both
+  // swell them, which is the read: whatever it is about to spit or swallow
+  // passes through these first. The amber is SHARED_MATS, so they stay lit
+  // through any status tint the body picks up.
+  e.swPods = [];
+  for (let i = 0; i < 3; i++) {
+    e.swPods.push(P('swKingPod', lump(0.14),
+      { x: (i - 1) * 0.26, y: 0.6 - i * 0.08, z: -0.74, mat: SHARED_MATS.swampAmber, shadow: false }));
+  }
   eyes(P, { y: 1.0, z: -1.1, x: 0.3, r: 1.7, mat: e.eyeMat });
 }
 
@@ -285,65 +322,469 @@ function aiMarshwing(e, a) {
   orbit(e, a, ORBIT);
   if (e.attackCd <= 0 && a.dist < 18) { e.attackCd = 3.8; e.swT = 1; e._setEyeAlert(true); }
 }
-function sovereignRest(e, a) {
-  swampCleanup(e); e.swampState = 'rest'; e.swT = 1.8; e.stepMul = 1.4;
-  e.bs.weakOpen = true; e.bs.ventNote = 'THROAT EXPOSED';
-  e._setEyeAlert(false); a.ctx.bossEvent('vent', e);
+// ---- the boss kit ---------------------------------------------------------
+// THE MIRE SOVEREIGN, reworked as what it always claimed to be: the apex
+// ambush predator of a drowned grove. The old fight stalked a corner and
+// cycled three greetings with a pause after each; this one MOVES - it wades,
+// it dives - and the arena it crosses stays bog behind it.
+//
+// THE FIVE CASTS, and what each one asks of the player:
+//
+//   MUD CRUSH    it rears onto its hindquarters - claws splayed, a ring of
+//                amber on the floor - and slams a shock ring you HOP over,
+//                then spits a fan of bog light down the bearing you fled on.
+//                Sideways over the rim, then across the fan, never straight
+//                back.
+//   REED BURST   a ring of amber buds rises around WHERE YOU WERE and fires
+//                as staggered nails raining down along it, closing from the
+//                far side of the one gap. Slip through the gap before the
+//                ring closes behind it. Enraged, there is no gap.
+//   BOG DIVE     it sinks - the water closes over its back - and the mire
+//                itself starts sliding toward you: a wake of amber, committed
+//                to a heading per LEG and re-read between them. Then it
+//                erupts. Cross the wake's line; don't run along it, and don't
+//                stand where the fill is closing.
+//   UNDERTOW     it plants and BREATHES IN: two rings of dragged water pull
+//                you toward the jaw - the pull ramps, a hop slips it - and
+//                then it snaps at whatever the inner ring still holds. Sprint
+//                OUT, early.
+//   GULP OF LIGHT
+//                the throat pods fill and it swallows the marsh lights back
+//                out as a fan of darts on the captured bearing - then gulps
+//                AGAIN, aimed at where you actually went. The filler between
+//                the big casts: there is never nothing coming.
+//
+// And TOUCHING it hurts at all times, on the shared boss touch clock - the
+// wind-up swing is gone; the body is the melee attack now. No shield and no
+// bigger bar anywhere in here: every cast still ends throat-up in the vent,
+// and the pressure is frequency, ground and movement, not soak.
+
+// UNDERTOW. The pull is capped under a sprint but over a mire-slowed walk:
+// standing in the shallows it laid while it pulls you is the trap they make
+// together. Its vent is SHORTER than the other casts' - the tow is the price.
+const TIDE_CD = 10, TIDE_TIME = 1.4;
+const TIDE_R = 11, TIDE_BITE = 3.8, TIDE_PULL = 5.2, TIDE_CAP = 26, TIDE_VENT = 0.85;
+
+// BOG DIVE. Three legs per dive; each is committed, and the wake re-reads the
+// player between them, so the slide bends but never tracks within a leg.
+const DIVE_CD = 12, DIVE_MIN = 11;
+const DIVE_SINK = 0.5, DIVE_TIME = 2.4, DIVE_LEGS = 3;
+const DIVE_MUL = 2.7, DIVE_MAX = 9;
+const DIVE_ARRIVE = 3.4, DIVE_R = 3.8, DIVE_CAP = 30;
+// The pool the eruption leaves where it came up: wide enough that rising
+// through it costs a beat of footing, short-lived enough that the crater is
+// ground you cannot stand in NOW rather than floor the fight has lost.
+const DIVE_POOL_R = 4.2, DIVE_POOL_LIFE = 5;
+
+// REED BURST. Nine slots around where the player WAS, each a mortar nail on
+// its own fuse, plus one in the middle: a ring alone would let a still target
+// stand in the centre of it for free, and the whole cast is about WHERE YOU
+// WERE. The calm ring leaves one slot unfired - the gap - and the fuses
+// stagger from the far side so the opening is the last ground to go. Enraged
+// CLOSES the gap rather than adding nails: MAX_MORTARS is ten, and a ring
+// wider than the pool quietly pokes holes in its own warning.
+const REEDS_SLOTS = 9;
+const REEDS_CD = 8, REEDS_TELL = 0.9, REEDS_R = 7;
+const REEDS_DELAY = 0.55, REEDS_STAG = 0.14, REEDS_NAIL_R = 1.5;
+
+// MUD CRUSH. The ring is jumpable like every ground shock in this house; the
+// fan is the bite on the retreat corridor and is capped by the proj table.
+const CRUSH_CD = 6.5, CRUSH_TELL = 0.75;
+const CRUSH_RING_R = 4.0, CRUSH_RING_CAP = 26, CRUSH_RANGE = 14;
+const CRUSH_FAN_N = 7, CRUSH_FAN_RAGE = 9, CRUSH_FAN_ARC = 0.3;
+
+// GULP OF LIGHT - the swallow. Two fans, the second one re-aimed live.
+const GULP_CD = 4.2, GULP_TELL = 0.6;
+const GULP_N = 3, GULP_N_RAGE = 4, GULP_ARC = 0.26, GULP_GAP = 0.38;
+
+// The vent - the throat hangs open after every cast (shorter after the tow):
+// the window the fight has always paid with, kept exactly as it was priced.
+const VENT_BASE = 1.5, VENT_RAGE = 1.05;
+
+// Prowl holds this ring around the player between casts.
+const PROWL_WANT = 6.5;
+
+// THE MIRE IT LEAVES. Wherever the body crosses, the floor stays bog for a
+// moment - the theme's own ground, slowing and never bleeding, so everything
+// else the boss does gets harder to answer from inside it.
+const MIRE_R = 2.9, MIRE_LIFE = 2.6, MIRE_EVERY = 0.3;
+
+// The pose is rewritten from scratch every frame - a state only has to say
+// what it wants THIS frame, and leaving one puts the body back on its own.
+function mirePose(e) {
+  const s = e.scale, bs = e.bs;
+  e.group.scale.set(1, 1, 1);
+  e.group.rotation.x = 0;
+  e.swThroat.scale.setScalar(s * (bs.weakOpen ? 1.5 : 1));
+  for (const p of e.swPods) p.scale.setScalar(s);
+  for (const r of e.swReeds) r.scale.setScalar(s);
+  for (const c of e.swClaws) { c.scale.setScalar(s); c.rotation.x = c.userData.rx0; }
+}
+
+// Death and reset call this (it is the type's `cleanup`): every telegraph the
+// boss can be holding lives in bs.mark / bs.rings under bs.fx, which is
+// exactly the shape releaseMarks() releases.
+function mireCleanup(e) {
+  releaseMarks(e);
+}
+
+// A cooldown, scaled: the wave's rate tightens everything, and a cornered
+// sovereign - under half its bar - presses harder. Nothing here ever goes
+// quiet because the GULP has the shortest clock and fires from any range.
+function mireCd(e, base) {
+  return base * e.rate * (e.bs.enraged ? 0.72 : 1);
+}
+
+// Every cast ends here: marks back to the pool, pose back to neutral, jaw
+// dropped and throat up - the flat-armour window the fight is built around.
+function sovereignVent(e, a, secs) {
+  const bs = e.bs;
+  releaseMarks(e);
+  bs.mark = -1;
+  mirePose(e);
+  bs.weakOpen = true; bs.ventNote = 'THROAT EXPOSED';
+  bs.state = 'recover'; bs.t = bs.tMax = secs * e.rate;
+  bs.lastCast = bs.castNow;
+  e._setEyeAlert(false);
+  a.ctx.bossEvent('vent', e);
+}
+
+// THE TRAIL. Only when the body is actually crossing the floor: a lake keeps
+// its own surface, so the plant-states and the dive lay nothing.
+function mireTrailTick(e, a) {
+  const bs = e.bs;
+  bs.trailT -= a.dt;
+  if (bs.trailT > 0 || Math.hypot(a.vx, a.vz) < 0.5 || e.pos.y > 0.25) return;
+  bs.trailT = MIRE_EVERY;
+  a.ctx.addHazard(e.pos.x, e.pos.z, MIRE_R, MIRE_LIFE, 0, 'mire');
+}
+function castCrush(e, a) {
+  const bs = e.bs;
+  snapAim(e, a, true);
+  bs.castNow = 'crush';
+  bs.state = 'crushTell'; bs.t = bs.tMax = CRUSH_TELL;
+  bs.fx = a.ctx.effects;
+  if (!(bs.mark >= 0)) bs.mark = a.ctx.effects.markAcquire();
+  // The cd is spent on the ATTEMPT, not the landing: a cast the pool could
+  // not warn aborts below, and a starved boss that retried it every think
+  // would turn one missing warning into a machine gun of blind ones.
+  bs.cdCrush = mireCd(e, CRUSH_CD);
+}
+function castReeds(e, a) {
+  const bs = e.bs;
+  snapAim(e, a, true);
+  bs.castNow = 'reeds';
+  bs.state = 'reedsTell'; bs.t = bs.tMax = REEDS_TELL;
+  bs.fx = a.ctx.effects;
+  bs.rings = [];
+  const gap = bs.enraged ? -1 : (Math.random() * REEDS_SLOTS) | 0;
+  for (let i = 0; i < REEDS_SLOTS; i++) {
+    if (i === gap) continue;
+    const h = a.ctx.effects.markAcquire();
+    if (h < 0) continue;
+    const ang = (i / REEDS_SLOTS) * Math.PI * 2;
+    bs.rings.push({
+      mark: h,
+      x: e.tx + Math.cos(ang) * REEDS_R,
+      z: e.tz + Math.sin(ang) * REEDS_R,
+      // The ring CLOSES from the far side: each nail's fuse is its distance
+      // around from the opening, so the opening is the last ground to go.
+      delay: REEDS_DELAY + ((i - gap + REEDS_SLOTS) % REEDS_SLOTS) * REEDS_STAG,
+    });
+  }
+  // And the middle: the one place a ring never reaches.
+  const hc = a.ctx.effects.markAcquire();
+  if (hc >= 0) bs.rings.push({ mark: hc, x: e.tx, z: e.tz, delay: REEDS_DELAY });
+  if (!bs.rings.length) sovereignVent(e, a, 0.5);
+  // Spent on the attempt, like every cast: see castCrush.
+  bs.cdReeds = mireCd(e, REEDS_CD);
+}
+// One committed leg of the dive. Re-reads the player BETWEEN legs, never
+// within one: the wake bends, it does not steer.
+function mireLeg(e, a) {
+  const bs = e.bs, p = a.ctx.player.pos;
+  const d = Math.max(0.001, a.dist);
+  bs.dx = (p.x - e.pos.x) / d;
+  bs.dz = (p.z - e.pos.z) / d;
+  bs.legT = DIVE_TIME / DIVE_LEGS;
+}
+// The eruption. Everything the wake was promising, paid at once - and where
+// it came up stays lake.
+function sovereignErupt(e, a) {
+  const bs = e.bs, ctx = a.ctx;
+  const warned = bs.mark >= 0;
+  releaseMarks(e);
+  bs.mark = -1;
+  at.set(e.pos.x, 0.5, e.pos.z);
+  ctx.effects.shockwave(at, AMBER, DIVE_R, 0.5);
+  ctx.effects.burst(at, 0x8b9b45, 22, 5.5, 3, 0.6);
+  ctx.effects.burst(at, e.eyeBase, 12, 3, 2, 0.5);
+  ctx.effects.addShake(0.22);
+  if (ctx.sfx) ctx.sfx.impact();
+  ctx.addHazard(e.pos.x, e.pos.z, DIVE_POOL_R, DIVE_POOL_LIFE, 0, 'mire');
+  if (warned && canTouch(e, a, DIVE_R)) {
+    const p = ctx.player.pos;
+    const d = Math.hypot(p.x - e.pos.x, p.z - e.pos.z);
+    ctx.onHitPlayer(Math.min(DIVE_CAP, e.damage * 1.25 * (1 - 0.4 * d / DIVE_R)), e.pos, e);
+  }
+  sovereignVent(e, a, bs.enraged ? 1.3 : 1.95);
+}
+function castDive(e, a) {
+  const bs = e.bs;
+  snapAim(e, a, true);
+  bs.castNow = 'dive';
+  bs.state = 'sink'; bs.t = bs.tMax = DIVE_SINK;
+  bs.fx = a.ctx.effects;
+  if (!(bs.mark >= 0)) bs.mark = a.ctx.effects.markAcquire();
+  bs.cdDive = mireCd(e, DIVE_CD);
+  if (a.ctx.sfx) a.ctx.sfx.tone({ f: 240, f2: 90, t: DIVE_SINK, type: 'sine', v: 0.35 });
+}
+function castTide(e, a) {
+  const bs = e.bs;
+  bs.fx = a.ctx.effects;
+  bs.rings = [];
+  // BOTH rings up front: the tow must never pull without its bite warned, so
+  // a pool that could not promise both cancels the cast rather than tow blind.
+  for (const r of [TIDE_BITE, TIDE_R]) {
+    const h = a.ctx.effects.markAcquire();
+    if (h >= 0) bs.rings.push({ mark: h, r });
+  }
+  if (bs.rings.length < 2) { sovereignVent(e, a, 0.5); bs.cdTide = mireCd(e, TIDE_CD); return; }
+  snapAim(e, a, true);
+  bs.castNow = 'tide';
+  bs.state = 'tide'; bs.t = bs.tMax = TIDE_TIME;
+  bs.cdTide = mireCd(e, TIDE_CD);
+  if (a.ctx.sfx) a.ctx.sfx.tone({ f: 160, f2: 60, t: TIDE_TIME, type: 'sine', v: 0.4 });
+}
+function castGulp(e, a) {
+  const bs = e.bs;
+  snapAim(e, a, true);
+  bs.castNow = 'gulp';
+  bs.state = 'gulpTell'; bs.t = bs.tMax = GULP_TELL;
+  bs.cdGulp = mireCd(e, GULP_CD);
 }
 function aiMireSovereign(e, a) {
-  const bs = e.bs;
-  if (!e.swampState) { e.swampState = 'stalk'; e.swT = 1.2; bs.turn = 0; }
-  bs.enraged = e.hp < e.maxHp * 0.5;
+  const bs = e.bs, ctx = a.ctx;
+  if (bs.state === undefined) {
+    bs.state = 'prowl'; bs.t = bs.tMax = 1.0;
+    bs.mark = -1; bs.rings = []; bs.fx = null;
+    bs.weakOpen = false; bs.ventNote = 'THROAT EXPOSED';
+    bs.enraged = false;
+    // The dive opens the fight: it is the only cast gated on having ground to
+    // cross (dist > 11), so it has to be ready before the first prowl closes
+    // the gap or it can never fire at all.
+    bs.cdCrush = 1.2; bs.cdGulp = 0.8; bs.cdReeds = 3.4; bs.cdTide = 5; bs.cdDive = 1.0;
+    bs.trailT = 0; bs.wakeT = 0;
+    bs.castNow = ''; bs.lastCast = '';
+  }
+  const enraged = e.hp <= e.maxHp * 0.5;
+  if (enraged && !bs.enraged) ctx.bossEvent('enrage', e);
+  bs.enraged = enraged;
+  // Feared: fearMode 'stagger' means update() still calls us, so the fight
+  // cancels whatever it was telling and holds - and keeps its cooldowns,
+  // because a fear punish is not a refund of the next cast.
+  if (e.status.fear > 0) {
+    if (bs.state !== 'recover') sovereignVent(e, a, 0.4);
+    a.vx = 0; a.vz = 0;
+    bossTouch(e, a);
+    bs.t -= a.dt;
+    if (bs.t > 0) return;
+    bs.weakOpen = false; ctx.bossEvent('vent', e);
+    bs.state = 'prowl'; bs.t = 0.3 * e.rate;
+    return;
+  }
+  e.stepMul = 1.4;
+  mirePose(e);
+  // The jaw is the vent's own readout, so it lives outside the pose reset.
   e.swJaw.position.y = (bs.weakOpen ? 0.46 : 0.68) * e.scale;
-  e.swThroat.scale.setScalar(e.scale * (bs.weakOpen ? 1.5 : 1));
-  e.swT -= a.dt;
-  if (e.swampState === 'rush') {
-    faceHeading(e, e.swNX, e.swNZ);
-    e.stepMul = 4; const speed = Math.min(e.speed * 4, 7.2) * Math.min(1, a.sp / Math.max(0.001, e.speed)) * Math.min(1, Math.max(0, e.swT + a.dt) / a.dt);
-    a.vx = e.swNX * speed; a.vz = e.swNZ * speed;
-    if (!e.swHit && canTouch(e, a, 3)) {
-      landHit(e, a.ctx, Math.min(30, e.damage)); e.swHit = true;
+  bs.t -= a.dt;
+  bs.cdCrush -= a.dt; bs.cdGulp -= a.dt; bs.cdReeds -= a.dt;
+  bs.cdTide -= a.dt; bs.cdDive -= a.dt;
+  // TOUCHING IT HURTS, in every state, on its own clock. This is the whole
+  // melee layer now: the body is the bite, and running through the boss is
+  // never the shortcut - including through a submerged wake.
+  bossTouch(e, a);
+  if (bs.state === 'crushTell') {
+    a.vx = 0; a.vz = 0;
+    faceSnap(e);
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    e.group.scale.set(1 + 0.06 * fill, 1 + 0.3 * fill, 1 + 0.06 * fill);
+    e.group.rotation.x = -0.3 * fill;
+    for (const c of e.swClaws) {
+      c.rotation.x = c.userData.rx0 - 0.45 * fill;
+      c.scale.setScalar(e.scale * (1 + 0.4 * fill));
     }
-    if (e.swT <= 0 || e.blockedBy > 0.05 || Math.abs(e.pos.x) > 20 || Math.abs(e.pos.z) > 20) sovereignRest(e, a);
+    bs.fx.markSet(bs.mark, e.pos.x, e.pos.z, CRUSH_RING_R, AMBER, fill);
+    if (bs.t > 0) return;
+    // No warning drawn, no slam sold: the guard is BEFORE the release.
+    if (!(bs.mark >= 0)) { sovereignVent(e, a, 0.5); return; }
+    releaseMarks(e);
+    bs.mark = -1;
+    // THE SLAM - a jumpable ring of bog shock; the splayed feet were the tell.
+    flash(e, a, CRUSH_RING_R);
+    ctx.effects.addShake(0.26);
+    const p = ctx.player.pos;
+    const d = Math.hypot(p.x - e.pos.x, p.z - e.pos.z);
+    if (d < CRUSH_RING_R && Math.abs(p.y) < 1.5 &&
+        !segBlocked(e.pos.x, e.pos.y + 1, e.pos.z, p.x, p.y + 0.8, p.z, ctx.obstacles)) {
+      ctx.onHitPlayer(
+        Math.min(CRUSH_RING_CAP, e.damage * 1.1 * (1 - 0.4 * d / CRUSH_RING_R)), e.pos, e);
+    }
+    // THE PORTAL - a fan of bog light down the bearing splayed at the tell.
+    const n = bs.enraged ? CRUSH_FAN_RAGE : CRUSH_FAN_N;
+    for (let i = 0; i < n; i++) {
+      capturedShot(e, a, e.aim, (i - (n - 1) / 2) * CRUSH_FAN_ARC, 0.9 * e.scale);
+    }
+    if (ctx.sfx) ctx.sfx.impact();
+    sovereignVent(e, a, bs.enraged ? VENT_RAGE : VENT_BASE);
     return;
   }
-  if (e.swampState === 'tell') {
-    faceHeading(e, e.swNX, e.swNZ);
-    if (bs.attack === 'rush') lane(e, a, 12, 3, 1 - e.swT / 1.1);
-    e.swJaw.rotation.x = -0.15 * Math.sin(Math.max(0, e.swT) * 8);
-    if (e.swT > 0) return;
-    const warned = e.swMark >= 0; swampCleanup(e); e.swJaw.rotation.x = 0;
-    if (bs.attack === 'rush') {
-      if (!warned) { sovereignRest(e, a); return; }
-      e.swampState = 'rush'; e.swT = 1.25; e.swHit = false;
-    } else if (bs.attack === 'bog') {
-      // Open horseshoe, never a sealed ring. Its centre was captured when
-      // the crown lit; moving through the open side defeats every eruption.
-      const n = bs.enraged ? 7 : 5;
-      for (let i = 0; i < n; i++) {
-        const angle = e.swAim + Math.PI / 2 + i * Math.PI / (n - 1);
-        a.ctx.addMortar(e.swX + Math.cos(angle) * 4, e.swZ + Math.sin(angle) * 4,
-          2, 1.2 + i * 0.15, Math.min(22, e.damage * 0.65));
-      }
-      a.ctx.addMortar(e.swX, e.swZ, 2.1, 1.8, Math.min(22, e.damage * 0.65));
-      sovereignRest(e, a);
-    } else {
-      const n = bs.enraged ? 7 : 5;
-      for (let i = 0; i < n; i++) aimed(e, a, (i - (n - 1) / 2) * 0.22, e.swAim);
-      flash(e, a, 3); sovereignRest(e, a);
+  if (bs.state === 'reedsTell') {
+    a.vx = 0; a.vz = 0;
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    for (const ring of bs.rings) {
+      bs.fx.markSet(ring.mark, ring.x, ring.z, REEDS_NAIL_R, AMBER, fill);
+    }
+    // The bed stands on end: the family's own reeds, as the tell.
+    for (const s of e.swReeds) s.scale.setScalar(e.scale * (1 + fill * 0.9));
+    if (bs.t > 0) return;
+    for (const ring of bs.rings) {
+      bs.fx.markRelease(ring.mark);
+      // The mortar owns its own red warning from here: the amber buds above,
+      // the filling circles below - a two-stage tell of the same ground.
+      addWarnedMortar(ctx, ring.x, ring.z, REEDS_NAIL_R, ring.delay,
+        Math.min(20, e.damage * 0.6));
+    }
+    bs.rings.length = 0;
+    if (ctx.sfx) ctx.sfx.impact();
+    sovereignVent(e, a, bs.enraged ? VENT_RAGE : VENT_BASE);
+    return;
+  }
+  if (bs.state === 'sink') {
+    a.vx = 0; a.vz = 0;
+    faceSnap(e);
+    const f = 1 - Math.max(0, bs.t) / bs.tMax;
+    e.group.scale.set(1 + f * 0.18, 1 - f * 0.75, 1 + f * 0.18);
+    bs.fx.markSet(bs.mark, e.pos.x, e.pos.z, DIVE_R, AMBER, f * 0.3, 1, 0, 0.5);
+    if (bs.t > 0) return;
+    // No wake to show, no dive: the mark is the only promise an ambush has.
+    if (!(bs.mark >= 0)) { sovereignVent(e, a, 0.5); return; }
+    bs.state = 'dive'; bs.t = bs.tMax = DIVE_TIME;
+    mireLeg(e, a);
+    flash(e, a, DIVE_R);
+    if (ctx.sfx) ctx.sfx.impact();
+    return;
+  }
+  if (bs.state === 'dive') {
+    // UNDER THE MIRE: the floor's furniture does not stop it, and its body
+    // reads as the wake - squat, wide and shooting-lit. Touch still bites;
+    // the wake is the body now.
+    e.phase = true;
+    e.stepMul = DIVE_MUL;
+    const v = Math.min(a.sp * DIVE_MUL, DIVE_MAX);
+    a.vx = bs.dx * v; a.vz = bs.dz * v;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dx, -bs.dz);
+    e.group.scale.set(1.18, 0.25, 1.18);
+    bs.fx.markSet(bs.mark, e.pos.x, e.pos.z, DIVE_R, AMBER,
+      Math.min(1, 0.4 + 0.6 * Math.max(0, 1 - (a.dist - DIVE_ARRIVE) / 8)), 1, 0, 0.6);
+    bs.wakeT -= a.dt;
+    if (bs.wakeT <= 0) {
+      bs.wakeT = 0.12;
+      at.set(e.pos.x, 0.2, e.pos.z);
+      ctx.effects.burst(at, 0x8b9b45, 3, 1.6, 1.2, 0.4);
+    }
+    bs.legT -= a.dt;
+    if (bs.legT <= 0 && a.dist > DIVE_ARRIVE) mireLeg(e, a);
+    if (a.dist < DIVE_ARRIVE || bs.t <= 0) { sovereignErupt(e, a); return; }
+    return;
+  }
+  if (bs.state === 'tide') {
+    a.vx = 0; a.vz = 0;
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    e.swThroat.scale.setScalar(e.scale * (1 + fill * 0.8));
+    for (const pod of e.swPods) pod.scale.setScalar(e.scale * (1 + fill * 1.1));
+    for (const ring of bs.rings) {
+      bs.fx.markSet(ring.mark, e.pos.x, e.pos.z, ring.r, AMBER, fill, 1, 0, 0.35);
+    }
+    // The pull ramps in, and a player OFF the floor slips it: hopping from
+    // hummock to hummock is the swamp's own answer to its water.
+    const p = ctx.player.pos;
+    const ramp = Math.min(1, fill * 1.6);
+    if (a.dist < TIDE_R && ramp > 0 && p.y < 1.2) {
+      ctx.pullPlayer(e.pos.x - p.x, e.pos.z - p.z, TIDE_PULL * ramp);
+    }
+    if (bs.t > 0) return;
+    // THE BITE: everything the inner ring still holds. The hold was the
+    // warning - the tow was the cost of ignoring it.
+    flash(e, a, TIDE_BITE);
+    if (ctx.sfx) ctx.sfx.impact();
+    if (canTouch(e, a, TIDE_BITE)) {
+      ctx.onHitPlayer(Math.min(TIDE_CAP, e.damage * 1.1), e.pos, e);
+    }
+    sovereignVent(e, a, bs.enraged ? 0.6 : TIDE_VENT);
+    return;
+  }
+  if (bs.state === 'gulpTell') {
+    a.vx = 0; a.vz = 0;
+    const fill = 1 - Math.max(0, bs.t) / bs.tMax;
+    for (const pod of e.swPods) pod.scale.setScalar(e.scale * (1 + fill * 0.9));
+    e.swThroat.scale.setScalar(e.scale * (1 + fill * 0.6));
+    e.group.rotation.x = -0.16 * fill;
+    if (bs.t > 0) return;
+    bs.state = 'gulp'; bs.t = bs.tMax = GULP_GAP;
+    bs.gulpN = bs.enraged ? GULP_N_RAGE : GULP_N;
+    for (let i = 0; i < bs.gulpN; i++) {
+      capturedShot(e, a, e.aim, (i - (bs.gulpN - 1) / 2) * GULP_ARC, 0.9 * e.scale);
+    }
+    if (ctx.sfx) ctx.sfx.tone({ f: 680, f2: 240, t: 0.14, type: 'sine', v: 0.3 });
+    return;
+  }
+  if (bs.state === 'gulp') {
+    a.vx = 0; a.vz = 0;
+    e.swThroat.scale.setScalar(e.scale * 1.3);
+    if (bs.t > 0) return;
+    // The second swallow is aimed LIVE: the first fan answered where you
+    // were, this one answers where you actually went.
+    const p = ctx.player.pos;
+    const live = Math.atan2(p.z - e.pos.z, p.x - e.pos.x);
+    for (let i = 0; i < bs.gulpN; i++) {
+      capturedShot(e, a, live, (i - (bs.gulpN - 1) / 2) * GULP_ARC, 0.9 * e.scale);
+    }
+    if (ctx.sfx) ctx.sfx.tone({ f: 520, f2: 200, t: 0.14, type: 'sine', v: 0.3 });
+    sovereignVent(e, a, bs.enraged ? VENT_RAGE : VENT_BASE);
+    return;
+  }
+  if (bs.state === 'recover') {
+    // THE VENT: jaw dropped, throat up, a drift at a third speed. This is the
+    // shot the whole fight is priced around, and it is never long enough to
+    // be safe in - the trail is still being laid.
+    a.vx = a.px * a.sp * 0.3;
+    a.vz = a.pz * a.sp * 0.3;
+    mireTrailTick(e, a);
+    if (bs.t <= 0) {
+      bs.weakOpen = false;
+      ctx.bossEvent('vent', e);
+      bs.state = 'prowl';
+      bs.t = (0.3 + Math.random() * 0.25) * e.rate;
     }
     return;
   }
-  if (e.swampState === 'rest') {
-    if (e.swT > 0) return;
-    bs.weakOpen = false; a.ctx.bossEvent('vent', e);
-    e.swampState = 'stalk'; e.swT = (bs.enraged ? 0.9 : 1.5) * e.rate;
-  }
-  a.vx = a.px * a.sp; a.vz = a.pz * a.sp;
-  if (e.swT > 0 || a.dist > 28) return;
-  bs.attack = ['rush', 'bog', 'fan'][bs.turn++ % 3];
-  e.swampState = 'tell'; e.swT = 1.1;
-  e.swNX = a.nx; e.swNZ = a.nz; e.swAim = Math.atan2(a.nz, a.nx);
-  e.swX = a.ctx.player.pos.x; e.swZ = a.ctx.player.pos.z;
-  e._setEyeAlert(true); flash(e, a, bs.attack === 'bog' ? 5 : 2);
+  // PROWL - the wade. It holds its striking distance over the bog it is
+  // laying, weaving on its own flip so it never reads as a train on rails.
+  e.strafeT -= a.dt;
+  if (e.strafeT <= 0) { e.strafe *= -1; e.strafeT = 1 + Math.random() * 1.6; }
+  const along = a.dist > PROWL_WANT + 0.8 ? 1 : a.dist < PROWL_WANT - 0.8 ? -0.5 : 0.15;
+  a.vx = a.px * a.sp * along + -a.pz * e.strafe * a.sp * 0.5;
+  a.vz = a.pz * a.sp * along + a.px * e.strafe * a.sp * 0.5;
+  mireTrailTick(e, a);
+  if (bs.t > 0) return;
+  // The picker asks the most local question first; anything unanswered gets a
+  // fresh think in well under half a second, and the GULP has no range gate.
+  if (a.dist < TIDE_R && bs.cdTide <= 0) { castTide(e, a); return; }
+  if (a.dist > DIVE_MIN && bs.cdDive <= 0) { castDive(e, a); return; }
+  if (bs.cdReeds <= 0) { castReeds(e, a); return; }
+  if (a.dist < CRUSH_RANGE && bs.cdCrush <= 0) { castCrush(e, a); return; }
+  if (bs.cdGulp <= 0) { castGulp(e, a); return; }
+  bs.t = (0.22 + Math.random() * 0.2) * e.rate;
 }

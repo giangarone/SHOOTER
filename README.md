@@ -616,14 +616,27 @@ context. The start screen says so, and one click anywhere fixes it.
   their high orbit, hover visibly before a paired dart shot, then climb and
   retreat. Their four amber wings and long tails distinguish them overhead.
   **THE MIRE SOVEREIGN** carries a drowned cypress grove on a vast crocodilian
-  back. It stalks between three attacks: a straight jaw rush down a marked
-  lane, a horseshoe of staggered bog eruptions around a captured position,
-  and a broad reed-dart fan. Every attack has a wind-up and ends with 1.8
-  seconds of exposed throat: the jaw drops, the amber throat swells, and its
-  35% damage resistance comes off. At half health the ranged patterns widen
-  and stalking pauses shorten; warnings and recovery stay full length.
-  Rushes stop at cover and their speed is capped so later waves cannot outrun
-  the warning. The bog's open side and the fan's gaps remain escape routes.
+  back, and it does not hold a corner: it wades the arena, and the floor it
+  crosses stays mire behind it - bog water that grips your stride without
+  drawing blood. Touching the body hurts at all times, on a cooldown of its
+  own. Five casts, each with a plain telegraph, each answered by movement
+  rather than ammunition: the **MUD CRUSH** (it rears onto splayed claws and
+  slams a jumpable amber ring around itself, then spits a fan of bog light
+  down the bearing you fled on), the **REED BURST** (a ring of amber buds
+  rises around where you were and fires as staggered nails, closing from the
+  far side of its one gap - enraged, the gap closes instead), the **BOG DIVE**
+  (it sinks and the mire itself slides at you as a lit wake, committed to a
+  heading per leg and re-read between them, then erupts - cross the wake,
+  don't run with it), the **UNDERTOW** (it plants, breathes in, and two rings
+  drag you toward the jaw - the pull ramps and a hop slips it - then it snaps
+  at whatever the inner ring still holds), and the **GULP OF LIGHT** (the
+  throat pods fill and it swallows the marsh lights back out as a dart fan on
+  your old bearing, then gulps again aimed at where you actually went). Every
+  cast ends with the throat exposed and its 35% damage resistance off - the
+  dive's is the longest window, the undertow's the shortest. At half health
+  the fight enrages: cooldowns tighten, the reed gap closes and every fan
+  widens. No shield, no bigger bar - the pressure is ground and frequency,
+  and the answer is to keep moving.
 - **FUNGAL: wine-coloured caps, luminous mint gills and woody mycelium.**
   **Buttonlings** raise their caps before a short radial spore clap; leave
   the marked circle before it closes. **Gillspitters** alternate a two-spore
@@ -851,15 +864,23 @@ context. The start screen says so, and one click anywhere fixes it.
   moment, and under half the bar every clock shortens and the charge comes
   back for a second pass. And the one thing carried over untouched: you still
   choose its damage window - its canopy is shut and armoured at any range and
-  OPENS when you come inside sixteen metres, no clock on it at all, so the
-  whole fight is the two of you arguing about the distance. **THE PALE CROWN**, RIME's, is the one fight in
-  the rotation that is not about the boss: it spends most of itself inside a
-  shell that takes NOTHING at all, and the way in is never the boss - three
-  anchors go into the floor with the shell, and breaking all three is what
-  brings it down. So the fight alternates between two completely different
-  jobs, and the shell has no clock on it: a player who finds the anchors fast
-  is paid in a longer window rather than the same window later. Three shells,
-  each with the arena a little more frozen than the last. The **FORGE-TYRANT**,
+  OPENS when they come inside sixteen metres, no clock on it at all, so the
+  whole fight is the two of you arguing about the distance. **THE PALE CROWN**, RIME's, is the rotation's
+  fastest fight and the purest statement of the theme: RIME spends the PLAYER
+  rather than the floor, so everything the Crown does either lays cold ground
+  or punishes you for standing on it. Five telegraphed attacks off a shuffled
+  bag, never the same one twice in a row, resting about a second between them:
+  an aimed lance fan fired twice with a re-aim between the volleys - five
+  lances wide instead of three whenever you are CHILLED, because the theme's
+  cold is what loads its gun; a glacier rush down a lane it draws to the far
+  wall, crossing the whole arena and freezing the corridor behind it, and below
+  half the bar it stops only to re-aim and come down the lane again; a nova
+  that answers hugging, chilling whatever it catches and freezing the rim it
+  opens; a gapped ring of icicles snapped shut around wherever you are
+  standing; and a rain of strikes that lands where you were and then where you
+  WENT. No shell, no damage gate anywhere in it - the floor is the Crown's
+  defence, and body contact always costs. The **FORGE-TYRANT**,
+
   EMBER's, is the mirror of
   the Colossus: it HEATS UP as it fights - unlocking its fire ring and its
   forked fissures as the bar climbs - and when the bar fills it has to stop
@@ -929,20 +950,19 @@ context. The start screen says so, and one click anywhere fixes it.
   and rings you in burning brands with exactly one slot left dark. It walks
   the room through all of it, the pause between ceremonies is half a second,
   and under a third of the bar even that goes away. **THE BROODMOTHER**,
-  HIVE's, is a nursery: she is slow and nearly harmless in herself - a melee
-  swing, a bite, nothing more - and everything dangerous in the room is
-  something she made. Grubs arc in on a timer, land under a filling circle
-  and fight as ordinary rushers once they are down, three at most, refilled
-  for as long as she lives. Her back bulbs swell toward the next refill and
-  FLARE before she throws the volley - the spitter's own fan at boss scale,
-  so the player already knows how to read it. And every so often she stops,
-  the floor around her pulses, and a gapped ring of honey is laid where she
-  stands: she walks on and the ring stays behind, so over a fight the room
-  fills with pockets of burning honey exactly where she has been. Under a
-  quarter of the bar she EATS her own brood for a burst of speed - the only
-  enrage in the game that costs the boss something the player can watch it
-  pay, and a player who kept the brood cleared takes nothing from the phase
-  but the speed. **THE RELIQUARY**, CATHEDRAL's, was rebuilt as THE OFFICE:
+  HIVE's, is the nursery turned predator: she is never still, stalking a ring
+  around the player with sudden sideways skitters, and her touch costs from
+  the first second to the last. The brood trickles out as always - grubs arc
+  in under filling circles - but now she also throws the BURST, three of them
+  at once in a ring around you; the BOMBARD, a walking line of honey mortars
+  that land as burning ground; the SWEEP, a planted fan that turns through an
+  arc between casts; and the RUSH, a telegraphed lane she charges down at
+  full pelt with her abdomen smearing honey the whole way. Stand on her too
+  long and the NOVA answers: a disc fills at her feet, the slam lands on
+  everything grounded inside it, and a gapped ring of honey pens in whoever
+  stayed. Under a quarter of the bar she EATS her own brood for speed - the
+  only enrage in the game that costs the boss something the player can watch
+  it pay. **THE RELIQUARY**, CATHEDRAL's, was rebuilt as THE OFFICE:
   a liturgy of six rites said over the room, every one telegraphed on the
   model and on the floor, and the shrine CIRCLES the nave between them
   instead of holding a corner. The VOLLEY is the curate's processional fan
@@ -3353,12 +3373,14 @@ test/ember.mjs      EMBER end to end - the fan, the sweep on the beat, the
                     and charges for being touched in any state
 test/rime.mjs       RIME end to end - the shard's conditional burst, the
                     glacier's crust and its one nova, the hailer's gapped ring,
-                    the hoarfrost's field, and the Pale Crown's anchors
+                    the hoarfrost's field, and the Pale Crown's five
+                    telegraphed attacks, touch and clock
 test/candy.mjs      CANDY counterplay, musical support, shell loss and the
                     Confectioner's five-pattern fight: lanes returned on death,
                     every dodge answered, every tell held honest
 test/fungal.mjs     FUNGAL growth patterns, bounded healing, the Spore Regent's
                     six-attack deck, contact rule and warning exhaustion
+
 test/insects.mjs    INSECTS committed charges, pheromone links, boss patterns and warning cleanup
 test/swamp.mjs      SWAMP counterplay, cleansing, attack recovery and telegraph cleanup
 test/coral.mjs      CORAL captured patterns, healing, boss openings and warning ownership
@@ -3405,8 +3427,10 @@ test/hive.mjs       HIVE end to end - the swarm spent as currency, so every
                     half plated AND its back half not, killed slow AND killed
                     fast, the carapace cheaper through AND still stacked
                     after the nurse is dead, the weeper's arc costing on the
-                    line AND nothing off it, and the Broodmother eating her
-                    own brood to panic
+                    line AND nothing off it, and the Broodmother moving -
+                    a rush that crosses its own telegraphed lane, a nova that
+                    hits the grounded and spares whoever is outside it, and
+                    the brood eaten to panic under a quarter of the bar
 test/cathedral.mjs  CATHEDRAL end to end - the sanctuary and the toll, so
                     the assertions are about thresholds: the penitent visibly
                     kneeling and taking 30% less damage there, the curate's

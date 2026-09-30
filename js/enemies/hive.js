@@ -13,8 +13,9 @@
 import * as THREE from 'three';
 import { pointInObstacle } from '../utils.js';
 import {
-  ENEMY_TYPES, FLY_RATE_DEFAULT, SHARED_MATS, aiMelee, bossTouch, eyes, lump,
-  orbit, partsFor, prism, slab, spike,
+  BOSS_REACH_Y, ENEMY_TYPES, FLY_RATE_DEFAULT, SHARED_MATS, aiMelee, bossTouch,
+  capturedShot, eyes, lump, orbit, partsFor, prism, releaseMarks, segBlocked,
+  slab, spike,
 } from './shared.js';
 
 // ---- the theme ------------------------------------------------------------
@@ -206,33 +207,57 @@ export const WEEP_CLIMB = 1.5;
 //
 // THE BROODMOTHER. A queen that is not carried: she drags herself about on
 // claw-legs with the abdomen on the floor behind her, and everything
-// dangerous in the room is something she made.
+// dangerous in the room is something she MAKES or something she is carrying.
+// She hunts on the move now - a circling stalk at the edge of the player's
+// reach broken by a charge that crosses the arena - and the nursery never
+// stops working while she does it.
 //
-//   the BROOD   grubs arc in on a timer, land under a filling circle and
-//               fight as ordinary rushers once they are down. Three at most,
-//               refilled for as long as she lives.
-//   the VOLLEY  a three-round fan off her back bulbs, telegraphed by the
-//               bulbs flaring - the spitter's attack at boss scale, so the
-//               player already knows how to read it.
-//   the RING    she stops, the floor around her pulses for a beat, and a
-//               gapped ring of honey is laid where she stands. The ring
-//               travels with her in the only sense that matters: it is laid
-//               where she IS, so the room fills with pockets of honey where
-//               she has been, and the floor the player was using to kite
-//               her on goes away a piece at a time.
-//   the PANIC   under a quarter of the bar she eats her own brood for a
-//   (once)     burst of speed. The only enrage in the game that costs the
-//               boss something the player can see it pay.
+//   the VOLLEY   a three-round fan off her back bulbs, thrown WITHOUT
+//                breaking stride; the bulbs flare first. The bread and butter
+//                between the big attacks, so the fight has no lulls.
+//   the BROOD    grubs arc in on a timer and hatch under a filling circle.
+//                Three at most off the trickle, refilled for as long as she
+//                lives, and they bite with her own scaled damage.
+//   the RING     she plants, the floor around her pulses, and a gapped ring
+//                of honey is laid where she stands.
+//   THE RUSH     a lane fills ahead of her and she drags herself down it at
+//                charge speed, the abdomen smearing burning honey the whole
+//                way. Committed at the tell - the dodge is a step OFF the
+//                lane - and a wall or a crate ends it early in a slam that
+//                costs her a moment.
+//   THE BOMBARD  the abdomen heaves and a staggered line of honey mortars
+//                lands across where the player is, where they are running
+//                to, and both flanks. Every circle that fills becomes
+//                burning ground.
+//   THE BURST    the whole rack flares and three grubs leave in one breath,
+//                landing in a ring AROUND the player under three filling
+//                circles. The trickle pays pressure in dribbles; the burst
+//                spends it all at once.
+//   THE SWEEP    she plants and turns a nine-round fan through an arc across
+//                the player's bearing, alternating the direction cast to
+//                cast. The wall of rounds MOVES: outrun the turn, duck
+//                behind cover - or be inside her reach, which is what the
+//                nova prices.
+//   THE NOVA     the anti-hug. The abdomen lifts, a disc fills at her feet,
+//                and the slam lands on everything GROUNDED in five and a
+//                half metres - a jump clears it. The honey annulus it lays
+//                has one gap in it.
+//   the PANIC    under a quarter of the bar she eats her own brood for a
+//   (per meal)   burst of speed, and comes out of the meal with the rush
+//                and the nova already back up. The only enrage in the game
+//                that costs the boss something the player can watch it pay.
 //
-// The health argument is the brood: she is a body that keeps repairing the
-// room's real threat, and the fight is over when the player out-damages the
-// nursery or clears the grubs faster than she can refill them.
+// The health argument is the brood and the floor together: she keeps
+// repairing the room's real pressure while taking the safe ground away.
 
-// How many grubs she keeps and how often she refills. The arc they fly is
-// EGG_ARC_H's, one size up - see BROOD_ARC_MUL, on the throw.
+// Brood, trickle and burst together. BROOD_MAX is what the TRICKLE alone
+// keeps alive; a burst is allowed to push the room as far as
+// BROOD_TOTAL_MAX and no further, so the fight never drowns in bodies.
 export const BROOD_MAX = 3;
 
-export const BROOD_CD = 6.5;
+export const BROOD_TOTAL_MAX = 6;
+
+export const BROOD_CD = 4.2;
 
 // Her throws start two metres up rather than one, so the brood's arcs read
 // taller than an oviger's from anywhere in the room: a bigger body makes a
@@ -242,7 +267,7 @@ export const BROOD_ARC_MUL = 1.2;
 // How long between volleys, and the tell. The bulbs flare for the whole
 // wind-up, so a player watching the boss and a player watching the room are
 // reading the same clock.
-export const BROOD_VOLLEY_CD = 3.4;
+export const BROOD_VOLLEY_CD = 2.6;
 
 export const BROOD_VOLLEY_TELL = 0.5;
 
@@ -255,6 +280,8 @@ export const BROOD_VOLLEY_FAN = 0.16;
 // one, so the floor never fills past what the pool can draw.
 export const BROOD_RING_TELL = 0.85;
 
+export const BROOD_RING_CD = 11;
+
 export const BROOD_RING_R = 6.0;
 
 export const BROOD_RING_N = 10;
@@ -265,14 +292,141 @@ export const BROOD_RING_LIFE = 7.5;
 
 export const BROOD_RING_DPS = 12;
 
+// THE RUSH. A committed lane: the line and its length are fixed at the start
+// of the tell, then she crosses it at charge speed with the abdomen smearing
+// burning honey behind her. The hit is bigger than the touch and happens
+// once, on the body she passes through.
+export const BM_RUSH_CD = 7.5;
+
+export const BM_RUSH_TELL = 0.85;
+
+// Multiples of her own walk, capped in metres a second BEFORE any slow is
+// applied - the cap on the unmodified stride means a late-wave charge is not
+// immune to Cryo and Absolute Zero.
+export const BM_RUSH_MUL = 4.6;
+
+export const BM_RUSH_CAP = 12.5;
+
+export const BM_RUSH_TIME = 2.0;
+
+export const BM_RUSH_HIT_PAD = 1.2;
+
+export const BM_RUSH_DMG_CAP = 34;
+
+// The drag: a patch this often, small and short-lived. The slick is a record
+// of where she has been rather than a wall the fight cannot cross.
+export const BM_RUSH_SLICK_EVERY = 0.16;
+
+export const BM_RUSH_SLICK_R = 1.3;
+
+export const BM_RUSH_SLICK_LIFE = 4.2;
+
+export const BM_RUSH_SLICK_DPS = 10;
+
+export const BM_RUSH_LANE_W = 1.5;
+
+export const BM_RUSH_LEN = 17;
+
+// THE BOMBARD. A staggered line of honey mortars over the player's position,
+// its lead, and both flanks; each impact circle is the patch it is about to
+// become, so the warning and the ground are one shape.
+export const BM_BOMBARD_CD = 6.5;
+
+export const BM_BOMBARD_TELL = 0.7;
+
+export const BM_BOMBARD_R = 2.3;
+
+export const BM_BOMBARD_DELAY = 1.05;
+
+export const BM_BOMBARD_STAGGER = 0.14;
+
+export const BM_BOMBARD_DMG_CAP = 22;
+
+export const BM_BOMBARD_PATCH_R = 1.9;
+
+export const BM_BOMBARD_PATCH_LIFE = 5.0;
+
+export const BM_BOMBARD_PATCH_DPS = 10;
+
+// THE BURST. The rack fires three grubs in one breath into a ring around the
+// player (a fourth on the second pass through the deck). The landing circles
+// are the grubs' own egg telegraph - the flight is the same contract the
+// trickle keeps, three of it at once.
+export const BM_BURST_CD = 9.0;
+
+export const BM_BURST_TELL = 0.75;
+
+export const BM_BURST_N = 3;
+
+export const BM_BURST_R = 3.4;
+
+// THE SWEEP. Planted and committed: the fan's centre is locked when firing
+// starts and the rounds walk across it, alternating direction cast to cast.
+// The answer is to move - not to stand where she first looked.
+export const BM_SWEEP_CD = 5.5;
+
+export const BM_SWEEP_TELL = 0.55;
+
+export const BM_SWEEP_T = 1.15;
+
+export const BM_SWEEP_N = 9;
+
+// Half-width of the arc, in radians. Wide enough that standing still is
+// always wrong, narrow enough that a sprint across it wins.
+export const BM_SWEEP_ARC = 0.85;
+
+// THE NOVA. The anti-hug: everything GROUNDED inside the disc pays, and
+// anything higher than a jump off the floor is clear of it - the slam is
+// the floor's, and jumping is the complete answer the same lesson the
+// game's rolling rings already taught.
+export const BM_NOVA_CD = 5.0;
+
+export const BM_NOVA_TELL = 0.7;
+
+export const BM_NOVA_R = 5.6;
+
+export const BM_NOVA_Y = 1.5;
+
+export const BM_NOVA_DMG_CAP = 30;
+
+export const BM_NOVA_PATCH_R = 1.6;
+
+export const BM_NOVA_PATCHES = 6;
+
+export const BM_NOVA_PATCH_LIFE = 4.5;
+
+export const BM_NOVA_PATCH_DPS = 10;
+
+// THE STALK. She holds a band around the player rather than planting at
+// arm's length: closing outside it, backing off inside it, circling on it,
+// with a skittering sideways burst every few seconds so the circle is not a
+// rail. The gap is the fight's pacing dial between big attacks.
+export const BM_STALK_MID = 8.4;
+
+export const BM_STALK_BAND = 2.2;
+
+export const BM_STALK_STRAFE = 0.62;
+
+export const BM_SKITTER_CD = 3.4;
+
+export const BM_SKITTER_T = 0.5;
+
+export const BM_SKITTER_MUL = 2.3;
+
+export const BM_GAP = 0.55;
+
 // The panic: where on the bar it fires, and how often she is allowed to eat.
 // The meal gap is real - a player who keeps the brood alive between meals
 // keeps it, and one who clears it starves the enrage down to the speed alone.
 export const BROOD_PANIC_FRAC = 0.25;
 
-export const BROOD_PANIC_CD = 12;
+export const BROOD_PANIC_CD = 10;
 
 export const BROOD_PANIC_SPEED = 1.35;
+
+// Where on the model the fan and the sweep leave from, in unit space - the
+// bulbs ride the thorax at y~1.68, and the muzzle has to read as theirs.
+export const BROOD_MUZZLE_H = 1.68;
 
 // Scratch, module-level and reused: the ring-laying and every burst run more
 // than once a second across a whole wave.
@@ -468,13 +622,14 @@ export function buildGrub(e, g, s) {
 // THE BROODMOTHER. The abdomen is a third of the model and almost all of its
 // mass, dragging on the floor behind the armoured thorax. The bulbs on her
 // back are the brood - they swell as the next refill nears and flare when a
-// volley is coming, so the nursery reads from anywhere in the room.
+// volley is coming, so the nursery reads from anywhere in the room. The
+// abdomen itself is the nova's tell: it rears off the floor before the slam.
 export function buildBroodmother(e, g, s) {
   const P = partsFor(e, g, s);
   // THE ABDOMEN. The theme's sac at boss scale: enormous, veined, lit, and
-  // dragging - a queen's body, and the one part of the fight the player
-  // never has any reason to shoot.
-  P('broodAbd', lump(0.62), {
+  // dragging - a queen's body. Kept on the enemy because the nova rears it
+  // and the rush drags it, and both reads live on this one part.
+  e.broodAbd = P('broodAbd', lump(0.62), {
     y: 0.6, z: 1.08, sx: 1.5, sy: 1.05, sz: 1.8, mat: SHARED_MATS.hiveSac,
   });
   // The thorax, armoured in the borer's plate material - the two halves of
@@ -884,135 +1039,153 @@ export function releaseGrub(e) {
 
 // ---- the boss -------------------------------------------------------------
 
+// THE RUSH charge speed: capped on the unmodified stride so Cryo still bites.
+function _rushSpeed(e, a, remaining) {
+  const slow = Math.min(1, a.sp / Math.max(0.001, e.speed));
+  const frame = Math.max(0, Math.min(1, (remaining + a.dt) / a.dt));
+  return Math.min(BM_RUSH_CAP, e.speed * BM_RUSH_MUL) * slow * frame;
+}
+
+// The boss's own touch: in every state but the rush, which lands its own
+// bigger hit through the same gate (contact during a charge is the charge).
+function _broodTouch(e, a) {
+  if (e.bs.state === 'rush') return;
+  bossTouch(e, a);
+}
+
+// One grub, thrown from her back: the trickle's single and the burst's ring
+// are the same throw - same arc, same landing circle, same hatch - so the
+// player reads the burst as three of a thing they already know.
+export function _broodThrow(e, ctx, tx, tz) {
+  if (!ctx.addAnchor) return;
+  const grub = ctx.addAnchor(e.pos.x, e.pos.z, 'grub');
+  if (!grub) return;
+  grub.eggFromX = e.pos.x;
+  grub.eggFromZ = e.pos.z;
+  grub.eggToX = tx;
+  grub.eggToZ = tz;
+  grub.eggFromY = 1.6;
+  grub.eggArcH = EGG_ARC_H * BROOD_ARC_MUL;
+  grub.eggT = 0;
+  grub.grubMark = -1;
+  // Her grubs bite with her own scaled damage - the brood is the boss's
+  // reach, and a reach that did not scale would be decoration.
+  grub.damage = e.damage * 0.6;
+  e.bs.brood.push(grub);
+  _hiveAt.set(e.pos.x, 1.6, e.pos.z);
+  ctx.effects.burst(_hiveAt, 0xffd54f, 16, 5, 3, 0.6);
+}
+
+// THE BOMBARD's throw: a staggered line of honey mortars - one where the
+// player stands, one on their lead, one on each flank - and every landing
+// becomes burning ground. The delay climbs across the line so the hits walk
+// rather than landing as one wall.
+function _broodBombard(e, a) {
+  const ctx = a.ctx;
+  const p = ctx.player;
+  const px = p.pos.x;
+  const pz = p.pos.z;
+  // Lead the GROUND-Velocity, not the eye: a jumping player has no run to
+  // lead, and reading it would put the shells where they were headed anyway.
+  const lvx = p.vel ? p.vel.x : 0;
+  const lvz = p.vel ? p.vel.z : 0;
+  const leadT = Math.min(1.1, a.dist / 14);
+  const spots = [
+    [px, pz],
+    [px + lvx * leadT, pz + lvz * leadT],
+  ];
+  // Flanks square to her line of approach, on the far side of the player.
+  for (const s of [-1, 1]) {
+    spots.push([px + -a.nz * s * 3.4 + a.nx * 1.5, pz + a.nx * s * 3.4 + a.nz * 1.5]);
+  }
+  let d = BM_BOMBARD_DELAY;
+  for (const [x0, z0] of spots) {
+    const x = Math.max(-20, Math.min(20, x0));
+    const z = Math.max(-20, Math.min(20, z0));
+    _hiveTo.set(x, 0.4, z);
+    if (pointInObstacle(_hiveTo, ctx.obstacles)) continue;
+    // Each circle lands AS the patch it becomes - the warning is the ground's
+    // own shape, drawn at its FINAL size while there is still time to leave.
+    ctx.addMortar(x, z, BM_BOMBARD_PATCH_R, d, Math.min(BM_BOMBARD_DMG_CAP, e.damage * 0.7),
+      { radius: BM_BOMBARD_PATCH_R, life: BM_BOMBARD_PATCH_LIFE, dps: BM_BOMBARD_PATCH_DPS, kind: 'hiveblood' });
+    d += BM_BOMBARD_STAGGER;
+  }
+  _hiveAt.set(e.pos.x, 1.9, e.pos.z);
+  ctx.effects.burst(_hiveAt, 0xffd54f, 20, 6, 3, 0.6);
+  ctx.effects.addShake(0.18);
+  if (ctx.sfx) ctx.sfx.impact();
+}
+
+// THE BURST: the rack goes off - one ring of grubs thrown at once around the
+// player, each under its own landing circle. Cooldown-charged on the throw;
+// a full brood skips the attack entirely rather than standing for nothing.
+function _broodBurst(e, a) {
+  const ctx = a.ctx;
+  const p = ctx.player;
+  const n = BM_BURST_N + (e.cycle ? 1 : 0);
+  const off = Math.random() * Math.PI * 2;
+  let thrown = 0;
+  for (let i = 0; i < n; i++) {
+    let placed = false;
+    for (let tries = 0; tries < 8 && !placed; tries++) {
+      const ang = off + ((i + (tries ? Math.random() * 0.4 : 0)) / n) * Math.PI * 2;
+      const r = BM_BURST_R * (0.9 + Math.random() * 0.35);
+      const x = Math.max(-20, Math.min(20, p.pos.x + Math.cos(ang) * r));
+      const z = Math.max(-20, Math.min(20, p.pos.z + Math.sin(ang) * r));
+      if (Math.hypot(x - e.pos.x, z - e.pos.z) < e.radius + 2) continue;
+      _hiveTo.set(x, 0.4, z);
+      if (pointInObstacle(_hiveTo, ctx.obstacles)) continue;
+      _broodThrow(e, ctx, x, z);
+      placed = true;
+      thrown++;
+    }
+  }
+  if (thrown) ctx.effects.addShake(0.2);
+}
+
 export function aiBroodmother(e, a) {
   const bs = e.bs;
   const ctx = a.ctx;
   if (bs.state === undefined) {
     bs.state = 'walk';
+    bs.t = 1.2;
     bs.broodCd = 1.5;
-    bs.volleyCd = 2.4;
+    bs.volleyCd = 1.6;
     bs.volleyTell = 0;
+    bs.ringCd = 4.5;
     bs.ringTell = 0;
-    bs.ringCd = 5;
     bs.panicAt = false;
     bs.panicCd = 0;
     bs.brood = [];
+    bs.attack = 0;
+    bs.attacks = ['rush', 'bombard', 'sweep', 'burst', 'ring', 'nova'];
+    bs.dirX = 0;
+    bs.dirZ = -1;
+    bs.mark = -1;
+    bs.fx = ctx.effects;
+    bs.skitterT = 0;
+    bs.skitterSign = 1;
+    bs.skitterCd = BM_SKITTER_CD;
   }
+  bs.fx = ctx.effects;
 
-  // Standing on her costs, in every state - she is a slow boss and this is
-  // what stops "hug the queen" being the whole fight.
-  bossTouch(e, a);
+  _broodTouch(e, a);
 
-  // THE BULBS, driven every frame: they swell toward the next refill and
-  // flare during a volley's tell, so the nursery's state is on the boss's
-  // back rather than in anybody's imagination.
+  // THE BULBS AND THE ABDOMEN, driven every frame: the bulbs swell toward the
+  // next refill and flare for the volley; the abdomen rears for the nova and
+  // the bombard, so her whole nursery reads off her back before it fires.
   const nextIn = Math.max(0, Math.min(1, bs.broodCd / BROOD_CD));
+  const flaring = bs.volleyTell > 0;
   for (const b of bs.bulbs) {
     b.rotation.y += a.dt * 0.8;
-    if (bs.volleyTell > 0) b.scale.setScalar(1.6 * e.scale);
+    if (flaring) b.scale.setScalar(1.6 * e.scale);
     else b.scale.setScalar((0.6 + (1 - nextIn) * 0.8) * e.scale);
   }
-
-  // ---- the ring -----------------------------------------------------------
-  // A claim on the floor where she is standing: a beat of warning, a pulse
-  // at the radius, then a gapped ring of honey laid in one frame. She walks
-  // on and the ring stays behind, so over a fight the room fills with
-  // pockets of honey where she has been.
-  if (bs.ringTell > 0) {
-    bs.ringTell -= a.dt;
-    a.vx = 0;
-    a.vz = 0;
-    e._setEyeAlert(true);
-    if (ctx.effects) {
-      _hiveAt.set(e.pos.x, 0.12, e.pos.z);
-      ctx.effects.shockwave(_hiveAt, 0xffb300, BROOD_RING_R, 0.16);
-    }
-    if (bs.ringTell <= 0) {
-      e._setEyeAlert(false);
-      bs.ringCd = 9 * e.rate;
-      const off = Math.random() * Math.PI * 2;
-      // A GAP IN THE RING, rotated at random: a closed ring with the boss
-      // inside it would be a wall with the player's own kite lane gone,
-      // and the gap is what makes the ring a question rather than a jail.
-      const gapAt = (Math.random() * BROOD_RING_N) | 0;
-      for (let i = 0; i < BROOD_RING_N; i++) {
-        if (i === gapAt || i === (gapAt + 1) % BROOD_RING_N) continue;
-        const ang = off + (i / BROOD_RING_N) * Math.PI * 2;
-        ctx.addHazard(
-          e.pos.x + Math.cos(ang) * BROOD_RING_R,
-          e.pos.z + Math.sin(ang) * BROOD_RING_R,
-          BROOD_RING_PATCH_R, BROOD_RING_LIFE, BROOD_RING_DPS, 'hiveblood'
-        );
-      }
-      _hiveAt.set(e.pos.x, 0.1, e.pos.z);
-      ctx.effects.shockwave(_hiveAt, 0xffb300, BROOD_RING_R + 2, 0.4);
-      ctx.effects.addShake(0.2);
-      if (ctx.sfx) ctx.sfx.impact();
-    }
-    return;
-  }
-
-  // ---- the volley ---------------------------------------------------------
-  if (bs.volleyTell > 0) {
-    bs.volleyTell -= a.dt;
-    if (bs.volleyTell <= 0) {
-      // THE FAN, off the bulbs: the spitter's attack at boss scale, so the
-      // player meets it already knowing how to read it.
-      const y = 1.1 * (e.group.scale.y || 1);
-      for (let i = -1; i <= 1; i++) {
-        ctx.addProjectile(e.pos.x, y, e.pos.z, 'broodmother', 1, i * BROOD_VOLLEY_FAN);
-      }
-      _hiveAt.set(e.pos.x, y, e.pos.z);
-      ctx.effects.burst(_hiveAt, 0xffd54f, 14, 5, 2, 0.4);
-    }
-  } else {
-    bs.volleyCd -= a.dt;
-    if (bs.volleyCd <= 0 && a.dist < 26) {
-      bs.volleyCd = BROOD_VOLLEY_CD * e.rate;
-      bs.volleyTell = BROOD_VOLLEY_TELL;
-      e.flash = 0.15;
-    }
-  }
-
-  // ---- the brood ----------------------------------------------------------
-  // Refill on a timer up to the cap. A dead grub frees its slot through the
-  // list itself, so the cap is checked live - a player clearing the brood
-  // faster simply faces a room that keeps refilling, never one that stops.
-  bs.brood = bs.brood.filter((q) => q && !q.dead);
-  bs.broodCd -= a.dt;
-  if (bs.broodCd <= 0 && bs.brood.length < BROOD_MAX) {
-    bs.broodCd = BROOD_CD * e.rate;
-    const p = ctx.player;
-    // Thrown NEAR the player rather than at them - the brood is pressure
-    // on the player's position, and the landing ring is the warning.
-    let sx = p.pos.x;
-    let sz = p.pos.z;
-    for (let tries = 0; tries < 8; tries++) {
-      const ang = Math.random() * Math.PI * 2;
-      const rad = 5 + Math.random() * 5;
-      sx = Math.max(-20, Math.min(20, p.pos.x + Math.cos(ang) * rad));
-      sz = Math.max(-20, Math.min(20, p.pos.z + Math.sin(ang) * rad));
-      if (Math.hypot(sx - e.pos.x, sz - e.pos.z) > e.radius + 2) break;
-    }
-    if (ctx.addAnchor) {
-      const grub = ctx.addAnchor(e.pos.x, e.pos.z, 'grub');
-      if (grub) {
-        grub.eggFromX = e.pos.x;
-        grub.eggFromZ = e.pos.z;
-        grub.eggToX = sx;
-        grub.eggToZ = sz;
-        grub.eggFromY = 1.6;
-        grub.eggArcH = EGG_ARC_H * BROOD_ARC_MUL;
-        grub.eggT = 0;
-        grub.grubMark = -1;
-        // Her grubs bite with her own scaled damage - the brood is the
-        // boss's reach, and a reach that did not scale would be decoration.
-        grub.damage = e.damage * 0.6;
-        bs.brood.push(grub);
-        _hiveAt.set(e.pos.x, 1.6, e.pos.z);
-        ctx.effects.burst(_hiveAt, 0xffd54f, 16, 5, 3, 0.6);
-      }
-    }
+  const rearing = bs.state === 'novaTell' || bs.state === 'bombardTell';
+  if (e.broodAbd) {
+    const lift = rearing ? (1 - Math.max(0, bs.t) / (bs.state === 'novaTell' ? BM_NOVA_TELL : BM_BOMBARD_TELL)) : 0;
+    e.broodAbd.position.y = (0.6 + lift * 0.75) * e.scale;
+    e.group.rotation.x = rearing ? -lift * 0.35 : 0;
   }
 
   // ---- the panic -----------------------------------------------------------
@@ -1044,12 +1217,373 @@ export function aiBroodmother(e, a) {
     ctx.effects.addShake(0.3);
   }
 
-  // ---- walking, and the ring's call ---------------------------------------
-  aiMelee(e, a);
+  // ---- committed attack states ---------------------------------------------
+  if (bs.state === 'rushTell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    // The lane, drawn at full length from the first frame: the AREA reads
+    // instantly, the fill counts down to the charge.
+    if (bs.mark >= 0) {
+      ctx.effects.markSet(bs.mark,
+        e.pos.x + bs.dirX * BM_RUSH_LEN * 0.5, e.pos.z + bs.dirZ * BM_RUSH_LEN * 0.5,
+        BM_RUSH_LANE_W, 0xffb300, 1 - Math.max(0, bs.t) / BM_RUSH_TELL,
+        BM_RUSH_LEN / (BM_RUSH_LANE_W * 2), Math.atan2(-bs.dirX, -bs.dirZ));
+    }
+    if (bs.t <= 0) {
+      if (bs.mark >= 0) {
+        bs.fx.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      bs.state = 'rush';
+      bs.t = BM_RUSH_TIME;
+      bs.hit = false;
+      bs.slickT = 0;
+      bs.travel = 0;
+      e._setEyeAlert(false);
+      ctx.bossEvent('charge', e);
+    }
+    return;
+  }
+
+  if (bs.state === 'rush') {
+    bs.t -= a.dt;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    // The step clamp is lifted for the charge (see aiColossus): a boss walks
+    // at 2.7 m/s, so a committed rush has to be written into stepMul as well
+    // as velocity or it reads as a fast walk.
+    const speed = _rushSpeed(e, a, bs.t);
+    e.stepMul = Math.max(1.4, speed / Math.max(0.5, a.sp));
+    a.vx = bs.dirX * speed;
+    a.vz = bs.dirZ * speed;
+    bs.travel += speed * a.dt;
+    // The abdomen drags: burning honey laid the whole way, so the lane she
+    // crossed stays hot after she has left it.
+    if (e.pos.y < 0.5) {
+      bs.slickT -= a.dt;
+      if (bs.slickT <= 0) {
+        bs.slickT = BM_RUSH_SLICK_EVERY;
+        ctx.addHazard(e.pos.x, e.pos.z, BM_RUSH_SLICK_R, BM_RUSH_SLICK_LIFE, BM_RUSH_SLICK_DPS, 'hiveblood');
+      }
+    }
+    if (!bs.hit && a.dist < e.radius + BM_RUSH_HIT_PAD && Math.abs(a.ctx.player.pos.y - e.pos.y) < BOSS_REACH_Y) {
+      ctx.onHitPlayer(Math.min(BM_RUSH_DMG_CAP, e.damage * 1.15), e.pos, e);
+      ctx.effects.addShake(0.3);
+      bs.hit = true;
+      _hiveAt.set(e.pos.x, e.pos.y + 1.2, e.pos.z);
+      ctx.effects.burst(_hiveAt, 0xffb300, 22, 7, 2, 0.6);
+    }
+    // The lane is the promise: the rush ends at its end, on a wall, or never
+    // - it does not outlive its own warning.
+    if (bs.t <= 0 || bs.travel >= BM_RUSH_LEN || e.blockedBy > 0.05) {
+      e.stepMul = 1.4;
+      if (e.blockedBy > 0.05 && bs.travel < BM_RUSH_LEN - 1) {
+        _hiveAt.set(e.pos.x, 0, e.pos.z);
+        ctx.effects.shockwave(_hiveAt, 0xffb300, 6, 0.5);
+        ctx.effects.burst(_hiveAt, 0xffb300, 26, 8, 3, 0.8);
+        ctx.effects.addShake(0.32);
+        ctx.bossEvent('stagger', e);
+        // A wall she slammed into costs her the moment: the long recover is
+        // the reward for baiting the lane into cover.
+        bs.state = 'recover';
+        bs.t = 1.4;
+        return;
+      }
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+      return;
+    }
+    return;
+  }
+
+  if (bs.state === 'bombardTell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+      _broodBombard(e, a);
+    }
+    return;
+  }
+
+  if (bs.state === 'burstTell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+      _broodBurst(e, a);
+    }
+    return;
+  }
+
+  if (bs.state === 'sweepTell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-bs.dirX, -bs.dirZ);
+    if (bs.t <= 0) {
+      e._setEyeAlert(false);
+      bs.state = 'sweep';
+      bs.t = BM_SWEEP_T;
+      bs.sweepN = 0;
+      bs.sweepStep = 0;
+      bs.sweepSign = bs.sweepSign === 1 ? -1 : 1;
+    }
+    return;
+  }
+
+  if (bs.state === 'sweep') {
+    a.vx = 0;
+    a.vz = 0;
+    bs.t -= a.dt;
+    const n = BM_SWEEP_N;
+    const step = BM_SWEEP_T / n;
+    bs.sweepStep -= a.dt;
+    // The rounds walk through the arc in lockstep with the body turning:
+    // facing IS the aim, so the fan never points where the boss is not.
+    const k = 1 - Math.max(0, bs.t) / BM_SWEEP_T;
+    const ang = bs.aim + bs.sweepSign * (k * 2 - 1) * BM_SWEEP_ARC;
+    e.faceLocked = true;
+    e.group.rotation.y = Math.atan2(-Math.cos(ang), -Math.sin(ang));
+    if (bs.sweepStep <= 0 && bs.sweepN < n) {
+      bs.sweepStep += step;
+      bs.sweepN++;
+      capturedShot(e, a, ang, 0, BROOD_MUZZLE_H * e.scale);
+    }
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+    }
+    return;
+  }
+
+  if (bs.state === 'novaTell') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    // The disc at her feet, filling: the slam lands where the fill does.
+    if (bs.mark >= 0) {
+      ctx.effects.markSet(bs.mark, e.pos.x, e.pos.z, BM_NOVA_R, 0xffb300,
+        1 - Math.max(0, bs.t) / BM_NOVA_TELL, 1, 0, 0.6);
+    }
+    if (bs.t <= 0) {
+      if (bs.mark >= 0) {
+        bs.fx.markRelease(bs.mark);
+        bs.mark = -1;
+      }
+      e._setEyeAlert(false);
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+      const p = ctx.player;
+      // GROUNDED is the whole question the nova asks.
+      if (a.dist < BM_NOVA_R && p.pos.y < e.pos.y + BM_NOVA_Y &&
+        !segBlocked(e.pos.x, e.pos.y + 0.5, e.pos.z, p.pos.x, p.pos.y + 0.8, p.pos.z, ctx.obstacles)) {
+        ctx.onHitPlayer(Math.min(BM_NOVA_DMG_CAP, e.damage), e.pos, e);
+      }
+      _hiveAt.set(e.pos.x, Math.max(0.1, e.pos.y), e.pos.z);
+      ctx.effects.shockwave(_hiveAt, 0xffb300, BM_NOVA_R, 0.4);
+      ctx.effects.burst(_hiveAt, 0xffd54f, 30, 7, 3, 0.7);
+      ctx.effects.addShake(0.28);
+      if (ctx.sfx) ctx.sfx.impact();
+      // The annulus: honey thrown wide of the slam, with one gap so the
+      // ground it claims is a pen, not a wall.
+      const off = Math.random() * Math.PI * 2;
+      const gapAt = (Math.random() * BM_NOVA_PATCHES) | 0;
+      for (let i = 0; i < BM_NOVA_PATCHES; i++) {
+        if (i === gapAt || i === (gapAt + 1) % BM_NOVA_PATCHES) continue;
+        const ang = off + (i / BM_NOVA_PATCHES) * Math.PI * 2;
+        ctx.addHazard(
+          e.pos.x + Math.cos(ang) * BM_NOVA_R * 0.82,
+          e.pos.z + Math.sin(ang) * BM_NOVA_R * 0.82,
+          BM_NOVA_PATCH_R, BM_NOVA_PATCH_LIFE, BM_NOVA_PATCH_DPS, 'hiveblood'
+        );
+      }
+    }
+    return;
+  }
+
+  if (bs.state === 'recover') {
+    bs.t -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    if (bs.t <= 0) {
+      bs.state = 'walk';
+      bs.t = BM_GAP * e.rate;
+    }
+    return;
+  }
+
+  // ---- the volley ---------------------------------------------------------
+  if (bs.volleyTell > 0) {
+    bs.volleyTell -= a.dt;
+    if (bs.volleyTell <= 0) {
+      // THE FAN, off the bulbs: the spitter's attack at boss scale.
+      const y = BROOD_MUZZLE_H * e.scale;
+      for (let i = -1; i <= 1; i++) {
+        capturedShot(e, a, Math.atan2(a.nz, a.nx), i * BROOD_VOLLEY_FAN, y);
+      }
+      _hiveAt.set(e.pos.x, y, e.pos.z);
+      ctx.effects.burst(_hiveAt, 0xffd54f, 14, 5, 2, 0.4);
+    }
+  } else {
+    bs.volleyCd -= a.dt;
+    if (bs.volleyCd <= 0 && a.dist < 26) {
+      bs.volleyCd = BROOD_VOLLEY_CD * e.rate;
+      bs.volleyTell = BROOD_VOLLEY_TELL;
+      e.flash = 0.15;
+    }
+  }
+
+  // ---- the brood trickle ---------------------------------------------------
+  // Refill on a timer up to the trickle's own cap. A dead grub frees its slot
+  // through the list itself, so the cap is checked live.
+  bs.brood = bs.brood.filter((q) => q && !q.dead);
+  bs.broodCd -= a.dt;
+  if (bs.broodCd <= 0 && bs.brood.length < BROOD_MAX && _grubsAlive(ctx) < BROOD_TOTAL_MAX) {
+    bs.broodCd = BROOD_CD * e.rate;
+    const p = ctx.player;
+    let sx = p.pos.x;
+    let sz = p.pos.z;
+    for (let tries = 0; tries < 8; tries++) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 5 + Math.random() * 5;
+      sx = Math.max(-20, Math.min(20, p.pos.x + Math.cos(ang) * rad));
+      sz = Math.max(-20, Math.min(20, p.pos.z + Math.sin(ang) * rad));
+      if (Math.hypot(sx - e.pos.x, sz - e.pos.z) > e.radius + 2) break;
+    }
+    _broodThrow(e, ctx, sx, sz);
+  }
+
+  // ---- walking: the stalk ---------------------------------------------------
+  // The band. She holds a mid-range station and circles it, with a skittering
+  // sideways burst every few seconds; the rush is what crosses the room.
+  // Standing on her is charged for by the touch, in every state but the rush.
+  bs.t -= a.dt;
+  e.stepMul = 1.4;
+  bs.skitterCd -= a.dt;
+  if (bs.skitterCd <= 0) {
+    bs.skitterCd = BM_SKITTER_CD;
+    bs.skitterT = BM_SKITTER_T;
+    bs.skitterSign = Math.random() < 0.5 ? -1 : 1;
+    if (Math.random() < 0.35) e.strafe *= -1;
+  }
+  let burst = 1;
+  if (bs.skitterT > 0) {
+    bs.skitterT -= a.dt;
+    burst = BM_SKITTER_MUL;
+    e.stepMul = Math.max(1.4, burst);
+  }
+  const along = a.dist > BM_STALK_MID + BM_STALK_BAND ? 0.9
+    : a.dist < BM_STALK_MID - BM_STALK_BAND ? -0.7 : 0;
+  // The skitter bends her strafe hard sideways for one beat.
+  a.vx = a.px * a.sp * along + -a.pz * e.strafe * a.sp * BM_STALK_STRAFE * burst;
+  a.vz = a.pz * a.sp * along + a.px * e.strafe * a.sp * BM_STALK_STRAFE * burst;
+
+  // The ring is on the book now - see the pick below. ringCd still ticks
+  // here so the ring stays a slow claim rather than something the rotation
+  // can spam; the window test lives in the pick.
   bs.ringCd -= a.dt;
-  if (bs.ringCd <= 0 && a.dist > 5) {
-    bs.ringTell = BROOD_RING_TELL;
-    e.flash = 0.18;
+  if (bs.ringTell > 0) {
+    bs.ringTell -= a.dt;
+    a.vx = 0;
+    a.vz = 0;
+    e._setEyeAlert(true);
+    _hiveAt.set(e.pos.x, 0.12, e.pos.z);
+    ctx.effects.shockwave(_hiveAt, 0xffb300, BROOD_RING_R, 0.16);
+    if (bs.ringTell <= 0) {
+      e._setEyeAlert(false);
+      bs.ringCd = BROOD_RING_CD * e.rate;
+      const off = Math.random() * Math.PI * 2;
+      const gapAt = (Math.random() * BROOD_RING_N) | 0;
+      for (let i = 0; i < BROOD_RING_N; i++) {
+        if (i === gapAt || i === (gapAt + 1) % BROOD_RING_N) continue;
+        const ang = off + (i / BROOD_RING_N) * Math.PI * 2;
+        ctx.addHazard(
+          e.pos.x + Math.cos(ang) * BROOD_RING_R,
+          e.pos.z + Math.sin(ang) * BROOD_RING_R,
+          BROOD_RING_PATCH_R, BROOD_RING_LIFE, BROOD_RING_DPS, 'hiveblood'
+        );
+      }
+      _hiveAt.set(e.pos.x, 0.1, e.pos.z);
+      ctx.effects.shockwave(_hiveAt, 0xffb300, BROOD_RING_R + 2, 0.4);
+      ctx.effects.addShake(0.2);
+      if (ctx.sfx) ctx.sfx.impact();
+    }
+    return;
+  }
+
+  // The attack book: one committed attack every beat off the rotation, when
+  // its range window fits. The order rotates so no two fights open the same.
+  if (bs.t <= 0) {
+    for (let i = 0; i < bs.attacks.length; i++) {
+      const pick = bs.attacks[(bs.attack + i) % bs.attacks.length];
+      if (pick === 'rush' && a.dist > 8) {
+        bs.attack += i + 1;
+        bs.state = 'rushTell';
+        bs.t = BM_RUSH_TELL;
+        bs.dirX = a.nx;
+        bs.dirZ = a.nz;
+        bs.aim = Math.atan2(a.nz, a.nx);
+        bs.mark = bs.fx.markAcquire();
+        ctx.bossEvent('charge', e);
+        break;
+      }
+      if (pick === 'nova' && a.dist < 9) {
+        bs.attack += i + 1;
+        bs.state = 'novaTell';
+        bs.t = BM_NOVA_TELL;
+        bs.mark = bs.fx.markAcquire();
+        e.flash = 0.16;
+        break;
+      }
+      if (pick === 'bombard' && a.dist > 5) {
+        bs.attack += i + 1;
+        bs.state = 'bombardTell';
+        bs.t = BM_BOMBARD_TELL;
+        e.flash = 0.16;
+        break;
+      }
+      if (pick === 'burst' && bs.brood.length < BROOD_MAX) {
+        bs.attack += i + 1;
+        bs.state = 'burstTell';
+        bs.t = BM_BURST_TELL;
+        e.flash = 0.16;
+        break;
+      }
+      if (pick === 'ring' && a.dist > 5 && bs.ringCd <= 0) {
+        bs.attack += i + 1;
+        bs.ringTell = BROOD_RING_TELL;
+        bs.ringCd = BROOD_RING_CD * e.rate;
+        e.flash = 0.18;
+        break;
+      }
+      if (pick === 'sweep') {
+        bs.attack += i + 1;
+        bs.state = 'sweepTell';
+        bs.t = BM_SWEEP_TELL;
+        bs.dirX = a.nx;
+        bs.dirZ = a.nz;
+        bs.aim = Math.atan2(a.nz, a.nx);
+        e.flash = 0.16;
+        break;
+      }
+    }
+    if (bs.state === 'walk') bs.t = 0.4;
   }
 }
 
@@ -1216,26 +1750,27 @@ const TYPES = {
     build: buildGrub, ai: aiGrub, cleanup: releaseGrub,
   },
 
-  // THE BROODMOTHER. Slow, nearly harmless in herself, and everything
-  // dangerous in the room is something she made: the brood she refills, the
-  // fan she throws off her own bulbs, the rings of honey she leaves where
-  // she has stood. Under a quarter bar she eats the brood for speed - the
-  // only enrage in the game that costs the boss something the player can
-  // watch it pay.
+  // THE BROODMOTHER. No longer a slow nursery in a corner: she stalks the
+  // player around a mid-range band, and everything dangerous in the room is
+  // something she made or something she is carrying - the brood she refills,
+  // the burst she throws in a ring around the player, the fan off her bulbs,
+  // the sweeping stream, the honey mortars, the charge that smears the lane
+  // behind it, the rings, and the nova for anyone standing on her. Under a
+  // quarter bar she eats the brood for speed - the only enrage in the game
+  // that costs the boss something the player can watch it pay.
   broodmother: {
     head: { r: 0.44, y: 1.12 },
-    hp: 3400, speed: 2.2, damage: 26, value: 6000, color: 0x8a5e10, eye: 0xffd54f,
+    hp: 3400, speed: 2.7, damage: 26, value: 6000, color: 0x8a5e10, eye: 0xffd54f,
     scale: 2.9, radius: 1.8, mass: 8, boss: true,
     hitbox: { r: 0.72, y: 0.8 },
     statusMul: 0.3, freezeSlow: true, slowFactor: 0.75, freezeVuln: 1.0,
     entropyExempt: true, fearMode: 'stagger',
-    melee: { windup: 0.7, start: 3.4, hit: 4.2, cd: 2.2 },
     // The fan, in the theme's own amber and one size up from the spitter's.
     proj: {
       core: 0xffe08a, glow: 0xffb300, scale: 0.85,
       speed: [14, 0.25, 20], dmg: [9, 0.4, 18],
     },
-    build: buildBroodmother, ai: aiBroodmother,
+    build: buildBroodmother, ai: aiBroodmother, cleanup: releaseMarks,
   },
 };
 

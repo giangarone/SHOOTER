@@ -98,10 +98,10 @@ ok(`${N_THEMES} distinct bosses`,
 //
 // The deliberate exceptions: things a BOSS or one of the theme's own enemies
 // puts in the arena rather than things a wave rolls. Colossus throws its
-// turrets and the Pale Crown drives in its anchors; an oviger lobs its eggs
+// turrets and the Conductor drives in its pylons; an oviger lobs its eggs
 // and the Broodmother throws her brood, and both are grubs. Nothing rolls
 // any of these, pickAddType will never return one, and none is in a role.
-const NOT_IN_A_THEME = new Set(['turret', 'anchor', 'pylon', 'grub']);
+const NOT_IN_A_THEME = new Set(['turret', 'pylon', 'grub']);
 
 const homeless = Object.keys(ENEMY_TYPES).filter((k) => {
   if (NOT_IN_A_THEME.has(k)) return false;

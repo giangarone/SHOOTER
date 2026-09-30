@@ -116,52 +116,139 @@ try {
     run(0.6); const fired = shots.length; run(1.4);
     ok('it fires two darts then climbs through a recovery window', fired === 2 && shots.length === 2 && e.pos.y > low, `shots=${shots.length} height=${e.pos.y}`);
 
-    clean(); shots.length = 0; e = put('miresovereign', -10, 0);
-    const attacks = new Set(), windows = new Set();
-    run(22, () => { if (e.bs.attack) attacks.add(e.bs.attack); if (e.bs.weakOpen) windows.add(e.bs.attack); });
-    ok('sovereign cycles through all three attacks and opens after each', attacks.size === 3 && windows.size === 3, JSON.stringify([...attacks]));
-    ok('sovereign actually fires its fan', shots.filter((s) => s.type === e.type).length >= 5);
+    // ---- the MIRE SOVEREIGN rework --------------------------------------
+    // One helper: run a frame so bs initialises, then pin every cast cooldown
+    // shut except the one under test, so each cast is exercised alone.
+    const arm = (e, cast, x) => {
+      run(DT);
+      const bs = e.bs;
+      bs.t = 0; bs.state = 'prowl';
+      bs.cdGulp = bs.cdCrush = bs.cdReeds = bs.cdTide = bs.cdDive = 99;
+      if (cast) bs['cd' + cast[0].toUpperCase() + cast.slice(1)] = 0;
+      return bs;
+    };
+
+    clean(); shots.length = 0; e = put('miresovereign', -15, 0);
+    const casts = new Set(), vents = new Set();
+    run(45, () => {
+      if (e.bs.castNow) casts.add(e.bs.castNow);
+      if (e.bs.weakOpen && e.bs.lastCast) vents.add(e.bs.lastCast);
+    });
+    ok('sovereign runs all five casts and vents after every one',
+      casts.size === 5 && vents.size === 5, JSON.stringify({ casts: [...casts], vents: [...vents] }));
     e.bs.weakOpen = false; const closed = ENEMY_TYPES[e.type].armorDefault(e);
     e.bs.weakOpen = true; const open = ENEMY_TYPES[e.type].armorDefault(e);
     ok('closed crown resists damage; exposed throat takes full damage', closed === 0.65 && open === 1);
-    const volley = (enrage, attack) => {
-      clean(); shots.length = 0; const e = put('miresovereign', -10, 0); e.speed = 0;
-      if (enrage) e.hp = e.maxHp * 0.4;
-      e.swampState = 'stalk'; e.swT = 0; e.bs.turn = attack;
-      run(1.3); return { shots: shots.length, mortars: g._mortars.length, open: e.bs.weakOpen };
-    };
-    const calmFan = volley(false, 2), rageFan = volley(true, 2), calmBog = volley(false, 1), rageBog = volley(true, 1);
-    ok('half health widens both ranged attacks while preserving recovery', calmFan.shots === 5 && rageFan.shots === 7 && calmBog.mortars === 6 && rageBog.mortars === 8 && rageBog.open, JSON.stringify({ calmFan, rageFan, calmBog, rageBog }));
-    const rush = (escape, fast = false, cover = false) => {
-      clean(); const e = put('miresovereign', -7, 0);
-      if (fast) { e.speed *= 8; e.damage *= 20; }
-      e.swampState = 'stalk'; e.swT = 0; e.bs.turn = 0;
-      until(() => e.swMark >= 0); run(0.2);
-      const early = HEALTH - p.health, x = e.pos.x;
-      if (escape) p.pos.z = 10;
-      if (cover) ctx.obstacles = [new THREE.Box3(new THREE.Vector3(-4, 0, -3), new THREE.Vector3(-3, 6, 3))];
-      until(() => e.swampState === 'rest');
-      return { early, damage: HEALTH - p.health, travel: e.pos.x - x, z: e.pos.z, open: e.bs.weakOpen };
-    };
-    const rushHit = rush(false, true), rushDodge = rush(true, true), rushCover = rush(false, false, true);
-    ok('late-wave jaw rush warns, hits once with capped damage and stays inside its lane',
-      rushHit.early === 0 && rushHit.damage > 0 && rushHit.damage <= 30 && rushHit.travel + 3 <= 12.01 && rushHit.open, JSON.stringify(rushHit));
-    ok('side step defeats the jaw rush without it steering', rushDodge.damage === 0 && Math.abs(rushDodge.z) < 0.1, JSON.stringify(rushDodge));
-    ok('solid cover stops the rush and opens the throat', rushCover.damage === 0 && rushCover.travel < 4 && rushCover.open, JSON.stringify(rushCover));
 
-    const bogDamage = (escape) => {
-      clean(); const e = put('miresovereign', -10, 0); e.speed = 0;
-      e.swampState = 'stalk'; e.swT = 0; e.bs.turn = 1;
-      run(1.3); const early = HEALTH - p.health;
-      if (escape) p.pos.x = 8;
-      run(2); return { early, damage: HEALTH - p.health };
-    };
-    const bogStay = bogDamage(false), bogEscape = bogDamage(true);
-    ok('bog eruptions damage the captured centre only after warning; open side escapes', bogStay.early === 0 && bogStay.damage > 0 && bogEscape.damage === 0, JSON.stringify({ bogStay, bogEscape }));
+    clean(); e = put('miresovereign', -2.4, 0); e.speed = 0;
+    arm(e, null);
+    run(0.1);
+    const nipped = HEALTH - p.health;
+    run(1.0);
+    ok('touching the sovereign bites immediately, then respects a cooldown',
+      nipped > 0 && nipped <= 30 && HEALTH - p.health === nipped, JSON.stringify({ nipped, after: HEALTH - p.health }));
 
-    for (const type of ['mudskipper', 'peatback', 'miresovereign']) {
+    const tide = (x, hold) => {
+      clean(); const e = put('miresovereign', x, 0); e.speed = 0;
+      const bs = arm(e, 'tide');
+      until(() => bs.state === 'tide');
+      p.extX = p.extZ = 0;
+      run(0.7);
+      const towed = p.extX, during = HEALTH - p.health;
+      if (hold) p.pos.set(e.pos.x + 3.5, 0, 0);
+      else p.pos.set(x + 30, 0, 0);
+      until(() => bs.state === 'recover');
+      return { towed, during, damage: HEALTH - p.health, open: bs.weakOpen };
+    };
+    const towed = tide(-9), bitten = tide(-9, true);
+    ok('undertow drags you toward the jaw and costs nothing but position',
+      towed.towed < -1 && towed.during === 0 && towed.damage === 0 && towed.open, JSON.stringify(towed));
+    ok('whatever the inner ring still holds meets the jaw',
+      bitten.damage > 0 && bitten.damage <= 26 && bitten.open, JSON.stringify(bitten));
+
+    const reeds = (enraged, stay) => {
+      clean(); const e = put('miresovereign', -8, 0); e.speed = 0;
+      const bs = arm(e, 'reeds');
+      if (enraged) e.hp = e.maxHp * 0.4;
+      until(() => g._mortars.length > 0, 6);
+      const nails = g._mortars.map((m) => ({ x: m.x, z: m.z }));
+      const angles = nails.filter((n) => Math.hypot(n.x, n.z) > 3)
+        .map((n) => Math.atan2(n.z, n.x)).sort((q, r) => q - r);
+      let widest = 0;
+      for (let i = 0; i < angles.length; i++) {
+        const next = angles[(i + 1) % angles.length] + (i === angles.length - 1 ? Math.PI * 2 : 0);
+        widest = Math.max(widest, next - angles[i]);
+      }
+      if (!stay) p.pos.set(30, 0, 0);
+      run(4);
+      return { n: nails.length, widest, damage: HEALTH - p.health };
+    };
+    const reedsStay = reeds(false, true), reedsRage = reeds(true, true), reedsGone = reeds(false, false);
+    ok('reed burst rings where you WERE, gapped when calm, and the centre is never free',
+      reedsStay.n === 9 && reedsStay.widest > 1.2 && reedsStay.damage > 0, JSON.stringify(reedsStay));
+    ok('enraged closes the gap instead of widening the pool',
+      reedsRage.n === 10 && reedsRage.widest < 1.0 && reedsRage.damage > 0, JSON.stringify(reedsRage));
+    ok('leaving the captured ring beats every nail', reedsGone.damage === 0, JSON.stringify(reedsGone));
+
+    const crush = (mode) => {
+      // The cover case needs the box BETWEEN the two without touching the
+      // boss's own 1.8m circle - resolveCircle would shove it out and into
+      // touch range, which is a different test than the one being asked.
+      const far = mode === 'cover';
+      clean(); shots.length = 0; const e = put('miresovereign', far ? -3.9 : -3, 0); e.speed = 0;
+      const bs = arm(e, 'crush');
+      if (mode === 'rage') e.hp = e.maxHp * 0.4;
+      until(() => bs.state === 'crushTell');
+      const warned = marks() > 0;
+      run(0.7);
+      const beforeSlam = HEALTH - p.health;
+      if (mode === 'jump') p.pos.y = 2.4;
+      if (mode === 'cover') ctx.obstacles = [new THREE.Box3(new THREE.Vector3(-2, 0, -3), new THREE.Vector3(-1, 6, 3))];
+      until(() => bs.state === 'recover', 4);
+      const ring = HEALTH - p.health;
+      p.pos.set(30, 6, 0); p.invulnEnd = 1e9;
+      run(1);
+      return { warned, beforeSlam, ring, shots: shots.length, darts: shots.filter((s) => s.type === e.type).length };
+    };
+    const slam = crush(), jumped = crush('jump'), covered = crush('cover'), rage = crush('rage');
+    ok('mud crush warns, waits out its tell, then slams a capped ring around itself',
+      slam.warned && slam.beforeSlam === 0 && slam.ring > 0 && slam.ring <= 26, JSON.stringify(slam));
+    ok('the hop and solid cover both answer the ring',
+      jumped.ring === 0 && covered.ring === 0, JSON.stringify({ jumped, covered }));
+    ok('the portal it spits down your old bearing widens with the enrage',
+      slam.darts === 7 && rage.darts === 9, JSON.stringify({ slam: slam.darts, rage: rage.darts }));
+
+    const dive = (flee) => {
+      clean(); const e = put('miresovereign', -16, 0);
+      const bs = arm(e, 'dive');
+      until(() => bs.state === 'dive', 6);
+      const wake = marks() > 0, x0 = e.pos.x;
+      run(0.9);
+      const speed = Math.abs(e.pos.x - x0) / 0.9;
+      if (flee) p.pos.set(20, 18, 0);
+      until(() => bs.weakOpen, 8);
+      return { wake, speed, damage: HEALTH - p.health, open: bs.weakOpen, leaked: marks() };
+    };
+    const dived = dive(false), divedPast = dive(true);
+    ok('the dive slides a lit wake across the arena and erupts on the still',
+      dived.wake && dived.speed > 4 && dived.speed <= 9.5 && dived.damage > 0 && dived.damage <= 30 && dived.open && dived.leaked === 0,
+      JSON.stringify(dived));
+    ok('the eruption is a promise about ground, not a homing shot',
+      divedPast.damage === 0 && divedPast.open && divedPast.leaked === 0, JSON.stringify(divedPast));
+
+    clean(); e = put('miresovereign', -14, 0);
+    const bs = arm(e, null); bs.t = 99;
+    run(1.8);
+    const bogs = g._hazard.filter((h) => h.kind === 'mire');
+    ok('the sovereign wades, and the floor it crossed stays bog',
+      bogs.length >= 3 && g._hazard.every((h) => h.kind === 'mire'), `n=${bogs.length}`);
+    p.pos.set(bogs[0].x, 0, bogs[0].z);
+    g._updateHazard(DT);
+    ok('bog water grips your stride, not your blood',
+      p.status.slowness > 0 && p.health === HEALTH, `slow=${p.status.slowness}`);
+
+    for (const type of ['mudskipper', 'peatback']) {
       clean(); e = put(type, type === 'peatback' ? -3 : -5, 0);
-      if (e.boss) { e.swampState = 'stalk'; e.swT = 0; e.bs.turn = 0; }
       const held = [];
       while (true) { const h = g.effects.markAcquire(); if (h < 0) break; held.push(h); }
       run(0.2); held.forEach((h) => g.effects.markRelease(h));
@@ -169,12 +256,27 @@ try {
       run(1.2);
       ok(`${type} skips attacks when its warning pool was exhausted`, p.health === HEALTH && e.swampState !== 'rush' && e.swampState !== 'hop');
     }
-    for (const type of ['mudskipper', 'peatback', 'miresovereign']) {
+    for (const cast of ['crush', 'reeds', 'dive', 'tide']) {
+      clean(); e = put('miresovereign', cast === 'dive' ? -13 : cast === 'reeds' ? -6 : -5, 0); e.speed = 0;
+      arm(e, cast);
+      const held = [];
+      while (true) { const h = g.effects.markAcquire(); if (h < 0) break; held.push(h); }
+      run(2.5); held.forEach((h) => g.effects.markRelease(h));
+      run(1.5);
+      ok(`${cast} with no warning pool left never lands a hit`, p.health === HEALTH && marks() === 0,
+        `health=${HEALTH - p.health} marks=${marks()} state=${e.bs.state}`);
+    }
+    for (const type of ['mudskipper', 'peatback']) {
       clean(); e = put(type, type === 'peatback' ? -3 : -5, 0);
       until(() => e.swMark >= 0);
       const before = marks(); e.takeDamage(1e9); run(DT);
       ok(`${type} killed mid-tell returns its warning handle`, before > 0 && marks() === 0, `before=${before} after=${marks()}`);
     }
+    clean(); e = put('miresovereign', -7, 0); e.speed = 0;
+    arm(e, 'crush');
+    until(() => e.bs.mark >= 0);
+    const heldNow = marks(); e.takeDamage(1e9); run(DT);
+    ok('sovereign killed mid-tell returns its warning handle', heldNow > 0 && marks() === 0, `before=${heldNow} after=${marks()}`);
     clean(); run(2); ok('reset drains all remaining telegraphs', marks() === 0);
     g._spawnProjectile = spawn;
     return rows;

@@ -553,13 +553,6 @@ try {
       await page.evaluate(() => {
         const g = window.__game;
         if (!g.bossFight) return;
-        // The Pale Crown's shell takes literally nothing until its three
-        // anchors are broken, so breaking them is the only way in - and doing
-        // it through the real mechanic rather than by forcing a flag means
-        // this loop also proves the shell comes down in a live fight.
-        for (const e of g.enemies) {
-          if (e.type === 'anchor') e.dead = true;
-        }
         for (const p of g.bossFight.parts) {
           const bs = p.bs;
           if (bs) {
@@ -574,7 +567,7 @@ try {
           // than inflating the damage number: chipping through 0.22 armour
           // reached six per cent and ran out of ticks, and would have proved
           // nothing about the gate even if it had landed. Same argument as
-          // the Pale Crown's anchors above - open it through the mechanic.
+          // what the gate is FOR - open it through the mechanic.
           if (p.type === 'overgrowth') {
             g.player.pos.set(p.pos.x + 3, g.player.pos.y, p.pos.z + 3);
           }
