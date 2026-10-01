@@ -284,6 +284,16 @@ export const SHARED_MATS = {
   tempestCeramic: new THREE.MeshStandardMaterial({
     color: 0xe8eef4, roughness: 0.5, metalness: 0.05,
   }),
+  // ---- LUNAR -----------------------------------------------------------------
+  // One body rock and one lit accent, the tank's contract: the family reads as
+  // LUNAR through dark basalt and the pale moonlight each body carries, and both
+  // keep their colour while the body under them is tinted by a status - so a
+  // frozen moonhare is still recognisably moonlit.
+  lunarRock: new THREE.MeshStandardMaterial({ color: 0x39415c, roughness: 0.72, metalness: 0.12 }),
+  lunarGlow: new THREE.MeshStandardMaterial({
+    color: 0xdfe6ff, emissive: 0xcfd8ff, emissiveIntensity: 1.2,
+    roughness: 0.25, metalness: 0.1,
+  }),
   hitbox: new THREE.MeshBasicMaterial({ visible: false }),
 };
 

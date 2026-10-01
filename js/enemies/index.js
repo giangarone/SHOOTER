@@ -22,6 +22,7 @@ export * from './fungal.js';
 export * from './hive.js';
 export * from './insects.js';
 export * from './jungle.js';
+export * from './lunar.js';
 export * from './obsidian.js';
 export * from './plague.js';
 export * from './rime.js';

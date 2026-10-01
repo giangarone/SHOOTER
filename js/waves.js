@@ -100,6 +100,7 @@ const ADD_PRESSURE = {
   siege: 3,   // its trail, rubble and rings already take up the floor
   herald: 5,
   reliquary: 5,  // its rings already take up the floor
+  eclipse: 3,    // its shower, landing mark and tide ring already take up the floor
 };
 const ADD_PRESSURE_DEFAULT = 4;
 
@@ -322,6 +323,12 @@ export function waveConfig(n, seed = 0, have = null, force = null) {
     theme: themeKey,
     themeName: theme.name,
     themeColor: theme.color,
+    // Absent on every theme but LUNAR: the block's own gravity multiplier on
+    // the player, folded in beside the MOON item's (see Player.update).
+    themeGravity: theme.gravity || 1,
+    // And the block's own laser-bank colour, where it has an opinion - 0
+    // means "the rig's hue, as always".
+    themeLaser: theme.laser || 0,
     blockPos: blockPos(n),
     hpScale,
     speedScale,

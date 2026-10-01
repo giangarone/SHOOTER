@@ -57,7 +57,8 @@
     "test:swamp": "node test/swamp.mjs",
     "test:sapphire": "node test/sapphire.mjs",
     "test:coral": "node test/coral.mjs",
-    "test:jungle": "node test/jungle.mjs"
+    "test:jungle": "node test/jungle.mjs",
+    "test:lunar": "node test/lunar.mjs"
   },
   "dependencies": {
     "three": "^0.166.1"

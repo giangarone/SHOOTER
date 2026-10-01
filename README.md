@@ -346,7 +346,7 @@ context. The start screen says so, and one click anywhere fixes it.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
-- **One hundred and two enemies, in seventeen themes of six** - one per role per theme, and every one of them built:
+- **One hundred and thirty-two enemies, in twenty-two themes of six** - one per role per theme, and every one of them built:
   one per role per theme. What exists now, by the theme it belongs to:
   **RUST** the machine theme, and the whole original roster kept together as
   one family - **Chasers** (close and swing), **Shooters** (ranged darts),
@@ -799,6 +799,46 @@ context. The start screen says so, and one click anywhere fixes it.
   pauses shorten and every pattern grows - more arms, more sweets, wider
   sweeps. Telegraphs and heart windows keep their full duration. Killing a
   caster cancels its unspent floor sweets and returns their warning handles.
+- **LUNAR: basalt and moonlight, and the whole block runs at three-fifths
+  gravity.** The moon is down in the arena: jumps carry further, falls hang,
+  and everything in the theme arrives by air or leaves the floor itself.
+  **Moonhares** do not run - they crouch, the whole silhouette folding down
+  with the ears flat, then bound one committed arc to where you were standing
+  at the crouch, landing in a thump and a half-second stagger that is the
+  window to shoot them in. **Landers** are lunar modules gone feral: four
+  splayed legs, a foil bus and a lit dish that fires its pulses in pairs a
+  hair apart, and when something closes on them their thruster pods light
+  and the whole machine burns sideways out of the line. **Craterbacks**
+  carry the crater they were dug out of with moonlight pooled in it; their
+  slam is a moonquake that never asks the fists to find you - it takes the
+  floor from under you, and in this block's air the launch is the attack.
+  **Meteorbells** throw nothing themselves: the standing stone rings, and the
+  sky answers with three stones on staggered fuses on and around the place
+  you just were. **Tidecallers** never attack at all - every few seconds the
+  crescent hung in their crown swells and the tide comes in, carrying every
+  ally in the ring two metres toward you at one stroke. **Moonmoths** circle
+  high, then fold into a committed low line and skip off the deck three times
+  like a stone off water, each touchdown its own strike in a puff of moondust,
+  and the slow climb back up is the shot you were owed.
+  **ECLIPSE**, LUNAR's, is the moon itself: a cratered sphere wearing the
+  dark shard of the umbra, a crescent grin of an eye and a corona of pale
+  light that never stops turning - and no armour anywhere on it, ever. It
+  holds the middle distance and asks a different question every few seconds.
+  The FAN flares the corona and throws two fans of seven crescent rounds down
+  your captured bearing, the second interleaved with the first - be behind
+  something, or be moving. The SHOWER walks five warned stones at where you
+  keep going, each led at its own release. The MOONFALL marks the ground you
+  were standing on, crosses the whole arena through the air and lands on the
+  mark, throwing anyone caught in the ring off the floor. The TIDE plants and
+  drags the room toward itself for two seconds, then slams a ring that pays
+  only against feet on the floor - the theme's own thin air is the way out,
+  and jumping it is the block answering the block. Touching the boss costs
+  in every state, and the block's laser bank is the same moonlight: WHITE,
+  not a colour riff on the room. Nothing in the block makes a sound - no
+  air out here - so the attacks, the landings and even the bell itself are
+  announced by dust, rings and shake alone, and the music is the only voice
+  the room has.
+
 - **Every enemy is its own silhouette.** Types used to share one capsule body
   and differ only by colour, which falls apart exactly when it matters - a
   frozen or poisoned enemy is wearing the status tint, not its own colour. Each
@@ -823,9 +863,9 @@ context. The start screen says so, and one click anywhere fixes it.
   in for a boss, and light shafts off the truss that dissipate into the haze
   rather than ending in a hard edge.
 - **A boss every five waves, and which one is dealt rather than fixed.** Each
-  of the seventeen themes owns a boss, and the block a theme lands in is where its
+  of the twenty-two themes owns a boss, and the block a theme lands in is where its
   boss is fought - so wave 5 is Colossus in one run and the Herald in the next.
-  All seventeen exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
+  All twenty-two exist. **THE DROWNED CHOIR**, BRINE's, is three bodies sharing one
   health bar, and the one fight that never holds still: the three of them WHEEL
   around you instead of parking, every attack is one of the theme's own mechanics
   grown to boss scale - a committed rush down a drawn lane, a drag toward a maw
@@ -3322,7 +3362,7 @@ js/lasers.js        the laser bank: six wall-mounted fan projectors raking the
                     and formations cast per phrase
 js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
-js/themes.js        the seventeen themes, their six enemies each, and the run's deck
+js/themes.js        the twenty-two themes, their six enemies each, and the run's deck
 js/items/discover.js           shared browser/Node directory discovery
 js/items/passive/index.js      passive catalogue, totem roll, shop prices
 js/items/passive/definitions/  one file per passive item

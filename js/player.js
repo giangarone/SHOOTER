@@ -2780,6 +2780,10 @@ export class Player {
     // MOON. Multiplied into the gravity term in update(); the item's end()
     // writes the 1 back, like every other mark it leaves here.
     this.gravityMult = 1;
+    // LUNAR BLOCKS. The same term's other multiplier, pushed by main.js from
+    // the wave config every frame, so a theme change restores it on its own
+    // and the item above composes with it instead of stomping it.
+    this.gravityTheme = 1;
     this.pinataLeft = 0;
     // BACKORDER'S PARCEL. A deadline rather than a running window, because the
     // running list is torn down at every wave clear (see the running list's
@@ -3385,8 +3389,10 @@ export class Player {
     // fall under it is the slow one the card promises - which is the whole
     // item and every verb at once. A multiplier and not a second constant, so
     // the ceiling test and the updraft's BEAT-gravity arithmetic below read
-    // the figure they already had.
-    this.vel.y -= 22 * this.gravityMult * dt;
+    // the figure they already had. gravityTheme is the LUNAR block's dial on
+    // the same line - an independent factor so the item's end() writing 1
+    // back can never snap the room's pull mid-wave.
+    this.vel.y -= 22 * this.gravityMult * this.gravityTheme * dt;
     // ---- UPDRAFT ------------------------------------------------------------
     //
     // The jump button, HELD, and the fall stops.

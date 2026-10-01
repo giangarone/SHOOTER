@@ -965,7 +965,20 @@ export class Rig {
     // the middle of every step washed out towards grey, while a laser is a
     // single wavelength and never is. Same hue, always at its strength.
     this._colour.getHSL(this._hsl);
-    this._laserColour.setHSL(this._hsl.h, 1, 0.5);
+    if (s.themeLaser) {
+      // A THEME THAT NAMES ITS OWN BANK. LUNAR's lasers are the moonlight
+      // itself - white - and the hue walk below would give them a saturated
+      // colour the room never chose. Optional data: themes without an
+      // opinion keep the hue they always had.
+      this._laserColour.setHex(s.themeLaser);
+    } else {
+      // The room's own colour, at full saturation and half lightness. Not a
+      // copy of `_colour` itself: that value is lerping between accents and
+      // spends the middle of every step washed out towards grey, while a
+      // laser is a single wavelength and never is. Same hue, always at its
+      // strength.
+      this._laserColour.setHSL(this._hsl.h, 1, 0.5);
+    }
     // What the ROOM allows. Which pairs are lit is the bank's own business,
     // and nothing in it answers the beat: the beams own the hits, the lasers
     // own the movement, and a laser that blinked on every kick would only be

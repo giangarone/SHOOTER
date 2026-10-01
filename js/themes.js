@@ -343,6 +343,34 @@ export const THEMES = {
     },
   },
 
+  // The moon down in the arena, and its one-sixth pull with it. Everything
+  // here ARRIVES by air or leaves the floor itself: the hare and the boss
+  // leap, the moth skips off the deck, the bell's answer falls out of the
+  // sky, the craterback's slam takes the ground from under the player, and
+  // the tide the obelisk rings drags every ally with it.
+  //
+  // `gravity` is the block's own dial on the player's gravity line (see
+  // waves.js's themeGravity and the MOON item's gravityMult): present on no
+  // other theme, and read as a MULTIPLIER so the item composes with it
+  // instead of the two overwriting each other.
+  //
+  // `laser` names the block's own laser-bank colour. Also optional: a theme
+  // without one keeps the bank at its own hue, and LUNAR's is WHITE - the
+  // beams are the moonlight the room is lit by, not a colour riff on it.
+  lunar: {
+    name: 'LUNAR', color: 0xc7ccff, boss: 'eclipse',
+    gravity: 0.6,
+    laser: 0xffffff,
+    roles: {
+      rusher: 'moonhare',
+      gunner: 'lander',
+      brute: 'craterback',
+      artillery: 'meteorbell',
+      support: 'tidecaller',
+      flier: 'moonmoth',
+    },
+  },
+
 };
 
 export const THEME_KEYS = Object.keys(THEMES);

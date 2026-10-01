@@ -3812,6 +3812,9 @@ class Game {
     // stays white, because the enemies have to stay readable - so a block
     // reads as being lit in EMBER's orange without the fight becoming orange.
     r.themeColor = this._cfg ? this._cfg.themeColor : 0;
+    // And the block's laser colour, where it has one. Zero means "the rig's
+    // own hue", so a theme with no opinion changes nothing about the venue.
+    r.themeLaser = this._cfg ? this._cfg.themeLaser : 0;
     return r;
   }
 
@@ -12537,6 +12540,12 @@ class Game {
       // player below is updated exactly as on any other frame.
       if (this._pass) this._updatePass(dt);
       if (this.autoTest) this._autoInput();
+      // LUNAR's thin sky. The block's own multiplier (waveConfig's
+      // themeGravity) is pushed here every frame rather than at the wave
+      // boundary, so a versus handover or a forced theme can never strand the
+      // room's pull - and it folds into Player.update's gravity line beside
+      // the MOON item's own factor instead of overwriting it.
+      this.player.gravityTheme = this._cfg ? this._cfg.themeGravity || 1 : 1;
       // The last argument is the combat gate: regeneration and Ammo Fabricator
       // only tick while a wave is actually running, so the wave break cannot be
       // farmed for free health or free rounds. Same test _fillRigState uses.
