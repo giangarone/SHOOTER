@@ -28,6 +28,10 @@ NOTE = {
     'statusWeakness': 'WEAKENED - a status on the player. Your shots hit softer.',
     'statusCurse': 'CURSED - a status on the player. Everything hurts 25% more.',
     'statusSlowness': 'SLOWED - a status on the player. You move at a fraction.',
+    'trophyBronze': 'WIN-STREAK TROPHY - one win. The plain cup the shelf builds on.',
+    'trophySilver': 'WIN-STREAK TROPHY - three wins. Wider bowl, big loops, lit rim.',
+    'trophyGold': 'WIN-STREAK TROPHY - five wins. A tall chalice with a jeweled stem.',
+    'trophyDiamond': 'WIN-STREAK TROPHY - ten wins. The crowned cup.',
 }
 
 

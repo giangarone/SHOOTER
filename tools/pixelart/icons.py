@@ -264,6 +264,66 @@ def _(c):
                 (12 + 10.4 * s, 1.5), (12 + 6.6 * s, 6.2)], S)
 
 
+@icon('trophyBronze')      # win-streak trophy: plain cup
+def _(c):
+    # The base every higher tier builds on: bowl, loop handles, stem, foot.
+    # Plain on purpose - bronze is the shape itself, the metals add the trim.
+    c.poly([(6.5, 3.5), (17.5, 3.5), (14, 11.5), (10, 11.5)], S)  # bowl
+    c.poly([(8.2, 5), (15.8, 5), (13.8, 10), (10.2, 10)], E)      # the glow inside
+    c.arc(6.9, 7.6, 3.5, 1.6, 90, 270, S)                         # left handle
+    c.arc(17.1, 7.6, 3.5, 1.6, 270, 90, S)                        # right handle
+    c.rect(11, 11.5, 13, 17.5, S)                                 # stem
+    c.poly([(7, 20.5), (17, 20.5), (15, 17.5), (9, 17.5)], S)     # foot
+
+
+@icon('trophySilver')      # win-streak trophy: wide bowl, big loops, lit rim
+def _(c):
+    # Wider than bronze in every direction, with a lit rim: second place is a
+    # bigger cup, not a different object, so the shelf reads as one family.
+    c.poly([(5.5, 3.5), (18.5, 3.5), (14, 12), (10, 12)], S)     # bowl
+    c.rect(5.5, 2.8, 18.5, 4.2, E)                               # the lit rim
+    c.poly([(7.5, 5.5), (16.5, 5.5), (13.8, 10.5), (10.2, 10.5)], E)
+    c.arc(6, 8, 4.1, 1.7, 90, 270, S)                            # left handle
+    c.arc(18, 8, 4.1, 1.7, 270, 90, S)                           # right handle
+    c.rect(11, 12, 13, 17.5, S)                                  # stem
+    c.poly([(7, 20.5), (17, 20.5), (15, 17.5), (9, 17.5)], S)    # foot
+
+
+@icon('trophyGold')        # win-streak trophy: tall chalice, jeweled stem
+def _(c):
+    # Taller bowl, flared foot, and the jewel on the stem: gold is the cup
+    # wearing something, which is what separates it from silver at a glance.
+    c.poly([(6.5, 2), (17.5, 2), (14, 11), (10, 11)], S)         # bowl
+    c.rect(6.5, 1.6, 17.5, 3, E)                                 # the lit rim
+    c.poly([(8.2, 4.5), (15.8, 4.5), (13.8, 9.5), (10.2, 9.5)], E)
+    c.arc(6.9, 7.2, 3.5, 1.6, 90, 270, S)                        # left handle
+    c.arc(17.1, 7.2, 3.5, 1.6, 270, 90, S)                       # right handle
+    c.rect(11, 11, 13, 18, S)                                    # stem
+    c.poly([(12, 12.5), (13.5, 14.5), (12, 16.5), (10.5, 14.5)], E)  # the jewel
+    c.poly([(6, 21), (18, 21), (15, 18), (9, 18)], S)            # flared foot
+
+
+@icon('trophyDiamond')     # win-streak trophy: crowned cup, faceted gem
+def _(c):
+    # Three spikes on a band: nothing else on the shelf wears a crown, so the
+    # top tier is unmistakable even as a silhouette. The bowl sits a row lower
+    # to give the crown its own air.
+    c.poly([(8, 3.6), (8.6, 0.8), (10.4, 3.6)], S)               # left spike
+    c.poly([(11, 3.6), (12, 0.2), (13, 3.6)], S)                 # middle spike
+    c.poly([(13.6, 3.6), (15.4, 0.8), (16, 3.6)], S)             # right spike
+    c.poly([(11.4, 3.4), (12, 1.2), (12.6, 3.4)], E)             # crown facet
+    c.rect(8, 3.4, 16, 4.6, S)                                   # the band
+    c.poly([(6.5, 5.5), (17.5, 5.5), (14, 12.5), (10, 12.5)], S)  # bowl
+    c.poly([(8.2, 7), (15.8, 7), (13.8, 11), (10.2, 11)], E)     # the glow inside
+    c.arc(6.9, 9, 3.5, 1.6, 90, 270, S)                          # left handle
+    c.arc(17.1, 9, 3.5, 1.6, 270, 90, S)                         # right handle
+    c.rect(11, 12.5, 13, 18.5, S)                                # stem
+    c.poly([(12, 14), (13.2, 15.7), (12, 17.5), (10.8, 15.7)], E)  # the jewel
+    c.poly([(6, 21.5), (18, 21.5), (15, 19), (9, 19)], S)        # flared foot
+    c.put(4, 5, P)                                               # sparkle
+    c.put(20, 6, P)                                              # sparkle
+
+
 @icon('statusSlowness')     # you move at a fraction of your pace
 def _(c):
     # AN ICICLE HANGING OFF A LEDGE. The chip used to be a boot frozen into a

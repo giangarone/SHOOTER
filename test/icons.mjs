@@ -38,6 +38,15 @@ const STATION_ICONS = {
 // stations can - and a pickup with no drawing is a crash the first time an
 // enemy dies, which is the worst place in the game to find one.
 
+// The win-streak trophies. Menu shelf art, owned by js/trophies.js - the only
+// non-item drawings with no other entry point, so they are named here.
+const TROPHY_ICONS = {
+  TROPHY_BRONZE: 'trophyBronze',
+  TROPHY_SILVER: 'trophySilver',
+  TROPHY_GOLD: 'trophyGold',
+  TROPHY_DIAMOND: 'trophyDiamond',
+};
+
 let fails = 0;
 const ok = (name, cond, extra = '') => {
   console.log((cond ? 'ok   ' : 'FAIL ') + name + (extra ? '  ' + extra : ''));
@@ -56,6 +65,7 @@ const missingLocal = itemKeys.filter((key) => !ownedIcons.some((icons) => Object
 ok('every item owns its drawing', missingLocal.length === 0, missingLocal.join(', '));
 for (const id of Object.keys(PASSIVE_ITEMS)) users[id] = PASSIVE_ITEMS[id].name;
 for (const [name, icon] of Object.entries(STATION_ICONS)) users[icon] = name;
+for (const [name, icon] of Object.entries(TROPHY_ICONS)) users[icon] = name;
 for (const [key, def] of Object.entries(POWERUP_TYPES)) users[def.icon] = 'PICKUP ' + key;
 users[AMMO_PICKUP.icon] = 'PICKUP ammo';
 // The player's status effects. Like a pickup, each names its drawing on its
@@ -173,6 +183,7 @@ ok('at twelve points or under a segment is one point',
 console.log(
   `\n${Object.keys(users).length} offers (${Object.keys(PASSIVE_ITEMS).length} passive items + ` +
   `${Object.keys(STATION_ICONS).length} stations + ` +
+  `${Object.keys(TROPHY_ICONS).length} trophies + ` +
   `${Object.keys(POWERUP_TYPES).length + 1} pickups + ` +
   `${Object.keys(PLAYER_STATUS).length} statuses + ` +
   `${Object.values(WEAPONS).filter((w) => w.icon).length} weapons + ` +
