@@ -52,6 +52,9 @@ export class UI {
     this.hitmarker = $('hitmarker');
     this.startOv = $('overlay-start');
     this.overOv = $('overlay-over');
+    this.winOv = $('overlay-win');
+    this.winStreakEl = $('win-streak');
+    this.winStreakRunEl = $('win-streak-run');
     this.pauseOv = $('overlay-pause');
     this.confirmOv = $('overlay-confirm');
     // The two sub-screens. They sit OVER whichever menu opened them rather
@@ -772,18 +775,30 @@ export class UI {
   showStart() {
     this.startOv.classList.remove('hidden');
     this.overOv.classList.add('hidden');
+    this.winOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.handoffOv.classList.add('hidden');
     this.hud.classList.add('hidden');
     this.hud.classList.remove('swap');
     this.hideSubScreens();
+    // Read here rather than in main.js so no path onto the menu can forget
+    // to refresh it - versus returns, win returns and plain boots alike.
+    try { this.setWinStreak(Number(localStorage.getItem('va-win-streak')) || 0); } catch {}
     this._syncReading();
+  }
+  // The menu's streak readout. Written by main.js, which owns the store - this
+  // only writes the DOM, on boot, on every showStart and on every win.
+  setWinStreak(n) {
+    const t = String(Math.max(0, Math.floor(n) || 0));
+    if (this.winStreakEl) this.winStreakEl.textContent = t;
+    if (this.winStreakRunEl) this.winStreakRunEl.textContent = t;
   }
   showHud() {
     this.hud.classList.remove('hidden');
     this.startOv.classList.add('hidden');
     this.pauseOv.classList.add('hidden');
     this.overOv.classList.add('hidden');
+    this.winOv.classList.add('hidden');
     this.handoffOv.classList.add('hidden');
     // A match that ended mid-pass would otherwise bring its half-slid
     // instruments into the next run.
@@ -820,7 +835,7 @@ export class UI {
     // for two seconds while the player decides something. Everything else on
     // this list pauses the game; this one only pauses the reading, which is all
     // the beam was ever turned down for.
-    const up = [this.startOv, this.overOv, this.pauseOv, this.settingsOv,
+    const up = [this.startOv, this.overOv, this.winOv, this.pauseOv, this.settingsOv,
       this.confirmOv, this.playersOv, this.statsPanel, this.debugPanel]
       .some((o) => o && !o.classList.contains('hidden'));
     document.body.classList.toggle('reading', up);
@@ -901,6 +916,23 @@ export class UI {
   }
 
   /**
+   * THE WIN. Solo only, over the wave break that is still standing behind it -
+   * the HUD stays up and the totems stay claimed-until-pick, so CONTINUE is a
+   * resume rather than a rebuild. Versus never opens it.
+   */
+  showWin(streak) {
+    this.setWinStreak(streak);
+    this.hideSubScreens();
+    this.hideHandoff();
+    this.winOv.classList.remove('hidden');
+    this._syncReading();
+  }
+  hideWin() {
+    this.winOv.classList.add('hidden');
+    this._syncReading();
+  }
+
+  /**
    * The end of a versus match. Reuses the death screen's furniture - the
    * marquee, the hero number, RESTART - because it is the same moment in the
    * cabinet's shape.
@@ -908,6 +940,7 @@ export class UI {
   showMatchOver(who, wave) {
     this.hideSubScreens();
     this.hideHandoff();
+    this.winOv.classList.add('hidden');
     const h1 = this.overOv.querySelector('h1');
     h1.textContent = who + ' WINS';
     h1.classList.remove('dead');
@@ -933,6 +966,7 @@ export class UI {
     h1.textContent = 'YOU DIED';
     h1.classList.add('dead');
     this.hideSubScreens();
+    this.winOv.classList.add('hidden');
     this.overHeroLabel.textContent = 'REACHED WAVE';
     this.overHero.textContent = String(wave);
     // Columns of one reading each, not one sentence. At 8x8 a run-on line of

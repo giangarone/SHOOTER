@@ -3,7 +3,9 @@
 // back into here except through the callbacks in the ctx objects below.
 //
 // STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'gameover' -> 'playing'
-// Only 'playing' simulates. The loop still runs and renders in every state,
+// The win is a pause off the same run: 'playing' -> 'won' -> 'playing' (or to
+// 'menu' with the streak kept). Only 'playing' simulates. The loop still runs
+// and renders in every state,
 // which is what keeps the menu camera orbiting and the pause overlay live.
 //
 // NO MENU EVER OPENS. The wave-end passive item choice is three totems that rise
@@ -75,7 +77,7 @@ import { SFX } from './sfx.js';
 import { Music } from './music.js';
 import { Magpie, Lamprey, MarshToad, RubberChicken, Parrot, PackRat, Ferryman } from './companions.js';
 import { Rig } from './rig.js';
-import { waveConfig, bossScale, pickAddType } from './waves.js';
+import { waveConfig, bossScale, pickAddType, WIN_WAVE } from './waves.js';
 import { THEMES } from './themes.js';
 
 // Which enemy types are actually BUILT. themes.js names every one of its sixty
@@ -555,6 +557,23 @@ const PLAYER_COLOR = [
 // be to read as a double-tap. Long enough to hit reliably mid-fight, short
 // enough that ordinary strafe-corrections never trip it by accident.
 const DOUBLE_TAP_WINDOW = 0.28;
+
+// ---- the win ----------------------------------------------------------------
+//
+// Solo only. Clearing WIN_WAVE (see waves.js) banks +1 here, once per run, and
+// parks the run on the win screen. A solo run that ends any other way - death
+// or EXIT - before the win zeroes it. Versus never reads or writes it, so a
+// match can neither build a streak nor break one.
+const WIN_STREAK_KEY = 'va-win-streak';
+function getWinStreak() {
+  try {
+    const n = Math.floor(Number(localStorage.getItem(WIN_STREAK_KEY)));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+function setWinStreak(n) {
+  try { localStorage.setItem(WIN_STREAK_KEY, String(Math.max(0, Math.floor(n) || 0))); } catch {}
+}
 
 // ---- the controller -------------------------------------------------------
 //
@@ -1531,6 +1550,10 @@ class Game {
     // a pass - see _updatePass.
     this._pass = false;
     this._swapped = false;
+    // Whether this solo run already banked its win. Set once, on the wave-50
+    // clear, and never unset until the next beginGame - so a death or an EXIT
+    // after the win cannot take the streak back.
+    this._winClaimed = false;
     this.wave = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -2420,6 +2443,19 @@ class Game {
       e.stopPropagation();
       this._audioGesture();
       this._restartFromOver();
+    });
+    // THE WIN'S TWO ANSWERS. stopPropagation for the same reason every other
+    // overlay button has it - except the win overlay is not click-to-continue,
+    // so these are the only two things on it that do anything at all.
+    document.getElementById('btn-win-continue').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._audioGesture();
+      this._continueAfterWin();
+    });
+    document.getElementById('btn-win-menu').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._audioGesture();
+      this._winToMenu();
     });
     // ---- the settings screen ------------------------------------------------
     //
@@ -3489,6 +3525,7 @@ class Game {
     if (this.state === 'menu') return this.ui.startOv;
     if (this.state === 'paused') return this.ui.pauseOv;
     if (this.state === 'gameover') return this.ui.overOv;
+    if (this.state === 'won') return this.ui.winOv;
     return null;
   }
 
@@ -3771,8 +3808,9 @@ class Game {
     // A pass is a wave BREAK, so the room is lit like one. Without the extra
     // test it fell to 'idle' - the between-runs mood - and the three seconds
     // of a handoff read as the game having stopped, which is the one thing the
-    // pass is built not to do.
-    const house = this.state === 'playing'
+    // pass is built not to do. The win screen sits over a wave break too, so
+    // it keeps the house lights rather than falling to idle.
+    const house = (this.state === 'playing' || this.state === 'won')
       && (this.waveState === 'intermission' || this._pass);
     r.mode = combat ? (this.bossFight ? 'boss' : 'combat') : house ? 'house' : 'idle';
     r.beat = this.music.beat;
@@ -3925,6 +3963,7 @@ class Game {
     this._lastKillPos = null;
     this._pass = false;
     this._swapped = false;
+    this._winClaimed = false;
     this.totemArea.dismiss();
     this.mysteryBox.dismiss();
     this.donationMachine.dismiss();
@@ -4026,6 +4065,10 @@ class Game {
    */
   _exitToMenu() {
     if (this.state !== 'paused') return;
+    // Walking away from a solo run that never won ends the streak, exactly
+    // like dying in one does. Versus never touches it, and a run that already
+    // won keeps what it banked.
+    if (!this.match && !this._winClaimed) setWinStreak(0);
     this._closeSubScreen();
     this.state = 'menu';
     this.pad.stopRumble();
@@ -5635,6 +5678,9 @@ class Game {
     // point of a hit, the last tick of a pool - so there is exactly one door
     // between "the player is dead" and "the run is over".
     if (this.match) { this._playerFell(); return; }
+    // A solo run that never won ends the streak. After the win it is already
+    // banked and a later death cannot take it back.
+    if (!this._winClaimed) { setWinStreak(0); this.ui.setWinStreak(0); }
     this.state = 'gameover';
     // The room stays standing - the screen is drawn OVER the arena as it fell,
     // row and all, so the row is not dismissed here (see _leaveRun).
@@ -5662,6 +5708,44 @@ class Game {
     // And the heaviest the pad goes, at a priority nothing else in the game
     // uses - there is nothing left that could need to interrupt it.
     this.pad.rumble(1, 0.8, 700, 4);
+  }
+
+  // THE WIN. Solo only, called once per run off the wave-50 clear. Banks +1
+  // and parks the run on the win screen: the wave break (totems, box, machine)
+  // is already standing behind it, so CONTINUE resumes the intermission rather
+  // than rebuilding it. Versus never reaches here - see the call site.
+  _claimWin() {
+    this._winClaimed = true;
+    const n = getWinStreak() + 1;
+    setWinStreak(n);
+    this.state = 'won';
+    this._clearInput();
+    this._closeStats();
+    this.ui.setPrompt(null, false);
+    this.player.setHolster(0);
+    this.pad.stopRumble();
+    if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
+    this.ui.showWin(n);
+    this.sfx.passiveItem();
+  }
+
+  // Back into the break the win interrupted. The intermission is still gated
+  // on the pick, so nothing about the shop is skipped or replayed.
+  _continueAfterWin() {
+    if (this.state !== 'won') return;
+    this.ui.hideWin();
+    this.state = 'playing';
+    if (!this.autoTest) this._lock();
+  }
+
+  // The win kept, the run thrown away. Reuses the pause exit's whole teardown:
+  // parked as paused it meets _exitToMenu's guard, and the streak guard inside
+  // sees _winClaimed and keeps what was banked.
+  _winToMenu() {
+    if (this.state !== 'won') return;
+    this.ui.hideWin();
+    this.state = 'paused';
+    this._exitToMenu();
   }
 
   // How hard the kill chain is running, 1 upward.
@@ -9166,6 +9250,9 @@ class Game {
         this._presentTotems();
         this._presentBox();
         this._presentDonationMachine();
+        // THE WIN. Solo only: the totems stay standing behind the screen, so
+        // CONTINUE is a resume of this same break rather than a rebuild.
+        if (!this.match && this.wave === WIN_WAVE && !this._winClaimed) this._claimWin();
       }
     } else if (this.waveState === 'intermission') {
       // The next wave is GATED ON A PICK, not on a clock. Nothing else in the

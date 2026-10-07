@@ -21,6 +21,7 @@
     "test:pad": "node test/pad.mjs",
     "test:rebind": "node test/rebind.mjs",
     "test:versus": "node test/versus.mjs",
+    "test:win": "node test/win.mjs",
     "test:seeker": "node test/seeker.mjs",
     "test:active": "node test/active.mjs",
     "test:item-modules": "node test/item-modules.mjs",

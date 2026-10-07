@@ -1571,6 +1571,15 @@ body.reading #crt::after {
 
 #overlay-over #btn-lb-save:hover { background: #fff3a0; }
 
+/* ---- the win --------------------------------------------------------------
+   Gold, not red: the death screen shouts and this one celebrates, but both
+   are the same marquee with the same buttons, so the shape is untouched. */
+.overlay h1.won {
+  color: var(--gold);
+  text-shadow: 4px 4px 0 var(--ink), 0 0 30px rgba(255, 233, 94, 0.85);
+}
+#overlay-win .marquee { --edge: rgba(255, 233, 94, 0.45); }
+
 /* ---- station prompt ------------------------------------------------------ */
 #prompt {
   position: fixed; left: 50%; top: calc(50% + 92px);

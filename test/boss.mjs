@@ -471,6 +471,9 @@ try {
     // the boss goes through exactly the path a real run takes.
     await page.evaluate(({ w, t }) => {
       const g = window.__game;
+      // A wave-50 clear parks a solo run on the win screen (see test/win.mjs).
+      // Play on past it exactly as a player would, or no later wave starts.
+      if (g.state === 'won') g._continueAfterWin();
       g.setTheme(t);
       g.wave = w - 1;
       g.enemies.forEach((e) => { e.dead = true; });

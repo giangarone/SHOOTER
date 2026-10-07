@@ -2,6 +2,9 @@
 // no game state, no side effects. main.js calls waveConfig() once when a wave
 // starts and reads the rest from it for the duration.
 //
+// THE WIN: clearing WIN_WAVE in solo finishes the game. Past it the run may
+// continue, but the streak is already banked - see _claimWin in main.js.
+//
 // FIXED SHAPE, THEMED CAST
 //
 // A wave's SHAPE - how many enemies of each ROLE it contains - is a pure
@@ -42,6 +45,10 @@
 import {
   THEMES, ROLE_KEYS, THEME_KEYS, blockPos, themeForWave, resolveRole, resolveBoss,
 } from './themes.js';
+
+// Clearing this wave in solo wins the run. The streak banks once per run and
+// the player may continue past it; versus never reads it.
+export const WIN_WAVE = 50;
 
 // ---- bosses --------------------------------------------------------------
 // Every fifth wave, and which boss it is comes from the block's theme rather
