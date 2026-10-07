@@ -1580,6 +1580,41 @@ body.reading #crt::after {
 }
 #overlay-win .marquee { --edge: rgba(255, 233, 94, 0.45); }
 
+/* ---- the trophy shelf -----------------------------------------------------
+   The four win-streak trophies, in the marquee under the streak line. One row,
+   always visible: locked tiers are the goals and earned ones are the proof,
+   so hiding either half would cost the reason the shelf is on the menu.
+   Canvases are 48px off GRID*2 sources (see pixelIconCanvas), the same
+   whole-pixel chain the item art uses. */
+#trophy-shelf {
+  display: flex; justify-content: center;
+  gap: calc(var(--u) * 4);
+  margin-top: calc(var(--u) * 2);
+}
+.trophy {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--u);
+}
+.trophy canvas {
+  width: 48px; height: 48px;
+  image-rendering: pixelated;
+}
+.trophy .tname { font-size: 8px; letter-spacing: 0.14em; color: var(--text); }
+.trophy .treq { font-size: 8px; letter-spacing: 0.1em; color: var(--dim); }
+/* LOCKED IS A SILHOUETTE, not an empty slot: the shape teases what is being
+   chased, and the grey says it is not earned yet. One filter over the coloured
+   art rather than a second drawing - the earned state and the locked one can
+   never drift apart. */
+.trophy.locked canvas { filter: grayscale(1) brightness(0.45); }
+.trophy.locked .tname { color: var(--dim); }
+/* EARNED glows in its own metal, written inline as --tint from the tier's
+   theme so the canvas, the name and the halo agree without a rule per tier. */
+.trophy:not(.locked) canvas { filter: drop-shadow(0 0 8px var(--tint)); }
+.trophy:not(.locked) .tname { color: var(--tint); }
+/* The unlock callout on the win screen. Gold and unblinking: the marquee is
+   already celebrating, and a second animation would fight the first. */
+#win-trophy { color: var(--gold); }
+
 /* ---- station prompt ------------------------------------------------------ */
 #prompt {
   position: fixed; left: 50%; top: calc(50% + 92px);

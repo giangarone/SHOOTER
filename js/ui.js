@@ -7,6 +7,7 @@
 // resetCache() clears those caches on a new game, so the first frame repaints.
 
 import { pixelIconCanvas } from './pixelicons.js';
+import { TROPHIES, trophiesEarned } from './trophies.js';
 import { itemCells } from './items/active/index.js';
 import { controllerGlyph } from './padmenu.js';
 
@@ -55,6 +56,10 @@ export class UI {
     this.winOv = $('overlay-win');
     this.winStreakEl = $('win-streak');
     this.winStreakRunEl = $('win-streak-run');
+    this.winTrophyEl = $('win-trophy');
+    this.trophyShelf = $('trophy-shelf');
+    this._trophySlots = [];
+    this._buildTrophyShelf();
     this.pauseOv = $('overlay-pause');
     this.confirmOv = $('overlay-confirm');
     // The two sub-screens. They sit OVER whichever menu opened them rather
@@ -783,7 +788,10 @@ export class UI {
     this.hideSubScreens();
     // Read here rather than in main.js so no path onto the menu can forget
     // to refresh it - versus returns, win returns and plain boots alike.
-    try { this.setWinStreak(Number(localStorage.getItem('va-win-streak')) || 0); } catch {}
+    try {
+      this.setWinStreak(Number(localStorage.getItem('va-win-streak')) || 0);
+      this.refreshTrophies(Number(localStorage.getItem('va-best-streak')) || 0);
+    } catch {}
     this._syncReading();
   }
   // The menu's streak readout. Written by main.js, which owns the store - this
@@ -792,6 +800,40 @@ export class UI {
     const t = String(Math.max(0, Math.floor(n) || 0));
     if (this.winStreakEl) this.winStreakEl.textContent = t;
     if (this.winStreakRunEl) this.winStreakRunEl.textContent = t;
+  }
+
+  // THE TROPHY SHELF. Built once out of the tier table - the table is the only
+  // list of tiers, so the menu can never show one the win screen does not
+  // award. Canvases are drawn once; refreshTrophies only flips classes, so a
+  // menu opened sixty times costs no redraws.
+  _buildTrophyShelf() {
+    if (!this.trophyShelf) return;
+    for (const t of TROPHIES) {
+      const slot = document.createElement('div');
+      slot.className = 'trophy locked';
+      slot.style.setProperty('--tint', '#' + t.theme.toString(16).padStart(6, '0'));
+      slot.appendChild(pixelIconCanvas(t.icon, t.theme, 2));
+      const name = document.createElement('span');
+      name.className = 'tname';
+      name.textContent = t.name;
+      const req = document.createElement('span');
+      req.className = 'treq';
+      req.textContent = 'STREAK ' + t.need;
+      slot.append(name, req);
+      this.trophyShelf.appendChild(slot);
+      this._trophySlots.push(slot);
+    }
+  }
+
+  // Lights the earned tiers. `best` is the best streak ever, so earned tiers
+  // never go dark again no matter what the live streak does - that permanence
+  // is what makes them achievements rather than a second streak readout.
+  refreshTrophies(best) {
+    const n = Math.max(0, Math.floor(best) || 0);
+    const earned = trophiesEarned(n);
+    for (let i = 0; i < this._trophySlots.length; i++) {
+      this._trophySlots[i].classList.toggle('locked', i >= earned);
+    }
   }
   showHud() {
     this.hud.classList.remove('hidden');
@@ -919,9 +961,23 @@ export class UI {
    * THE WIN. Solo only, over the wave break that is still standing behind it -
    * the HUD stays up and the totems stay claimed-until-pick, so CONTINUE is a
    * resume rather than a rebuild. Versus never opens it.
+   *
+   * `unlocks` is the tier names crossed by this win, if any - at most one per
+   * win, since the streak climbs one at a time.
    */
-  showWin(streak) {
+  showWin(streak, unlocks = []) {
     this.setWinStreak(streak);
+    try {
+      this.refreshTrophies(Number(localStorage.getItem('va-best-streak')) || 0);
+    } catch {}
+    if (this.winTrophyEl) {
+      if (unlocks.length) {
+        this.winTrophyEl.textContent = 'NEW TROPHY: ' + unlocks.join(' · ');
+        this.winTrophyEl.classList.remove('hidden');
+      } else {
+        this.winTrophyEl.classList.add('hidden');
+      }
+    }
     this.hideSubScreens();
     this.hideHandoff();
     this.winOv.classList.remove('hidden');

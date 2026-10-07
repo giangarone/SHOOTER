@@ -48,7 +48,7 @@ import {
 
 // Clearing this wave in solo wins the run. The streak banks once per run and
 // the player may continue past it; versus never reads it.
-export const WIN_WAVE = 50;
+export const WIN_WAVE = 30;
 
 // ---- bosses --------------------------------------------------------------
 // Every fifth wave, and which boss it is comes from the block's theme rather

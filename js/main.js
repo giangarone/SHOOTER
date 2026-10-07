@@ -78,6 +78,7 @@ import { Music } from './music.js';
 import { Magpie, Lamprey, MarshToad, RubberChicken, Parrot, PackRat, Ferryman } from './companions.js';
 import { Rig } from './rig.js';
 import { waveConfig, bossScale, pickAddType, WIN_WAVE } from './waves.js';
+import { TROPHIES } from './trophies.js';
 import { THEMES } from './themes.js';
 
 // Which enemy types are actually BUILT. themes.js names every one of its sixty
@@ -573,6 +574,22 @@ function getWinStreak() {
 }
 function setWinStreak(n) {
   try { localStorage.setItem(WIN_STREAK_KEY, String(Math.max(0, Math.floor(n) || 0))); } catch {}
+}
+
+// ---- the trophies -----------------------------------------------------------
+//
+// The best streak ever, and the only number the shelf reads. Permanent on
+// purpose: tiers are achievements for REACHING a streak, so ending a run can
+// never re-lock what was already earned. Versus never reaches the one writer.
+const BEST_STREAK_KEY = 'va-best-streak';
+function getBestStreak() {
+  try {
+    const n = Math.floor(Number(localStorage.getItem(BEST_STREAK_KEY)));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+function setBestStreak(n) {
+  try { localStorage.setItem(BEST_STREAK_KEY, String(Math.max(0, Math.floor(n) || 0))); } catch {}
 }
 
 // ---- the controller -------------------------------------------------------
@@ -1550,7 +1567,7 @@ class Game {
     // a pass - see _updatePass.
     this._pass = false;
     this._swapped = false;
-    // Whether this solo run already banked its win. Set once, on the wave-50
+    // Whether this solo run already banked its win. Set once, on the wave-30
     // clear, and never unset until the next beginGame - so a death or an EXIT
     // after the win cannot take the streak back.
     this._winClaimed = false;
@@ -5710,7 +5727,7 @@ class Game {
     this.pad.rumble(1, 0.8, 700, 4);
   }
 
-  // THE WIN. Solo only, called once per run off the wave-50 clear. Banks +1
+  // THE WIN. Solo only, called once per run off the wave-30 clear. Banks +1
   // and parks the run on the win screen: the wave break (totems, box, machine)
   // is already standing behind it, so CONTINUE resumes the intermission rather
   // than rebuilding it. Versus never reaches here - see the call site.
@@ -5718,6 +5735,12 @@ class Game {
     this._winClaimed = true;
     const n = getWinStreak() + 1;
     setWinStreak(n);
+    // Trophies measure the best ever, and unlocks are the tiers crossed by
+    // THIS win: the streak climbs one at a time, so at most one crosses.
+    const before = getBestStreak();
+    if (n > before) setBestStreak(n);
+    const unlocks = TROPHIES.filter((t) => t.need > before && t.need <= n)
+      .map((t) => t.name);
     this.state = 'won';
     this._clearInput();
     this._closeStats();
@@ -5725,7 +5748,7 @@ class Game {
     this.player.setHolster(0);
     this.pad.stopRumble();
     if (!this.autoTest && document.pointerLockElement) document.exitPointerLock();
-    this.ui.showWin(n);
+    this.ui.showWin(n, unlocks);
     this.sfx.passiveItem();
   }
 

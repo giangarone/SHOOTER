@@ -1260,12 +1260,16 @@ context. The start screen says so, and one click anywhere fixes it.
   where the big lit button is the safe answer and the outlined one ends the
   run, so a player mashing the obvious button keeps playing. Nothing is banked
   by leaving — a score reaches the board by dying with it.
-- **Wave 50 is the win, in solo.** Clearing it parks the run on a YOU WON!
+- **Wave 30 is the win, in solo.** Clearing it parks the run on a YOU WON!
   screen: CONTINUE plays on past it, BACK TO MENU ends the run with the win
   kept. Every win banks +1 on the WIN STREAK shown on the title screen; dying
-  or EXITing before wave 50 zeroes it, and a death after the win cannot take
+  or EXITing before wave 30 zeroes it, and a death after the win cannot take
   back what was banked. Versus never opens the screen and never touches the
   streak — the fun there is the match, not the wave.
+- **Win-streak trophies.** Bronze at 1, Silver at 3, Gold at 5, Diamond at 10 —
+  measured against the best streak ever, so they never re-lock. The shelf sits
+  on the title screen under the streak, silhouettes until earned; a win that
+  crosses a tier says so on the win screen.
 - **Local leaderboard.** The ten best runs, ranked by score with the wave
   reached as the tiebreak, shown on the title screen and after a death. A run
   that places asks for a name, arcade style; restarting without pressing SAVE

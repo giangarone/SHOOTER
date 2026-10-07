@@ -259,8 +259,11 @@
     <div class="marquee plate">
       <h1>VOID ARENA</h1>
       <div class="rule"></div>
-      <p class="sub">SURVIVE THE WAVES</p>
-      <p class="sub">WIN STREAK <b id="win-streak">0</b> · CLEAR WAVE 50 TO WIN</p>
+      <p class="sub">WIN STREAK <b id="win-streak">0</b> · CLEAR WAVE 30 TO WIN</p>
+      <!-- THE TROPHY SHELF. Built by ui.js out of js/trophies.js rather than
+           authored here, so the menu can never show a tier the table does not
+           know about - the canvas mounts are the only hand-authored thing. -->
+      <div id="trophy-shelf"></div>
     </div>
 
     <div class="controls plate">
@@ -307,15 +310,16 @@
     <div class="primary-row"><button id="btn-restart">RESTART</button></div>
   </div>
 
-  <!-- THE WIN. Solo only: clearing wave 50 banks the streak and parks the run
+  <!-- THE WIN. Solo only: clearing wave 30 banks the streak and parks the run
        here. CONTINUE returns to the wave break that is still standing behind
        it; BACK TO MENU ends the run with the win kept. Versus never opens it. -->
   <div id="overlay-win" class="overlay hidden">
     <div class="marquee plate">
       <h1 class="won">YOU WON!</h1>
       <div class="rule"></div>
-      <p class="sub">YOU CLEARED WAVE 50 · THE ARENA IS YOURS</p>
+      <p class="sub">YOU CLEARED WAVE 30 · THE ARENA IS YOURS</p>
       <p class="sub">WIN STREAK <b id="win-streak-run">1</b></p>
+      <p class="sub hidden" id="win-trophy">NEW TROPHY</p>
     </div>
 
     <div class="primary-row"><button id="btn-win-continue">CONTINUE</button></div>
