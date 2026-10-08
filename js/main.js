@@ -2292,6 +2292,7 @@ class Game {
     const SWALLOW = new Set(['jump', 'stats']);
 
     const onKeyDown = (e) => {
+      if (this._menuKeyboard(e)) return;
       // Guards any text input that ever ends up on screen: without this a
       // space would be swallowed by the jump binding's preventDefault, and R
       // and E would fire game actions mid-word.
@@ -2340,6 +2341,9 @@ class Game {
       }
     };
     const onKeyUp = (e) => {
+      if (this._rebindId == null && this._menuRoot()
+        && e.target instanceof Element && e.target.closest('.menu-ui button')
+        && (e.key === ' ' || e.key === 'Enter')) return;
       if (this._typing(e.target)) return;
       for (const id in RELEASED) {
         if (K().is(id, e.code)) {
@@ -2368,10 +2372,6 @@ class Game {
           if (!this.autoTest && document.pointerLockElement !== canvas) this._lock();
           this.input.shoot = true;
           this.input.shootFresh = true;
-        } else if (this.state === 'menu') {
-          this.beginGame();
-        } else if (this.state === 'paused') {
-          this.resume();
         }
       } else if (e.button === 2) {
         e.preventDefault();
@@ -2422,7 +2422,9 @@ class Game {
       this._audioGesture();
       if (this.state === 'menu') this.beginGame();
     };
-    document.getElementById('overlay-start').addEventListener('click', onStart);
+    // Background gestures can unlock audio, but only an explicit action may
+    // start a run. Clicking whitespace must never dismiss the new menus.
+    document.getElementById('overlay-start').addEventListener('click', () => this._audioGesture());
     document.getElementById('btn-start').addEventListener('click', (e) => {
       e.stopPropagation();
       onStart();
@@ -2437,7 +2439,11 @@ class Game {
     document.getElementById('btn-versus').addEventListener('click', (e) => {
       e.stopPropagation();
       this._audioGesture();
-      if (this.state === 'menu') this.ui.showPlayerCount();
+      if (this.state === 'menu') {
+        this._menuOpener = e.currentTarget;
+        this.ui.showPlayerCount();
+        this._focusMenu();
+      }
     });
     // One handler per count, off the button's own data-count, so the seat
     // cap is markup: the buttons below are the whole list of counts the game
@@ -2448,10 +2454,16 @@ class Game {
         e.stopPropagation();
         this._audioGesture();
         if (this.state !== 'menu') return;
-        this._closeSubScreen();
-        this.beginGame('versus', Number(btn.dataset.count));
+        this.ui.selectPlayerCount(Number(btn.dataset.count));
       });
     }
+    document.getElementById('btn-players-start').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const count = this.ui.playerCount;
+      if (this.state !== 'menu' || count === null) return;
+      this._closeSubScreen();
+      this.beginGame('versus', count);
+    });
     document.getElementById('btn-players-back').addEventListener('click', (e) => {
       e.stopPropagation();
       this._closeSubScreen();
@@ -2677,28 +2689,47 @@ class Game {
       this.inputMode === 'pad' ? this.keys.padSheet() : this.keys.sheet()
     );
 
-    // Opening and closing the two sub-screens. The buttons that open them sit
-    // on overlays that are themselves click-to-continue, so every one of these
-    // has to stop the event or the click would also start or resume the run.
+    // Sub-screens share the same return path, including focus restoration.
     document.getElementById('btn-settings-start').addEventListener('click', (e) => {
       e.stopPropagation();
-      this._openSettings();
+      this._openSettings(e.currentTarget);
     });
     document.getElementById('btn-settings-pause').addEventListener('click', (e) => {
       e.stopPropagation();
-      this._openSettings();
+      this._openSettings(e.currentTarget);
     });
     document.getElementById('btn-settings-back').addEventListener('click', (e) => {
       e.stopPropagation();
       this._closeSubScreen();
     });
-    // EXIT, in two presses. The first only opens the question; the second is
-    // the one that ends the run. Both stop the event for the same reason every
-    // other button on the pause overlay does - the overlay itself is
-    // click-to-continue, and a stray bubble would resume the game underneath.
+    for (const id of ['btn-controls-start', 'btn-controls-pause']) {
+      document.getElementById(id).addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._menuOpener = e.currentTarget;
+        this.ui.showControls();
+        this._focusMenu();
+      });
+    }
+    document.getElementById('btn-controls-back').addEventListener('click', () => this._closeSubScreen());
+    for (const tab of this.ui.settingsOv.querySelectorAll('[data-settings-tab]')) {
+      tab.addEventListener('click', () => this._selectSettingsCategory(tab.dataset.settingsTab));
+    }
+    for (const [index, row] of [...this.ui.settingsOv.querySelectorAll('.set-row')].entries()) {
+      const label = row.querySelector('.set-label');
+      const control = row.querySelector('.stepper, .opt-btn');
+      if (!label || !control) continue;
+      label.id = 'setting-label-' + index;
+      if (!control.id) control.id = 'setting-value-' + index;
+      if (control.classList.contains('stepper')) control.setAttribute('role', 'group');
+      control.setAttribute('aria-labelledby', label.id + (control.tagName === 'BUTTON' ? ' ' + control.id : ''));
+    }
+    // EXIT still requires two deliberate presses, with the safe answer
+    // selected first so repeated confirmation cannot abandon the run.
     document.getElementById('btn-exit-pause').addEventListener('click', (e) => {
       e.stopPropagation();
+      this._menuOpener = e.currentTarget;
       this.ui.showConfirmExit();
+      this._focusMenu();
     });
     document.getElementById('btn-exit-no').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2717,7 +2748,7 @@ class Game {
     // pointer-events: none, so a click during a handoff falls through to the
     // canvas, where every handler already refuses a state that is not
     // 'playing'. Swallowing it here would be a listener that can never fire.
-    for (const ov of [this.ui.settingsOv, this.ui.confirmOv, this.ui.playersOv]) {
+    for (const ov of [this.ui.settingsOv, this.ui.controlsOv, this.ui.confirmOv, this.ui.playersOv]) {
       ov.addEventListener('click', (e) => e.stopPropagation());
     }
 
@@ -2740,7 +2771,6 @@ class Game {
 
     this._wireMenuSounds();
 
-    document.getElementById('overlay-pause').addEventListener('click', () => this.resume());
     document.getElementById('btn-resume').addEventListener('click', (e) => {
       e.stopPropagation();
       this.resume();
@@ -2982,9 +3012,75 @@ class Game {
   // screen or the pause screen - and never hide it. That is what makes BACK a
   // single class change with nothing to remember: taking the top screen down
   // reveals exactly the screen the player came from.
-  _openSettings() {
+  _openSettings(opener = document.activeElement) {
     this._audioGesture();
+    this._menuOpener = opener;
     this.ui.showSettings();
+    this._focusMenu();
+  }
+
+  _selectSettingsCategory(category) {
+    this._rebindCancel();
+    this.ui.selectSettingsCategory(category);
+    const tab = this.ui.settingsOv.querySelector('[data-settings-tab="' + this.ui.settingsCategory + '"]');
+    if (this.inputMode === 'pad') this.menu.focus(tab);
+    else tab.focus({ preventScroll: true });
+  }
+
+  _focusMenu(target = null) {
+    const root = this._menuRoot();
+    if (!root) return;
+    this._padRoot = root;
+    this.menu.setRoot(root);
+    if (target && root.contains(target)) this.menu.focus(target, true);
+    if (this.inputMode !== 'pad' && this.menu.el) this.menu.el.classList.remove('pad-focus');
+  }
+
+  _menuKeyboard(e) {
+    // DOM navigation is separate from rebindable gameplay actions. A capture
+    // owns every key, including Tab, until it finishes or is cancelled.
+    if (this._rebindId != null) return false;
+    const root = this._menuRoot();
+    if (!root || root.classList.contains('hidden')) return false;
+    if (e.key === 'Tab') {
+      const items = [...root.querySelectorAll('button:not([disabled]), input:not([disabled]), .stepper')]
+        .filter((el) => el.offsetParent !== null && !el.closest('.hidden')
+          && !(el.tagName === 'BUTTON' && el.closest('.stepper'))
+          && !(el.matches('[role="tab"]') && el.tabIndex < 0));
+      if (!items.length) return false;
+      e.preventDefault();
+      this._setInputMode('kbm');
+      const index = items.indexOf(document.activeElement);
+      items[(index + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+      return true;
+    }
+    const tab = e.target instanceof Element ? e.target.closest('[data-settings-tab]') : null;
+    if (tab && ['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      this._setInputMode('kbm');
+      const tabs = [...root.querySelectorAll('[data-settings-tab]')].filter((el) => !el.classList.contains('hidden'));
+      const index = tabs.indexOf(tab);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+        : (index + (e.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;
+      this._selectSettingsCategory(tabs[next].dataset.settingsTab);
+      return true;
+    }
+    const stepper = e.target instanceof Element ? e.target.closest('.stepper') : null;
+    if (stepper && ['ArrowLeft', 'ArrowRight', ' ', 'Enter'].includes(e.key)) {
+      e.preventDefault();
+      this._setInputMode('kbm');
+      const button = stepper.querySelector(e.key === 'ArrowLeft' ? '.step-btn:first-child' : '.step-btn:last-child');
+      if (button && !button.disabled) button.click();
+      return true;
+    }
+    // Let the browser activate focused buttons with Space and Enter. The
+    // jump action otherwise prevents Space's native button activation.
+    if (e.target instanceof Element && e.target.closest('.menu-ui button')
+      && (e.key === ' ' || e.key === 'Enter')) {
+      this._setInputMode('kbm');
+      return true;
+    }
+    return false;
   }
 
   _closeSubScreen() {
@@ -2994,6 +3090,8 @@ class Game {
     // A binding row left listening behind the closed screen is a press trap.
     this._rebindCancel();
     this.ui.hideSubScreens();
+    this._focusMenu(this._menuOpener);
+    this._menuOpener = null;
   }
 
   // True while a sub-screen is up. The menus underneath are still there
@@ -3001,6 +3099,7 @@ class Game {
   _subScreenOpen() {
     return !this.ui.settingsOv.classList.contains('hidden')
       || !this.ui.confirmOv.classList.contains('hidden')
+      || !this.ui.controlsOv.classList.contains('hidden')
       || !this.ui.playersOv.classList.contains('hidden');
   }
 
@@ -3088,6 +3187,7 @@ class Game {
       // of the session even if the pad is unplugged, which is where a player
       // who has just unplugged one goes looking.
       document.body.classList.add('pad-seen');
+      document.getElementById('settings-tab-controller').classList.remove('hidden');
     }
     if (pad.justDisconnected && this.inputMode === 'pad') {
       // A controller pulled mid-fight is not a reason to die. The pause is the
@@ -3537,6 +3637,7 @@ class Game {
     // the driver at a screen nobody can see.
     if (this._debugOpen) return this.ui.debugPanel;
     if (!this.ui.confirmOv.classList.contains('hidden')) return this.ui.confirmOv;
+    if (!this.ui.controlsOv.classList.contains('hidden')) return this.ui.controlsOv;
     if (!this.ui.settingsOv.classList.contains('hidden')) return this.ui.settingsOv;
     if (!this.ui.playersOv.classList.contains('hidden')) return this.ui.playersOv;
     if (this.state === 'menu') return this.ui.startOv;

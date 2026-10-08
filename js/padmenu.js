@@ -66,40 +66,16 @@ export function controllerGlyph() {
     + '</svg>';
 }
 
-/** A whole keycap. `cls` is the caller's cap class - `.key` on the start
- *  screen, nothing in the prompt, which styles its own `b`. */
+/** A whole keycap. `cls` is the caller's cap class - `.key` in Controls,
+ *  nothing in the prompt, which styles its own `b`. */
 export function cap(name, cls = '') {
   const wide = !FACE[name] && name.length > 2 ? ' wide' : '';
   return '<b class="' + cls + ' pad-cap' + wide + '">' + glyph(name) + '</b>';
 }
 
-// The two control sheets on the start screen. Both are laid out three across,
-// so both have a length that divides by three - a ragged last row on a panel
-// that is read once, before the run, would be the first thing the eye lands on.
-//
-// LOOK and AIM are two different things and the sheet has to say so: LOOK is
-// the mouse turning the view, AIM is the right button raising the gun. Naming
-// them both "aim" was the state of this list before the sights existed.
-//
-// FIFTEEN NOW, not twelve, and crouching is what put the third row on. CROUCH
-// and SLIDE are listed SEPARATELY even though they are one button: which of
-// the two a press gives you depends on whether you are already running, and a
-// single row reading "CROUCH / SLIDE" would leave the player to guess at the
-// rule. Two rows state it - the slide's cap says SPRINT and then the button,
-// which is the input, in order.
-//
-// The fifteenth row on each is the one that was cut when the sheet was twelve
-// and now has its place back: FULLSCREEN, a real binding nothing else on the
-// screen mentions, and the pad's D-PAD, which is how a controller walks the
-// menus it is reading this sheet in.
-//
-// BOTH SHEETS ARE PASSED IN RATHER THAN OWNED HERE. The keyboard's comes out
-// of the binding table (Keybinds.sheet) and the pad's out of the same table's
-// pad half (Keybinds.padSheet) - the controller's buttons are rebindable now,
-// and a rebind made in SETTINGS has to reach these caps without this module
-// learning where bindings are stored. This file held the pad sheet as a
-// fixed constant until then: right, but plastic, and the player had nowhere
-// to say "I want R1 for jump".
+// Both device sheets come from Keybinds. Grouping changes only where actions
+// are read, never what input a cap names; rebinding and device swaps can share
+// this same renderer without a second binding table going stale.
 
 /**
  * Rewrites the control sheet in place. Called only when the input mode
@@ -112,12 +88,25 @@ export function cap(name, cls = '') {
  *   class the wider caps are keyed on
  */
 export function renderControls(el, pad, sheet) {
-  for (const old of el.querySelectorAll('.ctl')) old.remove();
+  el.replaceChildren();
+  const groups = [
+    ['MOVEMENT', new Set(['MOVE', 'SPRINT', 'LOOK', 'JUMP', 'CROUCH', 'SLIDE'])],
+    ['COMBAT', new Set(['SHOOT', 'AIM', 'MELEE', 'RELOAD', 'ACTIVE ITEM', 'USE', 'TAKE'])],
+    ['ARENA', new Set(['STATS', 'FULLSCREEN', 'PAUSE', 'MENU'])],
+  ].map(([name, labels]) => {
+    const section = document.createElement('section');
+    section.className = 'control-group';
+    const heading = document.createElement('h2');
+    heading.textContent = name;
+    section.appendChild(heading);
+    el.appendChild(section);
+    return { section, labels };
+  });
   for (const [key, label] of sheet) {
     const ctl = document.createElement('div');
     ctl.className = 'ctl';
     ctl.innerHTML = cap(key, 'key') + '<span>' + label + '</span>';
-    el.appendChild(ctl);
+    (groups.find((group) => group.labels.has(label)) || groups[2]).section.appendChild(ctl);
   }
   el.classList.toggle('pad', pad);
 }
@@ -190,7 +179,8 @@ export class MenuDriver {
   _default() {
     const items = this.items();
     if (!items.length) return null;
-    return items.find((e) => e.closest('.primary-row')) || items[0];
+    return items.find((e) => e.hasAttribute('data-menu-default'))
+      || items.find((e) => e.closest('.primary-row')) || items[0];
   }
 
   focus(el, quiet = false) {

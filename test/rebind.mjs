@@ -62,6 +62,117 @@ try {
     await new Promise((r) => setTimeout(r, ms));
   };
 
+  // Menu navigation must never spend a background click as a gameplay action,
+  // and closing a screen must return both state and focus to its opener.
+  const menus = await page.evaluate(() => {
+    const g = window.__game;
+    const shown = (id) => !document.getElementById(id).classList.contains('hidden');
+    document.getElementById('overlay-start').click();
+    const backgroundSafe = g.state === 'menu';
+    const controlsButton = document.getElementById('btn-controls-start');
+    controlsButton.click();
+    const controls = shown('overlay-controls') && g._subScreenOpen()
+      && g._menuRoot() === g.ui.controlsOv && g.ui.startOv.inert
+      && document.querySelectorAll('.controls .control-group').length === 3
+      && document.querySelectorAll('.controls .ctl').length === 15;
+    document.getElementById('btn-controls-back').click();
+    const restored = !shown('overlay-controls') && !g._subScreenOpen()
+      && document.activeElement === controlsButton && !g.ui.startOv.inert;
+    document.getElementById('btn-settings-start').click();
+    const general = shown('settings-general') && !shown('settings-bindings')
+      && !shown('settings-tab-controller');
+    document.getElementById('settings-tab-bindings').click();
+    const row = document.querySelector('#bind-forward button');
+    row.click();
+    document.getElementById('settings-tab-general').click();
+    const cancelled = g._rebindId == null && !row.classList.contains('listening')
+      && shown('settings-general') && !shown('settings-bindings');
+    document.getElementById('btn-settings-back').click();
+    return { backgroundSafe, controls, restored, general, cancelled,
+      settingsFocus: document.activeElement.id === 'btn-settings-start' };
+  });
+  for (const [name, pass] of Object.entries(menus)) ok('menus: ' + name, pass);
+
+  await page.focus('#btn-fs-start');
+  await page.keyboard.press('Tab');
+  ok('menus: Tab wraps within the title screen',
+    await page.evaluate(() => document.activeElement.id === 'btn-start'));
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Tab');
+  await page.keyboard.up('Shift');
+  ok('menus: Shift+Tab wraps backwards',
+    await page.evaluate(() => document.activeElement.id === 'btn-fs-start'));
+  await page.click('#btn-settings-start');
+  await page.keyboard.press('ArrowDown');
+  ok('menus: keyboard arrows select the Bindings category',
+    await page.evaluate(() => window.__game.ui.settingsCategory === 'bindings'));
+  await page.click('#settings-tab-general');
+  await page.evaluate(() => document.getElementById('shake-pips').closest('.stepper').focus());
+  const shakeBefore = await page.evaluate(() => window.__game.effects.shakeScale);
+  await page.keyboard.press('ArrowLeft');
+  ok('menus: keyboard arrows adjust a focused stepper',
+    await page.evaluate((before) => window.__game.effects.shakeScale === Math.max(0, before - .25), shakeBefore));
+  await page.keyboard.press('ArrowRight');
+  await page.click('#btn-settings-back');
+  await page.focus('#btn-start');
+  await page.keyboard.press('Space');
+  ok('menus: Space activates the explicit Start button',
+    await page.evaluate(() => window.__game.state === 'playing'));
+  const pauseMenus = await page.evaluate(() => {
+    const g = window.__game;
+    g.pause();
+    g.ui.pauseOv.click();
+    const safe = g.state === 'paused';
+    document.getElementById('btn-controls-pause').click();
+    const controls = !g.ui.controlsOv.classList.contains('hidden');
+    g._closeSubScreen();
+    const restored = g.state === 'paused' && document.activeElement.id === 'btn-controls-pause';
+    g._exitToMenu();
+    return safe && controls && restored;
+  });
+  ok('menus: pause background and Controls preserve the paused run', pauseMenus);
+
+  const multiplayer = await page.evaluate(() => {
+    const g = window.__game;
+    const start = document.getElementById('btn-players-start');
+    document.getElementById('btn-versus').click();
+    const empty = start.disabled && g.ui.playerCount === null;
+    document.querySelector('[data-count="8"]').click();
+    const selected = g.state === 'menu' && !start.disabled && g.ui.playerCount === 8
+      && document.querySelectorAll('[data-count][aria-pressed="true"]').length === 1;
+    document.getElementById('btn-players-back').click();
+    const reset = start.disabled && g.ui.playerCount === null
+      && document.activeElement.id === 'btn-versus';
+    document.getElementById('btn-versus').click();
+    document.querySelector('[data-count="2"]').click();
+    start.click();
+    const launched = g.state === 'playing' && g.mode === 'versus' && g.match.count === 2;
+    g.pause();
+    g._exitToMenu();
+    return { empty, selected, reset, launched };
+  });
+  for (const [name, pass] of Object.entries(multiplayer)) ok('multiplayer menu: ' + name, pass);
+
+  // The binding list is intentionally taller than the available pane. It must
+  // scroll inside that pane without moving BACK off any supported display.
+  for (const [width, height] of [[1280, 720], [1440, 900], [1920, 1080], [3840, 2160], [640, 640]]) {
+    await page.setViewport({ width, height });
+    const layout = await page.evaluate(() => {
+      const g = window.__game;
+      g._openSettings();
+      g._selectSettingsCategory('bindings');
+      const back = document.getElementById('btn-settings-back').getBoundingClientRect();
+      const pane = document.querySelector('.settings');
+      const visible = back.top >= 0 && back.bottom <= innerHeight && back.left >= 0 && back.right <= innerWidth;
+      const scrolling = pane.clientHeight >= 44 && pane.scrollHeight > pane.clientHeight;
+      const fitsWidth = pane.scrollWidth <= pane.clientWidth + 1;
+      g._closeSubScreen();
+      return visible && scrolling && fitsWidth;
+    });
+    ok('menus: Bindings scrolls with Back visible at ' + width + '×' + height, layout);
+  }
+  await page.setViewport({ width: 1280, height: 720 });
+
   // The defaults, read off the table itself, are asserted as the shipped set
   // - a rebind system whose defaults have drifted is one that cannot be reset.
   const defaultsOk = await page.evaluate(() => {
@@ -118,6 +229,7 @@ try {
   const rebindOk = await page.evaluate(async () => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     const row = document.getElementById('bind-forward').querySelector('button');
     row.click();
     const listening = row.classList.contains('listening')
@@ -152,8 +264,8 @@ try {
   });
   ok('W no longer moves, I does, and the release lands', moveAfter === true);
 
-  // The sheet on the start screen - under the settings screen, so the rebind
-  // has to reach it through _syncKeyUi without a mode change to carry it.
+  // The separate Controls screen must reflect a rebind immediately, even
+  // while Settings is open and without a device change to redraw it.
   // MOVE is the four directions fused into one cap while they are all single
   // characters, so the rebind shows up inside it: WASD has become IASD.
   const sheetOk = await page.evaluate(() => {
@@ -162,7 +274,7 @@ try {
     g._closeSubScreen();
     return caps[0] === 'IASD' && caps.includes('SHIFT');
   });
-  ok('the start screen sheet shows the rebind', sheetOk === true);
+  ok('the Controls screen shows the rebind', sheetOk === true);
 
   // ---- 2. the screen agrees with the table ---------------------------------
   // The KEYBOARD rows only - this suite runs on the keyboard, the pad rows
@@ -171,6 +283,7 @@ try {
   const rowsOk = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     for (const el of document.querySelectorAll('.bind-btn')) {
       if (el.offsetParent === null) continue;
       const id = el.dataset.action;
@@ -215,6 +328,7 @@ try {
   const defaultsBtn = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     document.getElementById('btn-reset-keys').click();
     return g.keys.codes('forward').includes('KeyW')
       && document.getElementById('bind-forward').querySelector('button').textContent === 'W';
@@ -272,6 +386,7 @@ try {
   const escOk = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true }));
@@ -286,6 +401,7 @@ try {
   const closeOk = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     g._closeSubScreen();
@@ -315,6 +431,7 @@ try {
   const noRecapture = await page.evaluate(async () => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
@@ -406,6 +523,7 @@ try {
   const swapOk = await page.evaluate(() => {
     const g = window.__game;
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     const kbRow = document.getElementById('bind-forward');
     const padRow = document.getElementById('pbind-jump');
     const kbVisible = () => kbRow.offsetParent !== null && padRow.offsetParent === null;

@@ -66,6 +66,8 @@ export class UI {
     // than replacing it, so the one behind is left exactly as it was and BACK
     // is a single class change.
     this.settingsOv = $('overlay-settings');
+    this.controlsOv = $('overlay-controls');
+    this.settingsCategory = 'general';
     // HOW MANY ARE PLAYING. A sub-screen on exactly the terms of the other
     // two, which is the whole reason it is one: BACK, CIRCLE, Escape and the
     // click-through guard all already know how to close one of these.
@@ -877,8 +879,17 @@ export class UI {
     // for two seconds while the player decides something. Everything else on
     // this list pauses the game; this one only pauses the reading, which is all
     // the beam was ever turned down for.
-    const up = [this.startOv, this.overOv, this.winOv, this.pauseOv, this.settingsOv,
-      this.confirmOv, this.playersOv, this.statsPanel, this.debugPanel]
+    const screens = [this.startOv, this.overOv, this.winOv, this.pauseOv,
+      this.playersOv, this.settingsOv, this.controlsOv, this.confirmOv];
+    // A layered screen must block keyboard focus as well as mouse clicks.
+    // The underlying menu stays mounted so BACK can restore its exact focus.
+    const top = !this.debugPanel.classList.contains('hidden') ? this.debugPanel
+      : screens.findLast((o) => !o.classList.contains('hidden'));
+    for (const screen of screens) {
+      screen.inert = screen !== top;
+      screen.setAttribute('aria-hidden', String(screen !== top));
+    }
+    const up = [...screens, this.statsPanel, this.debugPanel]
       .some((o) => o && !o.classList.contains('hidden'));
     document.body.classList.toggle('reading', up);
   }
@@ -890,17 +901,47 @@ export class UI {
   // ---- sub-screens ---------------------------------------------------------
   hideSubScreens() {
     this.settingsOv.classList.add('hidden');
+    this.controlsOv.classList.add('hidden');
     this.confirmOv.classList.add('hidden');
     this.playersOv.classList.add('hidden');
+    this.selectPlayerCount(null);
     this._syncReading();
   }
   showPlayerCount() {
+    this.selectPlayerCount(null);
     this.playersOv.classList.remove('hidden');
     this._syncReading();
   }
   showSettings() {
+    this.selectSettingsCategory('general');
     this.settingsOv.classList.remove('hidden');
     this._syncReading();
+  }
+  showControls() {
+    this.controlsOv.classList.remove('hidden');
+    this._syncReading();
+  }
+  selectSettingsCategory(category) {
+    const tab = this.settingsOv.querySelector('[data-settings-tab="' + category + '"]');
+    if (!tab || tab.classList.contains('hidden')) return;
+    this.settingsCategory = category;
+    for (const button of this.settingsOv.querySelectorAll('[data-settings-tab]')) {
+      const selected = button === tab;
+      button.setAttribute('aria-selected', String(selected));
+      button.toggleAttribute('data-menu-default', selected);
+      button.tabIndex = selected ? 0 : -1;
+      document.getElementById(button.getAttribute('aria-controls')).classList.toggle('hidden', !selected);
+    }
+    this.settingsOv.querySelector('.settings').scrollTop = 0;
+  }
+  selectPlayerCount(count) {
+    this.playerCount = count;
+    for (const button of this.playersOv.querySelectorAll('[data-count]')) {
+      button.setAttribute('aria-pressed', String(Number(button.dataset.count) === count));
+    }
+    document.getElementById('btn-players-start').disabled = count === null;
+    document.getElementById('players-summary').textContent = count === null
+      ? 'SELECT THE NUMBER OF PLAYERS' : count + ' PLAYERS · READY TO ENTER';
   }
   // The EXIT confirmation. A sub-screen on exactly the same terms as the other
   // two - layered over the pause menu, taken down by hideSubScreens - so BACK,
@@ -1378,7 +1419,7 @@ export class UI {
       const line = document.createElement('div');
       // COLOURED BY SIGN, green for a benefit and red for a cost - the same
       // read the totem card gave the lines when the offer was weighed. See
-      // .inv-line in styles.css.
+      // .inv-line in menus.css.
       line.className = sign < 0 ? 'inv-line bad' : sign > 0 ? 'inv-line good' : 'inv-line';
       line.textContent = text;
       body.appendChild(line);

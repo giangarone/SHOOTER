@@ -487,6 +487,14 @@ try {
     await tap(B.OPTIONS);
     g._openSettings();
     await frames(2);
+    t('settings opens on Audio & Visual', g.ui.settingsCategory === 'general');
+    const controllerTab = document.getElementById('settings-tab-controller');
+    t('a detected controller exposes its category', controllerTab.offsetParent !== null);
+    g.menu.focus(controllerTab);
+    await tap(B.CROSS);
+    t('Cross opens the selected settings category', g.ui.settingsCategory === 'controller'
+      && controllerTab.getAttribute('aria-selected') === 'true'
+      && document.getElementById('settings-general').classList.contains('hidden'));
     // THE ROWS, WALKED WITH THE PAD. A stepper is one stop, not two keys, and
     // left/right on it moves the VALUE - the bug this replaced was a selection
     // that walked from the minus key to the plus key and changed nothing.
@@ -538,6 +546,9 @@ try {
     // short-circuited.
     g._openSettings();
     await frames(2);
+    g.menu.focus(document.getElementById('settings-tab-bindings'));
+    await tap(B.CROSS);
+    t('Bindings is reachable through controller navigation', g.ui.settingsCategory === 'bindings');
     // THE BLOCKS SWAP WITH THE HANDS. The pad player sees the pad rows, the
     // keyboard rows are gone, and the note says what cancels.
     t('pad mode shows the pad rows',
@@ -607,6 +618,7 @@ try {
     g.pause();
     await frames(2);
     g._openSettings();
+    g._selectSettingsCategory('bindings');
     await frames(2);
 
     // THE PROMPT AND THE SHEET follow the table, not the plastic: the lead

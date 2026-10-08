@@ -26,14 +26,14 @@ Open http://localhost:8123
 | Space | Jump. Press again in midair, with the Double Jump passive item |
 | Q | Use the active item |
 | E | Buy ammo / reroll at a station |
-| Tab | Hold for the run summary: passive items owned, and the numbers behind the score |
+| Tab | Hold to view Carrying: passive items and the active item |
 | F | Toggle fullscreen (also on the start and pause screens) |
 | Esc | Pause |
 
 Every keyboard binding above except Esc — and the mouse pair — can be changed:
-SETTINGS has a KEY BINDINGS block with one row per action, showing the current
+SETTINGS → BINDINGS has a KEY BINDINGS block with one row per action, showing the current
 key on a cap. Click it, press a new key, and the binding changes everywhere at
-once — the field, the prompts and the control sheet on the start screen. The
+once — the field, the prompts and the dedicated CONTROLS screen. The
 bindings persist in localStorage, so they survive a restart, and one press of
 DEFAULTS puts the shipped table back.
 
@@ -47,8 +47,8 @@ fullscreen, and a rebind would hand one press two meanings.
 
 **The controller's buttons rebind too.** The same screen, the same one-press
 capture: on a pad the KEY BINDINGS block is replaced by CONTROLLER BINDINGS,
-because the settings screen follows the player's hands exactly as the start
-screen's control sheet always has. Ten actions — jump, crouch, reload, take,
+because the settings screen follows the player's hands exactly as the CONTROLS
+screen always has. Ten actions — jump, crouch, reload, take,
 aim, shoot, item, melee, sprint and stats — and one button each, so a bind is
 always a **swap** with whichever action owned the button: there is no spare
 to take and nothing to refuse, and no action is ever left empty. Cross,
@@ -57,7 +57,7 @@ click that opened the row, and the pad's confirm button can never also be the
 binding it is confirming with — and the sticks, the D-pad, Options and Create
 are fixed, for the same reason Esc is on the keyboard. The caps on the pad
 rows are drawn as glyphs, not spelled, and a rebind reaches the field, the
-prompts and the start screen's sheet the same frame. DEFAULTS puts the
+prompts and the CONTROLS screen the same frame. DEFAULTS puts the
 shipped layout back on both devices at once, and the two saves are separate
 (`va-keys`, `va-pad-keys`) so a keyboard player's table and a pad player's
 never fight over one store.
@@ -309,7 +309,7 @@ swallowed left and right globally would strand the selection on the first of
 three buttons in a row.
 
 Picking the pad up switches the interface with it: the prompts name buttons
-instead of keys, the control sheet on the start screen becomes the one above,
+instead of keys, the dedicated CONTROLS screen becomes the one above,
 the menus grow a selection the D-pad walks — and the binding rows in SETTINGS
 become the controller's. Touching the keyboard or moving the mouse switches
 every one of those straight back. Nothing has to be enabled and nothing is
@@ -1255,11 +1255,26 @@ context. The start screen says so, and one click anywhere fixes it.
   that is the better route; fliers still cross low cover without using the
   ground route.
 - HUD: health, ammo, score, wave + enemies remaining
-- Start, pause, and game-over screens with restart. The pause screen also has
-  **EXIT**, which asks first: the confirmation is the one screen in the cabinet
-  where the big lit button is the safe answer and the outlined one ends the
-  run, so a player mashing the obvious button keeps playing. Nothing is banked
-  by leaving — a score reaches the board by dying with it.
+- **Cinematic monochrome menus**, with the game's pixel typography and artwork.
+  The wide title screen balances the title, win streak and trophies on the left
+  with navigation on the right. The same design covers pause, victory, game
+  over, local multiplayer, Carrying and debug. Menus scale for laptops,
+  desktops and large TV displays; the player HUD keeps its original design.
+- **CONTROLS** is a dedicated screen reached from the title or pause menu,
+  grouped into Movement, Combat and Arena. It follows the active input device
+  and reflects saved bindings. **SETTINGS** has Audio & Visual, Bindings and
+  Controller categories; Controller appears after a DualSense is detected.
+  Only the content scrolls, so BACK stays visible. Settings save immediately.
+- **Explicit menu actions.** START RUN and RESUME require their buttons;
+  background clicks do not start or resume gameplay. Controller Options still
+  starts or resumes. Multiplayer offers 2–8 players: select a count, then
+  press START MATCH. BACK clears the selection. Keyboard Tab / Shift+Tab walks
+  the current menu, Enter / Space selects, and arrows adjust focused steppers
+  or select settings categories. Returning from a sub-screen restores focus
+  to its opener. Transitions are short and respect reduced-motion preferences.
+- The pause screen also has **EXIT RUN**, which asks first: the white primary
+  button keeps playing and the secondary action exits, so repeated confirmation
+  stays on the safe answer. Nothing is banked by leaving — a score reaches the board by dying with it.
 - **Wave 30 is the win, in solo.** Clearing it parks the run on a YOU WON!
   screen: CONTINUE plays on past it, BACK TO MENU ends the run with the win
   kept. Every win banks +1 on the WIN STREAK shown on the title screen; dying
@@ -3345,7 +3360,8 @@ floor, and scores double what the same body is worth shot.
 index.html          page + HUD + overlays
 AGENTS.md           how to change this repo without breaking it
 server.js           zero-dependency static dev server
-css/styles.css      HUD / overlay styling
+css/styles.css      HUD / gameplay styling
+css/menus.css       scoped monochrome menu layouts and controls
 js/main.js          game loop, state, waves, shooting
 js/arena.js         arena geometry, lighting, spawn points
 js/player.js        movement, weapon, camera

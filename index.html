@@ -9,6 +9,7 @@
        face, and a first paint in a fallback would relayout the entire HUD. -->
   <link rel="preload" href="assets/fonts/PressStart2P-Regular.ttf" as="font" type="font/ttf" crossorigin/>
   <link rel="stylesheet" href="css/styles.css"/>
+  <link rel="stylesheet" href="css/menus.css"/>
   <script type="importmap">
     { "imports": { "three": "./js/vendor/three.module.js" } }
   </script>
@@ -178,9 +179,9 @@
        WHAT YOU ARE CARRYING, not what the run has counted - every number that
        used to be here is either on the HUD already or is trivia, and none of it
        answered the one question a build sheet exists for. -->
-  <div id="stats-panel" class="hidden">
-    <div id="stats-card" class="plate">
-      <div class="stats-head">CARRYING</div>
+  <div id="stats-panel" class="menu-ui hidden">
+    <div id="stats-card">
+      <div class="stats-head"><span>CARRYING</span><span class="menu-eyebrow">YOUR CURRENT BUILD</span></div>
       <!-- PASSIVE ITEMS FIRST. They are the bulk of what a run accumulates
            and the part the player cannot see anywhere else, so they get the
            top of the sheet and the space; the one item is a footnote under
@@ -212,8 +213,8 @@
        filters every item grid by name and effect line - hundreds of tiles
        is past what the eye scans, and "give me the dash one" should not be
        a hunt. -->
-  <div id="debug-panel" class="hidden">
-    <div id="debug-card" class="plate">
+  <div id="debug-panel" class="menu-ui hidden">
+    <div id="debug-card">
       <div id="debug-head">
         <span>DEBUG</span>
         <input id="debug-search" type="text" placeholder="SEARCH ITEMS"
@@ -255,75 +256,64 @@
     </div>
   </div>
 
-  <div id="overlay-start" class="overlay">
-    <div class="marquee plate">
-      <h1>VOID ARENA</h1>
-      <div class="rule"></div>
-      <p class="sub">WIN STREAK <b id="win-streak">0</b> · CLEAR WAVE 30 TO WIN</p>
-      <!-- THE TROPHY SHELF. Built by ui.js out of js/trophies.js rather than
-           authored here, so the menu can never show a tier the table does not
-           know about - the canvas mounts are the only hand-authored thing. -->
-      <div id="trophy-shelf"></div>
-    </div>
-
-    <div class="controls plate">
-      <div class="controls-head">CONTROLS</div>
-      <!-- The caps are built by padmenu.js and swapped when the player picks
-           up or puts down a controller. Kept out of the markup entirely rather
-           than duplicated here as a starting state: two lists of bindings is
-           two lists to keep in step, and the one in the HTML would be the one
-           nobody remembers to change. -->
-    </div>
-
-    <!-- The board used to live here, under the controls, and it pushed PRESS
-         START off the bottom of a laptop screen the moment it had ten rows in
-         it. It is its own screen now. -->
-    <div class="primary-row"><button id="btn-start">PRESS START</button></div>
-    <!-- The second mode. Its own row under the marquee's button rather than
-         beside it: PRESS START is the cabinet's one big control and a pair of
-         equal buttons would make the player choose before they know there is
-         anything to choose between. -->
-    <div class="opt-row"><button id="btn-versus" class="opt-btn">MULTIPLAYER VERSUS</button></div>
-    <!-- Shown only when the sound is still locked and the pad is what is being
-         played on: a controller press is not a "user gesture" as far as the
-         browser is concerned, so no amount of pressing X will start the audio
-         context. One click anywhere will, and the player has to be told. -->
-    <p id="audio-hint" class="set-note hidden">CLICK ONCE TO ENABLE SOUND</p>
-    <div class="opt-row">
-      <button id="btn-settings-start" class="opt-btn">SETTINGS</button>
-      <button id="btn-fs-start" class="opt-btn">FULLSCREEN</button>
+  <div id="overlay-start" class="overlay menu-ui" aria-labelledby="overlay-start-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>ENTER THE ARENA</span></header>
+      <div class="menu-split">
+        <section class="menu-hero marquee">
+          <p class="menu-eyebrow">ENTER THE ARENA</p>
+          <h1 id="overlay-start-title">VOID<br>ARENA</h1>
+          <p class="menu-description">CLEAR WAVE 30.<br>MAKE IT OUT ALIVE.</p>
+          <div class="menu-progress"><p class="menu-eyebrow">WIN STREAK <b id="win-streak">0</b></p><div id="trophy-shelf"></div></div>
+        </section>
+        <nav class="menu-nav" aria-label="ENTER THE ARENA">
+          <div class="primary-row"><button id="btn-start" class="menu-primary">START RUN<i class="menu-arrow" aria-hidden="true"></i></button></div>
+          <button id="btn-versus" class="opt-btn">MULTIPLAYER<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-controls-start" class="opt-btn">CONTROLS<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-settings-start" class="opt-btn">SETTINGS<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-fs-start" class="opt-btn">FULLSCREEN<i class="menu-arrow" aria-hidden="true"></i></button>
+          <p id="audio-hint" class="set-note hidden">CLICK ONCE TO ENABLE SOUND</p>
+        </nav>
+      </div>
+      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
   </div>
 
-  <div id="overlay-over" class="overlay hidden">
-    <div class="marquee plate">
-      <h1 class="dead">YOU DIED</h1>
-      <div class="rule warm"></div>
-      <!-- HOW FAR YOU GOT, at the size it deserves. The wave is the only
-           measure of a run now, so it is the screen rather than a quarter of
-           a strip; the four readings below it are context for it. -->
-      <div id="over-hero-label">REACHED WAVE</div>
-      <div id="over-hero">1</div>
-      <div id="over-stats" class="run-strip"></div>
+  <div id="overlay-over" class="overlay menu-ui hidden" aria-labelledby="overlay-over-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>RUN COMPLETE</span></header>
+      <div class="menu-split">
+        <section class="menu-hero marquee">
+          <p class="menu-eyebrow">RUN COMPLETE</p>
+          <h1 id="overlay-over-title">YOU DIED</h1>
+          <div class="menu-result"><p id="over-hero-label" class="menu-eyebrow">REACHED WAVE</p><div id="over-hero">1</div></div>
+          <div id="over-stats" class="run-strip"></div>
+        </section>
+        <nav class="menu-nav" aria-label="RUN COMPLETE">
+          <div class="primary-row"><button id="btn-restart" class="menu-primary">RESTART<i class="menu-arrow" aria-hidden="true"></i></button></div>
+        </nav>
+      </div>
+      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
-
-    <div class="primary-row"><button id="btn-restart">RESTART</button></div>
   </div>
 
-  <!-- THE WIN. Solo only: clearing wave 30 banks the streak and parks the run
-       here. CONTINUE returns to the wave break that is still standing behind
-       it; BACK TO MENU ends the run with the win kept. Versus never opens it. -->
-  <div id="overlay-win" class="overlay hidden">
-    <div class="marquee plate">
-      <h1 class="won">YOU WON!</h1>
-      <div class="rule"></div>
-      <p class="sub">YOU CLEARED WAVE 30 · THE ARENA IS YOURS</p>
-      <p class="sub">WIN STREAK <b id="win-streak-run">1</b></p>
-      <p class="sub hidden" id="win-trophy">NEW TROPHY</p>
+  <div id="overlay-win" class="overlay menu-ui hidden" aria-labelledby="overlay-win-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>ARENA CLEARED</span></header>
+      <div class="menu-split">
+        <section class="menu-hero marquee">
+          <p class="menu-eyebrow">ARENA CLEARED</p>
+          <h1 id="overlay-win-title">YOU WON!</h1>
+          <p class="menu-description">WAVE 30 CLEARED.<br>THE ARENA IS YOURS.</p>
+          <div class="menu-progress"><p class="menu-eyebrow">WIN STREAK <b id="win-streak-run">1</b></p><p id="win-trophy" class="set-note hidden">NEW TROPHY</p></div>
+        </section>
+        <nav class="menu-nav" aria-label="ARENA CLEARED">
+          <div class="primary-row"><button id="btn-win-continue" class="menu-primary">CONTINUE<i class="menu-arrow" aria-hidden="true"></i></button></div>
+          <button id="btn-win-menu" class="opt-btn">BACK TO MENU<i class="menu-arrow" aria-hidden="true"></i></button>
+        </nav>
+      </div>
+      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
-
-    <div class="primary-row"><button id="btn-win-continue">CONTINUE</button></div>
-    <div class="opt-row"><button id="btn-win-menu" class="opt-btn">BACK TO MENU</button></div>
   </div>
 
   <!-- PASS THE CONTROLLER. Text on the arena and nothing else - no scrim, no
@@ -342,204 +332,203 @@
     <div id="handoff-count">3</div>
   </div>
 
-  <div id="overlay-pause" class="overlay hidden">
-    <div class="marquee plate">
-      <h1>PAUSED</h1>
-      <div class="rule"></div>
-      <p class="sub">THE ARENA IS WAITING</p>
-    </div>
-    <div class="primary-row"><button id="btn-resume">RESUME</button></div>
-    <div class="opt-row">
-      <button id="btn-settings-pause" class="opt-btn">SETTINGS</button>
-      <button id="btn-fs-pause" class="opt-btn">FULLSCREEN</button>
-      <!-- The one button on this screen that throws the run away, so it is
-           marked as such and it asks first. See #overlay-confirm. -->
-      <button id="btn-exit-pause" class="opt-btn danger">EXIT</button>
-    </div>
-  </div>
-
-  <!-- ARE YOU SURE. A sub-screen like SETTINGS and HIGH SCORES - layered over
-       the pause menu rather than swapping with it, so BACK is one class change
-       - but it is the only one that asks a question, so it is the only one
-       drawn in red and the only one whose default answer is no.
-
-       CANCEL is the PRIMARY button and EXIT is the outlined one, which is the
-       wrong way round for every other screen in the game and deliberately so
-       here: the big lit cabinet button is the safe one, and throwing away a
-       run takes the deliberate press. -->
-  <div id="overlay-confirm" class="overlay hidden">
-    <div class="marquee plate">
-      <h1>EXIT RUN?</h1>
-      <div class="rule"></div>
-      <p class="sub">THIS WAVE, THIS BUILD AND THIS SCORE ARE LOST</p>
-    </div>
-    <div class="primary-row"><button id="btn-exit-no">KEEP PLAYING</button></div>
-    <div class="opt-row">
-      <button id="btn-exit-yes" class="opt-btn danger">EXIT TO MENU</button>
-    </div>
-  </div>
-
-  <!-- HOW MANY ARE PLAYING. A sub-screen like SETTINGS and ARE YOU SURE -
-       layered over the start menu rather than swapping with it, so BACK is one
-       class change and CIRCLE, Escape and the click-through guard already know
-       what to do with it.
-
-       SEVEN EQUAL BUTTONS AND NO DEFAULT. Two through eight are different
-       games rather than a setting with a usual answer, and the count cannot
-       be changed once the match has taken its first snapshot - so this is the
-       one screen in the game where making the player choose is the point.
-       The count rides on data-count; main.js reads it off the button, and the
-       button list is the cap - a ninth seat is markup and a colour and
-       nothing else. -->
-  <div id="overlay-players" class="overlay hidden">
-    <div class="marquee plate">
-      <h1>HOW MANY?</h1>
-      <div class="rule"></div>
-      <p class="sub">ONE CONTROLLER  &middot;  ONE WAVE EACH  &middot;  LAST ONE STANDING</p>
-    </div>
-    <div class="opt-row">
-      <button class="opt-btn" data-count="2">2 PLAYERS</button>
-      <button class="opt-btn" data-count="3">3 PLAYERS</button>
-      <button class="opt-btn" data-count="4">4 PLAYERS</button>
-      <button class="opt-btn" data-count="5">5 PLAYERS</button>
-      <button class="opt-btn" data-count="6">6 PLAYERS</button>
-      <button class="opt-btn" data-count="7">7 PLAYERS</button>
-      <button class="opt-btn" data-count="8">8 PLAYERS</button>
-    </div>
-    <div class="opt-row">
-      <button id="btn-players-back" class="opt-btn">BACK</button>
-    </div>
-  </div>
-
-  <!-- SETTINGS. Its own screen, reached from the start and pause menus and
-       returning to whichever opened it. Every control in here is one ROW -
-       label on the left, the thing you change on the right - so the column of
-       values can be read down in one pass without hunting for which word is
-       the setting and which is its state. -->
-  <div id="overlay-settings" class="overlay hidden">
-    <div class="marquee plate">
-      <h1>SETTINGS</h1>
-      <div class="rule"></div>
-      <p class="sub">TUNE THE CABINET</p>
-    </div>
-
-    <div class="settings plate">
-      <div class="set-head">AUDIO</div>
-      <div class="set-row">
-        <span class="set-label">MUSIC</span>
-        <button id="btn-music" class="opt-btn">ON</button>
+  <div id="overlay-pause" class="overlay menu-ui hidden" aria-labelledby="overlay-pause-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>TAKE A BREATH</span></header>
+      <div class="menu-split">
+        <section class="menu-hero marquee">
+          <p class="menu-eyebrow">TAKE A BREATH</p>
+          <h1 id="overlay-pause-title">PAUSED</h1>
+          <p class="menu-description">THE ARENA IS WAITING.<br>RETURN WHEN YOU'RE READY.</p>
+        </section>
+        <nav class="menu-nav" aria-label="TAKE A BREATH">
+          <div class="primary-row"><button id="btn-resume" class="menu-primary">RESUME<i class="menu-arrow" aria-hidden="true"></i></button></div>
+          <button id="btn-controls-pause" class="opt-btn">CONTROLS<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-settings-pause" class="opt-btn">SETTINGS<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-fs-pause" class="opt-btn">FULLSCREEN<i class="menu-arrow" aria-hidden="true"></i></button>
+          <button id="btn-exit-pause" class="opt-btn" data-danger>EXIT RUN<i class="menu-arrow" aria-hidden="true"></i></button>
+        </nav>
       </div>
+      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
+    </div>
+  </div>
 
-      <div class="set-head">VISUAL</div>
-      <div class="set-row">
-        <span class="set-label">BEAT FLASHES</span>
-        <button id="btn-flash" class="opt-btn">OFF</button>
+  <div id="overlay-confirm" class="overlay menu-ui menu-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <section class="menu-dialog-card">
+      <p class="menu-eyebrow">LEAVE THE ARENA</p>
+      <h1 id="confirm-title">EXIT RUN?</h1>
+      <p class="menu-description">YOUR CURRENT WAVE AND BUILD WILL BE LOST.</p>
+      <div class="menu-dialog-actions">
+        <div class="primary-row"><button id="btn-exit-no" class="menu-primary">KEEP PLAYING</button></div>
+        <button id="btn-exit-yes" class="opt-btn" data-danger>EXIT TO MENU</button>
       </div>
-      <div class="set-row">
-        <span class="set-label">SCREENSHAKE</span>
-        <!-- A stepper, not a range input: a native slider is a rounded,
-             anti-aliased control from another operating system, and this
-             cabinet has no such shape in it. Eight lit cells and two keys. -->
-        <div class="stepper" tabindex="-1">
-          <button id="btn-shake-down" class="step-btn" type="button" aria-label="Less screenshake">-</button>
-          <div id="shake-pips" class="pips"></div>
-          <b id="shake-val">150%</b>
-          <button id="btn-shake-up" class="step-btn" type="button" aria-label="More screenshake">+</button>
+    </section>
+  </div>
+
+  <div id="overlay-players" class="overlay menu-ui menu-subscreen hidden" aria-labelledby="players-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>LOCAL MULTIPLAYER</span></header>
+      <section class="menu-page">
+        <header class="menu-page-head"><p class="menu-eyebrow">PASS THE CONTROLLER</p><h1 id="players-title">BRING YOUR RIVALS.</h1><p class="menu-description">ONE CONTROLLER. ONE WAVE EACH. LAST ONE STANDING.</p></header>
+        <div class="player-grid" role="group" aria-label="Number of players">
+          <button class="player-count opt-btn" data-count="2" aria-pressed="false"><b>02</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="3" aria-pressed="false"><b>03</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="4" aria-pressed="false"><b>04</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="5" aria-pressed="false"><b>05</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="6" aria-pressed="false"><b>06</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="7" aria-pressed="false"><b>07</b><span>PLAYERS</span></button>
+          <button class="player-count opt-btn" data-count="8" aria-pressed="false"><b>08</b><span>PLAYERS</span></button>
+        </div>
+        <p id="players-summary" class="set-note" aria-live="polite">SELECT THE NUMBER OF PLAYERS</p>
+      </section>
+      <footer class="menu-page-footer"><button id="btn-players-back" class="opt-btn">BACK</button><div class="primary-row"><button id="btn-players-start" class="menu-primary" disabled>START MATCH<i class="menu-arrow" aria-hidden="true"></i></button></div></footer>
+    </div>
+  </div>
+
+  <div id="overlay-controls" class="overlay menu-ui menu-subscreen hidden" aria-labelledby="controls-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>HOW TO PLAY</span></header>
+      <section class="menu-page">
+        <header class="menu-page-head"><p class="menu-eyebrow">KNOW YOUR CONTROLS</p><h1 id="controls-title">STAY IN CONTROL.</h1><p class="menu-description">YOUR CURRENT BINDINGS. CHANGE THEM IN SETTINGS.</p></header>
+        <div class="controls"></div>
+      </section>
+      <footer class="menu-page-footer"><div class="primary-row"><button id="btn-controls-back" class="opt-btn" data-menu-default>BACK</button></div><span class="menu-eyebrow"><span class="kbm-only">KEYBOARD + MOUSE</span><span class="pad-now">CONTROLLER</span></span></footer>
+    </div>
+  </div>
+
+  <div id="overlay-settings" class="overlay menu-ui menu-subscreen hidden" aria-labelledby="settings-title">
+    <div class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>PREFERENCES</span></header>
+      <header class="menu-page-head"><p class="menu-eyebrow">MAKE IT YOURS</p><h1 id="settings-title">SETTINGS</h1></header>
+      <div class="settings-layout">
+        <nav class="settings-tabs" aria-label="Settings categories" role="tablist" aria-orientation="vertical">
+          <button id="settings-tab-general" class="opt-btn" role="tab" aria-controls="settings-general" aria-selected="true" data-settings-tab="general" data-menu-default>AUDIO &amp; VISUAL</button>
+          <button id="settings-tab-bindings" class="opt-btn" role="tab" aria-controls="settings-bindings" aria-selected="false" data-settings-tab="bindings" tabindex="-1">BINDINGS</button>
+          <button id="settings-tab-controller" class="opt-btn controller-tab hidden" role="tab" aria-controls="settings-controller" aria-selected="false" data-settings-tab="controller" tabindex="-1">CONTROLLER</button>
+        </nav>
+        <div class="settings">
+          <section id="settings-general" class="settings-pane" role="tabpanel" aria-labelledby="settings-tab-general">
+            <div class="set-head">AUDIO</div>
+            <div class="set-row">
+              <span class="set-label">MUSIC</span>
+              <button id="btn-music" class="opt-btn">ON</button>
+            </div>
+
+            <div class="set-head">VISUAL</div>
+            <div class="set-row">
+              <span class="set-label">BEAT FLASHES</span>
+              <button id="btn-flash" class="opt-btn">OFF</button>
+            </div>
+            <div class="set-row">
+              <span class="set-label">SCREENSHAKE</span>
+              <!-- A stepper keeps controller adjustment in discrete saved steps. -->
+              <div class="stepper" tabindex="-1">
+                <button id="btn-shake-down" class="step-btn" type="button" aria-label="Less screenshake">-</button>
+                <div id="shake-pips" class="pips"></div>
+                <b id="shake-val">150%</b>
+                <button id="btn-shake-up" class="step-btn" type="button" aria-label="More screenshake">+</button>
+              </div>
+            </div>
+            <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
+
+
+          </section>
+          <section id="settings-bindings" class="settings-pane hidden" role="tabpanel" aria-labelledby="settings-tab-bindings">
+            <!-- KEY BINDINGS. One row per rebindable action: the action on the left,
+                 a button wearing the current key on the right. Click it, press a
+                 key, done. The rows are BUILT by main.js out of the binding table
+                 rather than authored here, so the screen can never show a binding
+                 the table does not know about - the cap on each row is the only
+                 hand-authored thing in the block.
+
+                 TWO BLOCKS, one per device, and the INPUT MODE picks which one the
+                 eye gets - the same rule the start screen's control sheet has always
+                 followed, so the settings screen follows the hands too. The pad
+                 block is built from the same table's pad half (Keybinds.padSheet
+                 order) and its caps are glyphs rather than letters. -->
+            <div class="set-head kbm-only">KEY BINDINGS</div>
+            <div class="set-row kbm-only"><span class="set-label">FORWARD</span><span class="bind-slot" id="bind-forward"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">BACK</span><span class="bind-slot" id="bind-back"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">LEFT</span><span class="bind-slot" id="bind-left"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">RIGHT</span><span class="bind-slot" id="bind-right"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">SPRINT</span><span class="bind-slot" id="bind-sprint"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">JUMP</span><span class="bind-slot" id="bind-jump"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">CROUCH</span><span class="bind-slot" id="bind-crouch"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">MELEE</span><span class="bind-slot" id="bind-melee"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">RELOAD</span><span class="bind-slot" id="bind-reload"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">ITEM</span><span class="bind-slot" id="bind-item"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">USE</span><span class="bind-slot" id="bind-use"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">STATS</span><span class="bind-slot" id="bind-stats"></span></div>
+            <div class="set-row kbm-only"><span class="set-label">FULLSCREEN</span><span class="bind-slot" id="bind-fullscreen"></span></div>
+
+            <div class="set-head pad-now">CONTROLLER BINDINGS</div>
+            <div class="set-row pad-now"><span class="set-label">JUMP</span><span class="bind-slot" id="pbind-jump"></span></div>
+            <div class="set-row pad-now"><span class="set-label">CROUCH</span><span class="bind-slot" id="pbind-crouch"></span></div>
+            <div class="set-row pad-now"><span class="set-label">RELOAD</span><span class="bind-slot" id="pbind-reload"></span></div>
+            <div class="set-row pad-now"><span class="set-label">TAKE</span><span class="bind-slot" id="pbind-use"></span></div>
+            <div class="set-row pad-now"><span class="set-label">AIM</span><span class="bind-slot" id="pbind-aim"></span></div>
+            <div class="set-row pad-now"><span class="set-label">SHOOT</span><span class="bind-slot" id="pbind-shoot"></span></div>
+            <div class="set-row pad-now"><span class="set-label">ITEM</span><span class="bind-slot" id="pbind-item"></span></div>
+            <div class="set-row pad-now"><span class="set-label">MELEE</span><span class="bind-slot" id="pbind-melee"></span></div>
+            <div class="set-row pad-now"><span class="set-label">SPRINT</span><span class="bind-slot" id="pbind-sprint"></span></div>
+            <div class="set-row pad-now"><span class="set-label">STATS</span><span class="bind-slot" id="pbind-stats"></span></div>
+
+            <!-- KEPT, even though the caps above are the honest default: a player who
+                 rebinds and regrets it has to dig through thirteen rows to undo
+                 them by hand otherwise. One press, everything back to the shipped
+                 table, felt through the same nudge the pad gives. -->
+            <div class="set-row">
+              <span class="set-label">RESET KEYS</span>
+              <button id="btn-reset-keys" class="opt-btn">DEFAULTS</button>
+            </div>
+            <p class="set-note kbm-only">CLICK A KEY, PRESS A NEW ONE. ESC CANCELS. MOUSE BUTTONS AND ESC ARE FIXED</p>
+            <p class="set-note pad-now">CLICK A BUTTON, PRESS A NEW ONE. CROSS, CIRCLE AND OPTIONS CANCEL. STICKS, D-PAD, OPTIONS AND CREATE ARE FIXED</p>
+
+          </section>
+          <section id="settings-controller" class="settings-pane hidden" role="tabpanel" aria-labelledby="settings-tab-controller">
+            <!-- CONTROLLER. Hidden until a DualSense has actually been seen this
+                 session (body.pad-seen): four rows about a device that is not
+                 plugged in is four rows of noise on the only settings screen the
+                 game has. -->
+            <div class="set-head pad-only">CONTROLLER</div>
+            <div class="set-row pad-only">
+              <span class="set-label">LOOK SENSITIVITY</span>
+              <div class="stepper" tabindex="-1">
+                <button id="btn-sens-down" class="step-btn" type="button" aria-label="Lower look sensitivity">-</button>
+                <div id="sens-pips" class="pips"></div>
+                <b id="sens-val">5</b>
+                <button id="btn-sens-up" class="step-btn" type="button" aria-label="Higher look sensitivity">+</button>
+              </div>
+            </div>
+            <div class="set-row pad-only">
+              <span class="set-label">AIM SENSITIVITY</span>
+              <div class="stepper" tabindex="-1">
+                <button id="btn-aimsens-down" class="step-btn" type="button" aria-label="Lower aim sensitivity">-</button>
+                <div id="aimsens-pips" class="pips"></div>
+                <b id="aimsens-val">3</b>
+                <button id="btn-aimsens-up" class="step-btn" type="button" aria-label="Higher aim sensitivity">+</button>
+              </div>
+            </div>
+            <div class="set-row pad-only">
+              <span class="set-label">AIM ASSIST</span>
+              <button id="btn-assist" class="opt-btn">ON</button>
+            </div>
+            <div class="set-row pad-only">
+              <span class="set-label">VIBRATION</span>
+              <button id="btn-rumble" class="opt-btn">ON</button>
+            </div>
+            <div class="set-row pad-only">
+              <span class="set-label">INVERT LOOK</span>
+              <button id="btn-invert" class="opt-btn">OFF</button>
+            </div>
+            <p class="set-note pad-only">AIM SENSITIVITY IS THE TURN RATE WITH THE GUN UP</p>
+
+
+          </section>
         </div>
       </div>
-      <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
-
-      <!-- CONTROLLER. Hidden until a DualSense has actually been seen this
-           session (body.pad-seen): four rows about a device that is not
-           plugged in is four rows of noise on the only settings screen the
-           game has. -->
-      <div class="set-head pad-only">CONTROLLER</div>
-      <div class="set-row pad-only">
-        <span class="set-label">LOOK SENSITIVITY</span>
-        <div class="stepper" tabindex="-1">
-          <button id="btn-sens-down" class="step-btn" type="button" aria-label="Lower look sensitivity">-</button>
-          <div id="sens-pips" class="pips"></div>
-          <b id="sens-val">5</b>
-          <button id="btn-sens-up" class="step-btn" type="button" aria-label="Higher look sensitivity">+</button>
-        </div>
-      </div>
-      <div class="set-row pad-only">
-        <span class="set-label">AIM SENSITIVITY</span>
-        <div class="stepper" tabindex="-1">
-          <button id="btn-aimsens-down" class="step-btn" type="button" aria-label="Lower aim sensitivity">-</button>
-          <div id="aimsens-pips" class="pips"></div>
-          <b id="aimsens-val">3</b>
-          <button id="btn-aimsens-up" class="step-btn" type="button" aria-label="Higher aim sensitivity">+</button>
-        </div>
-      </div>
-      <div class="set-row pad-only">
-        <span class="set-label">AIM ASSIST</span>
-        <button id="btn-assist" class="opt-btn">ON</button>
-      </div>
-      <div class="set-row pad-only">
-        <span class="set-label">VIBRATION</span>
-        <button id="btn-rumble" class="opt-btn">ON</button>
-      </div>
-      <div class="set-row pad-only">
-        <span class="set-label">INVERT LOOK</span>
-        <button id="btn-invert" class="opt-btn">OFF</button>
-      </div>
-      <p class="set-note pad-only">AIM SENSITIVITY IS THE TURN RATE WITH THE GUN UP</p>
-
-      <!-- KEY BINDINGS. One row per rebindable action: the action on the left,
-           a button wearing the current key on the right. Click it, press a
-           key, done. The rows are BUILT by main.js out of the binding table
-           rather than authored here, so the screen can never show a binding
-           the table does not know about - the cap on each row is the only
-           hand-authored thing in the block.
-
-           TWO BLOCKS, one per device, and the INPUT MODE picks which one the
-           eye gets - the same rule the start screen's control sheet has always
-           followed, so the settings screen follows the hands too. The pad
-           block is built from the same table's pad half (Keybinds.padSheet
-           order) and its caps are glyphs rather than letters. -->
-      <div class="set-head kbm-only">KEY BINDINGS</div>
-      <div class="set-row kbm-only"><span class="set-label">FORWARD</span><span class="bind-slot" id="bind-forward"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">BACK</span><span class="bind-slot" id="bind-back"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">LEFT</span><span class="bind-slot" id="bind-left"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">RIGHT</span><span class="bind-slot" id="bind-right"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">SPRINT</span><span class="bind-slot" id="bind-sprint"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">JUMP</span><span class="bind-slot" id="bind-jump"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">CROUCH</span><span class="bind-slot" id="bind-crouch"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">MELEE</span><span class="bind-slot" id="bind-melee"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">RELOAD</span><span class="bind-slot" id="bind-reload"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">ITEM</span><span class="bind-slot" id="bind-item"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">USE</span><span class="bind-slot" id="bind-use"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">STATS</span><span class="bind-slot" id="bind-stats"></span></div>
-      <div class="set-row kbm-only"><span class="set-label">FULLSCREEN</span><span class="bind-slot" id="bind-fullscreen"></span></div>
-
-      <div class="set-head pad-now">CONTROLLER BINDINGS</div>
-      <div class="set-row pad-now"><span class="set-label">JUMP</span><span class="bind-slot" id="pbind-jump"></span></div>
-      <div class="set-row pad-now"><span class="set-label">CROUCH</span><span class="bind-slot" id="pbind-crouch"></span></div>
-      <div class="set-row pad-now"><span class="set-label">RELOAD</span><span class="bind-slot" id="pbind-reload"></span></div>
-      <div class="set-row pad-now"><span class="set-label">TAKE</span><span class="bind-slot" id="pbind-use"></span></div>
-      <div class="set-row pad-now"><span class="set-label">AIM</span><span class="bind-slot" id="pbind-aim"></span></div>
-      <div class="set-row pad-now"><span class="set-label">SHOOT</span><span class="bind-slot" id="pbind-shoot"></span></div>
-      <div class="set-row pad-now"><span class="set-label">ITEM</span><span class="bind-slot" id="pbind-item"></span></div>
-      <div class="set-row pad-now"><span class="set-label">MELEE</span><span class="bind-slot" id="pbind-melee"></span></div>
-      <div class="set-row pad-now"><span class="set-label">SPRINT</span><span class="bind-slot" id="pbind-sprint"></span></div>
-      <div class="set-row pad-now"><span class="set-label">STATS</span><span class="bind-slot" id="pbind-stats"></span></div>
-
-      <!-- KEPT, even though the caps above are the honest default: a player who
-           rebinds and regrets it has to dig through thirteen rows to undo
-           them by hand otherwise. One press, everything back to the shipped
-           table, felt through the same nudge the pad gives. -->
-      <div class="set-row">
-        <span class="set-label">RESET KEYS</span>
-        <button id="btn-reset-keys" class="opt-btn">DEFAULTS</button>
-      </div>
-      <p class="set-note kbm-only">CLICK A KEY, PRESS A NEW ONE. ESC CANCELS. MOUSE BUTTONS AND ESC ARE FIXED</p>
-      <p class="set-note pad-now">CLICK A BUTTON, PRESS A NEW ONE. CROSS, CIRCLE AND OPTIONS CANCEL. STICKS, D-PAD, OPTIONS AND CREATE ARE FIXED</p>
+      <footer class="menu-page-footer"><button id="btn-settings-back" class="opt-btn">BACK</button><span class="menu-eyebrow">CHANGES SAVE AUTOMATICALLY</span></footer>
     </div>
-
-    <div class="primary-row"><button id="btn-settings-back">BACK</button></div>
-  </div>
-
   </div>
 
   <!-- The tube, in two layers, and they are separate elements for a reason
