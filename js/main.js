@@ -2488,6 +2488,11 @@ class Game {
       this._audioGesture();
       this._restartFromOver();
     });
+    document.getElementById('btn-over-menu').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._audioGesture();
+      this._overToMenu();
+    });
     // THE WIN'S TWO ANSWERS. stopPropagation for the same reason every other
     // overlay button has it - except the win overlay is not click-to-continue,
     // so these are the only two things on it that do anything at all.
@@ -5833,6 +5838,16 @@ class Game {
     this.ui.hideWin();
     this.state = 'playing';
     if (!this.autoTest) this._lock();
+  }
+
+  // The death screen kept, the run thrown away. Same shape as _winToMenu:
+  // parked as paused it meets _exitToMenu's guard, and the streak guard
+  // inside keeps what a post-win death already banked.
+  _overToMenu() {
+    if (this.state !== 'gameover') return;
+    this.ui.hideOver();
+    this.state = 'paused';
+    this._exitToMenu();
   }
 
   // The win kept, the run thrown away. Reuses the pause exit's whole teardown:

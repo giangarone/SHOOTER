@@ -1038,6 +1038,10 @@ export class UI {
     this.winOv.classList.add('hidden');
     this._syncReading();
   }
+  hideOver() {
+    this.overOv.classList.add('hidden');
+    this._syncReading();
+  }
 
   /**
    * The end of a versus match. Reuses the death screen's furniture - the

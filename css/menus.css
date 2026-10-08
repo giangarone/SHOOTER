@@ -847,6 +847,11 @@ body.pad-seen .menu-ui p.pad-only {
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
 }
 
+.menu-ui #debug-waves,
+.menu-ui #debug-themes {
+  gap: 6px;
+}
+
 .menu-ui .debug-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 0 24px;
