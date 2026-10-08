@@ -175,13 +175,14 @@
   <div id="prompt" class="plate hidden"></div>
 
   <!-- Held-TAB inventory sheet. Entries are built by ui.js; the shell is here
-       so the card and its two sections are styled once and never rebuilt.
+       so the layout and its two sections are styled once and never rebuilt.
        WHAT YOU ARE CARRYING, not what the run has counted - every number that
        used to be here is either on the HUD already or is trivia, and none of it
        answered the one question a build sheet exists for. -->
-  <div id="stats-panel" class="menu-ui hidden">
-    <div id="stats-card">
-      <div class="stats-head"><span>CARRYING</span><span class="menu-eyebrow">YOUR CURRENT BUILD</span></div>
+  <div id="stats-panel" class="overlay menu-ui menu-sheet hidden" aria-labelledby="stats-title">
+    <div id="stats-card" class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>YOUR CURRENT BUILD</span></header>
+      <div class="stats-head"><h1 id="stats-title">CARRYING</h1></div>
       <!-- PASSIVE ITEMS FIRST. They are the bulk of what a run accumulates
            and the part the player cannot see anywhere else, so they get the
            top of the sheet and the space; the one item is a footnote under
@@ -213,13 +214,13 @@
        filters every item grid by name and effect line - hundreds of tiles
        is past what the eye scans, and "give me the dash one" should not be
        a hunt. -->
-  <div id="debug-panel" class="menu-ui hidden">
-    <div id="debug-card">
+  <div id="debug-panel" class="overlay menu-ui menu-sheet hidden" aria-labelledby="debug-title">
+    <div id="debug-card" class="menu-frame">
+      <header class="menu-top"><span>VOID ARENA</span><span>DEVELOPER TOOLS</span></header>
       <div id="debug-head">
-        <span>DEBUG</span>
+        <h1 id="debug-title">DEBUG</h1>
         <input id="debug-search" type="text" placeholder="SEARCH ITEMS"
-               autocomplete="off" spellcheck="false" data-pad-skip>
-        <span id="debug-hint">9 / ESC &nbsp;-&nbsp; PAD: CREATE OR CIRCLE</span>
+               aria-label="Search items" autocomplete="off" spellcheck="false" data-pad-skip>
       </div>
       <div id="debug-body">
         <section class="debug-sec">
@@ -253,6 +254,7 @@
           <div id="debug-donation" class="debug-grid"></div>
         </section>
       </div>
+      <footer class="menu-footer"><span>CHEATS ENABLED</span><span id="debug-hint">9 / ESC &nbsp;-&nbsp; PAD: CREATE OR CIRCLE</span></footer>
     </div>
   </div>
 

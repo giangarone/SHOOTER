@@ -1262,6 +1262,10 @@ context. The start screen says so, and one click anywhere fixes it.
   with navigation on the right. The same design covers pause, victory, game
   over, local multiplayer, Carrying and debug. Menus scale for laptops,
   desktops and large TV displays; the player HUD keeps its original design.
+  Carrying and debug use the same open layout, with wide margins and fine
+  dividers instead of a solid panel or boxed item cards. Debug keeps search
+  and its close hint visible while the catalogue scrolls; Carrying keeps
+  passive items first and its active item visible below them during play.
   The title backdrop hides the first-person gun and smoothly cycles the accent
   lights, fixture lenses and lasers through a full rainbow every eight seconds.
   The cycle also continues behind screens opened from the title; gameplay,
