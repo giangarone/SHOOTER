@@ -307,20 +307,22 @@ export class Keybinds {
   }
 
   /**
-   * THE PAD SHEET for the start screen, in the same fifteen-row shape as
+   * THE PAD SHEET for Controls, in the same fifteen-row shape as
    * sheet(): a fixed frame around the ten rebindable rows. The five rows a
    * pad cannot change - MOVE, LOOK, MENU, PAUSE and the D-pad - are the
    * hardware's own, printed on its plastic, and they stay in the order the
    * keyboard sheet put them in so the two sheets read as one list.
    */
+  // Editable action ids are carried beside their labels. Fixed hardware and
+  // derived combinations omit them so the guide cannot offer false bindings.
   padSheet() {
     const P = (id) => this.padBtn(id);
     return [
-      ['L STICK', 'MOVE'], [P('sprint'), 'SPRINT'], ['R STICK', 'LOOK'],
-      [P('shoot'), 'SHOOT'], [P('aim'), 'AIM'], [P('melee'), 'MELEE'],
-      [P('activeItem'), 'ACTIVE ITEM'], [P('jump'), 'JUMP'], [P('reload'), 'RELOAD'],
-      [P('crouch'), 'CROUCH'], [P('sprint') + ' ' + P('crouch'), 'SLIDE'],
-      [P('use'), 'TAKE'], [P('stats'), 'STATS'], ['D-PAD', 'MENU'],
+      ['L STICK', 'MOVE'], [P('sprint'), 'SPRINT', ['sprint']], ['R STICK', 'LOOK'],
+      [P('shoot'), 'SHOOT', ['shoot']], [P('aim'), 'AIM', ['aim']], [P('melee'), 'MELEE', ['melee']],
+      [P('activeItem'), 'ACTIVE ITEM', ['activeItem']], [P('jump'), 'JUMP', ['jump']], [P('reload'), 'RELOAD', ['reload']],
+      [P('crouch'), 'CROUCH', ['crouch']], [P('sprint') + ' ' + P('crouch'), 'SLIDE'],
+      [P('use'), 'TAKE', ['use']], [P('stats'), 'STATS', ['stats']], ['D-PAD', 'MENU'],
       ['OPTIONS', 'PAUSE'],
     ];
   }
@@ -331,7 +333,7 @@ export class Keybinds {
   }
 
   /**
-   * The KEYBOARD sheet for the start screen, in its fifteen-row shape.
+   * The KEYBOARD sheet for Controls, in its fifteen-row shape.
    *
    * LOOK and AIM are two different things and the sheet has to say so: LOOK
    * is the mouse turning the view, AIM is the right button raising the gun.
@@ -355,11 +357,11 @@ export class Keybinds {
     const move = ['forward', 'left', 'back', 'right'].map(L);
     const moveStr = move.every((s) => s.length === 1) ? move.join('') : move.join(' ');
     return [
-      [moveStr, 'MOVE'], [L('sprint'), 'SPRINT'], ['MOUSE', 'LOOK'],
-      ['LMB', 'SHOOT'], ['RMB', 'AIM'], [L('melee'), 'MELEE'],
-      [L('reload'), 'RELOAD'], [L('jump'), 'JUMP'], [L('activeItem'), 'ACTIVE ITEM'],
-      [L('crouch'), 'CROUCH'], [L('sprint') + ' ' + keyLabel(this.codes('crouch')[0]), 'SLIDE'],
-      [L('use'), 'USE'], [L('stats'), 'STATS'], [L('fullscreen'), 'FULLSCREEN'],
+      [moveStr, 'MOVE', ['forward', 'left', 'back', 'right']], [L('sprint'), 'SPRINT', ['sprint']], ['MOUSE', 'LOOK'],
+      ['LMB', 'SHOOT'], ['RMB', 'AIM'], [L('melee'), 'MELEE', ['melee']],
+      [L('reload'), 'RELOAD', ['reload']], [L('jump'), 'JUMP', ['jump']], [L('activeItem'), 'ACTIVE ITEM', ['activeItem']],
+      [L('crouch'), 'CROUCH', ['crouch']], [L('sprint') + ' ' + keyLabel(this.codes('crouch')[0]), 'SLIDE'],
+      [L('use'), 'USE', ['use']], [L('stats'), 'STATS', ['stats']], [L('fullscreen'), 'FULLSCREEN', ['fullscreen']],
       ['ESC', 'PAUSE'],
     ];
   }

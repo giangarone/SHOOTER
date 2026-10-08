@@ -6,7 +6,7 @@
 //      moves the player the same frame, and the key it displaced stops doing
 //      what it used to - no second list anywhere in the game for the old key
 //      to hide in.
-//   2. THE SCREEN AGREES. Every binding row on the settings screen names the
+//   2. THE SCREEN AGREES. Every binding row on the Controls screen names the
 //      key the table says it names, and the control sheet on the start screen
 //      follows a rebind made underneath it.
 //   3. THE SAVE IS REAL. The store is written on the bind, a reloaded page
@@ -73,23 +73,28 @@ try {
     controlsButton.click();
     const controls = shown('overlay-controls') && g._subScreenOpen()
       && g._menuRoot() === g.ui.controlsOv && g.ui.startOv.inert
-      && document.querySelectorAll('.controls .control-group').length === 3
-      && document.querySelectorAll('.controls .ctl').length === 15;
+      && document.querySelectorAll('.controls .controls-device.kbm-only .control-group').length === 3
+      && document.querySelectorAll('.controls .controls-device.kbm-only .ctl').length === 15
+      && document.querySelectorAll('.controls .controls-device.kbm-only .bind-btn').length === 13
+      && !document.querySelector('.controls .fixed-key').closest('button');
     document.getElementById('btn-controls-back').click();
     const restored = !shown('overlay-controls') && !g._subScreenOpen()
       && document.activeElement === controlsButton && !g.ui.startOv.inert;
     document.getElementById('btn-settings-start').click();
-    const general = shown('settings-general') && !shown('settings-bindings')
+    const general = shown('settings-general')
+      && !document.getElementById('settings-bindings')
+      && !document.getElementById('settings-tab-bindings')
       && !shown('settings-tab-controller');
-    document.getElementById('settings-tab-bindings').click();
+    document.getElementById('btn-settings-back').click();
+    const settingsFocus = document.activeElement.id === 'btn-settings-start';
+    controlsButton.click();
     const row = document.querySelector('#bind-forward button');
     row.click();
-    document.getElementById('settings-tab-general').click();
+    document.getElementById('btn-controls-back').click();
     const cancelled = g._rebindId == null && !row.classList.contains('listening')
-      && shown('settings-general') && !shown('settings-bindings');
-    document.getElementById('btn-settings-back').click();
+      && !shown('overlay-controls');
     return { backgroundSafe, controls, restored, general, cancelled,
-      settingsFocus: document.activeElement.id === 'btn-settings-start' };
+      settingsFocus };
   });
   for (const [name, pass] of Object.entries(menus)) ok('menus: ' + name, pass);
 
@@ -103,9 +108,8 @@ try {
   ok('menus: Shift+Tab wraps backwards',
     await page.evaluate(() => document.activeElement.id === 'btn-fs-start'));
   await page.click('#btn-settings-start');
-  await page.keyboard.press('ArrowDown');
-  ok('menus: keyboard arrows select the Bindings category',
-    await page.evaluate(() => window.__game.ui.settingsCategory === 'bindings'));
+  ok('menus: Settings has no Bindings category',
+    await page.evaluate(() => !document.getElementById('settings-tab-bindings')));
   await page.click('#settings-tab-general');
   await page.evaluate(() => document.getElementById('shake-pips').closest('.stepper').focus());
   const shakeBefore = await page.evaluate(() => window.__game.effects.shakeScale);
@@ -153,23 +157,26 @@ try {
   });
   for (const [name, pass] of Object.entries(multiplayer)) ok('multiplayer menu: ' + name, pass);
 
-  // The binding list is intentionally taller than the available pane. It must
-  // scroll inside that pane without moving BACK off any supported display.
+  // Editable keycaps must fit the guide and leave both BACK and DEFAULTS
+  // reachable. Narrow and short guides scroll independently of the footer.
   for (const [width, height] of [[1280, 720], [1440, 900], [1920, 1080], [3840, 2160], [640, 640]]) {
     await page.setViewport({ width, height });
     const layout = await page.evaluate(() => {
       const g = window.__game;
-      g._openSettings();
-      g._selectSettingsCategory('bindings');
-      const back = document.getElementById('btn-settings-back').getBoundingClientRect();
-      const pane = document.querySelector('.settings');
-      const visible = back.top >= 0 && back.bottom <= innerHeight && back.left >= 0 && back.right <= innerWidth;
-      const scrolling = pane.clientHeight >= 44 && pane.scrollHeight > pane.clientHeight;
+      g._openControls();
+      const visible = ['btn-controls-back', 'btn-reset-keys'].every((id) => {
+        const r = document.getElementById(id).getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+      });
+      const pane = g.ui.controlsOv.querySelector('.menu-page');
       const fitsWidth = pane.scrollWidth <= pane.clientWidth + 1;
+      const editable = [...g.ui.controlsOv.querySelectorAll('.bind-btn')]
+        .filter((button) => button.offsetParent !== null);
+      const targets = editable.length === 13 && editable.every((button) => button.getBoundingClientRect().height >= 44);
       g._closeSubScreen();
-      return visible && scrolling && fitsWidth;
+      return visible && fitsWidth && targets;
     });
-    ok('menus: Bindings scrolls with Back visible at ' + width + '×' + height, layout);
+    ok('menus: editable Controls fits at ' + width + '×' + height, layout);
   }
   await page.setViewport({ width: 1280, height: 720 });
 
@@ -225,11 +232,10 @@ try {
   });
   ok('I is not forward before the rebind', moveBefore === true);
 
-  // Rebind FORWARD onto I, through the same events the settings screen uses.
+  // Rebind FORWARD onto I, through the same events the Controls screen uses.
   const rebindOk = await page.evaluate(async () => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     const row = document.getElementById('bind-forward').querySelector('button');
     row.click();
     const listening = row.classList.contains('listening')
@@ -238,13 +244,15 @@ try {
     const bound = g.keys.codes('forward').includes('KeyI');
     const swallowed = g.input.forward === false;
     const shown = row.textContent === 'I' && !row.classList.contains('listening');
+    const stable = document.querySelector('#bind-forward button') === row;
     const wGone = !g.keys.is('forward', 'KeyW');
-    return { listening, bound, swallowed, shown, wGone };
+    return { listening, bound, swallowed, shown, stable, wGone };
   });
   ok('the row says PRESS A KEY while it waits', rebindOk.listening === true);
   ok('the press binds', rebindOk.bound === true);
   ok('and the press itself is swallowed', rebindOk.swallowed === true);
   ok('the row shows the new key', rebindOk.shown === true);
+  ok('rebinding keeps the editable cap mounted', rebindOk.stable === true);
   ok('W stops being forward', rebindOk.wGone === true);
 
   const moveAfter = await page.evaluate(async () => {
@@ -265,14 +273,14 @@ try {
   ok('W no longer moves, I does, and the release lands', moveAfter === true);
 
   // The separate Controls screen must reflect a rebind immediately, even
-  // while Settings is open and without a device change to redraw it.
-  // MOVE is the four directions fused into one cap while they are all single
-  // characters, so the rebind shows up inside it: WASD has become IASD.
+  // without a device change or reopening the guide.
+  // MOVE keeps four editable directions: WASD has become IASD.
   const sheetOk = await page.evaluate(() => {
     const g = window.__game;
-    const caps = [...document.querySelectorAll('.controls .ctl .key')].map((c) => c.textContent);
+    const move = ['forward', 'left', 'back', 'right'].map((id) => document.querySelector('#bind-' + id + ' button').textContent).join('');
+    const sprint = document.querySelector('#bind-sprint button').textContent;
     g._closeSubScreen();
-    return caps[0] === 'IASD' && caps.includes('SHIFT');
+    return move === 'IASD' && sprint === 'SHIFT';
   });
   ok('the Controls screen shows the rebind', sheetOk === true);
 
@@ -282,8 +290,7 @@ try {
   // pad suite's to assert on.
   const rowsOk = await page.evaluate(() => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     for (const el of document.querySelectorAll('.bind-btn')) {
       if (el.offsetParent === null) continue;
       const id = el.dataset.action;
@@ -327,8 +334,7 @@ try {
 
   const defaultsBtn = await page.evaluate(() => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     document.getElementById('btn-reset-keys').click();
     return g.keys.codes('forward').includes('KeyW')
       && document.getElementById('bind-forward').querySelector('button').textContent === 'W';
@@ -385,23 +391,21 @@ try {
   // ---- 5. the capture is a conversation --------------------------------------
   const escOk = await page.evaluate(() => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true }));
     const closed = !row.classList.contains('listening') && row.textContent === 'SPACE';
     // Escape did double duty this once - closing the capture, then the screen.
     dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true }));
-    const screenClosed = g.ui.settingsOv.classList.contains('hidden');
+    const screenClosed = g.ui.controlsOv.classList.contains('hidden');
     return closed && screenClosed;
   });
   ok('Escape cancels the capture and still closes the screen', escOk === true);
 
   const closeOk = await page.evaluate(() => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     g._closeSubScreen();
@@ -409,6 +413,24 @@ try {
     return !row.classList.contains('listening');
   });
   ok('taking the screen down cancels the capture', closeOk === true);
+
+  const resetCapture = await page.evaluate(() => {
+    const g = window.__game;
+    g._openControls();
+    const button = document.querySelector('#bind-jump button');
+    const top = g.ui.controlsOv.querySelector('.controls').getBoundingClientRect().top;
+    const height = button.closest('.ctl').getBoundingClientRect().height;
+    button.click();
+    const stationary = top === g.ui.controlsOv.querySelector('.controls').getBoundingClientRect().top
+      && height === button.closest('.ctl').getBoundingClientRect().height;
+    document.getElementById('btn-reset-keys').click();
+    const cancelled = g._rebindId == null && !button.classList.contains('listening')
+      && button.textContent === 'SPACE' && !document.getElementById('controls-status');
+    g._closeSubScreen();
+    return { cancelled, stationary };
+  });
+  ok('DEFAULTS cancels a pending capture in Controls', resetCapture.cancelled);
+  ok('editing a binding does not shift the Controls layout', resetCapture.stationary);
 
   // A key pressed into a dead capture must reach the game as itself.
   const notEaten = await page.evaluate(async () => {
@@ -430,8 +452,7 @@ try {
   // not click the row again and put it straight back into capture.
   const noRecapture = await page.evaluate(async () => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     const row = document.getElementById('bind-jump').querySelector('button');
     row.click();
     dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
@@ -480,7 +501,8 @@ try {
       dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
       await step();
       dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
-      await new Promise((r) => setTimeout(r, 320));
+      // A 320ms wall delay exceeds the 280ms simulation window on a fast
+      // renderer. Two distinct frames keep this a double tap on every host.
       await step();
       dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
       await step();
@@ -522,8 +544,7 @@ try {
   // test/pad.mjs's, with a synthetic DualSense behind it.
   const swapOk = await page.evaluate(() => {
     const g = window.__game;
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     const kbRow = document.getElementById('bind-forward');
     const padRow = document.getElementById('pbind-jump');
     const kbVisible = () => kbRow.offsetParent !== null && padRow.offsetParent === null;

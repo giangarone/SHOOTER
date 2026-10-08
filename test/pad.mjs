@@ -130,7 +130,7 @@ try {
 
     // ---- 1. detection and the hand-over -----------------------------------
     t('starts on keyboard', g.inputMode === 'kbm', g.inputMode);
-    t('keyboard control sheet', document.querySelectorAll('.controls .ctl').length === 15
+    t('keyboard control sheet', document.querySelectorAll('.controls .controls-device.kbm-only .ctl').length === 15
       && !document.querySelector('.controls').classList.contains('pad'));
     // The rows appear when a pad is PLUGGED IN. The interface only changes
     // when one is picked up, which is the next test down.
@@ -144,7 +144,7 @@ try {
     t('pad takes over', g.inputMode === 'pad', g.inputMode);
     t('pad-mode class', document.body.classList.contains('pad-mode'));
     t('pad-seen class', document.body.classList.contains('pad-seen'));
-    t('controller sheet swapped', document.querySelectorAll('.controls.pad .ctl').length === 15);
+    t('controller sheet swapped', document.querySelectorAll('.controls.pad .controls-device.pad-now .ctl').length === 15);
     t('prompts name buttons', g._useLead().includes('pad-cap'), g._useLead());
     t('cross started the run', g.state === 'playing', g.state);
     // The press is still physically down. It must not also have been read as a
@@ -540,15 +540,15 @@ try {
     // ---- 6a. the buttons are rebindable ------------------------------------
     //
     // The pad half of the binding table, driven the way a player drives it:
-    // the settings screen, a row clicked open, a button pressed. The press
+    // the Controls screen, a cap clicked open, a button pressed. The press
     // goes through the synthetic pad's poll, so what is being measured is
     // the whole path - hardware index to table to game - with nothing
     // short-circuited.
-    g._openSettings();
+    g._openControls();
     await frames(2);
-    g.menu.focus(document.getElementById('settings-tab-bindings'));
-    await tap(B.CROSS);
-    t('Bindings is reachable through controller navigation', g.ui.settingsCategory === 'bindings');
+    t('Controls is the controller binding editor', g._menuRoot() === g.ui.controlsOv
+      && document.querySelectorAll('.controls .controls-device.pad-now .bind-btn').length === 10
+      && g.menu.items().includes(document.querySelector('#pbind-jump .bind-btn')));
     // THE BLOCKS SWAP WITH THE HANDS. The pad player sees the pad rows, the
     // keyboard rows are gone, and the note says what cancels.
     t('pad mode shows the pad rows',
@@ -571,8 +571,8 @@ try {
     // RELOAD's, so the two swap - the pad's one-button-per-action rule - and
     // the field obeys the next frame.
     const pRow = document.querySelector('#pbind-jump .bind-btn');
-    pRow.click();
-    await frames(1);
+    g.menu.focus(pRow);
+    await tap(B.CROSS);
     const listeningPad = pRow.classList.contains('listening')
       && pRow.textContent === 'PRESS A BUTTON';
     set(B.SQUARE, true);
@@ -617,8 +617,7 @@ try {
     // the presses in the field instead.
     g.pause();
     await frames(2);
-    g._openSettings();
-    g._selectSettingsCategory('bindings');
+    g._openControls();
     await frames(2);
 
     // THE PROMPT AND THE SHEET follow the table, not the plastic: the lead

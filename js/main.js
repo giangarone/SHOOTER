@@ -273,7 +273,7 @@ import { NavGrid } from './nav.js';
 import { TerrainSet, generateLayout, BUILD_TIME as TERRAIN_BUILD_TIME } from './terrain.js';
 import { Pad, BTN, BTN_NAMES } from './pad.js';
 import { MenuDriver, renderControls, cap } from './padmenu.js';
-import { Keybinds, KEY_ACTIONS, PAD_ACTIONS, isPadFixed } from './keybind.js';
+import { Keybinds, isPadFixed } from './keybind.js';
 import { resolveCircle, groundSurface, BOSS_HEIGHT, STEP_HEIGHT } from './utils.js';
 import { VersusMatch, captureRun, restoreRun } from './versus.js';
 
@@ -2610,53 +2610,13 @@ class Game {
     this._syncPadBtns();
     this._syncSens();
 
-    // ---- the keyboard bindings ---------------------------------------------
-    //
-    // The rows are BUILT rather than authored, on the same one-source-of-
-    // truth rule as the control sheet: the table is the only list of what the
-    // keys do, so it is also the only list of what the settings screen shows.
-    // Built once here; only the cap VALUE is rewritten after that.
-    //
-    // TWO BLOCKS in the markup - a KEYBOARD row per action and a CONTROLLER
-    // row per action - and the input mode picks which one the eye gets, on
-    // the same rule the start screen's control sheet has always followed:
-    // the settings screen follows the hands. The mode's CSS hides the other
-    // block, and MenuDriver already refuses anything hidden, so the other
-    // device's rows cannot even be landed on - no skip flags to keep in step.
-    this._bindRows = {};
-    for (const act of KEY_ACTIONS) {
-      const row = document.getElementById('bind-' + act.id);
-      if (!row) continue;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'opt-btn bind-btn';
-      btn.dataset.action = act.id;
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._rebindStart(btn, act.id);
-      });
-      row.appendChild(btn);
-      this._bindRows[act.id] = btn;
-    }
-    // The pad rows, on the same build out of the pad half of the table. One
-    // button per action rather than a pair, and the cap is drawn by the cap()
-    // from padmenu - a face button is its glyph, not its word.
-    this._padBindRows = {};
-    for (const act of PAD_ACTIONS) {
-      const row = document.getElementById('pbind-' + act.id);
-      if (!row) continue;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'opt-btn bind-btn';
-      btn.dataset.action = act.id;
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._rebindStart(btn, act.id);
-      });
-      row.appendChild(btn);
-      this._padBindRows[act.id] = btn;
-    }
-    this._syncBindBtns();
+    // Controls is both the guide and the editor. Its buttons are built once
+    // from the binding table so a saved swap cannot invalidate focus.
+    this._controlsEl = document.querySelector('.controls');
+    const bindings = renderControls(this._controlsEl, this.inputMode === 'pad', this.keys,
+      (button, id) => this._rebindStart(button, id));
+    this._bindRows = bindings.kbm;
+    this._padBindRows = bindings.pad;
 
     this._resetKeysBtn = document.getElementById('btn-reset-keys');
     this._resetKeysBtn.addEventListener('click', (e) => {
@@ -2666,6 +2626,7 @@ class Game {
       // landed" the player is holding the device for. Both halves: a reset
       // that left one device's stray binding behind would be a reset that
       // half-worked.
+      this._rebindCancel();
       this.keys.reset();
       this.keys.padReset();
       this.pad.rumble(0.25, 0.2, 70, 1);
@@ -2677,18 +2638,6 @@ class Game {
     // see the .pad-only rule - and it writes straight into the same field the
     // keyboard player types in, so there is one name and one save path.
     this._audioHint = document.getElementById('audio-hint');
-    // ONE SOURCE OF TRUTH for the bindings on screen. The panel starts empty
-    // in the markup and is filled here for whichever device the player is on
-    // at build time; _setInputMode swaps the sheet with the hands and
-    // _syncKeyUi rewrites whichever is current after a rebind. Both sheets
-    // come out of the binding table, so a rebind is in the caps the next time
-    // the player sees them.
-    this._controlsEl = document.querySelector('.controls');
-    renderControls(
-      this._controlsEl, this.inputMode === 'pad',
-      this.inputMode === 'pad' ? this.keys.padSheet() : this.keys.sheet()
-    );
-
     // Sub-screens share the same return path, including focus restoration.
     document.getElementById('btn-settings-start').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2705,9 +2654,7 @@ class Game {
     for (const id of ['btn-controls-start', 'btn-controls-pause']) {
       document.getElementById(id).addEventListener('click', (e) => {
         e.stopPropagation();
-        this._menuOpener = e.currentTarget;
-        this.ui.showControls();
-        this._focusMenu();
+        this._openControls(e.currentTarget);
       });
     }
     document.getElementById('btn-controls-back').addEventListener('click', () => this._closeSubScreen());
@@ -3012,8 +2959,17 @@ class Game {
   // screen or the pause screen - and never hide it. That is what makes BACK a
   // single class change with nothing to remember: taking the top screen down
   // reveals exactly the screen the player came from.
+  _openControls(opener = document.activeElement) {
+    this._audioGesture();
+    this._rebindCancel();
+    this._menuOpener = opener;
+    this.ui.showControls();
+    this._focusMenu();
+  }
+
   _openSettings(opener = document.activeElement) {
     this._audioGesture();
+    this._rebindCancel();
     this._menuOpener = opener;
     this.ui.showSettings();
     this._focusMenu();
@@ -3125,17 +3081,9 @@ class Game {
     if (this.inputMode === mode) return;
     this.inputMode = mode;
     document.body.classList.toggle('pad-mode', mode === 'pad');
-    // The control sheet on the start screen and the binding rows on the
-    // settings screen are the two pieces of UI that name INPUTS, and both are
-    // rewritten here rather than per frame. The sheets are rebuilt rather
-    // than cached because a rebind through SETTINGS can change either one
-    // while the start screen sits underneath.
-    if (this._controlsEl) {
-      renderControls(
-        this._controlsEl, mode === 'pad',
-        mode === 'pad' ? this.keys.padSheet() : this.keys.sheet()
-      );
-    }
+    // Both editable device sheets stay mounted, and the active device picks
+    // which one is visible. Swapping devices must also refresh derived caps.
+    this._syncKeyUi();
     // A capture open on the row the player just switched away from is a
     // listening row that can no longer be finished on that device - cancel it
     // and re-point every row's value at the new device's table. Safe to reach
@@ -3694,43 +3642,19 @@ class Game {
 
   // ---- the keyboard bindings --------------------------------------------------
 
-  // Rewrites every binding cap on the settings screen. Called on build, on
-  // every rebind, on reset and on every MODE CHANGE - the rows swap with the
-  // player's hands, exactly as the start screen's sheet does, because a
-  // settings screen is where a player goes looking for what the buttons do
-  // on the device they are holding.
-  //
-  // The keyboard caps are the key's NAME; the pad caps are drawn by the same
-  // cap() the prompts use - a face button is its shape, and a shape is what
-  // the player holding a pad reads first.
+  // Capture cancellation restores the cap before anything else can read it.
+  // Derived controls such as SLIDE refresh from the same saved bindings.
   _syncBindBtns() {
-    for (const id in this._bindRows) {
-      const btn = this._bindRows[id];
-      btn.textContent = this.keys.label(id);
-      btn.classList.toggle('listening', false);
+    for (const rows of [this._bindRows, this._padBindRows]) {
+      for (const button of Object.values(rows || {})) button.classList.remove('listening');
     }
-    for (const id in this._padBindRows) {
-      const btn = this._padBindRows[id];
-      btn.innerHTML = cap(this.keys.padLabel(id));
-      btn.classList.toggle('listening', false);
-    }
+    this._syncKeyUi();
   }
 
-  // Everything on screen that names a key: the settings rows above, the
-  // control sheet on the start screen (which SETTINGS sits over, so a rebind
-  // made inside it has to reach the sheet underneath) and the sheets the
-  // prompt path builds from _useLead. The prompt itself is rebuilt every frame
-  // it is up, so it needs no push.
-  //
-  // BOTH SHEETS, whichever is current: the sheet swap on a mode change is
-  // this same call with the mode already moved, so there is one path for a
-  // rebind and one for a device swap and neither can drift from the other.
   _syncKeyUi() {
     if (!this._controlsEl) return;
-    renderControls(
-      this._controlsEl, this.inputMode === 'pad',
-      this.inputMode === 'pad' ? this.keys.padSheet() : this.keys.sheet()
-    );
+    renderControls(this._controlsEl, this.inputMode === 'pad', this.keys,
+      (button, id) => this._rebindStart(button, id));
   }
 
   /**
@@ -3755,6 +3679,7 @@ class Game {
     this._rebindPad = this._padBindRows[id] === btn;
     btn.classList.add('listening');
     btn.textContent = this._rebindPad ? 'PRESS A BUTTON' : 'PRESS A KEY';
+    btn.setAttribute('aria-label', btn.dataset.label + ': ' + btn.textContent);
     // The click that opened the capture left the button FOCUSED, and a focused
     // button is live to Space and Enter - the keyup after binding jump onto
     // Space would click the row again and put it straight back into capture.
@@ -3764,7 +3689,7 @@ class Game {
   }
 
   // OUT of the capture state without a binding. Called by the next rebind
-  // press, by Escape, by taking the settings screen down - a row left
+  // press, by Escape, by taking the Controls screen down - a row left
   // listening behind a closed screen is a booby trap for the next run - and
   // by a device switch, which strands the capture on a device the player has
   // just put down.
@@ -3782,7 +3707,7 @@ class Game {
    * consumed here, so the game must not also act on it.
    *
    * Escape is cancel rather than a bindable key: the browser already owns it
-   * for leaving pointer lock and fullscreen, and a settings screen the player
+   * for leaving pointer lock and fullscreen, and a Controls screen the player
    * cannot get out of with the one universal "close" key would be a trap.
    * The modifier FAMILY codes bind normally - pressing either shift binds
    * "SHIFT", either ctrl "CTRL" - via normCode inside Keybinds.

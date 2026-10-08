@@ -913,11 +913,13 @@ export class UI {
     this._syncReading();
   }
   showSettings() {
+    this.controlsOv.classList.add('hidden');
     this.selectSettingsCategory('general');
     this.settingsOv.classList.remove('hidden');
     this._syncReading();
   }
   showControls() {
+    this.settingsOv.classList.add('hidden');
     this.controlsOv.classList.remove('hidden');
     this._syncReading();
   }

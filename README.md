@@ -31,10 +31,11 @@ Open http://localhost:8123
 | Esc | Pause |
 
 Every keyboard binding above except Esc — and the mouse pair — can be changed:
-SETTINGS → BINDINGS has a KEY BINDINGS block with one row per action, showing the current
-key on a cap. Click it, press a new key, and the binding changes everywhere at
-once — the field, the prompts and the dedicated CONTROLS screen. The
-bindings persist in localStorage, so they survive a restart, and one press of
+CONTROLS is both the guide and the binding editor. Click a keycap and press
+a replacement; the binding changes everywhere at once — the field, the
+prompts and the guide. MOVE has four separate caps so each direction can be
+changed independently. Mouse controls, Esc and the derived SLIDE combination
+remain read-only. Bindings persist in localStorage, so they survive a restart.
 DEFAULTS puts the shipped table back.
 
 A key that already belongs to another action is taken from it if that action
@@ -46,9 +47,9 @@ capture and always pauses; the browser owns it for leaving pointer lock and
 fullscreen, and a rebind would hand one press two meanings.
 
 **The controller's buttons rebind too.** The same screen, the same one-press
-capture: on a pad the KEY BINDINGS block is replaced by CONTROLLER BINDINGS,
-because the settings screen follows the player's hands exactly as the CONTROLS
-screen always has. Ten actions — jump, crouch, reload, take,
+capture: on a pad the CONTROLS screen shows editable controller caps,
+following the player's hands. Sticks, the D-pad and Options remain read-only.
+Ten actions — jump, crouch, reload, take,
 aim, shoot, item, melee, sprint and stats — and one button each, so a bind is
 always a **swap** with whichever action owned the button: there is no spare
 to take and nothing to refuse, and no action is ever left empty. Cross,
@@ -310,7 +311,7 @@ three buttons in a row.
 
 Picking the pad up switches the interface with it: the prompts name buttons
 instead of keys, the dedicated CONTROLS screen becomes the one above,
-the menus grow a selection the D-pad walks — and the binding rows in SETTINGS
+the menus grow a selection the D-pad walks — and the editable caps in CONTROLS
 become the controller's. Touching the keyboard or moving the mouse switches
 every one of those straight back. Nothing has to be enabled and nothing is
 remembered — the game follows the player's hands.
@@ -320,9 +321,9 @@ on one eight-step scale — LOOK for the hip and AIM for the gun up, blended by
 `aimT` rather than switched between — plus aim assist, vibration and inverted
 look, all stored in localStorage. The mouse has no slider; it keeps its own
 feel and is scaled by a fixed 0.6 while aiming, the standard zoom-relative
-ratio that carries muscle memory through the zoom. The CONTROLLER BINDINGS
-block beside them follows the input mode rather than the connection — a pad on
-the desk is not a pad in the hands.
+ratio that carries muscle memory through the zoom. Editable controller caps
+in CONTROLS follow the input mode rather than the connection — a pad on the
+desk is not a pad in the hands.
 
 Aim assist is two things. **Slowdown** drops the stick's turn rate while the
 reticle is already over a target, so the player's own correction is finest
@@ -1262,8 +1263,10 @@ context. The start screen says so, and one click anywhere fixes it.
   desktops and large TV displays; the player HUD keeps its original design.
 - **CONTROLS** is a dedicated screen reached from the title or pause menu,
   grouped into Movement, Combat and Arena. It follows the active input device
-  and reflects saved bindings. **SETTINGS** has Audio & Visual, Bindings and
-  Controller categories; Controller appears after a DualSense is detected.
+  and edits saved bindings directly through the keycaps. DEFAULTS restores
+  both devices, and leaving Controls or switching devices cancels a pending
+  capture. **SETTINGS** has Audio & Visual and Controller categories;
+  Controller appears after a DualSense is detected.
   Only the content scrolls, so BACK stays visible. Settings save immediately.
 - **Explicit menu actions.** START RUN and RESUME require their buttons;
   background clicks do not start or resume gameplay. Controller Options still

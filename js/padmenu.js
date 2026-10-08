@@ -16,6 +16,8 @@
 //
 // Nothing in here touches the game. main.js owns what a press does.
 
+import { KEY_ACTIONS, PAD_ACTIONS } from './keybind.js';
+
 // ---- glyphs ---------------------------------------------------------------
 
 // Drawn on a 12x12 grid at crisp edges, in the same hard-pixel language as the
@@ -77,38 +79,91 @@ export function cap(name, cls = '') {
 // are read, never what input a cap names; rebinding and device swaps can share
 // this same renderer without a second binding table going stale.
 
+const controlViews = new WeakMap();
+
 /**
  * Rewrites the control sheet in place. Called only when the input mode
  * actually changes, not per frame.
  *
  * @param {HTMLElement} el the `.controls` panel
- * @param {Array.<[string, string]>} sheet the fifteen [key, action] pairs -
- *   Keybinds.sheet() for the keyboard, Keybinds.padSheet() for the pad
+ * @param {Keybinds} keys the source of both sheets and their editable actions
  * @param {boolean} pad true for the controller sheet - keeps the `.pad`
  *   class the wider caps are keyed on
  */
-export function renderControls(el, pad, sheet) {
-  el.replaceChildren();
-  const groups = [
-    ['MOVEMENT', new Set(['MOVE', 'SPRINT', 'LOOK', 'JUMP', 'CROUCH', 'SLIDE'])],
-    ['COMBAT', new Set(['SHOOT', 'AIM', 'MELEE', 'RELOAD', 'ACTIVE ITEM', 'USE', 'TAKE'])],
-    ['ARENA', new Set(['STATS', 'FULLSCREEN', 'PAUSE', 'MENU'])],
-  ].map(([name, labels]) => {
-    const section = document.createElement('section');
-    section.className = 'control-group';
-    const heading = document.createElement('h2');
-    heading.textContent = name;
-    section.appendChild(heading);
-    el.appendChild(section);
-    return { section, labels };
-  });
-  for (const [key, label] of sheet) {
-    const ctl = document.createElement('div');
-    ctl.className = 'ctl';
-    ctl.innerHTML = cap(key, 'key') + '<span>' + label + '</span>';
-    (groups.find((group) => group.labels.has(label)) || groups[2]).section.appendChild(ctl);
+export function renderControls(el, pad, keys, onRebind) {
+  let view = controlViews.get(el);
+  if (!view) {
+    view = { kbm: {}, pad: {}, fixed: [] };
+    for (const device of ['kbm', 'pad']) {
+      const controller = device === 'pad';
+      const sheet = controller ? keys.padSheet() : keys.sheet();
+      const actions = controller ? PAD_ACTIONS : KEY_ACTIONS;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'controls-device ' + (controller ? 'pad-now' : 'kbm-only');
+      el.appendChild(wrapper);
+      const groups = [
+        ['MOVEMENT', new Set(['MOVE', 'SPRINT', 'LOOK', 'JUMP', 'CROUCH', 'SLIDE'])],
+        ['COMBAT', new Set(['SHOOT', 'AIM', 'MELEE', 'RELOAD', 'ACTIVE ITEM', 'USE', 'TAKE'])],
+        ['ARENA', new Set(['STATS', 'FULLSCREEN', 'PAUSE', 'MENU'])],
+      ].map(([name, labels]) => {
+        const section = document.createElement('section');
+        section.className = 'control-group';
+        const heading = document.createElement('h2');
+        heading.textContent = name;
+        section.appendChild(heading);
+        wrapper.appendChild(section);
+        return { section, labels };
+      });
+      for (const [index, [, label, editable = []]] of sheet.entries()) {
+        const ctl = document.createElement('div');
+        ctl.className = 'ctl';
+        const name = document.createElement('span');
+        name.className = 'ctl-label';
+        name.textContent = label;
+        const caps = document.createElement('span');
+        caps.className = 'ctl-keys';
+        for (const id of editable) {
+          const slot = document.createElement('span');
+          slot.className = 'bind-slot';
+          slot.id = (controller ? 'pbind-' : 'bind-') + id;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'key bind-btn';
+          button.dataset.action = id;
+          button.dataset.label = actions.find((action) => action.id === id).label;
+          button.addEventListener('click', () => onRebind(button, id));
+          if (!Object.keys(view[device]).length) button.setAttribute('data-menu-default', '');
+          view[device][id] = button;
+          slot.appendChild(button);
+          caps.appendChild(slot);
+        }
+        if (!editable.length) view.fixed.push({ caps, device, index });
+        ctl.append(name, caps);
+        (groups.find((group) => group.labels.has(label)) || groups[2]).section.appendChild(ctl);
+      }
+    }
+    controlViews.set(el, view);
+  }
+  // Keep the buttons mounted: rebuilding a sheet after a swap would strand
+  // controller focus and any pending capture on detached DOM nodes.
+  for (const device of ['kbm', 'pad']) {
+    for (const [id, button] of Object.entries(view[device])) {
+      const value = device === 'pad' ? keys.padLabel(id) : keys.label(id);
+      button.setAttribute('aria-label', button.dataset.label + ': ' + value + '. Change binding');
+      button.title = button.dataset.label + ' — change binding';
+      if (button.classList.contains('listening')) continue;
+      if (device === 'pad') button.innerHTML = cap(value);
+      else button.textContent = value;
+    }
+  }
+  const sheets = { kbm: keys.sheet(), pad: keys.padSheet() };
+  for (const { caps, device, index } of view.fixed) {
+    const [key, label] = sheets[device][index];
+    caps.innerHTML = cap(key, 'key fixed-key');
+    caps.title = label === 'SLIDE' ? 'Sprint + crouch; edit those bindings above' : 'Fixed control';
   }
   el.classList.toggle('pad', pad);
+  return view;
 }
 
 // ---- the focus driver -----------------------------------------------------

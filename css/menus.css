@@ -134,7 +134,7 @@
 .menu-ui .set-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; border-bottom: 1px solid #ffffff0c; }
 .menu-ui .set-label { font-size: 12px; min-width: 0; }
 .menu-ui .bind-slot { display: flex; flex: none; }
-.menu-ui .bind-btn { min-width: 112px; }
+.menu-ui .controls .bind-btn { min-width: var(--menu-key); min-height: 44px; font-weight: 400; padding: 8px 12px; }
 .menu-ui .bind-btn.listening { border-color: #fff; background: #ffffff18; }
 .menu-ui .bind-btn.taken { border-color: #eaa39c; color: #eaa39c; }
 .menu-ui .stepper { display: flex; align-items: center; flex: none; gap: 12px; }
@@ -145,12 +145,18 @@
 .menu-ui .pips i.on { background: #bfc0c3; }
 .menu-ui .pips i.hot { background: #fff; }
 .menu-ui .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.menu-ui .controls-device { display: contents; }
+.menu-ui .controls-device.pad-now { display: none; }
+body.pad-mode .menu-ui .controls-device.pad-now { display: contents; }
+.menu-ui .controls-help { margin-bottom: 16px; }
 .menu-ui .control-group { min-width: 0; }
 .menu-ui .control-group h2 { font-size: 8px; font-weight: 400; color: var(--menu-muted); padding-bottom: 16px; border-bottom: 1px solid var(--menu-line); }
 .menu-ui .ctl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; min-height: 64px; }
-.menu-ui .ctl > span { order: -1; font-size: 12px; min-width: 0; }
+.menu-ui .ctl-label { order: -1; font-size: 12px; flex: none; }
+.menu-ui .ctl-keys { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .menu-ui .key { display: inline-flex; justify-content: center; align-items: center; gap: 6px; padding: 10px 12px; min-width: var(--menu-key); min-height: 40px; background: #ffffff08; border: 1px solid var(--menu-line); color: var(--menu-white); font-weight: 400; font-size: 12px; flex-shrink: 0; }
 .menu-ui .pad-cap.wide { font-size: 8px; }
+.menu-ui .fixed-key { color: var(--menu-muted); cursor: default; }
 .menu-ui .gl { width: 16px; height: 16px; color: currentColor; display: inline-block; vertical-align: middle; margin: 0; }
 /* Visibility remains device-driven, including when the device changes while
    a different settings category is open. Hidden panes always win. */
@@ -222,7 +228,8 @@ body.pad-seen .menu-ui p.pad-only { display: block; }
   .menu-ui .menu-nav button { min-height: 112px; }
   .menu-ui button, .menu-ui input { min-height: 64px; padding: 20px 32px; }
   .menu-ui .settings-layout { grid-template-columns: 448px minmax(0, 1fr); gap: 80px; }
-  .menu-ui .settings-tabs button, .menu-ui .set-label, .menu-ui .stepper b, .menu-ui .ctl > span, .menu-ui .key, .menu-ui .inv-name, .menu-ui .dtile-name { font-size: 24px; }
+  .menu-ui .settings-tabs button, .menu-ui .set-label, .menu-ui .stepper b, .menu-ui .ctl-label, .menu-ui .key, .menu-ui .inv-name, .menu-ui .dtile-name { font-size: 24px; }
+  .menu-ui .controls .bind-btn { min-height: 64px; }
   .menu-ui .set-row { min-height: 96px; }
   .menu-ui .stepper b { width: 128px; }
   .menu-ui .step-btn { width: 64px; padding: 0; }
@@ -256,7 +263,7 @@ body.pad-seen .menu-ui p.pad-only { display: block; }
   .menu-ui .menu-split { padding: 8px 0; }
   .menu-ui .menu-progress { margin-top: 24px; padding-top: 16px; }
   .menu-ui .menu-page-head { margin-bottom: 16px; }
-  .menu-ui .ctl { padding: 8px 0; min-height: 56px; }
+  .menu-ui .ctl { padding: 2px 0; min-height: 48px; }
 }
 @media (max-width: 760px) {
   .menu-ui { --menu-pad: 24px; --menu-title: 40px; --menu-heading: 24px; }
