@@ -185,6 +185,7 @@ const LAP_BEATS_HOT = 8;
 const ACCENTS = [
   0x4ef3ff, 0xff2fb0, 0xb14aed, 0xffb300, 0x39ff88, 0xff5a4d, 0x3d6bff, 0xff8a1f,
 ];
+const MENU_RAINBOW_SECONDS = 8;
 // The intermission ember, and it is WHITE - the one colour that is not in the
 // show. Everything the venue lights itself by wears this at a wave break: the
 // wall strips, the deck and platform lips, the fixture lenses.
@@ -532,6 +533,8 @@ export class Rig {
     // wearing the show's colour.
     this._colour = new THREE.Color(ACCENTS[0]);
     this._target = new THREE.Color(ACCENTS[0]);
+    this._menuActive = false;
+    this._menuHue = 0;
     this._energy = 0;
     this._house = 0;
     // Whether the room lets the show's STABBING instruments burn at all -
@@ -645,6 +648,7 @@ export class Rig {
 
     const combat = s.mode === 'combat' || s.mode === 'boss';
     const boss = s.mode === 'boss';
+    const menu = s.mode === 'menu';
 
     // `_house` crossfades the whole rig from the show into the blackout the
     // wave break plays in (see the HOUSE_* constants), so the intermission
@@ -739,7 +743,7 @@ export class Rig {
     // heartbeat joins the room and quickens as health drops. It rides ON TOP
     // of the white rather than replacing it, so enemies stay readable at the
     // exact moment reading them matters most.
-    const lowH = s.healthFrac < 0.3 ? 1 - s.healthFrac / 0.3 : 0;
+    const lowH = !menu && s.healthFrac < 0.3 ? 1 - s.healthFrac / 0.3 : 0;
     let heart = 0;
     if (lowH > 0) {
       // 1.1Hz at the threshold up to ~2.2Hz at death's door: a pulse rate, not
@@ -759,7 +763,17 @@ export class Rig {
     // out of the wall strips, the floor lips and the fixture lenses together -
     // and it EASES there with everything else rather than switching, which the
     // half-way tests that used to sit on each of those surfaces did not.
-    if (this._house > 0.5) {
+    if (menu) {
+      // Start at the colour already in the room when returning from a run.
+      // Walking hue in order avoids the random jumps and grey blends that
+      // make the title backdrop look like a combat lighting cue.
+      if (!this._menuActive) {
+        this._colour.getHSL(this._hsl);
+        this._menuHue = this._hsl.h;
+      }
+      this._menuHue = (this._menuHue + dt / MENU_RAINBOW_SECONDS) % 1;
+      this._target.setHSL(this._menuHue, 0.9, 0.55);
+    } else if (this._house > 0.5) {
       this._target.setHex(HOUSE);
     } else if (boss && this._enraged) {
       this._target.setHex(0xff2018);
@@ -798,7 +812,18 @@ export class Rig {
         );
       }
     }
-    this._colour.lerp(this._target, Math.min(1, dt * 4));
+    this._menuActive = menu;
+    const colourEase = Math.min(1, dt * 4);
+    if (menu) {
+      // Hue already moves continuously. Ease only saturation and brightness
+      // on entry; RGB interpolation would dilute the rainbow at its corners.
+      this._colour.getHSL(this._hsl);
+      this._colour.setHSL(this._menuHue,
+        this._hsl.s + (0.9 - this._hsl.s) * colourEase,
+        this._hsl.l + (0.55 - this._hsl.l) * colourEase);
+    } else {
+      this._colour.lerp(this._target, colourEase);
+    }
 
     // ---- the white key light ----------------------------------------------
     // Only intensity moves. Hue never does.
@@ -965,7 +990,7 @@ export class Rig {
     // the middle of every step washed out towards grey, while a laser is a
     // single wavelength and never is. Same hue, always at its strength.
     this._colour.getHSL(this._hsl);
-    if (s.themeLaser) {
+    if (!menu && s.themeLaser) {
       // A THEME THAT NAMES ITS OWN BANK. LUNAR's lasers are the moonlight
       // itself - white - and the hue walk below would give them a saturated
       // colour the room never chose. Optional data: themes without an

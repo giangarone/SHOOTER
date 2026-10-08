@@ -130,6 +130,7 @@ try {
 
     // ---- 1. detection and the hand-over -----------------------------------
     t('starts on keyboard', g.inputMode === 'kbm', g.inputMode);
+    t('the title backdrop hides the first-person gun', g.player.gun.visible === false);
     t('keyboard control sheet', document.querySelectorAll('.controls .controls-device.kbm-only .ctl').length === 15
       && !document.querySelector('.controls').classList.contains('pad'));
     // The rows appear when a pad is PLUGGED IN. The interface only changes
@@ -147,6 +148,7 @@ try {
     t('controller sheet swapped', document.querySelectorAll('.controls.pad .controls-device.pad-now .ctl').length === 15);
     t('prompts name buttons', g._useLead().includes('pad-cap'), g._useLead());
     t('cross started the run', g.state === 'playing', g.state);
+    t('starting a run restores the gun', g.player.gun.visible === true);
     // The press is still physically down. It must not also have been read as a
     // jump on the frame after the menu spent it.
     await frames(2);

@@ -380,6 +380,66 @@ try {
   checks.push(['ambient anticipation preserved and scheduled laser flashes resume',
     pulseTrace.approach > 0 && pulseTrace.resumed]);
 
+  // The title has its own colour walk: stale theme, laser and health state
+  // from an abandoned run must not pin it to white or tint every shade red.
+  const menuBackdrop = await page.evaluate(async () => {
+    const g = window.__game;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    g.beginGame();
+    await frame();
+    const weapon = g.player.gun;
+    const playingGun = weapon.visible;
+    g.pause();
+    g._exitToMenu();
+    await frame();
+    await frame();
+    const menuGun = !weapon.visible && g._fillRigState().mode === 'menu';
+    const rig = g.rig;
+    const lights = g._countLights();
+    rig._colour.setHSL(0.1, 0.9, 0.55);
+    rig._menuActive = false;
+    rig._house = 1;
+    const state = { ...g._fillRigState(), mode: 'menu', healthFrac: 0,
+      themeColor: 0x00ff00, themeLaser: 0xffffff };
+    const hsl = {}, laser = {};
+    let previous = 0.1, travel = 0, maxStep = 0, minSat = 1, shared = true;
+    for (let i = 0; i < 960; i++) {
+      rig.update(1 / 120, state);
+      rig.houseColour.getHSL(hsl);
+      rig._laserColour.getHSL(laser);
+      const step = (hsl.h - previous + 1) % 1;
+      travel += step;
+      maxStep = Math.max(maxStep, step);
+      minSat = Math.min(minSat, hsl.s);
+      previous = hsl.h;
+      shared &&= Math.abs(hsl.h - laser.h) < 1e-6
+        && rig.fixtureMats.every((material) => material.emissive.equals(rig.houseColour))
+        && rig.lights.p1.color.equals(rig.houseColour);
+    }
+    rig._house = 0;
+    rig.update(1 / 120, { ...state, mode: 'combat' });
+    const themedLaser = rig._laserColour.getHex() === 0xffffff;
+    rig._house = 1;
+    rig.update(1 / 120, { ...state, mode: 'house' });
+    const houseWhite = rig._target.getHex() === 0xffffff;
+    g.beginGame();
+    await frame();
+    await frame();
+    return { menuGun, playingGun, restoredGun: weapon === g.player.gun && weapon.visible,
+      travel, maxStep, minSat, shared, themedLaser, houseWhite,
+      stableLights: lights === g._countLights() };
+  });
+  console.log('MENU BACKDROP', JSON.stringify(menuBackdrop));
+  checks.push(['the main screen hides the gun and starting restores the same model',
+    menuBackdrop.menuGun && menuBackdrop.playingGun && menuBackdrop.restoredGun]);
+  checks.push(['menu lights smoothly traverse the rainbow in eight seconds',
+    menuBackdrop.travel > 0.93 && menuBackdrop.travel < 1.04 && menuBackdrop.maxStep < 0.01
+      && menuBackdrop.minSat > 0.8]);
+  checks.push(['menu fixtures and lasers share the rainbow despite stale run state', menuBackdrop.shared]);
+  checks.push(['gameplay laser overrides and intermission white return after the menu',
+    menuBackdrop.themedLaser && menuBackdrop.houseWhite]);
+  checks.push(['menu colour cycling keeps the light pool fixed', menuBackdrop.stableLights]);
+
   for (const [name, ok] of checks) console.log((ok ? '  ok   ' : '  FAIL ') + name);
   const ok = checks.every(([, v]) => v);
 

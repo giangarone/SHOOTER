@@ -1261,6 +1261,10 @@ context. The start screen says so, and one click anywhere fixes it.
   with navigation on the right. The same design covers pause, victory, game
   over, local multiplayer, Carrying and debug. Menus scale for laptops,
   desktops and large TV displays; the player HUD keeps its original design.
+  The title backdrop hides the first-person gun and smoothly cycles the accent
+  lights, fixture lenses and lasers through a full rainbow every eight seconds.
+  The cycle also continues behind screens opened from the title; gameplay,
+  pause and victory retain their existing lighting and weapon presentation.
 - **CONTROLS** is a dedicated screen reached from the title or pause menu,
   grouped into Movement, Combat and Arena. It follows the active input device
   and edits saved bindings directly through the keycaps. DEFAULTS restores

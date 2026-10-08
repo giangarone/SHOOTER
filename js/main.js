@@ -3855,7 +3855,8 @@ class Game {
     // it keeps the house lights rather than falling to idle.
     const house = (this.state === 'playing' || this.state === 'won')
       && (this.waveState === 'intermission' || this._pass);
-    r.mode = combat ? (this.bossFight ? 'boss' : 'combat') : house ? 'house' : 'idle';
+    r.mode = this.state === 'menu' ? 'menu'
+      : combat ? (this.bossFight ? 'boss' : 'combat') : house ? 'house' : 'idle';
     r.beat = this.music.beat;
     r.beatHit = this.music.beatHit;
     r.level = this.music.level;
@@ -12964,6 +12965,10 @@ class Game {
     // real time, and a build must not stall because the game is paused mid
     // wave break.
     if (this.terrain.update(dt, this.music.pulse) === 'settled') this._settleTerrain();
+    // Visibility follows the run state rather than the weapon pose: the menu
+    // camera must never carry a first-person model, including after a return
+    // from gameplay. The same model is ready again on the first playing frame.
+    this.player.gun.visible = this.state !== 'menu';
     this.rig.update(dt, this._fillRigState());
     this.ui.setStrobe(this.rig.flash);
     // The orbs' rim colour rides the ceiling. One uniform, read after the rig
