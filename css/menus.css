@@ -34,6 +34,13 @@
   background: linear-gradient(90deg, #07080ba6, #07080b66 52%, #07080b99);
 }
 
+/* Blurred arena behind every menu but the main one, which sits on the live
+   attract-mode room and keeps it sharp. */
+.menu-ui.overlay:not(#overlay-start) {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
 /* The arena keeps its CRT pass. Only menu surfaces sit above the document's
    scanlines; no global effect changes when the live Carrying sheet opens. */
 .menu-ui.menu-subscreen {
