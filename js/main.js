@@ -489,6 +489,7 @@ function viewportAspect() {
 const SHAKE_PIPS = 8;
 const SHAKE_MAX = 2;
 const SHAKE_STEP = SHAKE_MAX / SHAKE_PIPS;
+const HUD_SIZES = [1, 1.25, 1.5, 1.75];
 
 // --- economy ---
 // Seconds a kill chain survives without a new kill.
@@ -1519,6 +1520,12 @@ class Game {
         this._setShakeScale(Math.max(0, Math.min(SHAKE_MAX, Math.round(n / SHAKE_STEP) * SHAKE_STEP)));
       }
     } catch {}
+    this._hudScale = 1;
+    try {
+      const saved = Number(localStorage.getItem('va-hud-scale'));
+      if (HUD_SIZES.includes(saved)) this._hudScale = saved;
+    } catch {}
+    this._applyHudScale();
     // ---- the controller ---------------------------------------------------
     //
     // The pad is POLLED, not listened to (the Gamepad API has no events), so
@@ -2563,6 +2570,26 @@ class Game {
     });
     this._syncShake();
 
+    this._hudPips = [];
+    const hudPipRow = document.getElementById('hud-pips');
+    for (let i = 0; i < HUD_SIZES.length; i++) {
+      const pip = document.createElement('i');
+      hudPipRow.appendChild(pip);
+      this._hudPips.push(pip);
+    }
+    this._hudVal = document.getElementById('hud-val');
+    this._hudDown = document.getElementById('btn-hud-down');
+    this._hudUp = document.getElementById('btn-hud-up');
+    this._hudDown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepHudScale(-1);
+    });
+    this._hudUp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._stepHudScale(1);
+    });
+    this._syncHudScale();
+
     // ---- the controller rows ------------------------------------------------
     //
     // Hidden until a DualSense has been seen (body.pad-seen, set in
@@ -2973,6 +3000,30 @@ class Game {
     this._shakeVal.classList.toggle('off', v === 0);
     this._shakeDown.disabled = v <= 0;
     this._shakeUp.disabled = v >= SHAKE_MAX;
+  }
+
+  _applyHudScale() {
+    // Scale individual instruments, never the HUD layer: transforming the
+    // layer also changes the spread reticle's distance from the shot ray.
+    document.documentElement.style.setProperty('--hud-scale', String(this._hudScale));
+  }
+
+  _stepHudScale(dir) {
+    const index = HUD_SIZES.indexOf(this._hudScale);
+    const next = HUD_SIZES[Math.max(0, Math.min(HUD_SIZES.length - 1, index + dir))];
+    if (next === this._hudScale) return;
+    this._hudScale = next;
+    this._applyHudScale();
+    try { localStorage.setItem('va-hud-scale', String(next)); } catch {}
+    this._syncHudScale();
+  }
+
+  _syncHudScale() {
+    const index = HUD_SIZES.indexOf(this._hudScale);
+    for (const [i, pip] of this._hudPips.entries()) pip.classList.toggle('on', i <= index);
+    this._hudVal.textContent = Math.round(this._hudScale * 100) + '%';
+    this._hudDown.disabled = index === 0;
+    this._hudUp.disabled = index === HUD_SIZES.length - 1;
   }
 
   // The sub-screens are LAYERED over whichever menu opened them - the start
@@ -12470,10 +12521,6 @@ class Game {
     this.ui.setHudBlind(!!this._hudBlind);
     this._hudBlind = false;
     this.ui.setWave(this.wave);
-    // The boss has its own bar, so the counter reads as adds on the field
-    // rather than sitting at "ENEMIES 1" for the length of a boss fight.
-    const parts = this.bossFight ? this.bossFight.parts.length : 0;
-    this.ui.setEnemies(this.enemies.length + this.queue.length - parts);
     if (this.bossFight) {
       const bf = this.bossFight;
       this.ui.setBoss(bf.name, this._bossHpFrac(), bf.note, bf.state);

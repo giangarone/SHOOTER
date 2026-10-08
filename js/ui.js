@@ -32,7 +32,6 @@ export class UI {
     const $ = (id) => document.getElementById(id);
     this.hud = $('hud');
     this.waveNum = $('wave-num');
-    this.enemies = $('enemies-left');
     this.hpBox = $('hp-box');
     this.hpBar = $('hp-bar');
     this.hpShield = $('hp-shield');
@@ -147,15 +146,6 @@ export class UI {
       this.waveNum.textContent = String(n).padStart(2, '0');
     }
   }
-  setEnemies(n) {
-    if (this._c.enemies !== n) {
-      this._c.enemies = n;
-      this.enemies.textContent = String(n).padStart(2, '0') + ' LEFT';
-      // The pip beside the count goes from red to green the instant the arena
-      // is clear - the one state change worth seeing without reading a number.
-      this.enemies.classList.toggle('clear', n === 0);
-    }
-  }
   /**
    * The boss bar. Pass a null name to hide it.
    *
@@ -184,8 +174,7 @@ export class UI {
     }
     if (this._c.bossState !== state) {
       this._c.bossState = state;
-      // `plate` is structural - it carries the chamfer and the frame ring -
-      // so the state class is appended to it rather than replacing it.
+      // Keep the base class when an armour/vulnerability state changes.
       this.bossBar.className = 'plate' + (state ? ' ' + state : '');
     }
   }
@@ -227,7 +216,7 @@ export class UI {
    * which is precisely the state BALLAST TANKS puts the player in at the top of
    * every wave, and SECOND SKIN in at the press of a button. Growing the
    * denominator instead means a hundred health and fifty shield reads as two
-   * thirds green and one third blue, both full, and every point the player owns
+   * thirds health and one third shield, both full, and every point the player owns
    * is on screen. A run with no shield at all divides by max health exactly as
    * it always did, so nothing about the ordinary bar moves.
    *
@@ -671,8 +660,8 @@ export class UI {
   //
   // `subColor` is that block's own colour, as a CSS string. It goes on the
   // element INLINE rather than through a class, because it is per-banner
-  // data - one element, eighteen blocks - and a banner given no colour hands
-  // the sub back to the stylesheet's cyan, so a plain banner never carries
+  // data - one element, many blocks - and a banner given no colour hands
+  // the sub back to the stylesheet's neutral tone, so a plain banner never carries
   // the last block's colour over.
   banner(text, sub = '', subColor = null) {
     this.bannerEl.textContent = text;
@@ -681,9 +670,6 @@ export class UI {
     this.bannerEl.classList.add('show');
     this.bannerSubEl.textContent = sub;
     this.bannerSubEl.style.color = subColor || '';
-    this.bannerSubEl.style.textShadow = subColor
-      ? '3px 3px 0 var(--ink), 0 0 22px ' + subColor
-      : '';
     this.bannerSubEl.classList.remove('show');
     void this.bannerSubEl.offsetWidth;
     if (sub) this.bannerSubEl.classList.add('show');
@@ -1473,7 +1459,6 @@ export class UI {
     this._c = {};
     this.bossBar.className = 'plate hidden';
     this.hpBox.classList.remove('low', 'stam-low', 'spent');
-    this.enemies.classList.remove('clear');
     this.flawlessEl.classList.add('hidden');
     this.crosshair.classList.remove('aim');
     // The marker's `.show` is never taken off in play - the animation under it

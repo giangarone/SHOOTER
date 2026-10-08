@@ -1,10 +1,10 @@
 /* Menus have their own palette and dimensions: changing one must never
    recolour a health bar or resize a keycap in a gameplay prompt. */
 .menu-ui {
-  --menu-white: #f1f0eb;
-  --menu-muted: #999b9e;
-  --menu-line: #ffffff24;
-  --menu-surface: #101114;
+  --menu-white: var(--ui-white);
+  --menu-muted: var(--ui-muted);
+  --menu-line: var(--ui-line);
+  --menu-surface: var(--ui-surface);
   --menu-space: 32px;
   --menu-type: 12px;
   --menu-label: 16px;

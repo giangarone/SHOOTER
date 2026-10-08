@@ -22,7 +22,11 @@
       <div id="wave-box">
         <span id="wave-label">WAVE</span>
         <span id="wave-num">01</span>
-        <span id="enemies-left">00 LEFT</span>
+      </div>
+      <div id="boss-bar" class="plate hidden">
+        <div id="boss-name">COLOSSUS</div>
+        <div id="boss-hp-bg" class="seg"><i id="boss-hp"></i></div>
+        <div id="boss-note"></div>
       </div>
       <!-- CREDITS, where the score used to be. A run is measured by the wave
            it reached - that readout is on the left - so the one number worth
@@ -38,27 +42,10 @@
       </div>
     </div>
 
-    <!-- Boss bar. Centred and wide, under the wave readout: a boss is the one
-         thing on screen worth its own instrument, and it has to be legible
-         without taking the player's eyes off the crosshair. The name plate
-         straddles the frame's top edge so the two read as one machine. -->
-    <div id="boss-bar" class="plate hidden">
-      <div id="boss-name">COLOSSUS</div>
-      <div id="boss-hp-bg" class="seg"><i id="boss-hp"></i></div>
-      <div id="boss-note"></div>
-    </div>
-
     <div id="crosshair">
       <i></i><i></i><i></i><i></i>
       <span id="hitmarker"></span>
     </div>
-
-    <!-- Buffs have the bottom centre to themselves. The combo gauge used to
-         share it, and came off with the kill chain's payout: the chain still
-         runs and still drives the room, but it buys the player nothing, and a
-         multiplier on the HUD that cannot be spent is a thing to play toward
-         for no reason. -->
-    <div id="buffs"></div>
 
     <div id="hud-bottom">
       <div id="hp-box">
@@ -83,8 +70,8 @@
              when what they really have is one bar with a cap on the end.
 
              THE BAR'S DENOMINATOR GROWS TO HOLD IT (see UI.setHealth): a
-             hundred health and fifty shield draw as two thirds green and one
-             third blue, both full, rather than the blue having nowhere to go
+             hundred health and fifty shield draw as two thirds health and one
+             third shield, both full, rather than the blue having nowhere to go
              on a full bar - which is the state BALLAST TANKS puts the player
              in at the top of every single wave.
 
@@ -93,33 +80,12 @@
              100% height, so a second one in flow would sit under the first and
              double the frame. -->
         <div id="hp-bar-bg" class="seg"><i id="hp-bar"></i><i id="hp-shield"></i></div>
-        <!-- STAMINA, under the health it belongs with. VITALS already means
-             "the state of your body" and this is the second half of it: same
-             cell mask, same chamfer, half the height, so it reads as the
-             quieter of two instruments on one plate rather than as a second
-             plate. -->
         <div id="stam-bar-bg" class="seg"><i id="stam-bar"></i></div>
       </div>
+      <div id="buffs"></div>
       <div id="ammo-box">
-        <!-- THE ACTIVE ITEM SLOT, directly over the round count.
-             Bottom right is where this player already looks for "what am I
-             holding", and an item is the same question asked about the other
-             hand.
-
-             NO FRAME. It is an icon, a name and a meter stacked in a column,
-             floating on the arena the way the crosshair does - a plate around
-             it made a second instrument out of what is really one reading.
-
-             The DRAWING sits outboard, against the edge of the screen, with
-             the name and the meter stacked to its left - so the icon lines up
-             with nothing and is read as a shape, while the two things made of
-             pixels-in-rows line up with the round count below them. The name
-             sits over the meter because it is the label for it: what is
-             charging, and how far along it is.
-
-             Hidden entirely until something is carried: an empty frame in the
-             corner is a permanent question about a system the player may not
-             have met yet. -->
+        <!-- Item artwork retains its colour; its name and charge share the
+             ammunition column's right edge. Hidden until an item is carried. -->
         <div id="item-box" class="hidden">
           <div id="item-info">
             <div id="item-name">TRAUMA KIT</div>
@@ -277,7 +243,6 @@
 
   <div id="overlay-over" class="overlay menu-ui hidden" aria-labelledby="overlay-over-title">
     <div class="menu-frame">
-      <header class="menu-top"><span>VOID ARENA</span><span>RUN COMPLETE</span></header>
       <div class="menu-split">
         <section class="menu-hero marquee">
           <p class="menu-eyebrow">RUN COMPLETE</p>
@@ -290,7 +255,6 @@
           <button id="btn-over-menu" class="opt-btn">BACK TO MENU<i class="menu-arrow" aria-hidden="true"></i></button>
         </nav>
       </div>
-      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
   </div>
 
@@ -422,6 +386,16 @@
               </div>
             </div>
             <p class="set-note">CAMERA KICK FROM HITS, BLASTS AND WEAPON RECOIL</p>
+            <div class="set-row">
+              <span class="set-label">HUD SIZE</span>
+              <div class="stepper" tabindex="-1" aria-describedby="hud-size-note">
+                <button id="btn-hud-down" class="step-btn" type="button" aria-label="Smaller HUD">-</button>
+                <div id="hud-pips" class="pips"></div>
+                <b id="hud-val" aria-live="polite">100%</b>
+                <button id="btn-hud-up" class="step-btn" type="button" aria-label="Larger HUD">+</button>
+              </div>
+            </div>
+            <p id="hud-size-note" class="set-note">LARGER READOUTS FOR TV PLAY. SCREEN SIZE ADAPTS AUTOMATICALLY.</p>
 
 
           </section>

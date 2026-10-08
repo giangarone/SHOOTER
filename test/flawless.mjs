@@ -42,7 +42,9 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load' });
-  await sleep(1500);
+  // Shader startup can outlast a fixed delay; read the player only after the
+  // game has published it, as the shared browser harness does.
+  await page.waitForFunction('window.__game && window.__game.player');
 
   // ---- the curve, and where it stops ----
   const curve = await page.evaluate(() => {

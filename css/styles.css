@@ -1,27 +1,7 @@
-/* ===========================================================================
-   VOID ARENA - HUD and gameplay interface
-   ---------------------------------------------------------------------------
-   The arena is lit, volumetric and smooth. The INTERFACE is the opposite on
-   purpose: it is the cabinet the arena is being watched through, so it is
-   drawn in hard pixels on a fixed grid, with no blur, no rounded corner and no
-   gradient that is not stepped.
-
-   Menu surfaces live in menus.css. These rules govern the gameplay UI:
-
-   Three rules hold the whole sheet together:
-
-     1. EVERY dimension is a multiple of --u (4px). Type sizes are multiples of
-        8px, which is the size Press Start 2P was drawn at - anything else
-        lands glyph edges between device pixels and the font turns to mush.
-     2. NOTHING is translucent by blur. Where the arena has to show through a
-        surface it shows through a DITHER: a 2px checker at partial alpha, the
-        way a machine with no alpha channel faked one. `backdrop-filter` is
-        gone from this file entirely.
-     3. Panels are CHAMFERED, not rounded. The 6px corner cut is the single
-        shape that repeats at every scale - plates, buttons, chips, keycaps -
-        and it is what makes a HUD element and a menu button read as parts of
-        the same machine.
-   =========================================================================== */
+/* VOID ARENA — gameplay interface.
+   HUD surfaces share the menus' open layouts and type hierarchy. Colour
+   identifies resources and states. --h scales readable instruments;
+   the crosshair keeps the gun's pixel cone. */
 
 @font-face {
   font-family: "Press Start 2P";
@@ -33,6 +13,16 @@
 }
 
 :root {
+  --ui-white: #f1f0eb;
+  --ui-muted: #999b9e;
+  --ui-line: #ffffff24;
+  --ui-surface: #101114;
+  --hud-responsive: 1px;
+  --hud-scale: 1;
+  --h: calc(var(--hud-responsive) * var(--hud-scale));
+  --hud-inset: clamp(16px, 3vw, calc(48 * var(--h)));
+  --hud-danger: var(--red);
+
   /* grid ------------------------------------------------------------------ */
   --u: 4px;
 
@@ -137,116 +127,42 @@ html, body {
    HUD
    ========================================================================= */
 
-/* THE LAYER MAP, and the one rule it exists to keep: NOTHING THE ARENA DOES TO
-   THE PLAYER IS EVER DRAWN OVER THE READOUTS.
-     0-3  arena, and anything stacking inside a plate
-     4    what is happening to you - #strobe, #fx-damage, #fx-fire,
-          #fx-poison, #invuln-frame
-     5-7  the HUD - #hud, #buffs, #prompt, #banner
-     8    live handoff caption
-     99-100  scanlines and bezel
-     110+  menu surfaces (menus.css)
-   The four status washes used to sit at 6, one above the HUD, so a player on
-   fire had amber tongues climbing over the vitals bar - the exact readout
-   someone on fire is looking at - and the fire layer carried a mask cut short
-   of the bar to work around it. They are under the HUD now, which is where a
-   thing that happens to the ROOM belongs. */
-#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-
+/* Status washes sit below the readouts; the scanlines and bezel sit above
+   every gameplay caption so the HUD belongs to the same tube as the arena. */
+#hud {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  color: var(--ui-white); text-shadow: 0 2px 5px #000b;
+}
+#hud-top, #hud-bottom {
+  position: absolute; left: var(--hud-inset); right: var(--hud-inset);
+  display: flex; justify-content: space-between; gap: calc(24 * var(--h));
+}
 #hud-top {
-  position: absolute; top: calc(var(--u) * 5); left: calc(var(--u) * 5);
-  right: calc(var(--u) * 5);
-  display: flex; justify-content: space-between; align-items: flex-start;
+  top: max(16px, env(safe-area-inset-top)); align-items: flex-start;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
 }
-
-/* NO PLATE UNDER THE CORNER READOUTS.
-   These three - the wave, the credits and the ammunition - are the readings the
-   player is glancing at mid-fight, and a framed panel behind each one put a
-   solid rectangle over the corner of the arena for the whole run. They are
-   made of LIGHT now, like everything in the room they are drawn over: the
-   glyphs, their glow, and nothing else.
-
-   What replaces the panel is the 1px ink shadow on every line below. It is not
-   decoration - with no fill behind it, an 8px label crossing a lit floor or a
-   muzzle flash has no other way to hold its edge. */
+#hud-bottom {
+  bottom: var(--hud-inset); align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, calc(288 * var(--h))) minmax(0, 1fr) minmax(0, calc(320 * var(--h)));
+}
 #wave-box, #credit-box {
-  display: flex; flex-direction: column;
-  gap: var(--u);
+  display: flex; flex-direction: column; gap: calc(10 * var(--h));
+  min-width: 0;
 }
-#credit-box { align-items: flex-end; text-align: right; }
-
-/* THE FLAWLESS STREAK, under the balance. Deliberately the size of a label and
-   not of a number: it is the only multiplier left on the HUD and it still must
-   not compete with the figure it modifies. Green rather than gold, because
-   what it is saying is "you have not been hit" and only incidentally "you are
-   being paid more" - it is the same reading the vitals bar gives. */
-#flawless {
-  font-size: 8px; letter-spacing: 0.16em; color: #7dff9b;
-  text-shadow: 1px 1px 0 var(--ink), 0 0 10px rgba(125, 255, 155, 0.5);
-}
-
-/* Section labels. 8px is the face's native size and the only place tracking
-   earns its keep - a label read as a texture rather than as a word. */
+#credit-box { grid-column: 3; align-items: flex-end; text-align: right; }
 #wave-label, #credit-label {
-  font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
-  text-shadow: 1px 1px 0 var(--ink);
+  font-size: calc(12 * var(--h)); letter-spacing: .1em;
+  color: var(--ui-muted); line-height: 1.5;
 }
-/* White, not cyan. Cyan is the interface's accent - it is on the
-   armour theme, the reload dial and half the consoles - and the wave number is
-   not an accent, it is the one fact on screen that says where the run is. White
-   is what the round count beneath it already uses for the same reason. */
-/* NO BLOOM ON THE FIGURE. It carried a 16px white halo, which is the one
-   effect on this sheet that fights the rule the whole interface is built on:
-   the panels are hard pixels on a grid, and a glow is by definition the
-   opposite - it is soft, it is off-grid, and at 32px it smeared the counters
-   of the glyphs it was meant to lift. The 2px ink shadow is what actually
-   holds these numbers against a lit arena, and it does it without blur. */
-#wave-num {
-  font-size: 32px; color: #fff;
-  text-shadow: 2px 2px 0 var(--ink);
-  line-height: 1;
-}
-/* The enemy count reads as a status line under the wave, with a square pip
-   that goes dark the moment the arena is clear. */
-#enemies-left {
-  font-size: 8px; letter-spacing: 0.12em; color: #93a0c0;
-  text-shadow: 1px 1px 0 var(--ink);
-  display: flex; align-items: center; gap: calc(var(--u) * 1.5);
-}
-#enemies-left::before {
-  content: ""; width: 6px; height: 6px; flex: none;
-  background: var(--red); box-shadow: 0 0 8px rgba(255, 59, 48, 0.8);
-}
-#enemies-left.clear { color: var(--green); }
-#enemies-left.clear::before {
-  background: var(--green); box-shadow: 0 0 8px rgba(55, 224, 139, 0.8);
-}
-/* Right-aligned by #credit-box, so a wide `$12,345` grows leftward into empty
-   frame. Gold: the colour this interface uses for money and for the thing that
-   is currently true, and the same weight the score readout had here before. */
+#wave-num { font-size: calc(40 * var(--h)); line-height: 1; }
 #credit-num {
-  font-size: 24px; color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
+  font-size: calc(32 * var(--h)); line-height: 1;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
-
-/* WHOSE TURN IT IS, over the VITALS in versus. Sized as a FIGURE, at the
-   credits' own 24px: at 10px in the corner it was the smallest thing on the
-   frame, and the one fact a hot-seat match cannot afford to make anyone squint
-   at is which of the two people in the room is holding the pad. It reads as
-   the name of the body whose health is drawn under it.
-
-   ITS COLOUR IS WRITTEN INLINE - the two player inks live in ui.js beside the
-   code that lights the gun with them - so all this owns is the shape. The ink
-   shadow and NOTHING else: a glow here inherited the gold one off the balance
-   and painted a yellow halo around a cyan or a red tag, which read as a third
-   colour that means nothing. */
-#versus-tag {
-  font-size: 24px; letter-spacing: 0.2em;
-  text-shadow: 2px 2px 0 var(--ink);
-  line-height: 1;
-}
+#flawless { font-size: calc(12 * var(--h)); letter-spacing: .04em; color: #7dff9b; }
+#versus-tag { font-size: calc(24 * var(--h)); line-height: 1.3; }
 
 /* ---- crosshair -----------------------------------------------------------
    Four 3px blocks and a centre pip, each carrying its own 1px dark outline so
@@ -335,12 +251,7 @@ body.hudblind #hitmarker { opacity: 0 !important; }
   100% { opacity: 0; transform: scale(1); }
 }
 
-/* ---- bottom row ---------------------------------------------------------- */
-#hud-bottom {
-  position: absolute; bottom: calc(var(--u) * 5); left: calc(var(--u) * 5);
-  right: calc(var(--u) * 5);
-  display: flex; justify-content: space-between; align-items: flex-end;
-}
+/* Segmented meters retain their exact fill geometry and shield stack. */
 
 /* ---- SEGMENTED BARS ------------------------------------------------------
    Health and boss health are one component: a track that
@@ -356,8 +267,7 @@ body.hudblind #hitmarker { opacity: 0 !important; }
   --cells: 20;
   --gap: 2px;
   position: relative;
-  background: rgba(6, 8, 13, 0.85);
-  box-shadow: inset 0 0 0 1px rgba(43, 51, 72, 0.9);
+  background: #ffffff24;
   -webkit-mask: repeating-linear-gradient(
     90deg, #000 0 calc(100% / var(--cells) - var(--gap)),
     transparent calc(100% / var(--cells) - var(--gap)) calc(100% / var(--cells))
@@ -383,199 +293,61 @@ body.hudblind #hitmarker { opacity: 0 !important; }
   transform-origin: left center; transform: scaleX(0);
 }
 
-#hp-box { width: 300px; display: flex; flex-direction: column; gap: calc(var(--u) * 1.5); }
+#hp-box {
+  width: 100%; min-width: 0;
+  display: flex; flex-direction: column; gap: calc(8 * var(--h));
+}
 #hp-head {
   display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 8px; letter-spacing: 0.2em; color: var(--dim);
+  gap: calc(8 * var(--h)); flex-wrap: wrap;
+  font-size: calc(12 * var(--h)); color: var(--ui-muted);
 }
-#hp-text { font-size: 10px; color: var(--text); letter-spacing: 0.06em; }
-#hp-bar-bg { height: calc(var(--u) * 5); --cells: 20; }
-#hp-bar {
-  background: var(--green);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(55, 224, 139, 0.5);
-}
-/* Below a third: the bar changes colour AND the readout starts to beat. Colour
-   alone is a change the player is not looking at the bar to notice. */
-#hp-box.low #hp-bar {
-  background: var(--red);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(255, 59, 48, 0.6);
-}
-#hp-box.low #hp-text { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
-#hp-box.low #hp-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
-
-/* ---- the shield ----------------------------------------------------------
-   The blue cap on the end of the health bar. BALLAST TANKS opens every wave
-   with fifty of these, PLASMA BAG adds ten a crate and SECOND SKIN twenty a
-   press - and before this none of them had any readout at all, so a player
-   holding seventy points of shield saw a full health bar and nothing else.
-
-   OUT OF FLOW AND OFFSET, NOT STACKED. `.seg > i` is a block at 100% height,
-   so a second one placed after the first would sit BELOW it and double the
-   frame's content height - exactly the trap #item-bar2 carries the note for.
-   Taken out of flow, it occupies the same cells; the translateX UI.setHealth
-   writes is what puts it to the RIGHT of the health it is protecting, which
-   is where it has to be: the shield is spent first, so the blue shrinking back
-   toward the green is the picture of what is actually happening.
-
-   CYAN, NOT A SECOND GREEN, AND NOT A NEW HUE EITHER. It is the value the
-   shield pickup, SECOND SKIN and the whole armour family already wear
-   (THEME.armor in items/passive/shared.js), and the UI has no business inventing a colour
-   the world does not use - see the note on the palette.
-
-   IT IS THE SAME CYAN THE STAMINA BAR ONE ROW DOWN IS, which is worth stating
-   because it looks like a mistake and is not. What tells the two apart is not
-   hue, it is that they are different INSTRUMENTS: this fill is 20px tall on a
-   20-cell track and the stamina bar is 8px on a 40-cell one, a row below it.
-   Giving the shield a hue of its own would have cost more than it bought - a
-   player who has learned that cyan means "shield" from the pickup, the item and
-   the totem would meet a fourth colour for it here, on the one readout they
-   look at most. */
-#hp-shield {
-  position: absolute; inset: 0;
-  background: var(--cyan);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(78, 243, 255, 0.55);
-}
-/* THE LOW STATE DOES NOT TOUCH IT. `#hp-box.low` turns the health fill red
-   below a third, and a shield sitting on the end of a nearly-empty bar is the
-   one thing on screen saying the next hit is survivable - reddening it would
-   be the HUD lying about the best news the player has. */
-
-/* ---- stamina -------------------------------------------------------------
-   The same instrument as the health bar at half the height and twice the cell
-   count, which is the whole design: it is obviously the same KIND of readout
-   and just as obviously the lesser of the two. Cyan rather than green, so a
-   glance at the corner never confuses the bar that means "alive" with the bar
-   that means "can still run" - and cyan is what this cabinet uses for a
-   resource that comes back on its own. */
-#stam-bar-bg { height: calc(var(--u) * 2); --cells: 40; --gap: 2px; }
-#stam-bar {
-  background: var(--cyan);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 10px rgba(78, 243, 255, 0.45);
-}
-/* LOW: below the amount that would let a run start. THE COLOUR IS THE LEVEL
-   AND NOTHING ELSE - it does not change with what the player is doing, so the
-   bar can be read at a glance the way the health bar above it can. Red at
-   exactly the line the lockout uses, so it means "there is not enough here to
-   run on" rather than being a warning at a round number. */
-#hp-box.stam-low #stam-bar,
-#hp-box.spent #stam-bar {
-  background: var(--red);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 59, 48, 0.6);
-}
-/* SPENT. The lockout is a state the player has to be told about - a key that
-   has stopped working and says nothing reads as a broken key - so the bar
-   BEATS until the third that unlocks it is back. An animation, not a colour:
-   the colour is already saying how much is left. */
-#hp-box.spent #stam-bar { animation: blink 0.5s steps(1, end) infinite; }
-#hp-box.spent #stam-bar-bg { box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.5); }
-
-@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.25; } }
-
-/* ---- ammunition ---------------------------------------------------------- */
-/* Unframed, for the reason above. The min-width stays: it is what keeps the
-   round count from sliding left when the reserve drops a digit, in a corner
-   where nothing else is holding the column still. */
+#hp-text { font-size: calc(14 * var(--h)); color: var(--ui-white); }
+#hp-bar-bg { height: calc(12 * var(--h)); --cells: 20; }
+#hp-bar { background: var(--green); }
+#hp-shield { position: absolute; inset: 0; background: var(--cyan); }
+#hp-box.low #hp-bar { background: var(--hud-danger); }
+#hp-box.low #hp-text { color: var(--hud-danger); animation: blink .7s steps(1, end) infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+#stam-bar-bg { height: calc(4 * var(--h)); --cells: 40; --gap: 1px; }
+#stam-bar { background: var(--cyan); }
+#hp-box.stam-low #stam-bar, #hp-box.spent #stam-bar { background: var(--hud-danger); }
+#hp-box.spent #stam-bar { animation: blink .7s steps(1, end) infinite; }
 #ammo-box {
   display: flex; flex-direction: column; align-items: flex-end;
-  gap: var(--u);
-  min-width: calc(var(--u) * 50);
+  gap: calc(12 * var(--h)); width: 100%; min-width: 0;
 }
 
-/* ---- THE ACTIVE ITEM SLOT ------------------------------------------------
-   A drawing on the right, with its name and its meter stacked to the left of
-   it. No frame: a plate around it made a second instrument out of what is
-   really one reading, and this sits over a lit 3D scene where an unframed
-   group reads perfectly well.
-
-   THE ICON IS THE OUTBOARD ELEMENT, hard against the edge of the screen. It is
-   the part that is recognised rather than read, so it wants to be the thing the
-   eye lands on first coming in from the corner - and it leaves the name and the
-   meter, which ARE read, sharing a right edge with the round count below them.
-
-   --item is the carried item's own theme colour, written from JS along with the
-   segment count. It is the only colour here that changes, and it drives the
-   name, the bar and the ready state together so they can never disagree about
-   which item is in the slot. */
+/* Authored item colour remains in the art. Text and meter also change at
+   readiness, so colour alone is never the cue to a usable charge. */
 #item-box {
-  display: flex; align-items: center;
-  gap: calc(var(--u) * 2);
-  margin-bottom: calc(var(--u) * 2);
+  display: flex; align-items: center; gap: calc(12 * var(--h));
+  width: 100%; justify-content: flex-end;
+  padding-bottom: calc(12 * var(--h)); border-bottom: 1px solid var(--ui-line);
   --item: var(--cyan);
 }
-/* The name over the meter, both right-aligned against the icon beside them. The
-   width is the METER'S - it is the only thing here whose length carries meaning
-   - and the name is trusted not to outrun it. */
 #item-info {
   display: flex; flex-direction: column; align-items: flex-end;
-  gap: calc(var(--u) * 1.5);
-  width: calc(var(--u) * 27);   /* 108px */
+  gap: calc(8 * var(--h)); min-width: 0; flex: 1;
 }
-#item-art {
-  /* 48 CSS px off a 96px canvas, and both numbers matter: 48 is exactly twice
-     the drawing's own 24 pixels, so a source pixel lands on two whole CSS
-     pixels, and 96 is exactly twice 48, so the canvas maps 1:1 onto the device
-     pixels of a 2x display and 2:1 on a 1x one. Nothing anywhere in that chain
-     is fractional, which is the whole difference between pixel art and a
-     picture of pixel art. image-rendering is what holds it: the default
-     smoothing blurs a hand-placed 24-pixel drawing at any scale but exactly 1. */
-  width: 48px; height: 48px;
-  image-rendering: pixelated;
-  flex: none;
-  filter: drop-shadow(2px 2px 0 var(--ink));
-}
+#item-art { width: calc(48 * var(--h)); height: calc(48 * var(--h)); image-rendering: pixelated; flex: none; }
 #item-name {
-  font-size: 8px; letter-spacing: 0.1em; color: var(--item);
-  text-shadow: 1px 1px 0 var(--ink);
-  white-space: nowrap;
+  font-size: calc(12 * var(--h)); color: var(--item);
+  text-align: right; line-height: 1.7; overflow-wrap: anywhere;
 }
-/* The meter. .seg's own rules, at a cell count that changes with the item -
-   see UI.setItem for how the count is chosen. */
-#item-bar-bg { width: 100%; height: 8px; }
-/* An item whose charge costs nothing has nothing to meter - see UI.setItem.
-   The name and the plate stay; only the bar goes, so the slot still reads as
-   the same instrument with one fewer reading on it. */
+#item-bar-bg { width: min(100%, calc(180 * var(--h))); height: calc(6 * var(--h)); }
 #item-box.nometer #item-bar-bg { display: none; }
 #item-bar { background: var(--item); }
-/* TWIN CELL'S SECOND CHARGE. Same geometry as the first fill - `.seg > i` puts
-   both at the left edge and both are driven by scaleX - so it climbs through
-   exactly the same cells, over the top of a bar that is already full.
-
-   A PALE WASH, NOT A SECOND HUE. The slot's colour is the ITEM's and it is
-   load-bearing everywhere else in the HUD; a second charge in some unrelated
-   colour would read as a different item rather than as more of this one. Near
-   white at three quarters opacity over the item's own full bar reads as the
-   same bar, brighter - which is what a spare charge is. */
-#item-bar2 {
-  /* STACKED, NOT FLOWED. `.seg > i` is a block at 100% height, so a second one
-     placed after the first would sit BELOW it and double the frame's content
-     height. Taken out of flow so the two fills occupy the same eight pixels. */
-  position: absolute; inset: 0;
-  background: #ffffff;
-  opacity: 0.82;
-  mix-blend-mode: screen;
-}
-
-/* CHARGED. The bar takes its glow, the name comes up to white and the icon to
-   full - legible in peripheral vision without reading a word, which is the
-   whole point, because it becomes true in the middle of a firefight. */
-#item-box:not(.ready) #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(0.72); }
-#item-box.ready #item-name { color: #fff; }
-#item-box.ready #item-bar { box-shadow: 0 0 8px var(--item); }
-/* BOTH CHARGES BANKED. The whole slot goes to white rather than the second bar
-   glowing on its own: a player holding two presses should be able to see it
-   from the corner of their eye without resolving a bar. */
-#item-box.spare #item-bar2 { box-shadow: 0 0 10px #fff; }
-#item-box.spare #item-art { filter: drop-shadow(2px 2px 0 var(--ink)) brightness(1.18); }
-
-/* The moment it fills, once. Restarted from JS by removing and re-adding the
-   class - the same trick #ammo-res.refund uses, and for the same reason: a
-   second charge inside the animation has to play again rather than ride the
-   first one out. */
-#item-box.charged #item-art { animation: item-charged 0.4s steps(3, end) 1; }
+#item-bar2 { position: absolute; inset: 0; background: #fff; opacity: .82; }
+#item-box:not(.ready) #item-art { opacity: .65; }
+#item-box.ready #item-name { color: var(--ui-white); }
+#item-box.spare #item-art { filter: brightness(1.18); }
+#item-box.charged #item-art { animation: item-charged .4s ease-out 1; }
 @keyframes item-charged {
-  0%   { transform: scale(1.22); filter: drop-shadow(2px 2px 0 var(--ink)) brightness(2.4); }
+  0% { transform: scale(1.12); filter: brightness(1.8); }
   100% { transform: none; }
 }
+
 /* AEGIS - THE SHIELD. Both damage sinks return in silence while the window is
    open, so without something around the screen five seconds of invulnerability
    look exactly like five seconds of not being shot at.
@@ -612,177 +384,68 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 /* The last second, so the player is told it is ending rather than discovering
    it by being hit. */
 #invuln-frame.ending { animation: blink 0.25s steps(1, end) infinite; }
-#ammo-line { display: flex; align-items: baseline; gap: calc(var(--u) * 2); }
-/* TWO DIGITS WIDE WHATEVER IS IN IT. tabular-nums keeps each glyph the same
-   width, but it cannot keep the COUNT of them the same - and a magazine
-   emptying goes 30, 9, 0, which narrowed this box by a digit and dragged the
-   whole ammo line right, in the middle of the reload the dial beside it exists
-   to make still. It grows past two digits for a magazine that has been upgraded
-   past 99, which is a change to the gun rather than something that happens
-   mid-reload. */
+#ammo-line { display: flex; align-items: baseline; gap: calc(12 * var(--h)); }
 #ammo-num {
-  font-size: 32px; color: #fff; line-height: 1;
-  text-shadow: 2px 2px 0 var(--ink);
-  font-variant-numeric: tabular-nums;
-  min-width: 2ch; text-align: right;
+  font-size: calc(40 * var(--h)); line-height: 1;
+  font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right;
 }
-/* RED FROM TEN ROUNDS DOWN, not from empty. Empty is the one number the player
-   does not need told - the gun has already stopped - and a warning that arrives
-   at zero is not a warning. Ten is about a second and a half of fire, which is
-   enough to break contact or start the reload on the player's own terms. */
-#ammo-num.low { color: var(--red); text-shadow: 2px 2px 0 var(--ink), 0 0 14px rgba(255, 59, 48, 0.6); }
-#ammo-res { font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 var(--ink); }
-/* RED BELOW ONE FULL MAGAZINE. Measured against the magazine rather than a flat
-   number because the magazine is what a reserve is FOR: the moment the reserve
-   can no longer refill the gun once is the moment the run is on a clock, and
-   that moment moves as the player takes magazine passive items. */
-#ammo-res.low  { color: var(--red); }
-#ammo-res.out  { color: var(--red); animation: blink 0.5s steps(1, end) infinite; }
-/* BRASS ECHO paying out. The reserve is a 12px number in the corner of the
-   screen and a refund moves it by one, which is invisible while the magazine
-   beside it is counting down - so the number itself flares gold for a moment.
-   Restarted from JS by removing and re-adding the class (see UI.flashReserve),
-   because a second refund inside the animation must play again rather than
-   ride the first one out. */
-#ammo-res.refund { animation: ammo-refund 0.42s ease-out 1; }
+#ammo-num.low, #ammo-res.low, #ammo-res.out { color: var(--hud-danger); }
+#ammo-res { font-size: calc(16 * var(--h)); color: var(--ui-muted); }
+#ammo-res.out { animation: blink .7s steps(1, end) infinite; }
+#ammo-res.refund { animation: ammo-refund .42s ease-out 1; }
 @keyframes ammo-refund {
-  0%   { color: var(--amber); transform: translateY(-3px) scale(1.35); }
-  100% { color: var(--dim); transform: none; }
+  0% { color: var(--ui-white); transform: translateY(-3px); }
+  100% { transform: none; }
 }
-/* ---- boss ---------------------------------------------------------------
-   The name plate OVERLAPS the bar's top edge rather than stacking above it,
-   which is what makes the two read as one instrument instead of two rows. */
-/* Its top edge sits on the SAME LINE as the wave and credit readouts, so the
-   three of them read as one instrument row across the top of the screen rather
-   than as a bar that floats at whatever height was left over. */
-#boss-bar {
-  position: absolute; top: calc(var(--u) * 5); left: 50%;
-  transform: translateX(-50%);
-  width: 46vw; max-width: 620px; min-width: 300px;
-  display: flex; flex-direction: column; align-items: center;
-  gap: calc(var(--u) * 2);
-  padding: calc(var(--u) * 8) calc(var(--u) * 4) calc(var(--u) * 2.5);
-  --edge: #8a4239;
-  pointer-events: none;
-}
-/* A TAB HANGING OFF THE TOP EDGE, not a plate straddling it: the frame is a
-   clip-path, and a clip-path crops anything that pokes outside it, so the name
-   is inset into the edge and chamfered on its lower corners only. */
-#boss-name {
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  z-index: 3;
-  font-size: 10px; letter-spacing: 0.16em; color: #ffd6c2;
-  background: #24151a;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px));
-  box-shadow: inset 0 -2px 0 var(--edge), inset 2px 0 0 var(--edge), inset -2px 0 0 var(--edge);
-  padding: 6px calc(var(--u) * 4) 7px;
-  white-space: nowrap;
-}
-#boss-hp-bg { width: 100%; height: calc(var(--u) * 4); --cells: 32; --gap: 3px; }
-#boss-hp {
-  background: #ff5a4d;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 90, 77, 0.5);
-}
-#boss-note {
-  font-size: 8px; letter-spacing: 0.22em; color: #93a0c0; min-height: 10px;
-}
-#boss-bar.vulnerable { --edge: var(--cyan); }
-#boss-bar.vulnerable #boss-name { color: var(--cyan); background: #0d2229; }
-#boss-bar.vulnerable #boss-hp {
-  background: var(--cyan);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 0 18px rgba(78, 243, 255, 0.7);
-}
-#boss-bar.vulnerable #boss-note { color: var(--cyan); }
-#boss-bar.enraged { --edge: #ff2d6f; }
-#boss-bar.enraged #boss-name { color: #ff2d6f; background: #260c19; }
-#boss-bar.enraged #boss-note { color: #ff2d6f; animation: blink 0.6s steps(1, end) infinite; }
 
-/* ---- buff chips ---------------------------------------------------------- */
+/* Boss colour and its note expose armour, vulnerability and enrage without
+   needing a heavy frame around the instrument. */
+#boss-bar {
+  position: relative; grid-column: 2; grid-row: 1; width: 100%; min-width: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(12 * var(--h)); background: none; clip-path: none;
+}
+#boss-bar::before { display: none; }
+#boss-name {
+  font-size: calc(14 * var(--h)); color: #ffd6c2;
+  letter-spacing: .04em; text-align: center; overflow-wrap: anywhere;
+}
+#boss-hp-bg { width: 100%; height: calc(6 * var(--h)); --cells: 32; --gap: 2px; }
+#boss-hp { background: #ff5a4d; }
+#boss-note { font-size: calc(12 * var(--h)); color: var(--ui-muted); text-align: center; min-height: 1.6em; }
+#boss-bar.vulnerable #boss-hp { background: var(--cyan); }
+#boss-bar.vulnerable #boss-name, #boss-bar.vulnerable #boss-note { color: var(--cyan); }
+#boss-bar.enraged #boss-hp { background: #ff2d6f; }
+#boss-bar.enraged #boss-name, #boss-bar.enraged #boss-note { color: #ff2d6f; }
+#boss-bar.enraged #boss-note { animation: blink .7s steps(1, end) infinite; }
+
+/* Wrapping keeps concurrent effects away from corner instruments. Hostile
+   effects carry a warning mark as well as a red timer. */
 #buffs {
-  position: fixed; left: 50%; bottom: calc(var(--u) * 43);
-  transform: translateX(-50%);
-  display: flex; gap: calc(var(--u) * 2);
-  pointer-events: none; z-index: 5;
+  display: flex; flex-wrap: wrap;
+  justify-content: center; gap: calc(8 * var(--h));
+  min-width: 0; pointer-events: none;
 }
 .buff-icon {
-  width: 44px; height: 44px;
-  position: relative;
-  clip-path: var(--cut-sm);
-  background: rgba(8, 10, 16, 0.9);
+  width: calc(48 * var(--h)); height: calc(52 * var(--h)); flex: none; position: relative;
   display: flex; align-items: center; justify-content: center;
-  /* --buff is the chip's theme colour, written by ui.js from the same value
-     the pickup's plate on the arena floor was drawn in. */
-  box-shadow: inset 0 0 0 2px var(--buff), 0 0 12px -2px var(--buff);
+  background: #101114b8; border: 1px solid var(--ui-line);
 }
-/* THE ART IS THE PICKUP'S OWN DRAWING, rendered flat to a canvas by
-   pixelIconCanvas() - see pixelicons.js. A chip and the thing on the floor it
-   stands for are the same 24x24. Untouched by this redesign. */
-.buff-icon .buff-art {
-  width: 28px; height: 28px;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 0 5px var(--buff));
-}
+.buff-icon .buff-art { width: calc(32 * var(--h)); height: calc(32 * var(--h)); image-rendering: pixelated; }
 .buff-icon .buff-timer {
-  position: absolute; bottom: 3px; left: 3px; right: 3px; height: 3px;
-  background: var(--buff);
-  transform-origin: left center; transform: scaleX(1);
+  position: absolute; bottom: 0; left: 0; right: 0; height: calc(3 * var(--h));
+  background: var(--buff); transform-origin: left center; transform: scaleX(1);
 }
-/* Remaining shield POINTS, over the chip: the timer says how long is left but
-   never how much, and the shield is spent by damage far more often than by
-   the clock. */
 .buff-icon .buff-label {
-  position: absolute; bottom: 7px; left: 0; right: 0;
-  font-size: 8px; text-align: center; color: #fff;
-  text-shadow: 1px 1px 0 var(--ink);
+  position: absolute; bottom: calc(5 * var(--h)); left: 0; right: 0;
+  font-size: calc(12 * var(--h)); text-align: center; color: var(--ui-white); text-shadow: 0 1px 3px #000;
 }
-
-/* ---- status chips ---------------------------------------------------------
-   The same chip, worn by something that is being done TO the player. Three
-   things separate it from a buff, and none of them is the art:
-
-     1. THE SILHOUETTE. Every other surface in this sheet cuts its corners at
-        45 degrees. This one is BITTEN - a notch out of the top edge and the
-        bottom - so a bad chip is bad from the corner of the eye, at the edge
-        of a fight, without the player parsing a 24x24 drawing to find out.
-     2. A red liner inside the effect's own colour, so the frame reads as a
-        warning while the icon keeps the colour of the thing that caused it.
-     3. A slow throb, on steps() like every other animation here. Two frames,
-        not a fade: nothing in this interface is allowed to be smooth. */
-.buff-icon.bad {
-  clip-path: polygon(
-    0 4px, 4px 0, 30% 0, 36% 5px, 64% 5px, 70% 0, calc(100% - 4px) 0, 100% 4px,
-    100% calc(100% - 4px), calc(100% - 4px) 100%, 70% 100%,
-    64% calc(100% - 5px), 36% calc(100% - 5px), 30% 100%, 4px 100%,
-    0 calc(100% - 4px)
-  );
-  background: rgba(20, 6, 10, 0.92);
-  /* The liner is the SECOND inset ring: the effect's 2px frame is painted over
-     the outer 2px of a 3px red one, leaving exactly a pixel of red inside it. */
-  box-shadow:
-    inset 0 0 0 2px var(--buff),
-    inset 0 0 0 3px rgba(255, 59, 48, 0.55),
-    0 0 12px -2px var(--buff);
-  animation: status-throb 1.1s steps(1, end) infinite;
+.buff-icon.bad { border-color: #ff3b3080; }
+.buff-icon.bad::after {
+  content: '!'; position: absolute; top: calc(2 * var(--h)); right: calc(3 * var(--h));
+  color: var(--hud-danger); font-size: calc(10 * var(--h));
 }
-/* The art keeps its own colour and its own glow - the frame is what says the
-   chip is hostile, and tinting six drawings red as well would collapse six
-   effects into one red smear. The TIMER is red, because a status running out
-   is the only good news on the chip. */
-.buff-icon.bad .buff-timer { background: var(--red); }
-@keyframes status-throb {
-  0%, 60% {
-    box-shadow:
-      inset 0 0 0 2px var(--buff),
-      inset 0 0 0 3px rgba(255, 59, 48, 0.55),
-      0 0 12px -2px var(--buff);
-  }
-  61%, 100% {
-    box-shadow:
-      inset 0 0 0 2px var(--buff),
-      inset 0 0 0 3px rgba(255, 59, 48, 0.9),
-      0 0 16px 0 var(--red);
-  }
-}
+.buff-icon.bad .buff-timer { background: var(--hud-danger); }
 
 /* =========================================================================
    FULL-SCREEN EFFECTS
@@ -927,49 +590,27 @@ body.hudblind #hitmarker { opacity: 0 !important; }
   100% { opacity: 0.6; background-position: 8px 8px, 0 0; }
 }
 
-/* Wave banner. It arrives in STEPS - four discrete scales rather than a
-   smooth ease - because a smoothly tweened word in a pixel interface is the
-   one thing that gives the whole illusion away. */
-#banner {
-  position: fixed; top: 20%; left: 0; right: 0; z-index: 7;
-  text-align: center; pointer-events: none;
-  font-size: 32px; letter-spacing: 0.08em;
-  color: #fff;
-  text-shadow: 4px 4px 0 var(--ink), 0 0 28px var(--cyan);
-  opacity: 0;
+/* Announcements use the menu hierarchy. CSS owns their finite lifetime so
+   successive waves can restart them without scheduling another timer. */
+#banner, #bannersub {
+  position: fixed; left: var(--hud-inset); right: var(--hud-inset); z-index: 7;
+  text-align: center; pointer-events: none; opacity: 0; text-shadow: 0 2px 6px #000b;
 }
-#banner.show { animation: banner 2.1s steps(1, end) forwards; }
-
-/* The block's theme, under the wave number. Smaller, wider tracked and in the
-   room's own cyan rather than white: it is a SUBTITLE, and at the banner's own
-   size two stacked words that big read as two banners fighting each other.
-   It rides the same keyframes so the pair arrive and leave as one thing. */
-#bannersub {
-  position: fixed; top: calc(20% + 40px); left: 0; right: 0; z-index: 7;
-  text-align: center; pointer-events: none;
-  font-size: 16px; letter-spacing: 0.34em;
-  color: var(--cyan);
-  text-shadow: 3px 3px 0 var(--ink), 0 0 22px var(--cyan);
-  opacity: 0;
-}
-#bannersub.show { animation: banner 2.1s steps(1, end) forwards; }
+#banner { top: 22%; font-size: calc(32 * var(--h)); color: var(--ui-white); }
+#bannersub { top: calc(22% + 64 * var(--h)); font-size: calc(14 * var(--h)); letter-spacing: .16em; color: var(--ui-muted); }
+#banner.show, #bannersub.show { animation: banner 2.1s ease-out forwards; }
 @keyframes banner {
-  0%   { opacity: 0; transform: scale(1.3); }
-  6%   { opacity: 1; transform: scale(1.16); }
-  10%  { opacity: 1; transform: scale(1.06); }
-  14%  { opacity: 1; transform: scale(1); }
-  74%  { opacity: 1; transform: scale(1); }
-  88%  { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1); }
+  0% { opacity: 0; transform: translateY(8px); }
+  10%, 74% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
 }
 
 /* ---- CRT ----------------------------------------------------------------
    Half of the effect. The other half is a post-process pass on the renderer
    (js/crt.js) which owns everything that has to sample the image: curvature,
    chromatic aberration, phosphor glow, grain. What is left here is what has
-   to cover the WHOLE DOCUMENT rather than just the canvas - the scanlines and
-   the bezel - because the HUD and the menus have to sit under the same grid
-   as the arena or the illusion is only skin deep.
+   to cover the arena and its HUD rather than just the canvas — the scanlines
+   and bezel. The common overlay makes the readouts part of the same display.
 
    The scanlines are the effect. A 1px line on a 3px pitch, and the layer is
    blended in OVERLAY rather than painted over the top. That blend mode is the
@@ -1062,59 +703,27 @@ body.reading #crt::after {
     linear-gradient(90deg,  rgba(0, 0, 0, 0.5) 0, transparent 2%, transparent 98%, rgba(0, 0, 0, 0.5) 100%);
 }
 
-/* ---- the hot seat -------------------------------------------------------
-
-   THE PASS CAPTION. Not an `.overlay`: there is no scrim, no plate and no
-   pause behind it. The arena stays lit and the two viewmodels swap underneath,
-   and this is the caption over that - so it sits ABOVE the banner (7) and
-   below the real menus (10), and never takes the cursor.
-
-   --pc is the player's colour, WRITTEN INLINE by UI.showHandoff from
-   PLAYER_INK. Everything tinted on this caption reads it, so the players are
-   told apart by one custom property rather than by four rules that could drift
-   apart - and by one that does not need a new stylesheet rule per seat. The
-   cyan below is only the fallback for a caption raised before anything has
-   written the property. */
+/* The handoff is still a live caption. Player colour stays on the controller
+   drawing while text takes the same calm hierarchy as the menus. */
 #handoff {
   position: fixed; inset: 0; z-index: 8;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: calc(var(--u) * 2);
-  text-align: center; pointer-events: none;
-  --pc: var(--cyan);
+  gap: calc(16 * var(--h)); padding: var(--hud-inset);
+  text-align: center; pointer-events: none; --pc: var(--cyan); text-shadow: 0 2px 6px #000b;
 }
-#handoff-lead {
-  font-size: 10px; letter-spacing: 0.28em; color: var(--dim);
-  text-shadow: 2px 2px 0 var(--ink);
-}
+#handoff-lead { font-size: calc(12 * var(--h)); letter-spacing: .12em; color: var(--ui-muted); }
 #handoff-icon { line-height: 0; color: var(--pc); }
-#handoff-who {
-  font-size: 32px; letter-spacing: 0.06em; color: var(--pc);
-  text-shadow: 4px 4px 0 var(--ink), 0 0 30px var(--pc);
-}
-/* THE STAKE. Gold rather than the player's colour: it is a fact about the
-   WAVE, not about who is holding the pad, and colouring it with the name would
-   fold the two readings into one. */
+#handoff-who { font-size: calc(32 * var(--h)); color: var(--pc); overflow-wrap: anywhere; max-width: 100%; }
 #handoff-stake {
-  font-size: 12px; letter-spacing: 0.22em; color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink);
+  font-size: calc(14 * var(--h)); letter-spacing: .08em; color: var(--gold);
+  padding-top: calc(16 * var(--h)); border-top: 1px solid var(--ui-line);
 }
-#handoff-count {
-  font-size: 56px; line-height: 1; margin-top: calc(var(--u) * 2);
-  color: #fff;
-  text-shadow: 4px 4px 0 var(--ink), 0 0 24px var(--pc);
-}
-/* One step per second, no easing - a cell changing on the tube, not a
-   countdown animating. Restarted from script on every tick. */
-#handoff-count.tick { animation: handoff-tick 0.9s steps(1, end) 1; }
-@keyframes handoff-tick {
-  0%   { transform: scale(1.2); }
-  10%  { transform: scale(1); }
-  100% { transform: scale(1); }
-}
+#handoff-count { font-size: calc(56 * var(--h)); line-height: 1; color: var(--ui-white); }
+#handoff-count.tick { animation: handoff-tick .9s ease-out 1; }
+@keyframes handoff-tick { 0% { opacity: .5; } 15%, 100% { opacity: 1; } }
 .gl-pad {
-  width: 92px; height: 61px; display: block; margin: 0 auto;
-  fill: none; stroke: currentColor; stroke-width: 1.1;
-  shape-rendering: crispEdges;
+  width: calc(92 * var(--h)); height: calc(61 * var(--h)); display: block; margin: 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.1; shape-rendering: crispEdges;
 }
 
 /* THE HUD LEAVING WITH ITS PLAYER. The two instrument clusters slide off the
@@ -1137,57 +746,65 @@ body.reading #crt::after {
    the reticle coming loose. */
 #hud.swap #crosshair { opacity: 0; transition: opacity 0.18s linear; }
 
-/* ---- station prompt ------------------------------------------------------ */
+/* Flat keycaps match Controls. Prompts wrap rather than cropping long item
+   names and prices when the player chooses an enlarged HUD. */
 #prompt {
-  position: fixed; left: 50%; top: calc(50% + 92px);
-  transform: translateX(-50%);
-  z-index: 6; pointer-events: none;
-  display: flex; align-items: center; gap: calc(var(--u) * 3);
-  padding: calc(var(--u) * 2.5) calc(var(--u) * 4);
-  --surface: rgba(6, 8, 13, 0.9);
-  font-size: 10px; letter-spacing: 0.1em; color: var(--text);
-  white-space: nowrap;
+  position: fixed; left: 50%; top: calc(50% + min(calc(72 * var(--h)), 8vh));
+  transform: translateX(-50%); z-index: 6; pointer-events: none;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: calc(12 * var(--h)); max-width: calc(100% - 2 * var(--hud-inset));
+  width: max-content; padding: calc(12 * var(--h)) calc(16 * var(--h));
+  background: #101114db; border: 1px solid var(--ui-line); clip-path: none;
+  font-size: calc(12 * var(--h)); color: var(--ui-white); text-align: center; text-shadow: none;
 }
-/* The key in the prompt is the same cap as the ones on the start screen: a
-   player who read the controls once should recognise the shape without
-   reading the letter. */
+#prompt::before { display: none; }
 #prompt b {
-  display: inline-block; min-width: calc(var(--u) * 6);
-  padding: 5px 7px 6px;
-  font-weight: 400; text-align: center;
-  background: #141a28; color: var(--cyan);
-  clip-path: var(--cut-sm);
-  box-shadow:
-    inset 0 0 0 2px #39445f,
-    inset 0 3px 0 rgba(255, 255, 255, 0.07),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.55);
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: calc(32 * var(--h)); min-height: calc(32 * var(--h));
+  padding: calc(6 * var(--h)); font-weight: 400;
+  background: #ffffff0d; border: 1px solid #ffffff50; color: var(--ui-white);
 }
+#prompt .gl { width: calc(16 * var(--h)); height: calc(16 * var(--h)); }
 #prompt .prompt-cost { color: var(--amber); }
-#prompt.blocked { opacity: 0.55; }
-#prompt.blocked b { background: #1a1d26; color: var(--dim); box-shadow: inset 0 0 0 2px #2b3348; }
+#prompt.blocked { color: var(--ui-muted); }
+#prompt.blocked b { border-color: var(--ui-line); color: var(--ui-muted); }
+#prompt.blocked .prompt-cost { color: var(--hud-danger); }
 
-/* =========================================================================
-   NARROW AND SHORT VIEWPORTS
-   The HUD is fixed-position furniture, so it does not reflow - it steps down
-   to a smaller set of sizes on the same grid.
-   ========================================================================= */
+/* Resolution cannot identify viewing distance: automatic TV/4K sizing is
+   paired with a saved multiplier for couch setups at any resolution. */
+@media (min-width: 1800px) and (min-height: 950px) {
+  :root { --hud-responsive: 1.25px; }
+}
+@media (min-width: 2800px) and (min-height: 1500px) {
+  :root { --hud-responsive: 2px; }
+}
 @media (max-width: 900px), (max-height: 700px) {
-  #handoff-count { font-size: 40px; }
-  #handoff-who { font-size: 22px; }
-  .gl-pad { width: 72px; height: 48px; }
-  #banner { font-size: 20px; }
-  #bannersub { font-size: 11px; top: calc(20% + 26px); }
-  #wave-num { font-size: 24px; }
-  #credit-num, #versus-tag { font-size: 16px; }
-  #ammo-num { font-size: 24px; }
-  #hp-box { width: 200px; }
+  :root {
+    --hud-responsive: .85px;
+    --h: min(calc(var(--hud-responsive) * var(--hud-scale)), 1px, calc(100vw / 720), calc(100vh / 560));
+  }
+  #hud-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #credit-box { grid-column: 2; grid-row: 1; }
+  #boss-bar { grid-column: 1 / -1; grid-row: 2; width: 82%; justify-self: center; }
+  #prompt { top: calc(50% + 24 * var(--h)); }
+  #banner { top: 30%; font-size: calc(24 * var(--h)); }
+  #bannersub { top: calc(30% + 48 * var(--h)); }
+}
+@media (max-width: 600px) {
+  #wave-num, #ammo-num { font-size: calc(28 * var(--h)); }
+  #credit-num { font-size: calc(24 * var(--h)); }
+  #hp-text, #ammo-res { font-size: calc(12 * var(--h)); }
+  #hud-bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #buffs {
+    position: absolute; left: 50%; bottom: calc(164 * var(--h));
+    transform: translateX(-50%); width: max-content; max-width: 80%;
+  }
 }
 
 /* A player who has asked the system to stop moving things gets a HUD that
    still blinks nothing. The interface loses no information: every blinking
    element also carries colour. */
 @media (prefers-reduced-motion: reduce) {
-  #banner.show,
   #hp-box.low #hp-text,
   #ammo-res.out,
   #fx-fire,
@@ -1198,7 +815,12 @@ body.reading #crt::after {
      switching its animation off would leave it stuck on the first hit - the
      exact bug the animation exists to fix. It loses the scale punch instead. */
   #hitmarker.show { animation: hitmark 0.2s steps(1, end) forwards; }
-  #banner.show { opacity: 1; }
+  /* A finite fade must still dismiss the notice; disabling it leaves a
+     permanent wave title. Reduced motion removes only spatial movement. */
+  #banner.show, #bannersub.show { animation: banner-still 2.1s linear forwards; }
+  #handoff-count.tick, #item-box.charged #item-art { animation: none; }
+  #hud-top, #hud-bottom, #buffs { transition: none; }
+  @keyframes banner-still { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 }
 
 /* =========================================================================
@@ -1239,4 +861,5 @@ body.pad-mode #game canvas { cursor: none; }
 /* A cap holding a word rather than a shape - L1, OPTIONS, L STICK. The pad has
    these printed on it, so the word IS the glyph. */
 .pad-cap.wide { font-size: 8px; letter-spacing: 0.08em; }
-#prompt b.pad-cap { padding: 6px 7px; }
+#prompt b.pad-cap { padding: calc(6 * var(--h)); }
+#prompt .pad-cap.wide { font-size: calc(12 * var(--h)); }

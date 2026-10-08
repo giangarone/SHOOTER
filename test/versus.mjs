@@ -327,15 +327,15 @@ try {
       'want ' + hex(g._cfg.themeColor) + ' got ' + (vsOpen && vsOpen[2]));
 
     // THE ELEMENT'S HALF, called directly so nothing overwrites it between the
-    // write and the read. A colour goes on; the next banner with no colour
-    // hands both colour and glow back to the stylesheet's cyan.
+    // write and the read. Theme colour goes on; the next plain banner returns
+    // to the neutral subtitle, with no coloured glow competing with the text.
     const paint = hex(g._cfg.themeColor);
     g.ui.banner('PROBE', 'SUB', paint);
     t('the sub takes a colour inline',
-      subEl.style.color === norm(paint) && subEl.style.textShadow !== '',
+      subEl.style.color === norm(paint) && subEl.style.textShadow === '',
       subEl.style.color + ' / ' + subEl.style.textShadow);
     g.ui.banner('PROBE', 'SUB');
-    t('and the next banner hands it back to cyan',
+    t('and the next banner returns to the neutral subtitle',
       subEl.style.color === '' && subEl.style.textShadow === '',
       subEl.style.color + ' / ' + subEl.style.textShadow);
     g.ui.banner = origBanner;

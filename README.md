@@ -1267,17 +1267,33 @@ controller vibration. Returning to the window requires deliberate resume.
   including bosses, can take short jumps onto reachable raised ground when
   that is the better route; fliers still cross low cover without using the
   ground route.
-- HUD: health, ammo, score, wave + enemies remaining
+- **Cohesive gameplay UI**: the HUD, boss instrument, buff and status chips,
+  station and item prompts, wave announcements and multiplayer handoff share
+  the menus' typography, open spacing and restrained surfaces. The top readouts
+  sit close to the screen edge, without dividers or extra top padding. Colour
+  identifies health, stamina, shields, credits, active-item charge, boss states
+  and player identity, alongside the authored item artwork. Health,
+  ammunition and credits use larger text, with margins that keep readouts off
+  the edges. Scanlines and the CRT bezel cover the HUD, prompts, announcements
+  and handoff captions as well as the arena, preserving the retro display.
+  The wave counter omits an
+  enemies-remaining caption; stamina is a bar without a label, and the vitals
+  group has no top divider.
+  HUD sizing adapts to desktop, 1080p TV and 4K viewports. **SETTINGS → AUDIO &
+  VISUAL → HUD SIZE** adds a saved 100%, 125%, 150% or 175% multiplier for
+  viewing from farther away; it also enlarges prompts, effects and announcements.
+  Short windows limit enlargement to keep the instruments inside the frame.
+  The aim reticle retains its exact relationship to the weapon's spread.
 - **Cinematic monochrome menus**, with the game's pixel typography and artwork
   over a translucent backdrop that keeps the arena and its lighting visible.
   The wide title screen balances the title, win streak and trophies on the left
   with navigation on the right. The same design covers pause, victory, game
   over, local multiplayer, Carrying and debug. Menus scale for laptops,
-  desktops and large TV displays; the player HUD keeps its original design.
+  desktops and large TV displays and share their palette with the gameplay UI.
   Carrying and debug use the same open layout, with wide margins and fine
-  dividers instead of a solid panel or boxed item cards. The title, pause and
-  victory screens, Carrying and debug omit the top and bottom bars to leave
-  more room for content. Debug keeps search visible while the catalogue scrolls;
+  dividers instead of a solid panel or boxed item cards. The title, pause,
+  death and victory screens, Carrying and debug omit the top and bottom bars
+  to leave more room for content. Debug keeps search visible while the catalogue scrolls;
   Carrying keeps passive items first and its active item visible below them
   during play.
   The title backdrop hides the first-person gun and smoothly cycles the accent

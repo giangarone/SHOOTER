@@ -490,6 +490,26 @@ try {
     g._openSettings();
     await frames(2);
     t('settings opens on Audio & Visual', g.ui.settingsCategory === 'general');
+    // Exercise the saved couch-size control through the same pad path as
+    // sensitivity, and verify it enlarges readouts without scaling the aim.
+    const hudRow = document.getElementById('hud-pips').closest('.stepper');
+    const label = document.getElementById('wave-label');
+    const labelSize = parseFloat(getComputedStyle(label).fontSize);
+    const reticleSize = getComputedStyle(g.ui.crosshair).width;
+    g.menu.focus(hudRow);
+    await tap(B.RIGHT);
+    t('right enlarges HUD text and retains focus', g._hudScale === 1.25
+      && parseFloat(getComputedStyle(label).fontSize) > labelSize
+      && g.menu.el === hudRow);
+    t('HUD size saves immediately without scaling the reticle',
+      localStorage.getItem('va-hud-scale') === '1.25'
+      && getComputedStyle(g.ui.crosshair).width === reticleSize);
+    await tap(B.LEFT);
+    t('left returns to the automatic base size', g._hudScale === 1 && g._hudDown.disabled);
+    for (let i = 0; i < 5; i++) await tap(B.RIGHT);
+    t('HUD enlargement stops at 175%', g._hudScale === 1.75 && g._hudUp.disabled);
+    await tap(B.LEFT);
+    await tap(B.LEFT);
     const controllerTab = document.getElementById('settings-tab-controller');
     t('a detected controller exposes its category', controllerTab.offsetParent !== null);
     g.menu.focus(controllerTab);
@@ -933,6 +953,74 @@ try {
   });
 
   for (const [name, cond, extra] of results) ok(name, cond, extra);
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction('window.__game && window.__game.ui');
+  ok('HUD size survives a fresh game load', await page.evaluate(() =>
+    window.__game._hudScale === 1.25 && document.getElementById('hud-val').textContent === '125%'));
+  await page.evaluate(() => window.__game.renderer.setAnimationLoop(null));
+  const fontSizes = [];
+  for (const [width, height] of [[1440, 900], [1920, 1080], [3840, 2160], [800, 600]]) {
+    await page.setViewport({ width, height });
+    const layout = await page.evaluate(() => {
+      const g = window.__game;
+      const ui = g.ui;
+      const $ = (id) => document.getElementById(id);
+      for (const overlay of document.querySelectorAll('.overlay')) overlay.classList.add('hidden');
+      ui.hud.classList.remove('hidden');
+      g._hudScale = 1;
+      g._applyHudScale();
+      const autoFont = parseFloat(getComputedStyle($('wave-label')).fontSize);
+      g._hudScale = 1.75;
+      g._applyHudScale();
+      ui.setWave(30);
+      ui.setCredits(1234567);
+      ui.setHealth(100, 100, 50);
+      ui.setBoss('THE SMOKING MIRROR', .7, 'VULNERABLE', 'vulnerable');
+      ui.setItem('itemHeal', { name: 'TRAUMA KIT', theme: 0x00e676, charge: 50 }, 1);
+      ui.setBuffs(.8, .6, .7, 50);
+      ui.setPrompt('<b>E</b> TAKE TRAUMA KIT <span class="prompt-cost">$120</span>', false);
+      ui.setCrosshair(13, false);
+      const rect = (id) => $(id).getBoundingClientRect();
+      const inFrame = ['wave-box', 'wave-num', 'credit-box', 'credit-num', 'hp-box', 'hp-text',
+        'ammo-box', 'ammo-num', 'ammo-res', 'item-name', 'boss-bar', 'boss-name', 'buffs', 'prompt']
+        .every((id) => { const r = rect(id); return r.width > 0 && r.height > 0
+          && r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1; });
+      const apart = (a, b) => { const x = rect(a), y = rect(b);
+        return x.right <= y.left || y.right <= x.left || x.bottom <= y.top || y.bottom <= x.top; };
+      return { autoFont, inFrame,
+        separate: apart('wave-box', 'boss-bar') && apart('credit-box', 'boss-bar')
+          && apart('hp-box', 'ammo-box') && apart('buffs', 'hp-box') && apart('buffs', 'ammo-box')
+          && apart('prompt', 'buffs') && apart('prompt', 'hp-box') && apart('prompt', 'ammo-box'),
+        reticle: rect('crosshair').width === 26
+          && rect('crosshair').left + 13 === innerWidth / 2
+          && rect('crosshair').top + 13 === innerHeight / 2
+          && ui.crosshair.style.getPropertyValue('--gap') === '13px',
+        retro: ['hud', 'prompt', 'banner', 'bannersub', 'handoff'].every((id) =>
+          +getComputedStyle($(id)).zIndex < +getComputedStyle($('scanlines')).zIndex)
+          && +getComputedStyle($('scanlines')).zIndex < +getComputedStyle($('crt')).zIndex,
+      };
+    });
+    fontSizes.push(layout.autoFont);
+    ok(`175% HUD fits ${width}×${height} with separate instruments and an accurate reticle`,
+      layout.inFrame && layout.separate && layout.reticle && layout.retro, JSON.stringify(layout));
+  }
+  ok('TV and 4K automatically enlarge HUD labels', fontSizes[1] > fontSizes[0]
+    && fontSizes[2] > fontSizes[1], fontSizes.join(' / '));
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await page.evaluate(() => window.__game.ui.banner('WAVE 30', 'VOID'));
+  await page.waitForFunction(() => {
+    const banner = document.getElementById('banner');
+    return banner.getAnimations().every((animation) => animation.playState === 'finished');
+  });
+  ok('reduced-motion announcements dismiss instead of covering the arena', await page.evaluate(() =>
+    getComputedStyle(document.getElementById('banner')).opacity === '0'
+    && getComputedStyle(document.getElementById('bannersub')).opacity === '0'));
+  await page.evaluate(() => localStorage.setItem('va-hud-scale', 'NaN'));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction('window.__game && window.__game.ui');
+  ok('a malformed saved HUD size falls back to 100%', await page.evaluate(() =>
+    window.__game._hudScale === 1 && document.documentElement.style.getPropertyValue('--hud-scale') === '1'));
   console.log('CONSOLE ERRORS', JSON.stringify(errors));
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } catch (err) {
