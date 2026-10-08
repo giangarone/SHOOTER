@@ -366,8 +366,6 @@
 .menu-ui .menu-dialog-card {
   width: min(100%, 720px);
   padding: 48px;
-  background: #101114;
-  border: 1px solid var(--menu-line);
 }
 
 .menu-ui .menu-dialog-card h1 {
@@ -577,10 +575,6 @@ body.pad-mode .menu-ui .controls-device.pad-now {
   display: contents;
 }
 
-.menu-ui .controls-help {
-  margin-bottom: 16px;
-}
-
 .menu-ui .control-group {
   min-width: 0;
 }
@@ -730,7 +724,7 @@ body.pad-seen .menu-ui p.pad-only {
 .menu-ui .inv-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 16px 48px;
+  gap: 0 24px;
   align-content: start;
 }
 
@@ -740,9 +734,9 @@ body.pad-seen .menu-ui p.pad-only {
 
 .menu-ui .inv {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 24px;
-  padding: 24px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--menu-line);
 }
 
@@ -760,7 +754,7 @@ body.pad-seen .menu-ui p.pad-only {
 
 .menu-ui .inv-name {
   font-size: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
@@ -855,7 +849,7 @@ body.pad-seen .menu-ui p.pad-only {
 
 .menu-ui .debug-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 16px 48px;
+  gap: 0 24px;
 }
 
 .menu-ui .dwave,
@@ -875,10 +869,10 @@ body.pad-seen .menu-ui p.pad-only {
 }
 
 .menu-ui .dtile {
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: 24px 8px;
+  padding: 12px 8px;
   gap: 24px;
   background: transparent;
   border-color: transparent;
@@ -1121,8 +1115,6 @@ body.pad-seen .menu-ui p.pad-only {
   .menu-ui .inv,
   .menu-ui .dtile {
     gap: 32px;
-    padding-top: 32px;
-    padding-bottom: 32px;
   }
 
   .menu-ui .inv-grid.one {
@@ -1220,12 +1212,6 @@ body.pad-seen .menu-ui p.pad-only {
   .menu-ui .stats-sec h3,
   .menu-ui .debug-sec h3 {
     margin-bottom: 16px;
-  }
-
-  .menu-ui .inv,
-  .menu-ui .dtile {
-    padding-top: 16px;
-    padding-bottom: 16px;
   }
 }
 
@@ -1334,7 +1320,7 @@ body.pad-seen .menu-ui p.pad-only {
 
   .menu-ui .inv-grid,
   .menu-ui .debug-grid {
-    gap: 12px 24px;
+    gap: 0 16px;
   }
 }
 

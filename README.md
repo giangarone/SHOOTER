@@ -1263,9 +1263,9 @@ context. The start screen says so, and one click anywhere fixes it.
   over, local multiplayer, Carrying and debug. Menus scale for laptops,
   desktops and large TV displays; the player HUD keeps its original design.
   Carrying and debug use the same open layout, with wide margins and fine
-  dividers instead of a solid panel or boxed item cards. The title and pause
-  screens, Carrying and debug omit the top and bottom bars to leave more room
-  for content. Debug keeps search visible while the catalogue scrolls;
+  dividers instead of a solid panel or boxed item cards. The title, pause and
+  victory screens, Carrying and debug omit the top and bottom bars to leave
+  more room for content. Debug keeps search visible while the catalogue scrolls;
   Carrying keeps passive items first and its active item visible below them
   during play.
   The title backdrop hides the first-person gun and smoothly cycles the accent
@@ -1288,7 +1288,8 @@ context. The start screen says so, and one click anywhere fixes it.
   to its opener. Transitions are short and respect reduced-motion preferences.
 - The pause screen also has **EXIT RUN**, which asks first: the white primary
   button keeps playing and the secondary action exits, so repeated confirmation
-  stays on the safe answer. Nothing is banked by leaving — a score reaches the board by dying with it.
+  stays on the safe answer. The dialog has no solid card background or border.
+  Nothing is banked by leaving — a score reaches the board by dying with it.
 - **Wave 30 is the win, in solo.** Clearing it parks the run on a YOU WON!
   screen: CONTINUE plays on past it, BACK TO MENU ends the run with the win
   kept. Every win banks +1 on the WIN STREAK shown on the title screen; dying
