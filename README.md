@@ -1256,7 +1256,8 @@ context. The start screen says so, and one click anywhere fixes it.
   that is the better route; fliers still cross low cover without using the
   ground route.
 - HUD: health, ammo, score, wave + enemies remaining
-- **Cinematic monochrome menus**, with the game's pixel typography and artwork.
+- **Cinematic monochrome menus**, with the game's pixel typography and artwork
+  over a translucent backdrop that keeps the arena and its lighting visible.
   The wide title screen balances the title, win streak and trophies on the left
   with navigation on the right. The same design covers pause, victory, game
   over, local multiplayer, Carrying and debug. Menus scale for laptops,
