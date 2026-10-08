@@ -337,13 +337,25 @@ One thing a browser will not let the game do: a gamepad press is not a "user
 gesture", so a player who never touches the mouse cannot start the audio
 context. The start screen says so, and one click anywhere fixes it.
 
+### Defeat and focus loss
+
+Solo defeat captures the results immediately and hides the gun. Over half a
+second, the camera falls to the surface below the player and tilts upward;
+the arena eases from normal speed to 30%. Monsters keep approaching and
+attacking the fallen position behind the results, with shots, effects and
+lighting running at that speed. The view keeps its colour. Damage, rewards,
+summoning and wave progression stop at defeat. The system's reduced-motion
+preference shows static results immediately without moving the camera.
+Restart restores normal play. Versus keeps its existing controller handoff.
+
+Losing window focus or hiding the tab pauses either input mode and stops
+controller vibration. Returning to the window requires deliberate resume.
+
 ## Features
 
 - First-person camera with pointer-lock mouse aiming
-- One move speed, always on. There is no sprint key: holding a button to travel
-  at the pace the game is tuned around was a tax rather than a decision, so the
-  slower walk is gone and everyone moves at what used to be sprint speed.
-  Accuracy still falls off while moving fast.
+- Walking, stamina-limited sprinting, toggle crouching and committed slides.
+  Sprinting trades the gun for speed; moving fast also costs accuracy.
 - Neon arena with walls, platforms, crates, and pillars (jumpable cover)
 - Enemies navigate around cover with a shared flow field (`js/nav.js`) instead
   of grinding into the nearest pillar
@@ -2642,10 +2654,9 @@ spent should not be rolled**, and a crate that banks max HP at a full bar can
 always be spent), which is why a run carrying it finds them everywhere even at
 full health.
 
-THIN BLOOD pays out of the WALLET and runs the wallet's balance on the same
-mirror `balance` already carries - the check is exact (only what credits can
-actually cover is diverted), and the shortfall lands as damage, which is what
-the card says happens. GLANCING BLOW sits at the door to the hit path, in front
+THIN BLOOD pays out of the live wallet on each direct hit or hazard tick.
+Only positive credits fund protection; debt provides none. Payment is settled
+before another hit can read the balance, and an unfunded shortfall lands as damage. GLANCING BLOW sits at the door to the hit path, in front
 of the ward and the counters a hit breaks, so a graze never spends anything:
 not the mantle, not Carnage, not the chain - "ignored entirely" is the card,
 and ignored it is.
@@ -2789,14 +2800,13 @@ cannot talk its way out of.
 **One slot, one button, no menu.** Everything else a run collects is a number
 folded into the stat block that then applies itself forever without being asked.
 An active item does nothing until it is fired, and firing it is a decision made
-at a particular second of a particular fight. `Q` on the keyboard, `L1` on the
-pad.
+at a particular second of a particular fight. `Q` on the keyboard, `R1` on the
+pad. Both can be rebound.
 
 Active items use the same worktree-safe layout: one file per item in
 `js/items/active/definitions/`, discovered by `js/items/active/index.js` with no
-central registry. A module owns its id, card data and behavior. New modules may
-also export their 24x24 `icon` rows beside the behavior, which avoids editing
-the legacy generated art catalogue when two branches add items in parallel.
+central registry. A module owns its id, card data and behavior. Every module exports its own 24x24 `icon` rows and theme colour beside the
+behavior, so independent item branches never edit a shared art catalogue.
 The carried slot is `player.activeItem`; charge and readiness use the
 `activeItem*` state and methods, while timed activations are owned by
 `RunningActiveItems`.
@@ -3117,32 +3127,15 @@ are untouched (see `DASH_TIME` in `player.js`). What changed is that it now
 competes with a heal and a panic button for the same slot. Double-tapping W still works, and
 does nothing unless BLINK DRIVE is what is carried.
 
-**None of the five is a new system.** The heal is the health pickup's sum, the
-freeze is the status every cryo round applies (so bosses downgrade it to a slow
-through the resistance they already carry), the damage window rides
-`damageBoostEnd`, and the invulnerability is `invulnEnd`, which both damage sinks
-already read as their first line. That last one needed the only new drawing in
-the set: both sinks return in silence, so without `#invuln-frame` five seconds of
-AEGIS look exactly like five seconds of not being shot at.
+**The mystery box is available every shop**, across the arena from the passive
+row. Credits buy a spin whose pool excludes the active item currently carried.
+The revealed item replaces the slot and arrives fully charged. Taking a passive
+item closes the shop, abandoning an unfinished box spin; rerolling the passive
+row leaves the shop and its other machines in place.
 
-**The pedestal comes up every third shop**, on the far side of the arena where
-the old row stood, with MAX HEALTH on its left and REROLL on its right. It is a
-COUNT and not a roll: the feature it replaced appeared on odds bought by clean
-waves, and the trouble with that is the run which most needs an answer is the one
-least likely to be offered one. An item is a tool, not a prize - the schedule is
-fixed, the player can see it coming, and planning a swap two shops ahead is a
-thing they are allowed to do. A reroll is not a new shop, so paying three times
-at one break does not walk the counter forward three places.
-
-**One offer, not three.** With a single slot to put it in, a row of three would
-ask the player to compare three things they can only have one of, at a wave
-break, having already picked a passive item - and the second and third would
-exist only to be walked past. The pedestal is a `Totem` with `kind: 'item'`,
-which changes exactly two things: an ACTIVE ITEM line above the name, and a
-second counter-spinning ring on the floor mark. Everything else about picking
-it up - the rise, the arm delay, the orbiting icon, the single invisible claim
-box - is the totem's, because the two are picked up identically and the pillar
-should not have to be relearned.
+Timed items use existing player windows or `RunningActiveItems`; deployed items
+use the arena's bounded deployable list. AEGIS protects against both direct hits
+and hazards, and its HUD frame stays visible throughout the granted window.
 
 Where a new passive item's hook goes, by what it reacts to:
 
@@ -3261,23 +3254,30 @@ When balancing, check damage per second *after* reloads, not per shot.
 
 ## Test
 
+Run the suites covering the system you changed:
+
 ```bash
-npm run test:all
+npm run test:newpool
+node test/all.mjs newpool
 ```
 
-Every suite, one after another, in about fifteen minutes. This is the gate, and
-CI runs it on every push and pull request. It reads the suite list from the
-directory rather than a list kept by hand, so a new suite is picked up the
-moment it lands; each gets a 300s cap (`TIMEOUT=600` to lengthen it), and the
-run ends with a pass/fail summary and a non-zero exit if anything failed. Pass
-a filter to narrow it: `node test/all.mjs tempest`.
+The runner discovers top-level suites from `test/`; shared exported fixtures
+live under `test/helpers/` and run through their owning suites. Each local
+suite has a 300s cap and reports named failures. A timeout is distinct from an
+assertion failure and should be investigated by running that suite alone.
+
+`npm run test:all` runs the complete set locally. CI runs it across four
+separate machines on pushes and pull requests; an agent on a CI runner should
+use targeted suites rather than launching the whole set on one machine.
 
 The suites need a Chrome on the machine, because `puppeteer-core` ships without
 one. `test/harness.mjs` finds it — `CHROME`, `CHROME_PATH` or
 `PUPPETEER_EXECUTABLE_PATH` if you set one, otherwise the usual macOS, Linux
 and Windows locations, and if none of them exist an error naming every path it
 tried. It also resolves the repo from its own location rather than the working
-directory, so `node test/boss.mjs` runs from anywhere.
+directory, so `node test/boss.mjs` runs from anywhere. Browser startup waits honor
+`NAV_TIMEOUT` (seconds, default 120), while individual browser calls use
+`PROTOCOL_TIMEOUT` (seconds, default 1200).
 
 ```bash
 npm test
@@ -3349,16 +3349,10 @@ only the last couple of metres behind the round are lit, that the burn stays
 warm (green never above red, blue never above green — cyan cannot pass), that
 the blast is born hot on its own frame with per-shot rolls, and that both
 pools drain. `test:active`
-covers the whole active item system and the pool merge that came with it: that
-the row rises on the third shop and no other, that a reroll is not a new shop,
-that an item arrives fully charged and that a second one replaces the first,
-that the pedestal never offers what is already carried, that kills fill the bar
-and neither wave time nor the shop fills anything while the button still works
-in both, that each of the five effects actually lands, that both consoles
-charge what they say, and that all eleven converted passive items are reachable
-on a free totem - a pick that is in the map, has a drawing, passes every other
-check and can still never be offered is the one failure nothing else would
-see. `test:crouch` covers the third movement gear
+covers active-item readiness, charging, timed effects and cleanup, and the
+mystery box's availability, carried-item exclusion and credit payments.
+`test:item-modules` discovers item-local mechanics and checks both development
+and generated Pages discovery. `test:crouch` covers the third movement gear
 and the swing: that the button latches a crouch and a second press releases it,
 that the same button at a sprint slides instead and that letting go does NOT
 end the slide, that a slide is faster than the run it came out of and ends
@@ -3401,7 +3395,6 @@ js/rig.js           the rave lighting rig: lights, beams, fixtures, looks, cues
 js/lasers.js        the laser bank: six wall-mounted fan projectors raking the
                     ceiling, and the choreography they do it with - the moves
                     and formations cast per phrase
-js/leaderboard.js   local top-ten table, stored in localStorage
 js/waves.js         wave difficulty config + the role schedule
 js/themes.js        the twenty-two themes, their six enemies each, and the run's deck
 js/items/discover.js           shared browser/Node directory discovery

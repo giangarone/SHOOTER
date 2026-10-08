@@ -37,4 +37,36 @@ export async function run({ page, check, id }) {
   check('Thin Blood with an empty wallet takes the hit',
     Math.abs(result.hpAfterBroke - (result.hp - 10)) < 1e-9
       && result.debtBroke === 0, JSON.stringify(result));
+  const ledger = await page.evaluate(() => {
+    const g = window.__game;
+    const prepare = (credits) => {
+      g.beginGame();
+      g.player.takePassiveItem('thinBlood');
+      g.credits = g.player.balance = credits;
+      return g.player;
+    };
+    let p = prepare(100);
+    g._hurtPlayerDot(20);
+    const dot = [p.health, g.credits];
+    p = prepare(40);
+    g._hurtPlayer(20, p.pos);
+    g._hurtPlayer(20, p.pos);
+    const repeated = [p.health, g.credits];
+    p = prepare(-100);
+    g._hurtPlayer(20, p.pos);
+    const debt = [p.health, g.credits, p.hpDebt];
+    p = prepare(10);
+    g._hurtPlayerDot(20);
+    const shortfall = [p.health, g.credits];
+    p.takePassiveItem('glancingBlow');
+    p.takeDamage(5, g.time);
+    const ignoredDebt = p.hpDebt;
+    g.beginGame();
+    return { dot, repeated, debt, shortfall, ignoredDebt };
+  });
+  check('Thin Blood pays hazard damage immediately', ledger.dot[0] === 84 && ledger.dot[1] === 60, JSON.stringify(ledger));
+  check('Thin Blood cannot spend the same credits twice in one frame', ledger.repeated[0] === 64 && ledger.repeated[1] === 0, JSON.stringify(ledger));
+  check('Thin Blood treats debt as an empty wallet', ledger.debt[0] === 80 && ledger.debt[1] === -100 && ledger.debt[2] === 0, JSON.stringify(ledger));
+  check('Thin Blood bills only funded protection and clears ignored debt', ledger.shortfall[0] === 81 && ledger.shortfall[1] === 0 && ledger.ignoredDebt === 0, JSON.stringify(ledger));
+
 }

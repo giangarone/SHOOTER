@@ -16,7 +16,7 @@
 // repeat scaling is covered too.
 //
 // Usage: node test/boss.mjs [waveList]
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8211;
 // A WAVE NO LONGER NAMES A BOSS. Which fight wave 5 is depends on which of
@@ -44,12 +44,12 @@ try {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
   // Wait on the game EXISTING, not on a clock: a runner shared with other
   // suites can take far longer than any fixed sleep to boot the page, and a
   // sleep that ran out read `__game` as undefined and crashed the suite
   // before a single assertion ran.
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
 
   // ---- weak point -----------------------------------------------------------
   // Checked before any fight, because it is the one boss bug that every

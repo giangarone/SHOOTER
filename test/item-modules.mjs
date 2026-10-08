@@ -5,7 +5,7 @@ import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { launchBrowser, ROOT, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, ROOT, sleep, startServer } from './harness.mjs';
 import { buildPages } from '../tools/build-pages.mjs';
 import { DONATION_ITEMS } from '../js/items/donation/index.js';
 
@@ -76,7 +76,7 @@ try {
     if (/\/js\/items\/(?:passive|active|donation)\/definitions\//.test(url)) directDefinitionRequests.push(url);
     if (/\/js\/items\/(?:passive|active|donation)\/modules\/[a-f0-9]{64}\.js$/.test(url)) opaqueModuleRequests.push(url);
   });
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
   await sleep(1500);
 
   const catalogue = await page.evaluate(() => ({
@@ -134,7 +134,7 @@ try {
     }
   });
   await pagesPage.goto(`http://127.0.0.1:${PAGES_PORT}/SHOOTER/?autotest`, {
-    waitUntil: 'load', timeout: 30000,
+    waitUntil: 'load', timeout: NAV_TIMEOUT,
   });
   await sleep(1500);
   const pagesCatalogue = await pagesPage.evaluate(() => ({

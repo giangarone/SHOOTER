@@ -321,7 +321,7 @@ export class DonationMachine {
 
   // Return the unfinished payment to Game as a forfeiture, exactly once.
   // Game records it BEFORE a versus snapshot; the furniture never owns a run.
-  dismiss() {
+  dismiss(immediate = false) {
     const forfeited = this.spinning;
     this.spinning = false;
     this.event = null;
@@ -329,6 +329,11 @@ export class DonationMachine {
     this.clearPending();
     if (this.state !== 'hidden') this.state = 'sinking';
     else this.displayGroup.visible = false;
+    if (immediate) {
+      this.state = 'hidden';
+      this.rise = 0;
+      this.group.visible = this.displayGroup.visible = false;
+    }
     return forfeited;
   }
 

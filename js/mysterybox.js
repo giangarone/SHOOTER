@@ -744,7 +744,7 @@ export class MysteryBox {
     this.group.visible = true;
   }
 
-  dismiss() {
+  dismiss(immediate = false) {
     if (this.riseState === 'hidden') return;
     this.riseState = 'sinking';
     // A SPIN IN PROGRESS IS ABANDONED, not finished on the way down. The shop
@@ -755,6 +755,12 @@ export class MysteryBox {
     this.state = 'idle';
     this.showing = null;
     this.returnT = 0;
+    if (immediate) {
+      this.riseState = 'hidden';
+      this.rise = 0;
+      this.group.visible = false;
+      this._swapIcon(null);
+    }
   }
 
   /**

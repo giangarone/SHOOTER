@@ -26,7 +26,7 @@
 //      blue<=green - cyan cannot pass), and the pool drains. The BLAST:
 //      born hot and fully visible on the shot's own frame, rolled per shot,
 //      pool drains.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8232;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -47,8 +47,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const g = window.__game;

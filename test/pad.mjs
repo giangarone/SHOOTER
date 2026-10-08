@@ -42,7 +42,7 @@
 //       and the start screen's sheet. CROSS/CIRCLE/OPTIONS cancel a capture
 //       rather than binding, DEFAULTS puts the shipped layout back, and the
 //       save is real: a fresh table reads it.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8212;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -94,8 +94,8 @@ try {
     });
   });
 
-  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.pad', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.pad', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const g = window.__game;
@@ -903,6 +903,31 @@ try {
     await frames(3);
     t('unplug pauses the run', g.state === 'paused', g.state);
     t('unplug hands back to keyboard', g.inputMode === 'kbm', g.inputMode);
+
+    pad.connected = true;
+    window.dispatchEvent(new Event('focus'));
+    g.beginGame();
+    g._setInputMode('pad');
+    pad.axes[1] = -1;
+    window.dispatchEvent(new Event('blur'));
+    const frozenTime = g.time;
+    await frames(5);
+    t('focus loss pauses controller play and freezes the clock', g.state === 'paused' && g.time === frozenTime);
+    set(B.OPTIONS, true);
+    window.dispatchEvent(new Event('focus'));
+    await frames(3);
+    t('focus return still requires deliberate resume', g.state === 'paused');
+    set(B.OPTIONS, false);
+    await frames(2);
+    const hidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    g.resume();
+    document.dispatchEvent(new Event('visibilitychange'));
+    t('a hidden document also pauses', g.state === 'paused');
+    if (hidden) Object.defineProperty(document, 'hidden', hidden);
+    else delete document.hidden;
+    window.dispatchEvent(new Event('focus'));
+    pad.axes[1] = 0;
 
     return out;
   });

@@ -4876,50 +4876,32 @@ export class Player {
     return landed;
   }
 
-  // Shield soaks damage first and fully - a hit that breaks the shield does
-  // not carry the remainder through to health. Returns remaining health.
-  takeDamage(d, time) {
-    const beforeHealth = this.health;
-    // CURSE, applied before the shield rather than after it: the effect says
-    // every source hurts 25% more, and a shield point is as much a thing the
-    // player has to spend as a health point is.
-    //
-    // Published as `lastDamageTaken` because this is the LAST place the number
-    // changes: main.js bills the run summary and the wave's damage total off
-    // what actually landed, and reading its own pre-curse figure would leave
-    // the summary quietly understating every cursed hit of the run.
+  // Preview before spending wards or triggering contact effects. Curse and
+  // the cap must agree with the value the health and shield layers receive.
+  damageAfterDefenses(d) {
     d *= this.statusTakenMult();
-    // CERAMIC INSERT, and it is the LAST word on what a hit costs - after
-    // curse, after the build's own multipliers, after an item window's. A cap
-    // applied any earlier could be multiplied back over by whatever came next,
-    // which is the one way a ceiling can fail to be a ceiling. Above the
-    // shield for the same reason curse is: a shield point is as much a thing
-    // the player has to spend as a health point is.
     if (this.mods.hitCap > 0) d = Math.min(d, this.maxHealth * this.mods.hitCap);
-    // GLANCING BLOW, and above the shield deliberately: the card says the hit
-    // is IGNORED, not absorbed, and a graze that had to be paid for out of a
-    // shield point would be a shield the player lost to a fly. The line is
-    // measured against the blow AFTER every multiplier has had its say - the
-    // "10 damage" on the card is what the hit is worth when it arrives, which
-    // is the only number the player can see. _hurtPlayer has the SAME check
-    // in front of the counters, so a graze broken off here also never breaks
-    // Carnage or the flawless streak - the ticket this method reads can only
-    // be a hit that was going to land.
-    if (this.mods.glancingBlow > 0 && d <= this.mods.glancingBlow) {
-      this.lastDamageTaken = 0;
-      return this.health;
-    }
-    // rate rather than off the bar - and it is paid from the TOP of the hit,
-    // so the credits take the graze and the health takes the rest. The
-    // balance is the frame's own mirror (see the HUD block in main.js), so
-    // the check is exact: only what the wallet can actually cover is
-    // diverted, and the shortfall lands as damage, which is what the card
-    // says happens. `hpDebt` is what main.js bills after this returns,
-    // because the player class does not own the credits.
+    if (this.mods.glancingBlow > 0 && d <= this.mods.glancingBlow) return 0;
+    return Math.max(0, d);
+  }
+
+  takeDamage(d, time) {
+    return this.takePreparedDamage(this.damageAfterDefenses(d), time);
+  }
+
+  // Game previews the same calculation before spending a ward or firing hit
+  // reactions. Prepared damage must not apply curse and the cap a second time.
+  takePreparedDamage(d, time) {
+    const beforeHealth = this.health;
+    this.lastDamageTaken = 0;
+    this.hpDebt = 0;
+    if (!(d > 0)) return this.health;
+    // The wallet funds only its positive balance. Game supplies fresh funds
+    // for each hit and settles hpDebt before another hit can spend them.
     if (this.mods.thinBlood > 0) {
       const cut = d * this.mods.thinBlood;
       const want = cut * this.mods.thinBloodRate;
-      const pay = Math.min(want, this.balance);
+      const pay = Math.min(want, Math.max(0, this.balance));
       this.hpDebt = pay;
       d -= pay / this.mods.thinBloodRate;
     } else {

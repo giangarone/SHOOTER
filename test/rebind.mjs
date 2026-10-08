@@ -28,7 +28,7 @@
 //      block of rows for the controller, and the input mode picks which one
 //      the eye gets - asserted here for the swap itself; the pad rows' own
 //      rebind behaviour is test/pad.mjs's, on a synthetic DualSense.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8245;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -52,8 +52,8 @@ try {
   // ?padtest hands out window.__game without a bot driving `input` - the same
   // harness the pad suite uses, because a keyboard rebind is the same kind of
   // seam: real key events, real game state.
-  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game', { timeout: NAV_TIMEOUT });
 
   const press = async (code, ms = 60) => {
     await page.keyboard.down(code);
@@ -318,7 +318,7 @@ try {
   // A REAL reload - same browser profile, same localStorage - must come up
   // with the rebind live.
   await page.reload({ waitUntil: 'load' });
-  await page.waitForFunction('window.__game && window.__game.keys', { timeout: 30000 });
+  await page.waitForFunction('window.__game && window.__game.keys', { timeout: NAV_TIMEOUT });
   const reloaded = await page.evaluate(async () => {
     const g = window.__game;
     g.state = 'playing';
@@ -557,6 +557,21 @@ try {
   });
   ok('the binding rows swap with the input mode', swapOk === true);
   await page.evaluate(() => window.__game._closeSubScreen());
+
+  const recovered = await page.evaluate(async () => {
+    const { Keybinds } = await import('./js/keybind.js');
+    const saved = localStorage.getItem('va-pad-keys');
+    localStorage.setItem('va-pad-keys', JSON.stringify({ jump: 'BOGUS' }));
+    const unknown = new Keybinds().padBtn('jump');
+    localStorage.setItem('va-pad-keys', JSON.stringify({ jump: 'square', reload: 'square', item: 'L1' }));
+    const keys = new Keybinds();
+    const names = Object.values(keys.padMap);
+    const result = { unknown, unique: new Set(names).size === names.length, item: keys.padBtn('activeItem') };
+    if (saved === null) localStorage.removeItem('va-pad-keys');
+    else localStorage.setItem('va-pad-keys', saved);
+    return result;
+  });
+  ok('corrupt controller saves recover playable bindings and retain the legacy alias', recovered.unknown === 'cross' && recovered.unique && recovered.item === 'L1', JSON.stringify(recovered));
 
   // Leave the store clean for whichever suite runs after this one.
   await page.evaluate(() => {

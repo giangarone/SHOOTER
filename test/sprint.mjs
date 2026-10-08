@@ -11,7 +11,7 @@
 //   5. Sprinting takes the gun out of the sights and widens the lens.
 //   6. The shot cone scales with LIVE SPEED - standing, walking and sprinting
 //      are three different guns - and the crosshair reads whichever it is.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8216;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -32,8 +32,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
-  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?padtest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const g = window.__game;

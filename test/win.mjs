@@ -185,6 +185,7 @@ try {
     const g = window.__game;
     // A fresh menu read: the shelf refreshes on every show, so no path can
     // serve a stale one.
+    if (g.state === 'dying') g._updateDeath(g._deathStart + 800);
     if (g.state === 'won') g._winToMenu();
     else if (g.state === 'gameover') { g._restartFromOver(); g.pause(); g._exitToMenu(); }
     else { if (g.state !== 'paused') g.pause(); g._exitToMenu(); }
@@ -292,6 +293,197 @@ try {
     return localStorage.getItem('va-best-streak');
   });
   check('versus never touches the best', vbest === '7', `best=${vbest}`);
+
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+  const death = await page.evaluate(async () => {
+    const g = window.__game;
+    g.renderer.setAnimationLoop(null);
+    const { Enemy, Projectile } = await import('./js/enemy.js');
+    const THREE = await import('three');
+    g.autoTest = true;
+    g.beginGame();
+    g.autoTest = false;
+    g._clearEntities();
+    g.player.pos.set(0, 0, 0);
+    g.player.pitch = g.player.yaw = 0;
+    g.waveState = 'active';
+    g.spawnTimer = 999;
+    const enemy = new Enemy('chaser', new THREE.Vector3(0, 0, -7), 1, 1, 1);
+    const shooter = new Enemy('shooter', new THREE.Vector3(7, 0, -7), 1, 1, 1);
+    for (const e of [enemy, shooter]) { g.scene.add(e.group); g.enemies.push(e); }
+    const shot = new Projectile(g.scene, g.effects.glowTex, -8, 1.7, 8,
+      new THREE.Vector3(10, 1.7, 8), 12, 5, 'herald');
+    g.projectiles.push(shot);
+    g._loop(g.last + 20);
+    g.autoTest = true;
+    g.kills = 7; g.credits = 123; g.player.health = 42;
+    g.player.mods.strayMercy = 1;
+    g.player.mods.donationTithe = 1;
+    g.queue.push('chaser');
+    const time = g.time;
+    const cameraY = g.camera.position.y;
+    const enemyPos = enemy.pos.clone();
+    const shotLife = shot.life;
+    const hp = g.player.health;
+    const playerPos = g.player.pos.clone();
+    const playerVel = g.player.vel.clone();
+    const stats = JSON.stringify(g.stats);
+    g.gameOver();
+    const start = g._deathStart;
+    let attempts = 0;
+    g._deathScene.enemyContext.onHitPlayer = () => { attempts++; };
+    const entered = g.state === 'dying' && g.ui.overOv.classList.contains('hidden') && !g.player.gun.visible;
+    const rigTime = g.rig.t;
+    const spark = g.effects.sparks.life.findIndex(l => l > 0);
+    const sparkLife = g.effects.sparks.life[spark];
+    const travel = [];
+    let lastX = shot.pos.x;
+    for (let ms = 50; ms <= 450; ms += 50) {
+      g._loop(start + ms);
+      travel.push(shot.pos.x - lastX);
+      lastX = shot.pos.x;
+    }
+    g._loop(start + 499);
+    const held = g.state === 'dying';
+    g._loop(start + 500);
+    travel.push(shot.pos.x - lastX);
+    const finished = g.state === 'gameover' && !g.ui.overOv.classList.contains('hidden');
+    const summary = g.ui.overStats.textContent;
+    const fallen = Math.abs(g.camera.position.y - 0.24) < 1e-6 && g.camera.position.y < cameraY
+      && g.camera.getWorldDirection(new THREE.Vector3()).y > 0.8 && !g.player.gun.visible;
+    const cameraPos = g.camera.position.clone();
+    const cameraRot = g.camera.quaternion.clone();
+    const colour = g.crt._composite.uniforms.uMono.value === 0;
+    const actualMovement = enemy.pos.distanceTo(enemyPos) > 0.5;
+    const sharedClock = Math.abs(g.rig.t - rigTime - 0.325) < 1e-6
+      && Math.abs(sparkLife - g.effects.sparks.life[spark] - 0.325) < 1e-5
+      && Math.abs(shotLife - shot.life - 0.325) < 1e-6;
+    const endX = shot.pos.x;
+    const endRig = g.rig.t;
+    for (let ms = 550; ms <= 1000; ms += 50) g._loop(start + ms);
+    const continuing = Math.abs(shot.pos.x - endX - 1.8) < 1e-6
+      && Math.abs(g.rig.t - endRig - 0.15) < 1e-6;
+    // Drive the same background update without paying for hundreds of renders.
+    for (let i = 0; i < 300; i++) {
+      const step = g._updateDeath(g.last + 50, 0.05);
+      g.last += 50;
+      g.effects.update(step, g.camera);
+    }
+    const bodySpace = Math.hypot(enemy.pos.x, enemy.pos.z) >= enemy.radius + 0.39;
+    enemy.takeDamage(enemy.hp + 1, true);
+    g._deathScene.step(0.015);
+    const finalFrozen = g.time === time && g.kills === 7 && g.credits === 123
+      && g.player.health === hp && g.player.pos.equals(playerPos) && g.player.vel.equals(playerVel)
+      && JSON.stringify(g.stats) === stats && g.queue.length === 1 && g.wave === 0
+      && g.ui.overStats.textContent === summary;
+    const cameraResting = g.camera.position.equals(cameraPos) && g.camera.quaternion.equals(cameraRot);
+    g.beginGame();
+    const reset = g._deathStart === null && g._deathScene === null
+      && g.player.gun.visible && g.camera.position.y > 1
+      && Math.abs(g.camera.getWorldDirection(new THREE.Vector3()).y) < 0.01
+      && g.effects.sparks.alive === 0 && g.effects.impacts.alive === 0
+      && g.effects.tracers.every(t => t.life === 0 && t.anchor === null)
+      && g.effects.shakeAmp === 0;
+    const totals = [];
+    for (const step of [16, 33, 50]) {
+      g.beginGame();
+      g.gameOver();
+      const t = g.rig.t;
+      const begin = g._deathStart;
+      for (let ms = step; ms < 1500; ms += step) g._loop(begin + ms);
+      g._loop(begin + 1500);
+      totals.push(g.rig.t - t);
+    }
+    g.beginGame();
+    const platform = new THREE.Box3(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 3, 2));
+    g.arena.obstacles.push(platform);
+    g.player.pos.set(0, 3, 0);
+    g.player.applyCamera();
+    g.gameOver();
+    g._updateDeath(g._deathStart + 500);
+    const supported = Math.abs(g.camera.position.y - 3.24) < 1e-6;
+    g.arena.obstacles.splice(g.arena.obstacles.indexOf(platform), 1);
+    g.beginGame();
+    g.crt.setMono(true);
+    g.gameOver();
+    g._loop(g._deathStart + 500);
+    const grayMatter = g.crt._composite.uniforms.uMono.value === 1;
+    g.crt.setMono(false);
+    g.beginGame();
+    return { entered, held, finished, fallen, cameraResting, colour, actualMovement,
+      sharedClock, continuing, travel, summary, reset, totals, grayMatter, finalFrozen,
+      attempts, supported, bodySpace };
+  });
+  check('solo death falls for half a second and immediately hides the gun', death.entered && death.held && death.finished && death.fallen, JSON.stringify(death));
+  check('monsters keep attacking while leaving the fallen camera clear', death.actualMovement && death.attempts > 0 && death.bodySpace, `attempts=${death.attempts}`);
+  check('the arena slows progressively and stays live at 30%', death.travel[0] > 0.58
+    && death.travel.every((d, i) => d > 0 && (!i || d < death.travel[i - 1])) && death.continuing, JSON.stringify(death));
+  check('shots, effects and lighting share the clock at every frame rate', death.sharedClock
+    && death.totals.every(t => Math.abs(t - 0.625) < 1e-6), JSON.stringify(death));
+  check('the resting camera looks upward and lands on the supporting surface', death.cameraResting && death.supported);
+  check('the scene keeps its colour and Gray Matter still works', death.colour && death.grayMatter);
+  check('damage, rewards, waves and results stay frozen during background attacks', death.finalFrozen && death.summary.includes('$123'), JSON.stringify(death));
+  check('restart restores the camera and gun and clears death effects', death.reset);
+
+  const themes = await page.evaluate(async () => {
+    const g = window.__game;
+    const { THEMES } = await import('./js/themes.js');
+    const { Enemy } = await import('./js/enemy.js');
+    const THREE = await import('three');
+    const results = [];
+    const allThemes = Object.values(THEMES);
+    // Every theme runs its real AI against the fallen target, including bosses
+    // that summon allies or write directly to a player's velocity.
+    for (const theme of allThemes) {
+      g.beginGame();
+      g.waveState = 'active';
+      g.player.pos.set(0, 0, 0);
+      const types = [...Object.values(theme.roles), theme.boss];
+      for (let i = 0; i < types.length; i++) {
+        const at = new THREE.Vector3(Math.sin(i) * 8, 0, -5 - Math.cos(i) * 4);
+        const e = new Enemy(types[i], at, 1, 1, 1);
+        if (i === types.length - 1) e.hp = e.maxHp * 0.2;
+        g.scene.add(e.group);
+        g.enemies.push(e);
+      }
+      const hp = g.player.health;
+      const vel = g.player.vel.clone();
+      const time = g.time;
+      g.gameOver();
+      let ok = true;
+      try {
+        for (let frame = 0; frame < 400; frame++) {
+          g._deathScene.step(0.05);
+          g.effects.update(0.05, g.camera);
+          ok &&= g.enemies.length <= types.length && g.projectiles.length <= 64;
+        }
+        ok &&= g.player.health === hp && g.player.vel.equals(vel)
+          && g.time === time && g.kills === 0 && g.credits === 0;
+      } catch (error) { results.push({ theme: theme.name, error: error.message }); ok = false; }
+      g.beginGame();
+      ok &&= g.effects.marks.every(m => !m.used) && g.effects.creep.every(c => !c.used)
+        && g.effects.clouds.every(c => !c.used);
+      if (!ok && !results.some(r => r.theme === theme.name)) results.push({ theme: theme.name });
+    }
+    return { count: allThemes.length, failures: results };
+  });
+  check('every theme survives a long death background without growth, rewards or pool leaks', themes.failures.length === 0, JSON.stringify(themes));
+
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  const reduced = await page.evaluate(() => {
+    const g = window.__game;
+    g.beginGame();
+    const pos = g.camera.position.clone();
+    const rot = g.camera.quaternion.clone();
+    const t = g.rig.t;
+    g.gameOver();
+    g._loop(g.last + 50);
+    const ok = g.state === 'gameover' && g._deathStart === null && g.camera.position.equals(pos)
+      && g.camera.quaternion.equals(rot) && g.rig.t === t && !g.player.gun.visible;
+    g.renderer.setAnimationLoop((now) => g._loop(now));
+    return ok;
+  });
+  check('reduced motion shows static results immediately without moving the camera', reduced);
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

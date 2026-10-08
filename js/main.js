@@ -2,7 +2,7 @@
 // lists, and the frame loop. Every other module is a leaf: they never call
 // back into here except through the callbacks in the ctx objects below.
 //
-// STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'gameover' -> 'playing'
+// STATE MACHINE: 'menu' -> 'playing' <-> 'paused' -> 'dying' -> 'gameover' -> 'playing'
 // The win is a pause off the same run: 'playing' -> 'won' -> 'playing' (or to
 // 'menu' with the streak kept). Only 'playing' simulates. The loop still runs
 // and renders in every state,
@@ -77,6 +77,7 @@ import { SFX } from './sfx.js';
 import { Music } from './music.js';
 import { Magpie, Lamprey, MarshToad, RubberChicken, Parrot, PackRat, Ferryman } from './companions.js';
 import { Rig } from './rig.js';
+import { DeathScene } from './death.js';
 import { waveConfig, bossScale, pickAddType, WIN_WAVE } from './waves.js';
 import { TROPHIES } from './trophies.js';
 import { THEMES } from './themes.js';
@@ -1548,6 +1549,9 @@ class Game {
     this._loadPadPrefs();
 
     this.state = 'menu';
+    this._deathStart = null;
+    this._deathScene = null;
+    this._deathSummary = null;
     this.kills = 0;
     this.credits = 0;
     this.comboKills = 0;
@@ -1867,7 +1871,7 @@ class Game {
     // with the activation.
     this._lavaCreep = [];
     this._lavaT = 0;
-    // ACTIVE ITEMS THAT ARE STILL RUNNING. Fifteen of the sixty-six do not
+    // ACTIVE ITEMS THAT ARE STILL RUNNING. Timed activations do not
     // finish on the frame they are pressed; this is the list that ticks them
     // and, more importantly, the list that ENDS them. See RunningActiveItems.
     this.runningActiveItems = new RunningActiveItems();
@@ -2082,6 +2086,8 @@ class Game {
     // melee, fire, poison, mines, sentries, thorns, blasts and every item at
     // the same time - see setDamageSink in enemy.js.
     setDamageSink((pos, dealt, crit, head) => {
+      // Background attacks must not turn a finished run into more income.
+      if (this._deathSummary) return;
       if (dealt > 0) this.effects.damageNumber(pos, dealt, crit, head);
       // TITHING BLADE. The sink is the one place every point of damage in the
       // game passes through - bullets, blasts, ticks, turrets - so the tithe
@@ -2357,12 +2363,21 @@ class Game {
     addEventListener('keyup', onKeyUp);
     // Losing focus mid-key would otherwise leave the player running forever,
     // or reading a stat panel it can no longer be told to close.
-    addEventListener('blur', () => {
+    const loseFocus = () => {
+      this._focusLost = true;
+      this.pause();
       this._clearInput();
       this._closeStats();
-      // A pad keeps buzzing while the tab is in the background, which is the
-      // one piece of this game that can follow the player out of it.
       this.pad.stopRumble();
+      this.pad.consumeAll();
+    };
+    addEventListener('blur', loseFocus);
+    addEventListener('focus', () => {
+      this._focusLost = false;
+      this._padFocusSync = true;
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) loseFocus();
     });
     canvas.addEventListener('mousedown', (e) => {
       this._setInputMode('kbm');
@@ -3127,9 +3142,14 @@ class Game {
   _padUpdate(dt) {
     // The bot drives `input` directly and must never have it written out from
     // under it by a pad someone left plugged into the test machine.
-    if (this.autoTest) return;
+    if (this.autoTest || this._focusLost || document.hidden) return;
     const pad = this.pad;
     pad.poll(dt);
+    if (this._padFocusSync) {
+      // A button pressed in another window is not a resume request here.
+      pad.consumeAll();
+      this._padFocusSync = false;
+    }
     if (pad.justConnected) {
       // Never taken off again. The settings rows stay reachable for the rest
       // of the session even if the pad is unplugged, which is where a player
@@ -3909,7 +3929,7 @@ class Game {
     // THE MYSTERY BOX IS NOT IN HERE. It carries its own light - three halos
     // and a beam - and it is never the only thing standing, so the rig has the
     // totem row to straddle whenever there is a wave break at all.
-    const row = this.totemArea.active ? this.totemArea.totems : null;
+    const row = this.state !== 'menu' && this.totemArea.active ? this.totemArea.totems : null;
     if (!row) return;
     for (const t of row) {
       if (t.state === 'hidden' || t.claimed || !t.offer) continue;
@@ -3984,6 +4004,9 @@ class Game {
   // changes during play must be reset here, including the spawn timers -
   // leftover state used to carry into the next run.
   beginGame(mode = 'solo', count = 2) {
+    this._deathStart = null;
+    this._deathScene = null;
+    this._deathSummary = null;
     this._audioGesture();
     this.mode = mode;
     // VERSUS IS A MATCH, NOT A RUN. The wave counter below is still the one
@@ -3992,6 +4015,7 @@ class Game {
     this.match = mode === 'versus' ? new VersusMatch(count) : null;
     this.player.reset();
     this._clearEntities();
+    this.effects.clearTransient();
     // A NEW DEAL EVERY RUN. The terrain seed is deliberately kept for the
     // session - a player learning the arena should be able to - but the theme
     // order is the thing a run varies by, so it is re-rolled here.
@@ -4008,9 +4032,9 @@ class Game {
     this._pass = false;
     this._swapped = false;
     this._winClaimed = false;
-    this.totemArea.dismiss();
-    this.mysteryBox.dismiss();
-    this.donationMachine.dismiss();
+    this.totemArea.dismiss(true);
+    this.mysteryBox.dismiss(true);
+    this.donationMachine.dismiss(true);
     this.wave = 0;
     this.queue.length = 0;
     this._pendingBuffs.length = 0;
@@ -4026,6 +4050,8 @@ class Game {
     this.stats.damaged = 0;
     this.state = 'playing';
     this._clearInput();
+    this.player.applyCamera();
+    this.player.gun.visible = true;
     this.ui.resetCache();
     this.ui.showHud();
     if (this.match) {
@@ -4080,13 +4106,13 @@ class Game {
    * the death screen is drawn over the room as it fell, and sweeping the row
    * from under it would rearrange the scene between the hit and the screen.
    */
-  _leaveRun({ dismissRow = true } = {}) {
+  _leaveRun({ dismissRow = true, immediate = false } = {}) {
     this._clearInput();
     this._closeStats();
     if (dismissRow) {
-      this.totemArea.dismiss();
-      this.mysteryBox.dismiss();
-      this._dismissDonationMachine();
+      this.totemArea.dismiss(immediate);
+      this.mysteryBox.dismiss(immediate);
+      this._dismissDonationMachine(immediate);
     }
     this.ui.setPrompt(null, false);
     this._pass = false;
@@ -4115,6 +4141,9 @@ class Game {
     if (!this.match && !this._winClaimed) setWinStreak(0);
     this._closeSubScreen();
     this.state = 'menu';
+    this._deathStart = null;
+    this._deathScene = null;
+    this._deathSummary = null;
     this.pad.stopRumble();
     // A MATCH ENDS WITH THE RUN THAT WAS ABANDONED. There is no half a versus
     // match to come back to: the slots are one run seen N times, and the
@@ -4123,7 +4152,7 @@ class Game {
     this.match = null;
     this.ui.setVersus(null);
     this.player.setPlayerTag(null);
-    this._leaveRun();
+    this._leaveRun({ immediate: true });
     this._clearEntities();
     this._resetTerrain();
     this.queue.length = 0;
@@ -4286,7 +4315,7 @@ class Game {
     // but _leaveRun clears the flags anyway so the screen can never be
     // reached with a half-swung weapon or a slid-out HUD still owed an
     // animation.
-    this._leaveRun();
+    this._leaveRun({ immediate: true });
     this._clearEntities();
     this.rig.setEnraged(false);
     this.sfx.passiveItem();
@@ -5716,7 +5745,7 @@ class Game {
   }
 
   gameOver() {
-    if (this.state === 'gameover') return;
+    if (this.state === 'gameover' || this.state === 'dying') return;
     // VERSUS HAS NO GAME OVER, only a lost wave. Branched here rather than at
     // the three places that reach it - the health test in the loop, the last
     // point of a hit, the last tick of a pool - so there is exactly one door
@@ -5725,33 +5754,51 @@ class Game {
     // A solo run that never won ends the streak. After the win it is already
     // banked and a later death cannot take it back.
     if (!this._winClaimed) { setWinStreak(0); this.ui.setWinStreak(0); }
-    this.state = 'gameover';
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this._deathScene = new DeathScene(this, reduced);
+    this.state = reduced ? 'gameover' : 'dying';
+    this._deathStart = reduced ? null : this.last;
+    const st = this.stats;
+    const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
+    this._deathSummary = { wave: this.wave, kills: this.kills,
+      accuracy: acc + '%', credits: Math.floor(this.credits) };
     // The room stays standing - the screen is drawn OVER the arena as it fell,
     // row and all, so the row is not dismissed here (see _leaveRun).
     this._leaveRun({ dismissRow: false });
+    this.player.gun.visible = false;
     const eye = this.player.eyeInto(this._killPos);
     this.effects.burst(eye, 0x4ef3ff, 40, 6, 3, 0.9);
     this.comboKills = 0;
     this.comboTimer = 0;
     this.ui.setBoss(null, 0, '', '');
-    // The boss keeps its telegraphs until it is disposed, and on the game-over
-    // screen it never is - release them with the fight.
-    if (this.bossFight) {
-      for (const p of this.bossFight.parts) {
-        const def = ENEMY_TYPES[p.type];
-        if (def.cleanup) def.cleanup(p);
-      }
-      this.bossFight = null;
-    }
+    // Boss AI keeps its live telegraphs; restart disposes their owners.
+    this.bossFight = null;
     this._clearHazards();
-    const st = this.stats;
-    const acc = st.shotsFired > 0 ? Math.round((st.hits / st.shotsFired) * 100) : 0;
-    this.ui.showOver(this.wave, this.kills, acc + '%', Math.floor(this.credits));
+    this._clearCompanions();
+    setShareHook(null);
+    this._shareOn = false;
+    this.pad.consumeAll();
+    if (reduced) this._showDeathResults();
+    else this.ui.showDeath();
     // The heaviest the sound goes. This is the run ending, not a body.
     this.sfx.death(1.2);
     // And the heaviest the pad goes, at a priority nothing else in the game
     // uses - there is nothing left that could need to interrupt it.
     this.pad.rumble(1, 0.8, 700, 4);
+  }
+
+  _showDeathResults() {
+    const summary = this._deathSummary;
+    this.state = 'gameover';
+    this.ui.showOver(summary.wave, summary.kills, summary.accuracy, summary.credits);
+    this.pad.consumeAll();
+  }
+
+  _updateDeath(now, dt) {
+    const step = this._deathScene.update(now, dt);
+    if (step > 0) this._deathScene.step(step);
+    if (this.state === 'dying' && this._deathScene.complete) this._showDeathResults();
+    return step;
   }
 
   // THE WIN. Solo only, called once per run off the wave-30 clear. Banks +1
@@ -8532,10 +8579,49 @@ class Game {
     );
   }
 
-  // Single entry point for all damage to the player, passed to enemies and
-  // projectiles through their ctx. `pos` is only used to place the hit spray.
+  // Payment is settled before another hit can read the wallet. Direct hits
+  // and hazards share accounting, while wards and contact reactions stay local.
+  _applyPlayerDamage(d) {
+    const p = this.player;
+    p.balance = this.credits;
+    const health = p.takePreparedDamage(d, this.time);
+    if (p.hpDebt > 0) {
+      this.credits -= p.hpDebt;
+      this._creditsDirty = true;
+      this.effects.burst(p.eyeInto(this._killPos), 0xffd600, 6, 2.5, 1.6, 0.25);
+    }
+    p.balance = this.credits;
+    if (!(p.lastDamageTaken > 0)) return health;
+    p.clearCarnage();
+    p.cleanKills = 0;
+    p.goldKills = 0;
+    if (p.mods.gracePeriod > 0) {
+      p.invulnEnd = Math.max(p.invulnEnd, this.time + p.mods.gracePeriod);
+      this.effects.shockwave(p.pos, 0xe8f5ff, 3.2, 0.35);
+    }
+    if (p.deadSwitchFx) this._deadMansSwitch();
+    this._noteDamage();
+    p.balance = this.credits;
+    return health;
+  }
+
+  _revivePlayer() {
+    const p = this.player;
+    if (p.livesUsed >= p.mods.extraLives) return;
+    p.livesUsed++;
+    p.health = 1;
+    p.shield = 40;
+    p.shieldEnd = this.time + 3;
+    this.effects.shockwave(p.pos, 0xff2d6f, 6, 0.5);
+    this.effects.burst(p.eyeInto(this._killPos), 0xff2d6f, 40, 7, 3, 0.9);
+    this.ui.banner('NINE LIVES');
+  }
+
+  // Direct attacks retain wards, dodges and contact reactions; hazards use
+  // their own entry below. Both settle through _applyPlayerDamage.
   _hurtPlayer(d, pos, source = null) {
     if (this.state !== 'playing') return;
+    this.player.lastDamageTaken = this.player.hpDebt = 0;
     // NOBODY IS HURT DURING A HANDOFF, and this is a rule about who is holding
     // the controller rather than about damage.
     //
@@ -8569,18 +8655,10 @@ class Game {
       this.ui.banner('DODGE');
       return;
     }
-    // GLANCING BLOW, above the ward and the throttle of bests either way: a
-    // graze never lands at all, so every counter that breaks on contact -
-    // Carnage, the flawless streak, KILL STREAK's clean count, the ward the
-    // player spent - must not fire, and the ward must not be spent on a hit
-    // the pick swallowed. "Ignored entirely" is the card, and ignored it is.
-    // The number is the blow after every multiplier but before curse (the one
-    // thing the ward checks too): small enough here, means small enough there.
-    if (this.player.mods.glancingBlow > 0
-      && d * this.player.incomingMult * this.player.itemTakenMult
-        <= this.player.mods.glancingBlow) {
-      // A blocked hit uses the armour family's cyan, independent of either
-      // item's offer colour.
+    d = this.player.damageAfterDefenses(
+      d * this.player.incomingMult * this.player.itemTakenMult
+    );
+    if (!(d > 0)) {
       this.effects.burst(pos, 0x80deea, 4, 3, 1.6, 0.2);
       return;
     }
@@ -8597,45 +8675,9 @@ class Game {
       this.ui.banner('WARD');
       return;
     }
-    // Blood Pact, and RED MIST's half of its own bargain. Applied after the
-    // ward and the dodge, because those are about whether a hit lands at all
-    // and this is about how much it costs. The item's multiplier is separate
-    // from the passive item's so the two stack instead of one overwriting the
-    // other - which is what a player holding both would expect, and is also
-    // the only reading under which the item's own text stays true.
-    d *= this.player.incomingMult * this.player.itemTakenMult;
-    // Carnage resets on any hit that actually lands, and Absolute Zero's
-    // drawback plants the player for a second. Both are the price of the deal.
-    this.player.clearCarnage();
+    const h = this._applyPlayerDamage(d);
+    if (!(this.player.lastDamageTaken > 0)) return;
     this.player.freeze(this.time);
-    const h = this.player.takeDamage(d, this.time);
-    if (this.player.lastDamageTaken > 0 && this.player.mods.gracePeriod > 0) {
-      this.player.invulnEnd = Math.max(
-        this.player.invulnEnd, this.time + this.player.mods.gracePeriod
-      );
-      this.effects.shockwave(this.player.pos, 0xe8f5ff, 3.2, 0.35);
-    }
-    if (this.player.deadSwitchFx) this._deadMansSwitch();
-    // THIN BLOOD's bill, settled the same frame the hit landed - the player
-    // class set `hpDebt` from the build's own arithmetic and the wallet is
-    // here. Like CASH CANNON, `balance` is not written twice; the minus is
-    // taken straight off `credits`, and the HUD is told next frame.
-    if (this.player.hpDebt > 0) {
-      const pay = Math.min(this.credits, this.player.hpDebt);
-      if (pay > 0) {
-        this.credits -= pay;
-        this._creditsDirty = true;
-        this.effects.burst(pos, 0xffd600, 6, 2.5, 1.6, 0.25);
-      }
-    }
-    // KILL STREAK's counter, broken by the same hit that breaks the flawless
-    // streak below - "without taking damage" means the same thing to both.
-    this.player.cleanKills = 0;
-    // GOLD STAR's ladder, broken by the same hit for the same reason: the
-    // streak it asks about is KILLS WITHOUT TAKING DAMAGE, and a graze the
-    // mantle ate never reached the player (see the ward and dodge branches
-    // above), so only a hit that landed clears it.
-    this.player.goldKills = 0;
     // BRUISE ROUNDS. A full magazine for a hit, made rather than moved: the
     // reserve is never touched, which is what makes it worth having to a build
     // that is out of both at once.
@@ -8674,9 +8716,6 @@ class Game {
         this.player.eyeInto(this._killPos), THEME_JUMPER, 10, 4, 2, 0.3
       );
     }
-    // What LANDED, not what was thrown: curse is applied inside takeDamage.
-    // Books the damage and breaks the flawless streak - see _noteDamage.
-    this._noteDamage();
     // DEATH STARE. The body that landed this blow, stoned where it stands.
     //
     // AFTER the dodge and the ward, so an attacker that got away with it is
@@ -8710,21 +8749,7 @@ class Game {
     // A hard white blink over the red vignette. Shorter than the vignette on
     // purpose, so the two read as one hit rather than two events.
     this.rig.cueDamage();
-    if (h > 0) return;
-    // Dead Cat. One revive for the whole run, not one per wave: it is the
-    // upside of a permanently smaller health pool, and refilling it every wave
-    // would make the drawback free after the first clear.
-    if (this.player.livesUsed < this.player.mods.extraLives) {
-      this.player.livesUsed++;
-      this.player.health = 1;
-      this.player.shield = 40;
-      this.player.shieldEnd = this.time + 3;
-      this.effects.shockwave(this.player.pos, 0xff2d6f, 6, 0.5);
-      this.effects.burst(this.player.eyeInto(this._killPos), 0xff2d6f, 40, 7, 3, 0.9);
-      this.effects.addShake(0.3);
-      this.ui.banner('NINE LIVES');
-      return;
-    }
+    if (h <= 0) this._revivePlayer();
     // THE DEATH IS NOT BOOKED HERE. Every caller of this method is inside one
     // of the frame's entity sweeps - a projectile's update, an enemy's, a
     // blast - and booking a death tears those very lists down underneath the
@@ -8785,11 +8810,11 @@ class Game {
     );
   }
 
-  _spawnGrenade(x, y, z, damage) {
+  _spawnGrenade(x, y, z, damage, aim = null) {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     // The ctx's player, for the reason _spawnProjectile gives: a grenade
     // throws at what the thrower believes is the target.
-    const t = this._enemyCtx.player.eyeInto(this._aimTarget);
+    const t = (aim || this._enemyCtx.player).eyeInto(this._aimTarget);
     const speed = Math.min(18, 12 + this.wave * 0.2);
     const dmg = Math.min(28, damage + this.wave * 0.5);
     this.projectiles.push(new Grenade(this.scene, this.effects.glowTex, x, y, z, t, speed, dmg));
@@ -8811,12 +8836,12 @@ class Game {
   // Solved in two passes: the lead moves the aim point, which changes the range
   // and so the flight time the lead was derived from. One pass under-leads a
   // sprinting player by metres.
-  _spawnSpit(x, y, z, kind = 'pool') {
+  _spawnSpit(x, y, z, kind = 'pool', aim = null) {
     if (this.projectiles.length >= MAX_ENEMY_PROJECTILES) return;
     // The ctx's player, for the reason _spawnProjectile gives: the spit leads
     // what the SPITTER believes it is aiming at, decoy included - a corpse
     // does not move, so the lead falls out to zero on its own.
-    const p = this._enemyCtx.player;
+    const p = aim || this._enemyCtx.player;
     const SPEED = 14;
     const LEAD = 0.9;
     let tx = p.pos.x;
@@ -10228,8 +10253,8 @@ class Game {
     return true;
   }
 
-  _dismissDonationMachine() {
-    if (this.donationMachine.dismiss()) {
+  _dismissDonationMachine(immediate = false) {
+    if (this.donationMachine.dismiss(immediate)) {
       this.player.donationChance = donationChanceAfterLoss(this.player);
     }
   }
@@ -12040,6 +12065,8 @@ class Game {
           h.cloud, h.x, h.z, h.radius, k.color, fade, Math.hypot(dx, dz)
         );
       }
+      // Defeat keeps the scenery alive without charging or moving the body.
+      if (this.state !== 'playing') continue;
       // Only while the player is on the ground. A pool is something to jump
       // out of as much as to run out of.
       // ANTIDOTE. Anything POISONOUS does nothing at all - the player walks
@@ -12127,6 +12154,7 @@ class Game {
   // flawless bonus and still ends the run.
   _hurtPlayerDot(d) {
     if (this.state !== 'playing') return;
+    this.player.lastDamageTaken = this.player.hpDebt = 0;
     // BUT INVINCIBILITY IS NOT THE WARD. The paragraph above is about Holy
     // Mantle's charge - a once-a-wave ward that must not be spent on a single
     // point of pool damage - and it never meant that AEGIS should be ignored
@@ -12147,23 +12175,8 @@ class Game {
     // touches the ward or Evasion, for the reason in the comment above.
     d *= this.player.mods.hazardMult * this.player.incomingMult
       * this.player.itemTakenMult;
-    // A pool bleeds a point at a time several times a second, so it is a slow
-    // and completely reliable way to lose a Carnage chain. That is correct:
-    // standing in fire is being hit.
-    this.player.clearCarnage();
-    // KILL STREAK's counter goes with Carnage's, for the same reason: standing
-    // in fire is being hit, and the card says "without taking damage".
-    this.player.cleanKills = 0;
-    const h = this.player.takeDamage(d, this.time);
-    if (this.player.lastDamageTaken > 0 && this.player.mods.gracePeriod > 0) {
-      this.player.invulnEnd = Math.max(
-        this.player.invulnEnd, this.time + this.player.mods.gracePeriod
-      );
-      this.effects.shockwave(this.player.pos, 0xe8f5ff, 3.2, 0.35);
-    }
-    if (this.player.deadSwitchFx) this._deadMansSwitch();
-    // Standing in fire is being hit, for the streak as much as for Carnage.
-    this._noteDamage();
+    const h = this._applyPlayerDamage(this.player.damageAfterDefenses(d));
+    if (!(this.player.lastDamageTaken > 0)) return;
     // Throttled, and NO LONGER THE DAMAGE FLASH. The fire and poison layers are
     // up for as long as the player is burning or poisoned - driven every frame
     // in the HUD sync, see Ui.setStatusFx - so the screen is already saying
@@ -12178,17 +12191,7 @@ class Game {
       this.sfx.hurt();
       this.rig.cueDamage();
     }
-    if (h > 0) return;
-    if (this.player.livesUsed < this.player.mods.extraLives) {
-      this.player.livesUsed++;
-      this.player.health = 1;
-      this.player.shield = 40;
-      this.player.shieldEnd = this.time + 3;
-      this.effects.shockwave(this.player.pos, 0xff2d6f, 6, 0.5);
-      this.effects.burst(this.player.eyeInto(this._killPos), 0xff2d6f, 40, 7, 3, 0.9);
-      this.ui.banner('NINE LIVES');
-      return;
-    }
+    if (h <= 0) this._revivePlayer();
     // Left to the loop, for the reason spelled out at the end of _hurtPlayer:
     // this runs from inside _updateHazard's walk of the pool list, and the
     // teardown a death brings with it empties that list mid-walk.
@@ -12397,8 +12400,7 @@ class Game {
 
   // Moves projectiles and reacts to what they hit. Grenades handle their own
   // blast inside update(); this only spawns the impact effect and cleans up.
-  _updateProjectiles(dt) {
-    const ctx = this._projCtx;
+  _updateProjectiles(dt, ctx = this._projCtx) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
       let res = pr.update(dt, ctx);
@@ -12589,8 +12591,10 @@ class Game {
   _statActive() {
     const p = this.player;
     if (!p.activeItem) return null;
+    if (this._statsActiveId === p.activeItem) return this._statsActive;
+    this._statsActiveId = p.activeItem;
     const def = ACTIVE_ITEMS[p.activeItem];
-    return {
+    return this._statsActive = {
       id: p.activeItem,
       name: def.name,
       effects: def.effects,
@@ -12602,7 +12606,9 @@ class Game {
   // theme colour and its own effect lines so the list reads as the totems the
   // player has been walking into all run - and says what each of them did.
   _statPassives() {
-    const out = [];
+    if (this._statsMods === this.player.mods) return this._statsPassives;
+    this._statsMods = this.player.mods;
+    const out = this._statsPassives = [];
     for (const [id, n] of Object.entries(this.player.passiveItems)) {
       const def = PASSIVE_ITEMS[id];
       if (!def || n <= 0) continue;
@@ -12656,6 +12662,7 @@ class Game {
     // an invariant of the clock, not a thing every reader has to defend.
     const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
+    let presentationDt = this._deathSummary ? 0 : dt;
 
     // THE PAD, FIRST AND IN EVERY STATE. It drives the menus as well as the
     // arena, so it cannot sit inside the `playing` branch, and anything it
@@ -12943,17 +12950,20 @@ class Game {
       // NOT DURING A PASS. A versus turn that ended in a death leaves the
       // body at zero for the half second before the other run is written in,
       // and without this the same death would be booked on every frame of it.
-      if (!this._pass && this.player.health <= 0) this.gameOver();
+      if (!this._pass && this.player.health <= 0) {
+        this.gameOver();
+        if (this._deathSummary) presentationDt = 0;
+      }
     } else if (this.state === 'menu') {
       const a = now * 0.00015;
       this.camera.position.set(Math.sin(a) * 13, 5.5, Math.cos(a) * 13);
       this.camera.lookAt(0, 1, 0);
+    } else if (this._deathScene && (this.state === 'dying' || this.state === 'gameover')) {
+      presentationDt = this._updateDeath(now, dt);
     }
 
-    // Outside the `playing` branch: the muffle and the rig both apply to the
-    // menu, pause and death screens too, and none of those tick game time.
-    // Driven by `dt` (real time, computed in every state) rather than
-    // `this.time`, which stops when the simulation does.
+    // Audio keeps its real clock in menus, pause and defeat. The rig and
+    // effects use the separate presentation clock to slow the dying scene.
     this.music.setMuffled(this._musicMuffled());
     // Sampled before the rig reads it, so a beat lights the room on the same
     // frame it happens rather than the next one.
@@ -12964,18 +12974,21 @@ class Game {
     // Outside the `playing` branch for the same reason the rig is: `dt` is
     // real time, and a build must not stall because the game is paused mid
     // wave break.
-    if (this.terrain.update(dt, this.music.pulse) === 'settled') this._settleTerrain();
+    // A defeated run cannot settle its next wave behind the results.
+    if (!this._deathSummary && this.terrain.update(dt, this.music.pulse) === 'settled') this._settleTerrain();
     // Visibility follows the run state rather than the weapon pose: the menu
     // camera must never carry a first-person model, including after a return
     // from gameplay. The same model is ready again on the first playing frame.
-    this.player.gun.visible = this.state !== 'menu';
-    this.rig.update(dt, this._fillRigState());
+    this.player.gun.visible = this.state !== 'menu' && !this._deathScene;
+    if (!this._deathSummary || presentationDt > 0) {
+      this.rig.update(presentationDt, this._deathScene ? this._deathScene.rigState : this._fillRigState());
+    }
     this.ui.setStrobe(this.rig.flash);
     // The orbs' rim colour rides the ceiling. One uniform, read after the rig
     // has settled this frame's colour so the two are never a frame apart.
     this.money.setHouseColour(this.rig.houseColour);
 
-    this.effects.update(dt, this.camera);
+    this.effects.update(presentationDt, this.camera);
     this.crt.render(this.scene, this.camera);
   }
 }

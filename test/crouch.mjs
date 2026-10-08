@@ -20,7 +20,7 @@
 //      rate and in phase with the gun dip, push-off and landing voices for
 //      the jumps, one voice per slide, silence over stairs - and the melee
 //      split into a whoosh on the button and a crunch on the connect.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8219;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -41,8 +41,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const THREE = await import('three');

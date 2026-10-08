@@ -294,6 +294,29 @@ try {
   ok('the chips go when the effects do', out.chipsDown === 0, String(out.chipsDown));
   ok('a new run starts clean', out.afterReset === false);
 
+  const defenses = await page.evaluate(() => {
+    const g = window.__game;
+    g.beginGame();
+    const p = g.player;
+    p.takePassiveItem('deadCat');
+    p.health = 1;
+    g._hurtPlayerDot(20);
+    const revived = p.health === 1 && p.livesUsed === 1 && p.shield === 40;
+    p.shield = 0;
+    p.goldKills = 3;
+    g._hurtPlayerDot(1);
+    const goldBroken = p.goldKills === 0;
+    g.beginGame();
+    p.giveActiveItem('itemInsurance');
+    g.tryActiveItem();
+    p.health = 1;
+    g._hurtPlayerDot(20);
+    const insured = p.health > 1 && p.insuredEnd === 0;
+    g.beginGame();
+    return { revived, goldBroken, insured };
+  });
+  ok('hazards share revives, insurance and damage accounting', defenses.revived && defenses.goldBroken && defenses.insured, JSON.stringify(defenses));
+
   ok('no console errors', errors.length === 0, errors.join(' | '));
 } finally {
   if (browser) await browser.close();

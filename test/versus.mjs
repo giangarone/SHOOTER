@@ -47,7 +47,7 @@
 //      own, because the bug this is most likely to catch is not in the
 //      arithmetic - it is main.js and the match disagreeing about which wave
 //      the arena is building, or the menu offering a seat no colour covers.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8230;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -68,8 +68,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.match !== undefined', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.match !== undefined', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const g = window.__game;
@@ -781,6 +781,24 @@ try {
   });
 
   for (const [name, cond, extra] of results) ok(name, cond, extra);
+
+  const clocks = await page.evaluate(async () => {
+    const g = window.__game;
+    const { captureRun, restoreRun } = await import('./js/versus.js');
+    g.beginGame('versus');
+    const p = g.player;
+    const time = g.time;
+    p.bottomEnd = time + 5;
+    p.dimeEnd = time + 4;
+    p.lastShotAt = time - 2;
+    p.lastKillAt = time - 1;
+    const snap = captureRun(g);
+    g.time += 100;
+    restoreRun(g, snap);
+    return [p.bottomEnd - g.time, p.dimeEnd - g.time,
+      g.time - p.lastShotAt, g.time - p.lastKillAt];
+  });
+  ok('passive windows and elapsed shot/kill clocks freeze on the bench', clocks.every((value, i) => Math.abs(value - [5, 4, 2, 1][i]) < 1e-8), JSON.stringify(clocks));
 
   console.log('CONSOLE ERRORS', JSON.stringify(errors));
   ok('no console errors', errors.length === 0, errors.join(' | '));

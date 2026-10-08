@@ -1118,9 +1118,25 @@ export class TotemArea {
   }
 
   // Sinks everything - the claimed totem, its two siblings and both stations.
-  dismiss() {
-    for (const t of this.totems) t.sink();
-    for (const s of this.stations) s.sink();
+  dismiss(immediate = false) {
+    for (const t of this.totems) {
+      t.sink();
+      if (immediate) {
+        t.state = 'hidden';
+        t.rise = 0;
+        t.offer = t.passiveItemId = null;
+        t.claimed = false;
+        t.group.visible = false;
+      }
+    }
+    for (const s of this.stations) {
+      s.sink();
+      if (immediate) {
+        s.state = 'hidden';
+        s.rise = 0;
+        s.group.visible = false;
+      }
+    }
   }
 
   // The NEAREST totem the player could press E on, with its squared distance,

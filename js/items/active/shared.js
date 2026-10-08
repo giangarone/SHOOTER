@@ -61,16 +61,9 @@ function pay(player, amount) {
 const GOOD = 1;
 const NOTE = 0;
 
-// WHAT AN ITEM'S READOUT DOES NOT SAY: how long it takes to charge.
-//
-// It is the most quotable number an item has and it is deliberately nowhere -
-// not on the box's card, not in the prompt, not in the HUD. The bar already
-// answers it, in the only unit it is ever thought about in: one segment is one
-// second, so a glance at the slot says "three blocks" or "twenty hairlines"
-// without a number, and the answer arrives from having carried the thing rather
-// than from having read it. A player choosing between a heal and a dash should
-// be weighing what they do, and a printed "20s" makes that a sum instead.
-
+// Cards describe the effect; the meter describes its cost in enemy value.
+// At twelve points or under each segment is one basic enemy. Larger costs
+// use twelve wider units, and only whole earned segments are lit.
 
 export const PAY_TO_WIN_COST = 1000;
 export const PARACHUTE_COST = 5000;

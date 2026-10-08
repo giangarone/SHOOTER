@@ -46,6 +46,7 @@
 import * as THREE from 'three';
 import {
   resolveCircle, pointInObstacle, groundSurface, AGENT_HEIGHT, BOSS_HEIGHT, STEP_HEIGHT,
+  segmentBoxFraction, segmentSphereFraction,
 } from './utils.js';
 import { jumpClear, jumpProgress, jumpY } from './enemy-jump.js';
 import {
@@ -1584,6 +1585,7 @@ function grenadeMaterials(glowTex) {
 }
 
 const _tmpTarget = new THREE.Vector3();
+const _projStep = new THREE.Vector3();
 
 // Straight-line enemy shot. update() returns 'alive', 'hit' (reached the
 // player), 'wall' (hit geometry or the floor) or 'expired'; main.js removes it
@@ -1652,45 +1654,50 @@ export class Projectile {
         this.vel.normalize().multiplyScalar(this.speed);
       }
     }
-    this.pos.addScaledVector(this.vel, dt);
+    // Resolve the earliest contact, including the remainder after a bounce.
+    // Checking the player first would let a round hit through nearby cover.
+    let remaining = dt;
+    ctx.player.eyeInto(_tmpTarget);
+    while (remaining > 0) {
+      _projStep.copy(this.vel).multiplyScalar(remaining);
+      const playerHit = segmentSphereFraction(this.pos, _projStep, _tmpTarget, 0.7);
+      let solid = this.pos.y <= 0.03 ? 0
+        : _projStep.y < 0 ? (0.03 - this.pos.y) / _projStep.y : Infinity;
+      if (solid > 1) solid = Infinity;
+      if (!this.ghost) {
+        for (const box of ctx.obstacles) {
+          solid = Math.min(solid, segmentBoxFraction(this.pos, _projStep, box));
+        }
+      }
+      let wallX = Infinity;
+      let wallZ = Infinity;
+      if (this.bounces > 0 && !this.ghost) {
+        if (_projStep.x !== 0) wallX = Math.max(0,
+          (Math.sign(_projStep.x) * PROJ_BOUND - this.pos.x) / _projStep.x);
+        if (_projStep.z !== 0) wallZ = Math.max(0,
+          (Math.sign(_projStep.z) * PROJ_BOUND - this.pos.z) / _projStep.z);
+      }
+      const bounce = Math.min(wallX, wallZ);
+      const contact = Math.min(playerHit, solid, bounce);
+      if (contact > 1) {
+        this.pos.add(_projStep);
+        break;
+      }
+      this.pos.addScaledVector(_projStep, contact);
+      this.mesh.position.copy(this.pos);
+      if (solid <= playerHit && solid <= bounce) return 'wall';
+      if (playerHit <= bounce) {
+        ctx.onHitPlayer(this.damage, this.pos);
+        return 'hit';
+      }
+      if (Math.abs(wallX - bounce) < 1e-8) this.vel.x = -this.vel.x;
+      if (Math.abs(wallZ - bounce) < 1e-8) this.vel.z = -this.vel.z;
+      this.bounces--;
+      this.life = Math.max(this.life, 2);
+      if (ctx.effects) ctx.effects.burst(this.pos, projLook(this.type).glow, 8, 3, 1, 0.3);
+      remaining *= 1 - contact;
+    }
     this.mesh.position.copy(this.pos);
-    if (this.pos.distanceTo(ctx.player.eyeInto(_tmpTarget)) < 0.7) {
-      ctx.onHitPlayer(this.damage, this.pos);
-      return 'hit';
-    }
-    if (this.pos.y <= 0.03) return 'wall';
-
-    // THE WALLS TURN IT, if it has a bounce left.
-    //
-    // The arena's own half-width, and NOT the obstacles. A wall is axis
-    // aligned and has a normal to hand; a crate does not, and a stone caroming
-    // off the corner of one at an angle nobody could predict would be noise
-    // rather than a mechanic. The contract the player is being asked to read
-    // is "look at the line, look at the wall behind you, know where it comes
-    // out", and only the walls can keep it.
-    if (this.bounces > 0) {
-      let turned = false;
-      if (Math.abs(this.pos.x) > PROJ_BOUND && this.vel.x * Math.sign(this.pos.x) > 0) {
-        this.vel.x = -this.vel.x;
-        turned = true;
-      }
-      if (Math.abs(this.pos.z) > PROJ_BOUND && this.vel.z * Math.sign(this.pos.z) > 0) {
-        this.vel.z = -this.vel.z;
-        turned = true;
-      }
-      if (turned) {
-        this.bounces--;
-        // Given its life back, so a stone thrown across the room still has
-        // time to come all the way back after it turns.
-        this.life = Math.max(this.life, 2);
-        if (ctx.effects) ctx.effects.burst(this.pos, projLook(this.type).glow, 8, 3, 1, 0.3);
-      }
-    }
-    // A GHOST ROUND meets nothing. The wall test is skipped rather than
-    // hollowed, because the floor test above is what keeps a curate's shot
-    // from flying on into the ceiling for ever - the round dies on the
-    // ground it was aimed at, cover or no cover.
-    if (!this.ghost && pointInObstacle(this.pos, ctx.obstacles)) return 'wall';
     return 'alive';
   }
 }

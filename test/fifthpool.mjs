@@ -22,7 +22,7 @@
 //   SOUTHPAW    - the trigger answers during the reload, once, at a fifth of
 //                 the rate, off the reserve - and the reload itself still
 //                 seats and tops the magazine as it always did.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8246;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -43,8 +43,8 @@ try {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
 
   const r = await page.evaluate(async () => {
     const g = window.__game;

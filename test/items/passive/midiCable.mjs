@@ -1,4 +1,4 @@
-import { probeEighth } from '../../passive-eighth-probe.mjs';
+import { probeEighth } from '../../helpers/passive-eighth-probe.mjs';
 
 export async function run({ page, check, id }) {
   const result = await probeEighth(page, id);

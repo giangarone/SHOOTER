@@ -18,7 +18,7 @@
 // count and never on wall time. The trials are a race between a player crossing
 // a distance and an enemy completing a windup, and a race is only meaningful if
 // both are timed by the same watch. See the note in trial().
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8207;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -52,8 +52,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
-  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.enemies', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${PORT}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.enemies', { timeout: NAV_TIMEOUT });
 
   const out = await page.evaluate(async (MELEE, STAND_SECONDS, RUN_SPEED) => {
     const g = window.__game;

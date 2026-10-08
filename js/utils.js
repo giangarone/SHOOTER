@@ -236,6 +236,44 @@ export function pointInObstacle(p, obstacles) {
   return false;
 }
 
+const AXES = ['x', 'y', 'z'];
+
+// First intersection along a frame's displacement, or Infinity. The slab
+// test cannot skip thin cover even when both endpoints lie outside it.
+export function segmentBoxFraction(from, delta, box) {
+  let enter = 0;
+  let leave = 1;
+  for (const axis of AXES) {
+    const d = delta[axis];
+    const p = from[axis];
+    if (Math.abs(d) < 1e-10) {
+      if (p < box.min[axis] || p > box.max[axis]) return Infinity;
+      continue;
+    }
+    const a = (box.min[axis] - p) / d;
+    const b = (box.max[axis] - p) / d;
+    enter = Math.max(enter, Math.min(a, b));
+    leave = Math.min(leave, Math.max(a, b));
+    if (enter > leave) return Infinity;
+  }
+  return enter;
+}
+
+export function segmentSphereFraction(from, delta, centre, radius) {
+  const x = from.x - centre.x;
+  const y = from.y - centre.y;
+  const z = from.z - centre.z;
+  const c = x * x + y * y + z * z - radius * radius;
+  if (c <= 0) return 0;
+  const a = delta.x ** 2 + delta.y ** 2 + delta.z ** 2;
+  if (a <= 1e-20) return Infinity;
+  const b = x * delta.x + y * delta.y + z * delta.z;
+  const discriminant = b * b - a * c;
+  if (discriminant < 0) return Infinity;
+  const t = (-b - Math.sqrt(discriminant)) / a;
+  return t >= 0 && t <= 1 ? t : Infinity;
+}
+
 // Centre + size -> min/max box. x,y,z is the centre, w,h,d the full extents.
 export function makeAabb(x, y, z, w, h, d) {
   return {

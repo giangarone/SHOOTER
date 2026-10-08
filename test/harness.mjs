@@ -139,7 +139,7 @@ export async function bootPage(browser, port) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(`http://127.0.0.1:${port}/?autotest`, { waitUntil: 'load', timeout: 30000 });
-  await page.waitForFunction('window.__game && window.__game.player', { timeout: 30000 });
+  await page.goto(`http://127.0.0.1:${port}/?autotest`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
+  await page.waitForFunction('window.__game && window.__game.player', { timeout: NAV_TIMEOUT });
   return { page, errors };
 }

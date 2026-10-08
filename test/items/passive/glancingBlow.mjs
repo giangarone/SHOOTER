@@ -29,4 +29,33 @@ export async function run({ page, check, id }) {
     result.ten === result.hp, JSON.stringify(result));
   check('Glancing Blow lets an 11-damage hit through',
     result.eleven === result.hp - 11, JSON.stringify(result));
+  const reactions = await page.evaluate(() => {
+    const g = window.__game;
+    g.beginGame();
+    const p = g.player;
+    for (const key of ['glancingBlow', 'ceramicInsert', 'deadCat', 'glassCannon', 'carnage', 'bruiseRounds', 'jumperCables', 'absoluteZero']) p.takePassiveItem(key);
+    p.health = p.maxHealth;
+    p.carnageStacks = 3;
+    p.cleanKills = p.goldKills = 4;
+    p.mag = 1;
+    p.wardCharges = 3;
+    const ward = p.wardCharges;
+    g._hurtPlayer(50, p.pos);
+    const capped = p.health === p.maxHealth && p.carnageStacks === 3
+      && p.cleanKills === 4 && p.goldKills === 4 && p.mag === 1
+      && p.wardCharges === ward && p.frozenUntil <= g.time;
+    g._hurtPlayerDot(5);
+    const dot = p.carnageStacks === 3 && p.cleanKills === 4 && p.goldKills === 4;
+    g.beginGame();
+    p.takePassiveItem('glancingBlow');
+    p.applyStatus('curse', 10);
+    g._hurtPlayer(9, p.pos);
+    const cursed = p.health;
+    g.beginGame();
+    return { capped, dot, cursed };
+  });
+  check('Ignored capped hits trigger no contact reactions or ward payment', reactions.capped, JSON.stringify(reactions));
+  check('Ignored hazard ticks preserve hit streaks', reactions.dot, JSON.stringify(reactions));
+  check('Glancing Blow measures damage after curse', reactions.cursed === 88.75, JSON.stringify(reactions));
+
 }

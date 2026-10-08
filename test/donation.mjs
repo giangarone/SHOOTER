@@ -1,6 +1,6 @@
 // Donation Machine integration: one fixture, three payment paths, fair roulette
 // landings, per-player progression, forfeiture and permanent shared rewards.
-import { launchBrowser, sleep, startServer } from './harness.mjs';
+import { NAV_TIMEOUT, launchBrowser, sleep, startServer } from './harness.mjs';
 
 const PORT = 8261;
 const server = startServer(PORT, { stdio: 'inherit' });
@@ -20,9 +20,9 @@ try {
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', (error) => errors.push('PAGEERROR: ' + error.message));
   await page.goto(`http://127.0.0.1:${PORT}/?autotest`, {
-    waitUntil: 'load', timeout: 30000,
+    waitUntil: 'load', timeout: NAV_TIMEOUT,
   });
-  await page.waitForFunction('window.__game && window.__game.donationMachine', { timeout: 30000 });
+  await page.waitForFunction('window.__game && window.__game.donationMachine', { timeout: NAV_TIMEOUT });
 
   const results = await page.evaluate(async () => {
     const g = window.__game;

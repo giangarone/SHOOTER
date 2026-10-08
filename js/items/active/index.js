@@ -81,7 +81,9 @@ export class RunningActiveItems {
     const s = {};
     def.use(game, s);
     if (!(def.duration > 0)) return;
-    this.list.push({ id, def, s, t: def.duration, full: def.duration });
+    this.list.push({ id, def, s, t: def.duration, full: def.duration,
+      chip: { key: id, icon: id, color: def.theme, fraction: 1, label: '' },
+    });
   }
 
   // Ends one activation early, running its end() so nothing is left written on
@@ -151,13 +153,9 @@ export class RunningActiveItems {
     out.length = 0;
     for (const r of this.list) {
       if (r.def.hud === false) continue;
-      out.push({
-        key: r.id,
-        icon: r.id,
-        color: r.def.theme,
-        fraction: Math.max(0, Math.min(1, r.t / r.full)),
-        label: r.s.label || '',
-      });
+      r.chip.fraction = Math.max(0, Math.min(1, r.t / r.full));
+      r.chip.label = r.s.label || '';
+      out.push(r.chip);
     }
     return out;
   }

@@ -176,6 +176,16 @@ function padDefaults() {
   return map;
 }
 
+function swapPadBinding(map, id, name) {
+  if (!Object.prototype.hasOwnProperty.call(map, id)
+    || !BTN_NAMES.includes(name)
+    || Object.prototype.hasOwnProperty.call(PAD_FIXED, name)) return;
+  for (const other of PAD_ACTIONS) {
+    if (other.id !== id && map[other.id] === name) map[other.id] = map[id];
+  }
+  map[id] = name;
+}
+
 // The pad's load, on the same rule as the keyboard's: one button per action,
 // a bad entry falls back to the default, and PAD_FIXED is the whole refusal
 // list - a name that is fixed cannot be a binding, so it is rejected here
@@ -189,7 +199,7 @@ function padLoad() {
     const v = raw[a.id] ?? (a.id === 'activeItem' ? raw.item : undefined);
     if (typeof v === 'string' && PAD_NAME_OK.test(v)
       && !Object.prototype.hasOwnProperty.call(PAD_FIXED, v)) {
-      map[a.id] = v;
+      swapPadBinding(map, a.id, v);
     }
   }
   return map;
@@ -279,15 +289,7 @@ export class Keybinds {
    * binding it had.
    */
   padBind(id, name) {
-    if (!this.padMap.hasOwnProperty(id)) return null;
-    if (!BTN_NAMES.includes(name) || PAD_FIXED.hasOwnProperty(name)) return null;
-    if (this.padMap[id] === name) return null;
-    for (const other of PAD_ACTIONS) {
-      if (other.id !== id && this.padMap[other.id] === name) {
-        this.padMap[other.id] = this.padMap[id];
-      }
-    }
-    this.padMap[id] = name;
+    swapPadBinding(this.padMap, id, name);
     this.savePad();
     return null;
   }

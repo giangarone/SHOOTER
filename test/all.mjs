@@ -21,7 +21,7 @@ const TIMEOUT = Number(process.env.TIMEOUT || 300) * 1000;
 
 // SHARD="2/4" runs the second quarter of the suites. CI splits the run across
 // parallel runners this way, because the wall-clock problem is not that any
-// one suite is slow - it is that there are thirty of them and a runner has no
+// one suite is slow - it is that many browser suites share a runner with no
 // GPU, so the game rasterizes every frame on a shared vCPU.
 //
 // Suites are NOT equal-cost - versus is a hundred times icons - so the split is

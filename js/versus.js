@@ -327,6 +327,7 @@ const PLAYER_SKIP = new Set([
 const PLAYER_CLOCKS = [
   'dodgeEnd', 'invulnEnd', 'frozenUntil', 'damageBoostEnd',
   'fireRateBoostEnd', 'shieldEnd', 'noSprintUntil', 'lastHurt', 'now',
+  'bottomEnd', 'dimeEnd', 'lastShotAt', 'lastKillAt',
   // Opening Salvo's window. A benched player must not come back to a window
   // that expired while someone else was shooting.
   'salvoEnd',

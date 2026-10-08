@@ -850,6 +850,14 @@ export class UI {
     this.hideSubScreens();
     this._syncReading();
   }
+  showDeath() {
+    this.hideSubScreens();
+    this.hud.classList.add('hidden');
+    this.overOv.classList.add('hidden');
+    this.winOv.classList.add('hidden');
+    this._syncReading();
+  }
+
   showPause() {
     this.pauseOv.classList.remove('hidden');
     this._syncReading();
@@ -1127,6 +1135,9 @@ export class UI {
   // array of { id, name, effects, theme, tier }.
 
   showStats(active, passives) {
+    if (this._statsOpen && this._statsActiveRef === active && this._statsPassivesRef === passives) return;
+    this._statsActiveRef = active;
+    this._statsPassivesRef = passives;
     const key = (active ? active.id : '-')
       + '|' + passives.map((m) => m.id + m.tier).join(',');
     if (this._statsOpen && key === this._statsKey) return;

@@ -705,6 +705,7 @@ function makeDigitAtlas() {
 
 export class Effects {
   constructor(scene) {
+    this._particleColor = new THREE.Color();
     this.scene = scene;
     this.glowTex = makeGlowTexture();
     this.sparkTex = makeSparkTexture();
@@ -1145,7 +1146,7 @@ export class Effects {
   }
 
   _emit(pool, p, color, count, speed, up, life) {
-    const c = new THREE.Color(color);
+    const c = this._particleColor.set(color);
     for (let i = 0; i < count; i++) {
       const idx = pool.cursor;
       pool.cursor = (pool.cursor + 1) % pool.max;
@@ -2156,6 +2157,36 @@ export class Effects {
   // `camera` is only used to billboard the damage numbers at it. Optional, so
   // a headless harness that drives effects without a camera still settles
   // everything else.
+  // Frozen death effects must not resume in a new run. Keep the allocations;
+  // only their lifetime, visibility and uploaded particle colours are reset.
+  clearTransient() {
+    for (const pool of [this.sparks, this.impacts]) {
+      pool.life.fill(0);
+      pool.col.fill(0);
+      for (let i = 0; i < pool.max; i++) pool.pos[i * 3 + 1] = -100;
+      pool.alive = pool.cursor = 0;
+      pool.points.geometry.attributes.position.needsUpdate = true;
+      pool.points.geometry.attributes.color.needsUpdate = true;
+    }
+    for (const list of [this.tracers, this.arcs, this.bolts]) {
+      for (const effect of list) {
+        effect.life = 0;
+        effect.line.visible = false;
+      }
+    }
+    for (const tracer of this.tracers) tracer.anchor = null;
+    for (const ring of this.rings) { ring.life = 0; ring.mesh.visible = false; }
+    for (const blast of this.blasts) {
+      blast.life = 0;
+      for (const part of blast.parts) part.visible = false;
+    }
+    for (const number of this.dmgNums) { number.live = false; number.mesh.visible = false; }
+    for (const beam of this.beams) beam.visible = false;
+    this._beamCount = 0;
+    this.flashT = this.shakeAmp = 0;
+    this.flashLight.intensity = 0;
+  }
+
   update(dt, camera = null) {
     this._stepDamageNumbers(dt, camera);
     // Beams are redrawn from scratch each frame, so anything not claimed since

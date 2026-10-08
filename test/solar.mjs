@@ -1,4 +1,4 @@
-// SOLAR, end to end - the tenth and last theme built out.
+// SOLAR, end to end.
 //
 // WHY THIS EXISTS
 //   SOLAR is the theme that attacks the INTERFACE. Everything else in the game
@@ -57,6 +57,10 @@ try {
     const res = {};
 
     g.autoTest = false;
+    // These pairs measure SOLAR mechanics. A randomly generated ordinary
+    // room may shorten a boss leap legitimately; terrain traversal is covered
+    // by its own suite. Keep the venue, but remove the generated interior.
+    g._resetTerrain();
     g.input.shoot = false;
     g.input.shootFresh = false;
     let px = 0;
@@ -455,14 +459,17 @@ try {
       // player pinned against it in this window is the contact rule itself.
       {
         clean();
-        await spawnBoss(0, 0);
-        px = 1.6; pz = 0;
+        const b = await spawnBoss(0, 0);
+        b.status.fear = 5;
+        // Ordinary-wave terrain can push a boss away from its spawn point.
+        // Keep the contact probe beside its actual body, on the same surface.
+        px = b.pos.x + 1.6; pz = b.pos.z; py = b.pos.y;
         // Sixty frames, not a hundred and thirty: a frame is worth up to 0.05s
         // of game on a slow host, and thirty more frames here is the
         // difference between "burned twice" and "dead mid-measure".
         res.heraldTouch = await measure(60, () => {
-          const b = g.enemies[g.enemies.length - 1];
           b.status.fear = 5;
+          px = b.pos.x + 1.6; pz = b.pos.z; py = b.pos.y;
         });
         clean(); px = 0; pz = 0;
       }
@@ -634,6 +641,10 @@ try {
           b.bs.next = 'leap';
           await waitState(b, 'windup', 10);
           if (off) { px = off[0]; pz = off[1]; }
+          // The first landing leaves fire and a burn on the player. This
+          // comparison measures the second slam, not that earlier damage.
+          g._clearHazards();
+          p.clearStatuses();
           god = false; p.invulnEnd = -1; p.health = p.maxHealth;
           const h1 = p.health;
           await waitState(b, 'recover', 10);
@@ -784,6 +795,44 @@ try {
     `${out.heraldBrandGlare} glare patches`);
   ok('every telegraph handle comes home', out.heraldMarks === 0,
     `held=${out.heraldMarks}`);
+
+  const collision = await page.evaluate(async () => {
+    const g = window.__game;
+    const { Projectile } = await import('./js/enemy.js');
+    const THREE = await import('three');
+    const target = new THREE.Vector3(0, 1.7, 0);
+    let hits = 0;
+    const ctx = { player: { eyeInto: (v) => v.copy(target) }, obstacles: [], onHitPlayer: () => { hits++; } };
+    const results = [];
+    for (const dt of [0.016, 0.033, 0.05]) {
+      const shot = new Projectile(g.scene, g.effects.glowTex, -0.8, 1.7, 0, target, 32, 5, 'herald');
+      let result;
+      for (let i = 0; i < 4; i++) { result = shot.update(dt, ctx); if (result !== 'alive') break; }
+      results.push(result === 'hit');
+      g.scene.remove(shot.mesh);
+      const before = hits;
+      const wall = { min: { x: -0.2, y: 0, z: -2 }, max: { x: -0.1, y: 3, z: 2 } };
+      target.x = 0.7;
+      ctx.obstacles = [wall];
+      const covered = new Projectile(g.scene, g.effects.glowTex, -0.8, 1.7, 0, target, 32, 5, 'herald');
+      for (let i = 0; i < 4; i++) { result = covered.update(dt, ctx); if (result !== 'alive') break; }
+      results.push(result === 'wall' && hits === before);
+      g.scene.remove(covered.mesh);
+      const ghost = new Projectile(g.scene, g.effects.glowTex, -0.8, 1.7, 0, target, 32, 5, 'curate');
+      for (let i = 0; i < 4; i++) { result = ghost.update(dt, ctx); if (result !== 'alive') break; }
+      results.push(result === 'hit');
+      g.scene.remove(ghost.mesh);
+      ctx.obstacles = [];
+      target.x = 0;
+      const bounce = new Projectile(g.scene, g.effects.glowTex, 21.3, 1.7, 0,
+        new THREE.Vector3(30, 1.7, 0), 32, 5, 'slinger');
+      bounce.update(dt, ctx);
+      results.push(bounce.vel.x < 0 && bounce.bounces === 0 && bounce.pos.x <= 21.6);
+      g.scene.remove(bounce.mesh);
+    }
+    return results;
+  });
+  ok('swept rounds hit players, respect nearer cover, preserve ghosts and bounce remainders at 16/33/50ms', collision.every(Boolean), JSON.stringify(collision));
 
   ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
