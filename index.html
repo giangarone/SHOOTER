@@ -181,7 +181,6 @@
        answered the one question a build sheet exists for. -->
   <div id="stats-panel" class="overlay menu-ui menu-sheet hidden" aria-labelledby="stats-title">
     <div id="stats-card" class="menu-frame">
-      <header class="menu-top"><span>VOID ARENA</span><span>YOUR CURRENT BUILD</span></header>
       <div class="stats-head"><h1 id="stats-title">CARRYING</h1></div>
       <!-- PASSIVE ITEMS FIRST. They are the bulk of what a run accumulates
            and the part the player cannot see anywhere else, so they get the
@@ -202,8 +201,7 @@
 
   <!-- THE DEBUG PANEL. Opened with 9 over a live run, and it is a CHEAT that
        ships - the same call the $1,000 key makes about itself, for the same
-       reason: it is here on purpose, it is one screen, and it says so in two
-       places (see _openDebug in js/main.js).
+       reason: it is here on purpose (see _openDebug in js/main.js).
 
        The controls come first, followed by every item catalogue: the one
        active item you can carry, the passives, and the Donation Machine’s
@@ -216,7 +214,6 @@
        a hunt. -->
   <div id="debug-panel" class="overlay menu-ui menu-sheet hidden" aria-labelledby="debug-title">
     <div id="debug-card" class="menu-frame">
-      <header class="menu-top"><span>VOID ARENA</span><span>DEVELOPER TOOLS</span></header>
       <div id="debug-head">
         <h1 id="debug-title">DEBUG</h1>
         <input id="debug-search" type="text" placeholder="SEARCH ITEMS"
@@ -254,13 +251,11 @@
           <div id="debug-donation" class="debug-grid"></div>
         </section>
       </div>
-      <footer class="menu-footer"><span>CHEATS ENABLED</span><span id="debug-hint">9 / ESC &nbsp;-&nbsp; PAD: CREATE OR CIRCLE</span></footer>
     </div>
   </div>
 
   <div id="overlay-start" class="overlay menu-ui" aria-labelledby="overlay-start-title">
     <div class="menu-frame">
-      <header class="menu-top"><span>VOID ARENA</span><span>ENTER THE ARENA</span></header>
       <div class="menu-split">
         <section class="menu-hero marquee">
           <p class="menu-eyebrow">ENTER THE ARENA</p>
@@ -277,7 +272,6 @@
           <p id="audio-hint" class="set-note hidden">CLICK ONCE TO ENABLE SOUND</p>
         </nav>
       </div>
-      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
   </div>
 
@@ -336,7 +330,6 @@
 
   <div id="overlay-pause" class="overlay menu-ui hidden" aria-labelledby="overlay-pause-title">
     <div class="menu-frame">
-      <header class="menu-top"><span>VOID ARENA</span><span>TAKE A BREATH</span></header>
       <div class="menu-split">
         <section class="menu-hero marquee">
           <p class="menu-eyebrow">TAKE A BREATH</p>
@@ -351,7 +344,6 @@
           <button id="btn-exit-pause" class="opt-btn" data-danger>EXIT RUN<i class="menu-arrow" aria-hidden="true"></i></button>
         </nav>
       </div>
-      <footer class="menu-footer"><span>WAVE SURVIVAL / LOCAL VERSUS</span><span class="menu-input-hint"><span class="kbm-only">TAB TO NAVIGATE · ENTER TO SELECT</span><span class="pad-now">D-PAD TO NAVIGATE · CROSS TO SELECT</span></span></footer>
     </div>
   </div>
 
@@ -371,7 +363,7 @@
     <div class="menu-frame">
       <header class="menu-top"><span>VOID ARENA</span><span>LOCAL MULTIPLAYER</span></header>
       <section class="menu-page">
-        <header class="menu-page-head"><p class="menu-eyebrow">PASS THE CONTROLLER</p><h1 id="players-title">BRING YOUR RIVALS.</h1><p class="menu-description">ONE CONTROLLER. ONE WAVE EACH. LAST ONE STANDING.</p></header>
+        <header class="menu-page-head"><p class="menu-eyebrow">PASS THE CONTROLLER</p><h1 id="players-title">MULTIPLAYER</h1><p class="menu-description">ONE CONTROLLER. ONE WAVE EACH. LAST ONE STANDING.</p></header>
         <div class="player-grid" role="group" aria-label="Number of players">
           <button class="player-count opt-btn" data-count="2" aria-pressed="false"><b>02</b><span>PLAYERS</span></button>
           <button class="player-count opt-btn" data-count="3" aria-pressed="false"><b>03</b><span>PLAYERS</span></button>
@@ -391,7 +383,7 @@
     <div class="menu-frame">
       <header class="menu-top"><span>VOID ARENA</span><span>HOW TO PLAY</span></header>
       <section class="menu-page">
-        <header class="menu-page-head"><p class="menu-eyebrow">KNOW YOUR CONTROLS</p><h1 id="controls-title">STAY IN CONTROL.</h1><p class="menu-description">SELECT A KEY OR BUTTON TO CHANGE IT.</p></header>
+        <header class="menu-page-head"><p class="menu-eyebrow">KNOW YOUR CONTROLS</p><h1 id="controls-title">CHANGE CONTROLS</h1><p class="menu-description">SELECT A KEY OR BUTTON TO CHANGE IT.</p></header>
         <p class="set-note controls-help"><span class="kbm-only">CLICK A KEY, THEN PRESS ITS REPLACEMENT. ESC CANCELS. MOUSE CONTROLS AND ESC ARE FIXED.</span><span class="pad-now">SELECT A BUTTON, THEN PRESS ITS REPLACEMENT. CROSS, CIRCLE AND OPTIONS CANCEL. STICKS AND MENU CONTROLS ARE FIXED.</span></p>
         <div class="controls"></div>
       </section>
