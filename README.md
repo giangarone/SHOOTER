@@ -1278,7 +1278,9 @@ controller vibration. Returning to the window requires deliberate resume.
   and handoff captions as well as the arena, preserving the retro display.
   The wave counter omits an
   enemies-remaining caption; stamina is a bar without a label, and the vitals
-  group has no top divider.
+  group has no top divider. The HUD uses the same 16px inset on every edge,
+  increased uniformly when the display requires a larger safe area, and
+  ammunition has no divider above it.
   HUD sizing adapts to desktop, 1080p TV and 4K viewports. **SETTINGS → AUDIO &
   VISUAL → HUD SIZE** adds a saved 100%, 125%, 150% or 175% multiplier for
   viewing from farther away; it also enlarges prompts, effects and announcements.

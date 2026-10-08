@@ -20,7 +20,7 @@
   --hud-responsive: 1px;
   --hud-scale: 1;
   --h: calc(var(--hud-responsive) * var(--hud-scale));
-  --hud-inset: clamp(16px, 3vw, calc(48 * var(--h)));
+  --hud-inset: max(16px, env(safe-area-inset-top), env(safe-area-inset-right), env(safe-area-inset-bottom), env(safe-area-inset-left));
   --hud-danger: var(--red);
 
   /* grid ------------------------------------------------------------------ */
@@ -138,7 +138,7 @@ html, body {
   display: flex; justify-content: space-between; gap: calc(24 * var(--h));
 }
 #hud-top {
-  top: max(16px, env(safe-area-inset-top)); align-items: flex-start;
+  top: var(--hud-inset); align-items: flex-start;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
 }
 #hud-bottom {
@@ -323,7 +323,6 @@ body.hudblind #hitmarker { opacity: 0 !important; }
 #item-box {
   display: flex; align-items: center; gap: calc(12 * var(--h));
   width: 100%; justify-content: flex-end;
-  padding-bottom: calc(12 * var(--h)); border-bottom: 1px solid var(--ui-line);
   --item: var(--cyan);
 }
 #item-info {
